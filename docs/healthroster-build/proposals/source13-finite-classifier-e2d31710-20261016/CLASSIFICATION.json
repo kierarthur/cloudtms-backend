@@ -1,0 +1,217 @@
+{
+  "version": "HEALTHROSTER_SOURCE13_FINITE_CLASSIFICATION_V1",
+  "sourceReviewCommit": "e2d31710e925fbcfa4f5ce16760cdf42ea918e92",
+  "sourceProposalCommit": "9ac637ef3bdc50ad1b82b616283cb226a7bbb69b",
+  "rootCommittedCheckpoint": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "newOccurrences": 26,
+  "newUniqueKeys": 23,
+  "filePins": [
+    {
+      "path": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6"
+    },
+    {
+      "path": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0"
+    },
+    {
+      "path": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131"
+    },
+    {
+      "path": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5"
+    },
+    {
+      "path": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0"
+    },
+    {
+      "path": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "sha256": "80d9c6244ae47cf674c77b55df85976d6501217856e8227995186071eff2a4d5"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc",
+      "sha256": "121631f2f6c0fa1fa2b45c857a683df64838bbbffa5e23e87d6ec755460b627f"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "sha256": "3f645a99ccdf35b69475f65c33dee019767392aafd754c55b80521dc86e9c80c"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "sha256": "04f985ed70f921803e74aac1394cd5d11deb8aac1ba6a48af50d5f66c4ebdc7f"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "sha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "sha256": "0d9156c674e4725d6198fc68783d8c6999daad3b6b557ff38c34deda27f64aaa"
+    }
+  ],
+  "dependencies": [
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044"
+    },
+    {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/census.mjs",
+      "sha256": "0e3e95ce364caff9dc979737a71b46780f7b78f89fd1f3c7b2bf30e7e62f029d"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/CHECKS.json",
+      "sha256": "c38c6673b70354dba47c554417dd2bf44e92388a540246a7efe1b63dc4735c7e"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/COUNTERPARTS.json",
+      "sha256": "66f6df97f021b307080ac3345cf7ceb1449e0aaed492d705416e268caa445ecd"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/counterparts.mjs",
+      "sha256": "4fb28ae7016fc9345fe700f0c24cd35fd571d0ee23e7ff18da0cce5efe2e3d6e"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/extension-map.mjs",
+      "sha256": "f75a6f7fa43d011061ffe8edfd5235a4d3f504fab37ec592a5e0de3579de4130"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/EXTENSION_MAP.json",
+      "sha256": "a4a9fbd8b83a5e31051b578b52efe6653147c7683f797ea4d10d37531b1723f7"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/RAW_CENSUS.json",
+      "sha256": "2156e30af349d5d425a0d196bb6292473d7f551631bc7d8f5db7278ede130175"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/README.md",
+      "sha256": "377c934f0f67229a657b68ea6c90c65ded56c912af81e364d199367aab9fedce"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/REVIEW.json",
+      "sha256": "9617122b726cd6bed6e1674fb07b340b2635becec542c5702c17fd7ab361b765"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/review.py",
+      "sha256": "d1f45029f19f902360ab7aeeb71977025087297af8c0f66c70ad75ff4df58ea1"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/verify.mjs",
+      "sha256": "ea1922dd3098e6c8812d2015e92fe861e5374893ce6aed52eabae0fd08714357"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/VERIFY_RESULTS.json",
+      "sha256": "51879956250b29c43821619bcc316ce918c46f5366512dd23cf3322c26a7205f"
+    }
+  ],
+  "mapPath": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/EXTENSION_MAP.json",
+  "proofPath": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/REVIEW.json",
+  "rawPath": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/inputs/review/RAW_CENSUS.json",
+  "producers": [
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/01-02f45d02338c.sqlinc",
+      "bodySha256": "02f45d02338c56af30314e7f2547bd241da29e5ec81fc807aefcf9f6871571ba",
+      "file": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "signature": "outer:supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "completeStatementSha256": null
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/02-f812f4b01341.sqlinc",
+      "bodySha256": "f812f4b013412fa5b781483947860a79cda922f579d2042548453071cdc371a6",
+      "file": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "signature": "outer:supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "completeStatementSha256": null
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/03-100c7082c5eb.sqlinc",
+      "bodySha256": "100c7082c5eba9dc5cebaf9a93504a45184bbabddf66da84c077a9c64a122adb",
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)",
+      "completeStatementSha256": "9686f62baf8c9b4866e27455e9a183f30809c1163ea21321d8657ccb5cb8b274"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/04-423e680d396a.sqlinc",
+      "bodySha256": "423e680d396adf62a844ae4c87ff346b5145f4a6622b0572adc686037b5ff94f",
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+      "completeStatementSha256": "93d54d17348e7ef33a595525cd13a712e8b88e97044ccd0d08dcbafd56bb5d96"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/05-0689fa248919.sqlinc",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/06-f5638316ec81.sqlinc",
+      "bodySha256": "f5638316ec816599fcc57bc787afa96e6fa5e76d9bcc3ecf609826cb2eb3b97e",
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "private.weekly_source_local_protected_pending_released_v1()",
+      "completeStatementSha256": "358a7ce6409d7f56350e7c75d584808f979421250a14f524069c7859f3eba885"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/07-58f73c0f3819.sqlinc",
+      "bodySha256": "58f73c0f3819d7981b9d995714a23fc96d0e32c480da6be7096dc78c2797ed29",
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "public.weekly_source_pay_decision_preview_v1(jsonb)",
+      "completeStatementSha256": "f9773873848d275df7cdeceb9bc3bdae71722e9c20df1c4513bf2c6e711d6432"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/08-e3e506c40aa2.sqlinc",
+      "bodySha256": "e3e506c40aa2784f5d219d3438d26a5f0406aab108439233fb8665a8de78dd62",
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "private.weekly_source_pay_decision_bind_publication_v1(uuid)",
+      "completeStatementSha256": "fd6098aa742e4d057cdddf8ac7d29665474323ffb3ce44097bca61eb30f67021"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/09-8d3bbc318345.sqlinc",
+      "bodySha256": "8d3bbc318345f583ead06626ade1716526d1ffdf5d1c7087fef9186fc8a7f774",
+      "file": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "signature": "private.weekly_source_resolve_root_identity_v1(uuid)",
+      "completeStatementSha256": "c980511b6e84312e8b246d9a210e7032818fcc2ffd4a545bb875f783baa87dbb"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/10-b16bb6fc4902.sqlinc",
+      "bodySha256": "b16bb6fc490202899712a5f03a41a98a957b6734c25263f968fb2424199db5dd",
+      "file": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+      "completeStatementSha256": "603122d55df8be43e2aac94634baba034740d1e01feedbf58abc17e32dd25908"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_SOURCE13_FINITE_REVIEW_20261016/producers/11-7c19c1e837f7.sqlinc",
+      "bodySha256": "7c19c1e837f76a7f8f413bd9e86d6c2320ed4d957f97b5bac28a6134fd7468d1",
+      "file": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "completeStatementSha256": "b9587301ec7a944a6ce2ef688651b9974c8bb1cc98b6348c7d2d360b7b519324"
+    }
+  ],
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "bankSchemaAssumptions": [],
+  "sqlEdits": 0,
+  "limit": "Exact source type and closed literal-DDL classification only; pending receipt singleton/native release and actual Bank dependencies remain held."
+}

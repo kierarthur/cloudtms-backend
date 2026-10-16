@@ -1,0 +1,96 @@
+declare
+  v_local private.weekly_source_local_protected_decision_receipts%rowtype;
+  v_generation public.weekly_exceptional_pay_generations%rowtype;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_work_event_id uuid;
+  v_target_state text;
+  v_source_hash bytea;
+  v_result jsonb;
+  v_hash bytea;
+begin
+  if new.state<>'RELEASED' or old.state='RELEASED' then return new; end if;
+  select * into v_local from private.weekly_source_local_protected_decision_receipts local_receipt
+    where local_receipt.state='PENDING_FREEZE'
+      and local_receipt.result_json->>'decision_bundle_id'=new.decision_bundle_id::text for update;
+  if not found then return new; end if;
+  if not exists(select 1 from private.weekly_source_entitlement_publication_receipts receipt
+    where receipt.id=new.released_receipt_id and receipt.decision_bundle_id=new.decision_bundle_id
+      and receipt.bundle_revision=new.bundle_revision
+      and receipt.request_digest=new.released_receipt_digest
+      and v_local.root_timesheet_id=any(receipt.member_root_ids)) then
+    raise exception 'WEEKLY_PROTECTED_LOCAL_DEFERRED_RECEIPT_INVALID' using errcode='55000';
+  end if;
+  select * into strict v_family from public.weekly_exceptional_pay_target_families
+    where id=v_local.family_id for update;
+  select * into strict v_generation from public.weekly_exceptional_pay_generations
+    where id=v_local.generation_id and family_id=v_family.id for update;
+  if v_family.current_generation_id is distinct from v_generation.prior_generation_id
+     or v_generation.lifecycle_state<>'PENDING_C1' then
+    raise exception 'WEEKLY_PROTECTED_LOCAL_DEFERRED_GENERATION_CHANGED' using errcode='55000';
+  end if;
+  select target.resulting_lifecycle_state,event.source_proposal_hash,event.durable_work_event_id
+    into strict v_target_state,v_source_hash,v_work_event_id
+    from public.weekly_exceptional_pay_target_events target
+    join public.weekly_exceptional_pay_family_events event on event.evidence_approval_id=target.approval_id
+    where target.financial_generation_id=v_generation.id and target.family_id=v_family.id;
+  v_result:=v_local.result_json||jsonb_build_object('outcome','PUBLISHED','state','LIVE',
+    'deferred_release_receipt_id',new.released_receipt_id,
+    'publication',jsonb_build_object('ok',true,'published',true,'replayed',false,
+      'receipt',private.weekly_source_publication_receipt_json_v1(new.released_receipt_id)),
+    'family_bound_version',v_family.bound_version+1);
+  v_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_LOCAL_RESULT_V1',v_result);
+  if v_family.current_generation_id is not null then
+    update public.weekly_exceptional_pay_generations set lifecycle_state='SUPERSEDED',
+      superseded_by_generation_id=v_generation.id,superseded_at_utc=statement_timestamp()
+      where id=v_family.current_generation_id and lifecycle_state='PUBLISHED';
+    if not found then raise exception 'WEEKLY_PROTECTED_LOCAL_PRIOR_GENERATION_INVALID' using errcode='55000'; end if;
+  end if;
+  update public.weekly_exceptional_pay_generations set lifecycle_state='PUBLISHED',
+    published_at_utc=statement_timestamp(),result_hash=v_hash where id=v_generation.id;
+  update public.weekly_exceptional_pay_target_families set current_generation_id=v_generation.id,
+    current_generation_number=v_generation.generation_number,
+    current_complete_target_vector_hash=v_generation.complete_next_vector_hash,
+    current_source_proposal_hash=v_source_hash,current_lifecycle_state=v_target_state,
+    current_component_count=(v_generation.complete_next_vector_json->>'component_count')::integer,
+    c1_publication_state='NONE',bound_version=bound_version+1 where id=v_family.id;
+  update private.weekly_source_local_protected_decision_receipts set state='COMPLETE',result_json=v_result
+    where publication_request_id=v_local.publication_request_id;
+   
+   
+   
+   
+   
+  update public.weekly_exceptional_orchestration_runs run
+    set after_state_fingerprint=v_hash
+    from public.weekly_exceptional_c1_publication_requests request
+    where request.id=v_local.publication_request_id and request.state='RETIRED'
+      and request.family_id=v_local.family_id and request.generation_id=v_generation.id
+      and request.request_sha256=v_local.request_sha256
+      and request.typed_result_json=v_local.result_json
+      and run.id=request.orchestration_run_id and run.family_id=v_local.family_id
+      and run.requested_by_user_id=v_local.actor_user_id and run.state='COMPLETE'
+      and run.completed_at_utc is not null
+      and run.after_state_fingerprint=private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_PROTECTED_LOCAL_RESULT_V1',v_local.result_json)
+      and exists(select 1 from public.weekly_exceptional_orchestration_steps step
+        where step.orchestration_run_id=run.id
+          and step.step_kind='COMPLETE_LOCAL_PROTECTED_DECISION' and step.outcome='PENDING'
+          and step.idempotency_key=v_local.idempotency_key
+          and step.bounded_owner_response_json=v_local.result_json
+          and step.owner_response_hash=run.after_state_fingerprint
+          and step.after_state_fingerprint=run.after_state_fingerprint);
+  if not found then
+    raise exception 'WEEKLY_PROTECTED_LOCAL_DEFERRED_RUN_INVALID' using errcode='55000';
+  end if;
+  update public.weekly_exceptional_c1_publication_requests set typed_result_json=v_result
+    where id=v_local.publication_request_id and state='RETIRED';
+  perform private.weekly_source_protected_contact_retire_v1(v_family.id,v_work_event_id);
+   
+   
+   
+  perform private.weekly_source_pay_decision_local_release_proof_v1(p.id)
+    from private.weekly_source_pay_decision_unprotect_preparations p
+    join public.weekly_exceptional_c1_publication_requests r on r.orchestration_run_id=p.orchestration_run_id
+    where r.id=v_local.publication_request_id;
+  return new;
+end;

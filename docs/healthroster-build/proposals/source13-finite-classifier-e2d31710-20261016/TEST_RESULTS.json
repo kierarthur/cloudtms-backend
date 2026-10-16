@@ -1,0 +1,19 @@
+{
+  "version": "HEALTHROSTER_SOURCE13_FINITE_CLASSIFIER_TESTS_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "installedTest": true,
+  "proposalOrParserOverrideRequired": false,
+  "tests": 15,
+  "passed": 15,
+  "failed": 0,
+  "files": 13,
+  "completeProducers": 11,
+  "newUniqueKeys": 23,
+  "newOccurrences": 26,
+  "baselineOccurrences": 12,
+  "sourceGateFullReverse": true,
+  "sourceGateSyntax": true,
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "native": "NOT_RUN"
+}

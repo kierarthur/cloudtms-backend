@@ -1,0 +1,661 @@
+{
+  "version": "F23_SOURCE13_FINITE_EXTENSION_INPUT_V1",
+  "qualification": "SOURCE_REVIEWED_FINITE_INPUT_NOT_ALREADY_GATE_OR_NATIVE_ADMITTED",
+  "rootCommittedCheckpoint": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "sourceProposalCommit": "9ac637ef3bdc50ad1b82b616283cb226a7bbb69b",
+  "counts": {
+    "rawDiagnostics": 38,
+    "frozenBaselineCoveredOccurrences": 12,
+    "newFiniteOccurrences": 26,
+    "newFiniteUniqueKeys": 23,
+    "dynamicOrLiteralStatements": 5,
+    "tupleStatements": 21,
+    "aggregateStatements": 10,
+    "minMaxExpressions": 16,
+    "uuidStatements": 2,
+    "completeBodies": 11
+  },
+  "artifacts": [
+    {
+      "path": "RAW_CENSUS.json",
+      "sha256": "2156e30af349d5d425a0d196bb6292473d7f551631bc7d8f5db7278ede130175"
+    },
+    {
+      "path": "COUNTERPARTS.json",
+      "sha256": "66f6df97f021b307080ac3345cf7ceb1449e0aaed492d705416e268caa445ecd"
+    },
+    {
+      "path": "REVIEW.json",
+      "sha256": "9617122b726cd6bed6e1674fb07b340b2635becec542c5702c17fd7ab361b765"
+    },
+    {
+      "path": "CHECKS.json",
+      "sha256": "c38c6673b70354dba47c554417dd2bf44e92388a540246a7efe1b63dc4735c7e"
+    }
+  ],
+  "filePins": [
+    {
+      "path": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6",
+      "bytes": 11034,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0",
+      "bytes": 3839,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131",
+      "bytes": 7486,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5",
+      "bytes": 1823,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "bytes": 2261,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "sha256": "80d9c6244ae47cf674c77b55df85976d6501217856e8227995186071eff2a4d5",
+      "bytes": 2909,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "bytes": 636634,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc",
+      "sha256": "121631f2f6c0fa1fa2b45c857a683df64838bbbffa5e23e87d6ec755460b627f",
+      "bytes": 19818,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "sha256": "3f645a99ccdf35b69475f65c33dee019767392aafd754c55b80521dc86e9c80c",
+      "bytes": 491,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c",
+      "bytes": 55454,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "sha256": "04f985ed70f921803e74aac1394cd5d11deb8aac1ba6a48af50d5f66c4ebdc7f",
+      "bytes": 397,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "sha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c",
+      "bytes": 36006,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "sha256": "0d9156c674e4725d6198fc68783d8c6999daad3b6b557ff38c34deda27f64aaa",
+      "bytes": 382,
+      "savedEqualsFrozenProposal": true,
+      "savedEqualsRootCommittedCheckpoint": true
+    }
+  ],
+  "completeProducerPins": [
+    {
+      "number": 1,
+      "file": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "signature": "outer:supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "completeStatementSha256": null,
+      "bodySha256": "02f45d02338c56af30314e7f2547bd241da29e5ec81fc807aefcf9f6871571ba",
+      "outer": true
+    },
+    {
+      "number": 2,
+      "file": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "signature": "outer:supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "completeStatementSha256": null,
+      "bodySha256": "f812f4b013412fa5b781483947860a79cda922f579d2042548453071cdc371a6",
+      "outer": true
+    },
+    {
+      "number": 3,
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)",
+      "completeStatementSha256": "9686f62baf8c9b4866e27455e9a183f30809c1163ea21321d8657ccb5cb8b274",
+      "bodySha256": "100c7082c5eba9dc5cebaf9a93504a45184bbabddf66da84c077a9c64a122adb",
+      "outer": false
+    },
+    {
+      "number": 4,
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+      "completeStatementSha256": "93d54d17348e7ef33a595525cd13a712e8b88e97044ccd0d08dcbafd56bb5d96",
+      "bodySha256": "423e680d396adf62a844ae4c87ff346b5145f4a6622b0572adc686037b5ff94f",
+      "outer": false
+    },
+    {
+      "number": 5,
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "outer": false
+    },
+    {
+      "number": 6,
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "private.weekly_source_local_protected_pending_released_v1()",
+      "completeStatementSha256": "358a7ce6409d7f56350e7c75d584808f979421250a14f524069c7859f3eba885",
+      "bodySha256": "f5638316ec816599fcc57bc787afa96e6fa5e76d9bcc3ecf609826cb2eb3b97e",
+      "outer": false
+    },
+    {
+      "number": 7,
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "public.weekly_source_pay_decision_preview_v1(jsonb)",
+      "completeStatementSha256": "f9773873848d275df7cdeceb9bc3bdae71722e9c20df1c4513bf2c6e711d6432",
+      "bodySha256": "58f73c0f3819d7981b9d995714a23fc96d0e32c480da6be7096dc78c2797ed29",
+      "outer": false
+    },
+    {
+      "number": 8,
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "signature": "private.weekly_source_pay_decision_bind_publication_v1(uuid)",
+      "completeStatementSha256": "fd6098aa742e4d057cdddf8ac7d29665474323ffb3ce44097bca61eb30f67021",
+      "bodySha256": "e3e506c40aa2784f5d219d3438d26a5f0406aab108439233fb8665a8de78dd62",
+      "outer": false
+    },
+    {
+      "number": 9,
+      "file": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "signature": "private.weekly_source_resolve_root_identity_v1(uuid)",
+      "completeStatementSha256": "c980511b6e84312e8b246d9a210e7032818fcc2ffd4a545bb875f783baa87dbb",
+      "bodySha256": "8d3bbc318345f583ead06626ade1716526d1ffdf5d1c7087fef9186fc8a7f774",
+      "outer": false
+    },
+    {
+      "number": 10,
+      "file": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+      "completeStatementSha256": "603122d55df8be43e2aac94634baba034740d1e01feedbf58abc17e32dd25908",
+      "bodySha256": "b16bb6fc490202899712a5f03a41a98a957b6734c25263f968fb2424199db5dd",
+      "outer": false
+    },
+    {
+      "number": 11,
+      "file": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "completeStatementSha256": "b9587301ec7a944a6ce2ef688651b9974c8bb1cc98b6348c7d2d360b7b519324",
+      "bodySha256": "7c19c1e837f76a7f8f413bd9e86d6c2320ed4d957f97b5bac28a6134fd7468d1",
+      "outer": false
+    }
+  ],
+  "selectedInvoiceDutyReverseProof": {
+    "oldFile": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+    "oldFileSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+    "oldCompleteStatementSha256": "f837fc330938f43a9484ee21efd4a10d909858c8dcfe0a937e99146ca5cec390",
+    "currentCompleteStatementSha256": "b9587301ec7a944a6ce2ef688651b9974c8bb1cc98b6348c7d2d360b7b519324",
+    "exactOneCallNameChange": {
+      "before": "private.weekly_source_invoice_duty_scope_v1(p_root_timesheet_id)",
+      "after": "private.weekly_source_pay_query_scope_v1(p_root_timesheet_id)"
+    },
+    "wholeFunctionReverseEqual": true,
+    "limit": "Only provenance; every current flagged tuple has its own same-relation proof. This does not transfer whole-function behavioral approval."
+  },
+  "points": [
+    {
+      "file": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sourceSha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "signature": "outer:supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+      "key": "[\"outer:supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n foreach name in array array['weekly_source_pay_decisions','weekly_source_pay_decision_requests',\\n  'weekly_source_pay_decision_preview_assemblies','weekly_source_pay_decision_preview_quotes','weekly_source_pay_decision_reviews',\\n  'weekly_source_pay_decision_members','weekly_source_pay_decision_bindings','weekly_source_pay_decision_unprotect_preparations',\\n  'weekly_source_pay_decision_acceptance_applications','weekly_source_pay_decision_native_adoptions','weekly_source_pay_decision_publication_adoptions'] loop\\n  execute format('alter table private.%I enable row level security',name);\"]",
+      "keySha256": "1c19b052a2b77aadea11f3b3c4c57cadaf6d131613f57a573e3e14d14b5ee36b",
+      "statementSha256": "6a5202dd8a4a715808dbe6dd3f29b7f9f23d6a4f9a524c97c9c9930ed954fa97",
+      "completeStatementSha256": null,
+      "bodySha256": "02f45d02338c56af30314e7f2547bd241da29e5ec81fc807aefcf9f6871571ba",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        1
+      ],
+      "reviewVerdict": "FINITE_CLOSED_HEALTH_DDL_FORMAT_PROVED"
+    },
+    {
+      "file": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sourceSha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "signature": "outer:supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+      "key": "[\"outer:supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute format('alter table private.%I force row level security',name);\"]",
+      "keySha256": "b62a164dbb8827cbb06de7f4f2a325a6e55eaaf06ddd228207848307ee6651bb",
+      "statementSha256": "82bb49bad22a1d9d824964a6dd35188ebeaef2e58b22f0ba40db72f788066f88",
+      "completeStatementSha256": null,
+      "bodySha256": "02f45d02338c56af30314e7f2547bd241da29e5ec81fc807aefcf9f6871571ba",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        2
+      ],
+      "reviewVerdict": "FINITE_CLOSED_HEALTH_DDL_FORMAT_PROVED"
+    },
+    {
+      "file": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sourceSha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "signature": "outer:supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+      "key": "[\"outer:supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute format('revoke all on table private.%I from public,anon,authenticated,service_role',name);\"]",
+      "keySha256": "f7503e655b5e420dc6d6f59fe31ead0e79b668664ab0dafb7d794017d50548c1",
+      "statementSha256": "6f2155a2e848ac2bbd66f9823ccf57705b14a1543513fb8d424ba68333ed1e60",
+      "completeStatementSha256": null,
+      "bodySha256": "02f45d02338c56af30314e7f2547bd241da29e5ec81fc807aefcf9f6871571ba",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        3
+      ],
+      "reviewVerdict": "FINITE_CLOSED_HEALTH_DDL_FORMAT_PROVED"
+    },
+    {
+      "file": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sourceSha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "signature": "outer:supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+      "key": "[\"outer:supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute format('create policy cloudtms_source_pay_decision_owner_only on private.%I for all to %I using(true) with check(true)',name,current_user);\"]",
+      "keySha256": "8c38b7acde90039e1b4fb973bc523273c3f3353d1f89bc5d1a1f61cde6fda898",
+      "statementSha256": "61111af1f2e3f7306ba3dcd26328d6b5fb66538ac0f7c45ba44fe98f52deb8a2",
+      "completeStatementSha256": null,
+      "bodySha256": "02f45d02338c56af30314e7f2547bd241da29e5ec81fc807aefcf9f6871571ba",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        4
+      ],
+      "reviewVerdict": "FINITE_CLOSED_HEALTH_DDL_FORMAT_PROVED"
+    },
+    {
+      "file": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "sourceSha256": "80d9c6244ae47cf674c77b55df85976d6501217856e8227995186071eff2a4d5",
+      "signature": "outer:supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+      "key": "[\"outer:supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if actual_definition is distinct from\\n $source_expected_predecessor$CHECK (resolution_kind IS NULL OR (resolution_kind = ANY (ARRAY['SOURCE_MATCHED'::text, 'OFFICE_ACCEPTED_SYSTEM_HOURS'::text, 'CANDIDATE_CORRECTED'::text, 'MANAGER_CONFIRMED_SYSTEM_HOURS'::text, 'RECORDED_NOT_WORKED'::text, 'CORRECT_FINAL_SOURCE'::text])))$source_expected_predecessor$ then\\n  raise exception 'SOURCE_INCIDENT_RESOLUTION_PREDECESSOR_MISMATCH' using errcode='55000';\"]",
+      "keySha256": "6d67b0d18be3bc5ad9fc488390b5e899d22d66958fb0e83f925f7d9f97a25beb",
+      "statementSha256": "961208e54b40277a238e1ea412b64d1f70a654495724416310682e42a1250710",
+      "completeStatementSha256": null,
+      "bodySha256": "f812f4b013412fa5b781483947860a79cda922f579d2042548453071cdc371a6",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        5
+      ],
+      "reviewVerdict": "FINITE_INERT_CHECK_COMPARISON_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)",
+      "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+      "key": "[\"private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(max(s.sequence),0)+1 into v_step from public.weekly_exceptional_orchestration_steps s where s.orchestration_run_id=v_run.id;\"]",
+      "keySha256": "f84b1445af2e3c96508946e2d9ed1683e3d9b69fd74d2c60cefa0a88f580292d",
+      "statementSha256": "7a8199721cbe848994e698b74e37717d772d6d1a2f7f814456fb562661b4a6db",
+      "completeStatementSha256": "9686f62baf8c9b4866e27455e9a183f30809c1163ea21321d8657ccb5cb8b274",
+      "bodySha256": "100c7082c5eba9dc5cebaf9a93504a45184bbabddf66da84c077a9c64a122adb",
+      "wholeSourceOccurrenceCount": 2,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 2,
+      "reviewIds": [
+        6,
+        7
+      ],
+      "reviewVerdict": "FINITE_SOURCE_SCALAR_AGGREGATE_TYPES_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+      "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+      "key": "[\"private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(max(event_sequence),0)+1,\\n         (array_agg(event_hash order by event_sequence desc))[1]\\n    into v_family_event_sequence,v_prior_family_event_hash\\n  from public.weekly_exceptional_pay_family_events\\n  where family_id=v_family.id;\"]",
+      "keySha256": "b08979472b95625d1eb643cb945877b608165e4968060cc82e159459786905d1",
+      "statementSha256": "3f70d6209444c414d4408aa3ded07d4dfae069a800ebaca70e0aa38580eb0404",
+      "completeStatementSha256": "93d54d17348e7ef33a595525cd13a712e8b88e97044ccd0d08dcbafd56bb5d96",
+      "bodySha256": "423e680d396adf62a844ae4c87ff346b5145f4a6622b0572adc686037b5ff94f",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        8
+      ],
+      "reviewVerdict": "FINITE_SOURCE_SCALAR_AGGREGATE_TYPES_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+      "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+      "key": "[\"private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(max(event_sequence),0)+1,\\n         (array_agg(event_hash order by event_sequence desc))[1]\\n    into v_target_event_sequence,v_prior_target_event_hash\\n  from public.weekly_exceptional_pay_target_events\\n  where family_id=v_family.id;\"]",
+      "keySha256": "b358515873a23685764d772f0f073154cb7e870039a1a3ea78483bdfb31625ac",
+      "statementSha256": "e6ad7c0d972ede23535511bdbead380be41100a5ea71a6ab8508d35217f402d7",
+      "completeStatementSha256": "93d54d17348e7ef33a595525cd13a712e8b88e97044ccd0d08dcbafd56bb5d96",
+      "bodySha256": "423e680d396adf62a844ae4c87ff346b5145f4a6622b0572adc686037b5ff94f",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        9
+      ],
+      "reviewVerdict": "FINITE_SOURCE_SCALAR_AGGREGATE_TYPES_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+      "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+      "key": "[\"private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(max(sequence),0)+1 into v_step_sequence\\n  from public.weekly_exceptional_orchestration_steps where orchestration_run_id=v_run.id;\"]",
+      "keySha256": "b94e1dae30d8d61f2c754a36ed6eba607704ea0fbd884ad6c0c7ba017f593ce2",
+      "statementSha256": "b3821b0b546892574fdd330a72e02548825aaa62044ecc51c61ccfec158bf5b8",
+      "completeStatementSha256": "93d54d17348e7ef33a595525cd13a712e8b88e97044ccd0d08dcbafd56bb5d96",
+      "bodySha256": "423e680d396adf62a844ae4c87ff346b5145f4a6622b0572adc686037b5ff94f",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        10
+      ],
+      "reviewVerdict": "FINITE_SOURCE_SCALAR_AGGREGATE_TYPES_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "ROWTYPE_SELECT:V_RECEIPT:PRIVATE . WEEKLY_SOURCE_LOCAL_PROTECTED_DECISION_RECEIPTS",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"ROWTYPE_SELECT:V_RECEIPT:PRIVATE . WEEKLY_SOURCE_LOCAL_PROTECTED_DECISION_RECEIPTS\",\"select * into v_receipt from private.weekly_source_local_protected_decision_receipts\\n    where publication_request_id=v_request_id;\"]",
+      "keySha256": "c3da58a7cff56919544aa1f115b1368c020586d4dec3f6b4d2ebb9e0b3850ef9",
+      "statementSha256": "58f2211d0716a2e9006aa627164c9977eb8eda45737529b170a7509bfe3b28ac",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 2,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 2,
+      "reviewIds": [
+        11,
+        14
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "ROWTYPE_SELECT:V_REQUEST:PUBLIC . WEEKLY_EXCEPTIONAL_C1_PUBLICATION_REQUESTS",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"ROWTYPE_SELECT:V_REQUEST:PUBLIC . WEEKLY_EXCEPTIONAL_C1_PUBLICATION_REQUESTS\",\"select * into strict v_request from public.weekly_exceptional_c1_publication_requests where id=v_request_id;\"]",
+      "keySha256": "b7af3b7f962ff3edda5783193c4ef1621a5210c6923f07c87a903cf240dcd93e",
+      "statementSha256": "25e1e423662b74c2f6fbec66fb07caeec252f05c9f2f631061da1cca029500b0",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 2,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 2,
+      "reviewIds": [
+        12,
+        13
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "ROWTYPE_SELECT:V_FAMILY:PUBLIC . WEEKLY_EXCEPTIONAL_PAY_TARGET_FAMILIES",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"ROWTYPE_SELECT:V_FAMILY:PUBLIC . WEEKLY_EXCEPTIONAL_PAY_TARGET_FAMILIES\",\"select * into strict v_family from public.weekly_exceptional_pay_target_families\\n    where id=v_request.family_id for update;\"]",
+      "keySha256": "21c07a823044f0425de03138fa0395fb0272b9bdde89d8ad27701dddf5c94eeb",
+      "statementSha256": "59e11fcc2c1b4095f6d954a9ea4e17d1bf4dd108c7cc3c4954af703171235f07",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        15
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "ROWTYPE_SELECT:V_REQUEST:PUBLIC . WEEKLY_EXCEPTIONAL_C1_PUBLICATION_REQUESTS",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"ROWTYPE_SELECT:V_REQUEST:PUBLIC . WEEKLY_EXCEPTIONAL_C1_PUBLICATION_REQUESTS\",\"select * into strict v_request from public.weekly_exceptional_c1_publication_requests\\n    where id=v_request_id for update;\"]",
+      "keySha256": "e8948f44c9e9a5c1812af21f7e371b92f8020cbe8227d966f9e06c7553161a99",
+      "statementSha256": "46d727ae940d9e617295e152e0562645fcc8e13d84b5fc4714fcb89df4014ee7",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        16
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "ROWTYPE_SELECT:V_GENERATION:PUBLIC . WEEKLY_EXCEPTIONAL_PAY_GENERATIONS",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"ROWTYPE_SELECT:V_GENERATION:PUBLIC . WEEKLY_EXCEPTIONAL_PAY_GENERATIONS\",\"select * into strict v_generation from public.weekly_exceptional_pay_generations\\n    where id=v_request.generation_id and family_id=v_family.id for update;\"]",
+      "keySha256": "98fef17ff10dcfff7eeb9640fe0f17de18bdfb2050478ddf960008a0ba28b1ca",
+      "statementSha256": "2ae9b8cf38c83822e5bc6318dca5a3e67080a726f47a3ab22725307208682bc7",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        17
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "ROWTYPE_SELECT:V_RUN:PUBLIC . WEEKLY_EXCEPTIONAL_ORCHESTRATION_RUNS",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"ROWTYPE_SELECT:V_RUN:PUBLIC . WEEKLY_EXCEPTIONAL_ORCHESTRATION_RUNS\",\"select * into strict v_run from public.weekly_exceptional_orchestration_runs\\n    where id=v_request.orchestration_run_id and family_id=v_family.id for update;\"]",
+      "keySha256": "bbcb544826bb3060d6ecef690f9c2b3f4b446073729919065fa39c556755a6ea",
+      "statementSha256": "49209023272edc4d10fb8140866693a7ecf100501714e19fb32766457580c499",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        18
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "ROWTYPE_SELECT:V_APPROVAL:PUBLIC . WEEKLY_EXCEPTIONAL_PAYMENT_APPROVALS",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"ROWTYPE_SELECT:V_APPROVAL:PUBLIC . WEEKLY_EXCEPTIONAL_PAYMENT_APPROVALS\",\"select * into strict v_approval from public.weekly_exceptional_payment_approvals\\n    where creation_orchestration_run_id=v_run.id and pay_target_family_id=v_family.id for share;\"]",
+      "keySha256": "d52e810b051a6897089158f4a57bceed76ebbce1b120e027dd454c6929e050c6",
+      "statementSha256": "53cb273cb081129ec130ac79ec57d739cbaf0cd1b1f5e0628b0b9c3601ec9237",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        19
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS\",\"select * into strict v_root from public.timesheets where timesheet_id=(v_placement->>'current_timesheet_id')::uuid for update;\"]",
+      "keySha256": "c2c643e46ec0282c194142288e3e64beed2f77ba4019e40543b9a217c06d7e22",
+      "statementSha256": "f1f3e3868baec46f6e4de53bf443d0b74906964b4d5b7f054ee7c06b60c2cdea",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        20
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "ROWTYPE_SELECT:V_FIN:PUBLIC . TIMESHEETS_FINANCIALS",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"ROWTYPE_SELECT:V_FIN:PUBLIC . TIMESHEETS_FINANCIALS\",\"select * into strict v_fin from public.timesheets_financials\\n    where timesheet_id=v_root.timesheet_id and is_current for update;\"]",
+      "keySha256": "329892148a2f7e0ea0b20848872a856516627fc2848996ba71cc307b37a3d1cf",
+      "statementSha256": "1850f815f12331c6af5fce634c0f3d55e2a458edbab91464d4973f938b27e0b8",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        21
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "ROWTYPE_SELECT:V_FIN:PUBLIC . TIMESHEETS_FINANCIALS",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"ROWTYPE_SELECT:V_FIN:PUBLIC . TIMESHEETS_FINANCIALS\",\"select * into strict v_fin from public.timesheets_financials financial\\n      where financial.id=(v_write->>'timesheet_financials_id')::uuid\\n        and financial.timesheet_id=v_root.timesheet_id and financial.is_current;\"]",
+      "keySha256": "176643d3e53bb2e002d755cd8c2604bbb0c5690f4a6f589a6104efd11831305e",
+      "statementSha256": "ea564c8a7fde51b38010de8f1acaa884c54e392ce29bffc04942b747e9cf9c6a",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        22
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+      "key": "[\"private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"insert into public.weekly_exceptional_orchestration_steps(orchestration_run_id,sequence,\\n    step_kind,idempotency_key,allowlisted_owner_name,allowlisted_owner_signature,bounded_request_hash,\\n    before_state_fingerprint,bounded_owner_response_json,owner_response_hash,after_state_fingerprint,outcome,completed_at_utc)\\n    select v_run.id,coalesce(max(step.sequence),0)+1,'COMPLETE_LOCAL_PROTECTED_DECISION',v_key,\\n      'CloudTMS.weekly_exceptional_pay_complete_local_v1','jsonb',v_hash,v_run.before_state_fingerprint,\\n      v_result,v_result_hash,v_result_hash,case when v_pending then 'PENDING' else 'COMPLETE' end,statement_timestamp()\\n    from public.weekly_exceptional_orchestration_steps step where step.orchestration_run_id=v_run.id;\"]",
+      "keySha256": "7670817a4bacd8f2c79f6e176219fe79bd9bdc4311c27cbc1193b61a498c0671",
+      "statementSha256": "af5746d4c97faf051c641af3732a98ba809737014c9e9749b261c0cfd0b8da54",
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "bodySha256": "0689fa24891938e5e3cce3a8362133677ecb5540c747b8885503b3e214c518f2",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        23
+      ],
+      "reviewVerdict": "FINITE_SOURCE_SCALAR_AGGREGATE_TYPES_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "public.weekly_source_pay_decision_preview_v1(jsonb)",
+      "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+      "key": "[\"public.weekly_source_pay_decision_preview_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(max(x.review_no),0)+1 into review_no from private.weekly_source_pay_decision_reviews x where x.decision_id=d.id;\"]",
+      "keySha256": "225d9e46623688d10a24d2567a5fb16e68ee2335200e02f7ec8c02afa77e8c4c",
+      "statementSha256": "53bd93d4f5a1060a9acf54751d031da6e8a49f4a0ba3ae9f8eb4f8a66d5656b9",
+      "completeStatementSha256": "f9773873848d275df7cdeceb9bc3bdae71722e9c20df1c4513bf2c6e711d6432",
+      "bodySha256": "58f73c0f3819d7981b9d995714a23fc96d0e32c480da6be7096dc78c2797ed29",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        27
+      ],
+      "reviewVerdict": "FINITE_SOURCE_SCALAR_AGGREGATE_TYPES_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sourceSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "signature": "private.weekly_source_pay_decision_bind_publication_v1(uuid)",
+      "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+      "key": "[\"private.weekly_source_pay_decision_bind_publication_v1(uuid)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"else\\n   select coalesce(max(x.binding_no),0)+1 into next_no from private.weekly_source_pay_decision_bindings x where x.decision_id=a.decision_id and x.member_key=member.member_key;\"]",
+      "keySha256": "16cd67065bfbaf8d54693a1267a801dd547a9a1509905032de982cc37bcd0209",
+      "statementSha256": "93350e821d444561bd5b52cd71473c5f59440c21465547667fb1b4cae152b332",
+      "completeStatementSha256": "fd6098aa742e4d057cdddf8ac7d29665474323ffb3ce44097bca61eb30f67021",
+      "bodySha256": "e3e506c40aa2784f5d219d3438d26a5f0406aab108439233fb8665a8de78dd62",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        28
+      ],
+      "reviewVerdict": "FINITE_SOURCE_SCALAR_AGGREGATE_TYPES_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "sourceSha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "hazard": "ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS",
+      "key": "[\"private.weekly_source_invoice_duty_v1(uuid)\",\"ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS\",\"select * into v_resolution from public.weekly_source_row_resolutions\\n        where upload_row_id=v_row.id and generation=v_generation;\"]",
+      "keySha256": "c21b02ed13cbcbd7dfa324fbd3514d772776e73949c51f4d0ee4489b42293370",
+      "statementSha256": "906a735f069488fc97bac42033c06b577438698fc9e754419b719adbc7d04766",
+      "completeStatementSha256": "b9587301ec7a944a6ce2ef688651b9974c8bb1cc98b6348c7d2d360b7b519324",
+      "bodySha256": "7c19c1e837f76a7f8f413bd9e86d6c2320ed4d957f97b5bac28a6134fd7468d1",
+      "wholeSourceOccurrenceCount": 1,
+      "exactFrozenBaselineConsumedCount": 0,
+      "newDiagnosticCount": 1,
+      "reviewIds": [
+        37
+      ],
+      "reviewVerdict": "FINITE_SOURCE_DECLARED_TUPLE_TYPE_PROVED"
+    }
+  ],
+  "unchangedGenericFences": true,
+  "unchangedOriginalSourceTypeMaps": true,
+  "bankingSchemaOrAbiAssumptions": [],
+  "requiredSqlCorrections": [],
+  "remainingReleaseHolds": [
+    "Actual Banking create-time relations/FKs/ROWTYPE dependencies",
+    "Actual Banking runtime producer/return qualifications",
+    "Pending-release exact one-receipt/native concurrency proof",
+    "Native source/currentness/permission/replay/acceptance and release checks"
+  ],
+  "native": "NOT_RUN"
+}

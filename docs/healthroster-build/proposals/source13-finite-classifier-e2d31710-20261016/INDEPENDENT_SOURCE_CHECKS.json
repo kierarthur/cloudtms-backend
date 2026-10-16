@@ -1,0 +1,37 @@
+{
+  "qualification": "SOURCE_ONLY_PIN_TYPE_AND_COUNTERPART_VERIFICATION",
+  "sourceReviewCommit": "e2d31710e925fbcfa4f5ce16760cdf42ea918e92",
+  "all13SavedFilesAnd38ActualDiagnosticOccurrencesEqual": true,
+  "completeCurrentProducers": 11,
+  "nativeSnapshotWholeRelationsVerified": 13,
+  "nativeScalarColumnsVerified": 3,
+  "sourceOwnedBigintDdl": [
+    {
+      "table": "private.weekly_source_pay_decision_reviews",
+      "column": "review_no",
+      "type": "bigint",
+      "completeDdlSha256": "d00b85529889e8331971a98e5a283173cdf7695769a06d320f4294dec266aa21"
+    },
+    {
+      "table": "private.weekly_source_pay_decision_bindings",
+      "column": "binding_no",
+      "type": "bigint",
+      "completeDdlSha256": "9213b05f12b86fe733eb399885a1faab1512d20e303b07cdfd5495688079b392"
+    }
+  ],
+  "rotationScopeWholeFunctionSha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd",
+  "rotationScopeDeclaredReturns": {
+    "requested_timesheet_id": "uuid",
+    "booking_id": "text",
+    "canonical_timesheet_id": "uuid",
+    "family_timesheet_id": "uuid",
+    "family_is_current": "bool",
+    "family_version": "int4",
+    "requested_is_canonical": "bool"
+  },
+  "invoiceWholeFunctionOneCallReverseEqual": true,
+  "invoiceCounterpartApproval": "PROVENANCE_ONLY_NO_BEHAVIORAL_APPROVAL_TRANSFER",
+  "pendingReceiptSingleton": "NOT_PROVED_BY_DECLARED_UNIQUE_KEY",
+  "native": "NOT_RUN",
+  "databaseCalls": 0
+}
