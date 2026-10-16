@@ -1,0 +1,12 @@
+{
+  "version": "HEALTH_SOURCE_QUALIFICATION_MANIFEST_V1",
+  "qualification": "SOURCE_ONLY_NOT_NATIVE_ACCEPTANCE",
+  "native": "NOT_RUN",
+  "files": {
+    "COMPLETE_DUTY_SUCCESSOR.sqlinc": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c",
+    "DUTY_SUCCESSOR_MANIFEST.json": "9c761dd7ef9d3fa3c4d65f02b60101288f8170bb5a4f759cbb38a0923053dab7",
+    "build-successor.mjs": "9aae1451fa45442b6c92213451829cdf8ae203b5ae60cb721fa4acdb39da8dd7",
+    "verify-successor.test.mjs": "6e8e5fa6adc211bc32c3dd6d24a152bed5e9ff43b32f8e5dd3fa40c58fe04ffa",
+    "README.md": "f138b6a8ad398c60331e902d020cab6f54870ac9c0c944231f41db7d40c925bd"
+  }
+}

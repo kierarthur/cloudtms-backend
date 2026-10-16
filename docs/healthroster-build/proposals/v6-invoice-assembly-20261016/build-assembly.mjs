@@ -61,7 +61,7 @@ assert.match(nativeStatements[3].sql,/^grant execute on function[\s\S]+to servic
 const order=selection.selected.filter(row=>row!==schema&&!row.path.endsWith('/099_new_private_acl.sqlinc'));
 order.push(selection.selected.find(row=>row.path.endsWith('/099_new_private_acl.sqlinc')));
 const rows=[],functions=[],effects=[];
-const chunks=['-- HealthRoster V6 Invoice finite source assembly; proposal only.\n-- Root allocates managed migrations/repeatables and closure registration.\n-- Prerequisites: exact Root01 schema, complete Physical/final Candidate and Daily04b/c/d.\n-- Native/API/ACL/contention/financial proof: NOT_RUN.\n'];
+const chunks=['-- HealthRoster V6 Invoice finite source assembly; proposal only.\n-- Root allocates managed migrations/repeatables and closure registration.\n-- CREATE prerequisites: exact Root01 schema, earlier Physical0713 core and Daily04b/c/d.\n-- FinalCandidate55/pending follows Invoice; complete first use follows all final definitions.\n-- Native/API/ACL/contention/financial proof: NOT_RUN.\n'];
 for(const row of order){
  const source=readSelected(row),parsed=statements(source,row.path);
  const actualFunctions=parsed.flatMap(item=>item.signatures.map(signature=>({signature,statementSha256:item.sha256})));
@@ -122,7 +122,8 @@ const manifest={version:'HEALTH_INVOICE_FINITE_SOURCE_ASSEMBLY_V1',qualification
   rootRequirement:'Mount only in one transaction after source_original eligibility helper and before final generation/callers and final099 ACL. Do not separately append CREATE-only033c.',
   dependencyEvidence:{qualification:'LITERAL_SOURCE_FILE_HITS_ONLY_NOT_POSTGRES_CATALOGUE',files:dependencyFileHits,
    nativeDependencyDropProof:'NOT_RUN; exact no-CASCADE DROP must pass clean PostgreSQL17 and rollback rehearsal. No dependency deletion or CASCADE authorised.'}},
- ordering:{preserved:'Selected file order except exact existing schema suppression and final099 moved after all selected helpers/native Expense owners.',finalAclPath:rows.at(-1).path},
+ ordering:{preserved:'Selected file order except exact existing schema suppression and final099 moved after all selected helpers/native Expense owners.',finalAclPath:rows.at(-1).path,
+  createTimeCandidateFoundationPreload:[],finalCandidate:'Mount finalCandidate55 after Invoice94 per f566 to avoid clobbering; existing0713 evidence_source(uuid)->jsonb supplies the only SQL Candidate dependency. All new pending calls are PLpgSQL runtime dependencies; full first use follows final definitions.'},
  physicalPrerequisites:selection.mandatoryPhysicalDependencies,pendingPrerequisites:selection.additionalPendingDependencies,
  integrationBoundary:{rootAllocatesManagedAuthority:true,physicalFinalWorkflowOwner:selection.physicalOwner,
   dailyContractFamilyDependencies:'Root-owned complete Daily04b/04c/04d must precede their SQL callers; f017001 alone does not supply Daily Contract family.',
@@ -134,7 +135,8 @@ const manifest={version:'HEALTH_INVOICE_FINITE_SOURCE_ASSEMBLY_V1',qualification
  sourcePreflight:{dbCheck:'BASELINE_FAIL_UNRECORDED_MIGRATION',detail:'supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql'}};
 fs.writeFileSync(path.join(here,'JOINED_INVOICE_SOURCE.sqlinc'),joined);
 fs.writeFileSync(path.join(here,'ASSEMBLY_MANIFEST.json'),JSON.stringify(manifest,null,2)+'\n');
-const artifactFiles=['ASSEMBLY_MANIFEST.json','JOINED_INVOICE_SOURCE.sqlinc','build-assembly.mjs','verify-assembly.test.mjs','README.md'];
+await import('./review-create-order.mjs');
+const artifactFiles=['ASSEMBLY_MANIFEST.json','JOINED_INVOICE_SOURCE.sqlinc','CREATE_ORDER_REVIEW.json','build-assembly.mjs','review-create-order.mjs','verify-assembly.test.mjs','README.md'];
 fs.writeFileSync(path.join(here,'SOURCE_MANIFEST.json'),JSON.stringify({version:'HEALTH_SOURCE_QUALIFICATION_MANIFEST_V1',
  qualification:'SOURCE_ONLY_NOT_NATIVE_ACCEPTANCE',native:'NOT_RUN',
  files:Object.fromEntries(artifactFiles.map(file=>[file,sha(fs.readFileSync(path.join(here,file)))]))},null,2)+'\n');

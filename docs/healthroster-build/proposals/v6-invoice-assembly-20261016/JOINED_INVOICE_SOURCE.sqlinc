@@ -1,6 +1,7 @@
 -- HealthRoster V6 Invoice finite source assembly; proposal only.
 -- Root allocates managed migrations/repeatables and closure registration.
--- Prerequisites: exact Root01 schema, complete Physical/final Candidate and Daily04b/c/d.
+-- CREATE prerequisites: exact Root01 schema, earlier Physical0713 core and Daily04b/c/d.
+-- FinalCandidate55/pending follows Invoice; complete first use follows all final definitions.
 -- Native/API/ACL/contention/financial proof: NOT_RUN.
 
 -- BEGIN selected f0172356c678695a68db80cd066ed69e80648a29:docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc

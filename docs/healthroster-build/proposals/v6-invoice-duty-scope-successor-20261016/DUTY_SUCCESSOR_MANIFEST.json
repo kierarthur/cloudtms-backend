@@ -1,0 +1,73 @@
+{
+  "version": "HEALTH_INVOICE_DUTY_SCOPE_COMPLETE_SUCCESSOR_V1",
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+  "original": {
+    "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+    "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/021a_source_duty.sqlinc",
+    "rawSha256": "0e74042257973b6ee0507f7f2168b5bad6f5f3f11a73f0c48673b70aaebecc99",
+    "canonicalLfSha256": "0e74042257973b6ee0507f7f2168b5bad6f5f3f11a73f0c48673b70aaebecc99",
+    "completeStatementSha256": "f837fc330938f43a9484ee21efd4a10d909858c8dcfe0a937e99146ca5cec390",
+    "headerSha256": "fb95606e88f1d3da2c44300dff97056064304b78f11e5854b64ed204ad37ee02"
+  },
+  "successor": {
+    "path": "COMPLETE_DUTY_SUCCESSOR.sqlinc",
+    "canonicalLfSha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c",
+    "bytes": 36006,
+    "completeStatementSha256": "b9587301ec7a944a6ce2ef688651b9974c8bb1cc98b6348c7d2d360b7b519324",
+    "headerSha256": "fb95606e88f1d3da2c44300dff97056064304b78f11e5854b64ed204ad37ee02"
+  },
+  "exactOnlyDelta": {
+    "before": "v_scope:=private.weekly_source_pay_query_scope_v1(p_root_timesheet_id);",
+    "after": "v_scope:=private.weekly_source_invoice_duty_scope_v1(p_root_timesheet_id);",
+    "occurrences": 1,
+    "completeReverseEqualsOriginal": true
+  },
+  "sourceHelper": {
+    "commit": "e8cc61559dd4a16fc9c9dd088fc5ad96f48af342",
+    "path": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/06_invoice_duty_scope.sqlinc",
+    "rawSha256": "b85aa8b6601e0fe7b93b42d453ae4c1ec165b4a9103ecf768de258feddca648d",
+    "canonicalLfSha256": "b85aa8b6601e0fe7b93b42d453ae4c1ec165b4a9103ecf768de258feddca648d",
+    "receiptPath": "docs/healthroster-build/proposals/source-pending-current-native-20261016/SOURCE_RECEIPT.json",
+    "receiptRawSha256": "a8a64b1acb1b19bfa7e83b044b0de31e7baddd6bb40896a1b6635793eabefc94",
+    "aclPath": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/99_acl.sqlinc",
+    "aclRawSha256": "37805e3b1abe5aa378a11e03faee0529b7a9ea5b5b07be438768cb0061cc431f",
+    "exactNativeReturnSha256": "340323d39f855d0149327128d04855e090507fcbc5aace9789e0a32d8a6ae6ef",
+    "scopeKeys": [
+      "root_timesheet_id",
+      "family_booking_id",
+      "target_family_id",
+      "candidate_id",
+      "client_id",
+      "contract_id",
+      "week_ending_date",
+      "root_version",
+      "family_bound_version"
+    ]
+  },
+  "mountOrder": [
+    "Canonical Root01 schema, complete earlier Physical0713 core and Daily04b/04c/04d",
+    "Complete base94 Invoice source assembly including018 (or skip only its superseded complete021a)",
+    "Complete finalCandidate55/pending and exact effects/final ACL after Invoice94 per f566 recipe",
+    "Complete Source d863 foundation plus Source pending/current successor, dedicated Invoice-duty helper and Source99 private ACL",
+    "This complete Invoice-duty successor after the base021a; unchanged final099 owner/private ACL and final browser-isolation closure; complete first use only after all final definitions"
+  ],
+  "preserved": [
+    "Original-A Timesheet/Contract/Candidate/Client/week/version identity and genuine exceptional target family",
+    "Entire Invoice duty census, discovery basis, movement/upload/operation membership and observation semantics",
+    "Complete original duty SECURITY DEFINER/STABLE/search_path and function ABI",
+    "Current-pay pending refusal for B with no synthetic current Timesheet or financial row",
+    "Original-A invoice/certificate/document/evidence owners and Policy X"
+  ],
+  "native": {
+    "postgres17": "NOT_RUN",
+    "rollback": "NOT_RUN",
+    "api": "NOT_RUN",
+    "acl": "NOT_RUN",
+    "financial": "NOT_RUN",
+    "concurrency": "NOT_RUN"
+  },
+  "rootIntegrationRequired": true,
+  "noDatabaseOrDeployment": true,
+  "noBankBodyOrAbiChange": true
+}

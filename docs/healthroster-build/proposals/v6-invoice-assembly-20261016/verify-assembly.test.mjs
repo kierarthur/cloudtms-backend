@@ -55,3 +55,13 @@ test('final099 follows all selected functions and Physical workflow is not overw
  for(const fn of kernel.functions)assert.equal(functionRows.filter(row=>row.signature===fn.signature).length,1);
  assert(!/pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i.test(source));
 });
+test('CREATE order needs no new pending preload and preserves f566 finalCandidate ordering',()=>{
+ const review=JSON.parse(fs.readFileSync(path.join(here,'CREATE_ORDER_REVIEW.json')));
+ assert.equal(review.assemblySha256,sha(source));assert.equal(review.sqlDefinitionCount,10);
+ assert.deepEqual(review.requiredCandidateFoundationPreload,[]);
+ assert.equal(review.pendingRuntimeCallers.length,2);assert(review.pendingRuntimeCallers.every(row=>row.language==='PLPGSQL'));
+ const calls=review.sqlDefinitions.flatMap(row=>row.candidateCalls);
+ assert.deepEqual(calls.map(row=>row.signature),['private.timesheet_contract_move_evidence_source_v1(uuid)']);
+ assert.equal(review.existingCreateTimeCandidateDependency.returns,'jsonb');
+ assert(review.order[2].startsWith('Complete finalCandidate55'));
+});
