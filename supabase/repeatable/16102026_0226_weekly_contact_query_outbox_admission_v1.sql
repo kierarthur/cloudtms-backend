@@ -57,7 +57,7 @@ begin
   select distinct on(value->>'timesheet_id')value item from jsonb_array_elements(v_issue_witnesses)
   order by value->>'timesheet_id',value->>'issue_fingerprint'
  )x;
- select public._import_review_hash_v1(string_agg(x.item->>'issue_fingerprint'||':'||(x.item->>'evidence_fingerprint'),
+ select public._import_review_hash_v1(string_agg((x.item->>'issue_fingerprint')||':'||(x.item->>'evidence_fingerprint'),
   '|' order by x.item->>'issue_fingerprint')) into v_issue_set from jsonb_array_elements(v_issue_witnesses)x(item);
  select public._import_review_hash_v1(string_agg(distinct h,'|' order by h)) into v_route_set from unnest(v_route_hashes)h;
  if v_count=0 or v_mail.attachments is distinct from v_attachments

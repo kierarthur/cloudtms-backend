@@ -193,7 +193,7 @@ begin
     for v_entry in select value from jsonb_array_elements(v_changes) order by value->>'client_id' loop
       v_scope_date:=(v_entry->>'scope_date')::date;
       v_shape:=private._weekly_source_settings_client_shape_v1(v_agency,v_environment,(v_entry->>'client_id')::uuid,v_scope_date);
-      v_apply_values:=v_entry->'before_values'||jsonb_build_object('effective_from',v_scope_date);
+      v_apply_values:=(v_entry->'before_values')||jsonb_build_object('effective_from',v_scope_date);
       if v_enabled then v_apply_values:=v_apply_values||jsonb_build_object('authority_mode','SOURCE_AUTHORITY','document_mode','CHECK_ONLY','self_bill_enabled',false); end if;
       v_result:=public.weekly_source_client_settings_save_atomic_v1(jsonb_build_object('actor_user_id',v_actor,'agency_id',v_agency,'environment',v_environment,
         'client_id',v_entry->>'client_id','expected_settings_version',v_shape->>'settings_version','settings',v_apply_values));

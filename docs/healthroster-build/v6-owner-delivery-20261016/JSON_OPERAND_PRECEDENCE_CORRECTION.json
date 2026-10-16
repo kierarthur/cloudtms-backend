@@ -1,0 +1,114 @@
+{
+  "version": "JSON_OPERAND_PRECEDENCE_CORRECTION_V1",
+  "status": "SOURCE_CORRECTED_NATIVE_NOT_RUN",
+  "sourceParent": "e27765fff38eff37199dae6f77b3bda7fa778724",
+  "changes": [
+    {
+      "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+      "kind": "EXPRESSION_TREE_UNCHANGED_EXPLICIT_GROUPING",
+      "beforeSha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "afterSha256": "4d5bd92b34ce4bdb659d3178144b3f1e7822f053dc91cf9c4d40c356dbbcbbba",
+      "from": "v_entry->'before_values'||jsonb_build_object",
+      "to": "(v_entry->'before_values')||jsonb_build_object"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/05_cap_original_functions_05_complete_existing_activation.sqlinc",
+      "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+      "kind": "EXPRESSION_TREE_UNCHANGED_EXPLICIT_GROUPING",
+      "beforeSha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc",
+      "afterSha256": "9660e82a270e84718e79352272307db98bf8fdac10a95b71963c5b66cfa26974",
+      "from": "v_entry->'before_values'||jsonb_build_object",
+      "to": "(v_entry->'before_values')||jsonb_build_object"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/32_q45_actor_event_closed_dto_cross_session_TEST_JOURNEY_SCOPE.sqlinc",
+      "signature": "private.weekly_source_protected_test_setup_atomic_v1(jsonb)",
+      "kind": "FIX_REAL_PREFIX_EXTRACTION_PRECEDENCE",
+      "beforeSha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100",
+      "afterSha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923",
+      "from": "'weekly-source-test-journey:'||auth->>'scope_id'",
+      "to": "'weekly-source-test-journey:'||(auth->>'scope_id')"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/37_q45_actor_event_closed_dto_cross_session_07_complete_existing_feature_setup.sqlinc",
+      "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+      "kind": "EXPRESSION_TREE_UNCHANGED_EXPLICIT_GROUPING",
+      "beforeSha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+      "afterSha256": "3120acf64d9e4076050c8985b51296ae68790bc5740f942c02a237aea4d0fe8c",
+      "from": "v_entry->'before_values'||jsonb_build_object",
+      "to": "(v_entry->'before_values')||jsonb_build_object"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/30_09_complete_controlled_setup_transport.sqlinc",
+      "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+      "kind": "EXPRESSION_TREE_UNCHANGED_EXPLICIT_GROUPING",
+      "beforeSha256": "5af440278222cf223ef4bcfc8b75c9d7f24828ed135366148d2ec4c85c3f910f",
+      "afterSha256": "e4eec42ef792b737b09517e64faaaad93c7cd3e41bf3bf93f300824fd2a1c3bb",
+      "from": "v_entry->'before_values'||jsonb_build_object",
+      "to": "(v_entry->'before_values')||jsonb_build_object"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/05_complete_current_feature_setup.sqlinc",
+      "signature": "public.weekly_source_group_rule_feature_set_atomic_v1(jsonb)",
+      "kind": "EXPRESSION_TREE_UNCHANGED_EXPLICIT_GROUPING",
+      "beforeSha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667",
+      "afterSha256": "9f91941a1a95831ec9669fc7b04cf1db94d01f028cb2098167c66519ade4d252",
+      "from": "v_entry->'before_values'||jsonb_build_object",
+      "to": "(v_entry->'before_values')||jsonb_build_object"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/09_native_child_raw_intents.sqlinc",
+      "signature": "private.timesheet_correction_a0_child_reference_before_v1()",
+      "kind": "EXPRESSION_TREE_UNCHANGED_EXPLICIT_GROUPING",
+      "beforeSha256": "be53f4621a7aac921dbcc256acb97d194bd310e61130a9a69e41df5e44f9c162",
+      "afterSha256": "7e95ec344576cacbecfca4cd9a4c125e349d0b07d80f170d93f1b240ba6b3eb5",
+      "from": "v_bookings||array[r->>'family_booking_id']",
+      "to": "v_bookings||array[(r->>'family_booking_id')]"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+      "signature": "private.weekly_contact_query_content_v1(uuid,uuid)",
+      "kind": "EXPRESSION_TREE_UNCHANGED_EXPLICIT_GROUPING",
+      "beforeSha256": "ca631e753a0eb31c7468d5a757f89863e608012a66b11408c7a17a6109758037",
+      "afterSha256": "80444bae062ff20c901dcb636921ab4ec382d478d7c336c8b631a6ff84beb938",
+      "from": "string_agg(x.item->>'issue_fingerprint'||':'||",
+      "to": "string_agg((x.item->>'issue_fingerprint')||':'||"
+    }
+  ],
+  "proof": {
+    "finiteDelta": "Each complete saved source equals exact committed preimage with one shown replacement; all eight hashes checked.",
+    "postgres17ExpressionTrees": "Offline PG17 AST comparison with locations removed: seven unchanged expression trees; protected setup mutex expression differs as intended to extract scope_id before concatenation.",
+    "remainingJsonConcatHazardsInAffectedFiles": 0,
+    "completePlpgsqlBodiesParsed": 447,
+    "completeBodiesFailures": 0,
+    "integrity": "407 migrations / 1075 repeatables PASS"
+  },
+  "realDefect": "The protected test setup journey mutex prefix must concatenate the text scope_id, rather than applying JSON extraction to the concatenated expression.",
+  "preserved": "No immutable migration or original proposal changed; signatures, ACL, scopes, release authorization, same transaction and expiry predicates retained. Seven other edits add explicit grouping only, with identical expression AST.",
+  "limits": {
+    "native": "NOT_RUN",
+    "sourceEffectClassification": "PENDING",
+    "contractSeal": "PENDING_FINAL_COMPOSITION",
+    "fullRehearsal": "NOT_RUN",
+    "install2": "NOT_INSTALLED"
+  },
+  "temporaryEvidence": {
+    "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\current-plpgsql-grammar-20261016",
+    "files": [
+      "inputs.json",
+      "check.py",
+      "PRE_CORRECTION_RESULT.json",
+      "RESULT.json"
+    ],
+    "privateBusinessData": false,
+    "needed": true
+  },
+  "effects": {
+    "databaseExecution": false,
+    "heldSession": false,
+    "deployment": false,
+    "bankingMessage": false,
+    "secretsPrinted": false
+  }
+}

@@ -118,7 +118,7 @@ begin
   if auth->>'authorization_sha256' is distinct from p_request->>'expected_authorization_sha256'
     or auth->>'setup_actor_user_id' is distinct from actor::text or auth->>'agency_id' is distinct from p_request->>'agency_id' then
     raise exception 'WEEKLY_SOURCE_TEST_SETUP_AUTHORIZATION_CHANGED' using errcode='40001'; end if;
-  perform pg_advisory_xact_lock(hashtextextended('weekly-source-test-journey:'||auth->>'scope_id',0));
+  perform pg_advisory_xact_lock(hashtextextended('weekly-source-test-journey:'||(auth->>'scope_id'),0));
   select * into strict c from public.weekly_source_cycles where id=(auth->>'source_cycle_id')::uuid;
   select * into strict g from public.weekly_source_groups where id=c.source_group_id and id=(auth->>'source_group_id')::uuid
     and active and source_family='ROSTER' and environment='TEST';

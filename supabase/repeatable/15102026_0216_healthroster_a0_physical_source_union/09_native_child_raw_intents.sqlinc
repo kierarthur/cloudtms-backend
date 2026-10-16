@@ -27,7 +27,7 @@ begin
       v_ids:=v_ids||array[(r->>'owning_timesheet_id')::uuid];v_workflows:=v_workflows||array[(r->>'workflow_id')::uuid];
     elsif tg_table_name='weekly_source_row_timesheet_lineages' then
       v_ids:=v_ids||array[(r->>'timesheet_id')::uuid];v_weeks:=v_weeks||array[(r->>'contract_week_id')::uuid];
-      v_cycles:=v_cycles||array[(r->>'source_cycle_id')::uuid];v_bookings:=v_bookings||array[r->>'family_booking_id'];
+      v_cycles:=v_cycles||array[(r->>'source_cycle_id')::uuid];v_bookings:=v_bookings||array[(r->>'family_booking_id')];
     elsif tg_table_name='weekly_source_cycles' then
       v_cycles:=v_cycles||array[(r->>'id')::uuid];
     elsif tg_table_name='contract_weeks' then
