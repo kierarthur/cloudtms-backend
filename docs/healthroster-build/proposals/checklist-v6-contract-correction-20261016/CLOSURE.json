@@ -16,8 +16,8 @@
     },
     {
       "file": "forward/sql/02_physical_apply.sqlinc",
-      "sha256": "6e92ad372d32f4148e0cc48a79b8e87fab7df384379accd272c73a1d5727753a",
-      "bytes": 32742
+      "sha256": "19653673c3fb690543350b535be931627e9a50c422f0d63b72ebbb397179d0e9",
+      "bytes": 37769
     },
     {
       "file": "forward/sql/03_native_guards.sqlinc",
@@ -26,8 +26,8 @@
     },
     {
       "file": "forward/sql/04_atomic_assert.sqlinc",
-      "sha256": "0fb6c39797aeac9dfd60993369fa7532bafcf97ad1046bc5c1c4029674620c4c",
-      "bytes": 8532
+      "sha256": "c5b2f14b2150a60e3b6160c58d1eb4eeb838f56067b7d7248d09c42a3ade8113",
+      "bytes": 8924
     },
     {
       "file": "forward/sql/04a_accept_composition.sqlinc",
@@ -41,8 +41,8 @@
     },
     {
       "file": "forward/sql/05_acl.sqlinc",
-      "sha256": "b8ff6abd3f0ef8bba6d11028514a25a2b2fd9506d9adc991e7e6b6afd1c299d0",
-      "bytes": 2899
+      "sha256": "0d3d7f6e26af8f9cffb620a03ad05ae5c8e1d2dd85c49e64927be65498082085",
+      "bytes": 2961
     },
     {
       "file": "forward/contracts/contract-correction-v3.mjs",
@@ -56,8 +56,8 @@
     },
     {
       "file": "tests/parse-source.py",
-      "sha256": "939f55a7d6bdf856938157412530e8064c303f3db583d5dda83fef4e0d399fb8",
-      "bytes": 2299
+      "sha256": "91a2fa5b8ea2fa2d3e3c30d525ec6a4517c4f210293a3d4cdb3e5a4377788551",
+      "bytes": 3525
     },
     {
       "file": "tests/native-scalars.sql",
@@ -66,8 +66,8 @@
     },
     {
       "file": "verification/catalogue.sql",
-      "sha256": "4707812de2f1e1450954a3c2b49e74701f955004ef518247194a7259d31696ca",
-      "bytes": 6810
+      "sha256": "1f01549eb0ebf0768958b671ce825962e9e6adaf2c8b9de35e668ab26a41bcf8",
+      "bytes": 6873
     },
     {
       "file": "build-native-guards.py",
@@ -76,8 +76,8 @@
     },
     {
       "file": "build-closure.mjs",
-      "sha256": "6511984558c8f04b6f785ef5a82621f3ed5ec69438c40267f5286ccb8ad1f5c8",
-      "bytes": 9905
+      "sha256": "3dcf6ea96a4aa41c2ca684987815563af34008f27225eee0337c33a8a0a43836",
+      "bytes": 10265
     },
     {
       "file": "NATIVE_GUARD_INPUTS.json",
@@ -355,6 +355,15 @@
       "searchPathControlled": true,
       "executeRoles": [],
       "sourceDeclarationSha256": "c30f128ac0e9230e859120621210d63fa5e70273f74aa82344dc50973aae9070"
+    },
+    {
+      "signature": "private.timesheet_contract_move_evidence_source_v1(uuid)",
+      "source": "forward/sql/02_physical_apply.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "b925d0cb0afb4e9b6c0f971ce6dae70b74fffa122f42c66a1ba9b301f20d2e2a"
     },
     {
       "signature": "private.timesheet_contract_move_stage_v1(uuid,uuid,bytea)",

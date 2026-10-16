@@ -4,8 +4,12 @@ import {createHash} from 'node:crypto';
 import path from 'node:path';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const hash=s=>createHash('sha256').update(s).digest('hex');
+// A Contract checkpoint must never absorb a saved, unqualified Daily successor.
+// Daily is admitted to the immutable closure only by this explicit switch.
+const includeDaily=process.argv.includes('--include-daily');
+if(process.argv.slice(2).some(arg=>arg!=='--include-daily'))throw Error('Unknown closure option');
 const sqlDir=path.join(root,'forward','sql');
-const sourceFiles=readdirSync(sqlDir).filter(f=>f.endsWith('.sqlinc')&&f!=='05_acl.sqlinc').sort();
+const sourceFiles=readdirSync(sqlDir).filter(f=>f.endsWith('.sqlinc')&&f!=='05_acl.sqlinc'&&(includeDaily||!/^04[bc]_daily_/.test(f))).sort();
 const functions=[],triggers=[];
 for(const f of sourceFiles){const s=readFileSync(path.join(sqlDir,f),'utf8');for(const m of s.matchAll(/create or replace function\s+([\w.]+)\s*\((.*?)\)\s*returns/igs)){
  const args=m[2].trim()?m[2].split(',').map(x=>x.trim().replace(/\s+default\s+.*$/i,'').replace(/^\w+\s+/,'')):[];

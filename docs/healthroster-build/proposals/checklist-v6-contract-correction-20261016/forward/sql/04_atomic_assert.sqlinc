@@ -71,6 +71,10 @@ begin
   if source_member is null or m.member_hash is distinct from private.timesheet_contract_move_row_hash_v1(source_member)
    or t.timesheet_id is null or not t.is_current or t.archived_at_utc is not null
    or t.contract_id is distinct from o.to_contract_id or t.version<>m.to_version
+   or (source_member->>'parent_timesheet_id' is null and t.parent_timesheet_id is not null)
+   or (source_member->>'parent_timesheet_id' is not null and not exists(
+    select 1 from private.timesheet_contract_move_members parent where parent.operation_id=o.id
+     and parent.from_timesheet_id=(source_member->>'parent_timesheet_id')::uuid and parent.to_timesheet_id=t.parent_timesheet_id))
    or not exists(select 1 from private.timesheet_contract_current_placements p where p.operation_id=o.id
     and p.family_root_id=m.family_root_id and p.member_key=m.member_key and p.current_timesheet_id=t.timesheet_id
     and p.current_contract_id=t.contract_id and p.placement_receipt_id=receipt_id)

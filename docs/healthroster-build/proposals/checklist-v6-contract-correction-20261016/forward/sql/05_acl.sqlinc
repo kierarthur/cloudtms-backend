@@ -21,6 +21,7 @@ begin
   'private.timesheet_contract_move_context_v1()',
   'private.timesheet_contract_move_event_assert_v1(uuid,jsonb)',
   'private.timesheet_contract_move_event_register_v1(text,text,oid,text,jsonb,jsonb,uuid,uuid)',
+  'private.timesheet_contract_move_evidence_source_v1(uuid)',
   'private.timesheet_contract_move_evidence_v1(uuid)',
   'private.timesheet_contract_move_family_lock_v1(uuid)',
   'private.timesheet_contract_move_financial_economics_v1(jsonb)',

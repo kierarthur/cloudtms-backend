@@ -22,8 +22,10 @@ as $function$
     'candidate_signed_at_utc',w.candidate_signed_at_utc,'manager_approved_at_utc',w.manager_approved_at_utc)
    order by w.id) from public.candidate_submission_workflows w
    where w.id=t.candidate_workflow_id or w.anchor_timesheet_id=t.timesheet_id or w.target_timesheet_id=t.timesheet_id),'[]'::jsonb),
-  'components',coalesce((select jsonb_agg(to_jsonb(e) order by e.expense_component_id)
-    from public.candidate_expense_components e where e.owning_timesheet_id=t.timesheet_id),'[]'::jsonb))
+  'components',coalesce((select jsonb_agg(to_jsonb(e)-array['component_generation','owning_timesheet_id','agency_authorisation_state','updated_at_utc'] order by e.expense_component_id)
+    from public.candidate_expense_components e where e.owning_timesheet_id=t.timesheet_id
+     or exists(select 1 from public.candidate_submission_workflows w where w.id=e.workflow_id
+      and (w.id=t.candidate_workflow_id or w.anchor_timesheet_id=t.timesheet_id or w.target_timesheet_id=t.timesheet_id))),'[]'::jsonb))
  from public.timesheets t where t.timesheet_id=p_timesheet_id;
 $function$;
 
@@ -108,6 +110,7 @@ begin
   evidence:=private.timesheet_contract_move_evidence_v1(original_id);
   member:=jsonb_build_object('member_key',member_key,'role',member_role,'from_timesheet_id',t.timesheet_id,
    'from_version',t.version,'from_financial_id',f.id,'from_contract_id',t.contract_id,'to_contract_id',o.to_contract_id,
+   'parent_timesheet_id',t.parent_timesheet_id,
    'original_timesheet_id',original_id,'source_row_sha256',encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(t)),'hex'),
    'financial_row_sha256',case when f.id is null then null else encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(f)),'hex') end,
    'financial_economics_sha256',case when f.id is null then null else encode(private.timesheet_contract_move_row_hash_v1(private.timesheet_contract_move_financial_economics_v1(to_jsonb(f))),'hex') end,
@@ -118,6 +121,9 @@ begin
    'destination_settings_authority',private._contract_settings_effective_core_v1(o.actual_client_id,o.to_contract_id,t.week_ending_date,'WEEKLY',null)-'resolved_at_utc');
   members:=members||jsonb_build_array(member);
  end loop;
+ if exists(select 1 from jsonb_array_elements(members) child where child->>'parent_timesheet_id' is not null
+  and not exists(select 1 from jsonb_array_elements(members) parent where parent->>'from_timesheet_id'=child->>'parent_timesheet_id')) then
+  raise exception 'CONTRACT_MOVE_NATIVE_PARENT_OUTSIDE_SCOPE' using errcode='55000';end if;
  result:=jsonb_build_object('version','CONTRACT_MOVE_SCOPE_V1','operation_id',o.id,'family_root_id',o.family_root_id,
   'current_placement',placement,'from_contract_id',o.from_contract_id,'to_contract_id',o.to_contract_id,
   'candidate_id',o.candidate_id,'actual_client_id',o.actual_client_id,'members',members,
@@ -195,6 +201,10 @@ begin
    and t.candidate_workflow_id is not distinct from (p_row->>'candidate_workflow_id')::uuid
    and t.candidate_workflow_generation is not distinct from (p_row->>'candidate_workflow_generation')::integer) then return false;end if;
  if o.state='REVIEWED' then
+  if private.timesheet_contract_move_accepting_v1(o.id) then
+   return exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=(p_row->>'timesheet_id')::uuid
+    and a.accepted_operation_id=o.id and a.original_timesheet_id=original_id);
+  end if;
   return exists(select 1 from private.timesheet_contract_move_capability_consumptions k
    join private.timesheet_contract_move_execution_contexts c on c.id=k.execution_context_id
    where k.operation_id=o.id and k.member_key=m.member_key and k.guard_name='public.timesheet_archive_row_guard_v1'
@@ -205,6 +215,39 @@ begin
  end if;
  return exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=(p_row->>'timesheet_id')::uuid
    and a.accepted_operation_id=o.id and a.original_timesheet_id=original_id);
+end;
+$function$;
+
+-- Native document/evidence consumers resolve original facts separately from
+-- the current physical header. Private raw assets never become public DTO keys.
+create or replace function private.timesheet_contract_move_evidence_source_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare a private.timesheet_contract_family_aliases%rowtype; m private.timesheet_contract_move_members%rowtype;
+ original_t public.timesheets%rowtype; current_t public.timesheets%rowtype; placement jsonb; evidence jsonb;
+begin
+ placement:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
+ select t.* into strict current_t from public.timesheets t where t.timesheet_id=(placement->>'current_timesheet_id')::uuid;
+ select v.* into a from private.timesheet_contract_family_aliases v where v.timesheet_id=current_t.timesheet_id;
+ if a.timesheet_id is null then return null;end if;
+ select v.* into strict m from private.timesheet_contract_move_members v where v.operation_id=a.accepted_operation_id and v.member_key=a.member_key;
+ select t.* into strict original_t from public.timesheets t where t.timesheet_id=a.original_timesheet_id;
+ evidence:=private.timesheet_contract_move_evidence_v1(original_t.timesheet_id);
+ if m.immutable_evidence_hash is distinct from private.timesheet_contract_move_row_hash_v1(evidence)
+  or (current_t.actual_schedule_json,current_t.worked_start_iso,current_t.worked_end_iso,current_t.worked_minutes,
+    current_t.break_start_iso,current_t.break_end_iso,current_t.break_minutes,current_t.additional_units_week,current_t.additional_units_per_day,
+    current_t.candidate_workflow_id,current_t.candidate_workflow_generation)
+   is distinct from (original_t.actual_schedule_json,original_t.worked_start_iso,original_t.worked_end_iso,original_t.worked_minutes,
+    original_t.break_start_iso,original_t.break_end_iso,original_t.break_minutes,original_t.additional_units_week,original_t.additional_units_per_day,
+    original_t.candidate_workflow_id,original_t.candidate_workflow_generation) then
+  raise exception 'CONTRACT_MOVE_ORIGINAL_EVIDENCE_CHANGED' using errcode='23514';end if;
+ return jsonb_build_object('version','CONTRACT_MOVE_EVIDENCE_SOURCE_V1','requested_timesheet_id',p_timesheet_id,
+  'original_timesheet_id',original_t.timesheet_id,'current_timesheet_id',current_t.timesheet_id,'family_root_id',a.family_root_id,
+  'member_key',a.member_key,'operation_id',a.accepted_operation_id,'placement_receipt_id',placement->'placement_receipt_id',
+  'placement_revision',placement->'placement_revision','immutable_evidence_hash',encode(m.immutable_evidence_hash,'hex'),
+  'original_timesheet',to_jsonb(original_t),'evidence',evidence,
+  'document_source',jsonb_build_object('timesheet_id',original_t.timesheet_id,'current_document_version_id',original_t.current_document_version_id,
+   'manual_document_asset_id',original_t.manual_document_asset_id,'manual_pdf_r2_key',original_t.manual_pdf_r2_key));
 end;
 $function$;
 
@@ -226,7 +269,7 @@ declare o private.timesheet_contract_move_operations%rowtype; r private.timeshee
  t public.timesheets%rowtype; target public.timesheets%rowtype; archived public.timesheets%rowtype; week public.contract_weeks%rowtype;
  scope jsonb; manifest jsonb; member jsonb; mapped jsonb:='[]'; plan jsonb; receipt jsonb; receipt_id uuid:=gen_random_uuid();
  context_id uuid:=gen_random_uuid(); now_utc timestamptz:=clock_timestamp(); seq integer; booking text; dest_id uuid; cap_id uuid;
- revision bigint; original_id uuid; new_primary uuid; bank_result jsonb; settings_snapshot jsonb;
+ revision bigint; original_id uuid; new_primary uuid; bank_result jsonb; settings_snapshot jsonb; inserted_count integer:=0;
 begin
  select v.* into o from private.timesheet_contract_move_operations v where v.id=p_operation_id;
  if o.id is null or o.purpose<>'CONTRACT_CORRECTION' then raise exception 'CONTRACT_MOVE_CONTRACT_ONLY' using errcode='22023';end if;
@@ -263,9 +306,18 @@ begin
  values(context_id,o.id,pg_backend_pid(),pg_current_xact_id(),o.created_by_user_id,r.id,private.timesheet_contract_move_row_hash_v1(manifest),
   o.billing_revision+1,0,'ACCEPT_PLACEMENT',manifest,now_utc,now_utc+interval '120 seconds');
  perform set_config('cloudtms.contract_move_execution_context',context_id::text,true);
- for member in select value from jsonb_array_elements(mapped) loop
+ for member in with recursive physical_order(row_json,from_id,depth) as (
+   select value,(value->>'from_timesheet_id')::uuid,0 from jsonb_array_elements(mapped) where value->>'parent_timesheet_id' is null
+   union all select child,(child->>'from_timesheet_id')::uuid,parent.depth+1
+    from jsonb_array_elements(mapped) child join physical_order parent on (child->>'parent_timesheet_id')::uuid=parent.from_id
+  ) select p.row_json from physical_order p order by p.depth,p.from_id loop
   select v.* into t from public.timesheets v where v.timesheet_id=(member->>'from_timesheet_id')::uuid;
   target:=t;target.timesheet_id:=(member->>'to_timesheet_id')::uuid;target.version:=1;target.contract_id:=o.to_contract_id;
+  if t.parent_timesheet_id is not null then
+   select (parent->>'to_timesheet_id')::uuid into target.parent_timesheet_id from jsonb_array_elements(mapped) parent
+    where parent->>'from_timesheet_id'=t.parent_timesheet_id::text;
+   if target.parent_timesheet_id is null then raise exception 'CONTRACT_MOVE_NATIVE_PARENT_UNBOUND' using errcode='55000';end if;
+  end if;
   settings_snapshot:=private._contract_settings_effective_core_v1(o.actual_client_id,o.to_contract_id,t.week_ending_date,'WEEKLY',null);
   if settings_snapshot-'resolved_at_utc' is distinct from member->'destination_settings_authority' then raise exception 'REVIEW_STALE' using errcode='40001';end if;
   target.settings_authority_json:=settings_snapshot;target.settings_authority_version:='CONTRACT_SETTINGS_AUTHORITY_V1';
@@ -295,9 +347,11 @@ begin
   perform private.timesheet_contract_move_event_register_v1(member->>'member_key','public.timesheet_archive_row_guard_v1','public.timesheets'::regclass,'INSERT',null,to_jsonb(target),receipt_id);
   cap_id:=private.timesheet_contract_move_capability_issue_v1(o.id,member->>'member_key','ACCEPT_PLACEMENT','public.timesheet_archive_row_guard_v1');
   insert into public.timesheets select (target).*;
+  inserted_count:=inserted_count+1;
   update public.contract_weeks set timesheet_id=target.timesheet_id,status='SUBMITTED',updated_at=now_utc
    where id=(member->>'contract_week_id')::uuid;
  end loop;
+ if inserted_count<>jsonb_array_length(mapped) then raise exception 'CONTRACT_MOVE_NATIVE_PARENT_ORDER_INVALID' using errcode='55000';end if;
  -- The real CM stage writes its own approved revision/binding/calculation under this same private context.
  bank_result:=private.bpay_next_contract_move_stage_v1(o.id,r.pay_cut_hash);
  for member in select value from jsonb_array_elements(mapped) loop
