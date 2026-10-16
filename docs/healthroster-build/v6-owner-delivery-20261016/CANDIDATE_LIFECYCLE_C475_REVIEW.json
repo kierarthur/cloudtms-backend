@@ -206,7 +206,7 @@
     },
     {
       "id": "CM-LIFECYCLE-CURRENT-POLICY-EQUIVALENCE",
-      "status": "RETURNED_FOR_EXACT_PRODUCER_TRACE",
+      "status": "RESOLVED_SOURCE_EQUIVALENCE_NATIVE_RACE_NOT_RUN",
       "issue": "Worker transient policy uses detail.capabilities.policy; native new guard uses _expense_approval_policy_v1 currentB JSON. Exact actual producer equivalence must be established or corrected."
     },
     {
@@ -232,5 +232,67 @@
   "api": "NOT_RUN",
   "testFlight": "NOT_BUILT",
   "install2": "NOT_INSTALLED",
-  "partBCriticSignoff": false
+  "partBCriticSignoff": false,
+  "successor529RootReview": {
+    "sourceCommit": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+    "status": "COMPLETE_PAPER_OWNERS_AND_TRANSITION_DELTA_READ_NOT_MOUNTED",
+    "readPayloads": [
+      {
+        "file": "forward/00a_original_paper_source_lock.sqlinc",
+        "sha256": "803f58f7cf4f58514e617d84268afaf4c830aa37b12bbe97a2cc1bf262875749"
+      },
+      {
+        "file": "forward/03_original_paper_mail_constructor.sqlinc",
+        "sha256": "1b9a9956eed59cb91308d2167690a41b8c47355a6219647cc4edae883bcc1f7c"
+      },
+      {
+        "file": "forward/05_original_paper_promote.sqlinc",
+        "sha256": "43f408456a69b4975dacb938a1e0dc6fe21fd86ede58c0516e5ca66871737da1"
+      },
+      {
+        "file": "forward/06_original_paper_proof.sqlinc",
+        "sha256": "d38389b2b6d91187ab8c2bfdfb3226a96428387faea134f626b1bea0d7a51696"
+      },
+      {
+        "file": "forward/06a_original_paper_proof_v1.sqlinc",
+        "sha256": "c19634b2737a5a074f2f96f74fcdad1638693537a32d91a88554c84eca33ee20"
+      },
+      {
+        "file": "forward/07_original_paper_complete.sqlinc",
+        "sha256": "7fe7ce844920bbef3061fad78886598e0ebdb23cfa435bef61067703ff03980c"
+      },
+      {
+        "file": "forward/02_original_paper_pack.mjsinc",
+        "sha256": "834ffd592a011ed86a24dea36ab1aad303fe5c889116767c60d713970ec3572c"
+      },
+      {
+        "file": "forward/04_original_paper_status.mjsinc",
+        "sha256": "c7c558deb3245774b5d7c8d8ce3104f277cc9dfc07d4a84bb6a8325c738b0ddd"
+      }
+    ],
+    "transitionDelta": "Complete delta from exact c475 03_worker_submit_current_placement.sqlinc to529 01_native_draft_and_paper_release.sqlinc read. Original workflow/manager/correction IDs and native mutation owner retained.",
+    "currentPolicyEquivalence": {
+      "status": "PASS_SOURCE_ONLY",
+      "proof": [
+        "04092026_1603 _candidate_record_capabilities_v1 returns complete _candidate_policy_resolve_v1(actualBClient,actualBContract,actualWeek) as policy.",
+        "96c5 detail uses current B/CW; c475 Worker transient calculationWorkflow uses that complete detail policy.",
+        "10102026_1347 _expense_approval_policy_v1 returns same resolver policy unmodified for CONTRACT_HOURS and CONTRACT_COMBINED.",
+        "529 workflow selects actual current B Contract; exact whole policy and rate_source_refs Contract are rechecked before submit, including combined.hours_submission."
+      ],
+      "nativeSettingsRace": "NOT_RUN",
+      "expenseOnly": "Distinct controlled refusal; no positive claim inferred."
+    },
+    "paperOriginalWeekPointer": {
+      "status": "PASS_HEALTH_SOURCE_ONLY",
+      "stageSha256": "916d7a0438014aa1a700878cc5ea76f97eb3138484947691801917ffe4abeea9",
+      "assessment": "Health stage inserts new destination CW and updates only that member CW, preserving original A pointer used by constructor. Missing Banking stage effects remain unqualified."
+    },
+    "remaining": [
+      "Intermediate-B workflow paper source continuation remains explicit successor work.",
+      "Real native rotation/withdrawal/pending binding and actual allocation CAS remain successor work.",
+      "Actual financial/Bank ABI, native concurrency/ACL, current contract seal/API/phone acceptance remain required."
+    ],
+    "native": "NOT_RUN_EXCEPT_SEPARATE_PURE_25_AND_28",
+    "mounted": false
+  }
 }

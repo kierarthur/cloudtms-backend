@@ -1,0 +1,63 @@
+{
+  "version": "HEALTHROSTER_CONTACT_REMINDER_REFUSAL_INTEGRATION_V1",
+  "status": "HTTP_SOURCE_INTEGRATED_NATIVE_PRODUCER_PENDING_NOT_INSTALLED",
+  "rootBeforeIntegration": "e745f7a3350078ad2ff200400bcae88499ecf20d",
+  "producerCommit": "03b444e0ead2f70ab193101dbf8f151e64efccaf",
+  "producerFile": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/40_candidate_contact_entry_owners.sqlinc",
+  "producerSha256": "a5bc0083766a1dea9788c264ae583a86af874edd817163b594e042871fb5a594",
+  "metadataSha256": "a84bf9b68c181773f6bc47f4ddec9e3e3ce4f5ce49a8257f946b52a734309a59",
+  "http": {
+    "action": "REMIND_CANDIDATE",
+    "rpc": "weekly_source_candidate_reminder_atomic_v1",
+    "sqlstate": "55000",
+    "nativeMessage": "CONTACT_PAUSED",
+    "detailVersion": "CONTACT_PAUSE_REFUSAL_V1",
+    "detailKeys": [
+      "version",
+      "candidate_id",
+      "client_id",
+      "audience",
+      "next_allowed_utc",
+      "next_allowed_local"
+    ],
+    "status": 409,
+    "responseKeys": [
+      "ok",
+      "error_code",
+      "message"
+    ],
+    "wording": "Contact paused until DD/MM/YYYY hh:mm (UK)",
+    "wordingAuthority": "NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/UI_POLICY_AND_COPY.md",
+    "clockAuthority": "Exact server refusal UTC6 instant, checked against its same Europe/London local display; no Date.now/browser clock/state mutation",
+    "preserved": "Existing success receipt, actor injection, no-store, unrelated/uncertain error semantics; no raw details/IDs exposed. Actual pause GET remains current-state authority."
+  },
+  "files": [
+    {
+      "file": "broker/src/weekly-source/contact-reminder-refusal.mjs",
+      "sha256": "6a9b8e1737bbd7a45e5b3613c2c4374d64c9f43b70866a0927242733188f228d"
+    },
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "sha256": "ed92abc085aaac15fc72aa58de649ebced8e1ae580d0bfac9d8c3a2078ac0242"
+    },
+    {
+      "file": "tests/weekly-source/contact-reminder-refusal.test.mjs",
+      "sha256": "aed4f5c51b467cccf9c53be701f5b22a6538798fce45db65f51c7ff63213b748"
+    }
+  ],
+  "validation": {
+    "sourceRouteTests": 21,
+    "passed": 21,
+    "failed": 0,
+    "native": "NOT_RUN",
+    "api": "NOT_RUN",
+    "providerCalls": 0
+  },
+  "newSourceFinding": {
+    "id": "CONTACT-UNRELATED-SCOPE-LOCKS",
+    "source": "forward/36_submission_identity_and_guard.sqlinc +40 reminder/submit callers",
+    "status": "RETURNED_TO_ORIGINAL_OWNER_FIX_IN_PROGRESS",
+    "issue": "Whole-cycle scope discovery currently includes unrelated/historical workers even for single-Candidate ingress. Narrow actual footprint without caps or loss of revalidation/concurrency."
+  },
+  "install2": "NOT_INSTALLED"
+}

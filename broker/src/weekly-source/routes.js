@@ -11,6 +11,7 @@ import { normalizeBpayNextOwnerStatus } from '../bpay-next-legacy-fence.js';
 import { validateRuleSetValues } from './rule-set-validation.js';
 import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';
 import {CONTACT_PAUSE_RPC_COMMANDS,isContactPauseCommand,parseContactPauseCommandBody,handleContactPauseOfficeCommand} from './contact-pause-office.mjs';
+import { contactReminderRefusal } from './contact-reminder-refusal.mjs';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_COMMAND_BYTES = 262_144;
@@ -878,6 +879,10 @@ async function handleCommand(req, env, ctx, dependencies, user) {
       );
       return jsonResponse(200, result);
     } catch (error) {
+      if (action === 'REMIND_CANDIDATE') {
+        const refusal = contactReminderRefusal(error);
+        if (refusal) return jsonResponse(409, refusal);
+      }
       if (action === 'ASK_CANDIDATES'
           && /WEEKLY_SOURCE_CANDIDATE_APP_UNAVAILABLE/i.test(
             `${String(error?.code || '')} ${String(error?.message || '')}`
