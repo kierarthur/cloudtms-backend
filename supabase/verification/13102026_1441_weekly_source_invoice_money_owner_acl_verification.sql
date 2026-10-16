@@ -18,8 +18,17 @@ begin
   begin perform private.weekly_source_invoice_only_vector_v1('PAY',1); raise exception 'F5_EXPECTED_PAY_REFUSAL';
   exception when sqlstate '22023' then perform pg_temp.f5_owner_assert(sqlerrm='WEEKLY_SOURCE_INVOICE_VECTOR_INVALID','nonzero pay refused'); end;
   perform pg_temp.f5_owner_assert(private.weekly_source_frozen_rule_values_v1('f5510000-0000-4000-8000-000000000999') is null,'absent immutable version has no current-setting fallback');
-  perform pg_temp.f5_owner_assert(private.weekly_source_shift_on_self_bill_v1('f5510000-0000-4000-8000-000000000999','f5510000-0000-4000-8000-000000000998')
-    ='{"on_accepted_report":false,"bound_to_finalised_export":false,"invoice_ready":false,"s25_pay_selected":false}'::jsonb,'unknown scope returns four strict false facts');
+  perform pg_temp.f5_owner_assert(private.weekly_source_shift_on_self_bill_v1(null,null)
+    ='{"on_accepted_report":false,"bound_to_finalised_export":false,"invoice_ready":false,"s25_pay_selected":false}'::jsonb,'legacy null scope returns four strict false facts');
+  perform pg_temp.f5_owner_assert(not exists(select 1 from public.weekly_work_events where id='f5510000-0000-4000-8000-000000000999')
+    and not exists(select 1 from public.weekly_source_cycles where id='f5510000-0000-4000-8000-000000000998')
+    and not exists(select 1 from public.weekly_source_report_scopes where id='f5510000-0000-4000-8000-000000000998'),'unknown scope sentinel remains absent');
+  begin
+    perform private.weekly_source_shift_on_self_bill_v1('f5510000-0000-4000-8000-000000000999','f5510000-0000-4000-8000-000000000998');
+    raise exception 'F5_EXPECTED_UNKNOWN_SCOPE_REFUSAL';
+  exception when sqlstate '22023' then
+    perform pg_temp.f5_owner_assert(sqlerrm='WEEKLY_SOURCE_SELF_BILL_EVENT_NOT_FOUND','explicit unknown scope fails closed');
+  end;
   foreach signature in array array[
     'private.weekly_source_billing_movement_hash_v1(jsonb)',
     'private.weekly_source_frozen_rule_values_v1(uuid)',

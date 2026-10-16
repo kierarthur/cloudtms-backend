@@ -11,7 +11,13 @@
       "repeatables": 1074,
       "verifiers": 176
     },
-    "snapshotPrecedesProfileReceiptCorrection": true
+    "snapshotPrecedesProfileReceiptCorrection": true,
+    "additionalSourceCorrectionsAfterSnapshot": [
+      {
+        "file": "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+        "reason": "Explicit-unknown scope verifier corrected; regenerate census after final mount."
+      }
+    ]
   },
   "newBodies": [
     {
@@ -212,6 +218,21 @@
       "file": "supabase/verification/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
       "status": "SOURCE_CORRECTED",
       "change": "Only result profile_count 5 to 6, matching the existing six-active-profile assertion.",
+      "native": "NOT_RUN"
+    },
+    {
+      "id": "I2-VERIFIER-EXPLICIT-UNKNOWN-SOURCE-SCOPE",
+      "file": "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+      "status": "SOURCE_CORRECTED_NATIVE_NOT_RUN",
+      "previousSourceSqlHash": "d6b90fb5ffe8d76e48ce06ab89ee4d1b7e32f25b8d2ab8afea23ba76bf6fce32",
+      "currentSavedSha256": "30be4ad2865364704f972ce3442062ba257440ae7cbe6eeae72f1884390aa21a",
+      "evidence": [
+        "The exact final shift_on_self_bill function returns the four-false legacy facts only for null arguments.",
+        "With explicit UUID arguments it first SELECTs weekly_work_events and raises22023 WEEKLY_SOURCE_SELF_BILL_EVENT_NOT_FOUND if absent.",
+        "The original verifier incorrectly asserted a four-false result for two explicit absent UUIDs."
+      ],
+      "change": "Preserve four-false assertion using null legacy inputs; prove fixed sentinels absent; require exact22023 explicit-unknown error. No application behavior or positive staging/financial assertion changed.",
+      "validation": "PG17 grammar:4statements including complete temp function and DO PASS; db:check407migrations/1074repeatables PASS.",
       "native": "NOT_RUN"
     }
   ],
@@ -1485,6 +1506,625 @@
       "scope": "Only exact current verifier argument/refusal arms assessed. Positive financial, Source publication, native report readiness, API/ACL and full transitive application behavior remain separately required.",
       "executionApproval": false,
       "native": "NOT_RUN"
+    },
+    {
+      "status": "EIGHT_COMPLETE_PROTECTION_AND_INVOICE_CLASSIFICATION_BODIES_READ",
+      "verifierIndices": [
+        163,
+        165
+      ],
+      "functions": [
+        {
+          "signature": "private.weekly_source_frozen_rule_values_v1(uuid)",
+          "root": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+          "statementSha256": "a97158c0b2b9c2d4c333b54d7c1be067c5e70015e4cb84dffacfb54dc82cef46"
+        },
+        {
+          "signature": "private.weekly_source_query_require_service_v1()",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "statementSha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0"
+        },
+        {
+          "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+          "root": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+          "statementSha256": "04e8d3ca4268324616ef9cd7cd47ee6fe7de8bf7a236e278f8e88838c4c83788"
+        },
+        {
+          "signature": "private.weekly_source_protected_wait_witness_v1(uuid,uuid)",
+          "root": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+          "statementSha256": "2bf6dedcdb4664da0079f63059c149c0ab844828409ec0d5124449aeeed14c2c"
+        },
+        {
+          "signature": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+          "root": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql",
+          "statementSha256": "04ad7e4819dba0a1d78728e47dc6e13325ff31c48ea128f2ae70bb2ab6bb4782"
+        },
+        {
+          "signature": "private._weekly_source_acl_table_contract_v1()",
+          "root": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+          "statementSha256": "7c726e16bbc6ac3454cfb3b4678c1119ca9f1c178eb02a3913f7154b3ded557e"
+        },
+        {
+          "signature": "public.weekly_source_automatic_reconcile_atomic_v1(jsonb)",
+          "root": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+          "statementSha256": "b1b0e953488598b9ad4df54b35c87077a2a5043ba2f9d628c28c023912971363"
+        },
+        {
+          "signature": "public.weekly_source_protect_all_signed_atomic_v1(jsonb)",
+          "root": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+          "statementSha256": "9916726e75052944d608a5553be77bbe4f466245be834fde269f58aa857804d5"
+        }
+      ],
+      "sourceFileHashes": [
+        {
+          "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+          "canonicalSha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+          "savedBytesSha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+        },
+        {
+          "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "canonicalSha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+          "savedBytesSha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+        },
+        {
+          "file": "supabase/repeatable/05102026_1417_weekly_source_coverage_support/qualified_coverage.inc",
+          "canonicalSha256": "45a8a0bc2364318d734c1ec678d79fa617d549a62c3a532ef851c928773aee6e",
+          "savedBytesSha256": "45a8a0bc2364318d734c1ec678d79fa617d549a62c3a532ef851c928773aee6e"
+        },
+        {
+          "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "canonicalSha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+          "savedBytesSha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+          "canonicalSha256": "c4c33f686dd3d1db4f51f467ca2984e7d99f4abcff4f933fa67d838a56cf7cae",
+          "savedBytesSha256": "c4c33f686dd3d1db4f51f467ca2984e7d99f4abcff4f933fa67d838a56cf7cae"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/00_checking_client_scope.sqlinc",
+          "canonicalSha256": "ced9c786bbe26995ed7d415ab16d2f2a4d8252cea155571b8dbdcdbe8a63d790",
+          "savedBytesSha256": "ced9c786bbe26995ed7d415ab16d2f2a4d8252cea155571b8dbdcdbe8a63d790"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/01_wait_receipt.sqlinc",
+          "canonicalSha256": "de1bbc3e9d1055cc0b1ca4eab94ec945e0be9426c19bbdf0e1aac1ec99c8d4b5",
+          "savedBytesSha256": "de1bbc3e9d1055cc0b1ca4eab94ec945e0be9426c19bbdf0e1aac1ec99c8d4b5"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc",
+          "canonicalSha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b",
+          "savedBytesSha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+          "canonicalSha256": "43feac012ac1be7b623a160bc50dae3f2f63433d60e790b227dbd0c6a5ecfc4d",
+          "savedBytesSha256": "202aee306e61e6150fa2978e8594c0aa38863b7d6f458888a59a99ce02702652"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/04_contact_retirement.sqlinc",
+          "canonicalSha256": "7fe56fe5e2f2ed14c835e96fc478512fd6a7956147b525ed8b37ca72805b8142",
+          "savedBytesSha256": "be0e4e6c9b1c48f21b59f45ca52843ef1fcff8bea612f9afee652a0789a489e6"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/05_unprotected_close.sqlinc",
+          "canonicalSha256": "4c6d3ca8cdaead1433a57bb93612b95877e901e874711bf989778f48cb4c280b",
+          "savedBytesSha256": "4c6d3ca8cdaead1433a57bb93612b95877e901e874711bf989778f48cb4c280b"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc",
+          "canonicalSha256": "bb3609e8c194b95e933f90ea91fd81b42540174e6d9ca578610d21e318144ef4",
+          "savedBytesSha256": "bb3609e8c194b95e933f90ea91fd81b42540174e6d9ca578610d21e318144ef4"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07a_current_source_rows.sqlinc",
+          "canonicalSha256": "1a19e89bd7439a15ceac39d3e15b1c94f1de64d695d4e0e379f95784bc277d84",
+          "savedBytesSha256": "1a19e89bd7439a15ceac39d3e15b1c94f1de64d695d4e0e379f95784bc277d84"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07_submission_comparison.sqlinc",
+          "canonicalSha256": "89bca949dfe088c3f7485739f327224874f1f02e29cda8b4701e7670ad6b4855",
+          "savedBytesSha256": "89bca949dfe088c3f7485739f327224874f1f02e29cda8b4701e7670ad6b4855"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08_comparison_audit.sqlinc",
+          "canonicalSha256": "317e970b59f7f7a806e2916277d30b7d1c5404ae24b56481c7de30d4082589ac",
+          "savedBytesSha256": "317e970b59f7f7a806e2916277d30b7d1c5404ae24b56481c7de30d4082589ac"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08a_expected_week_fingerprint.sqlinc",
+          "canonicalSha256": "559212099c2daf7d9b9d647ba2d8cb565d3e40b5f9c95c44c5f580a090347370",
+          "savedBytesSha256": "559212099c2daf7d9b9d647ba2d8cb565d3e40b5f9c95c44c5f580a090347370"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/09_expected_week_materialiser.sqlinc",
+          "canonicalSha256": "764d3b5513f92dc45001ca6cc1e7e6d2705e7b78b7762f4e51a5112f42e5e285",
+          "savedBytesSha256": "764d3b5513f92dc45001ca6cc1e7e6d2705e7b78b7762f4e51a5112f42e5e285"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/10_publication_recheck.sqlinc",
+          "canonicalSha256": "b44abd36f95844fddcbe38ea74daf3a16619383ec42b2d479248e1461cdbb27c",
+          "savedBytesSha256": "b44abd36f95844fddcbe38ea74daf3a16619383ec42b2d479248e1461cdbb27c"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/10a_expected_question_scope.sqlinc",
+          "canonicalSha256": "0c2406657f06a848c2f6cdd55dc5cb35ae854a03375bfdcf82f497a139ca5c12",
+          "savedBytesSha256": "0c2406657f06a848c2f6cdd55dc5cb35ae854a03375bfdcf82f497a139ca5c12"
+        },
+        {
+          "file": "supabase/repeatable/includes/weekly_contact_timing/010_timing_validation.sqlinc",
+          "canonicalSha256": "5172f1534da1e297cc477d53ed8e8c9d08f1a62ea64885e15c27f53fbf7325b4",
+          "savedBytesSha256": "5172f1534da1e297cc477d53ed8e8c9d08f1a62ea64885e15c27f53fbf7325b4"
+        },
+        {
+          "file": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+          "canonicalSha256": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be",
+          "savedBytesSha256": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/11_manager_due_scope.sqlinc",
+          "canonicalSha256": "107549cdc9e9e2606992465e386b40872b3d507d0140ad623a4109dc6ed93fc0",
+          "savedBytesSha256": "107549cdc9e9e2606992465e386b40872b3d507d0140ad623a4109dc6ed93fc0"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/12_manager_owned_facts.sqlinc",
+          "canonicalSha256": "a1f60c220121776af5fc05d7220c6ad22aafa0b326275de9f0ee15243d71aef8",
+          "savedBytesSha256": "a1f60c220121776af5fc05d7220c6ad22aafa0b326275de9f0ee15243d71aef8"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+          "canonicalSha256": "6684d0eda2a12f502e896f46844e0dd10a658831fb298a51f95afcd8e748ab5e",
+          "savedBytesSha256": "6684d0eda2a12f502e896f46844e0dd10a658831fb298a51f95afcd8e748ab5e"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/14_not_finalised_dispatch.sqlinc",
+          "canonicalSha256": "a50ccbf231397fd968945ce6acc8c5fb96b9d3baa575caf523d68682c9f46832",
+          "savedBytesSha256": "a50ccbf231397fd968945ce6acc8c5fb96b9d3baa575caf523d68682c9f46832"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc",
+          "canonicalSha256": "7c20563bda1e32cf808688ed441da0a4e8a96cc9b6c9091900180ec730ee4b77",
+          "savedBytesSha256": "7c20563bda1e32cf808688ed441da0a4e8a96cc9b6c9091900180ec730ee4b77"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/16_protected_lock_helpers.sqlinc",
+          "canonicalSha256": "5ad639381f656aa27c13a7b87319db8603bbc1bcaa3751bd8fe8b7d239d3e61c",
+          "savedBytesSha256": "5ad639381f656aa27c13a7b87319db8603bbc1bcaa3751bd8fe8b7d239d3e61c"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+          "canonicalSha256": "d7c821c1a41a47df2afaf7da31384b1590245cefddd488608e24cf943f29fb72",
+          "savedBytesSha256": "d7c821c1a41a47df2afaf7da31384b1590245cefddd488608e24cf943f29fb72"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/18_prepare_action.sqlinc",
+          "canonicalSha256": "a7078453d49205ad218c9349b9218fdb8349d9b423dbad72ec788d03941d6c62",
+          "savedBytesSha256": "a7078453d49205ad218c9349b9218fdb8349d9b423dbad72ec788d03941d6c62"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/19_action_context.sqlinc",
+          "canonicalSha256": "1f7f7a17dceea6aa4f28b02626b18a349eedb73243861076d056286b82d85e99",
+          "savedBytesSha256": "1f7f7a17dceea6aa4f28b02626b18a349eedb73243861076d056286b82d85e99"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/20_stage_request.sqlinc",
+          "canonicalSha256": "36bea12950392ba9d2721c86218fee31cce84a918ee0558b389bf4b47a3613c9",
+          "savedBytesSha256": "36bea12950392ba9d2721c86218fee31cce84a918ee0558b389bf4b47a3613c9"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/21_publication_family_fence.sqlinc",
+          "canonicalSha256": "a164fbca5a92f1bdefd19e1697cd2a0dfdaaf2fd4dbb948d8587b6b3cbc41745",
+          "savedBytesSha256": "a164fbca5a92f1bdefd19e1697cd2a0dfdaaf2fd4dbb948d8587b6b3cbc41745"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/22_query_groups.sqlinc",
+          "canonicalSha256": "ca4bba75f1e1aa7ee977f72cc888a7fc821d8b2b9e9e5615d5b78d9490cc8361",
+          "savedBytesSha256": "ca4bba75f1e1aa7ee977f72cc888a7fc821d8b2b9e9e5615d5b78d9490cc8361"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/23_bulk_signed_selection.sqlinc",
+          "canonicalSha256": "1d4f13e3dfe66aa8c8c0cd8f55a29cf3c231bf26f3202b3d4b7ae52a7144c049",
+          "savedBytesSha256": "1d4f13e3dfe66aa8c8c0cd8f55a29cf3c231bf26f3202b3d4b7ae52a7144c049"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/24_due_scope_capture.sqlinc",
+          "canonicalSha256": "ab3931cbfb55226f17c44c12a6ec51bb7c3750a577f40ccf7118398aefcc1d77",
+          "savedBytesSha256": "ab3931cbfb55226f17c44c12a6ec51bb7c3750a577f40ccf7118398aefcc1d77"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+          "canonicalSha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8",
+          "savedBytesSha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/26_bulk_command.sqlinc",
+          "canonicalSha256": "88a6c4ea62830ed5c72b3433864ddafe34120c5869541bcfedb5c428e5c3bdfa",
+          "savedBytesSha256": "88a6c4ea62830ed5c72b3433864ddafe34120c5869541bcfedb5c428e5c3bdfa"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+          "canonicalSha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138",
+          "savedBytesSha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138"
+        },
+        {
+          "file": "supabase/repeatable/includes/weekly_contact_timing/070_acl.sqlinc",
+          "canonicalSha256": "23e8f28ec1e958dc74f28182a3d28f25ef416fa154f8169cd6d1a0345eca9ba5",
+          "savedBytesSha256": "23e8f28ec1e958dc74f28182a3d28f25ef416fa154f8169cd6d1a0345eca9ba5"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql",
+          "canonicalSha256": "d26063ed33e464716d6e42ae739541d589b9d9ebf44c0d02693b71ff98a2dc57",
+          "savedBytesSha256": "d26063ed33e464716d6e42ae739541d589b9d9ebf44c0d02693b71ff98a2dc57"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+          "canonicalSha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f",
+          "savedBytesSha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/03_receipt_and_window_owners.sqlinc",
+          "canonicalSha256": "dd9d5ceb119867a6a07a768b86cc6f06c07d4949d4376207b13cd9ebe91bb2e9",
+          "savedBytesSha256": "dd9d5ceb119867a6a07a768b86cc6f06c07d4949d4376207b13cd9ebe91bb2e9"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
+          "canonicalSha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d",
+          "savedBytesSha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+          "canonicalSha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d",
+          "savedBytesSha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/06_complete_allocation_issue.sqlinc",
+          "canonicalSha256": "d23855453b7b6f8f2db9d96aa2b46d8f83e8af6dd18967e7599a9d7cdb57830a",
+          "savedBytesSha256": "d23855453b7b6f8f2db9d96aa2b46d8f83e8af6dd18967e7599a9d7cdb57830a"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/07_complete_header_move.sqlinc",
+          "canonicalSha256": "7a1f6eddd8cdc60bd52b10309bfab5107700ddab39aad3164df89afed7aa716d",
+          "savedBytesSha256": "7a1f6eddd8cdc60bd52b10309bfab5107700ddab39aad3164df89afed7aa716d"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+          "canonicalSha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff",
+          "savedBytesSha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+          "canonicalSha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+          "savedBytesSha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10_complete_source_readers_correction.sqlinc",
+          "canonicalSha256": "420139cda0467dfa61d9fb28240f6c8843317610313c8f736fe6278b00520f0c",
+          "savedBytesSha256": "420139cda0467dfa61d9fb28240f6c8843317610313c8f736fe6278b00520f0c"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10b_complete_remaining_manifest_consumers.sqlinc",
+          "canonicalSha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8",
+          "savedBytesSha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+          "canonicalSha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+          "savedBytesSha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10d_retained_report_and_date_boundaries.sqlinc",
+          "canonicalSha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5",
+          "savedBytesSha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/11_complete_native_snapshot_assembler.sqlinc",
+          "canonicalSha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+          "savedBytesSha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc",
+          "canonicalSha256": "50ecf38150cfdfcb5d197fd43bd6684a7a8c7ad510841c53178621a2c6b54f55",
+          "savedBytesSha256": "50ecf38150cfdfcb5d197fd43bd6684a7a8c7ad510841c53178621a2c6b54f55"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/13_private_acl.sqlinc",
+          "canonicalSha256": "c7de0f44918eca3a8985ba6e89650fedb7d15218e99da8907f87b88b0af7e6da",
+          "savedBytesSha256": "c7de0f44918eca3a8985ba6e89650fedb7d15218e99da8907f87b88b0af7e6da"
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/14_complete_legacy_render_manifest.sqlinc",
+          "canonicalSha256": "e95ba0bf3dcb72b3f9952422e839f20e9a2c40a03ec6c4735493f6017aa496b5",
+          "savedBytesSha256": "e95ba0bf3dcb72b3f9952422e839f20e9a2c40a03ec6c4735493f6017aa496b5"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+          "canonicalSha256": "41f389a3d77ca66b2f2ebb0bf596cfd5b8790cd5e58ac29c0f063e8e1347dfea",
+          "savedBytesSha256": "41f389a3d77ca66b2f2ebb0bf596cfd5b8790cd5e58ac29c0f063e8e1347dfea"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "canonicalSha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8",
+          "savedBytesSha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+          "canonicalSha256": "49fa65c7d185ad57f27d444585d79488715492c9f579206c4ddd84e99d6d8b0f",
+          "savedBytesSha256": "49fa65c7d185ad57f27d444585d79488715492c9f579206c4ddd84e99d6d8b0f"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/ORIGINAL_PREREQUISITES_SOURCE_FORWARD.sqlinc",
+          "canonicalSha256": "1ec71ddb192128b78a02e8ea11a7d5afd2797116e2d954b7cb7a03b9b2be74bc",
+          "savedBytesSha256": "1ec71ddb192128b78a02e8ea11a7d5afd2797116e2d954b7cb7a03b9b2be74bc"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/01_cap_original_functions_02_source_cas.sqlinc",
+          "canonicalSha256": "0ec5032e9bfe7d7b88ee5d85c5b207f235fbd6cbdb81f854f25becc4b219208b",
+          "savedBytesSha256": "0ec5032e9bfe7d7b88ee5d85c5b207f235fbd6cbdb81f854f25becc4b219208b"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/02_cap_original_functions_03_capability_owners.sqlinc",
+          "canonicalSha256": "434e6455857920740700009f52f88735071e1bd57e3d37e4440cfa19d359fd23",
+          "savedBytesSha256": "434e6455857920740700009f52f88735071e1bd57e3d37e4440cfa19d359fd23"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/03_cap_original_functions_04_original_clients.sqlinc",
+          "canonicalSha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741",
+          "savedBytesSha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/04_cap_original_functions_11_non_self_bill_admission.sqlinc",
+          "canonicalSha256": "48f477cf908ab3c2a0310f1cfc93eaf3b0ffdb98983c12307749e2dff6029632",
+          "savedBytesSha256": "48f477cf908ab3c2a0310f1cfc93eaf3b0ffdb98983c12307749e2dff6029632"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/05_cap_original_functions_05_complete_existing_activation.sqlinc",
+          "canonicalSha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc",
+          "savedBytesSha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/06_cap_original_functions_06_complete_selection.sqlinc",
+          "canonicalSha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1",
+          "savedBytesSha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/07_cap_original_functions_07_complete_stage_proof.sqlinc",
+          "canonicalSha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861",
+          "savedBytesSha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/08_cap_original_functions_08_complete_bulk_command.sqlinc",
+          "canonicalSha256": "89d9dc8051f19e5091a3599548850313cdf9bb09744803f0615b067124e6ddaf",
+          "savedBytesSha256": "89d9dc8051f19e5091a3599548850313cdf9bb09744803f0615b067124e6ddaf"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/09_cap_original_functions_12_complete_17_prepare_family.sqlinc",
+          "canonicalSha256": "a5b08c97d35d62a47ef1271fda23f9c9cbd80a8455594104b11e4c054c0a44be",
+          "savedBytesSha256": "a5b08c97d35d62a47ef1271fda23f9c9cbd80a8455594104b11e4c054c0a44be"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/10_cap_original_functions_12_complete_18_prepare_action.sqlinc",
+          "canonicalSha256": "66c1d78f61e8cf8f1094382cdf97dbc9c082b6e21765e8aecba1352d54f4bcc5",
+          "savedBytesSha256": "66c1d78f61e8cf8f1094382cdf97dbc9c082b6e21765e8aecba1352d54f4bcc5"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/11_cap_original_functions_12_complete_19_action_context.sqlinc",
+          "canonicalSha256": "edc8c9da16743a4af6758ba1beae1debcb13ac5c2da90c699a83b1c7da3a1d11",
+          "savedBytesSha256": "edc8c9da16743a4af6758ba1beae1debcb13ac5c2da90c699a83b1c7da3a1d11"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/12_cap_original_functions_12_complete_20_stage_request.sqlinc",
+          "canonicalSha256": "80500039ea01d7eee54713425372666331d33d2079f48a23e9f80812ca668254",
+          "savedBytesSha256": "80500039ea01d7eee54713425372666331d33d2079f48a23e9f80812ca668254"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/13_q25_owner_xid_qualification_00_complete_current_catalogue.sqlinc",
+          "canonicalSha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f",
+          "savedBytesSha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/14_q25_owner_xid_qualification_QUALIFICATION_SCOPE.sqlinc",
+          "canonicalSha256": "ca433a32c7c8f37e34a20cc68497ca702eed1a6370965314d7f72ede99343746",
+          "savedBytesSha256": "ca433a32c7c8f37e34a20cc68497ca702eed1a6370965314d7f72ede99343746"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/15_q25_owner_xid_qualification_QUALIFICATION_STEP.sqlinc",
+          "canonicalSha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076",
+          "savedBytesSha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/16_q25_owner_xid_qualification_03_complete_cas_admission.sqlinc",
+          "canonicalSha256": "c7b6d0812dacde13ff9ff5fb920fe73aa6ce959068b20e5c41134361e1a86342",
+          "savedBytesSha256": "c7b6d0812dacde13ff9ff5fb920fe73aa6ce959068b20e5c41134361e1a86342"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/17_q25_owner_xid_qualification_04_complete_non_self_bill_admission.sqlinc",
+          "canonicalSha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4",
+          "savedBytesSha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/18_q25_owner_xid_qualification_05_complete_automatic_admission.sqlinc",
+          "canonicalSha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46",
+          "savedBytesSha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/19_q25_owner_xid_qualification_QUALIFICATION_R2_READER.sqlinc",
+          "canonicalSha256": "e8776f728aea49370e1530d5db6a3150c1549cd375bd4297227bd033facc3a15",
+          "savedBytesSha256": "e8776f728aea49370e1530d5db6a3150c1549cd375bd4297227bd033facc3a15"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/20_q25_owner_xid_qualification_08_complete_capability_release_reader.sqlinc",
+          "canonicalSha256": "e3b20bb7aeac049b3351c63b4a34f04693b3f75c698cff8f443a8f79b626ef85",
+          "savedBytesSha256": "e3b20bb7aeac049b3351c63b4a34f04693b3f75c698cff8f443a8f79b626ef85"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/21_q45_actor_event_closed_dto_cross_session_00_complete_current_catalogue.sqlinc",
+          "canonicalSha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f",
+          "savedBytesSha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/22_q45_actor_event_closed_dto_cross_session_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+          "canonicalSha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+          "savedBytesSha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/23_q45_actor_event_closed_dto_cross_session_CAPABILITY_OWNERS.sqlinc",
+          "canonicalSha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66",
+          "savedBytesSha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/24_q45_actor_event_closed_dto_cross_session_04_original_clients.sqlinc",
+          "canonicalSha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741",
+          "savedBytesSha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/25_q45_actor_event_closed_dto_cross_session_04_complete_non_self_bill_admission.sqlinc",
+          "canonicalSha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4",
+          "savedBytesSha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+          "canonicalSha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076",
+          "savedBytesSha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/27_q45_actor_event_closed_dto_cross_session_05_complete_automatic_admission.sqlinc",
+          "canonicalSha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46",
+          "savedBytesSha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/28_q45_actor_event_closed_dto_cross_session_CLOSED_DTO.sqlinc",
+          "canonicalSha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c",
+          "savedBytesSha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/29_q45_actor_event_closed_dto_cross_session_OPERATIONAL_CERTIFICATE.sqlinc",
+          "canonicalSha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99",
+          "savedBytesSha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/30_q45_actor_event_closed_dto_cross_session_01_complete_qualification_scope.sqlinc",
+          "canonicalSha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70",
+          "savedBytesSha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/31_q45_actor_event_closed_dto_cross_session_02_complete_prerequisite_reader.sqlinc",
+          "canonicalSha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0",
+          "savedBytesSha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/32_q45_actor_event_closed_dto_cross_session_TEST_JOURNEY_SCOPE.sqlinc",
+          "canonicalSha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100",
+          "savedBytesSha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/33_q45_actor_event_closed_dto_cross_session_03_complete_operational_release_reader.sqlinc",
+          "canonicalSha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e",
+          "savedBytesSha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/34_q45_actor_event_closed_dto_cross_session_04_complete_capability_receipt.sqlinc",
+          "canonicalSha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1",
+          "savedBytesSha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/35_q45_actor_event_closed_dto_cross_session_05_complete_bulk_readiness.sqlinc",
+          "canonicalSha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3",
+          "savedBytesSha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/36_q45_actor_event_closed_dto_cross_session_06_complete_automatic_readiness.sqlinc",
+          "canonicalSha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456",
+          "savedBytesSha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/37_q45_actor_event_closed_dto_cross_session_07_complete_existing_feature_setup.sqlinc",
+          "canonicalSha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223",
+          "savedBytesSha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/38_q45_actor_event_closed_dto_cross_session_08_complete_cas_admission.sqlinc",
+          "canonicalSha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4",
+          "savedBytesSha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/39_q45_actor_event_closed_dto_cross_session_09_complete_actor_non_self_bill_admission.sqlinc",
+          "canonicalSha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4",
+          "savedBytesSha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/40_q45_actor_event_closed_dto_cross_session_10_complete_actor_bulk_selection.sqlinc",
+          "canonicalSha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986",
+          "savedBytesSha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/41_q45_actor_event_closed_dto_cross_session_11_complete_actor_own_stage.sqlinc",
+          "canonicalSha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad",
+          "savedBytesSha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/42_q45_actor_event_closed_dto_cross_session_12_complete_actor_17_prepare_family.sqlinc",
+          "canonicalSha256": "896a3769a099c3ebdc2f008dc89bcb667361acea70085b6e25847ea07378d63d",
+          "savedBytesSha256": "896a3769a099c3ebdc2f008dc89bcb667361acea70085b6e25847ea07378d63d"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/43_q45_actor_event_closed_dto_cross_session_12_complete_actor_18_prepare_action.sqlinc",
+          "canonicalSha256": "9c7637eba0478d7bf88c11bceec8a08066146234558510267fba14926c2438ea",
+          "savedBytesSha256": "9c7637eba0478d7bf88c11bceec8a08066146234558510267fba14926c2438ea"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/44_q45_actor_event_closed_dto_cross_session_12_complete_actor_19_action_context.sqlinc",
+          "canonicalSha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14",
+          "savedBytesSha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/45_q45_actor_event_closed_dto_cross_session_12_complete_actor_20_stage_request.sqlinc",
+          "canonicalSha256": "73da2a876d936e692584b905c9271aa586f196a13f973fa714f1cc7c45a08019",
+          "savedBytesSha256": "73da2a876d936e692584b905c9271aa586f196a13f973fa714f1cc7c45a08019"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/46_q45_actor_event_closed_dto_cross_session_07_complete_stage_proof.sqlinc",
+          "canonicalSha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861",
+          "savedBytesSha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/47_q45_actor_event_closed_dto_cross_session_16_complete_bulk_command_presentation.sqlinc",
+          "canonicalSha256": "9116d060e31067aca182b4a9b3b567937d48945fe17c1e7e2e3437027accac9e",
+          "savedBytesSha256": "9116d060e31067aca182b4a9b3b567937d48945fe17c1e7e2e3437027accac9e"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/48_f12_first_use_full_inventory_OPERATIONAL_CERTIFICATE.sqlinc",
+          "canonicalSha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72",
+          "savedBytesSha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/49_f12_first_use_full_inventory_TEST_JOURNEY_SCOPE.sqlinc",
+          "canonicalSha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923",
+          "savedBytesSha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/50_final_original_source_cas_schema_lineage_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+          "canonicalSha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83",
+          "savedBytesSha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83"
+        },
+        {
+          "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/51_final_original_source_cas_schema_lineage_LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+          "canonicalSha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8",
+          "savedBytesSha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8"
+        }
+      ],
+      "actualCallContext": [
+        {
+          "index": 163,
+          "context": "Both public mutation-capable owners invoke service-role guard as their first executable statement. Verifier sets authenticated and requires that exact42501 refusal before any input parsing, locks, audit, financial or queue path. Null protected-wait witness raises22023 before all data reads. JWT role is restored to original at end."
+        },
+        {
+          "index": 165,
+          "context": "Billing/vector operations are pure supplied JSON/scalar. Frozen version is a fixed SELECT-only join. Corrected shift facts use null legacy return then explicit sentinel-absent refusal before rule/report/pay dependencies. Table registry body is a fixed VALUES literal. Remaining operations read only catalogue metadata/function text; no business mutation owner is called."
+        }
+      ],
+      "executionApproval": false,
+      "native": "NOT_RUN",
+      "note": "Review of verifier invocation context only. Positive bulk/automatic financial and report journeys, graph-wide changed definitions, native ACL and full rehearsal retain independent required gates."
     }
   ],
   "targetedNativeEvidence": [
