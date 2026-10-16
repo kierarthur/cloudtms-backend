@@ -1,0 +1,16 @@
+diff --git "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_stage_c1_request_v1.common.sqlinc" "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_stage_c1_request_v1.actual.sqlinc"
+index 6a2ddb9e..2af8f815 100644
+--- "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_stage_c1_request_v1.common.sqlinc"	
++++ "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_stage_c1_request_v1.actual.sqlinc"	
+@@ -251,6 +251,11 @@ begin
+ 
+   -- An exact staged request is the idempotency authority even after the family
+   -- version advances.  A UUID collision with different bytes always refuses.
++  -- SP-12: existing admission only; no producer/version evidence.
++  if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
++    perform private.weekly_source_pay_query_admit_v2();
++  end if;
++
+   select request.* into v_publication
+   from public.weekly_exceptional_c1_publication_requests request
+   where request.id=v_request_id

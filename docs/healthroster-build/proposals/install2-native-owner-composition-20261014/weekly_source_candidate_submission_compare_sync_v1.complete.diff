@@ -1,0 +1,184 @@
+diff --git "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_candidate_submission_compare_sync_v1.actual.sqlinc" "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc"
+index bd6ec14f..2e2a87d8 100644
+--- "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_candidate_submission_compare_sync_v1.actual.sqlinc"	
++++ "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc"	
+@@ -51,6 +51,12 @@ declare
+   v_unchanged_count integer:=0;
+   v_resolved_count integer:=0;
+   v_open_count integer:=0;
++  v_import_authoritative boolean:=false;
++  v_scope_client_id uuid;
++  v_source_question_changed boolean:=false;
++  v_discovered_cycle_id uuid; v_discovered_group_id uuid; v_discovered_cycle jsonb;
++  v_discovered_timesheet public.timesheets%rowtype; v_locked_timesheet public.timesheets%rowtype;
++  v_family_lock jsonb; v_publication_i1_context jsonb;
+ begin
+   perform private.weekly_source_query_require_service_v1();
+   if p_projection_publication_id is null or p_timesheet_id is null
+@@ -58,6 +64,31 @@ begin
+     raise exception 'WEEKLY_SOURCE_CANDIDATE_COMPARISON_REQUEST_INVALID' using errcode='22023';
+   end if;
+ 
++  -- Plain scope/physical discovery precedes this owner's first business lock.
++  select * into strict v_publication from public.weekly_source_projection_publications
++    where id=p_projection_publication_id and state='CURRENT';
++  select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
++  v_discovered_cycle_id:=v_cycle.id; v_discovered_group_id:=v_cycle.source_group_id; v_discovered_cycle:=to_jsonb(v_cycle);
++  select * into strict v_discovered_timesheet from public.timesheets where timesheet_id=p_timesheet_id;
++  if nullif(current_setting('cloudtms.weekly_source_publication_i1_context',true),'') is not null then
++    v_publication_i1_context:=current_setting('cloudtms.weekly_source_publication_i1_context',true)::jsonb;
++    if v_publication_i1_context->>'schema_version' is distinct from 'WEEKLY_SOURCE_PUBLICATION_I1_CONTEXT_V1'
++      or v_publication_i1_context->>'publication_id' is distinct from p_projection_publication_id::text
++      or jsonb_typeof(v_publication_i1_context->'root_ids') is distinct from 'array'
++      or not(v_publication_i1_context->'root_ids' ? p_timesheet_id::text) then
++      raise exception 'WEEKLY_SOURCE_PUBLICATION_SIGNED_ROOT_SET_CHANGED' using errcode='40001'; end if;
++  end if;
++  perform private.weekly_source_pay_query_admit_v2();
++  v_family_lock:=private.weekly_source_lock_family_rows_v1(array[p_timesheet_id],null);
++  if v_family_lock->>'ok' is distinct from 'true' then
++    raise exception '%',coalesce(v_family_lock->>'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE') using errcode='55000'; end if;
++  select * into strict v_locked_timesheet from public.timesheets where timesheet_id=p_timesheet_id;
++  if to_jsonb(v_locked_timesheet) is distinct from to_jsonb(v_discovered_timesheet) then
++    raise exception 'WEEKLY_SOURCE_CANDIDATE_TIMESHEET_STALE' using errcode='40001'; end if;
++  perform 1 from public.weekly_source_groups where id=v_discovered_group_id for update;
++  select * into strict v_cycle from public.weekly_source_cycles where id=v_discovered_cycle_id for update;
++  if to_jsonb(v_cycle) is distinct from v_discovered_cycle or v_cycle.source_group_id is distinct from v_discovered_group_id then
++    raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_CHANGED' using errcode='40001'; end if;
+   if p_candidate_generation_id is null then
+     -- A newly published checking source must recompare already-signed weekly
+     -- evidence even when no submission request was needed or remains active.
+@@ -91,6 +122,8 @@ begin
+     where id=p_candidate_generation_id and request_kind='SUBMIT_TIMESHEET'
+       and state='ACTIVE'
+     for update;
++    if v_generation.source_cycle_id is distinct from v_discovered_cycle_id then
++      raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_CHANGED' using errcode='40001'; end if;
+     select * into strict v_cycle
+     from public.weekly_source_cycles where id=v_generation.source_cycle_id
+     for update;
+@@ -141,11 +174,20 @@ begin
+       and r2_nurse_key is not null and img_sha256_nurse is not null
+     for update;
+   end if;
++  v_scope_client_id:=private.weekly_source_checking_client_scope_v1(v_publication.id);
++  if v_scope_client_id is not null and v_scope_client_id is distinct from v_contract.client_id then
++    raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_INVALID' using errcode='55000';
++  end if;
+   if v_timesheet.version<1
+      or private.weekly_source_query_candidate_timesheet_hash_v1(v_timesheet.timesheet_id)
+           is distinct from p_timesheet_hash then
+     raise exception 'WEEKLY_SOURCE_CANDIDATE_TIMESHEET_STALE' using errcode='40001';
+   end if;
++  v_import_authoritative:=private.weekly_source_is_import_authoritative_v1(
++    v_contract.client_id,v_contract.id,v_membership.week_ending);
++  if v_import_authoritative and (v_upload.confirmed_coverage_start_local_date is null
++    or v_upload.confirmed_coverage_end_local_date is null) then
++    raise exception 'WEEKLY_SOURCE_PREFINAL_COVERAGE_INVALID' using errcode='55000'; end if;
+   v_policy:=private._weekly_source_effective_policy_v1(
+     v_contract.client_id,v_contract.id,v_membership.week_ending
+   );
+@@ -174,7 +216,7 @@ begin
+         v_timesheet.actual_schedule_json,v_timesheet.additional_units_per_day
+       )
+     ) candidate_row
+-    where v_profile_code<>'NHSP_PREFINAL_RELEASED_V1'
++    where (v_profile_code<>'NHSP_PREFINAL_RELEASED_V1' and not v_import_authoritative)
+       or (candidate_row.value->>'date')::date between
+         v_upload.confirmed_coverage_start_local_date
+         and v_upload.confirmed_coverage_end_local_date
+@@ -426,11 +468,11 @@ begin
+           'candidate_start_at_local',v_candidate_start,
+           'candidate_end_at_local',v_candidate_end,
+           'candidate_break_minutes',v_candidate_break,
+-          'system_start_at_local',case when v_presence='PRESENT'
++          'system_start_at_local',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')
+             then nullif(v_source_json->>'start_at_local','')::timestamp end,
+-          'system_end_at_local',case when v_presence='PRESENT'
++          'system_end_at_local',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')
+             then nullif(v_source_json->>'end_at_local','')::timestamp end,
+-          'system_break_minutes',case when v_presence='PRESENT'
++          'system_break_minutes',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')
+             then nullif(v_source_json->>'break_minutes','')::integer end
+         );
+         v_issues:=v_issues||pg_catalog.jsonb_build_array(v_issue);
+@@ -446,6 +488,8 @@ begin
+     ) source_row
+     where not (source_row.source_row_id=any(v_used_source_rows))
+       and source_row.row_finalisation_state<>'SOURCE_ABSENT_ZERO'
++      and (not v_import_authoritative or source_row.work_date between
++        v_upload.confirmed_coverage_start_local_date and v_upload.confirmed_coverage_end_local_date)
+       and (select link.link_kind from public.weekly_work_event_source_links link
+            where link.id=source_row.source_link_id)
+             not in ('FULL_NEGATIVE_SOURCE','ZERO_SOURCE')
+@@ -461,6 +505,10 @@ begin
+       )
+     );
+     if v_source.row_finalisation_state='SOURCE_UNFINALISED' then
++      if v_import_authoritative and not exists(select 1 from public.contract_weeks expected
++        where expected.contract_id=v_contract.id and expected.additional_seq=0
++          and not coalesce(expected.is_adjustment,false) and expected.status<>'CANCELLED'
++          and v_source.work_date between expected.week_ending_date-6 and expected.week_ending_date) then continue; end if;
+       v_issue_family:='HEALTHROSTER_NOT_FINALISED';
+       v_presence:='UNFINALISED';
+     elsif v_source.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED') then
+@@ -480,11 +528,11 @@ begin
+       'issue_family',v_issue_family,'source_presence',v_presence,
+       'candidate_start_at_local',null,'candidate_end_at_local',null,
+       'candidate_break_minutes',null,
+-      'system_start_at_local',case when v_presence='PRESENT'
++      'system_start_at_local',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')
+         then v_source.start_at_local end,
+-      'system_end_at_local',case when v_presence='PRESENT'
++      'system_end_at_local',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')
+         then v_source.end_at_local end,
+-      'system_break_minutes',case when v_presence='PRESENT'
++      'system_break_minutes',case when v_presence='PRESENT' or (v_import_authoritative and v_presence='UNFINALISED')
+         then v_source.break_minutes end
+     );
+     v_issues:=v_issues||pg_catalog.jsonb_build_array(v_issue);
+@@ -536,7 +584,8 @@ begin
+       ) values (
+         v_group.id,v_work_event.id,v_episode,v_generation.candidate_id,
+         v_membership.client_id,v_cycle.id,'OPEN','UNRESOLVED',
+-        case when p_candidate_generation_id is null
++        case when v_issue_family='HEALTHROSTER_NOT_FINALISED' and v_import_authoritative then 'NOT_REQUIRED'
++          when p_candidate_generation_id is null
+           and coalesce((v_policy->>'candidate_queries_enabled')::boolean,false)
+           then 'NOT_ASKED' else 'NOT_REQUIRED' end,
+         case when coalesce((v_policy->>'manager_queries_enabled')::boolean,false)
+@@ -564,6 +613,11 @@ begin
+       v_episode:=v_incident.episode_number;
+     end if;
+ 
++    v_source_question_changed:=v_import_authoritative and v_comparison.id is not null
++      and (v_comparison.issue_family,v_comparison.source_presence,v_comparison.system_start_at_local,
++        v_comparison.system_end_at_local,v_comparison.system_break_minutes)
++      is distinct from (v_issue_family,v_presence,nullif(v_issue->>'system_start_at_local','')::timestamp,
++        nullif(v_issue->>'system_end_at_local','')::timestamp,nullif(v_issue->>'system_break_minutes','')::integer);
+     v_fingerprint:=private.weekly_source_query_comparison_fingerprint_v1(
+       v_incident.id,v_episode,v_work_event.id,v_issue
+     );
+@@ -603,7 +657,13 @@ begin
+         nullif(v_issue->>'system_break_minutes','')::integer,v_fingerprint
+       ) returning * into v_comparison;
+       update public.weekly_discrepancy_incidents
+-      set current_comparison_revision_id=v_comparison.id
++      set current_comparison_revision_id=v_comparison.id,
++        candidate_action_state=case when v_issue_family='HEALTHROSTER_NOT_FINALISED' and v_import_authoritative
++          then 'NOT_REQUIRED' else candidate_action_state end,
++        manager_action_state=case when v_source_question_changed and manager_potential_state='AVAILABLE'
++          then 'NOT_SENT' else manager_action_state end,
++        waiting_source_state=case when v_source_question_changed then 'NOT_WAITING' else waiting_source_state end,
++        reconciliation_state=case when v_source_question_changed then 'UNRESOLVED' else reconciliation_state end
+       where id=v_incident.id;
+       insert into public.weekly_discrepancy_events(
+         incident_id,issue_episode,projection_publication_id,
+@@ -635,7 +695,7 @@ begin
+       and incident.client_id=v_membership.client_id
+       and comparison.contract_id=v_membership.contract_id
+       and work_event.work_date between v_membership.week_ending-6 and v_membership.week_ending
+-      and (v_profile_code<>'NHSP_PREFINAL_RELEASED_V1'
++      and ((v_profile_code<>'NHSP_PREFINAL_RELEASED_V1' and not v_import_authoritative)
+         or work_event.work_date between v_upload.confirmed_coverage_start_local_date
+           and v_upload.confirmed_coverage_end_local_date)
+       and incident.state='OPEN'

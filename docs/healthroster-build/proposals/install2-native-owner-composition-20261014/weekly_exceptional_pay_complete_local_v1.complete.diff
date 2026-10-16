@@ -1,0 +1,45 @@
+diff --git "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_complete_local_v1.actual.sqlinc" "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_complete_local_v1.complete.sqlinc"
+index 383c8ffa..f40d97c7 100644
+--- "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_complete_local_v1.actual.sqlinc"	
++++ "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_complete_local_v1.complete.sqlinc"	
+@@ -26,6 +26,7 @@ declare
+   v_write jsonb;
+   v_proposal jsonb;
+   v_components jsonb;
++  v_automatic_components jsonb;
+   v_expenses jsonb;
+   v_head_request jsonb;
+   v_target_state text;
+@@ -187,6 +188,11 @@ begin
+               else '[]'::jsonb end),'hex') then
+       raise exception 'WEEKLY_PROTECTED_COMPONENT_MANIFEST_UNAVAILABLE' using errcode='55000'; end if;
+   end if;
++  -- A manually invoked native Local owner cannot bypass the sealed automatic
++  -- request's per-component zero-delta proof. This is before PREPARING insert.
++  if v_generation.complete_next_vector_json ? 'automatic_reconcile_proof' then
++    perform private.weekly_source_automatic_reconcile_delta_assert_v1(v_request.id,v_actor);
++  end if;
+   select count(*) into v_live_authorisations from public.weekly_source_root_authorisations authority
+     where authority.root_timesheet_id=v_root.timesheet_id and authority.withdrawn_at_utc is null;
+   -- Exact accepted replay has already returned. Before admitting a NEW
+@@ -267,6 +273,12 @@ begin
+     v_local_context:=private.weekly_source_local_publication_context_v2(v_request.id,v_generation.id,v_root.timesheet_id);
+     if v_local_context is null then
+       raise exception 'WEEKLY_PROTECTED_LOCAL_SOURCE_QUALIFICATION_UNAVAILABLE' using errcode='55000'; end if;
++    if v_generation.complete_next_vector_json ? 'automatic_reconcile_proof' then
++      -- Exactly the producer used by delta_assert; no separately guessed vector.
++      v_automatic_components:=private.weekly_source_staged_entitlement_components_v1(v_request.id,v_actor);
++      v_components:=v_automatic_components->'components';
++      v_expenses:=v_automatic_components->'expenses';
++    else
+     select coalesce(jsonb_agg(jsonb_build_object('work_event_id',expense.work_event_id,
+       'source_observation_kind',expense.source_observation_kind,
+       'candidate_reimbursement_ex_vat',expense.candidate_reimbursement_ex_vat,
+@@ -294,6 +306,7 @@ begin
+       v_snapshot->'additional_units_json',
+       (v_snapshot->>'additional_pay_ex_vat')::numeric,
+       (v_snapshot->>'additional_charge_ex_vat')::numeric,v_root.booking_id);
++    end if;
+     -- Source expenses must be the same approved observations and money, not
+     -- a newer expense silently composed into an older protected decision.
+     if (select coalesce(sum((item.value->>'pay_ex_vat')::numeric)

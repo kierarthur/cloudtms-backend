@@ -1,0 +1,118 @@
+diff --git "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_stage_c1_request_v1.common.sqlinc" "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_stage_c1_request_v1.broad.sqlinc"
+index 6a2ddb9e..ef8d2706 100644
+--- "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_stage_c1_request_v1.common.sqlinc"	
++++ "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_stage_c1_request_v1.broad.sqlinc"	
+@@ -65,10 +65,13 @@ declare
+   v_target_snapshot jsonb;
+   v_component_identity_context jsonb;
+   v_component_identity_basis jsonb;
++  v_bulk_signed_proof jsonb;
++  v_automatic_reconcile_proof jsonb;
+   v_start jsonb;
+   v_sources jsonb;
+   v_components jsonb;
+   v_family public.weekly_exceptional_pay_target_families%rowtype;
++  v_lock_family jsonb; v_lock_group uuid;
+   v_run public.weekly_exceptional_orchestration_runs%rowtype;
+   v_cycle public.weekly_source_cycles%rowtype;
+   v_group public.weekly_source_groups%rowtype;
+@@ -153,7 +156,7 @@ declare
+   v_before_hash bytea;
+   v_after_hash bytea;
+ begin
+-  if not private.weekly_exceptional_json_keys_exact_v1(p_request,v_top_keys)
++  if not private.weekly_exceptional_json_keys_exact_v1(p_request,v_top_keys||array['bulk_signed_selection_proof','automatic_reconcile_selection_sha256'])
+      or not (p_request ?& v_top_keys)
+      or p_request->>'schema_version'<>'WEEKLY_PROTECTED_C1_STAGE_REQUEST_V1'
+      or pg_catalog.jsonb_typeof(p_request->'protected_schedule')<>'object'
+@@ -249,6 +252,29 @@ begin
+     raise exception 'WEEKLY_PROTECTED_C1_STREAM_COUNT_INVALID' using errcode='22023';
+   end if;
+ 
++  -- An exact staged request is the idempotency authority even after the family
++  -- version advances.  A UUID collision with different bytes always refuses.
++  select request.* into v_publication
++  from public.weekly_exceptional_c1_publication_requests request
++  where request.id=v_request_id;
++  if found then
++    if v_publication.family_id is distinct from v_family_id
++       or v_publication.orchestration_run_id is distinct from v_run_id
++       or v_publication.request_sha256 is distinct from v_c1_request_hash then
++      raise exception 'WEEKLY_PROTECTED_C1_REQUEST_ID_COLLISION' using errcode='23505';
++    end if;
++    perform private.weekly_source_bulk_stage_replay_assert_v1(v_publication.id,p_request);
++    perform private.weekly_source_automatic_reconcile_stage_replay_assert_v1(v_publication.id,p_request);
++    return pg_catalog.jsonb_build_object(
++      'ok',true,'outcome','STAGED','idempotent_replay',true,
++      'family_id',v_publication.family_id,'generation_id',v_publication.generation_id,
++      'publication_request_id',v_publication.id,'request_sha256',
++      pg_catalog.encode(v_publication.request_sha256,'hex'),
++      'state',v_publication.state
++    );
++  end if;
++
++  v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);
+   -- An exact staged request is the idempotency authority even after the family
+   -- version advances.  A UUID collision with different bytes always refuses.
+   select request.* into v_publication
+@@ -261,6 +287,8 @@ begin
+        or v_publication.request_sha256 is distinct from v_c1_request_hash then
+       raise exception 'WEEKLY_PROTECTED_C1_REQUEST_ID_COLLISION' using errcode='23505';
+     end if;
++    perform private.weekly_source_bulk_stage_replay_assert_v1(v_publication.id,p_request);
++    perform private.weekly_source_automatic_reconcile_stage_replay_assert_v1(v_publication.id,p_request);
+     return pg_catalog.jsonb_build_object(
+       'ok',true,'outcome','STAGED','idempotent_replay',true,
+       'family_id',v_publication.family_id,'generation_id',v_publication.generation_id,
+@@ -278,10 +306,24 @@ begin
+   from public.weekly_exceptional_orchestration_runs run
+   where run.id=v_run_id and run.family_id=v_family.id
+   for update;
++  if (v_family.root_timesheet_id::text,v_family.candidate_id::text,v_family.contract_id::text,v_family.week_ending_date::text)
++    is distinct from (v_lock_family->>'root_timesheet_id',v_lock_family->>'candidate_id',
++      v_lock_family->>'contract_id',v_lock_family->>'week_ending_date') then
++    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
++  v_lock_group:=private.weekly_source_protected_group_lock_v1(v_source_cycle_id);
++  if p_request ? 'bulk_signed_selection_proof' or p_request ? 'automatic_reconcile_selection_sha256' then
++    -- The new one-shift round seals one pending proof at a time using the
++    -- existing cycle mutex; the individual path retains its native SHARE.
++    select cycle.* into strict v_cycle from public.weekly_source_cycles cycle
++      where cycle.id=v_source_cycle_id for update;
++  else
+   select cycle.* into strict v_cycle
+   from public.weekly_source_cycles cycle
+   where cycle.id=v_source_cycle_id
+   for share;
++  end if;
++  if v_cycle.source_group_id is distinct from v_lock_group then
++    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
+   select source_group.* into strict v_group
+   from public.weekly_source_groups source_group
+   where source_group.id=v_cycle.source_group_id and source_group.active
+@@ -712,6 +754,14 @@ begin
+     v_next_vector:=v_next_vector||pg_catalog.jsonb_build_object(
+       'prior_effective_inventory',private.weekly_source_effective_inventory_v1(v_root.timesheet_id));
+   end if;
++  if p_request ? 'bulk_signed_selection_proof' then
++    v_bulk_signed_proof:=private.weekly_source_bulk_stage_proof_v1(p_request,v_fin.id);
++    v_next_vector:=v_next_vector||jsonb_build_object('bulk_signed_selection_proof',v_bulk_signed_proof);
++  end if;
++  if p_request ? 'automatic_reconcile_selection_sha256' then
++    v_automatic_reconcile_proof:=private.weekly_source_automatic_reconcile_stage_proof_v1(p_request);
++    v_next_vector:=v_next_vector||jsonb_build_object('automatic_reconcile_proof',v_automatic_reconcile_proof);
++  end if;
+   v_next_vector_hash:=private.weekly_source_sha256_jsonb_v1(
+     'WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',v_next_vector
+   );
+@@ -987,6 +1037,11 @@ begin
+     ),v_after_hash,v_after_hash,'COMPLETE',pg_catalog.statement_timestamp()
+   );
+ 
++  if p_request ? 'automatic_reconcile_selection_sha256' then
++    -- The assertion reads the actual sealed complete vector and native rows.
++    -- Any refusal rolls back this entire stage, including its unaccepted event.
++    perform private.weekly_source_automatic_reconcile_certificate_v1(v_publication.id,v_actor_user_id,v_cycle.id);
++  end if;
+   return pg_catalog.jsonb_build_object(
+     'ok',true,'outcome','STAGED','idempotent_replay',false,
+     'family_id',v_family.id,'generation_id',v_generation.id,

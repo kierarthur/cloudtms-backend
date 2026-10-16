@@ -1,0 +1,24 @@
+diff --git "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_complete_local_v1.common.sqlinc" "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_complete_local_v1.actual.sqlinc"
+index d8576ff9..383c8ffa 100644
+--- "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_complete_local_v1.common.sqlinc"	
++++ "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_exceptional_pay_complete_local_v1.actual.sqlinc"	
+@@ -54,8 +54,7 @@ begin
+   v_hash:=private.weekly_exceptional_hex_sha256_v1(p_request->>'expected_request_sha256');
+   v_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+   if v_actor is null or v_request_id is null or pg_catalog.char_length(v_key) not between 16 and 240
+-     or not exists(select 1 from public.tms_users actor where actor.id=v_actor and actor.is_active
+-                    and (actor.payment_authoriser or actor.payment_golden_key)) then
++     or not private.weekly_source_pay_actor_allowed_v1(v_actor) then
+     raise exception 'WEEKLY_PROTECTED_LOCAL_COMPLETE_SCOPE_INVALID' using errcode='42501';
+   end if;
+ 
+@@ -423,6 +422,9 @@ begin
+   if not v_pending then
+     perform private.weekly_source_protected_contact_retire_v1(v_family.id,v_approval.work_event_id);
+   end if;
++  if v_manual_review_id is null or v_run.request_kind not in ('APPROVE','AMEND','WITHDRAW','RECONCILE') then
++    perform private.bpay_next_source_query_refresh_v1(v_family.contract_id,v_approval.work_event_id);
++  end if;
+   return v_result;
+ exception when no_data_found or too_many_rows then
+   raise exception 'WEEKLY_PROTECTED_LOCAL_COMPLETE_SCOPE_INVALID' using errcode='55000';

@@ -1,0 +1,12 @@
+diff --git "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_review_resolve_v1.common.sqlinc" "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_review_resolve_v1.actual.sqlinc"
+index 35887f83..c8f970a3 100644
+--- "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_review_resolve_v1.common.sqlinc"	
++++ "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_review_resolve_v1.actual.sqlinc"	
+@@ -182,6 +182,7 @@ begin
+   insert into private.weekly_source_manual_review_commands(command_id,command_kind,actor_user_id,request_sha256,
+     review_id,source_cycle_id,client_id,week_ending_date,result_json)
+   values(v_command_id,'RESOLVE',v_actor,v_hash,v_review.id,v_cycle.id,v_review.client_id,v_week,v_result);
++  perform private.bpay_next_source_query_refresh_v1(v_review.contract_id,v_review.work_event_id);
+   return v_result;
+ end;
+ $function$;

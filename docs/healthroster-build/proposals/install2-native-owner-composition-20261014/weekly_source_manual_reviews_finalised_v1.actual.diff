@@ -1,0 +1,12 @@
+diff --git "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_reviews_finalised_v1.common.sqlinc" "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_reviews_finalised_v1.actual.sqlinc"
+index 575d57a0..65a210f5 100644
+--- "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_reviews_finalised_v1.common.sqlinc"	
++++ "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_reviews_finalised_v1.actual.sqlinc"	
+@@ -65,6 +65,7 @@ begin
+       jsonb_build_object('resolution_kind','OFFICE_ACCEPTED_SOURCE','work_event_id',v_review.work_event_id,
+         'final_revision_id',v_final.id,'reason','A later finalised report contains this shift'),
+       'Later finalised source report resolved imported-shift review',p_actor_user_id);
++    perform private.bpay_next_source_query_refresh_v1(v_review.contract_id,v_review.work_event_id);
+     v_count:=v_count+1;
+   end loop;
+   return v_count;

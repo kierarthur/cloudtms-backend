@@ -1,0 +1,13 @@
+diff --git "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_reviews_finalised_v1.actual.sqlinc" "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_reviews_finalised_v1.complete.sqlinc"
+index 65a210f5..004e29cf 100644
+--- "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_reviews_finalised_v1.actual.sqlinc"	
++++ "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_manual_reviews_finalised_v1.complete.sqlinc"	
+@@ -43,7 +43,7 @@ begin
+     -- A legacy review without captured opening provenance needs an explicit
+     -- Office remedy. Never manufacture an anchor using today's report.
+     if not found or v_anchor.opening_final_revision_id=p_final_revision_id
+-       or not exists(select 1 from public.weekly_source_client_manifests m where m.final_revision_id=v_final.id
++       or not exists(select 1 from public.weekly_source_client_manifests m where coalesce(m.invoice_window_cycle_id,m.source_cycle_id)=m.source_cycle_id and m.final_revision_id=v_final.id
+          and m.source_group_id=v_cycle.source_group_id and m.source_cycle_id=v_cycle.id and m.client_id=v_review.client_id) then continue; end if;
+     -- A new Final for the report already queried is not a new imported report.
+     -- Resolve the immutable opening authority, not preparation timestamps or

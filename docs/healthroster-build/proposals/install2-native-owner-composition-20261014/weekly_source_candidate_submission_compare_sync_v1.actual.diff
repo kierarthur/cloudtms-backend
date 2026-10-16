@@ -1,0 +1,20 @@
+diff --git "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_candidate_submission_compare_sync_v1.common.sqlinc" "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_candidate_submission_compare_sync_v1.actual.sqlinc"
+index 3ffadd36..bd6ec14f 100644
+--- "a/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_candidate_submission_compare_sync_v1.common.sqlinc"	
++++ "b/C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\install2-native-owner-composition-20261014\\weekly_source_candidate_submission_compare_sync_v1.actual.sqlinc"	
+@@ -619,6 +619,7 @@ begin
+         ),
+         'SOURCE_RECHECKED:'||v_incident.id::text||':'||pg_catalog.encode(v_fingerprint,'hex')
+       ) on conflict (event_kind,idempotency_key) do nothing;
++      perform private.bpay_next_source_query_refresh_v1(v_membership.contract_id,v_incident.work_event_id);
+     end if;
+   end loop;
+ 
+@@ -666,6 +667,7 @@ begin
+       ),
+       'SOURCE_MATCHED:'||v_incident.id::text||':'||v_publication.id::text
+     ) on conflict (event_kind,idempotency_key) do nothing;
++    perform private.bpay_next_source_query_refresh_v1(v_membership.contract_id,v_incident.work_event_id);
+     v_resolved_count:=v_resolved_count+1;
+   end loop;
+ 

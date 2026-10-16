@@ -1,0 +1,111 @@
+{
+  "version": "HEALTHROSTER_HISTORICAL_PROPOSAL_BACKUP_V1",
+  "status": "ARCHIVED_SOURCE_REFERENCE_NOT_FOR_INSTALL",
+  "purpose": "Preserve20 pre-existing Health Install2 composition diff/draft artifacts byte-for-byte off PC. No source winner, executed SQL, qualification or migration change is made by this archive.",
+  "files": [
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_exceptional_pay_complete_local_v1.actual.diff",
+      "bytes": 2274,
+      "sha256": "dc2d7547587e5f086b921112121c38cd9483b3bd0c0117ae745914a3528d41ea"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_exceptional_pay_complete_local_v1.broad.diff",
+      "bytes": 4094,
+      "sha256": "519aa0a44f90ec899341f3c727022a0d62e357a9c934335c842cbc804b9c810d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_exceptional_pay_complete_local_v1.complete.diff",
+      "bytes": 3449,
+      "sha256": "4230fea49209b56da0b6758a3aefc32aef2a102d6edff29fda96873bd467f889"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_exceptional_pay_complete_local_v1.draft.txt",
+      "bytes": 31460,
+      "sha256": "39847b83448f48c414b0eb3cf04dbd581a8f4595039aeb04d1237f5ef64c653d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_exceptional_pay_stage_c1_request_v1.actual.diff",
+      "bytes": 1635,
+      "sha256": "d1ffe3368db1eafe5357d2685bdef8671f7eb90075cf2ef156af2da0228d6825"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_exceptional_pay_stage_c1_request_v1.broad.diff",
+      "bytes": 7336,
+      "sha256": "f7552205a7c3c8cb774841cf0c41bedf273ca54b3e03ae0ee5593acf03a9a5c0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_exceptional_pay_stage_c1_request_v1.complete.diff",
+      "bytes": 9129,
+      "sha256": "d68b8d804cb261337d0b3804362fc48d839ed24c7ea98b5430155575b44e8575"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_exceptional_pay_stage_c1_request_v1.draft.txt",
+      "bytes": 55034,
+      "sha256": "de94ddb5eea5cd4939678d40cff82634e68c7e2be7fca2ad86e5ac8b4455bed3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_candidate_submission_compare_sync_v1.actual.diff",
+      "bytes": 1781,
+      "sha256": "6b2370638580a4c0895e9a9a1c5d78e5820e69d86b95f8dbd7bd5e766dd21095"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_candidate_submission_compare_sync_v1.broad.diff",
+      "bytes": 12584,
+      "sha256": "112193495f733fd5510334443d681ec75e25b62f181ac16c2d54976a32e7c48d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_candidate_submission_compare_sync_v1.complete.diff",
+      "bytes": 12590,
+      "sha256": "c4acf47494810db8e325e19c257e11a9534c169d2d07513d2b6ff700624cc852"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_candidate_submission_compare_sync_v1.draft.txt",
+      "bytes": 40147,
+      "sha256": "c3ca231ecac79b0be0bf5473762952ccd8ffb703f37a66a57b11688fbd061a0f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_manual_review_resolve_v1.actual.diff",
+      "bytes": 1522,
+      "sha256": "3cf8f251e88116eea575f7c8fbe03d097d41bc39748585c5db4e745b18f603a7"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_manual_review_resolve_v1.broad.diff",
+      "bytes": 22834,
+      "sha256": "b9656715fc2147efc04328ad0c7799d76587915803859692b37ddef6ee822d00"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_manual_review_resolve_v1.complete.diff",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_manual_review_resolve_v1.draft.txt",
+      "bytes": 8495,
+      "sha256": "e630d670d099ec33353c4680407d12e471abe06d913c7203a3825fe568bf115a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_manual_reviews_finalised_v1.actual.diff",
+      "bytes": 1554,
+      "sha256": "3f97e0cc85482db9babfd65829d30b1a9a7b5987f73af47de845b2d464c195c6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_manual_reviews_finalised_v1.broad.diff",
+      "bytes": 1936,
+      "sha256": "5e08be3ed12ce6bf8d123d72cf18ed6495a3033cfe35e2a65597f782f2218313"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_manual_reviews_finalised_v1.complete.diff",
+      "bytes": 1942,
+      "sha256": "9e34d5d888a0c8a70263726bb024c6480190b4e2733d4f884336a472ef3585e1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/install2-native-owner-composition-20261014/weekly_source_manual_reviews_finalised_v1.draft.txt",
+      "bytes": 5190,
+      "sha256": "b62af30fc18b5f15d5832eef6e56c4cfd3d4d646bf301f5a53796d07accbab32"
+    }
+  ],
+  "bytes": 224986,
+  "privateKeyOrCredentialPatternHits": 0,
+  "meaning": "Pattern checks support non-disclosing backup; they are not semantic implementation approval.",
+  "currentSourceAuthority": "Current canonical supabase/broker source and original reviewed composition manifest remain controlling. These txt/diff files are historical proposals only."
+}
