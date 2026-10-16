@@ -12,6 +12,9 @@ import {
   composeWeeklyProtectedTargetSchedule,
 } from './protected-target-schedule.js';
 import { buildWeeklyProtectedNextTarget } from './protected-next-preview.mjs';
+import { sourceProtectedCalculationContext } from './source-native-economic.mjs';
+import { loadWeeklyProtectedCurrentFinancialSource } from './source-current-financial.mjs';
+import { sourceNativeContinuationFromRpcError, sourcePayDecisionReadAction } from './source-native-contract.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -143,7 +146,19 @@ function requireDependencies(dependencies) {
 }
 
 async function rpc(dependencies, name, pRequest) {
-  return dependencies.dataRpc(name, { p_request: pRequest });
+  try {
+    return await dependencies.dataRpc(name, { p_request: pRequest });
+  } catch (error) {
+    const continuation = sourceNativeContinuationFromRpcError(error, name);
+    if (!continuation) throw error;
+    const refusal = new WeeklyProtectedActionError('SOURCE_PAY_DECISION_RESULT_REQUIRED',
+      'Open the saved Source pay decision to continue.', {
+        retryable: false, decision_id: continuation.decision_id, request_id: continuation.request_id,
+        next_action: sourcePayDecisionReadAction(continuation.decision_id, continuation.request_id),
+      });
+    refusal.status = 409;
+    throw refusal;
+  }
 }
 
 function normalizeRequest(action, request) {
@@ -611,16 +626,38 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
   }
 
   const calculation = await dependencies.calculateWeeklySnapshot({
-    context,
+    context: context.protected_current_placement ? sourceProtectedCalculationContext(context) : context,
     schedule: target.segments,
     zeroRoot: false,
     ...(nextRoute ? { retainNextPreviewFacts: true } : {}),
   });
-  const financialSnapshot = stageSnapshot(calculation, context);
+  const currentFinancialSource = nextRoute ? null : await loadWeeklyProtectedCurrentFinancialSource({ context,
+    actorUserId: normalized.actorUserId, dataRpc: dependencies.dataRpc });
+  const nativePayload = await buildWeeklyProtectedNativePayload({ context, target, calculation, nextRoute, currentFinancialSource,
+    actorUserId: normalized.actorUserId, reason: normalized.reason, idempotencyKey: normalized.idempotencyKey });
+  if (nativePayload.route === 'NEXT') {
+    const result = await rpc(dependencies, 'weekly_exceptional_pay_publish_next_v1', nativePayload.publish_request);
+    return nextReceipt(result, prepared);
+  }
+  const staged = await rpc(dependencies, 'weekly_exceptional_pay_stage_c1_request_v1', nativePayload.stage_request);
+  if (staged?.ok !== true || staged.publication_request_id !== nativePayload.complete_request.publication_request_id
+      || staged.request_sha256 !== nativePayload.complete_request.expected_request_sha256) {
+    fail('WEEKLY_PROTECTED_STAGE_RESULT_INVALID', 'The protected hours could not be prepared safely.');
+  }
+  return completeLocalDecision(normalized, prepared, staged, dependencies);
+}
+
+// Pure authoring shared by ordinary actions and Source confirmation. It performs
+// no RPC, ensure, run creation, staging or financial publication.
+export async function buildWeeklyProtectedNativePayload({ context, target, calculation, nextRoute, actorUserId, reason, idempotencyKey,
+  currentFinancialSource = null }) {
+  const normalized = { actorUserId, reason, idempotencyKey };
+  const calculationContext = context.protected_current_placement ? sourceProtectedCalculationContext(context) : context;
+  const financialSnapshot = stageSnapshot(calculation, calculationContext);
 
   if (nextRoute) {
-    const targetSnapshot = buildWeeklyProtectedNextTarget({ context, target, calculation });
-    const result = await rpc(dependencies, 'weekly_exceptional_pay_publish_next_v1', {
+    const targetSnapshot = buildWeeklyProtectedNextTarget({ context: calculationContext, target, calculation });
+    const publishRequest = {
       schema_version: 'WEEKLY_PROTECTED_NEXT_PUBLISH_V1',
       actor_user_id: normalized.actorUserId,
       family_id: context.family_id,
@@ -642,17 +679,21 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
       current_final_revision_id: context.current_final_revision_id,
       reason: normalized.reason,
       idempotency_key: `${normalized.idempotencyKey}:next`,
-    });
-    return nextReceipt(result, prepared);
+    };
+    return Object.freeze({ route: 'NEXT', publish_request: publishRequest });
   }
   const currentFinancial = object(
-    context.current_financial,
+    calculationContext.current_financial,
     'WEEKLY_PROTECTED_CONTEXT_INVALID',
     'Current Weekly financial record',
   );
   const currentFinancialId = uuid(currentFinancial.id, 'Current Weekly financial record');
+  if (context.protected_current_placement?.moved === true && (currentFinancialSource?.financial_row_id !== currentFinancialId
+      || currentFinancialSource?.root_version !== calculationContext.timesheet.version)) {
+    fail('SOURCE_CURRENT_FINANCIAL_SOURCE_REQUIRED', 'The current financial source must be reviewed again.');
+  }
   const componentInput = {
-    root_timesheet_id: context.root_timesheet_id,
+    root_timesheet_id: calculationContext.root_timesheet_id,
     financial_snapshot: financialSnapshot,
     expenses: context.source_expenses,
   };
@@ -673,13 +714,13 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
     actor_user_id: normalized.actorUserId,
     request_id: requestId,
     candidate_id: context.candidate_id,
-    contract_id: context.contract_id,
-    root_timesheet_id: context.root_timesheet_id,
+    contract_id: calculationContext.contract_id,
+    root_timesheet_id: calculationContext.root_timesheet_id,
     week_ending_date: context.week_ending_date,
     source_mode: context.source_mode,
     client_sources: context.client_sources,
     candidate_submission: context.candidate_submission,
-    root_financial: context.root_financial,
+    root_financial: currentFinancialSource ?? context.root_financial,
     provider: context.provider,
     components,
   });
@@ -721,12 +762,11 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
     reason: normalized.reason,
     idempotency_key: `${normalized.idempotencyKey}:stage`,
   };
-  const staged = await rpc(dependencies, 'weekly_exceptional_pay_stage_c1_request_v1', stageRequest);
-  if (staged?.ok !== true || staged.publication_request_id !== requestId
-      || staged.request_sha256 !== publication.request_sha256) {
-    fail('WEEKLY_PROTECTED_STAGE_RESULT_INVALID', 'The protected hours could not be prepared safely.');
-  }
-  return completeLocalDecision(normalized, prepared, staged, dependencies);
+  return Object.freeze({ route: 'SOURCE_LOCAL', stage_request: stageRequest, complete_request: {
+    schema_version: 'WEEKLY_PROTECTED_LOCAL_COMPLETE_V1', actor_user_id: normalized.actorUserId,
+    publication_request_id: requestId, expected_request_sha256: publication.request_sha256,
+    idempotency_key: `${normalized.idempotencyKey}:local-complete`,
+  } });
 }
 
 export const WEEKLY_PROTECTED_ACTION_ORCHESTRATOR_CONTRACT = Object.freeze({

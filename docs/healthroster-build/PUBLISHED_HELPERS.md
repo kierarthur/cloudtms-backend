@@ -2,6 +2,8 @@
 
 ## V6 source checkpoints — not installed
 
+Source pay Worker consumer continuation from d863577918ce7d439206296e91ad78de298e98b2 is integrated as runtime source; exact file hashes,351passing runtime/C1 cases, immutable-A/current-B separation, new opaque context policy witness and uninstalled dependencies are in v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json. No new Source public command is mounted before genuine Bank02/04/Physical/Invoice/ACL/native qualification. Sole Health closed decoder is broker/src/contract-correction-v3.mjs; Daily runtime-only source continuation and44cases are recorded in DAILY_RATE_SOURCE_INTEGRATION.json. Original installed WP-PP receipt below remains unchanged.
+
 Agency QT administration migration/repeatable and exact native fixture: bb8f129d61d4b6549773bdf3baa6598564e14192. Worker Office API and native receipt cbb32121cf25b2a1a755b0a6065b78dc0c9faa41; Office actual host/controller efd6f4dd6b2f8974bbc24dd6f2c324424cc60f8b. Bounded calendar/timing successor7f5a5a876a9b485beee2b040409233eef70448c7. Source files, signatures, ACLs, exact native pins/restoration and limits are in v6-owner-delivery-20261016/QT_ADMIN_IMPLEMENTATION.md, QT_ADMIN_NATIVE_ROLLBACK.json and QT_CALENDAR_NATIVE_ROLLBACK.json. Existing five schema rows carry current source hashes; no original approval is replaced. Consumers must integrate the current reader/START/permit/pause/provider union and final registry/security/contract checks before actual installation; these receipts do not imply readiness, activation or full acceptance. No Banking message was sent.
 
 

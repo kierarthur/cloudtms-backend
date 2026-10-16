@@ -696,6 +696,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -757,6 +766,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -830,6 +848,15 @@
           "installed": false,
           "native_business_acceptance": "REQUIRED_NOT_RUN"
         }
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -903,6 +930,15 @@
           "installed": false,
           "native_business_acceptance": "REQUIRED_NOT_RUN"
         }
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -1387,6 +1423,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -1449,6 +1494,15 @@
           "installed": false,
           "native_business_acceptance": "REQUIRED_NOT_RUN"
         }
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -1498,6 +1552,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -1548,6 +1611,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -1770,6 +1842,15 @@
           "installed": false,
           "native_business_acceptance": "REQUIRED_NOT_RUN"
         }
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -1841,6 +1922,15 @@
           "installed": false,
           "native_business_acceptance": "REQUIRED_NOT_RUN"
         }
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -2330,6 +2420,15 @@
           "installed": false,
           "native_business_acceptance": "REQUIRED_NOT_RUN"
         }
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -2713,6 +2812,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -2764,6 +2872,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -2815,6 +2932,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -2866,6 +2992,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -2929,6 +3064,15 @@
           "installed": false,
           "native_business_acceptance": "REQUIRED_NOT_RUN"
         }
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -2992,6 +3136,15 @@
           "installed": false,
           "native_business_acceptance": "REQUIRED_NOT_RUN"
         }
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -4575,6 +4728,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -4625,6 +4787,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -4675,6 +4846,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {
@@ -4725,6 +4905,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_runtime_continuation_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+        "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+        "runtime_tests_passed": 351,
+        "native_sql_composition": "DEPENDENCY_HELD",
+        "native": "REQUIRED_NOT_RUN",
+        "installed": false,
+        "original_schema_approval_status_preserved": true
       }
     },
     {

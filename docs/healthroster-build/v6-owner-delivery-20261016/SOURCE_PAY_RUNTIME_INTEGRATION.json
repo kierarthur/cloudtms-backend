@@ -1,0 +1,193 @@
+{
+  "version": "HEALTH_SOURCE_PAY_RUNTIME_INTEGRATION_V1",
+  "source_parent": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+  "producer_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+  "producer_worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+  "producer_branch": "codex/healthroster-v2-money-build-13102026",
+  "source_package_receipt_sha256": "c67f4e51cbcd9ec4ae67435a2740c41fd8f46e7c0579f30f229eb976da0866de",
+  "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+  "files": [
+    {
+      "path": "broker/src/weekly-source/protected-action-orchestrator.mjs",
+      "sha256": "b9580b3998760399d7dcf9d79cf4f4e3bba3bbd70173f3527c1bb465ac942737"
+    },
+    {
+      "path": "broker/src/weekly-source/protected-next-preview.mjs",
+      "sha256": "49ed6b5e24c1ebf6afd9dbada7de0d9d321c8297584491610353c1ee2a2bfc4a"
+    },
+    {
+      "path": "broker/src/weekly-source/source-native-contract.mjs",
+      "sha256": "1a7817a2465485481aa005d6296281467bde9d17b292d971423d7ff12860519a"
+    },
+    {
+      "path": "broker/src/weekly-source/source-pay-decision-request.mjs",
+      "sha256": "d9288c5e34dcf18c3ba5dd6ee3c1dd9678d1884b5ebec1970297e8d201e0d93f"
+    },
+    {
+      "path": "broker/src/weekly-source/source-pay-decision-preparation.mjs",
+      "sha256": "41d8ea8799f88a930a20eeca1c197c30ef9e2556d418dd19e320aee15d3082d1"
+    },
+    {
+      "path": "broker/src/weekly-source/source-native-economic.mjs",
+      "sha256": "da934f5a52cf5e8a073db70b3ccb79e38437d82f90fe4dd302fbfce493d54062"
+    },
+    {
+      "path": "broker/src/weekly-source/source-native-snapshot.mjs",
+      "sha256": "8bc6d963837df988c32583730b155375a898df9b7e7e57e0413d47c7e2276f76"
+    },
+    {
+      "path": "broker/src/weekly-source/source-unprotect-worker.mjs",
+      "sha256": "28c6eb0d0260620babbb102e2bbb68279c6cbc74b318222a62294aea70c71f73"
+    },
+    {
+      "path": "broker/src/weekly-source/source-current-financial.mjs",
+      "sha256": "67f2003a4cfcf5cde3f6f34511ade0c0cda8c51443ff8ad312ea7548dc4c8339"
+    },
+    {
+      "path": "broker/src/contract-correction-v3.mjs",
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
+    },
+    {
+      "path": "broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "sha256": "93bddf11b81dbb36ba42b05a7073981b36b1814d44e0665bd0d8b3b1450a1380"
+    },
+    {
+      "path": "broker/src/weekly-source/source-pay-decision-worker.mjs",
+      "sha256": "a24113b69ce4d05889a2742b0d91ed615e96981e7781d7c79f9eb2fdc7bc22b2"
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-components.mjs",
+      "sha256": "0c2643976f92a6d3ad63508f452b011a8880b7b35133c32b470f0af94d2bf674"
+    },
+    {
+      "path": "tests/weekly-source/protected-action-orchestrator.test.mjs",
+      "sha256": "99a6eac706a63b9c9555a98e097d150956a3a934d91b0ab520bd04cb3a1e0700"
+    },
+    {
+      "path": "tests/weekly-source/source-native-contract.test.mjs",
+      "sha256": "f9922eec4daa01c8dafcd4e5a2a171fc791b390fa32d2e67f112247441a19912"
+    },
+    {
+      "path": "tests/weekly-source/source-pay-decision-request.test.mjs",
+      "sha256": "f8c7a039338b77c26a98ee3652bf3835e120ea3b27f6537d7fd947f119921e99"
+    },
+    {
+      "path": "tests/weekly-source/source-pay-decision-preparation.test.mjs",
+      "sha256": "eb126d1c49ccdb7e37305e5a03ff0d234a6174d747817ca993257423097a0470"
+    },
+    {
+      "path": "tests/weekly-source/source-protected-placement.test.mjs",
+      "sha256": "5d83f826458b729fc54f178e69163220b0c075a5d1411b3e6c5093aeaaeca82a"
+    },
+    {
+      "path": "tests/weekly-source/source-native-economic.test.mjs",
+      "sha256": "529144c267f5b60f754929fcb859fb29fcd9f94eafd1beacd6d486e8a755cad3"
+    },
+    {
+      "path": "tests/weekly-source/source-native-snapshot.test.mjs",
+      "sha256": "db010e84fd88625a1d58f537cf2b7d67edebb9eaf7f3f9fd0da0b66c1424276e"
+    },
+    {
+      "path": "tests/weekly-source/helpers/source-native-snapshot-fixture.mjs",
+      "sha256": "9eecfa24dcc0d5b4f10c79c04b2492e951ffca608dcd9a6718fa6c478a98e5b9"
+    },
+    {
+      "path": "tests/weekly-source/protected-component-calculator-owner.test.mjs",
+      "sha256": "f6a90d175855be01b51fa53e9c7f5693ca54d98a7e2420e349e267915779a245"
+    },
+    {
+      "path": "tests/weekly-source/source-unprotect-worker.test.mjs",
+      "sha256": "1d2d0cc3d5bf72206757a298096c582e0e983fafd485560b2b71cc90bd09ed58"
+    },
+    {
+      "path": "tests/weekly-source/source-current-financial.test.mjs",
+      "sha256": "47a1959d6bfa0491cef78f02a294b7c5d5f9154f22181309bee32dca75445cf5"
+    },
+    {
+      "path": "tests/weekly-source/source-pay-decision-worker.test.mjs",
+      "sha256": "df47674dba2d44fc1c08840a001474ead211ce4294e73d6ab4f7a46f04f4b164"
+    }
+  ],
+  "finite_shared_changes": {
+    "protected_orchestrator": "Preserves original unmoved paths; exports pure existing native payload authoring and resolves certified moved current B separately from immutable original A. Exact source-owned P0001 continuation stops ordinary fallback.",
+    "component_projector": "One pure projection of existing native economic/authority fields before publication ID allocation; existing component builder unchanged.",
+    "shared_dto": "Same sole Health decoder SHA57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087 already present from90ffcf3f; not overwritten.",
+    "host": "broker/src/index.js and current routes untouched; actual native calculator forwarding retainNextPreviewFacts already present."
+  },
+  "source_protocol": {
+    "preview": "Run-free BEGIN → actual calculator → exact quote registration → READY → immutable reviewed seal; no locks across Worker calls.",
+    "confirmation": "Original confirmation → genuine run preparation → actual current context/calculator → original native payload and once-only registration before SQL acceptance.",
+    "policy_witness": "Only NEW uninstalled SOURCE_UNPROTECT_CALCULATION_POLICY_V1 domain uses {context_sha256:<opaque actual server context hash>}; SQL35 independently rederives actual context and compares both witnesses, SQL44 independently validates actual48-key native snapshot/current policy/rate refs. Existing native policy/three receipt hash domains unchanged.",
+    "recovery": "Known exact sbRpc fn/body/status/codes only; malformed, permission/stale/integrity/plain network failure never becomes positive NOT_PREPARED proof; unknown original run/receipt retained."
+  },
+  "qualification": {
+    "command": "node --test tests/weekly-source/protected-action-orchestrator.test.mjs tests/weekly-source/source-native-contract.test.mjs tests/weekly-source/source-pay-decision-request.test.mjs tests/weekly-source/source-pay-decision-preparation.test.mjs tests/weekly-source/source-protected-placement.test.mjs tests/weekly-source/source-native-economic.test.mjs tests/weekly-source/source-native-snapshot.test.mjs tests/weekly-source/protected-component-calculator-owner.test.mjs tests/weekly-source/source-unprotect-worker.test.mjs tests/weekly-source/source-current-financial.test.mjs tests/weekly-source/source-pay-decision-worker.test.mjs tests/weekly-source-c1-adapter.test.mjs tests/weekly-source-c1-authoring.test.mjs tests/weekly-source-c1-components.test.mjs tests/weekly-source-c1-durable-publication.test.mjs tests/weekly-source-c1-publication.test.mjs tests/weekly-source-c1-stream.test.mjs tests/weekly-source/protected-component-identity.test.mjs tests/weekly-source/protected-action-sql-contract.test.mjs tests/weekly-source/weekly-source-c1-raw-rpc.test.mjs",
+    "files": 20,
+    "passed": 351,
+    "failed": 0,
+    "scope": "Current runtime/C1 compatibility and full current published calculator execution in memory with blocked network; fixture/RPC replies isolated.",
+    "sql_package_tests": "Remain in producer proposal; not omitted from later native full package qualification.",
+    "native_sql_composition": "DEPENDENCY_HELD",
+    "native_pg_acl_financial_invoice_concurrency": "REQUIRED_NOT_RUN",
+    "source_public_command_mount": "DEPENDENCY_HELD",
+    "installed": false
+  },
+  "dependencies": [
+    {
+      "owner": "Banking",
+      "abi": "private.bpay_next_source_pay_decision_cut_v1(uuid,uuid,uuid,boolean)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    },
+    {
+      "owner": "Banking",
+      "abi": "private.bpay_next_source_pay_decision_acceptance_begin_v1(uuid,uuid,uuid,bytea)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    },
+    {
+      "owner": "Banking",
+      "abi": "private.bpay_next_source_pay_decision_stage_v1(uuid,uuid,bytea,uuid)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    },
+    {
+      "owner": "Banking",
+      "abi": "private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    },
+    {
+      "owner": "Banking B051",
+      "abi": "Final public Source READ_RESULT wrapper/current financial child schema",
+      "state": "NO_PUBLISHED_EXACT_PRODUCER_SHAPE"
+    },
+    {
+      "owner": "Banking native Source component binding",
+      "abi": "private.bpay_next_source_binding_components_v1(uuid)+private.bpay_next_source_component_bind_v1(uuid,uuid)",
+      "state": "REQUIRE_GENUINE_SOURCE_PROOF_ARM_PUBLICATION_RECEIPT"
+    },
+    {
+      "owner": "Banking existing protected producer",
+      "abi": "private.bpay_next_stage_protected_source_v1(uuid,uuid,uuid,jsonb)",
+      "source": "supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql",
+      "case": "Accepted A-to-B move: producer still validates original family/root Contract A; caller current-B qualification alone cannot satisfy that invariant.",
+      "state": "MOVED_B_NEXT_REQUIRES_EXISTING_PRODUCER_QUALIFICATION_RECEIPT_NO_BANK_BODY_EDIT"
+    },
+    {
+      "owner": "Invoice",
+      "abi": "private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    },
+    {
+      "owner": "Invoice",
+      "abi": "private.invoice_contract_move_source_certificate_v1(uuid,boolean)",
+      "source_commit": "330a4770a208f0c6a927fd3a7ebee366dbc96340",
+      "state": "SOURCE_PUBLISHED_NATIVE_REQUIRED_NOT_RUN"
+    },
+    {
+      "owner": "Physical",
+      "abi": "private.timesheet_contract_current_placement_v1(uuid)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    }
+  ],
+  "sql_source_checkpoint": "52 proposed SQL inputs/78 declarations remain published in producer worktree/branch; not mounted into six-root release before actual Bank02/04 and full Physical/Invoice closure.",
+  "install2": "NOT_INSTALLED",
+  "external_effects": false
+}
