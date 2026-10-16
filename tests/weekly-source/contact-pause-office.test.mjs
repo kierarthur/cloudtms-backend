@@ -6,6 +6,7 @@ const id=n=>`f7160000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const env={CANDIDATE_APP_ENVIRONMENT:'TEST',MYTMS_OFFICE_AGENCY_ID:id(19)};
 const inactive=()=>({paused:false,paused_until_utc:null,paused_until_local:null,reason:null});
 const scope=()=>({scope_id:id(20),candidate_id:id(10),client_id:id(11),revision:'9007199254740993',
+  next_pause_until_utc:'2026-10-18T23:00:00.000000Z',next_pause_until_local:'2026-10-19 00:00 Europe/London',
   worker:inactive(),manager:inactive(),can_pause:true,can_resume:true,in_flight:[]});
 const body=action=>({action,payload:{candidate_id:id(10),client_id:id(11),...(action==='CONTACT_PAUSE_GET'?{}:
   {request_id:id(2),expected_revision:'9007199254740993',audience:'WORKER',note:'Owner checked'})}});
@@ -71,6 +72,8 @@ test('query deployment injection, missing binding and payment-read projection ca
 });
 for(const [label,mutate]of[
   ['numeric revision',r=>({...r,scope:{...r.scope,revision:9007199254740992}})],
+  ['missing server Monday',r=>({...r,scope:{...r.scope,next_pause_until_utc:null}})],
+  ['invalid server Monday display',r=>({...r,scope:{...r.scope,next_pause_until_local:'Monday'}})],
   ['foreign scope',r=>({...r,scope:{...r.scope,candidate_id:id(99)}})],
   ['extra policy',r=>({...r,policy:{enabled:false}})],
   ['automatic send',r=>({...r,automatic_send:true})],

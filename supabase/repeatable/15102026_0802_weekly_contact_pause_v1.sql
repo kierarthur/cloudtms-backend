@@ -127,11 +127,14 @@ create or replace function private.weekly_contact_pause_shape_v1(
 language plpgsql stable security definer set search_path to 'pg_catalog','private','pg_temp'
 as $function$
 declare v_scope public.weekly_contact_pause_scopes%rowtype;
+ v_next_pause_until timestamptz:=private.weekly_contact_next_monday_v1(p_at_utc);
 begin
  select * into v_scope from public.weekly_contact_pause_scopes where agency_id=p_agency and environment=p_environment
   and candidate_id=p_candidate and client_id=p_client;
  return jsonb_build_object('scope_id',v_scope.id,'candidate_id',p_candidate,'client_id',p_client,
   'revision',coalesce(v_scope.revision,0)::text,
+  'next_pause_until_utc',to_char(v_next_pause_until at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'next_pause_until_local',to_char(v_next_pause_until at time zone 'Europe/London','YYYY-MM-DD HH24:MI')||' Europe/London',
   'worker',jsonb_build_object('paused',coalesce(v_scope.worker_paused_until_utc>p_at_utc,false),
    'paused_until_utc',case when v_scope.worker_paused_until_utc>p_at_utc then to_char(v_scope.worker_paused_until_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end,
    'paused_until_local',case when v_scope.worker_paused_until_utc>p_at_utc then to_char(v_scope.worker_paused_until_utc at time zone 'Europe/London','YYYY-MM-DD HH24:MI')||' Europe/London' end,

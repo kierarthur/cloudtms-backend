@@ -21,6 +21,10 @@ begin
   'agency_id','f7160000-0000-4000-8000-000000000019','environment','TEST');
  perform set_config('request.jwt.claim.role','service_role',true);
  v_reply:=public.weekly_source_contact_pause_get_v1(v_read);
+ if (v_reply#>>'{scope,next_pause_until_utc}')::timestamptz is distinct from private.weekly_contact_next_monday_v1(transaction_timestamp())
+  or v_reply#>>'{scope,next_pause_until_local}' is distinct from
+   to_char(private.weekly_contact_next_monday_v1(transaction_timestamp()) at time zone 'Europe/London','YYYY-MM-DD HH24:MI')||' Europe/London' then
+  raise exception 'SERVER_MONDAY_PREVIEW_MISSING_OR_CHANGED';end if;
  if v_reply#>>'{scope,revision}' is distinct from '0' or v_reply#>'{scope,worker,paused}' is distinct from 'false'::jsonb
   or v_reply#>'{scope,manager,paused}' is distinct from 'false'::jsonb
   or exists(select 1 from public.weekly_contact_pause_scopes) then raise exception 'ABSENT_SCOPE_GET_MUTATED_OR_FALSE_CONFLICT';end if;

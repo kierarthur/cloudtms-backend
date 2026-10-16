@@ -55,10 +55,12 @@ function audience(value) {
     : (value.paused_until_utc!==null || value.paused_until_local!==null)) unavailable();
 }
 function scope(value,request,mutation) {
-  const keys=['scope_id','candidate_id','client_id','revision','worker','manager','can_pause','can_resume','in_flight'];
+  const keys=['scope_id','candidate_id','client_id','revision','next_pause_until_utc','next_pause_until_local','worker','manager','can_pause','can_resume','in_flight'];
   if (!exact(value,keys) || (value.scope_id!==null && !uuid(value.scope_id))
     || (mutation && !uuid(value.scope_id)) || value.candidate_id!==request.candidate_id || value.client_id!==request.client_id
-    || !revision(value.revision) || typeof value.can_pause!=='boolean' || typeof value.can_resume!=='boolean'
+    || !revision(value.revision) || !instant(value.next_pause_until_utc)
+    || typeof value.next_pause_until_local!=='string' || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2} Europe\/London$/.test(value.next_pause_until_local)
+    || typeof value.can_pause!=='boolean' || typeof value.can_resume!=='boolean'
     || !Array.isArray(value.in_flight) || value.in_flight.length>500) unavailable();
   audience(value.worker);audience(value.manager);
   for (const item of value.in_flight) {
