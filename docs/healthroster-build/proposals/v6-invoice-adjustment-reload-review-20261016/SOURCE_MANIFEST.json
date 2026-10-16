@@ -1,0 +1,116 @@
+{
+  "version": "INVOICE_ADJUSTMENT_RELOAD_SOURCE_PEER_MANIFEST_V1",
+  "files": [
+    {
+      "path": "EVIDENCE.json",
+      "sha256": "0ad5ce0d0e808571395ec17c6db2bf14491d9bca430851210f673f766393b4d5",
+      "bytes": 4768
+    },
+    {
+      "path": "inputs/after/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+      "sha256": "82a4edda0a81355c75a0a74d1b4494d991c6be8ea6d5ebf0e8f10c9a901bcd15",
+      "bytes": 792
+    },
+    {
+      "path": "inputs/after/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "bytes": 16376
+    },
+    {
+      "path": "inputs/after/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+      "sha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e",
+      "bytes": 148338
+    },
+    {
+      "path": "inputs/after/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693",
+      "bytes": 9625
+    },
+    {
+      "path": "inputs/after/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/03_invoice_issue_validate.sqlinc",
+      "sha256": "3d04a8f41daa61980f733d279f6fa3bb0ea3c37bc6a9a4c66ce240b4d75839ef",
+      "bytes": 38834
+    },
+    {
+      "path": "inputs/after/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+      "sha256": "dc198c718436d8135c4ba6282896bc3aa7dab5099c3ba63650e9fa5aca2681fb",
+      "bytes": 27516
+    },
+    {
+      "path": "inputs/after/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+      "sha256": "6b3a87eb80d738755eeb92b21e92f52d65685ae7c1a3abfbb2f670b47396ebbb",
+      "bytes": 11446
+    },
+    {
+      "path": "inputs/after/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/06_native_acl.sqlinc",
+      "sha256": "62a8884633d4d3f5d7dc9bca09f9efa0f04b6230c9eeab7f74d0e455e9c77f4d",
+      "bytes": 857
+    },
+    {
+      "path": "inputs/after/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/07_new_owner_acl.sqlinc",
+      "sha256": "6015f8338bc103b7e0355067667ca0be1688ba06b5ad8c87d2cbb7407fd166c2",
+      "bytes": 1025
+    },
+    {
+      "path": "inputs/before/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+      "sha256": "60bdf030e045ffc523efb727ec23adb11a65fd1a4ca2faca7ba4ab97f9f9fae6",
+      "bytes": 761
+    },
+    {
+      "path": "inputs/before/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "bytes": 16376
+    },
+    {
+      "path": "inputs/before/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+      "sha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e",
+      "bytes": 148338
+    },
+    {
+      "path": "inputs/before/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693",
+      "bytes": 9625
+    },
+    {
+      "path": "inputs/before/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/03_invoice_issue_validate.sqlinc",
+      "sha256": "3d04a8f41daa61980f733d279f6fa3bb0ea3c37bc6a9a4c66ce240b4d75839ef",
+      "bytes": 38834
+    },
+    {
+      "path": "inputs/before/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+      "sha256": "dc198c718436d8135c4ba6282896bc3aa7dab5099c3ba63650e9fa5aca2681fb",
+      "bytes": 27516
+    },
+    {
+      "path": "inputs/before/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+      "sha256": "6b3a87eb80d738755eeb92b21e92f52d65685ae7c1a3abfbb2f670b47396ebbb",
+      "bytes": 11446
+    },
+    {
+      "path": "inputs/before/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/06_native_acl.sqlinc",
+      "sha256": "62a8884633d4d3f5d7dc9bca09f9efa0f04b6230c9eeab7f74d0e455e9c77f4d",
+      "bytes": 857
+    },
+    {
+      "path": "inputs/before/supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/07_new_owner_acl.sqlinc",
+      "sha256": "6015f8338bc103b7e0355067667ca0be1688ba06b5ad8c87d2cbb7407fd166c2",
+      "bytes": 1025
+    },
+    {
+      "path": "REVIEW.md",
+      "sha256": "22dad7251ad3c379888fed07e91015259b47b084f1e42622eb08e2adfe09a506",
+      "bytes": 906
+    },
+    {
+      "path": "review.mjs",
+      "sha256": "c9e384615a274d6c465ad9ad4d10f138d488a2329a44735b3b52c23f8f9a521c",
+      "bytes": 4554
+    }
+  ],
+  "completeIncludes": 8,
+  "completeFunctions": 9,
+  "fullRootAndExpandedClosureReverse": true,
+  "native": "NOT_RUN",
+  "I2Edits": 0,
+  "databaseCalls": 0
+}
