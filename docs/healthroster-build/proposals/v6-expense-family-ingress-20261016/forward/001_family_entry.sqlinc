@@ -1,0 +1,77 @@
+-- Locks only. This never authorizes a mutation, certifies current facts,
+-- selects a new target, or replaces the original native replay/permission owner.
+create or replace function private.timesheet_contract_expense_families_enter_v1(
+ p_environment text,p_workflow_ids uuid[],p_candidate_id uuid,p_account_id uuid
+) returns void language plpgsql volatile security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare v_environment text:=private._candidate_assert_environment(p_environment);
+ before_identity jsonb;after_identity jsonb;families uuid[];foreign_family boolean;
+begin
+ if p_workflow_ids is null or cardinality(p_workflow_ids)>100 then
+  raise exception 'CANDIDATE_EXPENSE_FAMILY_SCOPE_INVALID' using errcode='22023';end if;
+ -- Discovery uses actual native rows. Missing/deleted workflows remain for
+ -- the original immutable receipt/not-found owner; they grant no new access.
+ select coalesce(jsonb_agg(jsonb_build_object('id',w.id,'environment',w.environment,
+  'candidate_id',w.candidate_id,'account_id',w.account_id) order by w.id),'[]'::jsonb)
+ into before_identity from public.candidate_submission_workflows w
+ where w.id=any(p_workflow_ids) and w.environment=v_environment
+  and w.workflow_kind in('CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED');
+ if exists(select 1 from jsonb_array_elements(before_identity) identity
+  where p_candidate_id is not null and identity->>'candidate_id' is distinct from p_candidate_id::text
+    or p_account_id is not null and identity->>'account_id' is distinct from p_account_id::text) then
+  raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';end if;
+ -- All actual Candidates first, then all actual native worker controls, then
+ -- sorted family placement/Timesheet rows. This also closes multi-candidate
+ -- watchdog order; no component/workflow/update/operation lock precedes it.
+ perform 1 from public.candidates c where c.id in(
+  select (identity->>'candidate_id')::uuid from jsonb_array_elements(before_identity) identity)
+ order by c.id for update;
+ perform 1 from private.bpay_next_worker_control c where c.candidate_id in(
+  select (identity->>'candidate_id')::uuid from jsonb_array_elements(before_identity) identity)
+ order by c.candidate_id for update;
+ select coalesce(jsonb_agg(jsonb_build_object('id',w.id,'environment',w.environment,
+  'candidate_id',w.candidate_id,'account_id',w.account_id) order by w.id),'[]'::jsonb)
+ into after_identity from public.candidate_submission_workflows w
+ where w.id=any(p_workflow_ids) and w.environment=v_environment
+  and w.workflow_kind in('CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED');
+ if after_identity is distinct from before_identity then
+  raise exception 'CANDIDATE_EXPENSE_COMPONENT_CHANGED' using errcode='40001';end if;
+ with actual_workflows as materialized(select w.* from public.candidate_submission_workflows w
+   where w.id in(select (identity->>'id')::uuid from jsonb_array_elements(after_identity) identity)),
+ actual_rows as(
+  select w.candidate_id,w.anchor_timesheet_id timesheet_id from actual_workflows w
+  union select w.candidate_id,w.target_timesheet_id from actual_workflows w
+  union select w.candidate_id,cw.timesheet_id from actual_workflows w join public.contract_weeks cw on cw.id=w.contract_week_id
+  union select w.candidate_id,e.owning_timesheet_id from actual_workflows w join public.candidate_expense_components e on e.workflow_id=w.id)
+ select coalesce(array_agg(distinct a.family_root_id order by a.family_root_id),array[]::uuid[]),
+  coalesce(bool_or(o.candidate_id is distinct from r.candidate_id or exists(
+   select 1 from private.timesheet_contract_current_placements p where p.family_root_id=a.family_root_id
+    and p.candidate_id is distinct from r.candidate_id)),false)
+ into families,foreign_family from actual_rows r
+ join private.timesheet_contract_family_aliases a on a.timesheet_id=r.timesheet_id
+ join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id;
+ if foreign_family then raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';end if;
+ perform 1 from private.timesheet_contract_current_placements p where p.family_root_id=any(families)
+ order by p.family_root_id,p.member_key for update;
+ perform 1 from public.timesheets t where t.timesheet_id=any(families)
+  or t.timesheet_id in(select a.timesheet_id from private.timesheet_contract_family_aliases a where a.family_root_id=any(families))
+  or t.timesheet_id in(select p.current_timesheet_id from private.timesheet_contract_current_placements p where p.family_root_id=any(families))
+ order by t.timesheet_id for update;
+ -- No H103/current-target, generation, state or factual hash assertion here.
+ -- Existing native owners re-lock and validate all those facts after exact
+ -- request/receipt replay. A pending/null placement does not lose its receipt.
+end;
+$function$;
+alter function private.timesheet_contract_expense_families_enter_v1(text,uuid[],uuid,uuid) owner to postgres;
+revoke all on function private.timesheet_contract_expense_families_enter_v1(text,uuid[],uuid,uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.timesheet_contract_expense_family_enter_v1(
+ p_environment text,p_workflow_id uuid,p_candidate_id uuid,p_account_id uuid
+) returns void language sql volatile security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+ select private.timesheet_contract_expense_families_enter_v1(p_environment,array[p_workflow_id],p_candidate_id,p_account_id)
+$function$;
+alter function private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid) owner to postgres;
+revoke all on function private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid) from public,anon,authenticated,service_role;

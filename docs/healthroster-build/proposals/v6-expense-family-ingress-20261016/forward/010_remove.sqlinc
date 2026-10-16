@@ -1,0 +1,252 @@
+create or replace function private._candidate_expense_financial_remove_v1(
+  p_expense_component_id uuid,
+  p_expected_component_generation integer,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_component public.candidate_expense_components%rowtype;
+  v_timesheet_id uuid;
+  v_timesheet public.timesheets%rowtype;
+  v_fin public.timesheets_financials%rowtype;
+  v_mileage_units numeric;
+  v_mileage_pay numeric;
+  v_mileage_charge numeric;
+  v_travel_pay numeric;
+  v_travel_charge numeric;
+  v_accommodation_pay numeric;
+  v_accommodation_charge numeric;
+  v_other_pay numeric;
+  v_other_charge numeric;
+  v_expenses_pay numeric;
+  v_expenses_charge numeric;
+  v_total_pay numeric;
+  v_total_charge numeric;
+  v_remaining_expense_value numeric;
+  v_owner_category_count integer;
+  v_financial_category_amount numeric;
+  v_financial_category_charge numeric;
+  v_surviving_description text;
+  v_unmaterialised_prior jsonb;
+  v_prior_amount numeric;
+  v_prior_units numeric;
+  v_payment jsonb;
+  v_edit_financial_id uuid;
+  v_pay_cost_multiplier numeric:=1;
+begin
+  -- HEALTH_EXPENSE_FAMILY_ENTRY: actual component discovery, no authority inferred.
+  perform private.timesheet_contract_expense_family_enter_v1(
+    w.environment,w.id,null,null) from public.candidate_expense_components e
+    join public.candidate_submission_workflows w on w.id=e.workflow_id
+    where e.expense_component_id=p_expense_component_id;
+  select * into v_component from public.candidate_expense_components component
+  where component.expense_component_id=p_expense_component_id for update;
+  if not found then raise exception 'CANDIDATE_EXPENSE_COMPONENT_NOT_FOUND' using errcode='P0002'; end if;
+  if v_component.component_generation<>p_expected_component_generation then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_CHANGED' using errcode='40001';
+  end if;
+  v_timesheet_id:=private._candidate_expense_owner_context_lock_v1(
+    v_component.expense_component_id
+  );
+  if v_timesheet_id is null then
+    if v_component.owning_timesheet_id is null then
+      return jsonb_build_object('ok',true,'timesheet_id',null,
+        'financial_changed',false,'zero_expense_carrier',false);
+    end if;
+    raise exception 'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED' using errcode='40001';
+  end if;
+  select * into v_timesheet from public.timesheets row
+  where row.timesheet_id=v_timesheet_id and row.is_current
+    and row.archived_at_utc is null for update;
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED' using errcode='40001';
+  end if;
+  select * into v_fin from public.timesheets_financials row
+  where row.timesheet_id=v_timesheet_id and row.is_current
+  order by row.computed_at_utc desc nulls last,row.updated_at desc,row.id desc
+  limit 1 for update;
+  if not found then raise exception 'CANDIDATE_EXPENSE_FINANCIALS_NOT_FOUND' using errcode='P0002'; end if;
+  select count(*)::integer into v_owner_category_count
+  from public.candidate_expense_components other_component
+  where other_component.expense_category=v_component.expense_category
+    and other_component.lifecycle_state not in (
+      'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+    )
+    and private._candidate_expense_owned_timesheet_id_v1(
+      other_component.workflow_id,other_component.owning_timesheet_id
+    )=v_timesheet_id;
+  v_financial_category_amount:=case v_component.expense_category
+    when 'MILEAGE' then coalesce(v_fin.mileage_pay_ex_vat,0)
+    when 'TRAVEL' then coalesce(v_fin.travel_pay_ex_vat,0)
+    when 'ACCOMMODATION' then coalesce(v_fin.accommodation_pay_ex_vat,0)
+    else coalesce(v_fin.other_pay_ex_vat,0) end;
+  v_financial_category_charge:=case v_component.expense_category
+    when 'MILEAGE' then coalesce(v_fin.mileage_charge_ex_vat,0)
+    when 'TRAVEL' then coalesce(v_fin.travel_charge_ex_vat,0)
+    when 'ACCOMMODATION' then coalesce(v_fin.accommodation_charge_ex_vat,0)
+    else coalesce(v_fin.other_charge_ex_vat,0) end;
+  v_unmaterialised_prior:=private._candidate_expense_unmaterialised_prior_v1(
+    v_component.expense_component_id
+  );
+  v_prior_amount:=case when coalesce((v_unmaterialised_prior->>'allowed')::boolean,false)
+    then (v_unmaterialised_prior->>'amount')::numeric end;
+  v_prior_units:=case when coalesce((v_unmaterialised_prior->>'allowed')::boolean,false)
+    then (v_unmaterialised_prior->>'mileage_units')::numeric end;
+  if v_owner_category_count<>1
+     or not (
+       v_financial_category_amount is not distinct from v_component.amount
+       or v_financial_category_amount is not distinct from v_prior_amount
+     )
+     or (v_component.expense_category='MILEAGE'
+       and not (
+         coalesce(v_fin.mileage_units,0) is not distinct from v_component.mileage_units
+         or coalesce(v_fin.mileage_units,0) is not distinct from v_prior_units
+       )) then
+    raise exception 'CANDIDATE_EXPENSE_CATEGORY_OWNERSHIP_AMBIGUOUS'
+      using errcode='55000',detail=jsonb_build_object(
+        'expense_component_id',v_component.expense_component_id,
+        'owning_timesheet_id',v_timesheet_id,
+        'live_owner_category_count',v_owner_category_count
+      )::text;
+  end if;
+  if v_timesheet.authorised_at_server is not null
+     or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED')
+     or v_fin.authorised_at_utc is not null or v_fin.locked_by_invoice_id is not null then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
+  end if;
+  v_payment:=private._candidate_expense_effective_payment_v1(v_timesheet_id);
+  if coalesce((v_payment->>'payment_protected')::boolean,false) then
+    v_edit_financial_id:=private._candidate_expense_payment_edit_shell_v1(
+      v_timesheet_id,p_now_utc
+    );
+    select row.* into v_fin from public.timesheets_financials row
+    where row.id=v_edit_financial_id and row.is_current for update;
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_FINANCIALS_CHANGED' using errcode='40001';
+    end if;
+  end if;
+  v_mileage_units:=case when v_component.expense_category='MILEAGE'
+    then 0 else coalesce(v_fin.mileage_units,0) end;
+  v_mileage_pay:=case when v_component.expense_category='MILEAGE'
+    then 0 else coalesce(v_fin.mileage_pay_ex_vat,0) end;
+  v_mileage_charge:=case when v_component.expense_category='MILEAGE'
+    then 0 else coalesce(v_fin.mileage_charge_ex_vat,0) end;
+  v_travel_pay:=case when v_component.expense_category='TRAVEL'
+    then 0 else coalesce(v_fin.travel_pay_ex_vat,0) end;
+  v_travel_charge:=case when v_component.expense_category='TRAVEL'
+    then 0 else coalesce(v_fin.travel_charge_ex_vat,0) end;
+  v_accommodation_pay:=case when v_component.expense_category='ACCOMMODATION'
+    then 0 else coalesce(v_fin.accommodation_pay_ex_vat,0) end;
+  v_accommodation_charge:=case when v_component.expense_category='ACCOMMODATION'
+    then 0 else coalesce(v_fin.accommodation_charge_ex_vat,0) end;
+  v_other_pay:=case when v_component.expense_category='OTHER'
+    then 0 else coalesce(v_fin.other_pay_ex_vat,0) end;
+  v_other_charge:=case when v_component.expense_category='OTHER'
+    then 0 else coalesce(v_fin.other_charge_ex_vat,0) end;
+  v_expenses_pay:=v_travel_pay+v_accommodation_pay+v_other_pay;
+  v_expenses_charge:=v_travel_charge+v_accommodation_charge+v_other_charge;
+  -- pay_day/charge_day and their sibling columns are rate snapshots, not
+  -- monetary subtotals.  Preserve the already-authoritative hours and
+  -- additional totals and subtract only this exact owned expense category.
+  v_total_pay:=round(
+    coalesce(v_fin.total_pay_ex_vat,0)-v_financial_category_amount,2
+  );
+  v_total_charge:=round(
+    coalesce(v_fin.total_charge_ex_vat,0)-v_financial_category_charge,2
+  );
+  if coalesce(v_fin.total_pay_ex_vat,0)<>0 then
+    v_pay_cost_multiplier:=(
+      coalesce(v_fin.total_charge_ex_vat,0)-coalesce(v_fin.margin_ex_vat,0)
+    )/v_fin.total_pay_ex_vat;
+  end if;
+  v_surviving_description:=nullif(concat_ws('; ',
+    case when v_travel_pay<>0 then 'Travel £'||to_char(v_travel_pay,'FM999999999990.00') end,
+    case when v_accommodation_pay<>0 then
+      'Accommodation £'||to_char(v_accommodation_pay,'FM999999999990.00') end,
+    case when v_other_pay<>0 then 'Other £'||to_char(v_other_pay,'FM999999999990.00') end
+  ),'');
+  perform set_config(
+    'cloudtms.candidate_expense_component_mutation',
+    v_component.expense_component_id::text,true
+  );
+  update public.timesheets_financials set
+    mileage_units=v_mileage_units,mileage_pay_ex_vat=v_mileage_pay,
+    mileage_charge_ex_vat=v_mileage_charge,
+    mileage_evidence_r2_key=case when v_component.expense_category='MILEAGE'
+      then null else mileage_evidence_r2_key end,
+    mileage_evidence_manifest=case when v_component.expense_category='MILEAGE'
+      then null else mileage_evidence_manifest end,
+    travel_pay_ex_vat=v_travel_pay,travel_charge_ex_vat=v_travel_charge,
+    accommodation_pay_ex_vat=v_accommodation_pay,
+    accommodation_charge_ex_vat=v_accommodation_charge,
+    other_pay_ex_vat=v_other_pay,other_charge_ex_vat=v_other_charge,
+    expenses_pay_ex_vat=v_expenses_pay,expenses_charge_ex_vat=v_expenses_charge,
+    -- These are legacy aggregate pointers and cannot identify which category
+    -- a page belongs to.  Invalidate them after any non-mileage category
+    -- change; category-exact current evidence remains in timesheet_evidence.
+    expenses_evidence_r2_key=case when v_component.expense_category<>'MILEAGE'
+      then null else expenses_evidence_r2_key end,
+    expenses_evidence_manifest=case when v_component.expense_category<>'MILEAGE'
+      then null else expenses_evidence_manifest end,
+    -- The legacy description is one undifferentiated note. Rebuild it from
+    -- the surviving category authority so removed wording cannot remain and
+    -- a surviving category is never silently erased from legacy displays.
+    expenses_description=v_surviving_description,
+    total_pay_ex_vat=v_total_pay,total_charge_ex_vat=v_total_charge,
+    margin_ex_vat=round(v_total_charge-(v_total_pay*v_pay_cost_multiplier),2),
+    is_stale=true,
+    stale_reason='CANDIDATE_EXPENSE_COMPONENT_REMOVED',updated_at=p_now_utc
+  where id=v_fin.id and is_current;
+  if not found then raise exception 'CANDIDATE_EXPENSE_FINANCIALS_CHANGED' using errcode='40001'; end if;
+  update public.timesheet_evidence evidence set processing_state='SUPERSEDED'
+  where evidence.timesheet_id=v_timesheet_id
+    and evidence.processing_state<>'SUPERSEDED'
+    and evidence.document_role<>'EXPENSE_MILEAGE_APPROVAL_SUMMARY'
+    and (
+      upper(coalesce(evidence.kind::text,''))=v_component.expense_category
+      or evidence.candidate_component_id in (
+        select source.id from public.candidate_submission_components source
+        where source.workflow_id=v_component.workflow_id
+          and source.expense_category=v_component.expense_category
+      )
+    );
+  v_remaining_expense_value:=abs(v_mileage_units)+abs(v_mileage_pay)
+    +abs(v_mileage_charge)+abs(v_travel_pay)+abs(v_travel_charge)
+    +abs(v_accommodation_pay)+abs(v_accommodation_charge)
+    +abs(v_other_pay)+abs(v_other_charge);
+  return jsonb_build_object(
+    'ok',true,'timesheet_id',v_timesheet_id,'financial_changed',true,
+    'remaining_expense_value',v_remaining_expense_value,
+    'remaining_total_hours',coalesce(v_fin.total_hours,0),
+    'remaining_additional_value',abs(coalesce(v_fin.additional_pay_ex_vat,0))
+      +abs(coalesce(v_fin.additional_charge_ex_vat,0)),
+    'zero_expense_carrier',v_remaining_expense_value=0
+      and coalesce(v_fin.total_hours,0)=0
+      and abs(coalesce(v_fin.additional_pay_ex_vat,0))
+        +abs(coalesce(v_fin.additional_charge_ex_vat,0))=0
+      and coalesce(v_fin.hours_day,0)=0 and coalesce(v_fin.hours_night,0)=0
+      and coalesce(v_fin.hours_sat,0)=0 and coalesce(v_fin.hours_sun,0)=0
+      and coalesce(v_fin.hours_bh,0)=0
+      and v_total_pay=0 and v_total_charge=0
+      and round(v_total_charge-(v_total_pay*v_pay_cost_multiplier),2)=0
+      and coalesce(v_fin.pay_vat_amount_snapshot,0)=0
+      and coalesce(v_fin.pay_total_inc_vat_snapshot,0)=0
+      and v_timesheet.authorised_at_server is null
+      and upper(coalesce(v_timesheet.status::text,'')) not in (
+        'AUTHORISED','AUTHORIZED','INVOICED'
+      )
+      and v_timesheet.sheet_scope::text='WEEKLY'
+      and coalesce(v_timesheet.is_adjustment,false)
+      and upper(coalesce(v_timesheet.adjustment_origin,'')) not in (
+        'IMPORT_CORRECTION','IMPORT_CANCELLATION'
+      )
+  );
+end;
+$function$;
+alter function private._candidate_expense_financial_remove_v1(uuid,integer,timestamptz) owner to postgres;
+revoke all on function private._candidate_expense_financial_remove_v1(uuid,integer,timestamptz) from public,anon,authenticated,service_role;

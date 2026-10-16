@@ -1,0 +1,64 @@
+create or replace function public.candidate_expense_update_manager_hold_v1(
+  p_environment text,
+  p_workflow_id uuid,
+  p_approval_token_hash_hex text,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_update public.candidate_pending_expense_updates%rowtype;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_approval public.candidate_approval_requests%rowtype;
+  v_recovery jsonb;
+begin
+  if coalesce(p_approval_token_hash_hex,'') !~ '^[0-9a-fA-F]{64}$' then return null; end if;
+  -- Match the BEGIN/REBIND/ABORT lock order. If a concurrent rebind committed
+  -- first, the active update disappears and the same manager link proceeds
+  -- normally instead of receiving a spurious recovery error.
+  select workflow.* into v_workflow
+  from public.candidate_submission_workflows workflow
+  where workflow.id=p_workflow_id
+    and workflow.environment=private._candidate_assert_environment(p_environment)
+  for update;
+  if not found then return null; end if;
+  select update_row.* into v_update
+  from public.candidate_pending_expense_updates update_row
+  where update_row.workflow_id=p_workflow_id
+    and update_row.state in ('EDITING','RENDERING')
+  order by update_row.started_at_utc desc limit 1
+  for update;
+  if not found then return null; end if;
+  select * into v_approval from public.candidate_approval_requests request
+  where request.id=v_update.approval_request_id
+    and request.workflow_id=p_workflow_id and request.state='PENDING'
+    and request.token_hash=decode(lower(p_approval_token_hash_hex),'hex');
+  if not found then return null; end if;
+  if v_update.expires_at_utc<=p_now_utc or v_approval.expires_at_utc<=p_now_utc then
+    v_recovery:=public.candidate_expense_update_abort_atomic_v1(
+      null,p_environment,p_workflow_id,v_update.update_id,true,
+      'CANDIDATE_EXPENSE_UPDATE_EXPIRED',
+      'expense-update-expired:'||v_update.update_id::text,p_now_utc
+    );
+    if coalesce(v_recovery->>'update_state','')<>'NONE' then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_RECOVERY_FAILED' using errcode='40001';
+    end if;
+    return null;
+  end if;
+  return jsonb_build_object(
+    'ok',true,'state','UPDATING',
+    'status_code','MANAGER_APPROVAL_REQUEST_UPDATING',
+    'message','This claim is being updated. It will open automatically when ready.',
+    'retry_after_seconds',2,'workflow_id',p_workflow_id,
+    'approval_request_id',v_approval.id,
+    'approval_request_generation',v_approval.request_generation
+  );
+end;
+$function$;
+alter function public.candidate_expense_update_manager_hold_v1(text,uuid,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_expense_update_manager_hold_v1(text,uuid,text,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.candidate_expense_update_manager_hold_v1(text,uuid,text,timestamptz) to service_role;

@@ -1,0 +1,437 @@
+create or replace function public.candidate_whole_claim_action_atomic_v1(
+  p_session_id uuid,
+  p_environment text,
+  p_workflow_id uuid,
+  p_expected_generation integer,
+  p_timesheet_id uuid,
+  p_claim_scope_sha256 text,
+  p_action text,
+  p_reason_note text,
+  p_idempotency_key text,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text:=private._candidate_assert_environment(p_environment);
+  v_action text:=upper(btrim(coalesce(p_action,'')));
+  v_reason text:=nullif(btrim(coalesce(p_reason_note,'')),'');
+  v_context jsonb;
+  v_anchor public.timesheets%rowtype;
+  v_requested_anchor public.timesheets%rowtype;
+  v_anchor_fin public.timesheets_financials%rowtype;
+  v_current_anchor_id uuid;
+  v_owner public.candidate_submission_workflows%rowtype;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_component public.candidate_expense_components%rowtype;
+  v_timesheet_id uuid;
+  v_timesheet public.timesheets%rowtype;
+  v_fin public.timesheets_financials%rowtype;
+  v_pending_expense_count integer;
+  v_approved_count integer;
+  v_pending_count integer;
+  v_settings jsonb;
+  v_template jsonb;
+  v_submission_type text;
+  v_terminal_mail jsonb;
+  v_result jsonb;
+  v_results jsonb:='[]'::jsonb;
+  v_cleanup uuid[]:=array[]::uuid[];
+  v_delete_result jsonb;
+  v_deleted_timesheet_ids uuid[]:=array[]::uuid[];
+  v_retained_timesheet_ids uuid[]:=array[]::uuid[];
+  v_removed_from_current_timesheet_ids uuid[]:=array[]::uuid[];
+  v_empty_timesheet_results jsonb:='[]'::jsonb;
+  v_r2_cleanup_keys text[]:=array[]::text[];
+  v_request jsonb;
+  v_request_sha bytea;
+  v_operation public.candidate_expense_operations%rowtype;
+  v_scope jsonb;
+begin
+  if p_workflow_id is null or p_expected_generation is null or p_timesheet_id is null
+     or coalesce(p_claim_scope_sha256,'') !~ '^[0-9a-fA-F]{64}$'
+     or v_action not in ('WITHDRAW_ENTIRE_CLAIM','CANCEL_ENTIRE_CLAIM')
+     or v_reason is null or char_length(v_reason)>1000
+     or nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then
+    raise exception 'CANDIDATE_WHOLE_CLAIM_ACTION_INVALID' using errcode='22023';
+  end if;
+  v_context:=private._candidate_session_context_v1(
+    p_session_id,v_environment,null,p_now_utc,true
+  );
+  v_request:=jsonb_build_object(
+    'contract_version','CANDIDATE_WHOLE_CLAIM_ACTION_REQUEST_V1',
+    'workflow_id',p_workflow_id,'workflow_generation',p_expected_generation,
+    'timesheet_id',p_timesheet_id,
+    'claim_scope_sha256',lower(p_claim_scope_sha256),
+    'action_code',v_action,'reason_note',v_reason
+  );
+  v_request_sha:=private._candidate_sha256_jsonb_v1(v_request);
+  perform pg_advisory_xact_lock(hashtextextended(
+    'candidate-expense-operation|'||v_environment||'|'
+      ||(v_context->>'selected_candidate_id')||'|'||btrim(p_idempotency_key),0
+  ));
+  select operation.* into v_operation
+  from public.candidate_expense_operations operation
+  where operation.environment=v_environment
+    and operation.actor_kind='CANDIDATE'
+    and operation.actor_id=(v_context->>'selected_candidate_id')::uuid
+    and operation.idempotency_key=btrim(p_idempotency_key)
+  for update;
+  if found then
+    if v_operation.action_code<>v_action or v_operation.request_sha256<>v_request_sha then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='23505';
+    end if;
+    if v_operation.state='COMMITTED' then
+      return v_operation.result_json||jsonb_build_object('idempotent_replay',true);
+    end if;
+    raise exception 'CANDIDATE_EXPENSE_OPERATION_IN_PROGRESS' using errcode='55000';
+  end if;
+  insert into public.candidate_expense_operations(
+    environment,account_id,candidate_id,actor_kind,actor_id,action_code,
+    workflow_id,timesheet_id,request_sha256,idempotency_key,state,
+    created_at_utc,updated_at_utc
+  ) values (
+    v_environment,(v_context->>'account_id')::uuid,
+    (v_context->>'selected_candidate_id')::uuid,'CANDIDATE',
+    (v_context->>'selected_candidate_id')::uuid,v_action,p_workflow_id,
+    p_timesheet_id,v_request_sha,btrim(p_idempotency_key),'PREPARING',
+    p_now_utc,p_now_utc
+  ) returning * into v_operation;
+  select workflow.* into v_owner from public.candidate_submission_workflows workflow
+  where workflow.id=p_workflow_id and workflow.environment=v_environment
+    and workflow.candidate_id=(v_context->>'selected_candidate_id')::uuid
+    and workflow.state not in ('CANCELLED','EXPIRED','SUPERSEDED','REJECTED','REFUSED')
+  for update;
+  if not found then raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002'; end if;
+  if v_owner.generation<>p_expected_generation then
+    raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
+  end if;
+  -- A deleted row is never an action anchor.  A retained old version may
+  -- resolve only through its exact booking chain to one current row owned by
+  -- the same Candidate workflow.
+  select row.* into v_requested_anchor from public.timesheets row
+  where row.timesheet_id=p_timesheet_id;
+  if not found then raise exception 'TIMESHEET_NOT_FOUND' using errcode='P0002'; end if;
+  if v_requested_anchor.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum then
+    raise exception 'CANDIDATE_WHOLE_CLAIM_ACTION_CHANGED' using errcode='40001';
+  end if;
+  v_current_anchor_id:=private._candidate_expense_current_timesheet_id_v1(
+    v_owner.id,p_timesheet_id
+  );
+  if v_current_anchor_id is null then
+    raise exception 'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED' using errcode='40001';
+  end if;
+  select row.* into v_anchor from public.timesheets row
+  where row.timesheet_id=v_current_anchor_id and row.is_current
+    and row.archived_at_utc is null for update;
+  if not found
+     or v_anchor.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum
+     or v_anchor.contract_id is distinct from v_owner.contract_id
+     or v_anchor.week_ending_date is distinct from v_owner.week_ending_date
+     or (p_timesheet_id<>v_current_anchor_id and (
+       nullif(btrim(coalesce(v_requested_anchor.booking_id,'')),'') is null
+       or v_requested_anchor.booking_id is distinct from v_anchor.booking_id
+       or v_requested_anchor.contract_id is distinct from v_anchor.contract_id
+       or v_requested_anchor.week_ending_date is distinct from v_anchor.week_ending_date
+     )) then
+    raise exception 'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED' using errcode='40001';
+  end if;
+  select row.* into v_anchor_fin from public.timesheets_financials row
+  where row.timesheet_id=v_current_anchor_id and row.is_current
+  order by row.computed_at_utc desc nulls last,row.updated_at desc,row.id desc limit 1;
+  if v_anchor_fin.candidate_id is distinct from
+       (v_context->>'selected_candidate_id')::uuid then
+    raise exception 'TIMESHEET_NOT_FOUND' using errcode='P0002';
+  end if;
+  update public.candidate_expense_operations operation
+  set timesheet_id=v_current_anchor_id,updated_at_utc=p_now_utc
+  where operation.operation_id=v_operation.operation_id
+    and operation.state='PREPARING';
+  perform pg_advisory_xact_lock(hashtextextended(
+    'candidate-whole-claim|'||v_environment||'|'
+      ||(v_context->>'selected_candidate_id')||'|'||coalesce(v_anchor.contract_id::text,'')
+      ||'|'||v_anchor.week_ending_date::text,0
+  ));
+  perform 1 from public.candidate_submission_workflows workflow
+  where workflow.environment=v_environment
+    and workflow.candidate_id=(v_context->>'selected_candidate_id')::uuid
+    and workflow.contract_id=v_anchor.contract_id
+    and workflow.week_ending_date=v_anchor.week_ending_date
+    and workflow.state not in ('CANCELLED','EXPIRED','SUPERSEDED','REJECTED','REFUSED')
+  order by workflow.id for update;
+  -- Component protection is independently durable. Lock it before the scope
+  -- digest recheck and fail closed even when a legacy Timesheet/financial row
+  -- has not yet caught up with AUTHORISED/INVOICED/PAID component history.
+  perform 1
+  from public.candidate_expense_components component
+  join public.candidate_submission_workflows workflow
+    on workflow.id=component.workflow_id
+  where workflow.environment=v_environment
+    and workflow.candidate_id=(v_context->>'selected_candidate_id')::uuid
+    and workflow.contract_id=v_anchor.contract_id
+    and workflow.week_ending_date=v_anchor.week_ending_date
+    and workflow.state not in ('CANCELLED','EXPIRED','SUPERSEDED','REJECTED','REFUSED')
+    and component.lifecycle_state not in (
+      'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+    )
+  order by component.expense_component_id
+  for update of component;
+  v_scope:=private._candidate_whole_claim_scope_v1(
+    v_environment,v_owner.candidate_id,v_owner.contract_id,v_owner.week_ending_date
+  );
+  if coalesce(v_scope->>'scope_sha256','')<>lower(p_claim_scope_sha256) then
+    raise exception 'CANDIDATE_WHOLE_CLAIM_ACTION_CHANGED'
+      using errcode='40001',detail=v_scope::text;
+  end if;
+  if exists(
+    select 1
+    from public.candidate_expense_components component
+    join public.candidate_submission_workflows workflow
+      on workflow.id=component.workflow_id
+    where workflow.environment=v_environment
+      and workflow.candidate_id=v_owner.candidate_id
+      and workflow.contract_id=v_owner.contract_id
+      and workflow.week_ending_date=v_owner.week_ending_date
+      and workflow.state not in ('CANCELLED','EXPIRED','SUPERSEDED','REJECTED','REFUSED')
+      and component.lifecycle_state not in (
+        'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+      )
+       and component.agency_authorisation_state in ('AUTHORISED','INVOICED')
+  ) then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
+  end if;
+  if v_owner.contract_id is distinct from v_anchor.contract_id
+     or v_owner.week_ending_date is distinct from v_anchor.week_ending_date then
+    raise exception 'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED' using errcode='40001';
+  end if;
+  if exists(
+    select 1 from public.candidate_pending_expense_updates update_row
+    join public.candidate_submission_workflows workflow on workflow.id=update_row.workflow_id
+    where workflow.environment=v_environment
+      and workflow.candidate_id=v_owner.candidate_id
+      and workflow.contract_id=v_owner.contract_id
+      and workflow.week_ending_date=v_owner.week_ending_date
+      and update_row.state in ('EDITING','RENDERING')
+  ) then raise exception 'CANDIDATE_EXPENSE_UPDATE_IN_PROGRESS' using errcode='55000'; end if;
+  select count(distinct workflow.id)::integer into v_pending_expense_count
+  from public.candidate_submission_workflows workflow
+  left join public.candidate_approval_requests request on request.workflow_id=workflow.id
+    and request.workflow_generation=workflow.generation and request.state='PENDING'
+  where workflow.environment=v_environment and workflow.candidate_id=v_owner.candidate_id
+    and workflow.contract_id=v_owner.contract_id
+    and workflow.week_ending_date=v_owner.week_ending_date
+    and workflow.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
+    and (
+      (workflow.state='AWAITING_MANAGER_APPROVAL' and request.id is not null)
+      or (workflow.route='PAPER' and workflow.state='AWAITING_PAPER_RETURN')
+    );
+  if v_pending_expense_count>1 then
+    raise exception 'CANDIDATE_EXPENSE_PENDING_WORKFLOW_CONFLICT' using errcode='55000';
+  end if;
+  select count(distinct workflow.id) filter(where
+      request.state='APPROVED'
+      or (workflow.route='PAPER' and workflow.state in ('RECEIVED','FINALISED'))
+    )::integer,
+    count(distinct workflow.id) filter(where
+      request.state='PENDING'
+      or (workflow.route='PAPER' and workflow.state='AWAITING_PAPER_RETURN')
+    )::integer
+  into v_approved_count,v_pending_count
+  from public.candidate_submission_workflows workflow
+  left join public.candidate_approval_requests request
+    on request.workflow_id=workflow.id
+    and request.workflow_generation=case when workflow.state='FINALISED'
+      then greatest(workflow.generation-1,1) else workflow.generation end
+    and request.state in ('PENDING','APPROVED')
+  where workflow.environment=v_environment and workflow.candidate_id=v_owner.candidate_id
+    and workflow.contract_id=v_owner.contract_id
+    and workflow.week_ending_date=v_owner.week_ending_date
+    and workflow.state not in ('CANCELLED','EXPIRED','SUPERSEDED','REJECTED','REFUSED');
+  if (v_approved_count>0 and v_action<>'CANCEL_ENTIRE_CLAIM')
+     or (v_approved_count=0 and v_pending_count>0
+       and v_action<>'WITHDRAW_ENTIRE_CLAIM')
+     or (v_approved_count=0 and v_pending_count=0) then
+    raise exception 'CANDIDATE_WHOLE_CLAIM_ACTION_CHANGED' using errcode='40001';
+  end if;
+  for v_workflow in
+    select workflow.* from public.candidate_submission_workflows workflow
+    where workflow.environment=v_environment and workflow.candidate_id=v_owner.candidate_id
+      and workflow.contract_id=v_owner.contract_id
+      and workflow.week_ending_date=v_owner.week_ending_date
+      and workflow.state not in ('CANCELLED','EXPIRED','SUPERSEDED','REJECTED','REFUSED')
+    order by workflow.id
+  loop
+    v_timesheet_id:=private._candidate_expense_owned_timesheet_id_v1(
+      v_workflow.id,v_workflow.target_timesheet_id
+    );
+    if v_workflow.target_timesheet_id is not null and v_timesheet_id is null then
+      raise exception 'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED' using errcode='40001';
+    end if;
+    if v_timesheet_id is not null then
+      select row.* into v_timesheet from public.timesheets row
+      where row.timesheet_id=v_timesheet_id for update;
+      select row.* into v_fin from public.timesheets_financials row
+      where row.timesheet_id=v_timesheet_id and row.is_current
+      order by row.computed_at_utc desc nulls last,row.updated_at desc,row.id desc
+      limit 1 for update;
+      if v_timesheet.authorised_at_server is not null
+         or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED')
+         or v_fin.authorised_at_utc is not null or v_fin.locked_by_invoice_id is not null
+         or (coalesce((private._candidate_expense_effective_payment_v1(
+               v_timesheet_id
+             )->>'payment_protected')::boolean,false)
+           and (not coalesce((private._candidate_expense_effective_payment_v1(
+                 v_timesheet_id
+               )->>'payment_only_eligible')::boolean,false)
+             or coalesce(v_fin.total_hours,0)<>0
+             or coalesce(v_fin.hours_day,0)<>0
+             or coalesce(v_fin.hours_night,0)<>0
+             or coalesce(v_fin.hours_sat,0)<>0
+             or coalesce(v_fin.hours_sun,0)<>0
+             or coalesce(v_fin.hours_bh,0)<>0
+             or coalesce(v_fin.additional_pay_ex_vat,0)<>0
+             or coalesce(v_fin.additional_charge_ex_vat,0)<>0)) then
+        raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
+      end if;
+    end if;
+  end loop;
+  v_settings:=public.candidate_manager_email_settings_get_v1();
+  for v_workflow in
+    select workflow.* from public.candidate_submission_workflows workflow
+    where workflow.environment=v_environment and workflow.candidate_id=v_owner.candidate_id
+      and workflow.contract_id=v_owner.contract_id
+      and workflow.week_ending_date=v_owner.week_ending_date
+      and workflow.state not in ('CANCELLED','EXPIRED','SUPERSEDED','REJECTED','REFUSED')
+    order by workflow.id
+  loop
+    if v_workflow.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED') then
+      for v_component in select component.*
+        from public.candidate_expense_components component
+        where component.workflow_id=v_workflow.id
+          and component.lifecycle_state not in (
+            'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+          )
+        order by component.expense_component_id for update
+      loop
+        if v_component.owning_timesheet_id is not null then
+          v_result:=private._candidate_expense_financial_remove_v1(
+            v_component.expense_component_id,v_component.component_generation,p_now_utc
+          );
+          if coalesce((v_result->>'zero_expense_carrier')::boolean,false)
+             and nullif(v_result->>'timesheet_id','') is not null then
+            v_cleanup:=array_append(v_cleanup,(v_result->>'timesheet_id')::uuid);
+          end if;
+        end if;
+      end loop;
+    end if;
+    v_submission_type:=case v_workflow.workflow_kind
+      when 'CONTRACT_EXPENSE' then 'EXPENSE_CLAIM'
+      when 'CONTRACT_COMBINED' then 'COMBINED' else 'TIMESHEET' end;
+    v_template:=v_settings#>array['templates',v_submission_type,'CANCELLATION'];
+    v_terminal_mail:=jsonb_build_object(
+      'subject',v_template->>'subject','body_text',v_template->>'body_text',
+      'body_html',v_template->>'body_html','manager_template_version',v_settings->'version',
+      'manager_template_sha256',v_settings->>'semantic_sha256_hex',
+      'manager_submission_type',v_submission_type
+    );
+    v_result:=public.candidate_workflow_cancel_atomic_v2(
+      p_session_id,v_environment,v_workflow.id,v_workflow.generation,
+      jsonb_build_object(
+        'reason_note',v_reason,'reason_code',v_action,
+        'manager_terminal_mail',v_terminal_mail
+      ),'whole-claim:'||btrim(p_idempotency_key)||':'||v_workflow.id::text,p_now_utc
+    );
+    v_results:=v_results||jsonb_build_array(v_result);
+  end loop;
+  select coalesce(array_agg(distinct value order by value),array[]::uuid[])
+  into v_cleanup from unnest(v_cleanup) value;
+  foreach v_timesheet_id in array v_cleanup loop
+    if exists(select 1 from public.timesheets row where row.timesheet_id=v_timesheet_id) then
+      v_delete_result:=private._candidate_zero_expense_carrier_delete_v1(
+        v_environment,v_timesheet_id,pg_catalog.gen_random_uuid(),p_now_utc
+      );
+      v_empty_timesheet_results:=v_empty_timesheet_results||jsonb_build_array(
+        jsonb_build_object(
+          'timesheet_id',v_timesheet_id,
+          'empty_timesheet_consequence',coalesce(
+            v_delete_result->>'empty_timesheet_consequence','NONE'
+          ),
+          'owning_timesheet_deleted',coalesce(
+            (v_delete_result->>'owning_timesheet_deleted')::boolean,false
+          ),
+          'deleted_timesheet_ids',coalesce(
+            v_delete_result->'deleted_timesheet_ids','[]'::jsonb
+          ),
+          'retained_timesheet_ids',coalesce(
+            v_delete_result->'retained_timesheet_ids','[]'::jsonb
+          ),
+          'removed_from_current_timesheet_ids',coalesce(
+            v_delete_result->'removed_from_current_timesheet_ids','[]'::jsonb
+          )
+        )
+      );
+      select coalesce(array_agg(distinct value::uuid order by value::uuid),array[]::uuid[])
+      into v_deleted_timesheet_ids
+      from jsonb_array_elements_text(
+        to_jsonb(v_deleted_timesheet_ids)||coalesce(v_delete_result->'deleted_timesheet_ids','[]'::jsonb)
+      ) ids(value);
+      select coalesce(array_agg(distinct value::uuid order by value::uuid),array[]::uuid[])
+      into v_retained_timesheet_ids
+      from jsonb_array_elements_text(
+        to_jsonb(v_retained_timesheet_ids)||coalesce(v_delete_result->'retained_timesheet_ids','[]'::jsonb)
+      ) ids(value);
+      select coalesce(array_agg(distinct value::uuid order by value::uuid),array[]::uuid[])
+      into v_removed_from_current_timesheet_ids
+      from jsonb_array_elements_text(
+        to_jsonb(v_removed_from_current_timesheet_ids)
+          ||coalesce(v_delete_result->'removed_from_current_timesheet_ids','[]'::jsonb)
+      ) ids(value);
+      select coalesce(array_agg(distinct value order by value),array[]::text[])
+      into v_r2_cleanup_keys
+      from jsonb_array_elements_text(
+        to_jsonb(v_r2_cleanup_keys)||coalesce(v_delete_result->'r2_cleanup_keys','[]'::jsonb)
+      ) keys(value);
+    end if;
+  end loop;
+  perform private._candidate_notification_insert_v1(
+    v_owner.account_id,v_owner.candidate_id,v_owner.id,
+    case when v_current_anchor_id=any(v_removed_from_current_timesheet_ids)
+      then null else v_current_anchor_id end,
+    case when v_action='WITHDRAW_ENTIRE_CLAIM'
+      then 'CLAIM_WITHDRAWN' else 'CLAIM_CANCELLED' end,
+    'timesheet_expense_attention',case when v_action='WITHDRAW_ENTIRE_CLAIM'
+      then 'candidate-entire-claim-withdrawn-v1' else 'candidate-entire-claim-cancelled-v1' end,
+    jsonb_build_object('workflow_id',v_owner.id,'reason',v_reason,
+      'affected_workflow_count',jsonb_array_length(v_results)),
+    jsonb_build_object('type','workflow','workflow_id',v_owner.id),
+    'CANDIDATE_WHOLE_CLAIM_ACTION_V1:'||btrim(p_idempotency_key),p_now_utc
+  );
+  v_result:=jsonb_build_object(
+    'ok',true,'contract_version','CANDIDATE_WHOLE_CLAIM_ACTION_RESULT_V1',
+    'operation_id',v_operation.operation_id,
+    'action_code',v_action,'state','CANCELLED',
+    'workflow_results',v_results,'zero_expense_carrier_timesheet_ids',to_jsonb(v_cleanup),
+    'empty_timesheet_results',v_empty_timesheet_results,
+    'deleted_timesheet_ids',to_jsonb(v_deleted_timesheet_ids),
+    'retained_timesheet_ids',to_jsonb(v_retained_timesheet_ids),
+    'removed_from_current_timesheet_ids',to_jsonb(v_removed_from_current_timesheet_ids),
+    'r2_cleanup_keys',to_jsonb(v_r2_cleanup_keys),
+    'idempotent_replay',false
+  );
+  update public.candidate_expense_operations operation set
+    state='COMMITTED',result_json=v_result,completed_at_utc=p_now_utc,
+    updated_at_utc=p_now_utc
+  where operation.operation_id=v_operation.operation_id and operation.state='PREPARING';
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_OPERATION_CHANGED' using errcode='40001';
+  end if;
+  return v_result;
+end;
+$function$;
+alter function public.candidate_whole_claim_action_atomic_v1(uuid,text,uuid,integer,uuid,text,text,text,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_whole_claim_action_atomic_v1(uuid,text,uuid,integer,uuid,text,text,text,text,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.candidate_whole_claim_action_atomic_v1(uuid,text,uuid,integer,uuid,text,text,text,text,timestamptz) to service_role;

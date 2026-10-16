@@ -1,0 +1,160 @@
+create or replace function public.candidate_expense_paper_update_begin_atomic_v1(
+  p_session_id uuid,
+  p_environment text,
+  p_workflow_id uuid,
+  p_expected_generation integer,
+  p_category_changes jsonb,
+  p_idempotency_key text,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text:=private._candidate_assert_environment(p_environment);
+  v_context jsonb;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_operation public.candidate_expense_operations%rowtype;
+  v_update public.candidate_pending_expense_updates%rowtype;
+  v_request jsonb;
+  v_request_sha bytea;
+  v_begin jsonb;
+  v_result jsonb;
+begin
+  if p_workflow_id is null or coalesce(p_expected_generation,0)<1
+     or jsonb_typeof(p_category_changes) is distinct from 'array'
+     or jsonb_array_length(p_category_changes) not between 1 and 4
+     or nullif(pg_catalog.btrim(coalesce(p_idempotency_key,'')),'') is null then
+    raise exception 'CANDIDATE_PAPER_DOCUMENT_UPDATE_INVALID' using errcode='22023';
+  end if;
+  v_context:=private._candidate_session_context_v1(
+    p_session_id,v_environment,null,p_now_utc,true
+  );
+  -- The first successful BEGIN advances the workflow into a new draft
+  -- generation.  Resolve its durable receipt by the original immutable
+  -- request before consulting that mutable workflow state.
+  v_request:=jsonb_build_object(
+    'contract_version','CANDIDATE_PAPER_DOCUMENT_UPDATE_REQUEST_V1',
+    'workflow_id',p_workflow_id,'workflow_generation',p_expected_generation,
+    'category_changes',p_category_changes
+  );
+  v_request_sha:=private._candidate_sha256_jsonb_v1(v_request);
+  -- HEALTH_EXPENSE_FAMILY_ENTRY: locks only, before native mutable row locks.
+  perform private.timesheet_contract_expense_family_enter_v1(
+    v_environment,p_workflow_id,(v_context->>'selected_candidate_id')::uuid,(v_context->>'account_id')::uuid);
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'candidate-expense-operation|'||v_environment||'|'
+      ||(v_context->>'selected_candidate_id')||'|'||pg_catalog.btrim(p_idempotency_key),0
+  ));
+  select operation.* into v_operation
+  from public.candidate_expense_operations operation
+  where operation.environment=v_environment
+    and operation.actor_kind='CANDIDATE'
+    and operation.actor_id=(v_context->>'selected_candidate_id')::uuid
+    and operation.idempotency_key=pg_catalog.btrim(p_idempotency_key)
+  for update;
+  if found then
+    if v_operation.action_code<>'CREATE_UPDATED_DOCUMENTS'
+       or v_operation.workflow_id is distinct from p_workflow_id
+       or v_operation.request_sha256<>v_request_sha then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='23505';
+    end if;
+    if v_operation.state='COMMITTED' then
+      return v_operation.result_json||jsonb_build_object('idempotent_replay',true);
+    end if;
+    if v_operation.state in ('FAILED','ABORTED') and v_operation.result_json is not null then
+      return v_operation.result_json||jsonb_build_object('idempotent_replay',true);
+    end if;
+    if v_operation.state in ('PREPARING','RENDERING')
+       and v_operation.progress_json is not null then
+      return v_operation.progress_json||jsonb_build_object('idempotent_replay',true);
+    end if;
+    raise exception 'CANDIDATE_EXPENSE_OPERATION_IN_PROGRESS' using errcode='55000';
+  end if;
+  select workflow.* into v_workflow
+  from public.candidate_submission_workflows workflow
+  where workflow.id=p_workflow_id
+    and workflow.environment=v_environment
+    and workflow.account_id=(v_context->>'account_id')::uuid
+    and workflow.candidate_id=(v_context->>'selected_candidate_id')::uuid
+  for update;
+  if not found then
+    raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
+  end if;
+  if v_workflow.generation<>p_expected_generation
+     or v_workflow.route<>'PAPER'
+     or v_workflow.state<>'AWAITING_PAPER_RETURN'
+     or v_workflow.workflow_kind not in ('CONTRACT_EXPENSE','CONTRACT_COMBINED') then
+    raise exception 'CANDIDATE_PAPER_DOCUMENT_UPDATE_NOT_ALLOWED' using errcode='55000';
+  end if;
+  if exists(
+    select 1 from public.timesheets owner
+    where owner.timesheet_id in (
+      v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id
+    ) and owner.sheet_scope='DAILY'::public.timesheet_scope_enum
+  ) then
+    raise exception 'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED'
+      using errcode='40001';
+  end if;
+  insert into public.candidate_expense_operations(
+    environment,account_id,candidate_id,actor_kind,actor_id,action_code,
+    workflow_id,timesheet_id,request_sha256,idempotency_key,state,
+    created_at_utc,updated_at_utc
+  ) values (
+    v_environment,v_workflow.account_id,v_workflow.candidate_id,'CANDIDATE',
+    v_workflow.candidate_id,'CREATE_UPDATED_DOCUMENTS',v_workflow.id,
+    private._candidate_expense_current_timesheet_id_v1(
+      v_workflow.id,coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)
+    ),v_request_sha,pg_catalog.btrim(p_idempotency_key),'PREPARING',p_now_utc,p_now_utc
+  ) returning * into v_operation;
+  perform set_config(
+    'cloudtms.candidate_paper_update_begin_context',
+    jsonb_build_object(
+      'purpose','CREATE_UPDATED_DOCUMENTS',
+      'workflow_id',v_workflow.id,
+      'workflow_generation',v_workflow.generation
+    )::text,true
+  );
+  v_begin:=public.candidate_expense_update_begin_atomic_v1(
+    p_session_id,v_environment,v_workflow.id,v_workflow.generation,
+    p_category_changes,pg_catalog.btrim(p_idempotency_key),p_now_utc
+  );
+  perform set_config('cloudtms.candidate_paper_update_begin_context','',true);
+  update public.candidate_pending_expense_updates update_row set
+    operation_id=v_operation.operation_id,updated_at_utc=p_now_utc
+  where update_row.update_id=(v_begin->>'update_id')::uuid
+    and update_row.workflow_id=v_workflow.id and update_row.state='EDITING';
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+  end if;
+  v_result:=jsonb_build_object(
+    'contract_version','CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1',
+    'ok',true,'operation_id',v_operation.operation_id,
+    'action_code','CREATE_UPDATED_DOCUMENTS','stage','EDITING',
+    'workflow_id',v_workflow.id,'generation',(v_begin->>'generation')::integer,
+    'state','WORKER_DRAFT','update_state','UPDATING',
+    'update_id',(v_begin->>'update_id')::uuid,
+    'category_changes',v_begin->'category_changes',
+    'route','PAPER','route_selection_required',false,
+    'upload_mode','EXISTING_WORKFLOW_DELTA',
+    'submission_requires_update_id',true,
+    'paper_pack_replacement',true,'old_pack_recoverable',true,
+    'manager_link_preserved',false,'idempotent_replay',false
+  );
+  update public.candidate_expense_operations operation set
+    progress_json=v_result,updated_at_utc=p_now_utc
+  where operation.operation_id=v_operation.operation_id and operation.state='PREPARING';
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_OPERATION_CHANGED' using errcode='40001';
+  end if;
+  return v_result;
+end;
+$function$;
+alter function public.candidate_expense_paper_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_expense_paper_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamptz)
+  from public,anon,authenticated,service_role;
+grant execute on function public.candidate_expense_paper_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamptz)
+  to service_role;

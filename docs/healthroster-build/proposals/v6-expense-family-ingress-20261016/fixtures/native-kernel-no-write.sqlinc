@@ -1,0 +1,61 @@
+-- REQUIRED_NOT_RUN. Genuine input must be produced by existing native
+-- constructors in the root-owned rollback transaction, never direct fixture
+-- approval/financial/audit writes. Expected temporary input relation:
+-- pg_temp.healthroster_expense_ingress_input(environment text,workflow_ids uuid[],
+-- candidate_id uuid,account_id uuid). Exactly one genuine current native scope.
+create function pg_temp.expense_ingress_native_rows(p_workflow_ids uuid[])
+returns jsonb language sql stable as $capture$
+ with workflows as materialized(select w.* from public.candidate_submission_workflows w where w.id=any(p_workflow_ids)),
+ rows as(select w.anchor_timesheet_id id from workflows w union select w.target_timesheet_id from workflows w
+  union select c.timesheet_id from workflows w join public.contract_weeks c on c.id=w.contract_week_id
+  union select e.owning_timesheet_id from workflows w join public.candidate_expense_components e on e.workflow_id=w.id),
+ families as(select distinct a.family_root_id from rows r join private.timesheet_contract_family_aliases a on a.timesheet_id=r.id),
+ timesheets as(select r.id from rows r union select a.timesheet_id from private.timesheet_contract_family_aliases a
+  join families f on f.family_root_id=a.family_root_id)
+ select jsonb_build_object(
+ 'workflows',(select jsonb_agg(to_jsonb(w) order by w.id) from workflows w),
+ 'components',(select jsonb_agg(to_jsonb(c) order by c.expense_component_id) from public.candidate_expense_components c where c.workflow_id=any(p_workflow_ids)),
+ 'submission_components',(select jsonb_agg(to_jsonb(c) order by c.id) from public.candidate_submission_components c where c.workflow_id=any(p_workflow_ids)),
+ 'updates',(select jsonb_agg(to_jsonb(u) order by u.update_id) from public.candidate_pending_expense_updates u where u.workflow_id=any(p_workflow_ids)),
+ 'operations',(select jsonb_agg(to_jsonb(o) order by o.operation_id) from public.candidate_expense_operations o where o.workflow_id=any(p_workflow_ids)),
+ 'timesheets',(select jsonb_agg(to_jsonb(t) order by t.timesheet_id) from public.timesheets t where t.timesheet_id in(select id from timesheets)),
+ 'financials',(select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f where f.timesheet_id in(select id from timesheets)),
+ 'evidence',(select jsonb_agg(to_jsonb(e) order by e.id) from public.timesheet_evidence e where e.timesheet_id in(select id from timesheets)),
+ 'placements',(select jsonb_agg(to_jsonb(p) order by p.family_root_id,p.member_key) from private.timesheet_contract_current_placements p where p.family_root_id in(select family_root_id from families)),
+ 'aliases',(select jsonb_agg(to_jsonb(a) order by a.timesheet_id) from private.timesheet_contract_family_aliases a where a.family_root_id in(select family_root_id from families)))
+$capture$;
+do $native$
+declare input record;before_rows jsonb;wrong_candidate uuid:=gen_random_uuid();wrong_account uuid:=gen_random_uuid();
+begin
+ if current_database()<>'cloudtms_test_clone' or to_regclass('pg_temp.healthroster_expense_ingress_input') is null then
+  raise exception 'GENUINE_NATIVE_EXPENSE_INGRESS_INPUT_REQUIRED';end if;
+ if (select count(*) from pg_temp.healthroster_expense_ingress_input)<>1 then
+  raise exception 'GENUINE_NATIVE_EXPENSE_INGRESS_INPUT_REQUIRED';end if;
+ select v.* into strict input from pg_temp.healthroster_expense_ingress_input v;
+ if input.environment<>'TEST' or cardinality(input.workflow_ids) not between 1 and 100
+  or input.candidate_id is null or input.account_id is null
+  or (select count(*) from public.candidate_submission_workflows w where w.id=any(input.workflow_ids)
+   and w.environment='TEST' and w.candidate_id=input.candidate_id and w.account_id=input.account_id
+   and w.workflow_kind in('CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED'))<>cardinality(input.workflow_ids) then
+  raise exception 'GENUINE_NATIVE_EXPENSE_INGRESS_INPUT_REQUIRED';end if;
+ before_rows:=pg_temp.expense_ingress_native_rows(input.workflow_ids);
+ perform private.timesheet_contract_expense_families_enter_v1(input.environment,input.workflow_ids,input.candidate_id,input.account_id);
+ if before_rows is distinct from pg_temp.expense_ingress_native_rows(input.workflow_ids) then
+  raise exception 'EXPENSE_FAMILY_LOCK_CHANGED_NATIVE_ROWS';end if;
+ begin
+  perform private.timesheet_contract_expense_families_enter_v1(input.environment,input.workflow_ids,wrong_candidate,input.account_id);
+  raise exception 'EXPENSE_FAMILY_FOREIGN_CANDIDATE_ACCEPTED';
+ exception when sqlstate 'P0002' then null;end;
+ begin
+  perform private.timesheet_contract_expense_families_enter_v1(input.environment,input.workflow_ids,input.candidate_id,wrong_account);
+  raise exception 'EXPENSE_FAMILY_FOREIGN_ACCOUNT_ACCEPTED';
+ exception when sqlstate 'P0002' then null;end;
+ if has_function_privilege('anon','private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid)','execute')
+  or has_function_privilege('authenticated','private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid)','execute')
+  or has_function_privilege('service_role','private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid)','execute') then
+  raise exception 'EXPENSE_FAMILY_ENTRY_ACL_CHANGED';end if;
+end;
+$native$;
+-- This single-session no-write fixture does not establish blocking order or
+-- two-session Move/component races. Those remain a separate mandatory native
+-- owner rehearsal with real current/rotated/pending workflows and exact replay.

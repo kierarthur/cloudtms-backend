@@ -1,0 +1,332 @@
+create or replace function public.candidate_office_expense_category_reject_atomic_v1(
+  p_actor_user_id uuid,
+  p_environment text,
+  p_workflow_id uuid,
+  p_expected_generation integer,
+  p_expense_component_id uuid,
+  p_expected_component_generation integer,
+  p_confirmation_sha256 text,
+  p_reason_note text,
+  p_idempotency_key text,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text:=private._candidate_assert_environment(p_environment);
+  v_reason text:=nullif(btrim(coalesce(p_reason_note,'')),'');
+  v_context jsonb;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_component public.candidate_expense_components%rowtype;
+  v_before jsonb;
+  v_operation public.candidate_expense_operations%rowtype;
+  v_request_sha bytea;
+  v_financial jsonb;
+  v_begin jsonb;
+  v_submit jsonb;
+  v_result jsonb;
+  v_direct_empty_pending boolean:=false;
+  v_is_paper_pending boolean:=false;
+  v_paper_retirement jsonb;
+begin
+  if not private._candidate_office_service_context_valid_v1(
+       v_environment,p_actor_user_id,'REJECT_EXPENSE_CATEGORY'
+     ) then
+    raise exception 'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID' using errcode='28000';
+  end if;
+  if p_workflow_id is null or p_expected_generation is null
+     or p_expense_component_id is null or p_expected_component_generation is null
+     or coalesce(p_confirmation_sha256,'') !~ '^[0-9a-fA-F]{64}$'
+     or v_reason is null or char_length(v_reason)>1000
+     or nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then
+    raise exception 'CANDIDATE_EXPENSE_CATEGORY_REJECTION_INVALID' using errcode='22023';
+  end if;
+  v_request_sha:=private._candidate_sha256_jsonb_v1(jsonb_build_object(
+    'contract_version','OFFICE_EXPENSE_CATEGORY_REJECTION_REQUEST_V1',
+    'actor_user_id',p_actor_user_id,'environment',v_environment,
+    'workflow_id',p_workflow_id,'generation',p_expected_generation,
+    'expense_component_id',p_expense_component_id,
+    'component_generation',p_expected_component_generation,
+    'confirmation_sha256',lower(p_confirmation_sha256),'reason_note',v_reason
+  ));
+  perform pg_advisory_xact_lock(hashtextextended(
+    'office-expense-category-reject|'||p_actor_user_id::text||'|'
+      ||btrim(p_idempotency_key),0
+  ));
+  select * into v_operation from public.candidate_expense_operations operation
+  where operation.environment=v_environment and operation.actor_kind='OFFICE'
+    and operation.actor_id=p_actor_user_id
+    and operation.idempotency_key=btrim(p_idempotency_key) for update;
+  if found then
+    if v_operation.request_sha256<>v_request_sha then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+    end if;
+    if v_operation.state='COMMITTED' then
+      return v_operation.result_json||jsonb_build_object('idempotent_replay',true);
+    end if;
+    if v_operation.state='RENDERING'
+       and jsonb_typeof(v_operation.progress_json)='object'
+       and nullif(v_operation.progress_json->>'update_id','') is not null
+       and (
+         jsonb_typeof(v_operation.progress_json->'render_contract')='object'
+         or coalesce((v_operation.progress_json->>'paper_prepare_required')::boolean,false)
+       ) then
+      return v_operation.progress_json||jsonb_build_object(
+        'ok',true,'contract_version','OFFICE_EXPENSE_CATEGORY_REJECTION_PENDING_V1',
+        'operation_id',v_operation.operation_id,'action_code','REJECT_EXPENSE_CATEGORY',
+        'state','RENDERING','idempotent_replay',true
+      );
+    end if;
+    if v_operation.state in ('FAILED','ABORTED')
+       and v_operation.result_json is not null then
+      return v_operation.result_json||jsonb_build_object('idempotent_replay',true);
+    elsif v_operation.state in ('FAILED','ABORTED') then
+      raise exception 'CANDIDATE_EXPENSE_CATEGORY_REJECTION_NOT_COMMITTED'
+        using errcode='40001';
+    end if;
+    return jsonb_build_object(
+      'ok',true,'contract_version','OFFICE_EXPENSE_CATEGORY_REJECTION_PENDING_V1',
+      'operation_id',v_operation.operation_id,'state',v_operation.state,
+      'idempotent_replay',true
+    );
+  end if;
+  select * into v_workflow from public.candidate_submission_workflows workflow
+  where workflow.id=p_workflow_id and workflow.environment=v_environment for update;
+  select * into v_component from public.candidate_expense_components component
+  where component.expense_component_id=p_expense_component_id
+    and component.workflow_id=p_workflow_id for update;
+  if v_workflow.id is null or v_component.expense_component_id is null then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_NOT_FOUND' using errcode='P0002';
+  end if;
+  if v_workflow.generation<>p_expected_generation
+     or v_component.component_generation<>p_expected_component_generation then
+    raise exception 'CANDIDATE_EXPENSE_CATEGORY_CONTEXT_CHANGED' using errcode='40001';
+  end if;
+  perform private._candidate_expense_owner_context_lock_v1(
+    v_component.expense_component_id
+  );
+  v_context:=private._candidate_office_expense_rejection_context_v1(
+    v_environment,v_component.expense_component_id,p_now_utc
+  );
+  if not coalesce((v_context->>'eligible')::boolean,false)
+     or lower(coalesce(v_context->>'confirmation_sha256',''))<>lower(p_confirmation_sha256) then
+    raise exception 'CANDIDATE_EXPENSE_CATEGORY_CONTEXT_CHANGED'
+      using errcode='40001',detail=coalesce(v_context,'{}'::jsonb)::text;
+  end if;
+  perform set_config(
+    'cloudtms.candidate_expected_delete_scope_sha256',
+    coalesce(v_context#>>'{basis,delete_target_scope_sha256}','NO_DELETE'),true
+  );
+  insert into public.candidate_expense_operations(
+    environment,account_id,candidate_id,actor_kind,actor_id,action_code,
+    workflow_id,timesheet_id,expense_component_id,request_sha256,idempotency_key,
+    state,progress_json,created_at_utc,updated_at_utc
+  ) values (
+    v_environment,v_workflow.account_id,v_workflow.candidate_id,'OFFICE',p_actor_user_id,
+    'REJECT_EXPENSE_CATEGORY',v_workflow.id,
+    (v_context#>>'{basis,owning_timesheet_id}')::uuid,v_component.expense_component_id,
+    v_request_sha,btrim(p_idempotency_key),'PREPARING',jsonb_build_object(
+      'expected_rejection_freshness_sha256',v_context#>>'{basis,freshness_sha256}',
+      'expected_delete_scope_sha256',coalesce(
+        v_context#>>'{basis,delete_scope_sha256}','NO_DELETE'
+      ),
+      'expected_delete_target_scope_sha256',coalesce(
+        v_context#>>'{basis,delete_target_scope_sha256}','NO_DELETE'
+      )
+    ),p_now_utc,p_now_utc
+  ) returning * into v_operation;
+  v_is_paper_pending:=v_component.lifecycle_state='SUBMITTED'
+    and v_component.manager_approval_state='NOT_REQUESTED'
+    and v_workflow.route='PAPER'
+    and v_workflow.state='AWAITING_PAPER_RETURN';
+  if v_component.lifecycle_state='SUBMITTED' and (
+       (v_component.manager_approval_state='PENDING' and v_workflow.route<>'PAPER')
+       or v_is_paper_pending
+     ) then
+    v_direct_empty_pending:=v_workflow.workflow_kind='CONTRACT_EXPENSE'
+      and coalesce(v_context#>>'{basis,empty_timesheet_consequence}','NONE')
+        <>'NONE'
+      and not exists(
+        select 1 from public.candidate_expense_components other_component
+        where other_component.workflow_id=v_workflow.id
+          and other_component.expense_component_id<>v_component.expense_component_id
+          and other_component.lifecycle_state not in (
+            'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+          )
+      );
+    if not v_direct_empty_pending then
+      if v_is_paper_pending then
+        perform set_config(
+          'cloudtms.candidate_paper_update_begin_context',
+          jsonb_build_object(
+            'purpose','REJECT_EXPENSE_CATEGORY',
+            'workflow_id',v_workflow.id,
+            'workflow_generation',v_workflow.generation
+          )::text,true
+        );
+      end if;
+      v_begin:=public.candidate_expense_update_begin_atomic_v1(
+        null,v_environment,v_workflow.id,v_workflow.generation,
+        jsonb_build_array(jsonb_build_object(
+          'update_kind','OFFICE_REJECT_CATEGORY',
+          'expense_category',v_component.expense_category,
+          'expense_component_id',v_component.expense_component_id,
+          'component_generation',v_component.component_generation,
+          'reason_note',v_reason
+        )),'office-category-reject-begin:'||v_operation.operation_id::text,p_now_utc
+      );
+      if v_is_paper_pending then
+        perform set_config('cloudtms.candidate_paper_update_begin_context','',true);
+      end if;
+      update public.candidate_pending_expense_updates set
+        operation_id=v_operation.operation_id
+      where update_id=(v_begin->>'update_id')::uuid;
+      select * into v_workflow from public.candidate_submission_workflows
+      where id=v_workflow.id;
+      v_submit:=public.candidate_expense_update_submit_atomic_v1(
+        null,v_environment,v_workflow.id,v_workflow.generation,
+        (v_begin->>'update_id')::uuid,
+        jsonb_build_object('immutable_submission',v_workflow.immutable_submission_json),
+        'office-category-reject-submit:'||v_operation.operation_id::text,p_now_utc
+      );
+      update public.candidate_expense_operations set
+        state='RENDERING',
+        progress_json=coalesce(progress_json,'{}'::jsonb)||v_submit
+          ||jsonb_build_object(
+            'previous_owning_timesheet_id',
+            (v_context#>>'{basis,owning_timesheet_id}')::uuid,
+            'expected_delete_scope_sha256',
+            coalesce(v_context#>>'{basis,delete_scope_sha256}','NO_DELETE'),
+            'expected_delete_target_scope_sha256',
+            coalesce(v_context#>>'{basis,delete_target_scope_sha256}','NO_DELETE')
+          ),
+        updated_at_utc=p_now_utc
+      where operation_id=v_operation.operation_id;
+      return v_submit||jsonb_build_object(
+        'ok',true,'contract_version','OFFICE_EXPENSE_CATEGORY_REJECTION_PENDING_V1',
+        'operation_id',v_operation.operation_id,'action_code','REJECT_EXPENSE_CATEGORY',
+        'state','RENDERING','idempotent_replay',false
+      );
+    end if;
+    if v_is_paper_pending then
+      v_paper_retirement:=private._candidate_paper_delivery_retire_v1(
+        v_workflow.id,v_workflow.generation,
+        'EXPENSE_CATEGORY_OFFICE_REJECTED',p_now_utc
+      );
+      if not coalesce((v_paper_retirement->>'retired')::boolean,false)
+         or not (
+           coalesce((v_paper_retirement->>'qr_invalidated')::boolean,false)
+           or coalesce((v_paper_retirement->>'qr_already_invalidated')::boolean,false)
+         ) then
+        raise exception 'CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN'
+          using errcode='40001',detail=coalesce(v_paper_retirement,'{}'::jsonb)::text;
+      end if;
+    else
+      perform private._candidate_empty_manager_request_cancel_v1(
+        v_workflow.id,v_workflow.generation,'EXPENSE_CATEGORY_OFFICE_REJECTED',p_now_utc
+      );
+    end if;
+  end if;
+  v_before:=to_jsonb(v_component);
+  v_financial:=private._candidate_expense_financial_remove_v1(
+    v_component.expense_component_id,v_component.component_generation,p_now_utc
+  );
+  update public.candidate_expense_components set
+    component_generation=component_generation+1,lifecycle_state='OFFICE_REJECTED',
+    manager_approval_state=case when manager_approval_state='APPROVED'
+      then 'APPROVED' else 'NOT_REQUESTED' end,
+    approval_request_id=case when manager_approval_state='APPROVED'
+      then approval_request_id else null end,
+    refusal_kind='AGENCY_REJECTION',refusal_reason=v_reason,
+    refused_at_utc=p_now_utc,removed_at_utc=p_now_utc,updated_at_utc=p_now_utc
+  where expense_component_id=v_component.expense_component_id
+  returning * into v_component;
+  insert into public.candidate_expense_component_events(
+    expense_component_id,workflow_id,component_generation,event_type,actor_kind,
+    actor_id,reason,before_state_json,after_state_json,idempotency_key,occurred_at_utc
+  ) values (
+    v_component.expense_component_id,v_component.workflow_id,
+    v_component.component_generation,'OFFICE_REJECTED','OFFICE',p_actor_user_id,
+    v_reason,v_before,to_jsonb(v_component),
+    'office-category-reject:'||v_operation.operation_id::text,p_now_utc
+  );
+  perform private._candidate_notification_insert_v1(
+    v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,
+    nullif(v_financial->>'timesheet_id','')::uuid,'OFFICE_REJECTED',
+    'timesheet_expense_attention','candidate-expense-category-rejected-v1',
+    jsonb_build_object('workflow_id',v_workflow.id,
+      'expense_component_id',v_component.expense_component_id,
+      'expense_category',v_component.expense_category,'reason',v_reason,
+      'resubmission_scope','EXPENSE_CATEGORY'),
+    jsonb_build_object('type','workflow','workflow_id',v_workflow.id),
+    'CANDIDATE_EXPENSE_CATEGORY_REJECTED_V1:'||v_operation.operation_id::text,
+    p_now_utc
+  );
+  if v_direct_empty_pending then
+    update public.candidate_submission_workflows workflow set
+      state='CANCELLED',generation=workflow.generation+1,
+      cancelled_at_utc=p_now_utc,updated_at_utc=p_now_utc
+    where workflow.id=v_workflow.id
+      and workflow.generation=v_workflow.generation
+      and workflow.state=case when v_is_paper_pending
+        then 'AWAITING_PAPER_RETURN' else 'AWAITING_MANAGER_APPROVAL' end
+    returning workflow.* into v_workflow;
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_CATEGORY_CONTEXT_CHANGED' using errcode='40001';
+    end if;
+  end if;
+  if coalesce((v_financial->>'zero_expense_carrier')::boolean,false) then
+    v_begin:=private._candidate_zero_expense_carrier_delete_v1(
+      v_environment,(v_financial->>'timesheet_id')::uuid,
+      v_operation.operation_id,p_now_utc
+    );
+  else
+    v_begin:=jsonb_build_object(
+      'owning_timesheet_deleted',false,
+      'empty_timesheet_consequence','NONE',
+      'retained_timesheet_ids',jsonb_build_array(v_financial->'timesheet_id'),
+      'affected_timesheet_ids',jsonb_build_array(v_financial->'timesheet_id'),
+      'removed_from_current_timesheet_ids','[]'::jsonb
+    );
+  end if;
+  v_result:=jsonb_build_object(
+    'ok',true,'contract_version','OFFICE_EXPENSE_CATEGORY_REJECTION_RESULT_V2',
+    'operation_id',v_operation.operation_id,'action_code','REJECT_EXPENSE_CATEGORY',
+    'workflow_id',v_workflow.id,'expense_component_id',v_component.expense_component_id,
+    'component_generation',v_component.component_generation,
+    'state','OFFICE_REJECTED','refusal',jsonb_build_object(
+      'kind','AGENCY_REJECTION','reason',v_reason,'at_utc',p_now_utc
+    ),'previous_owning_timesheet_id',v_financial->'timesheet_id',
+    'empty_timesheet_consequence',coalesce(
+      v_begin->>'empty_timesheet_consequence','NONE'
+    ),
+    'owning_timesheet_deleted',coalesce(
+      (v_begin->>'owning_timesheet_deleted')::boolean,false
+    ),
+    'deleted_timesheet_ids',coalesce(v_begin->'deleted_timesheet_ids','[]'::jsonb),
+    'retained_timesheet_ids',coalesce(v_begin->'retained_timesheet_ids','[]'::jsonb),
+    'removed_from_current_timesheet_ids',coalesce(
+      v_begin->'removed_from_current_timesheet_ids','[]'::jsonb
+    ),
+    'affected_timesheet_ids',coalesce(v_begin->'affected_timesheet_ids',
+      jsonb_build_array(v_financial->'timesheet_id')),
+    'refresh_timesheet_ids',coalesce(v_begin->'affected_timesheet_ids',
+      jsonb_build_array(v_financial->'timesheet_id')),
+    'refresh_hints',jsonb_build_object(
+      'summary',true,'simple_timesheet',true,'bulk_process',true,
+      'bulk_authorise',true,'refetch','AFFECTED_ROWS'
+    ),
+    'idempotent_replay',false
+  );
+  update public.candidate_expense_operations set state='COMMITTED',result_json=v_result,
+    completed_at_utc=p_now_utc,updated_at_utc=p_now_utc
+  where operation_id=v_operation.operation_id;
+  return v_result;
+end;
+$function$;
+alter function public.candidate_office_expense_category_reject_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,text,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_office_expense_category_reject_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,text,text,timestamptz) from public,anon,authenticated,service_role;

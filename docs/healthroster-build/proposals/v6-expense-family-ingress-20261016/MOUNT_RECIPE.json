@@ -1,0 +1,345 @@
+{
+  "version": 1,
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "source_commit": null,
+  "remote_source_verified": null,
+  "root_observed_head": "66c6e5ef2971a22d34264b829877d6546c49a1be",
+  "root_native_input_files_lf_sha256": {
+    "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql": "f8f415a641f7ecdece1068d672f407370962e9aaeecc4f790ce832f791ce6908",
+    "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+    "supabase/repeatable/08092026_0918_candidate_expense_update_root_snapshot_validation_v1.sql": "cec8f0bcab33138ee33781dc8ac28edc8be4bd65818d93b9a97915f37b72a553",
+    "supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql": "c840d1462ff0c31bbe8b9cb56841bd6d8c0e732aeacf81e65d9d7879e610707b"
+  },
+  "current_native_inputs_equal_committed_root": true,
+  "new_schema": false,
+  "new_public_operations": false,
+  "new_private_routines": [
+    "private.timesheet_contract_expense_families_enter_v1(text,uuid[],uuid,uuid)->void",
+    "private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid)->void"
+  ],
+  "native_replacements": [
+    {
+      "name": "private._candidate_expense_financial_remove_v1",
+      "forward": "forward/010_remove.sqlinc",
+      "preimage": "reference/010_remove.sqlinc",
+      "preimage_sha256_lf": "8e73efbef4ee8273db9d46abf7860a54b05f00435f3b48d2fc63ca3c6cc2a206",
+      "forward_sha256_lf": "53001f8825993cd749a5258c902044e1ea109a481584e8a33b961426ff7566f5"
+    },
+    {
+      "name": "public.candidate_expense_update_rebind_atomic_v1",
+      "forward": "forward/020_rebind.sqlinc",
+      "preimage": "reference/020_rebind.sqlinc",
+      "preimage_sha256_lf": "d53150c779948eeb1bccf9e9ce201c533d45e6a9b6617d64c29daea493f389c7",
+      "forward_sha256_lf": "e74189f87510eaa0baf14886b2332c305120c16aabf3d741eb665dcabbc184b4"
+    },
+    {
+      "name": "public.candidate_office_expense_category_reject_atomic_v1",
+      "forward": "forward/030_office_reject.sqlinc",
+      "preimage": "reference/030_office_reject.sqlinc",
+      "preimage_sha256_lf": "27e2825dbc4ebfe235b018b963973019e183d76dc52f7ac27090adc57784458a",
+      "forward_sha256_lf": "59758c131d3e928cfb2a5e77dbe0c4a6393e0a452b97e45f6e6535d83317e992"
+    },
+    {
+      "name": "public.candidate_expense_component_action_atomic_v1",
+      "forward": "forward/040_component.sqlinc",
+      "preimage": "reference/040_component.sqlinc",
+      "preimage_sha256_lf": "e786cce1cc56c15e07a39a375868e067c2978f0ae42124b424fccf98e666f056",
+      "forward_sha256_lf": "e8901182d1d1a7bb0033291d271af3699e1f6dbb8f32cb9ae76f7901f18be3a6"
+    },
+    {
+      "name": "public.candidate_whole_claim_action_atomic_v1",
+      "forward": "forward/050_whole.sqlinc",
+      "preimage": "reference/050_whole.sqlinc",
+      "preimage_sha256_lf": "cd15bcadd21a23fb6755f1ac0b628342aa4680ae1fd626dcbf4968e5c9f4a6c0",
+      "forward_sha256_lf": "5d63c9204eb802659910ad6056d576928b5d82f298416435ff57562366409650"
+    },
+    {
+      "name": "public.candidate_expense_update_begin_atomic_v1",
+      "forward": "forward/060_begin.sqlinc",
+      "preimage": "reference/060_begin.sqlinc",
+      "preimage_sha256_lf": "c91a71f3edfa2e2b83215026ce92c32b7cc81da253aa5a71995c8a7ed18c8695",
+      "forward_sha256_lf": "be4290111dd1585580c21193c0e262ff58fd56731ee8b049607647305ced94f9"
+    },
+    {
+      "name": "public.candidate_expense_update_submit_atomic_v1",
+      "forward": "forward/070_submit.sqlinc",
+      "preimage": "reference/070_submit.sqlinc",
+      "preimage_sha256_lf": "0a24e4d32f54e11283cec78ea496029b52c7215008514b59281b2b252e3f10c4",
+      "forward_sha256_lf": "ba1dda600822cfe4f34126fa0acf83b37b3b7344ce21f4628c82bde7d2942d6e"
+    },
+    {
+      "name": "public.candidate_expense_update_abort_atomic_v1",
+      "forward": "forward/080_abort.sqlinc",
+      "preimage": "reference/080_abort.sqlinc",
+      "preimage_sha256_lf": "8a7004345600cf8dc63d720ced5a23abc2027838ea623d0636433ef0caf8cbfd",
+      "forward_sha256_lf": "4bbbaa7341867183a3bb78b371bf2fd69b14b5f682edd90d421b58e4df981aee"
+    },
+    {
+      "name": "public.candidate_expense_update_manager_hold_v1",
+      "forward": "forward/090_manager_hold.sqlinc",
+      "preimage": "reference/090_manager_hold.sqlinc",
+      "preimage_sha256_lf": "6bbac6b0df9541a715ba13d70c1e36e7f941ec78c94391cf5c8efac4aab4ec2c",
+      "forward_sha256_lf": "92080e59b6e5fb2a6322c80bed4160b46cdc1cbe1891b3d735064e96085ae5fd"
+    },
+    {
+      "name": "public.candidate_expense_paper_update_begin_atomic_v1",
+      "forward": "forward/100_paper_begin.sqlinc",
+      "preimage": "reference/100_paper_begin.sqlinc",
+      "preimage_sha256_lf": "9cb4b472137f050c7dfb5a566bc97a5cf58f5dcb1575d300676001d7cb330fa2",
+      "forward_sha256_lf": "2dd83aedf4c69f391e5aea6341835bcf5db199dcdbc3e0748b7cc3e8b3f774c0"
+    },
+    {
+      "name": "public.candidate_expense_category_resubmit_atomic_v1",
+      "forward": "forward/110_category_resubmit.sqlinc",
+      "preimage": "reference/110_category_resubmit.sqlinc",
+      "preimage_sha256_lf": "a200eb761f0212fb10951935a19227793d313d944c20547e99937b2361e2d010",
+      "forward_sha256_lf": "d16b9f35704a57efe285e8c770b1d1ca764818859301c1d02e42c02f0e9f3c88"
+    },
+    {
+      "name": "public.candidate_expense_update_recover_expired_v1",
+      "forward": "forward/120_recover.sqlinc",
+      "preimage": "reference/120_recover.sqlinc",
+      "preimage_sha256_lf": "dc6bc85eb04390ad2af882db596dfeaae50df42a17b9d73d460a3f84b9ea0747",
+      "forward_sha256_lf": "5f394edc280e28bf8427a22ebe451a050ba2a80fc515551176a4989fea84a0f2"
+    }
+  ],
+  "ordered_mount": [
+    "forward/001_family_entry.sqlinc",
+    "forward/010_remove.sqlinc",
+    "forward/020_rebind.sqlinc",
+    "forward/030_office_reject.sqlinc",
+    "forward/040_component.sqlinc",
+    "forward/050_whole.sqlinc",
+    "forward/060_begin.sqlinc",
+    "forward/070_submit.sqlinc",
+    "forward/080_abort.sqlinc",
+    "forward/090_manager_hold.sqlinc",
+    "forward/100_paper_begin.sqlinc",
+    "forward/110_category_resubmit.sqlinc",
+    "forward/120_recover.sqlinc"
+  ],
+  "workflow_owner_companion": {
+    "source": "a10f080f2272155c423991ffc81de8670d3c756b",
+    "path": "candidate-move-qr-paper-20261016/forward/05_native_paper_source.sqlinc",
+    "required_successor": "Physical composes exact locking-only entry after real Candidate/session/Office/service/manager read-ahead, before mutable native rows; no competing WF body"
+  },
+  "checks": {
+    "source_cases": 7,
+    "offline_postgres_grammar": "PASS",
+    "parsed_statements": 54,
+    "parsed_routine_bodies": 16,
+    "inner_sql": 856,
+    "native": "NOT_RUN",
+    "concurrency": "NOT_RUN",
+    "api": "NOT_RUN",
+    "database_calls": 0
+  },
+  "preserved": [
+    "original native pricing/finance/protection/paper/operation/result bodies outside recorded finite spans",
+    "original actor/session/token/permission and native mutable re-lock/revalidation",
+    "immutable request/receipt replay before original mutable generation/state guards",
+    "native bounded watchdog selection/order/limits",
+    "original explicit function owner/ACL",
+    "MyTMS f8/a7,invoicec86/330a/ffc,query2775,F5d49 immutable"
+  ],
+  "remaining": [
+    "Physical full same-signature workflow transition entry successor",
+    "Genuine native legacy/current-B/rotated/pending kernel and ingress/replay/actor cases with fresh restoration",
+    "Two actual concurrent native owner sessions for Move versus expense and batch lock order",
+    "Installed API/currentness/financial acceptance"
+  ],
+  "files": [
+    {
+      "path": "fixtures/native-kernel-no-write.sqlinc",
+      "sha256_raw": "14d6caf70b088997db222c48da65018071500ce6de5fe07d6e81650ffb152b86",
+      "sha256_lf": "14d6caf70b088997db222c48da65018071500ce6de5fe07d6e81650ffb152b86",
+      "bytes": 5503
+    },
+    {
+      "path": "forward/001_family_entry.sqlinc",
+      "sha256_raw": "4debb4606f3614050179e87473429df40d1f22f02825e1076fb6ac70b8777f3c",
+      "sha256_lf": "e3267e812d3ba05d874a7a42019e9f5e67dba62f46ed42b7f7627135ab6ac6f9",
+      "bytes": 5887
+    },
+    {
+      "path": "forward/010_remove.sqlinc",
+      "sha256_raw": "53001f8825993cd749a5258c902044e1ea109a481584e8a33b961426ff7566f5",
+      "sha256_lf": "53001f8825993cd749a5258c902044e1ea109a481584e8a33b961426ff7566f5",
+      "bytes": 12913
+    },
+    {
+      "path": "forward/020_rebind.sqlinc",
+      "sha256_raw": "e74189f87510eaa0baf14886b2332c305120c16aabf3d741eb665dcabbc184b4",
+      "sha256_lf": "e74189f87510eaa0baf14886b2332c305120c16aabf3d741eb665dcabbc184b4",
+      "bytes": 34463
+    },
+    {
+      "path": "forward/030_office_reject.sqlinc",
+      "sha256_raw": "59758c131d3e928cfb2a5e77dbe0c4a6393e0a452b97e45f6e6535d83317e992",
+      "sha256_lf": "59758c131d3e928cfb2a5e77dbe0c4a6393e0a452b97e45f6e6535d83317e992",
+      "bytes": 16436
+    },
+    {
+      "path": "forward/040_component.sqlinc",
+      "sha256_raw": "e8901182d1d1a7bb0033291d271af3699e1f6dbb8f32cb9ae76f7901f18be3a6",
+      "sha256_lf": "e8901182d1d1a7bb0033291d271af3699e1f6dbb8f32cb9ae76f7901f18be3a6",
+      "bytes": 24672
+    },
+    {
+      "path": "forward/050_whole.sqlinc",
+      "sha256_raw": "5d63c9204eb802659910ad6056d576928b5d82f298416435ff57562366409650",
+      "sha256_lf": "5d63c9204eb802659910ad6056d576928b5d82f298416435ff57562366409650",
+      "bytes": 22470
+    },
+    {
+      "path": "forward/060_begin.sqlinc",
+      "sha256_raw": "be4290111dd1585580c21193c0e262ff58fd56731ee8b049607647305ced94f9",
+      "sha256_lf": "be4290111dd1585580c21193c0e262ff58fd56731ee8b049607647305ced94f9",
+      "bytes": 19332
+    },
+    {
+      "path": "forward/070_submit.sqlinc",
+      "sha256_raw": "ba1dda600822cfe4f34126fa0acf83b37b3b7344ce21f4628c82bde7d2942d6e",
+      "sha256_lf": "ba1dda600822cfe4f34126fa0acf83b37b3b7344ce21f4628c82bde7d2942d6e",
+      "bytes": 17631
+    },
+    {
+      "path": "forward/080_abort.sqlinc",
+      "sha256_raw": "4bbbaa7341867183a3bb78b371bf2fd69b14b5f682edd90d421b58e4df981aee",
+      "sha256_lf": "4bbbaa7341867183a3bb78b371bf2fd69b14b5f682edd90d421b58e4df981aee",
+      "bytes": 16624
+    },
+    {
+      "path": "forward/090_manager_hold.sqlinc",
+      "sha256_raw": "92080e59b6e5fb2a6322c80bed4160b46cdc1cbe1891b3d735064e96085ae5fd",
+      "sha256_lf": "92080e59b6e5fb2a6322c80bed4160b46cdc1cbe1891b3d735064e96085ae5fd",
+      "bytes": 3763
+    },
+    {
+      "path": "forward/100_paper_begin.sqlinc",
+      "sha256_raw": "2dd83aedf4c69f391e5aea6341835bcf5db199dcdbc3e0748b7cc3e8b3f774c0",
+      "sha256_lf": "2dd83aedf4c69f391e5aea6341835bcf5db199dcdbc3e0748b7cc3e8b3f774c0",
+      "bytes": 7630
+    },
+    {
+      "path": "forward/110_category_resubmit.sqlinc",
+      "sha256_raw": "d16b9f35704a57efe285e8c770b1d1ca764818859301c1d02e42c02f0e9f3c88",
+      "sha256_lf": "d16b9f35704a57efe285e8c770b1d1ca764818859301c1d02e42c02f0e9f3c88",
+      "bytes": 16259
+    },
+    {
+      "path": "forward/120_recover.sqlinc",
+      "sha256_raw": "5f394edc280e28bf8427a22ebe451a050ba2a80fc515551176a4989fea84a0f2",
+      "sha256_lf": "5f394edc280e28bf8427a22ebe451a050ba2a80fc515551176a4989fea84a0f2",
+      "bytes": 3673
+    },
+    {
+      "path": "INTEGRATION.md",
+      "sha256_raw": "c496cef7a60249e93d4be55a2325cfcaca14f9adec43618072b234b972e79125",
+      "sha256_lf": "c496cef7a60249e93d4be55a2325cfcaca14f9adec43618072b234b972e79125",
+      "bytes": 6331
+    },
+    {
+      "path": "NATIVE_OWNER_PREFIXES.json",
+      "sha256_raw": "6a56903b38232d57bf86346e5248a5020c3e81756dde9ae16868d4df717f3484",
+      "sha256_lf": "6a56903b38232d57bf86346e5248a5020c3e81756dde9ae16868d4df717f3484",
+      "bytes": 14355
+    },
+    {
+      "path": "parse-source.py",
+      "sha256_raw": "a1a18ad032dfd3d424baf4baa330283fec30e55ab8803d7e65f8d3d5ada12ebd",
+      "sha256_lf": "a1a18ad032dfd3d424baf4baa330283fec30e55ab8803d7e65f8d3d5ada12ebd",
+      "bytes": 1442
+    },
+    {
+      "path": "prepare-source.py",
+      "sha256_raw": "3ec4c53581eaf2537c2f0ea1398f8b67d4da61648df65093d7c9251c78c7978e",
+      "sha256_lf": "3ec4c53581eaf2537c2f0ea1398f8b67d4da61648df65093d7c9251c78c7978e",
+      "bytes": 8146
+    },
+    {
+      "path": "reference/010_remove.sqlinc",
+      "sha256_raw": "8e73efbef4ee8273db9d46abf7860a54b05f00435f3b48d2fc63ca3c6cc2a206",
+      "sha256_lf": "8e73efbef4ee8273db9d46abf7860a54b05f00435f3b48d2fc63ca3c6cc2a206",
+      "bytes": 12561
+    },
+    {
+      "path": "reference/020_rebind.sqlinc",
+      "sha256_raw": "d53150c779948eeb1bccf9e9ce201c533d45e6a9b6617d64c29daea493f389c7",
+      "sha256_lf": "d53150c779948eeb1bccf9e9ce201c533d45e6a9b6617d64c29daea493f389c7",
+      "bytes": 34278
+    },
+    {
+      "path": "reference/030_office_reject.sqlinc",
+      "sha256_raw": "27e2825dbc4ebfe235b018b963973019e183d76dc52f7ac27090adc57784458a",
+      "sha256_lf": "27e2825dbc4ebfe235b018b963973019e183d76dc52f7ac27090adc57784458a",
+      "bytes": 16251
+    },
+    {
+      "path": "reference/040_component.sqlinc",
+      "sha256_raw": "e786cce1cc56c15e07a39a375868e067c2978f0ae42124b424fccf98e666f056",
+      "sha256_lf": "e786cce1cc56c15e07a39a375868e067c2978f0ae42124b424fccf98e666f056",
+      "bytes": 24420
+    },
+    {
+      "path": "reference/050_whole.sqlinc",
+      "sha256_raw": "cd15bcadd21a23fb6755f1ac0b628342aa4680ae1fd626dcbf4968e5c9f4a6c0",
+      "sha256_lf": "cd15bcadd21a23fb6755f1ac0b628342aa4680ae1fd626dcbf4968e5c9f4a6c0",
+      "bytes": 22218
+    },
+    {
+      "path": "reference/060_begin.sqlinc",
+      "sha256_raw": "c91a71f3edfa2e2b83215026ce92c32b7cc81da253aa5a71995c8a7ed18c8695",
+      "sha256_lf": "c91a71f3edfa2e2b83215026ce92c32b7cc81da253aa5a71995c8a7ed18c8695",
+      "bytes": 18883
+    },
+    {
+      "path": "reference/070_submit.sqlinc",
+      "sha256_raw": "0a24e4d32f54e11283cec78ea496029b52c7215008514b59281b2b252e3f10c4",
+      "sha256_lf": "0a24e4d32f54e11283cec78ea496029b52c7215008514b59281b2b252e3f10c4",
+      "bytes": 17182
+    },
+    {
+      "path": "reference/080_abort.sqlinc",
+      "sha256_raw": "8a7004345600cf8dc63d720ced5a23abc2027838ea623d0636433ef0caf8cbfd",
+      "sha256_lf": "8a7004345600cf8dc63d720ced5a23abc2027838ea623d0636433ef0caf8cbfd",
+      "bytes": 16276
+    },
+    {
+      "path": "reference/090_manager_hold.sqlinc",
+      "sha256_raw": "6bbac6b0df9541a715ba13d70c1e36e7f941ec78c94391cf5c8efac4aab4ec2c",
+      "sha256_lf": "6bbac6b0df9541a715ba13d70c1e36e7f941ec78c94391cf5c8efac4aab4ec2c",
+      "bytes": 2988
+    },
+    {
+      "path": "reference/100_paper_begin.sqlinc",
+      "sha256_raw": "9cb4b472137f050c7dfb5a566bc97a5cf58f5dcb1575d300676001d7cb330fa2",
+      "sha256_lf": "9cb4b472137f050c7dfb5a566bc97a5cf58f5dcb1575d300676001d7cb330fa2",
+      "bytes": 7378
+    },
+    {
+      "path": "reference/110_category_resubmit.sqlinc",
+      "sha256_raw": "a200eb761f0212fb10951935a19227793d313d944c20547e99937b2361e2d010",
+      "sha256_lf": "a200eb761f0212fb10951935a19227793d313d944c20547e99937b2361e2d010",
+      "bytes": 16000
+    },
+    {
+      "path": "reference/120_recover.sqlinc",
+      "sha256_raw": "dc6bc85eb04390ad2af882db596dfeaae50df42a17b9d73d460a3f84b9ea0747",
+      "sha256_lf": "dc6bc85eb04390ad2af882db596dfeaae50df42a17b9d73d460a3f84b9ea0747",
+      "bytes": 2961
+    },
+    {
+      "path": "source.test.mjs",
+      "sha256_raw": "0893efadc525b58109d593a65c1607481bc0d381d1fbd0fc0a84fc7c953d02f7",
+      "sha256_lf": "0893efadc525b58109d593a65c1607481bc0d381d1fbd0fc0a84fc7c953d02f7",
+      "bytes": 4798
+    },
+    {
+      "path": "SOURCE_PARSE_RESULT.json",
+      "sha256_raw": "c7fab1d28078ee1a71eaf2f667fd697b01fcb345fef208f72ba7f5b970640f33",
+      "sha256_lf": "c7fab1d28078ee1a71eaf2f667fd697b01fcb345fef208f72ba7f5b970640f33",
+      "bytes": 2430
+    }
+  ]
+}

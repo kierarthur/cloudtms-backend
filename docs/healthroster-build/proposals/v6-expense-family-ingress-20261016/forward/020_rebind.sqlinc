@@ -1,0 +1,669 @@
+create or replace function public.candidate_expense_update_rebind_atomic_v1(
+  p_environment text,
+  p_workflow_id uuid,
+  p_update_id uuid,
+  p_idempotency_key text,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text:=private._candidate_assert_environment(p_environment);
+  v_update public.candidate_pending_expense_updates%rowtype;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_approval public.candidate_approval_requests%rowtype;
+  v_component_ids uuid[];
+  v_change jsonb;
+  v_component public.candidate_expense_components%rowtype;
+  v_value record;
+  v_before jsonb;
+  v_manager_timesheet_component_id uuid;
+  v_manager_timesheet_sha256 bytea;
+  v_financial_result jsonb;
+  v_response jsonb;
+  v_operation public.candidate_expense_operations%rowtype;
+  v_operation_result jsonb;
+  v_paper_retirement jsonb;
+  v_delete_result jsonb:='{}'::jsonb;
+  v_previous_owner_timesheet_id uuid;
+  v_current_owner_timesheet_id uuid;
+  v_rebind_request_sha256 bytea;
+  v_rejection_freshness jsonb;
+  v_paper_mail_ids uuid[];
+  v_paper_mail public.mail_outbox%rowtype;
+  v_paper_notification_id uuid;
+  v_manager_mail_rebound_count integer:=0;
+begin
+  if p_workflow_id is null or p_update_id is null
+     or nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then
+    raise exception 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID' using errcode='22023';
+  end if;
+  -- HEALTH_EXPENSE_FAMILY_ENTRY: locks only, before native mutable row locks.
+  perform private.timesheet_contract_expense_family_enter_v1(
+    v_environment,p_workflow_id,null,null);
+  select * into v_workflow from public.candidate_submission_workflows workflow
+  where workflow.id=p_workflow_id and workflow.environment=v_environment for update;
+  if not found then raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002'; end if;
+  select * into v_update from public.candidate_pending_expense_updates update_row
+  where update_row.update_id=p_update_id and update_row.workflow_id=v_workflow.id
+  for update;
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_UPDATE_NOT_FOUND' using errcode='P0002';
+  end if;
+  v_rebind_request_sha256:=private._candidate_sha256_jsonb_v1(jsonb_build_object(
+    'contract_version','CANDIDATE_EXPENSE_UPDATE_REBIND_REQUEST_V1',
+    'workflow_id',v_workflow.id,'update_id',v_update.update_id
+  ));
+  if v_update.rebind_idempotency_key is not null then
+    if v_update.rebind_idempotency_key<>btrim(p_idempotency_key)
+       or v_update.rebind_request_sha256<>v_rebind_request_sha256 then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+    end if;
+    if v_update.rebind_result_json is null then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID' using errcode='55000';
+    end if;
+    return v_update.rebind_result_json||jsonb_build_object('idempotent_replay',true);
+  end if;
+  if v_update.state='COMMITTED' then
+    raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+  end if;
+  if v_update.state not in ('EDITING','RENDERING')
+     or (
+       v_update.update_mode='PENDING_MANAGER'
+       and (
+         v_workflow.state<>'READY_FOR_MANAGER_APPROVAL'
+         or v_workflow.review_manifest_json is null
+         or v_workflow.review_manifest_sha256 is null
+       )
+     )
+     or (
+       v_update.update_mode='PAPER_REPLACEMENT'
+       and (
+         v_workflow.state<>'AWAITING_PAPER_RETURN'
+         or v_workflow.paper_return_manifest_json is null
+         or v_workflow.paper_return_manifest_sha256 is null
+       )
+     )
+     or v_update.update_mode not in ('PENDING_MANAGER','PAPER_REPLACEMENT') then
+    raise exception 'CANDIDATE_EXPENSE_UPDATE_NOT_READY' using errcode='55000';
+  end if;
+  if v_update.operation_id is not null then
+    select operation.* into v_operation
+    from public.candidate_expense_operations operation
+    where operation.operation_id=v_update.operation_id
+    for update;
+    if not found or v_operation.workflow_id is distinct from v_update.workflow_id then
+      raise exception 'CANDIDATE_EXPENSE_OPERATION_CHANGED' using errcode='40001';
+    end if;
+    if v_operation.actor_kind='OFFICE'
+       and v_operation.action_code='REJECT_EXPENSE_CATEGORY' then
+      perform private._candidate_expense_owner_context_lock_v1(
+        v_operation.expense_component_id
+      );
+      v_rejection_freshness:=private._candidate_office_expense_rejection_context_v1(
+        v_environment,v_operation.expense_component_id,p_now_utc
+      );
+      if coalesce(v_operation.progress_json->>'expected_rejection_freshness_sha256','')
+           !~ '^[0-9a-f]{64}$'
+         or v_operation.progress_json->>'expected_rejection_freshness_sha256'
+           is distinct from v_rejection_freshness#>>'{basis,freshness_sha256}' then
+        raise exception 'CANDIDATE_EXPENSE_CATEGORY_CONTEXT_CHANGED'
+          using errcode='40001',detail=coalesce(v_rejection_freshness,'{}'::jsonb)::text;
+      end if;
+    end if;
+  end if;
+  if v_update.update_mode='PENDING_MANAGER' then
+    select * into v_approval from public.candidate_approval_requests request
+    where request.id=v_update.approval_request_id and request.workflow_id=v_workflow.id
+      and request.workflow_generation=v_update.from_workflow_generation
+      and request.state='PENDING' and request.expires_at_utc>p_now_utc for update;
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+    end if;
+    select array_agg(component.id order by component.review_ordinal,component.id)
+    into v_component_ids from public.candidate_submission_components component
+    where component.workflow_id=v_workflow.id
+      and component.workflow_generation=v_workflow.generation
+      and component.required and component.state<>'SUPERSEDED';
+    if coalesce(cardinality(v_component_ids),0)=0 then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_EMPTY' using errcode='55000';
+    end if;
+    v_manager_timesheet_component_id:=nullif(
+      v_workflow.review_manifest_json->>'manager_review_timesheet_component_id',''
+    )::uuid;
+    v_manager_timesheet_sha256:=case
+      when coalesce(v_workflow.review_manifest_json->>'manager_review_timesheet_sha256','')
+        ~ '^[0-9a-fA-F]{64}$'
+      then decode(v_workflow.review_manifest_json->>'manager_review_timesheet_sha256','hex')
+      else null end;
+    update public.candidate_approval_requests set
+      workflow_generation=v_workflow.generation,
+      review_manifest_sha256=v_workflow.review_manifest_sha256,
+      required_component_ids=v_component_ids,
+      required_component_manifest_json=coalesce(
+        v_workflow.review_manifest_json->'required_components','[]'::jsonb
+      ),
+      manager_review_timesheet_component_id=v_manager_timesheet_component_id,
+      manager_review_timesheet_sha256=v_manager_timesheet_sha256,
+      review_progress_json='{}'::jsonb,review_started_at_utc=null,
+      review_completed_at_utc=null,updated_at_utc=p_now_utc
+    where id=v_approval.id and state='PENDING'
+      and workflow_generation=v_update.from_workflow_generation
+    returning * into v_approval;
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+    end if;
+    -- The manager URL is stable, but every unsent message must name the
+    -- request's current immutable document generation.  Otherwise the email
+    -- outbox correctly refuses to send the stale generation after rebind.
+    update public.mail_outbox manager_mail set
+      payment_scope_json=manager_mail.payment_scope_json||jsonb_build_object(
+        'candidate_manager_workflow_generation',v_workflow.generation,
+        'candidate_manager_mail_rebound_at_utc',p_now_utc
+      )
+    where manager_mail.type='TIMESHEET_GENERAL'
+      and manager_mail.context_kind='CANDIDATE_WORKFLOW'
+      and manager_mail.context_id=v_workflow.id
+      and manager_mail.status='QUEUED' and manager_mail.sent_at is null
+      and upper(coalesce(
+        manager_mail.payment_scope_json->>'candidate_mail_authority',''
+      ))='MANAGER_APPROVAL_V1'
+      and upper(coalesce(
+        manager_mail.payment_scope_json->>'candidate_manager_mail_kind',''
+      )) in ('INITIAL','REMINDER','RENEWAL')
+      and lower(coalesce(
+        manager_mail.payment_scope_json->>'candidate_manager_mail_retired','false'
+      )) in ('false','f','0','no')
+      and manager_mail.payment_scope_json->>'candidate_approval_request_id'=
+        v_approval.id::text
+      and manager_mail.payment_scope_json->>'candidate_approval_request_generation'=
+        v_approval.request_generation::text
+      and manager_mail.payment_scope_json->>'candidate_manager_workflow_generation'=
+        v_update.from_workflow_generation::text;
+    get diagnostics v_manager_mail_rebound_count=row_count;
+    -- The approval request owns the ordered required-component manifest.
+    -- Source/review document rows must keep approval_request_id null: that
+    -- column is reserved by the table contract for a captured manager
+    -- signature.  Rebinding the request therefore updates the request's
+    -- required_component_ids above, not the document rows themselves.
+  end if;
+  update public.candidate_pending_expense_updates set
+    state='COMMITTED',current_workflow_generation=v_workflow.generation,
+    completed_at_utc=p_now_utc,updated_at_utc=p_now_utc
+  where update_id=v_update.update_id;
+  if v_update.update_mode='PENDING_MANAGER' then
+    update public.candidate_submission_workflows set
+      state='AWAITING_MANAGER_APPROVAL',updated_at_utc=p_now_utc
+    where id=v_workflow.id and generation=v_workflow.generation
+      and state='READY_FOR_MANAGER_APPROVAL';
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+    end if;
+  else
+    v_paper_retirement:=private._candidate_paper_delivery_retire_v1(
+      v_workflow.id,v_update.from_workflow_generation,
+      'PAPER_PACK_REPLACED',p_now_utc
+    );
+    if not coalesce((v_paper_retirement->>'retired')::boolean,false)
+       or not (
+         coalesce((v_paper_retirement->>'qr_invalidated')::boolean,false)
+         or coalesce((v_paper_retirement->>'qr_already_invalidated')::boolean,false)
+       ) then
+      raise exception 'CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN'
+        using errcode='40001',detail=v_paper_retirement::text;
+    end if;
+    -- PAPER_PACK_RELEASE may finish rendering while this update is still
+    -- RENDERING, but that replacement delivery is deliberately held at
+    -- infinity. Make it claimable, and create its Candidate notification,
+    -- only inside the same transaction that commits the update and retires
+    -- the previous immutable pack.
+    select coalesce(array_agg(mail_row.id order by mail_row.id),array[]::uuid[])
+    into v_paper_mail_ids
+    from public.mail_outbox mail_row
+    where mail_row.type='TIMESHEET_QR'
+      and mail_row.context_kind='timesheets'
+      and mail_row.status='QUEUED' and mail_row.sent_at is null
+      and mail_row.attempt_lease_token is null
+      and mail_row.payment_scope_json->>'candidate_mail_authority'='CANDIDATE_PAPER_V1'
+      and mail_row.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+      and mail_row.payment_scope_json->>'candidate_workflow_generation'=
+        v_workflow.generation::text
+      and lower(coalesce(mail_row.payment_scope_json->>'paper_return_manifest_sha256',''))=
+        encode(v_workflow.paper_return_manifest_sha256,'hex')
+      and lower(coalesce(mail_row.payment_scope_json->>'candidate_paper_pack_ready','false'))
+        in ('true','t','1','yes')
+      and lower(coalesce(mail_row.payment_scope_json->>'candidate_expense_update_hold','false'))
+        in ('true','t','1','yes')
+      and mail_row.payment_scope_json->>'mail_hold_reason'='CANDIDATE_EXPENSE_UPDATE_PENDING'
+      and jsonb_typeof(mail_row.attachments)='array'
+      and jsonb_array_length(mail_row.attachments)>0;
+    if cardinality(v_paper_mail_ids)<>1 then
+      raise exception 'CANDIDATE_EXPENSE_PAPER_REPLACEMENT_NOT_READY'
+        using errcode='40001',detail=jsonb_build_object(
+          'held_replacement_mail_count',cardinality(v_paper_mail_ids),
+          'workflow_id',v_workflow.id,'generation',v_workflow.generation
+        )::text;
+    end if;
+    update public.mail_outbox mail_row set
+      scheduled_for_utc=p_now_utc,next_attempt_at_utc=p_now_utc,
+      payment_scope_json=mail_row.payment_scope_json||jsonb_build_object(
+        'mail_held_until_pdf_rendered',false,
+        'mail_delayed_for_pdf_render',false,
+        'mail_hold_reason',null,
+        'candidate_expense_update_hold',false,
+        'candidate_expense_update_committed_at_utc',p_now_utc
+      )
+    where mail_row.id=v_paper_mail_ids[1]
+      and mail_row.status='QUEUED' and mail_row.sent_at is null
+      and mail_row.attempt_lease_token is null
+    returning mail_row.* into v_paper_mail;
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_PAPER_REPLACEMENT_NOT_READY'
+        using errcode='40001';
+    end if;
+    insert into public.candidate_notifications(
+      account_id,candidate_id,workflow_id,timesheet_id,event_type,preference_category,
+      template_key,template_params,deep_link_json,state,push_state,dedupe_key,created_at_utc
+    ) values (
+      v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,v_paper_mail.context_id,
+      'PAPER_PACK_READY','resubmission_required','candidate-paper-pack-ready-v1',
+      jsonb_build_object(
+        'page_count',(v_paper_mail.payment_scope_json->>'candidate_complete_pack_page_count')::integer,
+        'workflow_generation',v_workflow.generation
+      ),
+      jsonb_build_object('type','paper_pack','timesheet_id',v_paper_mail.context_id,
+        'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation),
+      'UNREAD','PENDING',
+      'CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'
+        ||v_workflow.generation::text||':'
+        ||encode(v_workflow.paper_return_manifest_sha256,'hex'),p_now_utc
+    ) on conflict(dedupe_key) do nothing
+    returning id into v_paper_notification_id;
+  end if;
+  -- The old immutable generation remains untouched throughout editing and
+  -- rendering.  Retire it only after the new manager manifest or complete
+  -- PAPER pack is proved ready and the owning workflow has reached its new
+  -- authoritative waiting state.
+  update public.candidate_submission_components component set
+    state='SUPERSEDED',superseded_at_utc=p_now_utc,
+    review_render_state=case when component.review_render_state='NOT_REQUIRED'
+      then component.review_render_state else 'SUPERSEDED' end,
+    final_signed_render_state=case when component.final_signed_render_state='NOT_REQUIRED'
+      then component.final_signed_render_state else 'SUPERSEDED' end
+  where component.workflow_id=v_workflow.id
+    and component.workflow_generation=v_update.from_workflow_generation
+    and component.state<>'SUPERSEDED';
+  perform private._candidate_expense_components_sync_v1(v_workflow.id,p_now_utc);
+  -- Finalise the stable category ledger only after the fresh manifest and the
+  -- original approval request have been atomically rebound.  Until this
+  -- point, the previous category remains authoritative and ABORT can restore
+  -- it without fabricating a transient withdrawal.
+  for v_change in
+    select value from jsonb_array_elements(v_update.update_plan_json) item(value)
+  loop
+    if v_change->>'update_kind' in ('REMOVE_CATEGORY','OFFICE_REJECT_CATEGORY') then
+      select * into v_component
+      from public.candidate_expense_components component
+      where component.workflow_id=v_workflow.id
+        and component.expense_component_id=(v_change->>'expense_component_id')::uuid
+        and component.component_generation=(v_change->>'component_generation')::integer
+      for update;
+      if not found or v_component.lifecycle_state<>'SUBMITTED'
+         or (v_update.update_mode='PENDING_MANAGER'
+           and v_component.manager_approval_state<>'PENDING')
+         or (v_update.update_mode='PAPER_REPLACEMENT'
+           and v_component.manager_approval_state<>'NOT_REQUESTED') then
+        raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+      end if;
+      v_before:=to_jsonb(v_component);
+      v_financial_result:=private._candidate_expense_financial_remove_v1(
+        v_component.expense_component_id,v_component.component_generation,p_now_utc
+      );
+      update public.candidate_expense_components set
+        workflow_generation=v_workflow.generation,
+        component_generation=component_generation+1,
+        lifecycle_state=case when v_change->>'update_kind'='OFFICE_REJECT_CATEGORY'
+          then 'OFFICE_REJECTED' else 'WITHDRAWN' end,
+        manager_approval_state='NOT_REQUESTED',
+        approval_request_id=null,removed_at_utc=p_now_utc,updated_at_utc=p_now_utc
+        ,refusal_kind=case when v_change->>'update_kind'='OFFICE_REJECT_CATEGORY'
+          then 'AGENCY_REJECTION' end
+        ,refusal_reason=case when v_change->>'update_kind'='OFFICE_REJECT_CATEGORY'
+          then v_update.reason_note end
+        ,refused_at_utc=case when v_change->>'update_kind'='OFFICE_REJECT_CATEGORY'
+          then p_now_utc end
+      where expense_component_id=v_component.expense_component_id
+      returning * into v_component;
+      insert into public.candidate_expense_component_events(
+        expense_component_id,workflow_id,component_generation,event_type,actor_kind,
+        actor_id,before_state_json,after_state_json,idempotency_key,occurred_at_utc
+      ) values (
+        v_component.expense_component_id,v_workflow.id,v_component.component_generation,
+        case when v_change->>'update_kind'='OFFICE_REJECT_CATEGORY'
+          then 'OFFICE_REJECTED' else 'WITHDRAWN' end,
+        v_update.actor_kind,v_update.actor_id,v_before,to_jsonb(v_component),
+        'expense-update-remove:'||v_update.update_id::text||':'
+          ||v_component.expense_component_id::text,p_now_utc
+      ) on conflict(expense_component_id,idempotency_key) do nothing;
+      perform private._candidate_notification_insert_v1(
+        v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,
+        private._candidate_expense_owned_timesheet_id_v1(
+          v_workflow.id,v_component.owning_timesheet_id
+        ),case when v_change->>'update_kind'='OFFICE_REJECT_CATEGORY'
+          then 'OFFICE_REJECTED' else 'EXPENSE_WITHDRAWN' end,
+        'timesheet_expense_attention',
+        case when v_change->>'update_kind'='OFFICE_REJECT_CATEGORY'
+          then 'candidate-expense-category-rejected-v1'
+          else 'candidate-expense-category-withdrawn-v1' end,
+        jsonb_build_object(
+          'workflow_id',v_workflow.id,
+          'expense_component_id',v_component.expense_component_id,
+          'expense_category',v_component.expense_category,
+          'reason',case when v_change->>'update_kind'='OFFICE_REJECT_CATEGORY'
+            then v_update.reason_note end,
+          'resubmission_scope',case when v_change->>'update_kind'='OFFICE_REJECT_CATEGORY'
+            then 'EXPENSE_CATEGORY' end
+        ),jsonb_build_object('type','workflow','workflow_id',v_workflow.id),
+        case when v_change->>'update_kind'='OFFICE_REJECT_CATEGORY'
+          then 'CANDIDATE_EXPENSE_CATEGORY_REJECTED_V1:'
+          else 'CANDIDATE_EXPENSE_CATEGORY_WITHDRAWN_V1:' end
+          ||v_update.update_id::text||':'
+          ||v_component.expense_component_id::text,p_now_utc
+      );
+    elsif v_change->>'update_kind'='ADD_CATEGORY' then
+      select * into v_component from public.candidate_expense_components component
+      where component.workflow_id=v_workflow.id
+        and component.expense_category=v_change->>'expense_category'
+      for update;
+      if found and v_component.lifecycle_state in (
+        'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+      ) then
+        select * into v_value
+        from private._candidate_expense_component_values_v1(v_workflow.id) value
+        where value.expense_category=v_change->>'expense_category';
+        if not found or (v_value.amount<=0 and v_value.mileage_units<=0) then
+          raise exception 'CANDIDATE_EXPENSE_UPDATE_EMPTY' using errcode='55000';
+        end if;
+        v_before:=to_jsonb(v_component);
+        update public.candidate_expense_components set
+          workflow_generation=v_workflow.generation,
+          component_generation=component_generation+1,
+          owning_timesheet_id=v_workflow.target_timesheet_id,
+          amount=v_value.amount,mileage_units=v_value.mileage_units,
+          lifecycle_state='SUBMITTED',manager_approval_state=case
+            when v_update.update_mode='PENDING_MANAGER' then 'PENDING'
+            else 'NOT_REQUESTED' end,
+          agency_authorisation_state='NOT_AUTHORISED',approval_request_id=case
+            when v_update.update_mode='PENDING_MANAGER' then v_approval.id end,
+          submitted_at_utc=p_now_utc,manager_approved_at_utc=null,
+          refusal_kind=null,refusal_reason=null,refused_at_utc=null,
+          removed_at_utc=null,updated_at_utc=p_now_utc
+        where expense_component_id=v_component.expense_component_id
+        returning * into v_component;
+        insert into public.candidate_expense_component_events(
+          expense_component_id,workflow_id,component_generation,event_type,actor_kind,
+          before_state_json,after_state_json,idempotency_key,occurred_at_utc
+        ) values (
+          v_component.expense_component_id,v_workflow.id,v_component.component_generation,
+          'SUBMITTED','CANDIDATE',v_before,to_jsonb(v_component),
+          'expense-update-add:'||v_update.update_id::text||':'
+            ||v_component.expense_component_id::text,p_now_utc
+        ) on conflict(expense_component_id,idempotency_key) do nothing;
+      elsif not found
+         or v_component.lifecycle_state<>'SUBMITTED'
+         or (v_update.update_mode='PENDING_MANAGER' and (
+           v_component.manager_approval_state<>'PENDING'
+           or v_component.approval_request_id is distinct from v_approval.id
+         ))
+         or (v_update.update_mode='PAPER_REPLACEMENT' and (
+           v_component.manager_approval_state<>'NOT_REQUESTED'
+           or v_component.approval_request_id is not null
+         )) then
+        raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+      end if;
+    elsif v_change->>'update_kind'='REPLACE_CATEGORY' then
+      select * into v_component from public.candidate_expense_components component
+      where component.workflow_id=v_workflow.id
+        and component.expense_component_id=(v_change->>'expense_component_id')::uuid
+      for update;
+      if not found then
+        raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+      end if;
+      if v_component.lifecycle_state<>'SUBMITTED'
+         or (v_update.update_mode='PENDING_MANAGER' and (
+           v_component.manager_approval_state<>'PENDING'
+           or v_component.approval_request_id is distinct from v_approval.id
+         ))
+         or (v_update.update_mode='PAPER_REPLACEMENT' and (
+           v_component.manager_approval_state<>'NOT_REQUESTED'
+           or v_component.approval_request_id is not null
+         )) then
+        raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+      end if;
+      select event.before_state_json into v_before
+      from public.candidate_expense_component_events event
+      where event.expense_component_id=v_component.expense_component_id
+        and event.component_generation=v_component.component_generation
+        and event.idempotency_key='component-sync:'
+          ||v_component.expense_component_id::text||':'
+          ||v_component.component_generation::text
+      order by event.occurred_at_utc desc,event.event_id desc limit 1;
+      if v_before is null then
+        raise exception 'CANDIDATE_EXPENSE_UPDATE_COMPONENT_AUDIT_MISSING'
+          using errcode='55000';
+      end if;
+      insert into public.candidate_expense_component_events(
+        expense_component_id,workflow_id,component_generation,event_type,actor_kind,
+        before_state_json,after_state_json,idempotency_key,occurred_at_utc
+      ) values (
+        v_component.expense_component_id,v_workflow.id,v_component.component_generation,
+        'REPLACED',v_update.actor_kind,v_before,to_jsonb(v_component),
+        'expense-update-replace:'||v_update.update_id::text||':'
+          ||v_component.expense_component_id::text,p_now_utc
+      ) on conflict(expense_component_id,idempotency_key) do nothing;
+    end if;
+  end loop;
+  -- The Office result names the Timesheet that was current when the user
+  -- confirmed the consequence.  Do not replace that historical identity
+  -- with a later rotation target resolved during render/rebind.
+  v_current_owner_timesheet_id:=nullif(v_financial_result->>'timesheet_id','')::uuid;
+  v_previous_owner_timesheet_id:=case
+    when v_operation.actor_kind='OFFICE' then coalesce(
+      nullif(v_operation.progress_json->>'previous_owning_timesheet_id','')::uuid,
+      v_operation.timesheet_id,
+      v_current_owner_timesheet_id
+    )
+    else v_current_owner_timesheet_id
+  end;
+  if v_update.operation_id is not null then
+    perform set_config(
+      'cloudtms.candidate_expected_delete_scope_sha256',
+      coalesce(v_operation.progress_json->>'expected_delete_target_scope_sha256',''),true
+    );
+  else
+    perform set_config('cloudtms.candidate_expected_delete_scope_sha256','',true);
+  end if;
+  if coalesce((v_financial_result->>'zero_expense_carrier')::boolean,false)
+     and v_current_owner_timesheet_id is not null then
+    v_delete_result:=private._candidate_zero_expense_carrier_delete_v1(
+      v_environment,v_current_owner_timesheet_id,
+      coalesce(v_update.operation_id,v_update.update_id),p_now_utc
+    );
+  elsif v_current_owner_timesheet_id is not null then
+    v_delete_result:=jsonb_build_object(
+      'owning_timesheet_deleted',false,
+      'empty_timesheet_consequence','NONE',
+      'retained_timesheet_ids',jsonb_build_array(v_current_owner_timesheet_id),
+      'affected_timesheet_ids',jsonb_build_array(v_current_owner_timesheet_id),
+      'removed_from_current_timesheet_ids','[]'::jsonb
+    );
+  end if;
+  -- Category evidence (including same-amount replacements) is summary input.
+  -- Queue every surviving exact owner after the atomic rebind; the queue is
+  -- content-addressed, so unchanged inputs are an idempotent no-op.
+  perform private._candidate_expense_summary_queue_v1(
+    owner.timesheet_id,p_now_utc
+  )
+  from (
+    select distinct private._candidate_expense_owned_timesheet_id_v1(
+      component.workflow_id,component.owning_timesheet_id
+    ) as timesheet_id
+    from public.candidate_expense_components component
+    where component.workflow_id=v_workflow.id
+  ) owner
+  where owner.timesheet_id is not null
+    and exists(select 1 from public.timesheets row
+      where row.timesheet_id=owner.timesheet_id and row.is_current
+        and row.archived_at_utc is null);
+  v_response:=jsonb_build_object(
+    'ok',true,'workflow_id',v_workflow.id,'state',case
+      when v_update.update_mode='PENDING_MANAGER' then 'AWAITING_MANAGER_APPROVAL'
+      else 'AWAITING_PAPER_RETURN' end,
+    'generation',v_workflow.generation,'update_state','NONE','update_id',v_update.update_id,
+    'category_changes',v_update.update_plan_json,'approval_request_id',v_approval.id,
+    'approval_request_generation',v_approval.request_generation,
+    'manager_queued_mail_rebound_count',v_manager_mail_rebound_count,
+    'manager_link_preserved',v_update.update_mode='PENDING_MANAGER',
+    'paper_pack_replacement',v_update.update_mode='PAPER_REPLACEMENT',
+    'old_pack_retired',v_update.update_mode='PAPER_REPLACEMENT',
+    'previous_owning_timesheet_id',v_previous_owner_timesheet_id,
+    'empty_timesheet_consequence',coalesce(
+      v_delete_result->>'empty_timesheet_consequence','NONE'
+    ),
+    'owning_timesheet_deleted',coalesce(
+      (v_delete_result->>'owning_timesheet_deleted')::boolean,false
+    ),
+    'deleted_timesheet_ids',coalesce(v_delete_result->'deleted_timesheet_ids','[]'::jsonb),
+    'retained_timesheet_ids',coalesce(v_delete_result->'retained_timesheet_ids','[]'::jsonb),
+    'affected_timesheet_ids',coalesce(v_delete_result->'affected_timesheet_ids','[]'::jsonb),
+    'removed_from_current_timesheet_ids',coalesce(
+      v_delete_result->'removed_from_current_timesheet_ids','[]'::jsonb
+    ),
+    'idempotent_replay',false
+  );
+  if v_update.operation_id is not null then
+    if v_operation.actor_kind='OFFICE'
+       and v_operation.action_code='REJECT_EXPENSE_CATEGORY'
+       and v_operation.state in ('PREPARING','RENDERING') then
+      select component.* into v_component
+      from public.candidate_expense_components component
+      where component.expense_component_id=v_operation.expense_component_id
+        and component.lifecycle_state='OFFICE_REJECTED';
+      if not found then
+        raise exception 'CANDIDATE_EXPENSE_CATEGORY_REJECTION_NOT_COMMITTED'
+          using errcode='40001';
+      end if;
+      v_operation_result:=jsonb_build_object(
+        'ok',true,
+        'contract_version','OFFICE_EXPENSE_CATEGORY_REJECTION_RESULT_V2',
+        'operation_id',v_operation.operation_id,
+        'action_code','REJECT_EXPENSE_CATEGORY',
+        'workflow_id',v_operation.workflow_id,
+        'expense_component_id',v_component.expense_component_id,
+        'component_generation',v_component.component_generation,
+        'state','OFFICE_REJECTED',
+        'refusal',jsonb_build_object(
+          'kind','AGENCY_REJECTION','reason',v_component.refusal_reason,
+          'at_utc',v_component.refused_at_utc
+        ),
+        'previous_owning_timesheet_id',v_previous_owner_timesheet_id,
+        'empty_timesheet_consequence',coalesce(
+          v_delete_result->>'empty_timesheet_consequence','NONE'
+        ),
+        'owning_timesheet_deleted',coalesce(
+          (v_delete_result->>'owning_timesheet_deleted')::boolean,false
+        ),
+        'deleted_timesheet_ids',coalesce(
+          v_delete_result->'deleted_timesheet_ids','[]'::jsonb
+        ),
+        'retained_timesheet_ids',coalesce(
+          v_delete_result->'retained_timesheet_ids','[]'::jsonb
+        ),
+        'removed_from_current_timesheet_ids',coalesce(
+          v_delete_result->'removed_from_current_timesheet_ids','[]'::jsonb
+        ),
+        'affected_timesheet_ids',coalesce(
+          v_delete_result->'affected_timesheet_ids',
+          case when v_previous_owner_timesheet_id is null then '[]'::jsonb
+            else jsonb_build_array(v_previous_owner_timesheet_id) end
+        ),
+        'refresh_timesheet_ids',coalesce(
+          v_delete_result->'affected_timesheet_ids',
+          case when v_previous_owner_timesheet_id is null then '[]'::jsonb
+            else jsonb_build_array(v_previous_owner_timesheet_id) end
+        ),
+        'refresh_hints',jsonb_build_object(
+          'summary',true,'simple_timesheet',true,'bulk_process',true,
+          'bulk_authorise',true,'refetch','AFFECTED_ROWS'
+        ),
+        'idempotent_replay',false
+      );
+      update public.candidate_expense_operations operation set
+        state='COMMITTED',result_json=v_operation_result,
+        completed_at_utc=p_now_utc,updated_at_utc=p_now_utc
+      where operation.operation_id=v_operation.operation_id
+        and operation.state in ('PREPARING','RENDERING');
+      if not found then
+        raise exception 'CANDIDATE_EXPENSE_OPERATION_CHANGED' using errcode='40001';
+      end if;
+      v_response:=v_operation_result;
+    elsif v_operation.actor_kind='CANDIDATE'
+       and v_operation.state in ('PREPARING','RENDERING') then
+      v_operation_result:=v_response||jsonb_build_object(
+        'contract_version','CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+        'operation_id',v_operation.operation_id,
+        'action_code',v_operation.action_code,
+        'expense_component_id',v_operation.expense_component_id,
+        'idempotent_replay',false
+      );
+      if coalesce(
+          (v_operation.progress_json->>'automatic_resubmission_required')::boolean,false
+         ) then
+        v_operation_result:=v_operation_result||jsonb_build_object(
+          'old_pack_recoverable',false,
+          'preserved_component_count',coalesce(
+            (v_operation.progress_json->>'preserved_component_count')::integer,0
+          ),
+          'candidate_signature_component_id',
+            v_operation.progress_json->'candidate_signature_component_id',
+          'automatic_resubmission_required',true
+        );
+      end if;
+      update public.candidate_expense_operations operation set
+        state='COMMITTED',
+        result_json=case when operation.action_code='RESUBMIT_EXPENSE_CATEGORY'
+          then operation.progress_json||jsonb_build_object('idempotent_replay',false)
+          else v_operation_result end,
+        completed_at_utc=p_now_utc,updated_at_utc=p_now_utc
+      where operation.operation_id=v_operation.operation_id
+        and operation.state in ('PREPARING','RENDERING')
+        and (
+          operation.action_code<>'RESUBMIT_EXPENSE_CATEGORY'
+          or operation.progress_json->>'contract_version'
+            ='CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_RESULT_V1'
+        );
+      if not found then
+        raise exception 'CANDIDATE_EXPENSE_OPERATION_CHANGED' using errcode='40001';
+      end if;
+      v_response:=v_operation_result;
+    end if;
+  end if;
+  update public.candidate_pending_expense_updates set
+    rebind_idempotency_key=btrim(p_idempotency_key),
+    rebind_request_sha256=v_rebind_request_sha256,
+    rebind_result_json=v_response,
+    updated_at_utc=p_now_utc
+  where update_id=v_update.update_id and state='COMMITTED';
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID' using errcode='55000';
+  end if;
+  return v_response;
+end;
+$function$;
+alter function public.candidate_expense_update_rebind_atomic_v1(text,uuid,uuid,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_expense_update_rebind_atomic_v1(text,uuid,uuid,text,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.candidate_expense_update_rebind_atomic_v1(text,uuid,uuid,text,timestamptz) to service_role;

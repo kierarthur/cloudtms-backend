@@ -1,0 +1,70 @@
+create or replace function public.candidate_expense_update_recover_expired_v1(
+  p_environment text,
+  p_limit integer default 20,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text:=private._candidate_assert_environment(p_environment);
+  v_target record;
+  v_result jsonb;
+  v_recovered jsonb:='[]'::jsonb;
+  v_failed jsonb:='[]'::jsonb;
+  v_terminal_state text;
+begin
+  if p_limit not between 1 and 100 then
+    raise exception 'CANDIDATE_EXPENSE_UPDATE_RECOVERY_LIMIT_INVALID' using errcode='22023';
+  end if;
+  for v_target in
+    select update_row.update_id,update_row.workflow_id
+    from public.candidate_pending_expense_updates update_row
+    join public.candidate_submission_workflows workflow
+      on workflow.id=update_row.workflow_id
+    where workflow.environment=v_environment
+      and update_row.state in ('EDITING','RENDERING')
+      and update_row.expires_at_utc<=p_now_utc
+    order by update_row.expires_at_utc,update_row.update_id
+    limit p_limit
+  loop
+    begin
+      v_result:=public.candidate_expense_update_abort_atomic_v1(
+        null,v_environment,v_target.workflow_id,v_target.update_id,true,
+        'CANDIDATE_EXPENSE_UPDATE_EXPIRED',
+        'expense-update-expired:'||v_target.update_id::text,p_now_utc
+      );
+      v_recovered:=v_recovered||jsonb_build_array(jsonb_build_object(
+        'workflow_id',v_target.workflow_id,'update_id',v_target.update_id,
+        'state',v_result->>'state'
+      ));
+    exception when sqlstate '40001' or sqlstate '55000' or sqlstate 'P0002' then
+      select update_row.state into v_terminal_state
+      from public.candidate_pending_expense_updates update_row
+      where update_row.update_id=v_target.update_id;
+      if v_terminal_state in ('COMMITTED','ABORTED','FAILED') then
+        v_recovered:=v_recovered||jsonb_build_array(jsonb_build_object(
+          'workflow_id',v_target.workflow_id,'update_id',v_target.update_id,
+          'state',v_terminal_state,'concurrent_terminal',true
+        ));
+      else
+        v_failed:=v_failed||jsonb_build_array(jsonb_build_object(
+          'workflow_id',v_target.workflow_id,'update_id',v_target.update_id,
+          'code',sqlerrm
+        ));
+      end if;
+    end;
+  end loop;
+  return jsonb_build_object(
+    'ok',jsonb_array_length(v_failed)=0,
+    'recovered',v_recovered,'recovered_count',jsonb_array_length(v_recovered),
+    'failed',v_failed,'failed_count',jsonb_array_length(v_failed)
+  );
+end;
+$function$;
+alter function public.candidate_expense_update_recover_expired_v1(text,integer,timestamptz) owner to postgres;
+revoke all on function public.candidate_expense_update_recover_expired_v1(text,integer,timestamptz) from public,anon,authenticated,service_role;
+grant execute on function public.candidate_expense_update_recover_expired_v1(text,integer,timestamptz) to service_role;

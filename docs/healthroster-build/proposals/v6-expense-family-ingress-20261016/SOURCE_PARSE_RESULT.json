@@ -1,0 +1,105 @@
+{
+  "qualification": "OFFLINE_GRAMMAR_ONLY",
+  "native": "NOT_RUN",
+  "pglast": "v7.20",
+  "checks": [
+    {
+      "path": "fixtures/native-kernel-no-write.sqlinc",
+      "statements": 2,
+      "plpgsql": 2,
+      "inner_sql": 12,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "path": "forward/001_family_entry.sqlinc",
+      "statements": 6,
+      "plpgsql": 2,
+      "inner_sql": 16,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "path": "forward/010_remove.sqlinc",
+      "statements": 3,
+      "plpgsql": 1,
+      "inner_sql": 58,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/020_rebind.sqlinc",
+      "statements": 4,
+      "plpgsql": 1,
+      "inner_sql": 129,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/030_office_reject.sqlinc",
+      "statements": 3,
+      "plpgsql": 1,
+      "inner_sql": 72,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/040_component.sqlinc",
+      "statements": 4,
+      "plpgsql": 1,
+      "inner_sql": 89,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/050_whole.sqlinc",
+      "statements": 4,
+      "plpgsql": 1,
+      "inner_sql": 101,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/060_begin.sqlinc",
+      "statements": 4,
+      "plpgsql": 1,
+      "inner_sql": 96,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/070_submit.sqlinc",
+      "statements": 4,
+      "plpgsql": 1,
+      "inner_sql": 77,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/080_abort.sqlinc",
+      "statements": 4,
+      "plpgsql": 1,
+      "inner_sql": 61,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/090_manager_hold.sqlinc",
+      "statements": 4,
+      "plpgsql": 1,
+      "inner_sql": 20,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/100_paper_begin.sqlinc",
+      "statements": 4,
+      "plpgsql": 1,
+      "inner_sql": 38,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/110_category_resubmit.sqlinc",
+      "statements": 4,
+      "plpgsql": 1,
+      "inner_sql": 72,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/120_recover.sqlinc",
+      "statements": 4,
+      "plpgsql": 1,
+      "inner_sql": 15,
+      "rowtype_parser_alias_only": false
+    }
+  ]
+}

@@ -1,0 +1,354 @@
+create or replace function public.candidate_expense_category_resubmit_atomic_v1(
+  p_session_id uuid,
+  p_environment text,
+  p_source_workflow_id uuid,
+  p_expected_generation integer,
+  p_expense_component_id uuid,
+  p_expected_component_generation integer,
+  p_idempotency_key text,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text:=private._candidate_assert_environment(p_environment);
+  v_context jsonb;
+  v_source public.candidate_submission_workflows%rowtype;
+  v_component public.candidate_expense_components%rowtype;
+  v_pending public.candidate_submission_workflows%rowtype;
+  v_pending_update public.candidate_pending_expense_updates%rowtype;
+  v_pending_count integer;
+  v_request jsonb;
+  v_request_sha bytea;
+  v_operation public.candidate_expense_operations%rowtype;
+  v_begin jsonb;
+  v_create jsonb;
+  v_result jsonb;
+  v_new_workflow_id uuid;
+  v_anchor_timesheet_id uuid;
+begin
+  if p_source_workflow_id is null or p_expected_generation is null
+     or p_expense_component_id is null
+     or p_expected_component_generation is null
+     or nullif(pg_catalog.btrim(coalesce(p_idempotency_key,'')),'') is null then
+    raise exception 'CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_INVALID'
+      using errcode='22023';
+  end if;
+  v_context:=private._candidate_session_context_v1(
+    p_session_id,v_environment,null,p_now_utc,true
+  );
+  -- Resolve an exact durable receipt before consulting mutable source state.
+  -- The request body contains only caller-supplied immutable preconditions;
+  -- category is a server projection/result fact, not part of the HTTP input.
+  v_request:=jsonb_build_object(
+    'contract_version','CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_REQUEST_V1',
+    'source_workflow_id',p_source_workflow_id,
+    'source_workflow_generation',p_expected_generation,
+    'source_expense_component_id',p_expense_component_id,
+    'source_component_generation',p_expected_component_generation
+  );
+  v_request_sha:=private._candidate_sha256_jsonb_v1(v_request);
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'candidate-expense-operation|'||v_environment||'|'
+      ||(v_context->>'selected_candidate_id')||'|'||pg_catalog.btrim(p_idempotency_key),0
+  ));
+  select operation.* into v_operation
+  from public.candidate_expense_operations operation
+  where operation.environment=v_environment
+    and operation.actor_kind='CANDIDATE'
+    and operation.actor_id=(v_context->>'selected_candidate_id')::uuid
+    and operation.idempotency_key=pg_catalog.btrim(p_idempotency_key)
+  for update;
+  if found then
+    if v_operation.action_code<>'RESUBMIT_EXPENSE_CATEGORY'
+       or v_operation.expense_component_id is distinct from p_expense_component_id
+       or v_operation.request_sha256<>v_request_sha then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='23505';
+    end if;
+    if v_operation.state='COMMITTED' then
+      return v_operation.result_json||jsonb_build_object('idempotent_replay',true);
+    end if;
+    if v_operation.state in ('FAILED','ABORTED') and v_operation.result_json is not null then
+      return v_operation.result_json||jsonb_build_object('idempotent_replay',true);
+    end if;
+    if v_operation.state in ('PREPARING','RENDERING') then
+      select update_row.* into v_pending_update
+      from public.candidate_pending_expense_updates update_row
+      join public.candidate_submission_workflows workflow
+        on workflow.id=update_row.workflow_id
+      where update_row.operation_id=v_operation.operation_id
+        and update_row.state in ('EDITING','RENDERING')
+      limit 1;
+      if found and v_operation.progress_json is not null then
+        return v_operation.progress_json||jsonb_build_object(
+          'generation',v_pending_update.current_workflow_generation,
+          'state',case when v_pending_update.state='EDITING'
+            then 'WORKER_DRAFT' else 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT' end,
+          'idempotent_replay',true
+        );
+      end if;
+    end if;
+    raise exception 'CANDIDATE_EXPENSE_OPERATION_IN_PROGRESS' using errcode='55000';
+  end if;
+  select workflow.* into v_source
+  from public.candidate_submission_workflows workflow
+  where workflow.id=p_source_workflow_id
+    and workflow.environment=v_environment
+    and workflow.account_id=(v_context->>'account_id')::uuid
+    and workflow.candidate_id=(v_context->>'selected_candidate_id')::uuid
+  for update;
+  if not found then
+    raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
+  end if;
+  select component.* into v_component
+  from public.candidate_expense_components component
+  where component.expense_component_id=p_expense_component_id
+    and component.workflow_id=v_source.id
+  for update;
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_NOT_FOUND' using errcode='P0002';
+  end if;
+  if v_source.generation<>p_expected_generation
+     or v_component.component_generation<>p_expected_component_generation then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_CHANGED' using errcode='40001';
+  end if;
+  if exists(
+    select 1 from public.timesheets owner
+    where owner.timesheet_id in (
+      v_component.owning_timesheet_id,
+      v_source.target_timesheet_id,
+      v_source.anchor_timesheet_id
+    ) and owner.sheet_scope='DAILY'::public.timesheet_scope_enum
+  ) then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_CHANGED' using errcode='40001';
+  end if;
+  if v_component.lifecycle_state not in ('MANAGER_REFUSED','OFFICE_REJECTED')
+     or v_component.agency_authorisation_state<>'NOT_AUTHORISED' then
+    raise exception 'CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_NOT_ALLOWED'
+      using errcode='55000';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'candidate-expense-pending|'||v_environment||'|'||v_source.candidate_id::text
+      ||'|'||v_source.contract_id::text||'|'||v_source.week_ending_date::text,0
+  ));
+  select count(distinct workflow.id)::integer into v_pending_count
+  from public.candidate_submission_workflows workflow
+  where workflow.environment=v_environment
+    and workflow.candidate_id=v_source.candidate_id
+    and workflow.contract_id=v_source.contract_id
+    and workflow.week_ending_date=v_source.week_ending_date
+    and workflow.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
+    and (
+      (
+        workflow.route<>'PAPER'
+        and workflow.state='AWAITING_MANAGER_APPROVAL'
+        and exists(
+          select 1 from public.candidate_approval_requests request
+          where request.workflow_id=workflow.id
+            and request.workflow_generation=workflow.generation
+            and request.state='PENDING'
+        )
+      )
+      or (workflow.route='PAPER' and workflow.state='AWAITING_PAPER_RETURN')
+    );
+  if v_pending_count>1 then
+    raise exception 'CANDIDATE_EXPENSE_PENDING_WORKFLOW_CONFLICT' using errcode='55000';
+  end if;
+  if v_pending_count=1 then
+    select workflow.* into v_pending
+    from public.candidate_submission_workflows workflow
+    where workflow.environment=v_environment
+      and workflow.candidate_id=v_source.candidate_id
+      and workflow.contract_id=v_source.contract_id
+      and workflow.week_ending_date=v_source.week_ending_date
+      and workflow.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
+      and (
+        (
+          workflow.route<>'PAPER'
+          and workflow.state='AWAITING_MANAGER_APPROVAL'
+          and exists(
+            select 1 from public.candidate_approval_requests request
+            where request.workflow_id=workflow.id
+              and request.workflow_generation=workflow.generation
+              and request.state='PENDING'
+          )
+        )
+        or (workflow.route='PAPER' and workflow.state='AWAITING_PAPER_RETURN')
+      )
+    order by workflow.id limit 1 for update of workflow;
+    if exists(
+      select 1 from public.candidate_expense_components existing
+      where existing.workflow_id=v_pending.id
+        and existing.expense_category=v_component.expense_category
+        and existing.lifecycle_state not in (
+          'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+        )
+    ) then
+      raise exception 'CANDIDATE_EXPENSE_CATEGORY_ALREADY_PENDING' using errcode='55000';
+    end if;
+  end if;
+  insert into public.candidate_expense_operations(
+    environment,account_id,candidate_id,actor_kind,actor_id,action_code,
+    workflow_id,timesheet_id,expense_component_id,request_sha256,idempotency_key,
+    state,created_at_utc,updated_at_utc
+  ) values (
+    v_environment,v_source.account_id,v_source.candidate_id,'CANDIDATE',
+    v_source.candidate_id,'RESUBMIT_EXPENSE_CATEGORY',v_source.id,
+    private._candidate_expense_owned_timesheet_id_v1(
+      v_source.id,v_component.owning_timesheet_id
+    ),v_component.expense_component_id,v_request_sha,
+    pg_catalog.btrim(p_idempotency_key),'PREPARING',p_now_utc,p_now_utc
+  ) returning * into v_operation;
+
+  if v_pending_count=1 then
+    update public.candidate_expense_operations operation set
+      workflow_id=v_pending.id,
+      timesheet_id=private._candidate_expense_owned_timesheet_id_v1(
+        v_pending.id,v_pending.target_timesheet_id
+      ),
+      updated_at_utc=p_now_utc
+    where operation.operation_id=v_operation.operation_id
+      and operation.state='PREPARING';
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_OPERATION_CHANGED' using errcode='40001';
+    end if;
+    select operation.* into v_operation
+    from public.candidate_expense_operations operation
+    where operation.operation_id=v_operation.operation_id for update;
+    if v_pending.route='PAPER' then
+      perform set_config(
+        'cloudtms.candidate_paper_update_begin_context',
+        jsonb_build_object(
+          'purpose','RESUBMIT_EXPENSE_CATEGORY',
+          'workflow_id',v_pending.id,
+          'workflow_generation',v_pending.generation
+        )::text,true
+      );
+    end if;
+    v_begin:=public.candidate_expense_update_begin_atomic_v1(
+      p_session_id,v_environment,v_pending.id,v_pending.generation,
+      jsonb_build_array(jsonb_build_object(
+        'update_kind','ADD_CATEGORY',
+        'expense_category',v_component.expense_category
+      )),
+      'resubmit-category-begin:'||v_operation.operation_id::text,p_now_utc
+    );
+    if v_pending.route='PAPER' then
+      perform set_config('cloudtms.candidate_paper_update_begin_context','',true);
+    end if;
+    update public.candidate_pending_expense_updates update_row set
+      operation_id=v_operation.operation_id,updated_at_utc=p_now_utc
+    where update_row.update_id=(v_begin->>'update_id')::uuid
+      and update_row.state='EDITING';
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+    end if;
+    v_result:=jsonb_build_object(
+      'contract_version','CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_RESULT_V1',
+      'ok',true,'operation_id',v_operation.operation_id,
+      'action_code','RESUBMIT_EXPENSE_CATEGORY',
+      'source_workflow_id',v_source.id,
+      'source_expense_component_id',v_component.expense_component_id,
+      'source_component_generation',v_component.component_generation,
+      'expense_category',v_component.expense_category,
+      'category_changes',jsonb_build_array(jsonb_build_object(
+        'update_kind','ADD_CATEGORY',
+        'expense_category',v_component.expense_category
+      )),
+      'editor_mode',case when v_pending.route='PAPER'
+        then 'PAPER_REPLACEMENT' else 'PENDING_MANAGER_UPDATE' end,
+      'workflow_id',(v_begin->>'workflow_id')::uuid,
+      'generation',(v_begin->>'generation')::integer,
+      'state','WORKER_DRAFT','update_state','UPDATING',
+      'update_id',(v_begin->>'update_id')::uuid,'blank_claim',true,
+      'route_selection_required',false,
+      'route',case when v_pending.route='PAPER' then 'PAPER' else 'ELECTRONIC' end,
+      'paper_pack_replacement',v_pending.route='PAPER',
+      'old_pack_recoverable',v_pending.route='PAPER',
+      'manager_link_preserved',v_pending.route<>'PAPER',
+      'idempotent_replay',false
+    );
+    update public.candidate_expense_operations operation set
+      progress_json=v_result,updated_at_utc=p_now_utc
+    where operation.operation_id=v_operation.operation_id
+      and operation.state='PREPARING';
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_OPERATION_CHANGED' using errcode='40001';
+    end if;
+    return v_result;
+  end if;
+
+  v_anchor_timesheet_id:=private._candidate_expense_current_timesheet_id_v1(
+    v_source.id,v_source.anchor_timesheet_id
+  );
+  if v_anchor_timesheet_id is null and v_source.anchor_timesheet_id is not null
+     and exists(
+       select 1 from public.timesheets anchor
+       where anchor.timesheet_id=v_source.anchor_timesheet_id
+         and anchor.is_current and anchor.archived_at_utc is null
+     ) then
+    v_anchor_timesheet_id:=v_source.anchor_timesheet_id;
+  end if;
+  v_new_workflow_id:=pg_catalog.gen_random_uuid();
+  v_create:=public.candidate_workflow_transition_atomic_v1(
+    p_session_id,v_environment,v_new_workflow_id,'CREATE',null,
+    jsonb_strip_nulls(jsonb_build_object(
+      'workflow_kind','CONTRACT_EXPENSE','scope','WEEKLY','route','ELECTRONIC',
+      'contract_id',v_source.contract_id,
+      'contract_week_id',v_source.contract_week_id,
+      'week_ending_date',v_source.week_ending_date,
+      'anchor_timesheet_id',v_anchor_timesheet_id,
+      'input_snapshot',jsonb_build_object(
+        'expense_category_resubmission',jsonb_build_object(
+          'source_workflow_id',v_source.id,
+          'source_expense_component_id',v_component.expense_component_id,
+          'expense_category',v_component.expense_category
+        )
+      )
+    )),
+    'resubmit-category-workflow:'||v_operation.operation_id::text,p_now_utc
+  );
+  if coalesce(v_create->>'state','')<>'WORKER_DRAFT' then
+    raise exception 'CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_NOT_READY'
+      using errcode='55000';
+  end if;
+  v_result:=jsonb_build_object(
+    'contract_version','CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_RESULT_V1',
+    'ok',true,'operation_id',v_operation.operation_id,
+    'action_code','RESUBMIT_EXPENSE_CATEGORY',
+    'source_workflow_id',v_source.id,
+    'source_expense_component_id',v_component.expense_component_id,
+    'source_component_generation',v_component.component_generation,
+    'expense_category',v_component.expense_category,
+    'category_changes',jsonb_build_array(jsonb_build_object(
+      'update_kind','ADD_CATEGORY',
+      'expense_category',v_component.expense_category
+    )),
+    'editor_mode','NEW_EXPENSE_CLAIM',
+    'workflow_id',(v_create->>'workflow_id')::uuid,
+    'generation',(v_create->>'generation')::integer,
+    'state','WORKER_DRAFT','update_state','NONE','update_id',null,
+    'blank_claim',true,'route_selection_required',true,
+    'route',null,'paper_pack_replacement',false,'old_pack_recoverable',false,
+    'manager_link_preserved',false,'idempotent_replay',false
+  );
+  update public.candidate_expense_operations operation set
+    state='COMMITTED',result_json=v_result,completed_at_utc=p_now_utc,
+    updated_at_utc=p_now_utc
+  where operation.operation_id=v_operation.operation_id
+    and operation.state='PREPARING';
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_OPERATION_CHANGED' using errcode='40001';
+  end if;
+  return v_result;
+end;
+$function$;
+alter function public.candidate_expense_category_resubmit_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,timestamptz) owner to postgres;
+revoke all on function public.candidate_expense_category_resubmit_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,timestamptz)
+  from public,anon,authenticated,service_role;
+grant execute on function public.candidate_expense_category_resubmit_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,timestamptz)
+  to service_role;
