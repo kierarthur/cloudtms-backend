@@ -1,0 +1,31 @@
+async function restartCandidatePaperSourceDocumentFromStatus(env, deps, context, ctx) {
+  if (context?.version?.source_kind==='WORKFLOW_IMMUTABLE_SUBMISSION') {
+    return {ok:true,skipped:true,reason:'WORKFLOW_SOURCE_READY'};
+  }
+  const documentState = upper(context?.timesheet?.document_state);
+  const activeOperationId = text(context?.timesheet?.active_document_operation_id);
+  if (context?.state !== 'PREPARING' || documentState !== 'STALE'
+      || UUID_RE.test(activeOperationId) || !context?.outbox
+      || typeof deps?.enqueueQrPack !== 'function') {
+    return { ok: true, skipped: true, reason: 'SOURCE_REQUEUE_NOT_REQUIRED' };
+  }
+
+  const generation = requireInteger(
+    context.workflow?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1
+  );
+  const documentRevision = requireInteger(
+    context.timesheet?.document_revision, 'CANDIDATE_PAPER_DOCUMENT_REVISION_INVALID', 1
+  );
+  const pack = await deps.enqueueQrPack({
+    timesheetId: context.id,
+    expectedTimesheetId: context.id,
+    idempotencyKey: `candidate-paper-status:${context.workflow.id}:g${generation}:r${documentRevision}`,
+    ctx
+  });
+  const operationId = text(pack?.document_operation_id);
+  if (!UUID_RE.test(operationId)
+      || text(pack?.current_timesheet_id || pack?.timesheet_id) !== context.id) {
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_DOCUMENT_REQUEUE_INVALID');
+  }
+  return { ok: true, document_operation_id: operationId };
+}

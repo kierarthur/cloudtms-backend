@@ -1,0 +1,11 @@
+{
+  "path": "broker/src/candidate-app-backend.js",
+  "sourceSha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd",
+  "exactOld": "env, deps, workflow, { ...body, immutable_submission: normalisedSubmissionFacts }, mutationKey",
+  "exactNew": "env, deps, workflow, { ...body, immutable_submission: normalisedSubmissionFacts }, mutationKey, access",
+  "functions": [
+    "prepareImmutableSubmission"
+  ],
+  "indexFunction": "buildCandidateWeeklySubmissionThroughCanonicalAuthority",
+  "publicProtocolChange": false
+}

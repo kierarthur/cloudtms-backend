@@ -1,0 +1,93 @@
+async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
+  const manifest = parseJson(workflow.paper_return_manifest_json, {}) || {};
+  const pages = safePaperReturnPages(manifest, { includeSourceContentSha256: true });
+  if (!pages.length || !workflow.paper_return_manifest_sha256) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+  }
+  const targetlessExpense = upper(workflow.workflow_kind) === 'CONTRACT_EXPENSE'
+    && !text(workflow.target_timesheet_id);
+  if (targetlessExpense
+      && pages.some((page) => upper(page.component_kind) === 'HOURS_TIMESHEET')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  const immutableOriginalSource=version?.source_kind==='WORKFLOW_IMMUTABLE_SUBMISSION'
+    && SHA256_RE.test(text(version?.sha256)) && pages.every(page=>page.manifest_version===2);
+  if (!targetlessExpense && version?.source_kind==='WORKFLOW_IMMUTABLE_SUBMISSION' && !immutableOriginalSource) {
+    throw new CandidateHttpError(409,'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  let base = null;
+  if (!targetlessExpense && !immutableOriginalSource) {
+    try {
+      base = await r2Bytes(env, version.r2_key, text(version.sha256) || null);
+    } catch (error) {
+      if (error instanceof CandidateHttpError) throw error;
+      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+    }
+    if (base.media_type !== 'application/pdf') {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID');
+    }
+  }
+  let components;
+  try {
+    components = await restRows(env, 'candidate_submission_components',
+      `workflow_id=eq.${encodeURIComponent(workflow.id)}&workflow_generation=eq.${encodeURIComponent(workflow.generation)}`
+      + '&state=eq.IMMUTABLE&select=*');
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+  }
+  const combined = await PDFDocument.create({ updateMetadata: false });
+  for (let index = 0; index < pages.length; index += 1) {
+    const expected = pages[index];
+    const kind = upper(expected.component_kind);
+    const pageQrText = expected.manifest_version === 2
+      ? await candidatePaperPageQrText(env, workflow, timesheet, expected)
+      : null;
+    if (kind === 'HOURS_TIMESHEET') {
+      await appendPdfBytes(combined, pageQrText
+        ? await candidatePaperTimesheetPageBytes(
+          env, workflow, timesheet, components, pageQrText
+        )
+        : base?.bytes);
+      continue;
+    }
+    let component = null;
+    if (kind === 'EXPENSE_SUMMARY') {
+      component = components.find((entry) => upper(entry.component_kind) === 'EXPENSE_SUMMARY') || {
+        id: workflow.id, component_kind: 'EXPENSE_SUMMARY', document_role: 'EXPENSE_APPROVAL_SUMMARY',
+        expense_category: 'OTHER', review_ordinal: index + 1
+      };
+    } else {
+      component = candidatePaperPackComponentForPage(components, expected);
+    }
+    if (!component || upper(component.component_kind) !== kind) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_MISSING');
+    }
+    await appendPdfBytes(combined, await paperExpensePageBytes(
+      env, workflow, component, expected, index + 1, pageQrText, expected.display_name
+    ));
+  }
+  if (combined.getPageCount() !== pages.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_INCOMPLETE');
+  const bytes = new Uint8Array(await combined.save());
+  const identity = paperPackIdentity(env, workflow, timesheet, version);
+  let receipt;
+  try {
+    receipt = await immutablePut(env, identity.key, bytes, 'application/pdf', {
+      purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
+      workflow_generation: String(workflow.generation),
+      timesheet_id: timesheet.timesheet_id, manifest_sha256: identity.manifest_hash,
+      base_document_sha256: identity.base_hash,
+      branding_contract_sha256: identity.branding_hash,
+      renderer_contract_version: identity.renderer_contract_version,
+      page_count: String(combined.getPageCount())
+    });
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_R2_WRITE_TRANSIENT');
+  }
+  const complete = {
+    ...identity, bytes, sha256: receipt.sha256, byte_size: bytes.byteLength,
+    page_count: combined.getPageCount(), ready: true
+  };
+  return complete;
+}

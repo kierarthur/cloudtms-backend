@@ -1,0 +1,5 @@
+drop trigger if exists candidate_contract_move_summary_invalidate_v1 on private.timesheet_contract_move_operations;
+
+create trigger candidate_contract_move_summary_invalidate_v1 after update of state on private.timesheet_contract_move_operations
+for each row when(new.state='COMPLETE' and old.state is distinct from new.state)
+execute function private.candidate_contract_move_summary_invalidate_v1();

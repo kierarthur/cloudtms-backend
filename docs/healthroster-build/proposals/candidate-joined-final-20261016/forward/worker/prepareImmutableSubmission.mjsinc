@@ -1,0 +1,74 @@
+async function prepareImmutableSubmission(env, deps, workflow, body, mutationKey, access = null) {
+  const supplied = isObject(body.immutable_submission) ? structuredClone(body.immutable_submission) : {};
+  const forbidden = forbiddenFinancialKeys(supplied);
+  if (forbidden.length) throw new CandidateHttpError(400, 'CANDIDATE_FINANCIAL_AUTHORITY_FORBIDDEN', { fields: forbidden.slice(0, 20) });
+  let calculationWorkflow = workflow;
+  if (workflow.scope === 'WEEKLY' && access) {
+    const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+      p_timesheet_id: null, p_contract_week_id: null, p_workflow_id: workflow.id
+    }));
+    if (detail?.contract_move != null) {
+      const move = decodeCandidateContractMove(detail.contract_move);
+      const week = detail.contract_week;
+      if (!week || !UUID_RE.test(text(week.id)) || !UUID_RE.test(text(week.contract_id))
+          || !isObject(detail.capabilities?.policy)
+          || detail.timesheet?.id !== move.current_mutable_timesheet_id
+          || !(Array.isArray(detail.workflows) ? detail.workflows : []).some(w =>
+            w.workflow_id === workflow.id && Number(w.generation) === Number(workflow.generation))) {
+        throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+      }
+      // Transient calculation input only. The stored workflow identity and the
+      // original official-presentation/signed body below remain original A.
+      if (workflow.workflow_kind === 'CONTRACT_EXPENSE') {
+        // The worked anchor and server-resolved expense carrier are different
+        // native identities. A targetless draft stays targetless; the existing
+        // canonical producer retains its normal prospective create payload.
+        let calculationWeek = week;
+        let calculationTarget = null;
+        if (workflow.target_timesheet_id) {
+          const carrier = await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+            p_timesheet_id: workflow.target_timesheet_id, p_contract_week_id: null, p_workflow_id: null
+          }));
+          const carrierMove = decodeCandidateContractMove(carrier?.contract_move);
+          if (carrierMove.family_root_id !== move.family_root_id || carrierMove.operation_id !== move.operation_id
+              || carrier.timesheet?.id !== carrierMove.current_mutable_timesheet_id
+              || carrier.contract_week?.contract_id !== week.contract_id || !UUID_RE.test(text(carrier.contract_week?.id))
+              || !(Array.isArray(carrier.workflows) ? carrier.workflows : []).some(w =>
+                w.workflow_id === workflow.id && Number(w.generation) === Number(workflow.generation))) {
+            throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+          }
+          calculationWeek = carrier.contract_week;
+          calculationTarget = carrierMove.current_mutable_timesheet_id;
+        }
+        calculationWorkflow = { ...workflow, contract_id: week.contract_id, contract_week_id: calculationWeek.id,
+          target_timesheet_id: calculationTarget, anchor_timesheet_id: move.current_mutable_timesheet_id,
+          policy_snapshot_json: detail.capabilities.policy, _contract_move_current: calculationTarget != null,
+          _contract_move_expense_anchor: { timesheet_id: move.current_mutable_timesheet_id, contract_week_id: week.id } };
+      } else {
+        calculationWorkflow = { ...workflow, contract_id: week.contract_id, contract_week_id: week.id,
+          target_timesheet_id: move.current_mutable_timesheet_id, policy_snapshot_json: detail.capabilities.policy, _contract_move_current: true };
+      }
+    }
+  }
+  const authoritySubmission = workflow.workflow_kind === 'DAILY'
+    ? await deps.buildDailySubmission({ workflow, factualSubmission: supplied, mutationKey })
+    : await deps.buildWeeklySubmission({ workflow: calculationWorkflow, factualSubmission: supplied, mutationKey });
+  const presentation = await buildOfficialPresentationSnapshot(env, workflow);
+  const id = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
+  const rawCorrection = await correctionProjection(deps, id, workflow.candidate_id);
+  if (rawCorrection && rawCorrection.replacement_timesheet_id === id) {
+    const correction = serializeCandidateCorrection(rawCorrection, id, CORRECTION_CONVERTERS);
+    if (correction.state !== 'WAITING') throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    // Read only the canonical producer's actual submitted schedule. Never the
+    // Office proposal, mutable Rota, or the earlier signed record's schedule.
+    const reviewed = scheduleFromImmutable({ ...workflow, immutable_submission_json: authoritySubmission }, null);
+    if (!reviewed.length) throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    const frozen = correctionPresentation(rawCorrection, reviewed, CORRECTION_CONVERTERS);
+    presentation.correction = frozen;
+    presentation.wording.header.lines = [...frozen.header_lines, ...presentation.wording.header.lines];
+  }
+  return {
+    ...authoritySubmission,
+    official_presentation: presentation
+  };
+}

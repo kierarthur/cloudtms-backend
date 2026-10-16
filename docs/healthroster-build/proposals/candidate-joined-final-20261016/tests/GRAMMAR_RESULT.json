@@ -1,0 +1,42 @@
+{
+  "status": "PASS_GRAMMAR_FIELD_ONLY",
+  "native": "NOT_RUN",
+  "rowVariables": 146,
+  "results": [
+    {
+      "file": "forward/CANDIDATE_EFFECTS.sqlinc",
+      "sha256": "c76727d61d6fd09739b63e1a2d9a3fb1ef5fde295edbc7cf9f8a7eb353e29844",
+      "exit": 0,
+      "output": "CANDIDATE_EFFECTS.sqlinc: grammar parsed\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/CANDIDATE_FINAL_ACL.sqlinc",
+      "sha256": "2489d92c14804bd04a95bc9a90781264f947787478133c188d96f547e076551f",
+      "exit": 0,
+      "output": "CANDIDATE_FINAL_ACL.sqlinc: grammar parsed\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/CANDIDATE_FINAL_FUNCTIONS.sqlinc",
+      "sha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "exit": 0,
+      "output": "CANDIDATE_FINAL_FUNCTIONS.sqlinc: grammar parsed\n145 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/NATIVE_PENDING_MIGRATION_BODY.sqlinc",
+      "sha256": "c36ecbba9bfaa2d79f362689112b996155098ceb0b81d10f32aacda55c404d04",
+      "exit": 0,
+      "output": "NATIVE_PENDING_MIGRATION_BODY.sqlinc: grammar parsed\n1 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "tests/BASELINE_FRESH.sql",
+      "sha256": "c7b8e8e3560a1f184e58fd7a8bf757d4ac899fc6eeae8b12ae65b6874c22a942",
+      "exit": 0,
+      "output": "BASELINE_FRESH.sql: grammar parsed\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    }
+  ]
+}
