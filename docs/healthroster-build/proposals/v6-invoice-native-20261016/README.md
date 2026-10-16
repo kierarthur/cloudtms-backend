@@ -12,12 +12,16 @@ is self-contained; the unchanged paused preservation predecessor is retained in
 uncommitted file. All prior paused invoice, Agency and Source work is preserved.
 
 `node build.mjs` regenerates full owner definitions using unique-hunk assertions.
-`node --test source.test.mjs` passes 21 source regression checks. `parse-source.py`
+`node --test source.test.mjs` passes 22 source regression checks. `parse-source.py`
 passes SQL, PL/pgSQL and inner SQL grammar checks for all 53 files using pglast
 7.20 installed only in `C:/tmp/healthroster-v6-invoice-parser-20261016`.
 These checks do not prove catalog binding, monetary output, ACL execution,
 concurrency, rendered documents, installed API behavior or phone acceptance.
 Native qualification remains `REQUIRED_NOT_RUN`.
+`fixtures/native-owner-assertions.sqlinc` supplies seven temporary executable
+assertion helpers for root's genuine native rollback fixtures, with exact owner
+entry/finish seams documented in `fixtures/README.md`. Separate fixture grammar
+passes. They create no native business authority and have not been executed.
 
 The second source checkpoint also proves PostgreSQL AST equality for all 28
 operands of the original native invoice-line projection, ignoring only source

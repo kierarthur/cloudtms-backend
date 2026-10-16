@@ -11,6 +11,15 @@
     "operand_count": 27,
     "comparison": "PostgreSQL AST equality ignoring source locations"
   },
+  "fixture_grammar_checks": [
+    {
+      "file": "fixtures/native-owner-assertions.sqlinc",
+      "sql_statements": 8,
+      "plpgsql_functions": 7,
+      "inner_sql_expressions": 88,
+      "native": "REQUIRED_NOT_RUN"
+    }
+  ],
   "checks": [
     {
       "file": "001_billing_schema.sqlinc",

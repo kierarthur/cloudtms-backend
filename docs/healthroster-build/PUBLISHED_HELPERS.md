@@ -46,3 +46,11 @@ The six billing stores are unchanged from 367c60bb. No database execution or
 installed publication is claimed. Actual Banking valuation/cut/publish, Daily
 Review/Accept/Summary/freeze composition, native security/finance/document and
 concurrency proof remain required; Agency NX-AI6 remains pending.
+
+16 October native fixture preparation: seven executable pg_temp assertion
+helpers are saved outside the permanent 53-fragment install closure. They take
+genuine native owner-created witnesses at exact enter/finish seams and test
+altered pence/identity/PID/xid/actor/claim, real inserted duplicates, restoration,
+Daily identity/old-finance preservation and final stamp cleanup. They create no
+business origin/valuation/receipt. Fixture SQL/PL/inner grammar passes and the
+source suite now passes 22 cases. Fixture/native execution remains NOT_RUN.

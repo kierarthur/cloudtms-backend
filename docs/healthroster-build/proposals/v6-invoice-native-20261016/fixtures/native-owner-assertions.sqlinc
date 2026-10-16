@@ -1,0 +1,157 @@
+-- TEST rollback fixture helpers only. Never part of a managed installation.
+-- Invoke at the actual native enter/finish seams after a genuine owner has
+-- created its witness. These helpers create no business origin/money/receipt.
+create temporary table healthroster_v6_invoice_assertions(case_name text primary key,passed boolean not null check(passed));
+
+create or replace function pg_temp.healthroster_v6_source_admission_enter_assert_v1(p_invoice_id uuid)
+returns void language plpgsql as $function$
+declare stamp jsonb;line jsonb;mutant jsonb;key text;rejected boolean;
+begin
+ stamp:=private.invoice_source_admission_line_claim_v1(p_invoice_id);line:=stamp->'line';
+ if private.invoice_source_admission_line_allowed_v1(line) is distinct from true then raise exception 'FIXTURE_NATIVE_ADMISSION_POSITIVE_FAILED';end if;
+ foreach key in array array['total_charge_ex_vat','vat_amount','total_inc_vat'] loop
+  rejected:=false;
+  begin
+   perform private.invoice_source_admission_line_allowed_v1(jsonb_set(line,array[key],to_jsonb((line->>key)::numeric+0.01)));
+  exception when sqlstate '40001' then rejected:=true;end;
+  if not rejected then raise exception 'FIXTURE_NATIVE_ADMISSION_ACCEPTED_ALTERED_PENCE: %',key;end if;
+ end loop;
+ rejected:=false;
+ begin perform private.invoice_source_admission_line_allowed_v1(jsonb_set(line,'{source_key}',to_jsonb((line->>'source_key')||':ALTERED')));
+ exception when sqlstate '40001' then rejected:=true;end;
+ if not rejected then raise exception 'FIXTURE_NATIVE_ADMISSION_ACCEPTED_ALTERED_IDENTITY';end if;
+ foreach key in array array['backend_pid','transaction_id','actor_user_id','manifest_sha256'] loop
+  mutant:=jsonb_set(stamp,array[key],case key when 'backend_pid' then to_jsonb(pg_backend_pid()+1)
+    when 'transaction_id' then '"FOREIGN_TRANSACTION"'::jsonb when 'actor_user_id' then 'null'::jsonb else to_jsonb(repeat('0',64)) end);
+  mutant:=jsonb_set(mutant,'{sha256}',to_jsonb(encode(private.weekly_source_sha256_jsonb_v1('SOURCE_ORIGINAL_NATIVE_ADMISSION_V1',mutant-'sha256'),'hex')));
+  rejected:=false;
+  begin
+   update public.invoices set header_snapshot_json=jsonb_set(header_snapshot_json,'{source_original_native_admission}',mutant) where id=p_invoice_id;
+   perform private.invoice_source_admission_line_claim_v1(p_invoice_id);
+  exception when sqlstate '40001' or sqlstate '42501' or sqlstate '22023' then rejected:=true;end;
+  if not rejected then raise exception 'FIXTURE_NATIVE_ADMISSION_ACCEPTED_FOREIGN_OWNER: %',key;end if;
+  if private.invoice_source_admission_line_claim_v1(p_invoice_id) is distinct from stamp then raise exception 'FIXTURE_NATIVE_ADMISSION_NEGATIVE_DID_NOT_RESTORE';end if;
+ end loop;
+ insert into pg_temp.healthroster_v6_invoice_assertions values('source_admission_enter:'||p_invoice_id,true) on conflict(case_name) do update set passed=excluded.passed;
+end;
+$function$;
+
+create or replace function pg_temp.healthroster_v6_source_admission_finish_assert_v1(p_invoice_id uuid,p_line_id uuid)
+returns void language plpgsql as $function$
+declare stamp jsonb;actual jsonb;rejected boolean:=false;
+begin
+ stamp:=private.invoice_source_admission_line_claim_v1(p_invoice_id);
+ select to_jsonb(l) into strict actual from public.invoice_lines l where l.id=p_line_id and l.invoice_id=p_invoice_id;
+ begin perform private.invoice_source_admission_line_allowed_v1(actual);
+ exception when sqlstate '23505' then rejected:=true;end;
+ if not rejected then raise exception 'FIXTURE_NATIVE_ADMISSION_ACCEPTED_DUPLICATE';end if;
+ if not exists(select 1 from public.invoice_lines l where l.id=p_line_id and l.source_key=stamp#>>'{line,source_key}') then
+  raise exception 'FIXTURE_NATIVE_ADMISSION_RESULT_IDENTITY_FAILED';end if;
+ insert into pg_temp.healthroster_v6_invoice_assertions values('source_admission_finish:'||p_line_id,true) on conflict(case_name) do update set passed=excluded.passed;
+end;
+$function$;
+
+create or replace function pg_temp.healthroster_v6_source_allocation_enter_assert_v1(p_destination_id uuid)
+returns void language plpgsql as $function$
+declare stamp jsonb;line jsonb;mutant jsonb;rejected boolean;
+begin
+ stamp:=private.invoice_source_allocation_claim_v1(p_destination_id);
+ for line in select value from jsonb_array_elements(stamp->'lines') loop
+  if private.invoice_source_allocation_line_allowed_v1(line) is distinct from true then raise exception 'FIXTURE_NATIVE_ALLOCATION_POSITIVE_FAILED';end if;
+  rejected:=false;
+  begin perform private.invoice_source_allocation_line_allowed_v1(jsonb_set(line,'{total_inc_vat}',to_jsonb((line->>'total_inc_vat')::numeric+0.01)));
+  exception when sqlstate '40001' then rejected:=true;end;
+  if not rejected then raise exception 'FIXTURE_NATIVE_ALLOCATION_ACCEPTED_CHANGED_LINE';end if;
+ end loop;
+ mutant:=jsonb_set(stamp,'{transaction_id}','"FOREIGN_TRANSACTION"'::jsonb);
+ mutant:=jsonb_set(mutant,'{sha256}',to_jsonb(encode(private.weekly_source_sha256_jsonb_v1('SOURCE_ORIGINAL_NATIVE_ALLOCATION_V1',mutant-'sha256'),'hex')));
+ rejected:=false;
+ begin
+  update public.invoices set header_snapshot_json=jsonb_set(header_snapshot_json,'{source_original_native_allocation}',mutant) where id=p_destination_id;
+  perform private.invoice_source_allocation_claim_v1(p_destination_id);
+ exception when sqlstate '40001' then rejected:=true;end;
+ if not rejected then raise exception 'FIXTURE_NATIVE_ALLOCATION_ACCEPTED_FOREIGN_TRANSACTION';end if;
+ if private.invoice_source_allocation_claim_v1(p_destination_id) is distinct from stamp then raise exception 'FIXTURE_NATIVE_ALLOCATION_NEGATIVE_DID_NOT_RESTORE';end if;
+ insert into pg_temp.healthroster_v6_invoice_assertions values('source_allocation_enter:'||p_destination_id,true) on conflict(case_name) do update set passed=excluded.passed;
+end;
+$function$;
+
+create or replace function pg_temp.healthroster_v6_source_generation_assert_v1(p_chunk_id uuid)
+returns void language plpgsql as $function$
+declare c public.invoice_operation_chunks%rowtype;stamp jsonb;line jsonb;original_line jsonb;mutant jsonb;key text;rejected boolean;
+begin
+ stamp:=private.invoice_source_original_claim_v1(p_chunk_id);
+ select x.* into strict c from public.invoice_operation_chunks x where x.id=p_chunk_id;
+ for original_line in select value from jsonb_array_elements(c.payload_json#>'{source_original_line_plan,lines}')
+  where private.timesheet_contract_source_original_eligible_v1((value->>'timesheet_id')::uuid) loop
+  line:=jsonb_set(original_line,'{meta_json}',original_line->'meta_json'||jsonb_build_object('source_original_generation_chunk_id',c.id,
+    'source_original_line_plan_sha256',c.payload_json#>>'{source_original_line_plan,sha256}'));
+  if private.invoice_source_original_line_allowed_v1(line) is distinct from true then raise exception 'FIXTURE_NATIVE_GENERATION_POSITIVE_FAILED';end if;
+  rejected:=false;
+  begin perform private.invoice_source_original_line_allowed_v1(jsonb_set(line,'{total_charge_ex_vat}',to_jsonb((line->>'total_charge_ex_vat')::numeric+0.01)));
+  exception when sqlstate '40001' then rejected:=true;end;
+  if not rejected then raise exception 'FIXTURE_NATIVE_GENERATION_ACCEPTED_ALTERED_LINE';end if;
+ end loop;
+ if line is null then raise exception 'FIXTURE_NATIVE_GENERATION_PLAN_NOT_PRESENT';end if;
+ foreach key in array array['backend_pid','transaction_id','lease_token','fence_token','operation_control_version'] loop
+  mutant:=jsonb_set(stamp,array[key],case key when 'backend_pid' then to_jsonb(pg_backend_pid()+1)
+   when 'transaction_id' then '"FOREIGN_TRANSACTION"'::jsonb when 'lease_token' then to_jsonb('00000000-0000-0000-0000-000000000000'::uuid)
+   else to_jsonb((stamp->>key)::bigint+1) end);
+  rejected:=false;
+  begin
+   update public.invoice_operation_chunks set payload_json=jsonb_set(payload_json,'{source_original_native_claim}',mutant) where id=p_chunk_id;
+   perform private.invoice_source_original_claim_v1(p_chunk_id);
+  exception when sqlstate '40001' then rejected:=true;end;
+  if not rejected then raise exception 'FIXTURE_NATIVE_GENERATION_ACCEPTED_STALE_CLAIM: %',key;end if;
+  if private.invoice_source_original_claim_v1(p_chunk_id) is distinct from stamp then raise exception 'FIXTURE_NATIVE_GENERATION_NEGATIVE_DID_NOT_RESTORE';end if;
+ end loop;
+ insert into pg_temp.healthroster_v6_invoice_assertions values('source_generation:'||p_chunk_id,true) on conflict(case_name) do update set passed=excluded.passed;
+end;
+$function$;
+
+create or replace function pg_temp.healthroster_v6_daily_preview_assert_v1(p_scope jsonb,p_daily jsonb,p_actor uuid)
+returns void language plpgsql as $function$
+declare result jsonb;mutant jsonb;rejected boolean;
+begin
+ result:=private.invoice_contract_move_inspect_v1(p_scope,p_daily,p_actor,false);
+ if result->>'certificate_digest' is null then raise exception 'FIXTURE_DAILY_PREVIEW_CERTIFICATE_MISSING';end if;
+ mutant:=jsonb_set(p_daily,'{normalized_snapshot,total_charge_ex_vat}',to_jsonb((p_daily#>>'{normalized_snapshot,total_charge_ex_vat}')::numeric+0.01));
+ rejected:=false;
+ begin perform private.invoice_contract_move_inspect_v1(p_scope,mutant,p_actor,false);
+ exception when sqlstate '23514' then rejected:=true;end;
+ if not rejected then raise exception 'FIXTURE_DAILY_ACCEPTED_ALTERED_NORMALIZED_MONEY';end if;
+ mutant:=jsonb_set(p_daily,'{calculation_snapshot,timesheet_id}',to_jsonb('00000000-0000-0000-0000-000000000000'::uuid));
+ rejected:=false;
+ begin perform private.invoice_contract_move_inspect_v1(p_scope,mutant,p_actor,false);
+ exception when sqlstate '23514' then rejected:=true;end;
+ if not rejected then raise exception 'FIXTURE_DAILY_ACCEPTED_ALTERED_IDENTITY';end if;
+ insert into pg_temp.healthroster_v6_invoice_assertions values('daily_preview:'||(p_scope->>'operation_id'),true) on conflict(case_name) do update set passed=excluded.passed;
+end;
+$function$;
+
+create or replace function pg_temp.healthroster_v6_daily_accepted_assert_v1(p_operation_id uuid,p_original_finance jsonb)
+returns void language plpgsql as $function$
+declare m private.timesheet_contract_move_members%rowtype;old_f public.timesheets_financials%rowtype;
+begin
+ perform private.invoice_daily_rate_actual_revision_assert_v1(p_operation_id);
+ select x.* into strict m from private.timesheet_contract_move_members x where x.operation_id=p_operation_id;
+ select x.* into strict old_f from public.timesheets_financials x where x.id=m.from_financial_id;
+ if (to_jsonb(old_f)-array['is_current','updated_at']) is distinct from (p_original_finance-array['is_current','updated_at'])
+  or old_f.is_current or m.from_timesheet_id is distinct from m.to_timesheet_id or m.from_financial_id=m.to_financial_id
+  or exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=m.to_timesheet_id)
+  or exists(select 1 from private.timesheet_contract_current_placements p where p.operation_id=p_operation_id) then
+  raise exception 'FIXTURE_DAILY_CHANGED_ORIGINAL_OR_PHYSICAL_IDENTITY';end if;
+ insert into pg_temp.healthroster_v6_invoice_assertions values('daily_accepted:'||p_operation_id,true) on conflict(case_name) do update set passed=excluded.passed;
+end;
+$function$;
+
+create or replace function pg_temp.healthroster_v6_no_source_stamps_assert_v1(p_invoice_ids uuid[],p_chunk_ids uuid[])
+returns void language plpgsql as $function$
+begin
+ if exists(select 1 from public.invoices i where i.id=any(p_invoice_ids) and (i.header_snapshot_json?'source_original_native_admission'
+   or i.header_snapshot_json?'source_original_native_allocation'))
+  or exists(select 1 from public.invoice_operation_chunks c where c.id=any(p_chunk_ids) and c.payload_json?'source_original_native_claim') then
+  raise exception 'FIXTURE_NATIVE_SOURCE_STAMP_SURVIVED';end if;
+ insert into pg_temp.healthroster_v6_invoice_assertions values('no_source_stamps:'||coalesce(p_invoice_ids::text,'{}')||coalesce(p_chunk_ids::text,'{}'),true) on conflict(case_name) do update set passed=excluded.passed;
+end;
+$function$;

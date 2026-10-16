@@ -10,6 +10,7 @@ import pglast
 
 root = pathlib.Path(__file__).resolve().parent
 checks = []
+fixture_checks = []
 failures = []
 
 def grammar_source(sql):
@@ -50,6 +51,21 @@ for file in sorted((root / "forward").glob("*.sqlinc")):
                        "rowtype_parser_alias_only": grammar_source(sql) != sql})
     except Exception as error:
         failures.append({"file": file.name, "error": str(error)})
+for file in sorted((root / 'fixtures').glob('*.sqlinc')):
+    try:
+        sql=file.read_text(encoding='utf-8')
+        statements=pglast.parse_sql(sql)
+        procedures=pglast.parse_plpgsql(grammar_source(sql))
+        count=0
+        for expression in expressions(procedures):
+            query=expression['query'];mode=expression.get('parseMode',0)
+            if mode==2: query='SELECT '+query
+            elif mode in(3,4,5): query='SELECT '+re.split(r':=|=(?!=)',query,maxsplit=1)[1]
+            pglast.parse_sql(query);count+=1
+        fixture_checks.append({'file':'fixtures/'+file.name,'sql_statements':len(statements),
+          'plpgsql_functions':len(procedures),'inner_sql_expressions':count,'native':'REQUIRED_NOT_RUN'})
+    except Exception as error:
+        failures.append({'file':'fixtures/'+file.name,'error':str(error)})
 projection_proof = None
 try:
     def ctes_for(file):
@@ -102,6 +118,7 @@ except Exception as error:
 result = {"parser": "pglast " + pglast.__version__, "database_execution": False,
           "native_projection": projection_proof,
           "source_admission_projection": source_admission_proof,
+          "fixture_grammar_checks": fixture_checks,
           "checks": checks, "failures": failures, "native": "REQUIRED_NOT_RUN"}
 (root / "SOURCE_PARSE_RESULT.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 print(json.dumps({"files": len(checks), "failures": failures, "native": "REQUIRED_NOT_RUN"}))

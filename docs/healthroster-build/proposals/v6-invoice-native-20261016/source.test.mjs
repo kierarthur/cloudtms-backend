@@ -238,3 +238,16 @@ test('replacement documents read original signed evidence and keep current attac
  assert.doesNotMatch(known,/raise exception .*NOT_READY|TIMESHEET_DOCUMENT_NOT_READY|insert into|update public/);
  assert.match(known,/purpose','TIMESHEET'/);
 });
+
+test('native fixture helpers require real witnesses and never manufacture financial authority',()=>{
+ const fixture=read('fixtures/native-owner-assertions.sqlinc');
+ assert.equal((fixture.match(/create or replace function pg_temp\./g)||[]).length,7);
+ assert.match(fixture,/FIXTURE_NATIVE_ADMISSION_POSITIVE_FAILED/);
+ assert.match(fixture,/FIXTURE_NATIVE_GENERATION_POSITIVE_FAILED/);
+ assert.match(fixture,/FIXTURE_NATIVE_ADMISSION_NEGATIVE_DID_NOT_RESTORE/);
+ assert.match(fixture,/FIXTURE_NATIVE_ALLOCATION_NEGATIVE_DID_NOT_RESTORE/);
+ assert.match(fixture,/FIXTURE_DAILY_CHANGED_ORIGINAL_OR_PHYSICAL_IDENTITY/);
+ assert.doesNotMatch(fixture,/insert into (?:public|private)\.|create or replace function (?:public|private)\.|set_config|disable trigger|session_replication_role/i);
+ assert.equal(JSON.parse(read('SOURCE_PARSE_RESULT.json')).fixture_grammar_checks[0].plpgsql_functions,7);
+ assert.ok(manifest.files.every(row=>!row.file.startsWith('fixtures/')));
+});
