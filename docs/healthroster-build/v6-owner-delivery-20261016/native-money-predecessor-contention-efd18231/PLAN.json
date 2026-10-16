@@ -1,0 +1,9 @@
+{
+  "version": "HEALTH_MONEY_PREDECESSOR_CONTENTION_SOURCE_PLAN_V1",
+  "candidate": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+  "held": [],
+  "pendingCount": 0,
+  "installedReference": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "referenceMigrationCount": 389,
+  "scope": "Two owned sessions: existing three-table prebody exclusive LOCK must time out against own read-only ACCESS SHARE holder before assertion or1430body."
+}

@@ -1627,6 +1627,30 @@
       "sha256": "cf2f82f28ab0f1c96084235acff3ea8fc4245f82ba10cdf5960223b1c436ccec"
     },
     {
+      "path": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6"
+    },
+    {
+      "path": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0"
+    },
+    {
+      "path": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131"
+    },
+    {
+      "path": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5"
+    },
+    {
+      "path": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0"
+    },
+    {
+      "path": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "sha256": "80d9c6244ae47cf674c77b55df85976d6501217856e8227995186071eff2a4d5"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

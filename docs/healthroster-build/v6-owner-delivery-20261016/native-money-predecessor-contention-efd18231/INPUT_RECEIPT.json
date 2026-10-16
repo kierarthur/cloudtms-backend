@@ -1,0 +1,30 @@
+{
+  "version": "HEALTH_MONEY_PREDECESSOR_CONTENTION_TRIAL_INPUT_V1",
+  "candidate": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+  "marker": "hr_install2_b7ac5a8017b4409fb06cdd65589438a9",
+  "sourcePlan": {
+    "version": "HEALTH_MONEY_PREDECESSOR_CONTENTION_SOURCE_PLAN_V1",
+    "candidate": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+    "held": [],
+    "pendingCount": 0,
+    "installedReference": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "referenceMigrationCount": 389,
+    "scope": "Two owned sessions: existing three-table prebody exclusive LOCK must time out against own read-only ACCESS SHARE holder before assertion or1430body."
+  },
+  "sourceSqlSha256": "05b9d695b7ed1e4223b13ba701a865b8e2596724c708bf4ca771f6ff74cef3b0",
+  "sqlBytes": 87327,
+  "sqlStatements": 13,
+  "verificationSqlSha256": "c463109abdd12012252f128702b36b875e28957e9a4a5c4b6175285f4b7c2f29",
+  "verificationStatements": 3,
+  "createdRelations": [],
+  "observedBusinessRelations": [
+    "public.weekly_source_charge_checks",
+    "public.weekly_source_billing_movements",
+    "public.weekly_source_invoice_presentation_lines",
+    "public.weekly_source_final_revisions"
+  ],
+  "expectedErrorCode": "55P03",
+  "sourceProgramSha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+  "expectedFailedStatement": 12,
+  "scope": "No migration units/body. Exact original companion LOCK must refuse against owned read-only table holder in second session; rollback/fresh restoration mandatory. Not completeclosure/fullrehearsal/Install2 qualification."
+}

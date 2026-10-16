@@ -1,0 +1,493 @@
+{
+  "version": "HEALTH_SOURCE_ASSEMBLY_OFFLINE_CHECKS_V1",
+  "checks": [
+    {
+      "name": "Output byte pin supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "Output byte pin supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "No Bank DDL/body in supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "83complete functions retained exactly",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_metadata_guard_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_application_commit_guard_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_assembly_commit_guard_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_publication_adoption_guard_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_publication_adoptions_assert_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_application_finish_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_confirmation_context_v1(jsonb,text)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_confirmation_context_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_confirmation_prepare_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_unprotect_application_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_protected_current_placement_v1(uuid,uuid,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_protected_signed_evidence_v1(uuid,uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_protected_action_facts_v1(jsonb,text)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_exceptional_pay_action_context_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_unprotect_source_observation_v1(uuid,uuid,uuid,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_preview_quote_context_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_native_request_scope_v1(uuid,jsonb,text,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_record_native_adoption_v1(uuid,uuid,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_native_next_payload_validate_v1(jsonb,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_exceptional_pay_publish_next_impl_v1(jsonb,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_family_native_route_v1(uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_local_head_owned_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_native_local_payload_validate_v1(jsonb,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_exceptional_pay_stage_c1_request_impl_v1(jsonb,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_unprotect_apply_v1(uuid,uuid,text,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_local_release_proof_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_local_protected_pending_released_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_local_saved_status_native_v1(uuid,uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_local_saved_status_v1(uuid,uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_target_family_for_root_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_query_scope_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_protected_entitlement_projection_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_local_publication_context_v2(uuid,uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_protected_saved_placement_v1(uuid,uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_protected_root_financial_fact_v1(jsonb,integer)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_protected_current_financial_source_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_request_v1(jsonb,text)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_scope_access_v1(uuid,uuid,uuid,date)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_source_subject_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_selection_identity_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_assembly_assert_v1(uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_preview_begin_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_preview_ready_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_preview_abandon_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_preview_quote_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_quantity_union_v1(jsonb,text)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_public_actions_v1(uuid,jsonb,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_review_projection_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_preview_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_incident_guard_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_contact_retire_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_contact_suppressed_v1(uuid,uuid,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_read_source_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_native_rollback_witness_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_native_dependency_v1(uuid,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_bind_publication_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_protected_action_placement_assert_v1(jsonb,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE private.weekly_source_pay_decision_native_snapshot_assert_v1(jsonb,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function BASE public.weekly_exceptional_pay_next_publication_status_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function PENDING_CURRENT private._candidate_expense_source_family_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function PENDING_CURRENT private.weekly_source_resolve_root_identity_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function PENDING_CURRENT private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function PENDING_CURRENT private.weekly_source_pay_query_scope_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function PENDING_CURRENT private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function PENDING_CURRENT private.weekly_source_invoice_duty_scope_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact complete function INVOICE_DUTY private.weekly_source_invoice_duty_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "81final signature selections",
+      "result": "PASS"
+    },
+    {
+      "name": "76Health base functions selected",
+      "result": "PASS"
+    },
+    {
+      "name": "Excluded complete Banking route body",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact14177byte Health prefix only",
+      "result": "PASS"
+    },
+    {
+      "name": "Five native setup statements explicitly superseded",
+      "result": "PASS"
+    },
+    {
+      "name": "No other Source base effects removed",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact15Health trigger identities",
+      "result": "PASS"
+    },
+    {
+      "name": "No trigger drop/replacement/enable",
+      "result": "PASS"
+    },
+    {
+      "name": "Strict existing-shape refusals for15triggers",
+      "result": "PASS"
+    },
+    {
+      "name": "Actual cross-owner release hold retained",
+      "result": "PASS"
+    },
+    {
+      "name": "Truthful missing public financial projection remains",
+      "result": "PASS"
+    }
+  ],
+  "passed": 121,
+  "native": "NOT_RUN",
+  "databaseConnections": 0,
+  "scope": "Exactsource, complete-function byte identity, finite selected effects, truthful dependency holds; not native compilation/behavior/ACL/replay proof"
+}

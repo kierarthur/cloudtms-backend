@@ -6589,5 +6589,60 @@
     "runtimeValueBugClaim": false,
     "oldRecordRetainedHistorical": true,
     "native": "NOT_RUN"
+  },
+  "source_native_sql_source_continuation_20261016": {
+    "status": "SOURCE_INTEGRATED_DEPENDENCY_HELD_NOT_RELEASE_READY",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_NATIVE_SQL_SOURCE_INTEGRATION.json",
+    "producerCommit": "9ac637ef3bdc50ad1b82b616283cb226a7bbb69b",
+    "peerCommit": "ceef1651275b393c6d4bd379dd16f7e9a477fdf0",
+    "completeDefinitions": 83,
+    "finalSignatures": 81,
+    "managedMigrations": [
+      {
+        "path": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+        "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6"
+      },
+      {
+        "path": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+        "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0"
+      },
+      {
+        "path": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+        "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131"
+      },
+      {
+        "path": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+        "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5"
+      },
+      {
+        "path": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+        "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0"
+      },
+      {
+        "path": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+        "sha256": "80d9c6244ae47cf674c77b55df85976d6501217856e8227995186071eff2a4d5"
+      }
+    ],
+    "roots": [
+      {
+        "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "sha256": "3f645a99ccdf35b69475f65c33dee019767392aafd754c55b80521dc86e9c80c",
+        "closureSha256": "8d0e3c6c845272b11b1ac1b7f3c890a9aa0531b4e4a66dcb0fe9e2c9fc552830"
+      },
+      {
+        "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+        "sha256": "04f985ed70f921803e74aac1394cd5d11deb8aac1ba6a48af50d5f66c4ebdc7f",
+        "closureSha256": "c03fa331e2e3fc08cd18f8360590649ff1307516e4eae3d904ae1eb914db5d16"
+      },
+      {
+        "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+        "sha256": "0d9156c674e4725d6198fc68783d8c6999daad3b6b557ff38c34deda27f64aaa",
+        "closureSha256": "82ca98579a1c15352c6dfd12ec477a43945ec67fc199fd19ef08fe74abe987a7"
+      }
+    ],
+    "bankingBodiesSelected": 0,
+    "original92ObjectsRetained": true,
+    "releaseAndFinancialReadResultHold": true,
+    "native": "NOT_RUN"
   }
 }

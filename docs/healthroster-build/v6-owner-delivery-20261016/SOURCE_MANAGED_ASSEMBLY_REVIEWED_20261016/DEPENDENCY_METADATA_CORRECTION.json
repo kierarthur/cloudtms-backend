@@ -1,0 +1,82 @@
+{
+  "version": "HEALTH_SOURCE_DEPENDENCY_METADATA_SCOPE_CORRECTION_V1",
+  "finding": "P2 independentceef Source-only creation dependency list included7 later Contact contextual records",
+  "originalManifestSha256": "8518dd4e5267238ffdc352ab6e3e26eaf301679fa7ad218bfdf4a685a486c50e",
+  "successorManifestSha256": "872e0e983a5e10be9915f83c21ee244c5d42ecb2f4a0198e455b0e58095f419f",
+  "sourceCreationDependencies": 10,
+  "contextualUnselectedContactEntries": [
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_checking_logical_keys_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/00_current_logical_closure.sqlinc",
+      "qualified_callees": [
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_checking_scope_facts_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/01_checking_revision_and_history.sqlinc",
+      "qualified_callees": [
+        "private.weekly_contact_checking_pair_facts_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_source_manager_row_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/05_manual_member_facts.sqlinc",
+      "qualified_callees": [],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_manual_manifest_seal_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/06_manual_manifest_and_preview.sqlinc",
+      "qualified_callees": [],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_source_capture_pairs_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/07_capture_native_reads.sqlinc",
+      "qualified_callees": [],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_recheck_native_ids_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/16_recheck_native_progress.sqlinc",
+      "qualified_callees": [
+        "private.weekly_source_candidate_generation_current_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_source_bulk_scope_facts_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/43_exact_bulk_scope_locks.sqlinc",
+      "qualified_callees": [
+        "private.weekly_contact_source_route_scope_facts_v1",
+        "private.weekly_source_office_query_groups_v1"
+      ],
+      "banking_relations": []
+    }
+  ],
+  "manifestExactChangedPointers": [
+    "/releaseHold/sqlLanguageCreationDependencies"
+  ],
+  "recipeExactChangedPointers": [
+    "/releaseHold/sqlLanguageCreationDependencies",
+    "/manifest/path",
+    "/manifest/sha256"
+  ],
+  "definerExactChangedPointers": [
+    "/manifestSha256"
+  ],
+  "fullSemanticReverse": true,
+  "managedSqlOrAclChanged": false,
+  "frozen9acPreserved": true,
+  "wideFadeAuditPreserved": true
+}

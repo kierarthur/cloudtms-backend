@@ -1,0 +1,40 @@
+{
+  "version": "SOURCE_MANAGED_INDEPENDENT_INTERIM_REVIEW_PINS_V1",
+  "proposalCommit": "9ac637ef3bdc50ad1b82b616283cb226a7bbb69b",
+  "rootCheckpoint": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+  "files": [
+    {
+      "path": "REVIEW.md",
+      "sha256": "cabf0fdb3c20cf8b3550340d771dffcc3eec03a055019d29ec78c2d2baa1529c",
+      "bytes": 11841
+    },
+    {
+      "path": "audit.mjs",
+      "sha256": "82780c6e0c87a53fd4af2fa454b499e82f764cdc1deda67d5b1e653d109f4375",
+      "bytes": 15238
+    },
+    {
+      "path": "guard-ast-review.py",
+      "sha256": "a788d1317b9e359ff0a1ad42bbb449fce683c8b06e1806c55bc697ecf135bdd0",
+      "bytes": 5909
+    },
+    {
+      "path": "REVIEW_EVIDENCE.json",
+      "sha256": "27859d66ae0d908d773985baafd8cbf8f128f0502b0b3f38779c1309703e0093",
+      "bytes": 140376
+    },
+    {
+      "path": "GUARD_AST_REVIEW.json",
+      "sha256": "a355a8f176dd4c5ff315b25d867e8e3d83d1c1c20052e7be90b147302e95853a",
+      "bytes": 7794
+    }
+  ],
+  "excludesSelf": true,
+  "status": "SOURCE_ONLY_NOT_FINAL_PART_B",
+  "verdict": "No source blocker found in exact15guards/1105guard/83complete selections; seven Contact-only metadata records require separation before Source-only dependency reconciliation.",
+  "native": "NOT_RUN",
+  "databaseConnections": 0,
+  "rootEdits": false,
+  "producerEdits": false,
+  "bankingEdits": false
+}

@@ -13,6 +13,7 @@ import { logicalPostgresExecutablePolicy, mapExecutableSqlSource } from './cloud
 import { closeFinalDefinerSelection, routineDefinitions } from './bpay-next-final-definers.mjs';
 import { CONTACT_CLAIM_MIGRATION,contactClaimMigrationCompanionFor,contactClaimMigrationSql } from './healthroster-contact-claim-boundary.mjs';
 import { MONEY_PREDECESSOR_MIGRATION,moneyPredecessorCompanionFor,moneyPredecessorMigrationSql } from './healthroster-money-predecessor-boundary.mjs';
+import { CAPABILITY_PREDECESSOR_MIGRATION,capabilityPredecessorCompanionFor,capabilityPredecessorMigrationSql } from './healthroster-capability-predecessor-boundary.mjs';
 
 const json = value => `${literal(JSON.stringify(value))}::jsonb`;
 const readJson = (root, file) => JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
@@ -87,6 +88,8 @@ export function managedEvidence(context, extra = {}) {
     contact_claim_atomic_companion_version: CONTACT_CLAIM_MIGRATION.version,
     money_check_prebody_companion_version: MONEY_PREDECESSOR_MIGRATION.version,
     money_check_prebody_companion_sha256: MONEY_PREDECESSOR_MIGRATION.companionSha256,
+    capability_check_prebody_companion_version: CAPABILITY_PREDECESSOR_MIGRATION.version,
+    capability_check_prebody_companion_sha256: CAPABILITY_PREDECESSOR_MIGRATION.companionSha256,
     expected_database: context.expectedDatabase, environment: context.environment, customer_key: context.customerKey,
     bootstrap_complete: context.mode === 'NEW' }, ...extra };
 }
@@ -164,6 +167,7 @@ export function compileManagedUnit(item, kind, { root, mapSource = value => valu
   const immutableGuardDependency = immutableGuardDependencyFor(closure, kind, root);
   const contactClaimCompanion = contactClaimMigrationCompanionFor(closure,kind,{root,mapSource});
   const moneyPredecessorCompanion = moneyPredecessorCompanionFor(closure,kind,{root,mapSource});
+  const capabilityPredecessorCompanion = capabilityPredecessorCompanionFor(closure,kind,{root,mapSource});
   // Dollar bodies remain opaque to the packaging lexer. This conservative
   // refusal is additional guard integrity, not a claim that arbitrary DO
   // effects were proved safe by their statement head.
@@ -183,7 +187,7 @@ export function compileManagedUnit(item, kind, { root, mapSource = value => valu
     }
     return { item, kind, closure, exception, script: `\\ir ${quotePsqlPath(executable)}\n` };
   }
-  try { return { item, kind, closure, body: exactAtomicBody(closure.expanded), ownerRlsEnvelope, immutableGuardDependency,contactClaimCompanion,moneyPredecessorCompanion }; }
+  try { return { item, kind, closure, body: exactAtomicBody(closure.expanded), ownerRlsEnvelope, immutableGuardDependency,contactClaimCompanion,moneyPredecessorCompanion,capabilityPredecessorCompanion }; }
   catch (error) { throw Error(`MANAGED_EXECUTION_ENVELOPE_UNCLASSIFIED: ${item.path} (${error.message})`); }
 }
 
@@ -349,6 +353,10 @@ export function quotePsqlPath(file) {
 
 export function unitCheckpointSql(unit, context) {
   const ledger = unit.kind === 'migration' ? migrationLedgerSql(unit.item,context) : repeatableLedgerSql(unit.item,context);
+  if(unit.capabilityPredecessorCompanion||unit.item.path===CAPABILITY_PREDECESSOR_MIGRATION.path){
+    const prebody=capabilityPredecessorMigrationSql(unit,mapExecutableSqlSource);
+    return `begin;\n${assertWriterSql}\n${prebody}\n${unit.body}\n${assertWriterSql}\n${ledger}\ncommit;`;
+  }
   if(unit.moneyPredecessorCompanion||unit.item.path===MONEY_PREDECESSOR_MIGRATION.path){
     const prebody=moneyPredecessorMigrationSql(unit,mapExecutableSqlSource);
     return `begin;\n${assertWriterSql}\n${prebody}\n${unit.body}\n${assertWriterSql}\n${ledger}\ncommit;`;
@@ -433,6 +441,7 @@ export function managedReleaseContext({ root, current, release, context, baselin
       immutableGuardDependency: IMMUTABLE_GUARD_DEPENDENCY,
       contactClaimAtomicCompanion: CONTACT_CLAIM_MIGRATION,
       moneyCheckPrebodyCompanion: MONEY_PREDECESSOR_MIGRATION,
+      capabilityCheckPrebodyCompanion: CAPABILITY_PREDECESSOR_MIGRATION,
       logicalOwnerMapping: logicalPostgresExecutablePolicy() }}) };
   validateContext(result); return result;
 }

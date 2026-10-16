@@ -7,6 +7,7 @@ import {inventory,mapExecutableSqlSource,logicalPostgresExecutablePolicy,canonic
 import {pendingInventory,compileManagedUnit} from './cloudtms-managed-release.mjs';
 import { CONTACT_CLAIM_MIGRATION,contactClaimMigrationSql } from './healthroster-contact-claim-boundary.mjs';
 import { MONEY_PREDECESSOR_MIGRATION,moneyPredecessorMigrationSql } from './healthroster-money-predecessor-boundary.mjs';
+import { CAPABILITY_PREDECESSOR_MIGRATION,capabilityPredecessorMigrationSql } from './healthroster-capability-predecessor-boundary.mjs';
 import {closeFinalDefinerSelection} from './bpay-next-final-definers.mjs';
 import {readerReleasePhases,READER_PREPARATION,readerActivationSql} from './weekly-source-reader-release.mjs';
 import {canonical,digest,scanManagedSql,exactAtomicBody,literal} from './cloudtms-managed-release-sql.mjs';
@@ -29,6 +30,8 @@ const requireThat=(condition,code)=>{if(!condition)throw Error(code);};
 const stable=value=>Array.isArray(value)?value.map(stable):value&&typeof value==='object'
  ?Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):value;
 const releaseInputFiles=['scripts/cloudtms-db-release-lib.mjs','scripts/cloudtms-managed-release.mjs',
+ 'scripts/healthroster-capability-predecessor-boundary.mjs',CAPABILITY_PREDECESSOR_MIGRATION.companionPath,CAPABILITY_PREDECESSOR_MIGRATION.constructorPath,
+ ...CAPABILITY_PREDECESSOR_MIGRATION.evidenceFiles.map(row=>row.file),
  'scripts/healthroster-money-predecessor-boundary.mjs',MONEY_PREDECESSOR_MIGRATION.companionPath,MONEY_PREDECESSOR_MIGRATION.evidencePath,
  'scripts/cloudtms-managed-release-sql.mjs','scripts/cloudtms-managed-execution-policy.mjs','scripts/bpay-next-final-definers.mjs',
  'scripts/weekly-source-reader-release.mjs','supabase/release/current-release.json','supabase/release/migration-lock.json',
@@ -184,21 +187,28 @@ export function compiledAtomicRehearsalUnit(compiled){
  const {item,kind}=compiled;
  // A protected exception cannot be silently flattened into this outer rollback.
  requireThat(!compiled.exception&&!compiled.ownerRlsEnvelope&&!compiled.immutableGuardDependency,'REHEARSAL_SPECIAL_MANAGED_ENVELOPE_REVIEW_REQUIRED');
+ const capabilityPrebody=compiled.capabilityPredecessorCompanion||item.path===CAPABILITY_PREDECESSOR_MIGRATION.path
+  ?capabilityPredecessorMigrationSql(compiled,mapExecutableSqlSource):'';
  const prebody=compiled.moneyPredecessorCompanion||item.path===MONEY_PREDECESSOR_MIGRATION.path
   ?moneyPredecessorMigrationSql(compiled,mapExecutableSqlSource):'';
  const companion=compiled.contactClaimCompanion||item.path===CONTACT_CLAIM_MIGRATION.path
   ?contactClaimMigrationSql(compiled,mapExecutableSqlSource):'';
- const sql=(prebody?prebody+'\n':'')+compiled.body+(companion?'\n'+companion:'');
+ const sql=(capabilityPrebody?capabilityPrebody+'\n':'')+(prebody?prebody+'\n':'')+compiled.body+(companion?'\n'+companion:'');
  return {file:item.path,kind,sql,sqlHash:digest(sql),sourceSqlHash:item.sha256,phase:kind,
   sourceFiles:[...(compiled.closure?.ordered.map(x=>({file:x.path,sha256:digest(x.source)}))??[]),
-   ...(compiled.contactClaimCompanion?.sourceFiles??[]),...(compiled.moneyPredecessorCompanion?.sourceFiles??[])],
+   ...(compiled.contactClaimCompanion?.sourceFiles??[]),...(compiled.moneyPredecessorCompanion?.sourceFiles??[]),...(compiled.capabilityPredecessorCompanion?.sourceFiles??[])],
   ...(companion?{atomicContactClaimCompanion:{version:compiled.contactClaimCompanion.version,
    statementSha256:compiled.contactClaimCompanion.statementSha256,nativeProof:'NOT_RUN'}}:{}),
   ...(prebody?{atomicMoneyPredecessorCompanion:{version:compiled.moneyPredecessorCompanion.version,
    companionSha256:compiled.moneyPredecessorCompanion.companionSha256,
    statementSha256:compiled.moneyPredecessorCompanion.statementSha256,
    placement:compiled.moneyPredecessorCompanion.placement,
-   evidenceFiles:compiled.moneyPredecessorCompanion.evidenceFiles,nativeProof:'NOT_RUN'}}:{})};
+   evidenceFiles:compiled.moneyPredecessorCompanion.evidenceFiles,nativeProof:'NOT_RUN'}}:{}),
+  ...(capabilityPrebody?{atomicCapabilityPredecessorCompanion:{version:compiled.capabilityPredecessorCompanion.version,
+   companionSha256:compiled.capabilityPredecessorCompanion.companionSha256,
+   statementSha256:compiled.capabilityPredecessorCompanion.statementSha256,
+   placement:compiled.capabilityPredecessorCompanion.placement,
+   evidenceFiles:compiled.capabilityPredecessorCompanion.evidenceFiles,nativeProof:'NOT_RUN'}}:{})};
 }
 
 // This compiler takes the freshly observed installed ledgers. It performs no
@@ -268,6 +278,8 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
  expectedContractHash??=sourceBinding.contractSha256;
  requireThat(expectedContractHash===sourceBinding.contractSha256,'REHEARSAL_SEALED_CONTRACT_DRIFT');
  const diagnosticReview={...review,sourceFiles:[...review.sourceFiles,
+  ...units.filter(unit=>unit.atomicCapabilityPredecessorCompanion).flatMap(unit=>unit.sourceFiles
+   .filter(row=>row.file===CAPABILITY_PREDECESSOR_MIGRATION.companionPath)),
   ...units.filter(unit=>unit.atomicMoneyPredecessorCompanion).flatMap(unit=>unit.sourceFiles
    .filter(row=>row.file===MONEY_PREDECESSOR_MIGRATION.companionPath))]};
  const diagnosticCodes=[...new Set([...reviewedDiagnosticCodes(diagnosticReview),'REHEARSAL_MARKER_CONTRACT_SHAPE_REFUSED',
@@ -331,7 +343,8 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
   currentCounts:{migrations:current.migrations.length,repeatables:current.repeatables.length,verifiers:release.verificationFiles.length},
   pendingCounts:{migrations:pending.migrations.length,repeatables:pending.repeatables.length,readerPair:phases.readers.length},
   units:rendered.units.map((x,i)=>({...x,phase:units[i].phase,sourceFiles:units[i].sourceFiles??[],clientVariables:units[i].clientVariables??[],
-   ...(units[i].atomicMoneyPredecessorCompanion?{atomicMoneyPredecessorCompanion:units[i].atomicMoneyPredecessorCompanion}:{})})),
+   ...(units[i].atomicMoneyPredecessorCompanion?{atomicMoneyPredecessorCompanion:units[i].atomicMoneyPredecessorCompanion}:{}),
+   ...(units[i].atomicCapabilityPredecessorCompanion?{atomicCapabilityPredecessorCompanion:units[i].atomicCapabilityPredecessorCompanion}:{})})),
   exclusions,exclusionCount:exclusions.length,requiredPostVerifiedVerifiers,
   sql,sqlHash:digest(sql),bytes:Buffer.byteLength(sql),lineMap,
   outerIsolation:rendered.outerIsolation,isolationRequirements:rendered.isolationRequirements,

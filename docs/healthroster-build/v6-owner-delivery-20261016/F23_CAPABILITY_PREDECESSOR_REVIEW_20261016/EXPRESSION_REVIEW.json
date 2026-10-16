@@ -1,0 +1,825 @@
+{
+  "version": "HEALTHROSTER_CAPABILITY0400_EXACT_EXPRESSION_PEER_REVIEW_V1",
+  "status": "PASS_OFFLINE_SOURCE_AND_PUBLISHED_NATIVE_EXPRESSION_COMPARISON",
+  "postgresqlParserVersion": [
+    17,
+    7
+  ],
+  "pglastVersion": "v7.20",
+  "sourceCheckCount": 10,
+  "selectedSourceCheckCount": 2,
+  "retainedSourceCheckCount": 8,
+  "canonicalPendingPrefixUnitsVerified": 9,
+  "prefixAssignmentMentionsOnlyConstructor": [
+    "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql"
+  ],
+  "comparisons": [
+    {
+      "role": "PURPOSE",
+      "constraintName": "weekly_source_group_rule_assignments_feature_purpose_check",
+      "constructorColumn": "feature_purpose",
+      "sourceNormalizedAst": {
+        "A_Expr": {
+          "kind": "AEXPR_IN",
+          "name": [
+            {
+              "String": {
+                "sval": "="
+              }
+            }
+          ],
+          "lexpr": {
+            "ColumnRef": {
+              "fields": [
+                {
+                  "String": {
+                    "sval": "feature_purpose"
+                  }
+                }
+              ]
+            }
+          },
+          "rexpr": {
+            "List": {
+              "items": [
+                {
+                  "A_Const": {
+                    "sval": {
+                      "sval": "RULE_SET"
+                    }
+                  }
+                },
+                {
+                  "A_Const": {
+                    "sval": {
+                      "sval": "SIGNED_CHECK_ONLY"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "nativeVariantsEqualAfterFiniteTextInAdaptation": true,
+      "nativeVariants": {
+        "selector_definition_default_false": {
+          "A_Expr": {
+            "kind": "AEXPR_IN",
+            "name": [
+              {
+                "String": {
+                  "sval": "="
+                }
+              }
+            ],
+            "lexpr": {
+              "ColumnRef": {
+                "fields": [
+                  {
+                    "String": {
+                      "sval": "feature_purpose"
+                    }
+                  }
+                ]
+              }
+            },
+            "rexpr": {
+              "List": {
+                "items": [
+                  {
+                    "A_Const": {
+                      "sval": {
+                        "sval": "RULE_SET"
+                      }
+                    }
+                  },
+                  {
+                    "A_Const": {
+                      "sval": {
+                        "sval": "SIGNED_CHECK_ONLY"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "evidence_definition_pretty_true": {
+          "A_Expr": {
+            "kind": "AEXPR_IN",
+            "name": [
+              {
+                "String": {
+                  "sval": "="
+                }
+              }
+            ],
+            "lexpr": {
+              "ColumnRef": {
+                "fields": [
+                  {
+                    "String": {
+                      "sval": "feature_purpose"
+                    }
+                  }
+                ]
+              }
+            },
+            "rexpr": {
+              "List": {
+                "items": [
+                  {
+                    "A_Const": {
+                      "sval": {
+                        "sval": "RULE_SET"
+                      }
+                    }
+                  },
+                  {
+                    "A_Const": {
+                      "sval": {
+                        "sval": "SIGNED_CHECK_ONLY"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "evidence_expression_pretty_true": {
+          "A_Expr": {
+            "kind": "AEXPR_IN",
+            "name": [
+              {
+                "String": {
+                  "sval": "="
+                }
+              }
+            ],
+            "lexpr": {
+              "ColumnRef": {
+                "fields": [
+                  {
+                    "String": {
+                      "sval": "feature_purpose"
+                    }
+                  }
+                ]
+              }
+            },
+            "rexpr": {
+              "List": {
+                "items": [
+                  {
+                    "A_Const": {
+                      "sval": {
+                        "sval": "RULE_SET"
+                      }
+                    }
+                  },
+                  {
+                    "A_Const": {
+                      "sval": {
+                        "sval": "SIGNED_CHECK_ONLY"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "role": "VERSION",
+      "constraintName": "weekly_source_group_rule_assignments_check2",
+      "constructorColumn": null,
+      "sourceNormalizedAst": {
+        "BoolExpr": {
+          "boolop": "OR_EXPR",
+          "args": [
+            {
+              "NullTest": {
+                "arg": {
+                  "ColumnRef": {
+                    "fields": [
+                      {
+                        "String": {
+                          "sval": "feature_purpose"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "nulltesttype": "IS_NULL"
+              }
+            },
+            {
+              "A_Expr": {
+                "kind": "AEXPR_OP",
+                "name": [
+                  {
+                    "String": {
+                      "sval": "="
+                    }
+                  }
+                ],
+                "lexpr": {
+                  "NullTest": {
+                    "arg": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "rule_set_version_id"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "nulltesttype": "IS_NULL"
+                  }
+                },
+                "rexpr": {
+                  "A_Expr": {
+                    "kind": "AEXPR_OP",
+                    "name": [
+                      {
+                        "String": {
+                          "sval": "="
+                        }
+                      }
+                    ],
+                    "lexpr": {
+                      "ColumnRef": {
+                        "fields": [
+                          {
+                            "String": {
+                              "sval": "feature_purpose"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "rexpr": {
+                      "A_Const": {
+                        "sval": {
+                          "sval": "SIGNED_CHECK_ONLY"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "nativeVariantsEqualAfterFiniteTextInAdaptation": true,
+      "nativeVariants": {
+        "selector_definition_default_false": {
+          "BoolExpr": {
+            "boolop": "OR_EXPR",
+            "args": [
+              {
+                "NullTest": {
+                  "arg": {
+                    "ColumnRef": {
+                      "fields": [
+                        {
+                          "String": {
+                            "sval": "feature_purpose"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "nulltesttype": "IS_NULL"
+                }
+              },
+              {
+                "A_Expr": {
+                  "kind": "AEXPR_OP",
+                  "name": [
+                    {
+                      "String": {
+                        "sval": "="
+                      }
+                    }
+                  ],
+                  "lexpr": {
+                    "NullTest": {
+                      "arg": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "rule_set_version_id"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "nulltesttype": "IS_NULL"
+                    }
+                  },
+                  "rexpr": {
+                    "A_Expr": {
+                      "kind": "AEXPR_OP",
+                      "name": [
+                        {
+                          "String": {
+                            "sval": "="
+                          }
+                        }
+                      ],
+                      "lexpr": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "feature_purpose"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "rexpr": {
+                        "A_Const": {
+                          "sval": {
+                            "sval": "SIGNED_CHECK_ONLY"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "evidence_definition_pretty_true": {
+          "BoolExpr": {
+            "boolop": "OR_EXPR",
+            "args": [
+              {
+                "NullTest": {
+                  "arg": {
+                    "ColumnRef": {
+                      "fields": [
+                        {
+                          "String": {
+                            "sval": "feature_purpose"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "nulltesttype": "IS_NULL"
+                }
+              },
+              {
+                "A_Expr": {
+                  "kind": "AEXPR_OP",
+                  "name": [
+                    {
+                      "String": {
+                        "sval": "="
+                      }
+                    }
+                  ],
+                  "lexpr": {
+                    "NullTest": {
+                      "arg": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "rule_set_version_id"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "nulltesttype": "IS_NULL"
+                    }
+                  },
+                  "rexpr": {
+                    "A_Expr": {
+                      "kind": "AEXPR_OP",
+                      "name": [
+                        {
+                          "String": {
+                            "sval": "="
+                          }
+                        }
+                      ],
+                      "lexpr": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "feature_purpose"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "rexpr": {
+                        "A_Const": {
+                          "sval": {
+                            "sval": "SIGNED_CHECK_ONLY"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "evidence_expression_pretty_true": {
+          "BoolExpr": {
+            "boolop": "OR_EXPR",
+            "args": [
+              {
+                "NullTest": {
+                  "arg": {
+                    "ColumnRef": {
+                      "fields": [
+                        {
+                          "String": {
+                            "sval": "feature_purpose"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "nulltesttype": "IS_NULL"
+                }
+              },
+              {
+                "A_Expr": {
+                  "kind": "AEXPR_OP",
+                  "name": [
+                    {
+                      "String": {
+                        "sval": "="
+                      }
+                    }
+                  ],
+                  "lexpr": {
+                    "NullTest": {
+                      "arg": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "rule_set_version_id"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "nulltesttype": "IS_NULL"
+                    }
+                  },
+                  "rexpr": {
+                    "A_Expr": {
+                      "kind": "AEXPR_OP",
+                      "name": [
+                        {
+                          "String": {
+                            "sval": "="
+                          }
+                        }
+                      ],
+                      "lexpr": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "feature_purpose"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "rexpr": {
+                        "A_Const": {
+                          "sval": {
+                            "sval": "SIGNED_CHECK_ONLY"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "actualSuccessorAsts": {
+    "PURPOSE": {
+      "A_Expr": {
+        "kind": "AEXPR_IN",
+        "name": [
+          {
+            "String": {
+              "sval": "="
+            }
+          }
+        ],
+        "lexpr": {
+          "ColumnRef": {
+            "fields": [
+              {
+                "String": {
+                  "sval": "feature_purpose"
+                }
+              }
+            ]
+          }
+        },
+        "rexpr": {
+          "List": {
+            "items": [
+              {
+                "A_Const": {
+                  "sval": {
+                    "sval": "RULE_SET"
+                  }
+                }
+              },
+              {
+                "A_Const": {
+                  "sval": {
+                    "sval": "SIGNED_CHECK_ONLY"
+                  }
+                }
+              },
+              {
+                "A_Const": {
+                  "sval": {
+                    "sval": "PROTECTED_SOURCE"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "VERSION": {
+      "BoolExpr": {
+        "boolop": "OR_EXPR",
+        "args": [
+          {
+            "NullTest": {
+              "arg": {
+                "ColumnRef": {
+                  "fields": [
+                    {
+                      "String": {
+                        "sval": "feature_purpose"
+                      }
+                    }
+                  ]
+                }
+              },
+              "nulltesttype": "IS_NULL"
+            }
+          },
+          {
+            "A_Expr": {
+              "kind": "AEXPR_OP",
+              "name": [
+                {
+                  "String": {
+                    "sval": "="
+                  }
+                }
+              ],
+              "lexpr": {
+                "NullTest": {
+                  "arg": {
+                    "ColumnRef": {
+                      "fields": [
+                        {
+                          "String": {
+                            "sval": "rule_set_version_id"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "nulltesttype": "IS_NULL"
+                }
+              },
+              "rexpr": {
+                "A_Expr": {
+                  "kind": "AEXPR_IN",
+                  "name": [
+                    {
+                      "String": {
+                        "sval": "="
+                      }
+                    }
+                  ],
+                  "lexpr": {
+                    "ColumnRef": {
+                      "fields": [
+                        {
+                          "String": {
+                            "sval": "feature_purpose"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "rexpr": {
+                    "List": {
+                      "items": [
+                        {
+                          "A_Const": {
+                            "sval": {
+                              "sval": "SIGNED_CHECK_ONLY"
+                            }
+                          }
+                        },
+                        {
+                          "A_Const": {
+                            "sval": {
+                              "sval": "PROTECTED_SOURCE"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "checkTruthMatrix": [
+    {
+      "feature_purpose": null,
+      "rule_set_version_id": null,
+      "oldChecks": {
+        "PURPOSE": null,
+        "VERSION": true
+      },
+      "newChecks": {
+        "PURPOSE": null,
+        "VERSION": true
+      },
+      "oldCheckAccepts": true,
+      "newCheckAccepts": true
+    },
+    {
+      "feature_purpose": null,
+      "rule_set_version_id": "non-null UUID",
+      "oldChecks": {
+        "PURPOSE": null,
+        "VERSION": true
+      },
+      "newChecks": {
+        "PURPOSE": null,
+        "VERSION": true
+      },
+      "oldCheckAccepts": true,
+      "newCheckAccepts": true
+    },
+    {
+      "feature_purpose": "RULE_SET",
+      "rule_set_version_id": null,
+      "oldChecks": {
+        "PURPOSE": true,
+        "VERSION": false
+      },
+      "newChecks": {
+        "PURPOSE": true,
+        "VERSION": false
+      },
+      "oldCheckAccepts": false,
+      "newCheckAccepts": false
+    },
+    {
+      "feature_purpose": "RULE_SET",
+      "rule_set_version_id": "non-null UUID",
+      "oldChecks": {
+        "PURPOSE": true,
+        "VERSION": true
+      },
+      "newChecks": {
+        "PURPOSE": true,
+        "VERSION": true
+      },
+      "oldCheckAccepts": true,
+      "newCheckAccepts": true
+    },
+    {
+      "feature_purpose": "SIGNED_CHECK_ONLY",
+      "rule_set_version_id": null,
+      "oldChecks": {
+        "PURPOSE": true,
+        "VERSION": true
+      },
+      "newChecks": {
+        "PURPOSE": true,
+        "VERSION": true
+      },
+      "oldCheckAccepts": true,
+      "newCheckAccepts": true
+    },
+    {
+      "feature_purpose": "SIGNED_CHECK_ONLY",
+      "rule_set_version_id": "non-null UUID",
+      "oldChecks": {
+        "PURPOSE": true,
+        "VERSION": false
+      },
+      "newChecks": {
+        "PURPOSE": true,
+        "VERSION": false
+      },
+      "oldCheckAccepts": false,
+      "newCheckAccepts": false
+    },
+    {
+      "feature_purpose": "PROTECTED_SOURCE",
+      "rule_set_version_id": null,
+      "oldChecks": {
+        "PURPOSE": false,
+        "VERSION": false
+      },
+      "newChecks": {
+        "PURPOSE": true,
+        "VERSION": true
+      },
+      "oldCheckAccepts": false,
+      "newCheckAccepts": true
+    },
+    {
+      "feature_purpose": "PROTECTED_SOURCE",
+      "rule_set_version_id": "non-null UUID",
+      "oldChecks": {
+        "PURPOSE": false,
+        "VERSION": true
+      },
+      "newChecks": {
+        "PURPOSE": true,
+        "VERSION": false
+      },
+      "oldCheckAccepts": false,
+      "newCheckAccepts": false
+    },
+    {
+      "feature_purpose": "OTHER",
+      "rule_set_version_id": null,
+      "oldChecks": {
+        "PURPOSE": false,
+        "VERSION": false
+      },
+      "newChecks": {
+        "PURPOSE": false,
+        "VERSION": false
+      },
+      "oldCheckAccepts": false,
+      "newCheckAccepts": false
+    },
+    {
+      "feature_purpose": "OTHER",
+      "rule_set_version_id": "non-null UUID",
+      "oldChecks": {
+        "PURPOSE": false,
+        "VERSION": true
+      },
+      "newChecks": {
+        "PURPOSE": false,
+        "VERSION": true
+      },
+      "oldCheckAccepts": false,
+      "newCheckAccepts": false
+    }
+  ],
+  "normalization": "Only locations removed, literal ::text casts on string constants removed after actual constructor column TEXT proof, and this exact two-member positive IN versus =ANY ARRAY comparison normalized. No arbitrary expression equivalence rule.",
+  "sourceDesignExpressionApproved": true,
+  "nativeCompanionApproved": false,
+  "nativeCompanion": "NOT_RUN",
+  "companionSha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+  "companionTopLevelStatements": 2,
+  "databaseCalls": 0
+}

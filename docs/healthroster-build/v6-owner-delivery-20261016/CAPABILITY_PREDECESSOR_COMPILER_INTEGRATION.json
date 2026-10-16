@@ -1,0 +1,64 @@
+{
+  "version": "HEALTHROSTER_CAPABILITY0400_COMPILER_INTEGRATION_V1",
+  "status": "SOURCE_INTEGRATED_NATIVE_NOT_RUN",
+  "rootBase": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+  "producerCommit": "7fbafccff632603e9d5e59ac960296353195e5b5",
+  "predecessorReviewCommit": "23314cfa6cada35d0b31d306b11d8629505b2d0a",
+  "installedTestSuccessorCommit": "ec50c7c23486b24279d716046f2e55cd095841df",
+  "fourCompleteReverseEqualities": [
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "beforeSha256": "1dccee6a3b635f36946e27550db722f4ee5d3f62cf13f0e1cc213245cf7de0c8",
+      "afterSha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
+      "fullReverseEquality": true
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "beforeSha256": "ff6e2ce20804ecfd859543d6e76dc3b9da19b033eafc6c3b86c05640c4d4a27e",
+      "afterSha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "fullReverseEquality": true
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json",
+      "beforeSha256": "59c6695da15d52bd5f512fa2cf259337caeb4a9794649e6462a7849d15680e32",
+      "afterSha256": "57994305ab9fab1f9fabebb675e35be3028b4d2a3befc1fda0d5567ad4bb7f83",
+      "onlySemanticChange": "Invoice ownerSourceHash; native gate literal and callee audit unchanged",
+      "fullReverseEquality": true
+    },
+    {
+      "file": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "beforeSha256": "932e3769fbad6c361c82e533663c76ce9e782ba300dbee43bb4d8eed55a61277",
+      "afterSha256": "53b92b41b522851a68126447f88d11862974e70895c829e9e79b1877ea86c19b",
+      "fullReverseEquality": true
+    }
+  ],
+  "exactEdits": 16,
+  "compiledBodyUnchanged": true,
+  "immutableMigrationUnchanged": true,
+  "program": {
+    "file": "supabase/release/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+    "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c"
+  },
+  "installedTest": {
+    "file": "tests/healthroster-capability-predecessor-boundary.test.mjs",
+    "beforeSha256": "10088697a6d05230d3d3dd357633d9fe8e335ae699a9297aa794bf7578d96fa6",
+    "afterSha256": "5def4dd476a24755a03650c0182775f6968bb54e579eb6faebf626f7993e853a",
+    "fullReverseEquality": true,
+    "oldCompilerBaseline": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+    "isolatedOriginalFiles": 59,
+    "currentBackendModulesBorrowed": 0,
+    "relativeImportRewrites": 0,
+    "bareLockedXlsxImportRewrites": 4
+  },
+  "actualMountedTests": {
+    "command": "node --test tests/healthroster-capability-predecessor-boundary.test.mjs tests/healthroster-money-predecessor-boundary.test.mjs tests/healthroster-install1-full-rehearsal.test.mjs",
+    "tests": 57,
+    "passed": 57,
+    "failed": 0
+  },
+  "native0400": "NOT_RUN",
+  "fullRehearsal": "NOT_RUN",
+  "install2": "NOT_RUN",
+  "finalPartB": "NOT_RUN",
+  "preserved1430AndContact0339AndInvoiceGate": true
+}

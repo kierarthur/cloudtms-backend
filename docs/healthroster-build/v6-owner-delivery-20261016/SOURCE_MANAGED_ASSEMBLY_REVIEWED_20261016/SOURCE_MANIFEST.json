@@ -1,0 +1,127 @@
+{
+  "version": "HEALTH_SOURCE_MANAGED_ASSEMBLY_SOURCE_PINS_V1",
+  "qualification": "SOURCE_ONLY_NOT_RELEASE_OR_NATIVE_ACCEPTANCE",
+  "files": [
+    {
+      "path": "ASSEMBLY_MANIFEST.json",
+      "sha256": "8518dd4e5267238ffdc352ab6e3e26eaf301679fa7ad218bfdf4a685a486c50e",
+      "bytes": 329324
+    },
+    {
+      "path": "build.mjs",
+      "sha256": "7f275dab0a48d988d6c47d5e8e1cae461bc8d655b476187d87ee523bb8e917d4",
+      "bytes": 15542
+    },
+    {
+      "path": "CHECKS.json",
+      "sha256": "9e94e380730a8a7f1954e139f540bd2b05bb07cdac2fcf4d00480893f9030ef6",
+      "bytes": 17606
+    },
+    {
+      "path": "effects/01_health_trigger_exact_replay.sqlinc",
+      "sha256": "121631f2f6c0fa1fa2b45c857a683df64838bbbffa5e23e87d6ec755460b627f",
+      "bytes": 19818
+    },
+    {
+      "path": "FINAL_DEFINER_CONTRIBUTION.json",
+      "sha256": "4469c59e62cf66491f32568ffcb3c170681c8e7a230f1e37cd0761e80dae2d4b",
+      "bytes": 74608
+    },
+    {
+      "path": "guards/06_incident_resolution_predecessor.sqlinc",
+      "sha256": "5fc6666ed1c07950a91761ed297ff53ef871e14d5c1b0ad9741ead08adaa89c2",
+      "bytes": 1725
+    },
+    {
+      "path": "GUARD_REVIEW.json",
+      "sha256": "ff02108fe6b4e54d8a71a674a4b464e2e380d887b0e840955c04e1db97b7e4b0",
+      "bytes": 68231
+    },
+    {
+      "path": "managed/supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6",
+      "bytes": 11034
+    },
+    {
+      "path": "managed/supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0",
+      "bytes": 3839
+    },
+    {
+      "path": "managed/supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131",
+      "bytes": 7486
+    },
+    {
+      "path": "managed/supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5",
+      "bytes": 1823
+    },
+    {
+      "path": "managed/supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "bytes": 2261
+    },
+    {
+      "path": "managed/supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "sha256": "80d9c6244ae47cf674c77b55df85976d6501217856e8227995186071eff2a4d5",
+      "bytes": 2909
+    },
+    {
+      "path": "managed/supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "bytes": 636634
+    },
+    {
+      "path": "managed/supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc",
+      "sha256": "121631f2f6c0fa1fa2b45c857a683df64838bbbffa5e23e87d6ec755460b627f",
+      "bytes": 19818
+    },
+    {
+      "path": "managed/supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "sha256": "3f645a99ccdf35b69475f65c33dee019767392aafd754c55b80521dc86e9c80c",
+      "bytes": 491
+    },
+    {
+      "path": "managed/supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c",
+      "bytes": 55454
+    },
+    {
+      "path": "managed/supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "sha256": "04f985ed70f921803e74aac1394cd5d11deb8aac1ba6a48af50d5f66c4ebdc7f",
+      "bytes": 397
+    },
+    {
+      "path": "managed/supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "sha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c",
+      "bytes": 36006
+    },
+    {
+      "path": "managed/supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "sha256": "0d9156c674e4725d6198fc68783d8c6999daad3b6b557ff38c34deda27f64aaa",
+      "bytes": 382
+    },
+    {
+      "path": "MOUNT_RECIPE.json",
+      "sha256": "181238f56284660bfa238f8fe6ca6f813eb203fbe1572f09ba45b8b862009e73",
+      "bytes": 27386
+    },
+    {
+      "path": "README.md",
+      "sha256": "145331e56a5e00507007be90d61aed0663adf0b345bb83ee3efde70a797c82a0",
+      "bytes": 7540
+    },
+    {
+      "path": "review-guards.py",
+      "sha256": "8b2477225c2b7cf9a0364d8ea6309b3f478f697f2fded0786d1b58d11cd41022",
+      "bytes": 7815
+    },
+    {
+      "path": "verify.mjs",
+      "sha256": "cea2f58dbbd051164a43e51970277f4739c57e21b6bbb71e6b0d48396f7830da",
+      "bytes": 7145
+    }
+  ],
+  "native": "NOT_RUN"
+}

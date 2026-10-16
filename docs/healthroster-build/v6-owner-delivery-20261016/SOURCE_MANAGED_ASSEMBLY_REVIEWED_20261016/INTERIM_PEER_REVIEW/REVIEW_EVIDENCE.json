@@ -1,0 +1,2744 @@
+{
+  "version": "SOURCE_MANAGED_INDEPENDENT_INTERIM_REVIEW_V1",
+  "qualification": "SOURCE_ONLY_NOT_NATIVE_NOT_FINAL_PART_B",
+  "proposalCommit": "9ac637ef3bdc50ad1b82b616283cb226a7bbb69b",
+  "rootCheckpoint": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+  "sourceSealSha256": "d52a6f3b894f9572fe8766116b68b382d7cce4e13342420499b44c0b0ae05976",
+  "proposalManifestSha256": "8518dd4e5267238ffdc352ab6e3e26eaf301679fa7ad218bfdf4a685a486c50e",
+  "counts": {
+    "managedFiles": 13,
+    "completeDeclarations": 83,
+    "uniqueFinalFunctions": 81,
+    "originalSourceRecords": 52,
+    "selectedHealthBaseFunctions": 76,
+    "pendingFunctions": 6,
+    "dutyFunctions": 1,
+    "setupStatementsReplaced": 5,
+    "triggerDefinitions": 15
+  },
+  "originalCompleteFunctionsAllEqual": true,
+  "allOtherSelectedEffectsRetained": true,
+  "removedSetup": [
+    {
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+      "sha256": "b8bbe709686c62c359e437a057523e501d13335044ef4dcda43b9753cf62c194"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+      "sha256": "38bae185dc4a9508a9a130114f478924fc9584e5c84af9618f8ad77e689ad6bd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+      "sha256": "c379cd76851d07249eea8a9a1887a08f8776c11f65170ad156d808611ea81242"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/04_exact_publication_adoption_bridge.sqlinc",
+      "sha256": "f9026f3aef35a83884c0a5ac666e41fa4cfa4bd5b78bfd5b94ea69a386176d7b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/37_selected_contact_retirement.sqlinc",
+      "sha256": "96de75b59a43e089b3b4234d20efa470a51eb7245c3814211c8acfa64a36bb00"
+    }
+  ],
+  "supersededSignatures": [
+    "private.weekly_source_pay_query_scope_v1(uuid)",
+    "private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)"
+  ],
+  "payloadProofs": [
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/01_complete_health_decision_metadata.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "bbe67b861a084764df21e05b530b94a4e5ec422afa23ea1ed2a30da275a862ea",
+      "retainedSha256": "bbe67b861a084764df21e05b530b94a4e5ec422afa23ea1ed2a30da275a862ea",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/02_complete_retained_native_preparations.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "5b3d65c49cd5bcbaec306bad9ecb91fe57cfcb1c9f648ace0401b283a9a1f9b7",
+      "retainedSha256": "5b3d65c49cd5bcbaec306bad9ecb91fe57cfcb1c9f648ace0401b283a9a1f9b7",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/03_complete_acceptance_applications_and_adoptions.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "aa39325f7ad31221c2598b35981d1f3c8ebc1fe7a1e3e17d208f7bdec48577ed",
+      "retainedSha256": "aa39325f7ad31221c2598b35981d1f3c8ebc1fe7a1e3e17d208f7bdec48577ed",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/04_complete_canonical_publication_bridge.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "6b87d777bf32cefdccd534da9735645876869e83b537ff0b00c0cf6c628888f6",
+      "retainedSha256": "6b87d777bf32cefdccd534da9735645876869e83b537ff0b00c0cf6c628888f6",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/05_complete_owner_only_rls.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "c38472b6ab2645ef3aa966d2820e7c2b950e011f6af2fc3bcc5086366a22d847",
+      "retainedSha256": "c38472b6ab2645ef3aa966d2820e7c2b950e011f6af2fc3bcc5086366a22d847",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/06_native_source_contact_resolution.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "7a9be76af0858f9e948014a85f980186145b5dbc2210501830ffe76b94136224",
+      "retainedSha256": "7a9be76af0858f9e948014a85f980186145b5dbc2210501830ffe76b94136224",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "b62786482e2ed965a8e9ffcd575727216f1e0f029d5c3ffa7d52a38f50fc9b76",
+      "retainedSha256": "03bececdb5189b39a7233cbec5e6851f48af895e496bfcf96dd7b2581dd7d421",
+      "suppressedSetupStatements": 3,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/02_atomic_source_run_birth.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "74b474d0bf332d1f517cb3f1afbfd589538f221d43bf86b0ea784c9dd015c771",
+      "retainedSha256": "74b474d0bf332d1f517cb3f1afbfd589538f221d43bf86b0ea784c9dd015c771",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/03_normal_native_source_gate.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "2a6d04785f20a1397e9ef3ba625a998eee74d7a5fdb13d9ecafbd88cd911faa9",
+      "retainedSha256": "2a6d04785f20a1397e9ef3ba625a998eee74d7a5fdb13d9ecafbd88cd911faa9",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/04_exact_publication_adoption_bridge.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "0ac5e5acf48496e732781fd1d9615c16a4daef808cfe609b9188d60796f162c3",
+      "retainedSha256": "d8bde8e2a219e3d8dd4cd5aaa7f5672aea10548c8d7aacfcd799776c54e50bd8",
+      "suppressedSetupStatements": 1,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/05_application_final_receipt.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "f556a44e08432c7b98b128c6201a693709d3b50610eca20ea81e74764058c943",
+      "retainedSha256": "f556a44e08432c7b98b128c6201a693709d3b50610eca20ea81e74764058c943",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/06_confirmation_run_preparation.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "901552c63d00330934afe8822c860ffa6df69e627642bb35396e13db134cbb31",
+      "retainedSha256": "901552c63d00330934afe8822c860ffa6df69e627642bb35396e13db134cbb31",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/07_exact_preparation_application.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "dd6baac8d07ddd42d0579a803ee6b8ea4ef07ea5c61b553b949283d399de2368",
+      "retainedSha256": "dd6baac8d07ddd42d0579a803ee6b8ea4ef07ea5c61b553b949283d399de2368",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/08_protected_current_placement.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "dd80fc6eedd3bff7bf05aff371103ff80e4119f718a6131f1fbe54e059767420",
+      "retainedSha256": "dd80fc6eedd3bff7bf05aff371103ff80e4119f718a6131f1fbe54e059767420",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/09_certified_native_signed_evidence.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "486a6b42704d45543c8b075bddf8246ffde3741118c5dd3598c12c6566b32d1e",
+      "retainedSha256": "486a6b42704d45543c8b075bddf8246ffde3741118c5dd3598c12c6566b32d1e",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/10_shared_native_context.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "d01b7b7ffcf7ecedc4c32ac2068bd120f32722c903f4fe62d333d40f8226770a",
+      "retainedSha256": "d01b7b7ffcf7ecedc4c32ac2068bd120f32722c903f4fe62d333d40f8226770a",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/11_native_source_observation.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "f9e9f4777d424bbab869c8b68ddbc600522f92abcbd77107520c1674137ea188",
+      "retainedSha256": "f9e9f4777d424bbab869c8b68ddbc600522f92abcbd77107520c1674137ea188",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/12_run_free_review_context.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "013115ad91da671de4ee6c83c827880aaeb422987d6256b9345c2056359e2211",
+      "retainedSha256": "013115ad91da671de4ee6c83c827880aaeb422987d6256b9345c2056359e2211",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/13_preview_quote_operands.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "c9ef2e5e6fee0f99c031080a9e02f8daaca8b22c0ead91e56e313e92dd06d3a4",
+      "retainedSha256": "c9ef2e5e6fee0f99c031080a9e02f8daaca8b22c0ead91e56e313e92dd06d3a4",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/14_native_preparation_request_scope.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "8a5e07fd4125c32b17ecdc2b8d3ea53a1609280dd88a8b7bab40f5df66ce88a6",
+      "retainedSha256": "8a5e07fd4125c32b17ecdc2b8d3ea53a1609280dd88a8b7bab40f5df66ce88a6",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/15_record_owned_native_adoption.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "36ca1a60942fac7807963e08243d574c942b87bbdb5380d82cb902c547bc0d9d",
+      "retainedSha256": "36ca1a60942fac7807963e08243d574c942b87bbdb5380d82cb902c547bc0d9d",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "e944001616f868078ad3a88e222d374b5c667187ddb78a5837429a3ab6a55880",
+      "retainedSha256": "e944001616f868078ad3a88e222d374b5c667187ddb78a5837429a3ab6a55880",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/17_source_composed_owner_route.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "c0d5edfde0c7ba787236233d13b9873fef623b6a6a8915d18afc553b4e0c7ddb",
+      "retainedSha256": "c0d5edfde0c7ba787236233d13b9873fef623b6a6a8915d18afc553b4e0c7ddb",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/18_current_native_owner_route.sqlinc",
+      "selection": "EXCLUDE_BANKING_OWNED_WHOLE_FILE",
+      "wholeSha256": "ae5cbe2f8660103e6bce24eb61c4b604d05c36dddaa267e5686a2c723c9a939e",
+      "emitted": false
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/19_exact_local_head_capture.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "EXACT_HEALTH_PREFIX_ONLY_BANK_BODY_EXCLUDED",
+      "selectedSha256": "14ef812d093d1a9c932428cf52a861decfb403ff5074b2e365d2886b02b9154c",
+      "retainedSha256": "14ef812d093d1a9c932428cf52a861decfb403ff5074b2e365d2886b02b9154c",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "06ffc188bc7c404822d3f7a5ef08c4c1f3380857264dbd5030ea9db26d27451f",
+      "retainedSha256": "06ffc188bc7c404822d3f7a5ef08c4c1f3380857264dbd5030ea9db26d27451f",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/21_native_local_complete_implementation.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "fe61457f17574137b5cc3207dfc43987baba5ef94a40f1dc0002713841a8b7f5",
+      "retainedSha256": "fe61457f17574137b5cc3207dfc43987baba5ef94a40f1dc0002713841a8b7f5",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/22_full_native_payload_preparation.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "eb6deac3df606e6a56a95b0dfa8fe2635f127953f9c8079bcef7884e5747ebce",
+      "retainedSha256": "eb6deac3df606e6a56a95b0dfa8fe2635f127953f9c8079bcef7884e5747ebce",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/23_same_transaction_native_dispatch.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "33e7a4f37289fff278a3e0940c094898fe112e2bfde5be329569bc2a6d8977e2",
+      "retainedSha256": "33e7a4f37289fff278a3e0940c094898fe112e2bfde5be329569bc2a6d8977e2",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/24_genuine_local_deferred_release_proof.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "6aed27242d8f22d7daaccd297757a81987d469ccb1107c76b3f9537ba14f19f7",
+      "retainedSha256": "6aed27242d8f22d7daaccd297757a81987d469ccb1107c76b3f9537ba14f19f7",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/25_actual_local_release_and_saved_status.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "7cfc927e2a5d9621d25e8150a32531e29e2598235b3e13acc2ff44d0bd834ba8",
+      "retainedSha256": "7cfc927e2a5d9621d25e8150a32531e29e2598235b3e13acc2ff44d0bd834ba8",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/26_confirmed_quote_operands.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "b5e9b0d303d516e30f575da0a8bb43809ce9efc31e78fb2a3c262ec5eb2cffca",
+      "retainedSha256": "b5e9b0d303d516e30f575da0a8bb43809ce9efc31e78fb2a3c262ec5eb2cffca",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/27_certified_current_native_scope.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "56bc22447a069c21e9bb518cbe9f5b0744e2b2873b26d3320104def19b0e3b3b",
+      "retainedSha256": "56bc22447a069c21e9bb518cbe9f5b0744e2b2873b26d3320104def19b0e3b3b",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/28_current_native_entitlement_projection.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "494e7007fcd1ae7b7a964939ba6c2f8f9f247a3e42fc2a35a283a36faa86bec1",
+      "retainedSha256": "494e7007fcd1ae7b7a964939ba6c2f8f9f247a3e42fc2a35a283a36faa86bec1",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/29_current_local_native_context.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "f88cd41e70a143526f476bf8ca9ae8ba53682f4f6ae6b4934fee2ce609f1c771",
+      "retainedSha256": "f88cd41e70a143526f476bf8ca9ae8ba53682f4f6ae6b4934fee2ce609f1c771",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/30_native_saved_placement_proof.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "17d99435dd4dedcc46b9978694c20154204a28922359076fc81c150092962125",
+      "retainedSha256": "17d99435dd4dedcc46b9978694c20154204a28922359076fc81c150092962125",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/31_current_financial_native_source.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "69d721c22648c5634c4a953bc8a78c0cde802bb393e356a6c6ccb7abf9ca0af7",
+      "retainedSha256": "69d721c22648c5634c4a953bc8a78c0cde802bb393e356a6c6ccb7abf9ca0af7",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/32_source_request_and_scope_guards.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "2758be8ffbb3a2498fbd2b127b9d8e0eb11142eb9707587cf02c92fae43ead36",
+      "retainedSha256": "2758be8ffbb3a2498fbd2b127b9d8e0eb11142eb9707587cf02c92fae43ead36",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/33_genuine_source_subject_and_scope.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "1fb7a294e506bec52c6c0fa8379da71784a259f636e8e97caf3af8e015605ae2",
+      "retainedSha256": "1fb7a294e506bec52c6c0fa8379da71784a259f636e8e97caf3af8e015605ae2",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/34_atomic_preview_assembly.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "96be2ed50578bddeb21d3a8339950848fc356b930ee98f8116102ffb3f35cb2d",
+      "retainedSha256": "96be2ed50578bddeb21d3a8339950848fc356b930ee98f8116102ffb3f35cb2d",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/35_native_preview_quote_registration.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "79388312c0e4fcc359ad7fb69b39a7d005e6ee61af65d979df3cbb0c3678916f",
+      "retainedSha256": "79388312c0e4fcc359ad7fb69b39a7d005e6ee61af65d979df3cbb0c3678916f",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/36_exact_source_review_and_seal.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "564ef8cd3b33f899204c9867ad86ca2a8c40b416d798cb686fa6c3313564f2b2",
+      "retainedSha256": "564ef8cd3b33f899204c9867ad86ca2a8c40b416d798cb686fa6c3313564f2b2",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/37_selected_contact_retirement.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "ea81be5e88c4773704adfba36495908b49dc7d7d03ed8daef23229801888e2e5",
+      "retainedSha256": "7bea462a4f5ee7f9aa14cf5334e7eed71d4b65560e024a911f7af524fba289a0",
+      "suppressedSetupStatements": 1,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/38_source_owned_saved_result.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "f29a3b3a68e5e8a6391dd39c4931c4beed14b9c597559235ebb89fefc10e2490",
+      "retainedSha256": "f29a3b3a68e5e8a6391dd39c4931c4beed14b9c597559235ebb89fefc10e2490",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/39_actual_native_dependency_rollback.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "d0563cf6fd9f48eb2922d3d192274f5d4ce82edc922418f086778d4c3241a617",
+      "retainedSha256": "d0563cf6fd9f48eb2922d3d192274f5d4ce82edc922418f086778d4c3241a617",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/40_actual_publication_and_source_binding.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "ba76bacb30d48a0725d7a4e1e41f2f1b9580988e3667544537bdb3dc9825da73",
+      "retainedSha256": "ba76bacb30d48a0725d7a4e1e41f2f1b9580988e3667544537bdb3dc9825da73",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/41_atomic_source_acceptance.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "f52279eededf4f3081b6a8e46178fda4e444db45ab42c540f1971e054e1cde10",
+      "retainedSha256": "f52279eededf4f3081b6a8e46178fda4e444db45ab42c540f1971e054e1cde10",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/42_native_contact_reimport_match.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "2bb2006340eeabc7a049fea21bc255f9fbd2fb6b7b18ea19b94cbb97a02f3ba9",
+      "retainedSha256": "2bb2006340eeabc7a049fea21bc255f9fbd2fb6b7b18ea19b94cbb97a02f3ba9",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/43_current_native_action_preparation.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "45c340aad3125e3afffdcaec7587f57deb6266119103e75d74dbf0ba3b00d512",
+      "retainedSha256": "45c340aad3125e3afffdcaec7587f57deb6266119103e75d74dbf0ba3b00d512",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/44_strict_native_snapshot_validation.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "f79ed9d89b6ad8295b9b25af58d54f21f0d3368d1443532523d576665cd27f15",
+      "retainedSha256": "f79ed9d89b6ad8295b9b25af58d54f21f0d3368d1443532523d576665cd27f15",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/native-entry/weekly_exceptional_pay_next_publication_status_v1.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "6b49ce2c20b91e8917778d9ed175e14f220a6478f0a56aed6c9ec3b29dce2041",
+      "retainedSha256": "6b49ce2c20b91e8917778d9ed175e14f220a6478f0a56aed6c9ec3b29dce2041",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/native-entry/owner_acl.sqlinc",
+      "sourceCommit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "984f63a891a592dcffb287b0b267ae6df0dcfffee1bc9616242ebd31231dac1c",
+      "retainedSha256": "984f63a891a592dcffb287b0b267ae6df0dcfffee1bc9616242ebd31231dac1c",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/01_source_family.sqlinc",
+      "sourceCommit": "e8cc61559dd4a16fc9c9dd088fc5ad96f48af342",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "83c869d2060148612b66c9f4d185a3e4e6ffeeb85373c46a482199fd4303615e",
+      "retainedSha256": "83c869d2060148612b66c9f4d185a3e4e6ffeeb85373c46a482199fd4303615e",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/02_root_identity.sqlinc",
+      "sourceCommit": "e8cc61559dd4a16fc9c9dd088fc5ad96f48af342",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "9803fde8c0d7a59d207a245b01625fa9d25de4307eddda4e7a9f254d5d4084e1",
+      "retainedSha256": "9803fde8c0d7a59d207a245b01625fa9d25de4307eddda4e7a9f254d5d4084e1",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/03_family_rows.sqlinc",
+      "sourceCommit": "e8cc61559dd4a16fc9c9dd088fc5ad96f48af342",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "1ee30dd5cde7f772b41bd6fe203961087eb4a8363b50b67efa72954527de3cb0",
+      "retainedSha256": "1ee30dd5cde7f772b41bd6fe203961087eb4a8363b50b67efa72954527de3cb0",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/04_current_pay_query.sqlinc",
+      "sourceCommit": "e8cc61559dd4a16fc9c9dd088fc5ad96f48af342",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "0ea9b3ba3b918589ea75cf591aa91c7fd43814ac222d5c4083b09ac09e537d68",
+      "retainedSha256": "0ea9b3ba3b918589ea75cf591aa91c7fd43814ac222d5c4083b09ac09e537d68",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/05_decision_scope.sqlinc",
+      "sourceCommit": "e8cc61559dd4a16fc9c9dd088fc5ad96f48af342",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "90264c74fdb8f4e1e5290a855c8d45acf8730e027052fa68cd57f4f78e661747",
+      "retainedSha256": "90264c74fdb8f4e1e5290a855c8d45acf8730e027052fa68cd57f4f78e661747",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/06_invoice_duty_scope.sqlinc",
+      "sourceCommit": "e8cc61559dd4a16fc9c9dd088fc5ad96f48af342",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "b85aa8b6601e0fe7b93b42d453ae4c1ec165b4a9103ecf768de258feddca648d",
+      "retainedSha256": "b85aa8b6601e0fe7b93b42d453ae4c1ec165b4a9103ecf768de258feddca648d",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/99_acl.sqlinc",
+      "sourceCommit": "e8cc61559dd4a16fc9c9dd088fc5ad96f48af342",
+      "selection": "WHOLE_FILE",
+      "selectedSha256": "37805e3b1abe5aa378a11e03faee0529b7a9ea5b5b07be438768cb0061cc431f",
+      "retainedSha256": "37805e3b1abe5aa378a11e03faee0529b7a9ea5b5b07be438768cb0061cc431f",
+      "suppressedSetupStatements": 0,
+      "allRetainedBytesContiguous": true
+    }
+  ],
+  "functions": [
+    {
+      "signature": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "statementSha256": "cab215b700639784d9f6a0eeda238cd5dd69bdac416a5d8d36093133af946053",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_application_commit_guard_v1()",
+      "statementSha256": "0b3479f328b8e2a331e48501d24b125e564f08e5b02ee69277a643df81d8bcc3",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_assembly_commit_guard_v1()",
+      "statementSha256": "506f57485aeb9ae83adabf07bb54366a5cadcdb95f88dccf596b11156c0cae57",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/01_health_metadata_guards.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+      "statementSha256": "146d2f84fd7337da4be3c608203b5d4f5e82685616709c172fb08108ec7353c2",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/02_atomic_source_run_birth.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+      "statementSha256": "12ca9b51486b4aa1e42b8c1c4b118d8e3e7e6f3dfac77a94e2f2e6e129cedfd1",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/03_normal_native_source_gate.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_publication_adoption_guard_v1()",
+      "statementSha256": "bbf767aa1ea94155b16c75e66cc0483908da99fecf2773e4bf4e3713d243416b",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/04_exact_publication_adoption_bridge.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_publication_adoptions_assert_v1(uuid)",
+      "statementSha256": "96c0ab9446ef600013eb9a132e167a9b7f8986a3884866033d707c75322c78cc",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/04_exact_publication_adoption_bridge.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_application_finish_v1(uuid)",
+      "statementSha256": "b01711b58c85f5c4e6c7153efed818331bd742fda6ee4bb5aa56f86c1f3d4b2f",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/05_application_final_receipt.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_confirmation_context_v1(jsonb,text)",
+      "statementSha256": "47bd00318d7855aeb49bc83cf4bfe0b2b4dc67371287196def6243c7ddb24827",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/06_confirmation_run_preparation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_confirmation_context_v1(jsonb)",
+      "statementSha256": "691651ea2aafe9c5e35984b053e4cf6db6b824d6516ffbbaadf12221c293aceb",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/06_confirmation_run_preparation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_confirmation_prepare_v1(jsonb)",
+      "statementSha256": "ca0a9ef10ad6523d8a0995403a972f9ec976c1705fa3879a64fbd6462852bb53",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/06_confirmation_run_preparation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_unprotect_application_v1(uuid)",
+      "statementSha256": "60ac52fa3fc7a79d8699dbd37fdb41090acae9a8e5a8a252c3d7f72a72a97fb6",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/07_exact_preparation_application.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_protected_current_placement_v1(uuid,uuid,boolean)",
+      "statementSha256": "7039eb66c27c69c681778213a09768a2ab7b7885364bdf9a9b4e3a990234a67a",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/08_protected_current_placement.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_protected_signed_evidence_v1(uuid,uuid,uuid)",
+      "statementSha256": "e5d3eeb18241635da7c37eca88c0908f352bcc5b08eaf65d2303c8a215e53f56",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/09_certified_native_signed_evidence.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_protected_action_facts_v1(jsonb,text)",
+      "statementSha256": "41edba293899edfb9df6d7916f3c021f60b4341a10155643d508b7a45e23982d",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/10_shared_native_context.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+      "statementSha256": "09bb7ef02737f7d5e6f94ba7aaadd4e0226a33dc9072664dba4e6739561b6f43",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/10_shared_native_context.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_unprotect_source_observation_v1(uuid,uuid,uuid,jsonb)",
+      "statementSha256": "6139614b41badc1d63ff61c2080e05cba28d724244734a375a0bd5d3b25cbfeb",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/11_native_source_observation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb)",
+      "statementSha256": "4d0f407fb2cafdc6bb738b62885f25fc0ac624dc290fc252931750a4c7fe065f",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/12_run_free_review_context.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_quote_context_v1(jsonb)",
+      "statementSha256": "d6c6dc8f0e0c4ae3214d521517eaff4fe0275e66f75cb595a5081febfe2d9d8d",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/13_preview_quote_operands.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_request_scope_v1(uuid,jsonb,text,boolean)",
+      "statementSha256": "b8e5406141afd310a52277b782fce4648e4adba379471afe394992905d0a8e3a",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/14_native_preparation_request_scope.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_record_native_adoption_v1(uuid,uuid,jsonb)",
+      "statementSha256": "179dfc73971382d770d932ec10c2bac26ab9da70f76aef20c00720a406f051f6",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/15_record_owned_native_adoption.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)",
+      "statementSha256": "9686f62baf8c9b4866e27455e9a183f30809c1163ea21321d8657ccb5cb8b274",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_next_payload_validate_v1(jsonb,uuid)",
+      "statementSha256": "9c0a0fa03ae5b6730646ede4287d77fc1f9a06f262cd78c86a5fddbb907dd655",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_exceptional_pay_publish_next_impl_v1(jsonb,uuid)",
+      "statementSha256": "3c18fa99216b362750b4f4e03a449d93e0730c9fce71d6fe16194d5b83bc9202",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+      "statementSha256": "3cc1199595d56a4db9d337586552ecb54f9da0d2a919fead9d42bf0af1fb3126",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_family_native_route_v1(uuid,uuid)",
+      "statementSha256": "6b0ffcf2117d8564d64bf9c8a4b01c7157aeb78d89779128ce2df2f04c543edc",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/17_source_composed_owner_route.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_local_head_owned_v1(uuid)",
+      "statementSha256": "89566ed2bb9ae507c6a8795062fa71c257407961a15b7a65d149fc8d08fb8fed",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/19_exact_local_head_capture.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+      "statementSha256": "93d54d17348e7ef33a595525cd13a712e8b88e97044ccd0d08dcbafd56bb5d96",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_local_payload_validate_v1(jsonb,uuid)",
+      "statementSha256": "3c4a151852e003f1bd6cefc976bb40a797bfc885bc2f16092e38b810d6fc424a",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_exceptional_pay_stage_c1_request_impl_v1(jsonb,uuid)",
+      "statementSha256": "042f1e2cdf67db8497d1c634373ff12a3e42887b7abb969ba614c522ae4d1a0a",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+      "statementSha256": "db184ade9abfc61f0a9b2714e632f893298bbdc9100163d7c84ce7880ef2ffbe",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "statementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/21_native_local_complete_implementation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+      "statementSha256": "6f3e0f10892d8a9ad217d42ede1d65e6a7f37ae3d3994473aee56d3a19cbd260",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/21_native_local_complete_implementation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb)",
+      "statementSha256": "c76bdb4048b1f748d90ef64df6749b7a01de2e4ab9acabd95f677d2c37c6d262",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/22_full_native_payload_preparation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_unprotect_apply_v1(uuid,uuid,text,uuid)",
+      "statementSha256": "ae8262de4cc765c4a6c611094399f96bffc3cbed42d4042d1c3638c672a19f7e",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/23_same_transaction_native_dispatch.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_local_release_proof_v1(uuid)",
+      "statementSha256": "9f3d3df6094bea15457ee62c60e677cde3daa70be60613441e24dd1e8a01f310",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/24_genuine_local_deferred_release_proof.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_local_protected_pending_released_v1()",
+      "statementSha256": "358a7ce6409d7f56350e7c75d584808f979421250a14f524069c7859f3eba885",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/25_actual_local_release_and_saved_status.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_local_saved_status_native_v1(uuid,uuid,uuid)",
+      "statementSha256": "2c01d931eb3d98448d8b7f54ae48a14b0a39c380b137f9e96679292f0d10eec3",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/25_actual_local_release_and_saved_status.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_local_saved_status_v1(uuid,uuid,uuid)",
+      "statementSha256": "3cce1fc5e1b89f108ebf44a5285addc2234e2c1853ad496a20915d845f60ca49",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/25_actual_local_release_and_saved_status.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb)",
+      "statementSha256": "075dcced41d315978ed0dc671254176be35e41bda86ec90a18efaa8e1a416a64",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/26_confirmed_quote_operands.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_target_family_for_root_v1(uuid)",
+      "statementSha256": "e22b8af1498ac692a58a1771aedcd44114711425af0880adf53582483c628943",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/27_certified_current_native_scope.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_query_scope_v1(uuid)",
+      "statementSha256": "a7a12795ff163aaf2201b08f7050373a0bb4065854d7c267c9ead380301ac38b",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/27_certified_current_native_scope.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_protected_entitlement_projection_v1(jsonb)",
+      "statementSha256": "50b182b24b65136677d3545adc2e00d9acd32e124041fd2786e17d053eb0a657",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/28_current_native_entitlement_projection.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)",
+      "statementSha256": "05581e26b34f70a1f2fa8a7bb67cd8f2c28d8b6ad0bc81e7183cbac0d16bb2e0",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/29_current_local_native_context.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_local_publication_context_v2(uuid,uuid,uuid)",
+      "statementSha256": "34020c0d1669dc00998ec4007e0d3bb15beba92cc66d13baaaf32518f86a9384",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/29_current_local_native_context.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_protected_saved_placement_v1(uuid,uuid,uuid)",
+      "statementSha256": "06dde2a024b457c441c81b5c0aa6d3d4b1ba6e8c236637fcc128c0e2af32f1bf",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/30_native_saved_placement_proof.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_protected_root_financial_fact_v1(jsonb,integer)",
+      "statementSha256": "b175ce6002ade780e5f3c15456f36538c3dc23af6d43c542e7ee3bfd76efcf59",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/31_current_financial_native_source.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_protected_current_financial_source_v1(jsonb)",
+      "statementSha256": "3a925f6d2124477375574003f573c44d0133531198cacaf28de716360f398192",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/31_current_financial_native_source.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_request_v1(jsonb,text)",
+      "statementSha256": "d207b8bc9ed9f12daa2b12f9b1b33033f9776ea12be7be30e4731ec3d1876ce7",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/32_source_request_and_scope_guards.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_scope_access_v1(uuid,uuid,uuid,date)",
+      "statementSha256": "5d1d33999bbd9898b242542c7759711c5c4bb41d3f0dd511593f1058918c5d97",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/32_source_request_and_scope_guards.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_source_subject_v1(uuid)",
+      "statementSha256": "2f29b699ebc00feeaaa8ff63956ce3f7d07ba356071a6aa935b823ab732cb42a",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/33_genuine_source_subject_and_scope.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_selection_identity_v1(jsonb)",
+      "statementSha256": "18665120d17cfc6722a5c3eb2a2d0e5293e8da920b6f45ccc0d3b2c0e53bc7e7",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/33_genuine_source_subject_and_scope.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+      "statementSha256": "07a779a53542b534fb4fcdac29dd76b9db54f2a950baaba1295e0d87993b9e70",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/33_genuine_source_subject_and_scope.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_assembly_assert_v1(uuid,uuid)",
+      "statementSha256": "a768a4f91b1fca2617baf60f69324b97d1efe406cf478f57ebecb4daf69e92ec",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/34_atomic_preview_assembly.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_begin_v1(jsonb)",
+      "statementSha256": "bd58756cf2b99f8d292f203817a01c1982e390fe0d5b1ffe5e72c8dbd34060b1",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/34_atomic_preview_assembly.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_ready_v1(jsonb)",
+      "statementSha256": "a02e2c87090c25ffca992911775129527065116f14739f38654a4c1c364c77db",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/34_atomic_preview_assembly.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_abandon_v1(jsonb)",
+      "statementSha256": "b3c64850a3a02b3259cb6eb415a1a375c69c385aea41c09ed88548c6fed93d21",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/34_atomic_preview_assembly.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_quote_v1(jsonb)",
+      "statementSha256": "721936f04cbef633f7d2d418a79d20a077006b9e06f8bd12fad212df80c52852",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/35_native_preview_quote_registration.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_quantity_union_v1(jsonb,text)",
+      "statementSha256": "910372a53fd44b6380bd7e131b157c555b45d40ffd740bf0ad87520a2dd91149",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/36_exact_source_review_and_seal.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_public_actions_v1(uuid,jsonb,uuid)",
+      "statementSha256": "956ce41169932465682479527895ec82ed88eb28b04d4cc07ef3052859747f02",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/36_exact_source_review_and_seal.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_review_projection_v1(uuid)",
+      "statementSha256": "5c4feec6b99726eb63da301a53db4ba4f04ce09665f67024addee3483a204a14",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/36_exact_source_review_and_seal.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_v1(jsonb)",
+      "statementSha256": "f9773873848d275df7cdeceb9bc3bdae71722e9c20df1c4513bf2c6e711d6432",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/36_exact_source_review_and_seal.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_incident_guard_v1()",
+      "statementSha256": "26795aa0a43c99b588012d9b6f7fcd0c48fc8a7f84831c7b7a78eaa3a632521b",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/37_selected_contact_retirement.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_contact_retire_v1(uuid)",
+      "statementSha256": "bad148e0cbc05ad665d81081dafcbbf14456d09842ff29aca9d89e4681edd755",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/37_selected_contact_retirement.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_contact_suppressed_v1(uuid,uuid,jsonb)",
+      "statementSha256": "1d1a69b429bccf8326531f3b9e85eec487ed222e93dc71f1970ddd7d68848f50",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/37_selected_contact_retirement.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)",
+      "statementSha256": "2cc9a649951826b913168fd8883592b5a8dd2d0903e0a1631fc018761e4e40c1",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/38_source_owned_saved_result.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_read_source_v1(jsonb)",
+      "statementSha256": "3b473a1c2c1aea57704302bfbd0f12cf5b45407deef6fdef473703aba734d3bf",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/38_source_owned_saved_result.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_rollback_witness_v1(uuid)",
+      "statementSha256": "53fbea9cb74437274af77af1edb251334cff7720f77eadc17ba5b0e998d11160",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/39_actual_native_dependency_rollback.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_dependency_v1(uuid,jsonb)",
+      "statementSha256": "f7ee0becffa1dc8027ea370016059395ca4559258febb1ae1101d34030175ee8",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/39_actual_native_dependency_rollback.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_bind_publication_v1(uuid)",
+      "statementSha256": "fd6098aa742e4d057cdddf8ac7d29665474323ffb3ce44097bca61eb30f67021",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/40_actual_publication_and_source_binding.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "statementSha256": "cad02a71a6f4a4a4a08bb161ac0a976ab2690f155f2b4f95cb56e01719ce0ead",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/41_atomic_source_acceptance.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)",
+      "statementSha256": "57f624b28fb76c47daf840a23f38b29158358f782d7343fdb325cc68993d641d",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/42_native_contact_reimport_match.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+      "statementSha256": "3697717955ef6bc979e0ba976f0ae1bcc075a103ffc50996a5ecb96542b0fba9",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/43_current_native_action_preparation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_protected_action_placement_assert_v1(jsonb,jsonb)",
+      "statementSha256": "c79bad2ede73c3e35b264d01f5f901843cb523cd9529140612998d5f563d1480",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/43_current_native_action_preparation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_snapshot_assert_v1(jsonb,jsonb)",
+      "statementSha256": "ce239226d0e44e62e890d343d6d6160fb468f9ba258a19afbd1c5f60571a63dd",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/44_strict_native_snapshot_validation.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_next_publication_status_v1(jsonb)",
+      "statementSha256": "585cccc84e6717ae05ed401d210106b7fdabc03c0d297358ac742d622353f9e2",
+      "file": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/native-entry/weekly_exceptional_pay_next_publication_status_v1.sqlinc",
+      "stage": "BASE"
+    },
+    {
+      "signature": "private._candidate_expense_source_family_v1(uuid)",
+      "statementSha256": "fd6730649d8ac7d81408f646ebd64b782eff068e910d323aeff0afa1e0524bd9",
+      "file": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/01_source_family.sqlinc",
+      "stage": "PENDING_CURRENT"
+    },
+    {
+      "signature": "private.weekly_source_resolve_root_identity_v1(uuid)",
+      "statementSha256": "c980511b6e84312e8b246d9a210e7032818fcc2ffd4a545bb875f783baa87dbb",
+      "file": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/02_root_identity.sqlinc",
+      "stage": "PENDING_CURRENT"
+    },
+    {
+      "signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+      "statementSha256": "603122d55df8be43e2aac94634baba034740d1e01feedbf58abc17e32dd25908",
+      "file": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/03_family_rows.sqlinc",
+      "stage": "PENDING_CURRENT"
+    },
+    {
+      "signature": "private.weekly_source_pay_query_scope_v1(uuid)",
+      "statementSha256": "50aefc118b6e1c58fbbf115b374558e8d7e69cebe7ab3bf1b143f8200269e5fa",
+      "file": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/04_current_pay_query.sqlinc",
+      "stage": "PENDING_CURRENT"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+      "statementSha256": "1d2449c5f3e5d6aa0eed0158605a3ecda00e561bd9febb8fbd166f7429f3225d",
+      "file": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/05_decision_scope.sqlinc",
+      "stage": "PENDING_CURRENT"
+    },
+    {
+      "signature": "private.weekly_source_invoice_duty_scope_v1(uuid)",
+      "statementSha256": "3fea772b0e486332c572a10f17d9dac477e026c5ac2e0158cb4ba45f1016376f",
+      "file": "docs/healthroster-build/proposals/source-pending-current-native-20261016/forward/06_invoice_duty_scope.sqlinc",
+      "stage": "PENDING_CURRENT"
+    },
+    {
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "statementSha256": "b9587301ec7a944a6ce2ef688651b9974c8bb1cc98b6348c7d2d360b7b519324",
+      "file": "docs/healthroster-build/proposals/v6-invoice-duty-scope-successor-20261016/COMPLETE_DUTY_SUCCESSOR.sqlinc",
+      "stage": "INVOICE_DUTY"
+    }
+  ],
+  "security": [
+    {
+      "signature": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "header": "create or replace function private.weekly_source_pay_decision_metadata_guard_v1()\nreturns trigger language plpgsql security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_application_commit_guard_v1()",
+      "header": "create or replace function private.weekly_source_pay_decision_application_commit_guard_v1()\nreturns trigger language plpgsql security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_assembly_commit_guard_v1()",
+      "header": "create or replace function private.weekly_source_pay_decision_assembly_commit_guard_v1()\nreturns trigger language plpgsql security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_unprotect_run_prepare_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer\nset search_path=pg_catalog,private,public\nset lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+      "header": "create or replace function private.weekly_source_pay_decision_native_normal_gate_v1(\n p_family_id uuid,p_run_id uuid,p_actor_user_id uuid,p_native_entry text\n) returns jsonb language plpgsql stable security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_publication_adoption_guard_v1()",
+      "header": "create or replace function private.weekly_source_pay_decision_publication_adoption_guard_v1()\nreturns trigger language plpgsql security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_publication_adoptions_assert_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_publication_adoptions_assert_v1(p_application_id uuid)\nreturns void language plpgsql stable security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_application_finish_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_application_finish_v1(p_application_id uuid)\nreturns bytea language plpgsql volatile security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_confirmation_context_v1(jsonb,text)",
+      "header": "create or replace function private.weekly_source_pay_decision_confirmation_context_v1(p_request jsonb,p_version text)\nreturns jsonb language plpgsql volatile security definer\nset search_path=pg_catalog,private,public\nset lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_confirmation_context_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_confirmation_context_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public\nset lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_confirmation_prepare_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_confirmation_prepare_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public\nset lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_unprotect_application_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_unprotect_application_v1(p_preparation_id uuid)\nreturns uuid language plpgsql stable security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_protected_current_placement_v1(uuid,uuid,boolean)",
+      "header": "create or replace function private.weekly_source_protected_current_placement_v1(\n p_family_id uuid,p_work_event_id uuid,p_lock boolean\n) returns jsonb language plpgsql volatile security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_protected_signed_evidence_v1(uuid,uuid,uuid)",
+      "header": "create or replace function private.weekly_source_protected_signed_evidence_v1(\n  p_timesheet_id uuid,p_family_id uuid,p_work_event_id uuid\n) returns jsonb\nlanguage plpgsql stable security definer\nset search_path to 'public','private','extensions','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_protected_action_facts_v1(jsonb,text)",
+      "header": "create or replace function private.weekly_source_protected_action_facts_v1(\n  p_request jsonb,p_request_kind text\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','extensions','pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+      "header": "create or replace function public.weekly_exceptional_pay_action_context_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_unprotect_source_observation_v1(uuid,uuid,uuid,jsonb)",
+      "header": "create or replace function private.weekly_source_unprotect_source_observation_v1(\n p_family_id uuid,p_source_cycle_id uuid,p_work_event_id uuid,p_context jsonb\n) returns jsonb language plpgsql stable security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_unprotect_review_context_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer\nset search_path=pg_catalog,private,public\nset lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_quote_context_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_preview_quote_context_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_request_scope_v1(uuid,jsonb,text,boolean)",
+      "header": "create or replace function private.weekly_source_pay_decision_native_request_scope_v1(\n p_preparation_id uuid,p_request jsonb,p_kind text,p_effect boolean\n) returns uuid language plpgsql stable security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_record_native_adoption_v1(uuid,uuid,jsonb)",
+      "header": "create or replace function private.weekly_source_pay_decision_record_native_adoption_v1(\n p_preparation_id uuid,p_application_id uuid,p_control jsonb\n) returns jsonb language plpgsql volatile security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)",
+      "header": "create or replace function private.weekly_source_protected_next_engine_v1(p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_next_payload_validate_v1(jsonb,uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_native_next_payload_validate_v1(p_request jsonb,p_preparation_id uuid)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "SQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_exceptional_pay_publish_next_impl_v1(jsonb,uuid)",
+      "header": "create or replace function private.weekly_exceptional_pay_publish_next_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "SQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+      "header": "create or replace function public.weekly_exceptional_pay_publish_next_v1(p_request jsonb)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "SQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated",
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role",
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_family_native_route_v1(uuid,uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_family_native_route_v1(p_family_id uuid,p_generation_id uuid)\nreturns text language plpgsql stable security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_local_head_owned_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_local_head_owned_v1(p_receipt_id uuid)\nreturns boolean language plpgsql stable security definer\nset search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+      "header": "create or replace function private.weekly_source_protected_local_stage_engine_v1(\n  p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','extensions','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_local_payload_validate_v1(jsonb,uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_native_local_payload_validate_v1(p_request jsonb,p_preparation_id uuid)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "SQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_exceptional_pay_stage_c1_request_impl_v1(jsonb,uuid)",
+      "header": "create or replace function private.weekly_exceptional_pay_stage_c1_request_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+      "header": "create or replace function public.weekly_exceptional_pay_stage_c1_request_v1(p_request jsonb)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "SQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated",
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role",
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "header": "create or replace function private.weekly_exceptional_pay_complete_local_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid)\nreturns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\nset lock_timeout to '2500ms'\nset statement_timeout to '30s'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+      "header": "create or replace function public.weekly_exceptional_pay_complete_local_v1(p_request jsonb)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "SQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated",
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role",
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_unprotect_prepare_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_unprotect_apply_v1(uuid,uuid,text,uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_unprotect_apply_v1(\n p_preparation_id uuid,p_decision_id uuid,p_member_key text,p_request_id uuid\n) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_local_release_proof_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_local_release_proof_v1(p_preparation_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_local_protected_pending_released_v1()",
+      "header": "create or replace function private.weekly_source_local_protected_pending_released_v1()\nreturns trigger language plpgsql security definer\nset search_path to 'pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_local_saved_status_native_v1(uuid,uuid,uuid)",
+      "header": "create or replace function private.weekly_source_local_saved_status_native_v1(\n  p_family_id uuid,p_orchestration_run_id uuid,p_actor_user_id uuid\n) returns jsonb\nlanguage plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_local_saved_status_v1(uuid,uuid,uuid)",
+      "header": "create or replace function private.weekly_source_local_saved_status_v1(p_family_id uuid,p_orchestration_run_id uuid,p_actor_user_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_unprotect_quote_context_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_target_family_for_root_v1(uuid)",
+      "header": "create or replace function private.weekly_source_target_family_for_root_v1(\n  p_root_timesheet_id uuid\n) returns public.weekly_exceptional_pay_target_families\nlanguage plpgsql stable security definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_query_scope_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_query_scope_v1(\n  p_root_timesheet_id uuid\n) returns jsonb\nlanguage plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role",
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "signature": "private.weekly_source_protected_entitlement_projection_v1(jsonb)",
+      "header": "create or replace function private.weekly_source_protected_entitlement_projection_v1(p_context jsonb)\nreturns jsonb language plpgsql immutable set search_path=pg_catalog ",
+      "securityDefiner": false,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)",
+      "header": "create or replace function private.weekly_source_local_preauthorisation_write_allowed_v1(\n  p_root_timesheet_id uuid, p_snapshot jsonb\n) returns boolean\nlanguage sql volatile security definer\nset search_path to 'pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "SQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_local_publication_context_v2(uuid,uuid,uuid)",
+      "header": "create or replace function private.weekly_source_local_publication_context_v2(\n  p_publication_request_id uuid,p_generation_id uuid,p_root_timesheet_id uuid\n) returns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_protected_saved_placement_v1(uuid,uuid,uuid)",
+      "header": "create or replace function private.weekly_source_protected_saved_placement_v1(p_generation_id uuid,p_root_timesheet_id uuid,p_contract_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_protected_root_financial_fact_v1(jsonb,integer)",
+      "header": "create or replace function private.weekly_source_protected_root_financial_fact_v1(p_financial jsonb,p_root_version integer)\nreturns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_protected_current_financial_source_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_protected_current_financial_source_v1(p_request jsonb)\nreturns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_request_v1(jsonb,text)",
+      "header": "create or replace function private.weekly_source_pay_decision_request_v1(p_body jsonb,p_kind text)\nreturns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_scope_access_v1(uuid,uuid,uuid,date)",
+      "header": "create or replace function private.weekly_source_pay_decision_scope_access_v1(p_actor uuid,p_group uuid,p_client uuid,p_date date)\nreturns void language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_source_subject_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_source_subject_v1(p_row uuid)\nreturns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_selection_identity_v1(jsonb)",
+      "header": "create or replace function private.weekly_source_pay_decision_selection_identity_v1(p_selection jsonb)\nreturns jsonb language sql immutable set search_path=pg_catalog ",
+      "securityDefiner": false,
+      "language": "SQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+      "header": "create or replace function private.weekly_source_pay_decision_resolved_scope_v1(p_browser jsonb,p_actor uuid,p_lock boolean)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role",
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_assembly_assert_v1(uuid,uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_assembly_assert_v1(p_assembly uuid,p_actor uuid)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_begin_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_preview_begin_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_ready_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_preview_ready_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_abandon_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_preview_abandon_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_quote_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_preview_quote_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_quantity_union_v1(jsonb,text)",
+      "header": "create or replace function private.weekly_source_pay_decision_quantity_union_v1(p_values jsonb,p_mode text)\nreturns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_public_actions_v1(uuid,jsonb,uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_public_actions_v1(p_decision uuid,p_member jsonb,p_cut uuid)\nreturns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_review_projection_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_review_projection_v1(p_review uuid)\nreturns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_preview_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_incident_guard_v1()",
+      "header": "create or replace function private.weekly_source_pay_decision_incident_guard_v1()\nreturns trigger language plpgsql security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_contact_retire_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_contact_retire_v1(p_application uuid)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_contact_suppressed_v1(uuid,uuid,jsonb)",
+      "header": "create or replace function private.weekly_source_pay_decision_contact_suppressed_v1(p_group uuid,p_event uuid,p_issue jsonb)\nreturns boolean language sql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "SQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_read_source_v1(p_decision uuid,p_request uuid,p_actor uuid)\nreturns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_read_source_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_read_source_v1(p_request jsonb)\nreturns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_rollback_witness_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_native_rollback_witness_v1(p_preparation uuid)\nreturns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_dependency_v1(uuid,jsonb)",
+      "header": "create or replace function private.weekly_source_pay_decision_native_dependency_v1(p_preparation uuid,p_before jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_bind_publication_v1(uuid)",
+      "header": "create or replace function private.weekly_source_pay_decision_bind_publication_v1(p_application uuid)\nreturns void language plpgsql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "header": "create or replace function public.weekly_source_pay_decision_accept_v1(p_request jsonb)\nreturns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)",
+      "header": "create or replace function private.weekly_source_query_resolved_decision_matches_v1(\n  p_source_group_id uuid,p_work_event_id uuid,p_issue jsonb\n) returns boolean language sql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "SQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+      "header": "create or replace function public.weekly_exceptional_pay_prepare_action_v1(\n  p_request jsonb\n) returns jsonb\nlanguage plpgsql volatile security definer\nset search_path to 'public','private','extensions','pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_protected_action_placement_assert_v1(jsonb,jsonb)",
+      "header": "create or replace function private.weekly_source_protected_action_placement_assert_v1(p_request jsonb,p_placement jsonb)\nreturns void language plpgsql volatile security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_snapshot_assert_v1(jsonb,jsonb)",
+      "header": "create or replace function private.weekly_source_pay_decision_native_snapshot_assert_v1(p_snapshot jsonb,p_facts jsonb)\nreturns void language plpgsql immutable security definer set search_path=pg_catalog,private,public ",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": []
+      }
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_next_publication_status_v1(jsonb)",
+      "header": "create or replace function public.weekly_exceptional_pay_next_publication_status_v1(\n  p_request jsonb\n) returns jsonb language plpgsql stable security definer\nset search_path=pg_catalog,private,public\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated"
+        ],
+        "grants": [
+          "service_role"
+        ],
+        "owners": []
+      }
+    },
+    {
+      "signature": "private._candidate_expense_source_family_v1(uuid)",
+      "header": "CREATE OR REPLACE FUNCTION private._candidate_expense_source_family_v1(p_timesheet_id uuid)\n RETURNS boolean\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "signature": "private.weekly_source_resolve_root_identity_v1(uuid)",
+      "header": "create or replace function private.weekly_source_resolve_root_identity_v1(\n  p_timesheet_id uuid\n) returns jsonb\nlanguage plpgsql\nstable\nsecurity definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+      "header": "create or replace function private.weekly_source_lock_family_rows_v1(\n  p_requested_timesheet_ids uuid[],\n  p_candidate_id uuid default null\n) returns jsonb\nlanguage plpgsql\nvolatile\nsecurity definer\nset search_path to 'public','private','pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "signature": "private.weekly_source_invoice_duty_scope_v1(uuid)",
+      "header": "create or replace function private.weekly_source_invoice_duty_scope_v1(p_timesheet_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path='pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": {
+        "revokes": [
+          "public,anon,authenticated,service_role"
+        ],
+        "grants": [],
+        "owners": [
+          "postgres"
+        ]
+      }
+    },
+    {
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "header": "create or replace function private.weekly_source_invoice_duty_v1(p_root_timesheet_id uuid)\nreturns jsonb language plpgsql stable security definer\nset search_path to 'pg_catalog','pg_temp'\n",
+      "securityDefiner": true,
+      "language": "PLPGSQL",
+      "acl": null
+    }
+  ],
+  "triggerGuard": {
+    "path": "effects/01_health_trigger_exact_replay.sqlinc",
+    "sha256": "121631f2f6c0fa1fa2b45c857a683df64838bbbffa5e23e87d6ec755460b627f",
+    "locks": 15,
+    "noDropReplaceEnable": true,
+    "pg17Sources": [
+      "https://www.postgresql.org/docs/17/catalog-pg-trigger.html",
+      "https://www.postgresql.org/docs/17/catalog-pg-constraint.html",
+      "https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/commands/trigger.c"
+    ],
+    "native": "NOT_RUN"
+  },
+  "incidentPredecessor": {
+    "currentRootConstraint": {
+      "name": "weekly_discrepancy_incidents_resolution_kind_check",
+      "type": "c",
+      "deferred": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (resolution_kind IS NULL OR (resolution_kind = ANY (ARRAY['SOURCE_MATCHED'::text, 'OFFICE_ACCEPTED_SYSTEM_HOURS'::text, 'CANDIDATE_CORRECTED'::text, 'MANAGER_CONFIRMED_SYSTEM_HOURS'::text, 'RECORDED_NOT_WORKED'::text, 'CORRECT_FINAL_SOURCE'::text])))"
+    },
+    "guardSha256": "5fc6666ed1c07950a91761ed297ff53ef871e14d5c1b0ad9741ead08adaa89c2",
+    "guardBeforeUnchangedBody": true,
+    "oldValues": [
+      "SOURCE_MATCHED",
+      "OFFICE_ACCEPTED_SYSTEM_HOURS",
+      "CANDIDATE_CORRECTED",
+      "MANAGER_CONFIRMED_SYSTEM_HOURS",
+      "RECORDED_NOT_WORKED",
+      "CORRECT_FINAL_SOURCE"
+    ],
+    "newValues": [
+      "SOURCE_MATCHED",
+      "OFFICE_ACCEPTED_SYSTEM_HOURS",
+      "CANDIDATE_CORRECTED",
+      "MANAGER_CONFIRMED_SYSTEM_HOURS",
+      "RECORDED_NOT_WORKED",
+      "CORRECT_FINAL_SOURCE",
+      "SOURCE_PAY_DECISION"
+    ],
+    "native": "NOT_RUN"
+  },
+  "actualSqlFunctions": [
+    {
+      "signature": "private.weekly_source_pay_decision_native_next_payload_validate_v1(jsonb,uuid)",
+      "sourceFile": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "sql": "create or replace function private.weekly_source_pay_decision_native_next_payload_validate_v1(p_request jsonb,p_preparation_id uuid)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public as $function$\n select private.weekly_source_protected_next_engine_v1(p_request,p_preparation_id,true);\n$function$;",
+      "proposalCalls": [
+        "private.weekly_source_protected_next_engine_v1"
+      ],
+      "externalCalls": [],
+      "sourceOrder": 22
+    },
+    {
+      "signature": "private.weekly_exceptional_pay_publish_next_impl_v1(jsonb,uuid)",
+      "sourceFile": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "sql": "create or replace function private.weekly_exceptional_pay_publish_next_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public as $function$\n select private.weekly_source_protected_next_engine_v1(p_request,p_source_decision_preparation_id,false);\n$function$;",
+      "proposalCalls": [
+        "private.weekly_source_protected_next_engine_v1"
+      ],
+      "externalCalls": [],
+      "sourceOrder": 23
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+      "sourceFile": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "sql": "create or replace function public.weekly_exceptional_pay_publish_next_v1(p_request jsonb)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public as $function$\n select private.weekly_exceptional_pay_publish_next_impl_v1(p_request,null);\n$function$;",
+      "proposalCalls": [
+        "private.weekly_exceptional_pay_publish_next_impl_v1"
+      ],
+      "externalCalls": [],
+      "sourceOrder": 24
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_local_payload_validate_v1(jsonb,uuid)",
+      "sourceFile": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+      "sql": "create or replace function private.weekly_source_pay_decision_native_local_payload_validate_v1(p_request jsonb,p_preparation_id uuid)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public as $function$\n select private.weekly_source_protected_local_stage_engine_v1(p_request,p_preparation_id,true);\n$function$;",
+      "proposalCalls": [
+        "private.weekly_source_protected_local_stage_engine_v1"
+      ],
+      "externalCalls": [],
+      "sourceOrder": 28
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+      "sourceFile": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+      "sql": "create or replace function public.weekly_exceptional_pay_stage_c1_request_v1(p_request jsonb)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public as $function$\n select private.weekly_exceptional_pay_stage_c1_request_impl_v1(p_request,null);\n$function$;",
+      "proposalCalls": [
+        "private.weekly_exceptional_pay_stage_c1_request_impl_v1"
+      ],
+      "externalCalls": [],
+      "sourceOrder": 30
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+      "sourceFile": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/21_native_local_complete_implementation.sqlinc",
+      "sql": "create or replace function public.weekly_exceptional_pay_complete_local_v1(p_request jsonb)\nreturns jsonb language sql volatile security definer set search_path=pg_catalog,private,public as $function$\n select private.weekly_exceptional_pay_complete_local_impl_v1(p_request,null);\n$function$;",
+      "proposalCalls": [
+        "private.weekly_exceptional_pay_complete_local_impl_v1"
+      ],
+      "externalCalls": [],
+      "sourceOrder": 32
+    },
+    {
+      "signature": "private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)",
+      "sourceFile": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/29_current_local_native_context.sqlinc",
+      "sql": "create or replace function private.weekly_source_local_preauthorisation_write_allowed_v1(\n  p_root_timesheet_id uuid, p_snapshot jsonb\n) returns boolean\nlanguage sql volatile security definer\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  select count(*)=1\n  from private.weekly_source_local_protected_decision_receipts receipt\n  join public.weekly_exceptional_pay_target_families family on family.id=receipt.family_id\n  join public.weekly_exceptional_pay_generations generation on generation.id=receipt.generation_id\n  join public.timesheets root on root.timesheet_id=receipt.root_timesheet_id\n  where receipt.root_timesheet_id=p_root_timesheet_id\n    and receipt.state='PREPARING'\n    and receipt.preparing_transaction_id=pg_catalog.pg_current_xact_id()\n    and (family.root_timesheet_id=root.timesheet_id or (\n      private.timesheet_contract_current_placement_v1(family.root_timesheet_id)->>'current_timesheet_id'=root.timesheet_id::text\n      and private.timesheet_contract_current_placement_v1(family.root_timesheet_id)->>'current_contract_id'=root.contract_id::text\n      and exists(select 1 from public.contracts c where c.id=root.contract_id and c.candidate_id=family.candidate_id)\n      and root.week_ending_date=family.week_ending_date))\n    and family.ownership_state='TARGET_MANAGED'\n    and generation.family_id=family.id and generation.lifecycle_state='PENDING_C1'\n    and root.is_current and root.revoked_at is null and root.archived_at_utc is null\n    and root.authorised_at_server is null\n    and not exists(select 1 from public.weekly_source_root_authorisations authority\n                   where authority.root_timesheet_id=root.timesheet_id and authority.withdrawn_at_utc is null)\n    and (select count(*) from public.timesheets_financials financial\n         where financial.timesheet_id=root.timesheet_id and financial.is_current)=1\n    and exists(select 1 from public.timesheets_financials financial\n      where financial.id=receipt.prior_financial_id and financial.is_current\n        and financial.timesheet_id=root.timesheet_id and financial.authorised_at_utc is null\n        and financial.processing_status='PENDING_AUTH'\n        and financial.paid_at_utc is null and financial.locked_by_invoice_id is null)\n    and (p_snapshot is null or p_snapshot=receipt.approved_snapshot_json);\n$function$;",
+      "proposalCalls": [],
+      "externalCalls": [
+        "private.timesheet_contract_current_placement_v1"
+      ],
+      "sourceOrder": 43
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_selection_identity_v1(jsonb)",
+      "sourceFile": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/33_genuine_source_subject_and_scope.sqlinc",
+      "sql": "create or replace function private.weekly_source_pay_decision_selection_identity_v1(p_selection jsonb)\nreturns jsonb language sql immutable set search_path=pg_catalog as $function$\n select jsonb_build_object('scope_kind',p_selection->'scope_kind','scope_mode',p_selection->'scope_mode',\n  'source_row_id',p_selection->'source_row_id','family_root_id',case when p_selection->>'scope_kind'='TIMESHEET_FAMILY' then p_selection->'family_root_id' else 'null'::jsonb end,\n  'component_keys',(select coalesce(jsonb_agg(value order by value::text),'[]'::jsonb) from jsonb_array_elements(p_selection->'component_keys')),\n  'work_dates',p_selection->'work_dates');\n$function$;",
+      "proposalCalls": [],
+      "externalCalls": [],
+      "sourceOrder": 51
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_contact_suppressed_v1(uuid,uuid,jsonb)",
+      "sourceFile": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/37_selected_contact_retirement.sqlinc",
+      "sql": "create or replace function private.weekly_source_pay_decision_contact_suppressed_v1(p_group uuid,p_event uuid,p_issue jsonb)\nreturns boolean language sql stable security definer set search_path=pg_catalog,private,public as $function$\n select coalesce(upper(btrim(p_issue->>'issue_family')) in('SOURCE_MISSING_OR_NOT_AUTHORISED','SOURCE_HOURS_DIFFER','HEALTHROSTER_NOT_FINALISED')\n  and exists(select 1 from private.bpay_next_worker_pay_disposition disposition\n   join private.bpay_next_worker_pay_disposition_member current_member on current_member.disposition_id=disposition.id and current_member.version_no=disposition.current_version\n   join private.weekly_source_pay_decisions decision on decision.id=current_member.member_decision_id and decision.accept_request_id is not null\n    and decision.contact_policy='DO_NOT_QUERY_SELECTED_ISSUES'\n   join private.weekly_source_pay_decision_members selected on selected.decision_id=decision.id and selected.source_row_id=disposition.original_source_row_id\n   join private.weekly_source_pay_decision_requests accepted on accepted.request_id=decision.accept_request_id and accepted.metadata_state='COMMITTED'\n   join private.weekly_source_pay_decision_reviews review on review.id=accepted.review_id\n   where current_member.source_work_event_id=p_event and exists(select 1 from jsonb_array_elements(review.private_manifest_json->'selection') s\n    where s.value->>'member_key'=selected.member_key and s.value->>'source_group_id'=p_group::text\n     and (selected.scope_mode='WHOLE_SHIFT' or jsonb_array_length(s.value->'selected_issue_ids')>0)))\n ,false);\n$function$;",
+      "proposalCalls": [],
+      "externalCalls": [],
+      "sourceOrder": 64
+    },
+    {
+      "signature": "private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)",
+      "sourceFile": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/42_native_contact_reimport_match.sqlinc",
+      "sql": "create or replace function private.weekly_source_query_resolved_decision_matches_v1(\n  p_source_group_id uuid,p_work_event_id uuid,p_issue jsonb\n) returns boolean language sql stable security definer\nset search_path to 'pg_catalog','pg_temp'\nas $function$\n  with latest as (\n    select incident.state,incident.resolution_kind,incident.current_comparison_revision_id\n    from public.weekly_discrepancy_incidents incident\n    where incident.source_group_id=p_source_group_id and incident.work_event_id=p_work_event_id\n    order by incident.episode_number desc,incident.id desc limit 1\n  )\n  select private.weekly_source_pay_decision_contact_suppressed_v1(p_source_group_id,p_work_event_id,p_issue)\n    or coalesce((select latest.state='RESOLVED'\n    and latest.resolution_kind in ('OFFICE_ACCEPTED_SYSTEM_HOURS','MANAGER_CONFIRMED_SYSTEM_HOURS','CANDIDATE_CORRECTED')\n    and comparison.contract_id is not distinct from nullif(p_issue->>'contract_id','')::uuid\n    and comparison.issue_family is not distinct from upper(btrim(p_issue->>'issue_family'))\n    and comparison.source_presence is not distinct from upper(btrim(p_issue->>'source_presence'))\n    and comparison.candidate_start_at_local is not distinct from nullif(p_issue->>'candidate_start_at_local','')::timestamp\n    and comparison.candidate_end_at_local is not distinct from nullif(p_issue->>'candidate_end_at_local','')::timestamp\n    and comparison.candidate_break_minutes is not distinct from nullif(p_issue->>'candidate_break_minutes','')::integer\n    and comparison.system_start_at_local is not distinct from nullif(p_issue->>'system_start_at_local','')::timestamp\n    and comparison.system_end_at_local is not distinct from nullif(p_issue->>'system_end_at_local','')::timestamp\n    and comparison.system_break_minutes is not distinct from nullif(p_issue->>'system_break_minutes','')::integer\n    from latest join public.weekly_issue_comparison_revisions comparison\n      on comparison.id=latest.current_comparison_revision_id),false);\n$function$;",
+      "proposalCalls": [
+        "private.weekly_source_pay_decision_contact_suppressed_v1"
+      ],
+      "externalCalls": [],
+      "sourceOrder": 71
+    }
+  ],
+  "sourceCreationMetadata": [
+    {
+      "package": "source",
+      "function": "private.weekly_source_pay_decision_native_next_payload_validate_v1",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "qualified_callees": [
+        "private.weekly_source_protected_next_engine_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "source",
+      "function": "private.weekly_exceptional_pay_publish_next_impl_v1",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "qualified_callees": [
+        "private.weekly_source_protected_next_engine_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "source",
+      "function": "public.weekly_exceptional_pay_publish_next_v1",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+      "qualified_callees": [
+        "private.weekly_exceptional_pay_publish_next_impl_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "source",
+      "function": "private.weekly_source_pay_decision_native_local_payload_validate_v1",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+      "qualified_callees": [
+        "private.weekly_source_protected_local_stage_engine_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "source",
+      "function": "public.weekly_exceptional_pay_stage_c1_request_v1",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+      "qualified_callees": [
+        "private.weekly_exceptional_pay_stage_c1_request_impl_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "source",
+      "function": "public.weekly_exceptional_pay_complete_local_v1",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/21_native_local_complete_implementation.sqlinc",
+      "qualified_callees": [
+        "private.weekly_exceptional_pay_complete_local_impl_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "source",
+      "function": "private.weekly_source_local_preauthorisation_write_allowed_v1",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/29_current_local_native_context.sqlinc",
+      "qualified_callees": [
+        "private.timesheet_contract_current_placement_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "source",
+      "function": "private.weekly_source_pay_decision_selection_identity_v1",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/33_genuine_source_subject_and_scope.sqlinc",
+      "qualified_callees": [],
+      "banking_relations": []
+    },
+    {
+      "package": "source",
+      "function": "private.weekly_source_pay_decision_contact_suppressed_v1",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/37_selected_contact_retirement.sqlinc",
+      "qualified_callees": [],
+      "banking_relations": [
+        "private.bpay_next_worker_pay_disposition",
+        "private.bpay_next_worker_pay_disposition_member"
+      ]
+    },
+    {
+      "package": "source",
+      "function": "private.weekly_source_query_resolved_decision_matches_v1",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/42_native_contact_reimport_match.sqlinc",
+      "qualified_callees": [
+        "private.weekly_source_pay_decision_contact_suppressed_v1"
+      ],
+      "banking_relations": []
+    }
+  ],
+  "invoiceDutyCompleteReverse": {
+    "rootCommit": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+    "rootInvoicePath": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+    "currentStatementSha256": "f837fc330938f43a9484ee21efd4a10d909858c8dcfe0a937e99146ca5cec390",
+    "successorStatementSha256": "b9587301ec7a944a6ce2ef688651b9974c8bb1cc98b6348c7d2d360b7b519324",
+    "completeOneCallReverseEqualsCurrentInvoice": true,
+    "inheritedCurrentPrivateContract": {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_invoice_duty_v1(p_root_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "21042aa812db88006dbdc287f023e898ba2c2384b3b0172acb42f4bf36c54132"
+    },
+    "dutyAclInventoryPath": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+    "qualification": "CREATE OR REPLACE retains existing ACL/owner; full0955 precedes1120. Effective final role verification remains required."
+  },
+  "extraneousContactCreationMetadata": [
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_checking_logical_keys_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/00_current_logical_closure.sqlinc",
+      "qualified_callees": [
+        "private.weekly_source_sha256_jsonb_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_checking_scope_facts_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/01_checking_revision_and_history.sqlinc",
+      "qualified_callees": [
+        "private.weekly_contact_checking_pair_facts_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_source_manager_row_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/05_manual_member_facts.sqlinc",
+      "qualified_callees": [],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_manual_manifest_seal_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/06_manual_manifest_and_preview.sqlinc",
+      "qualified_callees": [],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_source_capture_pairs_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/07_capture_native_reads.sqlinc",
+      "qualified_callees": [],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_recheck_native_ids_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/16_recheck_native_progress.sqlinc",
+      "qualified_callees": [
+        "private.weekly_source_candidate_generation_current_v1"
+      ],
+      "banking_relations": []
+    },
+    {
+      "package": "contact",
+      "function": "private.weekly_contact_source_bulk_scope_facts_v1",
+      "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/43_exact_bulk_scope_locks.sqlinc",
+      "qualified_callees": [
+        "private.weekly_contact_source_route_scope_facts_v1",
+        "private.weekly_source_office_query_groups_v1"
+      ],
+      "banking_relations": []
+    }
+  ],
+  "bankingHold": {
+    "active": true,
+    "foreignKeys": [
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/03_complete_acceptance_applications_and_adoptions.sqlinc",
+        "line": 15,
+        "relation": "private.bpay_next_source_pay_decision_cut",
+        "referenced_key_columns": [
+          "decision_id",
+          "id"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/03_complete_acceptance_applications_and_adoptions.sqlinc",
+        "line": 28,
+        "relation": "private.bpay_next_work",
+        "referenced_key_columns": [
+          "id"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/03_complete_acceptance_applications_and_adoptions.sqlinc",
+        "line": 48,
+        "relation": "private.bpay_next_work_revision",
+        "referenced_key_columns": [
+          "work_id",
+          "id"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/04_complete_canonical_publication_bridge.sqlinc",
+        "line": 6,
+        "relation": "private.bpay_next_source_pay_decision_publication_member",
+        "referenced_key_columns": [
+          "command_id",
+          "member_no"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/04_complete_canonical_publication_bridge.sqlinc",
+        "line": 10,
+        "relation": "private.bpay_next_source_pay_decision_cut",
+        "referenced_key_columns": [
+          "decision_id",
+          "id"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/04_complete_canonical_publication_bridge.sqlinc",
+        "line": 12,
+        "relation": "private.bpay_next_worker_pay_disposition_subject_binding",
+        "referenced_key_columns": [
+          "disposition_id",
+          "binding_no"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/04_complete_canonical_publication_bridge.sqlinc",
+        "line": 14,
+        "relation": "private.bpay_next_worker_pay_disposition",
+        "referenced_key_columns": [
+          "id"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      }
+    ],
+    "rowtypes": {
+      "private.bpay_next_move_publication_member": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/08_protected_current_placement.sqlinc"
+      ],
+      "private.bpay_next_protected_source_receipt": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/native-entry/weekly_exceptional_pay_next_publication_status_v1.sqlinc"
+      ],
+      "private.bpay_next_source_pay_decision_cut": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/12_run_free_review_context.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/13_preview_quote_operands.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/22_full_native_payload_preparation.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/26_confirmed_quote_operands.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/34_atomic_preview_assembly.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/36_exact_source_review_and_seal.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/41_atomic_source_acceptance.sqlinc"
+      ],
+      "private.bpay_next_work": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/08_protected_current_placement.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/15_record_owned_native_adoption.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/17_source_composed_owner_route.sqlinc"
+      ],
+      "private.bpay_next_work_revision": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/08_protected_current_placement.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/15_record_owned_native_adoption.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/17_source_composed_owner_route.sqlinc"
+      ]
+    },
+    "externalDependencies": [
+      {
+        "owner": "Banking",
+        "abi": "private.bpay_next_source_pay_decision_cut_v1(uuid,uuid,uuid,boolean)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      },
+      {
+        "owner": "Banking",
+        "abi": "private.bpay_next_source_pay_decision_acceptance_begin_v1(uuid,uuid,uuid,bytea)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      },
+      {
+        "owner": "Banking",
+        "abi": "private.bpay_next_source_pay_decision_stage_v1(uuid,uuid,bytea,uuid)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      },
+      {
+        "owner": "Banking",
+        "abi": "private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      },
+      {
+        "owner": "Banking B051",
+        "abi": "Final public Source READ_RESULT wrapper/current financial child schema",
+        "state": "NO_PUBLISHED_EXACT_PRODUCER_SHAPE"
+      },
+      {
+        "owner": "Banking native Source component binding",
+        "abi": "private.bpay_next_source_binding_components_v1(uuid)+private.bpay_next_source_component_bind_v1(uuid,uuid)",
+        "state": "REQUIRE_GENUINE_SOURCE_PROOF_ARM_PUBLICATION_RECEIPT"
+      },
+      {
+        "owner": "Banking existing protected producer",
+        "abi": "private.bpay_next_stage_protected_source_v1(uuid,uuid,uuid,jsonb)",
+        "source": "supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql",
+        "case": "Accepted A-to-B move: producer still validates original family/root Contract A; caller current-B qualification alone cannot satisfy that invariant.",
+        "state": "MOVED_B_NEXT_REQUIRES_EXISTING_PRODUCER_QUALIFICATION_RECEIPT_NO_BANK_BODY_EDIT"
+      },
+      {
+        "owner": "Invoice",
+        "abi": "private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      },
+      {
+        "owner": "Invoice",
+        "abi": "private.invoice_contract_move_source_certificate_v1(uuid,boolean)",
+        "source_commit": "330a4770a208f0c6a927fd3a7ebee366dbc96340",
+        "state": "SOURCE_PUBLISHED_NATIVE_REQUIRED_NOT_RUN"
+      },
+      {
+        "owner": "Physical",
+        "abi": "private.timesheet_contract_current_placement_v1(uuid)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      }
+    ],
+    "readResult": "SOURCE_PAY_DECISION_READ_PROJECTION_DEPENDENCY_REQUIRED remains exact and truthful until genuine B051 child/public financial-result consumer is complete"
+  },
+  "outputs": [
+    {
+      "path": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6",
+      "bytes": 11034
+    },
+    {
+      "path": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0",
+      "bytes": 3839
+    },
+    {
+      "path": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131",
+      "bytes": 7486
+    },
+    {
+      "path": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5",
+      "bytes": 1823
+    },
+    {
+      "path": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "bytes": 2261
+    },
+    {
+      "path": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "sha256": "80d9c6244ae47cf674c77b55df85976d6501217856e8227995186071eff2a4d5",
+      "bytes": 2909
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "bytes": 636634
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc",
+      "sha256": "121631f2f6c0fa1fa2b45c857a683df64838bbbffa5e23e87d6ec755460b627f",
+      "bytes": 19818
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "sha256": "3f645a99ccdf35b69475f65c33dee019767392aafd754c55b80521dc86e9c80c",
+      "bytes": 491
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c",
+      "bytes": 55454
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "sha256": "04f985ed70f921803e74aac1394cd5d11deb8aac1ba6a48af50d5f66c4ebdc7f",
+      "bytes": 397
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "sha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c",
+      "bytes": 36006
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "sha256": "0d9156c674e4725d6198fc68783d8c6999daad3b6b557ff38c34deda27f64aaa",
+      "bytes": 382
+    }
+  ],
+  "native": {
+    "database": false,
+    "lock": false,
+    "docker": false,
+    "compile": "NOT_RUN",
+    "acl": "NOT_RUN",
+    "triggerReplay": "NOT_RUN",
+    "concurrency": "NOT_RUN",
+    "api": "NOT_RUN",
+    "partB": "NOT_RUN"
+  }
+}

@@ -1,0 +1,506 @@
+{
+  "version": "HEALTH_SOURCE_MANAGED_PROPOSAL_MOUNT_RECIPE_V1",
+  "qualification": "SOURCE_ONLY_DEPENDENCY_HELD_NOT_INSTALLABLE_OR_NATIVE_ACCEPTED",
+  "manifest": {
+    "path": "ASSEMBLY_MANIFEST.json",
+    "sha256": "8518dd4e5267238ffdc352ab6e3e26eaf301679fa7ad218bfdf4a685a486c50e"
+  },
+  "source": "managed/",
+  "orderedManagedFiles": [
+    {
+      "path": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6",
+      "bytes": 11034,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0",
+      "bytes": 3839,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131",
+      "bytes": 7486,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5",
+      "bytes": 1823,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "bytes": 2261,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "sha256": "80d9c6244ae47cf674c77b55df85976d6501217856e8227995186071eff2a4d5",
+      "bytes": 2909,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "bytes": 636634,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc",
+      "sha256": "121631f2f6c0fa1fa2b45c857a683df64838bbbffa5e23e87d6ec755460b627f",
+      "bytes": 19818,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "sha256": "3f645a99ccdf35b69475f65c33dee019767392aafd754c55b80521dc86e9c80c",
+      "bytes": 491,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c",
+      "bytes": 55454,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "sha256": "04f985ed70f921803e74aac1394cd5d11deb8aac1ba6a48af50d5f66c4ebdc7f",
+      "bytes": 397,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "sha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c",
+      "bytes": 36006,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "sha256": "0d9156c674e4725d6198fc68783d8c6999daad3b6b557ff38c34deda27f64aaa",
+      "bytes": 382,
+      "selection": "EXACT_FULL_FILE"
+    }
+  ],
+  "ordering": [
+    "Existing complete current native schema plus genuine Bank cut/publication/disposition keys before dependent1102/1103migrations.",
+    "Six one-time1100..1105migrations in exact order; original native resolution CHECK must pass guarded1105.",
+    "Actual Physical/Daily/Invoice0955/Candidate1003 complete final definitions and pending migration before Source first use.",
+    "Full Source1100entry (complete base bodies then exact Health trigger setup).",
+    "Full pending/current1110entry and its exact private ACL.",
+    "Complete Invoice-duty1120entry after dedicated helper; preserve actual final Invoice private owner/ACL closure.",
+    "Root alone reconciles final-definer registry, native source classes, central vocabularies, contract catalogue, ACL/role isolation, route/Office parent, genuine prerequisite hold and native acceptance."
+  ],
+  "releaseHold": {
+    "active": true,
+    "reason": "Actual cross-owner Bank schema/keys/rowtypes/SQL-callees and current financial producers require review/native proof. No fake schema/ABI, disabled checking, Bank body or swallowed financial failure.",
+    "creationTimeForeignKeys": [
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/03_complete_acceptance_applications_and_adoptions.sqlinc",
+        "line": 15,
+        "relation": "private.bpay_next_source_pay_decision_cut",
+        "referenced_key_columns": [
+          "decision_id",
+          "id"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/03_complete_acceptance_applications_and_adoptions.sqlinc",
+        "line": 28,
+        "relation": "private.bpay_next_work",
+        "referenced_key_columns": [
+          "id"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/03_complete_acceptance_applications_and_adoptions.sqlinc",
+        "line": 48,
+        "relation": "private.bpay_next_work_revision",
+        "referenced_key_columns": [
+          "work_id",
+          "id"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/04_complete_canonical_publication_bridge.sqlinc",
+        "line": 6,
+        "relation": "private.bpay_next_source_pay_decision_publication_member",
+        "referenced_key_columns": [
+          "command_id",
+          "member_no"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/04_complete_canonical_publication_bridge.sqlinc",
+        "line": 10,
+        "relation": "private.bpay_next_source_pay_decision_cut",
+        "referenced_key_columns": [
+          "decision_id",
+          "id"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/04_complete_canonical_publication_bridge.sqlinc",
+        "line": 12,
+        "relation": "private.bpay_next_worker_pay_disposition_subject_binding",
+        "referenced_key_columns": [
+          "disposition_id",
+          "binding_no"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/one-time/04_complete_canonical_publication_bridge.sqlinc",
+        "line": 14,
+        "relation": "private.bpay_next_worker_pay_disposition",
+        "referenced_key_columns": [
+          "id"
+        ],
+        "dependency": "ACTUAL_RELATION_AND_EXACT_UNIQUE_KEY_REQUIRED_AT_CREATE"
+      }
+    ],
+    "creationTimeRowtypes": {
+      "private.bpay_next_move_publication_member": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/08_protected_current_placement.sqlinc"
+      ],
+      "private.bpay_next_protected_source_receipt": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/native-entry/weekly_exceptional_pay_next_publication_status_v1.sqlinc"
+      ],
+      "private.bpay_next_source_pay_decision_cut": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/12_run_free_review_context.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/13_preview_quote_operands.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/22_full_native_payload_preparation.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/26_confirmed_quote_operands.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/34_atomic_preview_assembly.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/36_exact_source_review_and_seal.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/41_atomic_source_acceptance.sqlinc"
+      ],
+      "private.bpay_next_work": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/08_protected_current_placement.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/15_record_owned_native_adoption.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/17_source_composed_owner_route.sqlinc"
+      ],
+      "private.bpay_next_work_revision": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/08_protected_current_placement.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/15_record_owned_native_adoption.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/17_source_composed_owner_route.sqlinc"
+      ]
+    },
+    "sqlLanguageCreationDependencies": [
+      {
+        "package": "source",
+        "function": "private.weekly_source_pay_decision_native_next_payload_validate_v1",
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+        "qualified_callees": [
+          "private.weekly_source_protected_next_engine_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "source",
+        "function": "private.weekly_exceptional_pay_publish_next_impl_v1",
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+        "qualified_callees": [
+          "private.weekly_source_protected_next_engine_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "source",
+        "function": "public.weekly_exceptional_pay_publish_next_v1",
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+        "qualified_callees": [
+          "private.weekly_exceptional_pay_publish_next_impl_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "source",
+        "function": "private.weekly_source_pay_decision_native_local_payload_validate_v1",
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+        "qualified_callees": [
+          "private.weekly_source_protected_local_stage_engine_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "source",
+        "function": "public.weekly_exceptional_pay_stage_c1_request_v1",
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc",
+        "qualified_callees": [
+          "private.weekly_exceptional_pay_stage_c1_request_impl_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "source",
+        "function": "public.weekly_exceptional_pay_complete_local_v1",
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/21_native_local_complete_implementation.sqlinc",
+        "qualified_callees": [
+          "private.weekly_exceptional_pay_complete_local_impl_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "source",
+        "function": "private.weekly_source_local_preauthorisation_write_allowed_v1",
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/29_current_local_native_context.sqlinc",
+        "qualified_callees": [
+          "private.timesheet_contract_current_placement_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "source",
+        "function": "private.weekly_source_pay_decision_selection_identity_v1",
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/33_genuine_source_subject_and_scope.sqlinc",
+        "qualified_callees": [],
+        "banking_relations": []
+      },
+      {
+        "package": "source",
+        "function": "private.weekly_source_pay_decision_contact_suppressed_v1",
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/37_selected_contact_retirement.sqlinc",
+        "qualified_callees": [],
+        "banking_relations": [
+          "private.bpay_next_worker_pay_disposition",
+          "private.bpay_next_worker_pay_disposition_member"
+        ]
+      },
+      {
+        "package": "source",
+        "function": "private.weekly_source_query_resolved_decision_matches_v1",
+        "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/42_native_contact_reimport_match.sqlinc",
+        "qualified_callees": [
+          "private.weekly_source_pay_decision_contact_suppressed_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "contact",
+        "function": "private.weekly_contact_checking_logical_keys_v1",
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/00_current_logical_closure.sqlinc",
+        "qualified_callees": [
+          "private.weekly_source_sha256_jsonb_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "contact",
+        "function": "private.weekly_contact_checking_scope_facts_v1",
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/01_checking_revision_and_history.sqlinc",
+        "qualified_callees": [
+          "private.weekly_contact_checking_pair_facts_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "contact",
+        "function": "private.weekly_contact_source_manager_row_v1",
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/05_manual_member_facts.sqlinc",
+        "qualified_callees": [],
+        "banking_relations": []
+      },
+      {
+        "package": "contact",
+        "function": "private.weekly_contact_manual_manifest_seal_v1",
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/06_manual_manifest_and_preview.sqlinc",
+        "qualified_callees": [],
+        "banking_relations": []
+      },
+      {
+        "package": "contact",
+        "function": "private.weekly_contact_source_capture_pairs_v1",
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/07_capture_native_reads.sqlinc",
+        "qualified_callees": [],
+        "banking_relations": []
+      },
+      {
+        "package": "contact",
+        "function": "private.weekly_contact_recheck_native_ids_v1",
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/16_recheck_native_progress.sqlinc",
+        "qualified_callees": [
+          "private.weekly_source_candidate_generation_current_v1"
+        ],
+        "banking_relations": []
+      },
+      {
+        "package": "contact",
+        "function": "private.weekly_contact_source_bulk_scope_facts_v1",
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/43_exact_bulk_scope_locks.sqlinc",
+        "qualified_callees": [
+          "private.weekly_contact_source_route_scope_facts_v1",
+          "private.weekly_source_office_query_groups_v1"
+        ],
+        "banking_relations": []
+      }
+    ],
+    "qualifiedBankRuntimeCallNames": {
+      "private.bpay_next_capture_local_source_detail_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/21_native_local_complete_implementation.sqlinc"
+      ],
+      "private.bpay_next_contract_rate_rows_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc"
+      ],
+      "private.bpay_next_legacy_callback_enabled_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/21_native_local_complete_implementation.sqlinc"
+      ],
+      "private.bpay_next_protected_current_decision_capture_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/20_native_local_stage_implementation.sqlinc"
+      ],
+      "private.bpay_next_protected_local_receipt_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/native-entry/weekly_exceptional_pay_next_publication_status_v1.sqlinc"
+      ],
+      "private.bpay_next_protected_lock_current_root_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc"
+      ],
+      "private.bpay_next_protected_owner_route_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/02_atomic_source_run_birth.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/10_shared_native_context.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/native-entry/weekly_exceptional_pay_next_publication_status_v1.sqlinc"
+      ],
+      "private.bpay_next_protected_receipt_json_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/native-entry/weekly_exceptional_pay_next_publication_status_v1.sqlinc"
+      ],
+      "private.bpay_next_protected_require_authorised_root_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc"
+      ],
+      "private.bpay_next_publish_source_staged_pair_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc"
+      ],
+      "private.bpay_next_source_binding_components_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/40_actual_publication_and_source_binding.sqlinc"
+      ],
+      "private.bpay_next_source_component_bind_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/40_actual_publication_and_source_binding.sqlinc"
+      ],
+      "private.bpay_next_source_decision_native_status_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/03_normal_native_source_gate.sqlinc"
+      ],
+      "private.bpay_next_source_pay_decision_acceptance_begin_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/41_atomic_source_acceptance.sqlinc"
+      ],
+      "private.bpay_next_source_pay_decision_cut_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/02_atomic_source_run_birth.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/06_confirmation_run_preparation.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/12_run_free_review_context.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/22_full_native_payload_preparation.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/26_confirmed_quote_operands.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/34_atomic_preview_assembly.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/41_atomic_source_acceptance.sqlinc"
+      ],
+      "private.bpay_next_source_pay_decision_publish_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/41_atomic_source_acceptance.sqlinc"
+      ],
+      "private.bpay_next_source_pay_decision_stage_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/41_atomic_source_acceptance.sqlinc"
+      ],
+      "private.bpay_next_source_query_refresh_v1": [
+        "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/38_native_submission_readers.sqlinc",
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/21_native_local_complete_implementation.sqlinc"
+      ],
+      "private.bpay_next_stage_protected_source_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc"
+      ],
+      "private.bpay_next_workbench_refresh_work_v1": [
+        "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc"
+      ]
+    },
+    "externalDependenciesVerbatim": [
+      {
+        "owner": "Banking",
+        "abi": "private.bpay_next_source_pay_decision_cut_v1(uuid,uuid,uuid,boolean)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      },
+      {
+        "owner": "Banking",
+        "abi": "private.bpay_next_source_pay_decision_acceptance_begin_v1(uuid,uuid,uuid,bytea)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      },
+      {
+        "owner": "Banking",
+        "abi": "private.bpay_next_source_pay_decision_stage_v1(uuid,uuid,bytea,uuid)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      },
+      {
+        "owner": "Banking",
+        "abi": "private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      },
+      {
+        "owner": "Banking B051",
+        "abi": "Final public Source READ_RESULT wrapper/current financial child schema",
+        "state": "NO_PUBLISHED_EXACT_PRODUCER_SHAPE"
+      },
+      {
+        "owner": "Banking native Source component binding",
+        "abi": "private.bpay_next_source_binding_components_v1(uuid)+private.bpay_next_source_component_bind_v1(uuid,uuid)",
+        "state": "REQUIRE_GENUINE_SOURCE_PROOF_ARM_PUBLICATION_RECEIPT"
+      },
+      {
+        "owner": "Banking existing protected producer",
+        "abi": "private.bpay_next_stage_protected_source_v1(uuid,uuid,uuid,jsonb)",
+        "source": "supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql",
+        "case": "Accepted A-to-B move: producer still validates original family/root Contract A; caller current-B qualification alone cannot satisfy that invariant.",
+        "state": "MOVED_B_NEXT_REQUIRES_EXISTING_PRODUCER_QUALIFICATION_RECEIPT_NO_BANK_BODY_EDIT"
+      },
+      {
+        "owner": "Invoice",
+        "abi": "private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      },
+      {
+        "owner": "Invoice",
+        "abi": "private.invoice_contract_move_source_certificate_v1(uuid,boolean)",
+        "source_commit": "330a4770a208f0c6a927fd3a7ebee366dbc96340",
+        "state": "SOURCE_PUBLISHED_NATIVE_REQUIRED_NOT_RUN"
+      },
+      {
+        "owner": "Physical",
+        "abi": "private.timesheet_contract_current_placement_v1(uuid)",
+        "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+      }
+    ],
+    "bankingQualification": "No Bank source/checklist inspected, no new producer receipt inferred. Exact required relations/keys/functions/current-B semantics remain prerequisite-qualified; F17 only NEXT runtime/activation, not independent Source/Contact source/schema work.",
+    "readResult": "SOURCE_PAY_DECISION_READ_PROJECTION_DEPENDENCY_REQUIRED remains exact and truthful until genuine B051 child/public financial-result consumer is complete"
+  },
+  "bankingExclusions": [
+    {
+      "function": "private.bpay_next_protected_owner_route_v1(uuid)",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/18_current_native_owner_route.sqlinc",
+      "commit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "excluded_byte_start": 0,
+      "excluded_suffix_sha256": "ae5cbe2f8660103e6bce24eb61c4b604d05c36dddaa267e5686a2c723c9a939e",
+      "excluded_complete_function_sha256": "6206497211b5bd7f39b6b509ccb9d270d72008fcabe029e416ee0b91ad330f81",
+      "reason": "Banking-owned owner-route full body and owner/ACL are outside Health scope",
+      "required_contribution": "Genuine Bank-owned route discriminator delegates to exact Health weekly_source_pay_decision_family_native_route_v1(uuid,uuid) for Source-composed current generations while preserving its complete ordinary native authority",
+      "native_effects": "NOT_RUN"
+    },
+    {
+      "function": "private.bpay_next_source_receipt_publish_v1()",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/19_exact_local_head_capture.sqlinc",
+      "commit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "excluded_byte_start": 14177,
+      "excluded_suffix_sha256": "80dd972bb3a4a7c426c64a2b7d872fd69d65a54442ffd48dc2ec877f256c08fa",
+      "reason": "Banking-owned full body, owner/ACL and trigger replacement are outside Health scope",
+      "required_contribution": "Genuine Bank-owned receipt hook invokes the exact Health whole-scope helper before its first stage/publish/bind and preserves ordinary native body and trigger semantics",
+      "native_effects": "NOT_RUN"
+    }
+  ],
+  "native": "NOT_RUN",
+  "noRootOrBankEdits": true
+}

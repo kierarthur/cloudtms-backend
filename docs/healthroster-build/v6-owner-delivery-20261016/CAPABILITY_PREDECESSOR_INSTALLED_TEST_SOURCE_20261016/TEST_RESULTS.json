@@ -1,0 +1,82 @@
+{
+  "version": "HEALTHROSTER_CAPABILITY0400_INSTALLED_TEST_SUCCESSOR_RESULTS_V1",
+  "status": "PASS_SOURCE_ONLY_INSTALLED_DEFAULT_PATH",
+  "installedDefaultSourceRootUsed": true,
+  "proposalEnvironmentOverrideAbsent": true,
+  "tests": 21,
+  "passed": 21,
+  "failed": 0,
+  "frozenBaseline": {
+    "commit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+    "completeFiles": 59,
+    "relativeImportRewrites": 0,
+    "currentBackendModulesBorrowed": 0,
+    "barePackageRewrites": [
+      {
+        "file": "scripts/healthroster-f5-synthetic-fixture.mjs",
+        "kind": "BARE_PACKAGE_SPECIFIER_ONLY",
+        "package": "xlsx",
+        "version": "0.20.3",
+        "entrySha256": "1a0fb062ee9781b13f6687371b202aaefc53b6ce55b530c027e01f9c087b77db",
+        "lockSha256": "70a6d57701a89269103a3b17665444572b90cd82668fe37bd7587bfb1a63ff73",
+        "from": "\nimport * as XLSX from 'xlsx'",
+        "to": "\nimport * as XLSX from 'file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026/node_modules/xlsx/xlsx.mjs'"
+      },
+      {
+        "file": "broker/src/weekly-source/shared.js",
+        "kind": "BARE_PACKAGE_SPECIFIER_ONLY",
+        "package": "xlsx",
+        "version": "0.20.3",
+        "entrySha256": "1a0fb062ee9781b13f6687371b202aaefc53b6ce55b530c027e01f9c087b77db",
+        "lockSha256": "70a6d57701a89269103a3b17665444572b90cd82668fe37bd7587bfb1a63ff73",
+        "from": "import * as XLSX from 'xlsx'",
+        "to": "import * as XLSX from 'file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026/node_modules/xlsx/xlsx.mjs'"
+      },
+      {
+        "file": "broker/src/weekly-source/source-finalised-time.js",
+        "kind": "BARE_PACKAGE_SPECIFIER_ONLY",
+        "package": "xlsx",
+        "version": "0.20.3",
+        "entrySha256": "1a0fb062ee9781b13f6687371b202aaefc53b6ce55b530c027e01f9c087b77db",
+        "lockSha256": "70a6d57701a89269103a3b17665444572b90cd82668fe37bd7587bfb1a63ff73",
+        "from": "import * as XLSX from 'xlsx'",
+        "to": "import * as XLSX from 'file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026/node_modules/xlsx/xlsx.mjs'"
+      },
+      {
+        "file": "broker/src/weekly-source/xlsx-evidence.js",
+        "kind": "BARE_PACKAGE_SPECIFIER_ONLY",
+        "package": "xlsx",
+        "version": "0.20.3",
+        "entrySha256": "1a0fb062ee9781b13f6687371b202aaefc53b6ce55b530c027e01f9c087b77db",
+        "lockSha256": "70a6d57701a89269103a3b17665444572b90cd82668fe37bd7587bfb1a63ff73",
+        "from": "import * as XLSX from 'xlsx'",
+        "to": "import * as XLSX from 'file:///C:/Users/KierArthur/OneDrive%20-%20Arthur%20Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026/node_modules/xlsx/xlsx.mjs'"
+      }
+    ],
+    "graphSha256": "d00cb2a9b59d07c83970ca898f70c53f50ad47751eb826ea5671c27b796497fa",
+    "executedGraphSha256": "71cd6b167e271783c901934a61c1a3ba443b8d58c0f122424e38f9cd65132a4d",
+    "allReverseEquality": true,
+    "criticalFiles": [
+      {
+        "file": "scripts/cloudtms-managed-release.mjs",
+        "sha256": "1dccee6a3b635f36946e27550db722f4ee5d3f62cf13f0e1cc213245cf7de0c8"
+      },
+      {
+        "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+        "sha256": "ff6e2ce20804ecfd859543d6e76dc3b9da19b033eafc6c3b86c05640c4d4a27e"
+      },
+      {
+        "file": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json",
+        "sha256": "59c6695da15d52bd5f512fa2cf259337caeb4a9794649e6462a7849d15680e32"
+      },
+      {
+        "file": "scripts/healthroster-reviewed-managed-envelope.mjs",
+        "sha256": "932e3769fbad6c361c82e533663c76ce9e782ba300dbee43bb4d8eed55a61277"
+      }
+    ]
+  },
+  "targetTestSha256": "5def4dd476a24755a03650c0182775f6968bb54e579eb6faebf626f7993e853a",
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "native": "NOT_RUN"
+}

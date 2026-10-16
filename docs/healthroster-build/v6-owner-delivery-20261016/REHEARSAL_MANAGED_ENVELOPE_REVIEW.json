@@ -208,7 +208,7 @@
       },
       "existingNativeGate": {
         "owner": "scripts/cloudtms-managed-release.mjs::unitCheckpointSql",
-        "ownerSourceHash": "1dccee6a3b635f36946e27550db722f4ee5d3f62cf13f0e1cc213245cf7de0c8",
+        "ownerSourceHash": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
         "literal": "\n\\if :{?invoice_presentation_active_work}\n  select pg_catalog.set_config('cloudtms.managed.invoice_active_work', :'invoice_presentation_active_work', false);\n  do $gate$ begin if pg_catalog.current_setting('cloudtms.managed.invoice_active_work')::boolean\n    then raise exception 'CLOUDTMS_INVOICE_INSTALL_DEFERRED_ACTIVE_WORK'; end if; end $gate$;\n\\else\n  do $gate$ begin raise exception 'CLOUDTMS_INVOICE_INSTALL_GATE_MISSING'; end $gate$;\n\\endif\n",
         "sha256": "62bb8efc92cd8bbbb9a9a6b080107773bf4277fc3d38640cdd5be8db49f9b793",
         "requiredPreUnitReset": "\\unset invoice_presentation_active_work"

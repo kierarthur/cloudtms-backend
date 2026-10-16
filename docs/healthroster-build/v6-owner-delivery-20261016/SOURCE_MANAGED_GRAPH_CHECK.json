@@ -1,0 +1,14 @@
+{
+  "version": "HEALTH_SOURCE_MANAGED_ROOT_GRAPH_CHECK_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "finalDefiners": {
+    "signatures": 2878,
+    "registered": 1462,
+    "roots": 1082,
+    "pendingRoots": 312
+  },
+  "migrationLocksBefore": 408,
+  "migrationLocksAfter": 414,
+  "allOldEntriesUnchanged": true,
+  "native": "NOT_RUN"
+}

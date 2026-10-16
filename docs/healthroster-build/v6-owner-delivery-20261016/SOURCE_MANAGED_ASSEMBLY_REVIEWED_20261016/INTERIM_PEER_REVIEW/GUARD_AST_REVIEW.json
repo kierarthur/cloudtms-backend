@@ -1,0 +1,187 @@
+{
+  "version": "SOURCE_GUARD_INDEPENDENT_INTERIM_AST_REVIEW_V1",
+  "qualification": "PG17_GRAMMAR_AND_SOURCE_NOT_NATIVE_CATALOGUE_REPLAY_OR_LOCK_PROOF",
+  "proposalCommit": "9ac637ef3bdc50ad1b82b616283cb226a7bbb69b",
+  "parser": {
+    "pglast": "v7.20",
+    "postgresql": [
+      17,
+      7
+    ]
+  },
+  "triggers": [
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decisions",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "642077627e465356fbd26e4de647f27651c9d63d246acf9aa834b6f37859d3e9",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decision_requests",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "bbf3fac4161f18cf0a315e0cbd70aa1cbff2bc375b413081b62553e2f9c489b0",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decision_preview_assemblies",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "d119345f7a0a9e85232461c0c75553e9627bfbeb137d7e793050cdf63fddebd0",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decision_preview_quotes",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "b956a2854ff49d03bc96fcac365db21b7c2416613d0502788d99d54ea9a22ad4",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decision_reviews",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "9d0ab82e30d0cfeefc90b602af254793340f5927dadebb37c9d6e50ac7d7819b",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decision_members",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "e3890ccbcd4986b370356780db023f998ddb1225c74947282a988237fa51c23c",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decision_bindings",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "1b23cc7fd17a77ae7010505bd8fb6153cc76ac06e49cfa0a13fd1610e528914a",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decision_unprotect_preparations",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "60edd7cc4f0dc47963f15d50175936c06d9b65297a7062698689c0781ac3940f",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decision_acceptance_applications",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "713f83f4a5ae589e2d3584f98e8eef421c8ad881b5defa7873e6a1e81bff4772",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decision_native_adoptions",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "b31b7a60d5c9785f337399b7ff7e52b7dc254776f8345158c5083a1c0345ea1a",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_metadata_immutable",
+      "relation": "private.weekly_source_pay_decision_publication_adoptions",
+      "function": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "99883fd49e849371ce0fc8694763d346c28737a46a6133561d127ce1da82246c",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_application_must_commit",
+      "relation": "private.weekly_source_pay_decision_acceptance_applications",
+      "function": "private.weekly_source_pay_decision_application_commit_guard_v1()",
+      "mask": 21,
+      "deferred": true,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "38bae185dc4a9508a9a130114f478924fc9584e5c84af9618f8ad77e689ad6bd",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_assembly_must_have_one_cut",
+      "relation": "private.weekly_source_pay_decision_preview_assemblies",
+      "function": "private.weekly_source_pay_decision_assembly_commit_guard_v1()",
+      "mask": 21,
+      "deferred": true,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "c379cd76851d07249eea8a9a1887a08f8776c11f65170ad156d808611ea81242",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_publication_adoption_exact",
+      "relation": "private.weekly_source_pay_decision_publication_adoptions",
+      "function": "private.weekly_source_pay_decision_publication_adoption_guard_v1()",
+      "mask": 7,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "f9026f3aef35a83884c0a5ac666e41fa4cfa4bd5b78bfd5b94ea69a386176d7b",
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "source_pay_decision_incident_guard",
+      "relation": "public.weekly_discrepancy_incidents",
+      "function": "private.weekly_source_pay_decision_incident_guard_v1()",
+      "mask": 31,
+      "deferred": false,
+      "originalCreateAstEqualsGenerated": true,
+      "guardPredicatesConjunctive": true,
+      "wholeOriginalCreateSha256": "96de75b59a43e089b3b4234d20efa470a51eb7245c3814211c8acfa64a36bb00",
+      "native": "NOT_RUN"
+    }
+  ],
+  "incidentGuardSourcePredicatesChecked": true,
+  "noDropReplaceEnable": true,
+  "native": "NOT_RUN",
+  "postgresSourceReferences": [
+    "https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/commands/trigger.c#L754-L929",
+    "https://www.postgresql.org/docs/17/catalog-pg-trigger.html",
+    "https://www.postgresql.org/docs/17/catalog-pg-constraint.html"
+  ]
+}
