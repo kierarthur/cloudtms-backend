@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "projectionBase": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+  "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "input": {
+    "path": "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
+    "sha256": "4d9ea15952fab2e3b653b8ea1a2fa0bfafad13c910fedf19710c2885ca716db5"
+  },
+  "actualCalculator": {
+    "path": "broker/src/index.js",
+    "symbol": "buildCandidateWeeklySubmissionThroughCanonicalAuthority",
+    "line": 28421,
+    "callee": "buildWeeklyScheduleSegmentsSnapshot(write_now:false)",
+    "currentLimit": "Inputs currently workflow.ContractA/CW/targetA; use genuine accepted B context for a NEW native submission only, never rewrite existing immutable A body."
+  },
+  "actualFinalizer": {
+    "path": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+    "caller": "candidate_submission_finalize_single_flight_v1",
+    "currentLimit": "Consumes frozen A canonical_tsfin_snapshot; current B actual calculation/approval/read-only-unchanged-finance vs genuine new approval must be bound to the real current producer, not guessed."
+  },
+  "independentCompletedSource": [
+    "Existing authenticated break-entry context returns current B settings and same original workflow/generation. Existing opaque token binds actual placement,current TS/CW/finance rows and current policy.",
+    "New native HOURS/COMBINED submit acquires actual family gate before workflow lock, rechecks current context/token/native B calculation/policy, retains original WF identity and original presentation.",
+    "Immutable native receipt replay retains exact original request hash/generation/key/actor/channel and precedes current generation/fresh calculation.",
+    "Current immutable accepted body SHA/native full render receipt or genuine same-command private audit witness checked independently of worked-facts hashing.",
+    "Native worked-facts hash excludes canonical economics/server envelopes and empty/equal duplicate workflow metadata, while every live physical worked/header/reference field remains in the domain.",
+    "Fresh native signature required after changed worked/body facts; repeated Move uses genuine original frozen workflow fallback; cache invalidation uses strict H103 without premature accepted-body proof."
+  ],
+  "remaining": [
+    "Weekly finalizer must preserve original workflow identity and use genuine current B valuation/approval/write target via the actual current native producer; existing frozen-A canonical payload cannot be retargeted.",
+    "Moved expense-only new submit is explicitly refused pending its distinct current approved-hours/claim-owner integration; no claim receipt or financial owner is fabricated.",
+    "Native withdrawal/reset currently retires Timesheet and clears ContractWeek pointer; accepted Move requires a real current placement. Exact native rotation/placement successor integration remains Health-owned and unqualified.",
+    "Original paper PREPARING task producer continuation remains unqualified; original READY asset reader was delivered in projection96c5."
+  ],
+  "externalBankDependency": "Actual current B staged financial revision, approval/provenance and NOT_APPROVED branch ABI not supplied. No new Banking publisher/valuer or guessed return.",
+  "sourceInputs": "MOUNT_RECIPE.json"
+}

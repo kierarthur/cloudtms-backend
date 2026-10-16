@@ -1,0 +1,51 @@
+create or replace function public.candidate_break_entry_context_get_v1(
+  p_session_id uuid,
+  p_environment text,
+  p_workflow_id uuid,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+declare
+  v_session jsonb;
+  v_candidate_id uuid;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_capabilities jsonb;
+  v_move jsonb;
+  v_current_timesheet_id uuid;
+  v_current_week_id uuid;
+begin
+  v_session:=private._candidate_session_context_v1(
+    p_session_id,p_environment,null,p_now_utc,false
+  );
+  v_candidate_id:=nullif(v_session->>'selected_candidate_id','')::uuid;
+  select * into v_workflow from public.candidate_submission_workflows
+  where id=p_workflow_id and candidate_id=v_candidate_id;
+  if not found then raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002'; end if;
+  if v_workflow.workflow_kind='DAILY' then
+    v_capabilities:=private._candidate_daily_read_projection_v1(
+      p_environment,v_candidate_id,v_workflow.target_timesheet_id,p_now_utc);
+    return (v_capabilities->'break_entry')||jsonb_build_object(
+      'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation);
+  end if;
+  -- Existing authenticated action-context read; immutable workflow/generation
+  -- remain original, current break/settings permission uses the accepted B member.
+  v_move:=private.candidate_contract_move_context_v1(p_environment,v_candidate_id,null,v_workflow.id);
+  v_current_timesheet_id:=coalesce((v_move#>>'{dto,current_mutable_timesheet_id}')::uuid,v_workflow.target_timesheet_id);
+  v_current_week_id:=coalesce((v_move->>'current_week_id')::uuid,v_workflow.contract_week_id);
+  v_capabilities:=private._candidate_record_capabilities_v1(
+    v_current_timesheet_id,v_current_week_id,'{}'::jsonb
+  );
+  return private._candidate_break_entry_context_core_v1(
+    v_current_timesheet_id,v_current_week_id,
+    (p_now_utc at time zone 'Europe/London')::date,v_capabilities
+  )||jsonb_build_object(
+    'workflow_id',v_workflow.id,
+    'workflow_generation',v_workflow.generation
+  );
+end
+$function$;

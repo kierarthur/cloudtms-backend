@@ -1,0 +1,77 @@
+-- Private read-side proof. No command/replay response or public Move DTO key is
+-- added. Original captured bodies retain their independent physical evidence seal.
+create or replace function private.candidate_contract_move_workflow_facts_v1(p_workflow_id uuid,p_frozen jsonb)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare w public.candidate_submission_workflows%rowtype; s public.candidate_submission_components%rowtype;
+ body_sha text; facts jsonb; accepted boolean:=false; render_core jsonb; render_sha text;
+begin
+ select v.* into strict w from public.candidate_submission_workflows v where v.id=p_workflow_id;
+ if w.immutable_submission_json is not null and w.immutable_submission_sha256 is distinct from
+   private._candidate_sha256_jsonb_v1(w.immutable_submission_json) then
+  raise exception 'CANDIDATE_MOVE_ACCEPTED_BODY_UNBOUND' using errcode='23514';end if;
+ facts:=private.candidate_contract_move_signature_facts_v1(coalesce(nullif(w.input_snapshot_json,'null'::jsonb),
+   nullif(w.immutable_submission_json,'null'::jsonb),'{}'::jsonb));
+ -- Editable native draft input stays live, even if AMEND retained an older signed
+ -- immutable body. This never makes the old body/signature attest the new input.
+ if w.state in('CREATED','WORKER_DRAFT') or w.immutable_submission_json is null then return facts;end if;
+ if w.input_snapshot_json is distinct from w.immutable_submission_json then
+  raise exception 'CANDIDATE_MOVE_ACCEPTED_BODY_UNBOUND' using errcode='23514';end if;
+ body_sha:=encode(w.immutable_submission_sha256,'hex');
+ if p_frozen->>'id'=w.id::text and p_frozen->'immutable_submission_json'=w.immutable_submission_json
+   and p_frozen->>'immutable_submission_sha256'=to_jsonb(w)->>'immutable_submission_sha256' then
+  return facts; -- independently validated original snapshot, no new body claim
+ end if;
+ -- Current native submit owner emits this internal audit witness in the same TX
+ -- as its real immutable receipt. It carries no invented success or provider fact.
+ select exists(select 1 from public.audit_events a join public.audit_events r
+   on r.object_type='candidate_workflow_mutation_receipt' and r.object_id_text=a.object_id_text
+    and r.correlation_id=a.correlation_id and r.before_json->>'workflow_action'='WORKER_SUBMIT'
+    and r.before_json->>'request_sha256'=a.before_json#>>'{contract_move_submission,semantic_request_sha256}'
+  where a.object_type='candidate_submission_workflow' and a.object_id_text=w.id::text
+   and a.action='CANDIDATE_WORKFLOW_WORKER_SUBMIT'
+   and a.before_json#>>'{contract_move_submission,version}'='CANDIDATE_MOVE_ACCEPTED_BODY_V1'
+   and a.before_json#>>'{contract_move_submission,workflow_id}'=w.id::text
+   and a.before_json#>>'{contract_move_submission,immutable_submission_sha256}'=body_sha
+   and a.before_json#>>'{contract_move_submission,input_snapshot_sha256}'=body_sha
+   and a.before_json#>>'{contract_move_submission,factual_submission_sha256}'=
+      encode(private._candidate_sha256_jsonb_v1(facts),'hex')
+   and a.before_json#>>'{contract_move_submission,generation}'=r.after_json->>'generation'
+   and r.after_json->>'workflow_id'=w.id::text
+   and (r.after_json->>'generation')::integer<=w.generation) into accepted;
+ if accepted then return facts;end if;
+ -- Existing electronic submit responses contain the actual render-parent digest.
+ -- Reconstruct precisely _candidate_render_input_v1's complete core, using the
+ -- actual signature component generation (not current generation minus one).
+ select v.* into s from public.candidate_submission_components v
+  where v.id=w.candidate_signature_component_id and v.workflow_id=w.id
+   and v.component_kind='CANDIDATE_SIGNATURE' and v.document_role='CANDIDATE_SIGNATURE'
+   and v.immutable_at_utc is not null and v.source_content_sha256=w.candidate_signature_sha256;
+ if s.id is not null then
+  render_core:=jsonb_build_object('workflow_id',w.id,'workflow_generation',s.workflow_generation,
+   'scope',w.scope,'workflow_kind',w.workflow_kind,'contract_id',w.contract_id,'contract_week_id',w.contract_week_id,
+   'work_date',w.work_date,'week_ending_date',w.week_ending_date,'immutable_submission',w.immutable_submission_json,
+   'immutable_submission_sha256',body_sha,'policy_snapshot_sha256',encode(w.policy_snapshot_sha256,'hex'),
+   'candidate_signature',jsonb_build_object('component_id',s.id,'source_component_id',coalesce(s.source_component_id,s.id),
+    'storage_key',s.storage_key,'sha256',encode(s.source_content_sha256,'hex'),'media_type',s.media_type,
+    'signed_at_utc',w.candidate_signed_at_utc),'renderer_contract_version',w.renderer_contract_version);
+  render_sha:=encode(private._candidate_sha256_jsonb_v1(render_core),'hex');
+  select exists(select 1 from public.audit_events r
+   cross join lateral jsonb_array_elements(r.after_json#>'{render_contract,components}') c
+   where r.object_type='candidate_workflow_mutation_receipt' and r.object_id_text=w.id::text
+    and r.before_json->>'workflow_action'='WORKER_SUBMIT'
+    and r.before_json->>'request_sha256' ~ '^[0-9a-f]{64}$'
+    and r.after_json->>'workflow_id'=w.id::text and r.after_json->>'generation'=s.workflow_generation::text
+    and r.after_json#>>'{render_contract,workflow_id}'=w.id::text
+    and r.after_json#>>'{render_contract,workflow_generation}'=s.workflow_generation::text
+    and c#>>'{render_input,workflow_render_input_sha256}'=render_sha
+    and exists(select 1 from public.candidate_submission_components actual
+      where actual.id=(c->>'component_id')::uuid and actual.workflow_id=w.id
+       and actual.workflow_generation=s.workflow_generation)) into accepted;
+ end if;
+ if not accepted then raise exception 'CANDIDATE_MOVE_ACCEPTED_BODY_UNBOUND' using errcode='23514';end if;
+ return facts;
+end;
+$function$;
+alter function private.candidate_contract_move_workflow_facts_v1(uuid,jsonb) owner to postgres;
+revoke all on function private.candidate_contract_move_workflow_facts_v1(uuid,jsonb) from public,anon,authenticated,service_role;

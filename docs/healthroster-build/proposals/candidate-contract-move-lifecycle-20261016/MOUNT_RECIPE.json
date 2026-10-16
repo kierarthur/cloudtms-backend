@@ -1,0 +1,326 @@
+{
+  "version": 1,
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "projectionBase": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+  "pureSubsetSource": "118a28ca5c702f629f977d2ac0dead4325c5fdb2",
+  "sourceInputs": {
+    "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+    "observedHead": "14b1c85686e0b03d9d1a62b9e40cbdff1c01c83a",
+    "files": [
+      {
+        "path": "broker/src/candidate-app-backend.js",
+        "sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd"
+      },
+      {
+        "path": "broker/src/index.js",
+        "sha256": "f5bff8ca19712b957eea1e51a1732d54b4f8584d79fe4f57a3a018b782b1b21f"
+      },
+      {
+        "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+        "sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c"
+      },
+      {
+        "path": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+        "sha256": "42a3b830a53ea3ffad232dbe414d06d38771e4d6c4736a16518053a14df811ed"
+      },
+      {
+        "path": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+        "sha256": "9f47ab97b5e520074576c77bcfeee8867211663a4d7be0c8667aff9f7c73845a"
+      },
+      {
+        "path": "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
+        "sha256": "4d9ea15952fab2e3b653b8ea1a2fa0bfafad13c910fedf19710c2885ca716db5"
+      },
+      {
+        "path": "supabase/repeatable/28092026_1110_candidate_source_self_entry_break_context_v1.sql",
+        "sha256": "a30b469a8fa271ab37a40d93fc1725c83e9b0708653cbc174a6263e4345cc6d9"
+      },
+      {
+        "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+        "sha256": "f8f415a641f7ecdece1068d672f407370962e9aaeecc4f790ce832f791ce6908"
+      },
+      {
+        "path": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+        "sha256": "535d02bd281c0c79ced43576ff66d8a14a4d07338ddf0384e4a22da641b68174"
+      },
+      {
+        "path": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+        "sha256": "5845f7ee77cb9164da6150bddbdbb90bd4e1c062fc556fa2e2207c78cc5e66fe"
+      },
+      {
+        "path": "supabase/release/current-contract.json",
+        "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+      }
+    ]
+  },
+  "mount": {
+    "suggestedFinalOwner": "supabase/repeatable/16102026_0510_candidate_contract_move_current_submission_v1.sql",
+    "after": "The exact reviewed 96c5 13-leaf projection and current native owners/physical/Invoice dependency closure; before final private/central ACL catalogue verification. No older whole parent transplant.",
+    "orderedSqlPayloads": [
+      "forward/02a_signature_facts.sqlinc",
+      "forward/02b_worked_facts.sqlinc",
+      "forward/04_accepted_body_witness.sqlinc",
+      "forward/05_worked_fact_projection.sqlinc",
+      "forward/00a_break_token_row_binding.sqlinc",
+      "forward/00_break_entry_current_placement.sqlinc",
+      "forward/03_worker_submit_current_placement.sqlinc",
+      "forward/06_summary_identity_invalidation.sqlinc",
+      "forward/07_acl.sqlinc"
+    ],
+    "broker": {
+      "module": "broker/src/candidate-app-backend.js",
+      "completeFunction": "prepareImmutableSubmission",
+      "singleCaller": "BROKER_CALLER.json",
+      "requiredExistingImport": "decodeCandidateContractMove from the exact projection96c5 shared module172e; no competing decoder"
+    },
+    "index": {
+      "module": "broker/src/index.js",
+      "completeFunction": "buildCandidateWeeklySubmissionThroughCanonicalAuthority"
+    },
+    "nativeNumericDependency": "Existing complete private._candidate_expense_number_v1(jsonb,text), exact root0609 source pin; forward/02_native_expense_number.sqlinc is the pure-test dependency, not a permanent final-owner takeover."
+  },
+  "publicProtocolChange": false,
+  "publicMoveKeys": 17,
+  "requestOperationsAdded": 0,
+  "schemaChanges": false,
+  "scope": [
+    "Existing authenticated break-entry context returns current B settings and same original workflow/generation. Existing opaque token binds actual placement,current TS/CW/finance rows and current policy.",
+    "New native HOURS/COMBINED submit acquires actual family gate before workflow lock, rechecks current context/token/native B calculation/policy, retains original WF identity and original presentation.",
+    "Immutable native receipt replay retains exact original request hash/generation/key/actor/channel and precedes current generation/fresh calculation.",
+    "Current immutable accepted body SHA/native full render receipt or genuine same-command private audit witness checked independently of worked-facts hashing.",
+    "Native worked-facts hash excludes canonical economics/server envelopes and empty/equal duplicate workflow metadata, while every live physical worked/header/reference field remains in the domain.",
+    "Fresh native signature required after changed worked/body facts; repeated Move uses genuine original frozen workflow fallback; cache invalidation uses strict H103 without premature accepted-body proof."
+  ],
+  "ownedRemaining": [
+    "Weekly finalizer must preserve original workflow identity and use genuine current B valuation/approval/write target via the actual current native producer; existing frozen-A canonical payload cannot be retargeted.",
+    "Moved expense-only new submit is explicitly refused pending its distinct current approved-hours/claim-owner integration; no claim receipt or financial owner is fabricated.",
+    "Native withdrawal/reset currently retires Timesheet and clears ContractWeek pointer; accepted Move requires a real current placement. Exact native rotation/placement successor integration remains Health-owned and unqualified.",
+    "Original paper PREPARING task producer continuation remains unqualified; original READY asset reader was delivered in projection96c5.",
+    "Native command-set family/session/workflow/claim lock order must be checked against genuine other native writers, including current native claim callbacks; source-only new submit ordering is not a native concurrency proof."
+  ],
+  "externalDependencies": [
+    "Bank actual current-B staged financial revision, native approved/not-approved calculation/registration receipt and finalizer publication ABI not supplied. No Banking cut/stage/publisher/dialog body authored."
+  ],
+  "verification": {
+    "nodeTests": 15,
+    "offlineGrammar": "All finite complete SQL payloads and pure vectors; actual current-contract declared %ROWTYPE field checks",
+    "databaseCalls": 0,
+    "native": "NOT_RUN",
+    "api": "NOT_RUN",
+    "concurrency": "NOT_RUN",
+    "acl": "SOURCE_ONLY_NATIVE_NOT_RUN"
+  },
+  "schema7d": {
+    "path": "../checklist-v6-contract-correction-20261016/forward/sql/physical-schema.sqlinc",
+    "sha256": "5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115"
+  },
+  "functions": [
+    {
+      "signature": "private.candidate_contract_move_signature_facts_v1(jsonb)",
+      "path": "forward/02a_signature_facts.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.candidate_contract_move_facts_v1(jsonb,jsonb)",
+      "path": "forward/02b_worked_facts.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.candidate_contract_move_workflow_facts_v1(uuid,jsonb)",
+      "path": "forward/04_accepted_body_witness.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.candidate_contract_move_context_v1(text,uuid,uuid,uuid)",
+      "path": "forward/05_worked_fact_projection.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private._candidate_break_entry_context_core_v1(uuid,uuid,date,jsonb)",
+      "path": "forward/00a_break_token_row_binding.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "public.candidate_break_entry_context_get_v1(uuid,text,uuid,timestamptz)",
+      "path": "forward/00_break_entry_current_placement.sqlinc",
+      "exposure": "service_role"
+    },
+    {
+      "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)",
+      "path": "forward/03_worker_submit_current_placement.sqlinc",
+      "exposure": "service_role"
+    },
+    {
+      "signature": "private._candidate_timesheet_summary_revision_touch_workflow_v1(uuid)",
+      "path": "forward/06_summary_identity_invalidation.sqlinc",
+      "exposure": "owner_only"
+    }
+  ],
+  "payloads": [
+    {
+      "path": "BROKER_CALLER.json",
+      "sha256": "8a72374fd2ae7eabdca8104f1406944f138de275bf967e81325c615cd216f672",
+      "bytes": 536
+    },
+    {
+      "path": "build.mjs",
+      "sha256": "7857a2fd7fee36dd6815187f47ccd587693a93898cfa4a27e430adfacb85604d",
+      "bytes": 20760
+    },
+    {
+      "path": "forward/00_break_entry_current_placement.sqlinc",
+      "sha256": "c0d9b1933b37ab1453701416fc632f85b86624f8e2f60eda975b114574d40d4b",
+      "bytes": 2175
+    },
+    {
+      "path": "forward/00a_break_token_row_binding.sqlinc",
+      "sha256": "b8017cb253a0fb258f7d859c2b1caa67ca7c0a248acc7a1089562a7a8209d14d",
+      "bytes": 6269
+    },
+    {
+      "path": "forward/01_acl.sqlinc",
+      "sha256": "c859c45d28482b921935f8c465626ccdfdb0bfe0f6619d23eddd4ac2dcbd52cf",
+      "bytes": 361
+    },
+    {
+      "path": "forward/02_native_expense_number.sqlinc",
+      "sha256": "988a604cd3b618a6963a3aad29c7a3c7d9131560bf226e4f5efbefd3fb3f145d",
+      "bytes": 752
+    },
+    {
+      "path": "forward/02_weekly_current_calculation.mjsinc",
+      "sha256": "74f0514364465e36134df50dbd40f2d511a2b06c9f826ae8321ca0cd8dda67b5",
+      "bytes": 11984
+    },
+    {
+      "path": "forward/02a_signature_facts.sqlinc",
+      "sha256": "9c92b44753fde319dfcc9759a91d8171c645a0f0d476581274c0e28ec5a83b54",
+      "bytes": 6089
+    },
+    {
+      "path": "forward/02b_worked_facts.sqlinc",
+      "sha256": "ac2e65b546ef6c3b33c85eebafe67cea626fbc607597737e502d18b0a92dba15",
+      "bytes": 1884
+    },
+    {
+      "path": "forward/03_worker_submit_current_placement.sqlinc",
+      "sha256": "6d9631548eb5f588c21c3baa011e63f150d4ac6a289908db0e6c91bd0f6d2c12",
+      "bytes": 253398
+    },
+    {
+      "path": "forward/04_accepted_body_witness.sqlinc",
+      "sha256": "b6f6cd8dfbc422c63e73fa717433c37783a879b5d84e427a96b90f75243c0ab1",
+      "bytes": 6054
+    },
+    {
+      "path": "forward/05_worked_fact_projection.sqlinc",
+      "sha256": "8771c474ae4adf1c2b79ef1bab9aa13f1c7240a756622ad3805135236470ff46",
+      "bytes": 9598
+    },
+    {
+      "path": "forward/06_summary_identity_invalidation.sqlinc",
+      "sha256": "ed133bdda529f1d61ba5ad9248d434e1580804a452f3c32ebf7b69bd9b65b8ae",
+      "bytes": 2850
+    },
+    {
+      "path": "forward/07_acl.sqlinc",
+      "sha256": "99839073f24f6469d5477f8344413863e66adeddbc1f73a3e3f9a82062b4f49e",
+      "bytes": 2233
+    },
+    {
+      "path": "NATIVE_ACCEPTANCE.md",
+      "sha256": "20311d6ee474c89d80462cb5ffac3cf94191e180f0c8a2a2ad750a25b163465e",
+      "bytes": 3620
+    },
+    {
+      "path": "prepared/pure-facts.sql",
+      "sha256": "5ec89d610278889c5852fb93c3bcc7796b23000d9804a77bb83f44f249cb027b",
+      "bytes": 17012
+    },
+    {
+      "path": "PURE_FACTS.md",
+      "sha256": "522c4fe8455786ee238848e22d2480386890905a881104816ee6d8f3ae258762",
+      "bytes": 2933
+    },
+    {
+      "path": "PURE_FACTS_RECIPE.json",
+      "sha256": "a3770e2a490c83a8897fe029245ed78370df249c897baf937b63aaa6d9dcdcbd",
+      "bytes": 2584
+    },
+    {
+      "path": "README.md",
+      "sha256": "9c92e7c7c43ff7213bbff341b2b07ba1c06211ada7d4779210df0d46b584a211",
+      "bytes": 4102
+    },
+    {
+      "path": "seal-lifecycle.py",
+      "sha256": "32144a3ad86c2311885e6475424d5e92932dedc444ee3031d791eeb88c4b5a77",
+      "bytes": 2066
+    },
+    {
+      "path": "seal-pure-facts.py",
+      "sha256": "8e80402d03627d208f525c3dddce8cdc8f3ad66e217e58f08bbb61cf5d768a57",
+      "bytes": 1500
+    },
+    {
+      "path": "SOURCE_TRACE.json",
+      "sha256": "07edefa7d21a394fd772bb4b677f0639d99a351900df9cd56dce4985311d7613",
+      "bytes": 3453
+    },
+    {
+      "path": "tests/current-submit.test.mjs",
+      "sha256": "806dfec2ff46ccc4aad9e60e9bd4313c1d1935a4cfc1a14d953763b2377eb3f9",
+      "bytes": 8569
+    },
+    {
+      "path": "tests/lifecycle-provenance.test.mjs",
+      "sha256": "4acef173a366c649cac4e36bd478cdd28ee6488e80630371a1122dc4ee7cc506",
+      "bytes": 4005
+    },
+    {
+      "path": "tests/pure-facts-baseline-and-fresh.sql",
+      "sha256": "60a6ef0441289f8e4d68f97c176bf576598e68544b1e0d0d8131f44449f34c60",
+      "bytes": 620
+    },
+    {
+      "path": "tests/pure-facts-native.sql",
+      "sha256": "b7fa7b3440b7743a3b8d04fa1d53d5843f6829e1a3c84b36e4a9a204837576a0",
+      "bytes": 8205
+    },
+    {
+      "path": "tests/pure-facts-provenance.test.mjs",
+      "sha256": "4b3fb60ee41f69b9ad7ecb8c393ad8030f0176ae3baf47fa56d3f5c4c6d03cbb",
+      "bytes": 1888
+    }
+  ],
+  "pureNativeProof": {
+    "rootCommit": "14b1c856",
+    "status": "PASS_PURE_JSON_SCALAR_ONLY",
+    "sourceCommit": "118a28ca5c702f629f977d2ac0dead4325c5fdb2",
+    "assertions": 25,
+    "sourceSqlSha256": "5ec89d610278889c5852fb93c3bcc7796b23000d9804a77bb83f44f249cb027b",
+    "evidenceFolder": "docs/healthroster-build/v6-owner-delivery-20261016/native-pure-facts-118a28ca",
+    "files": [
+      {
+        "path": "BASELINE_AND_FRESH.sql",
+        "sha256": "60a6ef0441289f8e4d68f97c176bf576598e68544b1e0d0d8131f44449f34c60"
+      },
+      {
+        "path": "MAPPED_TRIAL.sql",
+        "sha256": "d557fa993c842626935490fe7ea4f37e82bb4c9f416d31a9e4bae7aa83709d0d"
+      },
+      {
+        "path": "NATIVE_RECEIPT.json",
+        "sha256": "466db5b7bf6985af412c470a4e69b4d368ad488bee686728b3d441815406dea4"
+      },
+      {
+        "path": "SOURCE_RECIPE.json",
+        "sha256": "a3770e2a490c83a8897fe029245ed78370df249c897baf937b63aaa6d9dcdcbd"
+      },
+      {
+        "path": "SUBMITTED_TRIAL.sql",
+        "sha256": "61c1d4f8b906e4a641a3d49939ef65ea7d6ca7f4510f2eceb7e3bacd75bf9632"
+      }
+    ]
+  }
+}
