@@ -1,0 +1,9 @@
+# Daily common ingress gate successor
+
+Apply after source 150ac08f4a9ae4196a6f6319f1478a693f70fd39: replace ONLY its complete forward/001_family_entry.sqlinc with this definition. All 12 outer native owner prefixes remain byte-identical. Same two private ABI signatures and ACL. Physical must compose its complete eight-argument workflow owner using this successor.
+
+Actual current contract candidate_submission_workflows constraints admit DAILY with scope DAILY; actual final 24092026_2247 candidate_expense_component_action_atomic_v1 reads the same expense component and explicitly branches on native owner.sheet_scope=DAILY. Therefore excluding DAILY at the common Candidate gate was unsafe. This successor locks actual Daily Candidate and existing worker-control before any native expense row mutex/lock, consistent with actual Physical04b Daily correction. It does not lock/remap a Daily as a Contract family; native original owner retains same physical TS/TF identity and validation.
+
+Contract family discovery unions actual retained workflow.anchor_timesheet_id, target_timesheet_id, actual Contract-week Timesheet when non-NULL, and actual component.owning_timesheet_id. A NULL Contract-week does not discard real retained anchors/components. If ALL those native rows are NULL there is no actual alias from which to discover a family: Candidate/control mutex is still taken, no family/target invented, original immutable replay/not-found/pending native owner remains responsible. A future certified pending placement binding must be integrated explicitly after its native ABI is sealed.
+
+Source and offline grammar only. Native/API and actual two-session Move/Daily versus expense contention remain NOT_RUN. Static ordering is not concurrency proof. No DB/infra/sender/deploy or ordinary business writes performed.

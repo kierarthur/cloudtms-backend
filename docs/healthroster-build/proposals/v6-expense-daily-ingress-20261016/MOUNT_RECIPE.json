@@ -1,0 +1,16 @@
+{
+  "schema_version": "HEALTH_EXPENSE_DAILY_INGRESS_SOURCE_V1",
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "predecessor": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+  "replacement": "forward/001_family_entry.sqlinc",
+  "same_private_signatures": true,
+  "all_12_outer_prefixes_unchanged": true,
+  "native_concurrency": "NOT_RUN",
+  "files": {
+    "forward/001_family_entry.sqlinc": "fd49adbd4620aee76d0ec0782658c7cca7046d80f0e2518e8689cefaf1d82034",
+    "INTEGRATION.md": "57fabba0a390fc2dafb47a1fbe9f359a62b136bc868b156ee63ac22437d5093b",
+    "parse-source.py": "a1a18ad032dfd3d424baf4baa330283fec30e55ab8803d7e65f8d3d5ada12ebd",
+    "source.test.mjs": "f011347e15161ea8a05b23985feb245ce887d993114534a94620051764a60c26",
+    "SOURCE_PARSE_RESULT.json": "e6532098e425419977809a6cb0c5b756db5e5856dc74412cf9f913be08a53035"
+  }
+}
