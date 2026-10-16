@@ -6496,5 +6496,17 @@
     "bankingInterface": "DEPENDENCY_HELD",
     "currentClosureSha256": "9b7df19ef7df0dfa4d50adb2b223ba171c02bfecb7d87f4b838d881af78512de",
     "operandGroupingRecord": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_JSON_OPERAND_GROUPING.json"
+  },
+  "invoice_native_sql_source_continuation_20261016": {
+    "status": "SOURCE_INTEGRATED_NOT_RELEASE_READY",
+    "producerCommit": "1808fbad03a93abe0ac414938c6e8785e673bae3",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_NATIVE_SQL_SOURCE_INTEGRATION.json",
+    "root": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+    "closureSha256": "86fc6d638961b9ca966a73c3faa8b115f5d0872fb32134491f478a1eaaf8b969",
+    "completeFunctions": 94,
+    "sourceOnly": true,
+    "native": "NOT_RUN",
+    "sourceDutySuccessor": "PENDING_MOUNT",
+    "finalCandidate": "PENDING_MOUNT"
   }
 }

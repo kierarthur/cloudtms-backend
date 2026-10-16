@@ -1,0 +1,2437 @@
+{
+  "version": "HEALTH_INVOICE_FINITE_SOURCE_ASSEMBLY_V1",
+  "qualification": "SOURCE_ONLY_NOT_NATIVE_ACCEPTANCE",
+  "selection": {
+    "path": "docs/healthroster-build/proposals/v6-invoice-final-mount-20261016/FINAL_MOUNT_SELECTION.json",
+    "sha256": "42fe73e938a141588fa60d629353dc2706069a7491cfb31570ea67626fbbc7a4",
+    "manifestPath": "docs/healthroster-build/proposals/v6-invoice-final-mount-20261016/SOURCE_MANIFEST.json",
+    "manifestSha256": "d0a6cf0fc76c9c96476c5364f07479b695389d4f71b514a27553e6c00c5df58c"
+  },
+  "sourceHead": "6384ba8706e5ddbefc6203f30b1408e0b499497e",
+  "counts": {
+    "selectedSourceFiles": 67,
+    "joinedSourcePayloads": 66,
+    "completeUniqueFunctions": 94,
+    "selectedNonFunctionStatements": 178,
+    "exactExistingSchemaStatementsSuppressed": 16,
+    "nativeParentStatementsAdded": 3,
+    "retainedNonFunctionStatements": 165,
+    "totalJoinedStatements": 259
+  },
+  "schemaSuppression": {
+    "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+    "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/001_billing_schema.sqlinc",
+    "rawSha256": "7cf768b713f421248e62dbc23178efbf24adf6096eafe63d284eb316a4d81545",
+    "canonicalLfSha256": "7cf768b713f421248e62dbc23178efbf24adf6096eafe63d284eb316a4d81545",
+    "reason": "Exact complete LF source occurs contiguously in canonical Root01; no schema/ACL/RLS/index recreation.",
+    "existingRootCommit": "77c629dba2efe39fa0e676e551e12bf5cf442664",
+    "existingRootPath": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+    "existingRootCanonicalLfSha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+    "statements": [
+      {
+        "statementSha256": "04063df3a7e94ab52c6fcab29a7eb580ede7a9ffa92800e49d36c99e09055b5a",
+        "statement": "create table private.timesheet_contract_move_invoice_scopes(\n id uuid primary key,operation_id uuid not null references private.timesheet_contract_move_operations(id),\n accept_request_id uuid unique,accept_request_hash bytea check(accept_request_hash is null or octet_length(accept_request_hash)=32),\n original_invoice_id uuid not null references public.invoices(id),family_root_id uuid not null,\n original_timesheet_id uuid not null references public.timesheets(timesheet_id),current_timesheet_id uuid references public.timesheets(timesheet_id),\n scope_kind text not null check(scope_kind='CONTRACT_MOVE'),original_line_ids uuid[] not null,\n original_lines_sha256 bytea not null check(octet_length(original_lines_sha256)=32),\n original_invoice_state_json jsonb not null,replacement_charge_certificate_json jsonb not null,\n replacement_charge_sha256 bytea not null check(octet_length(replacement_charge_sha256)=32),\n billing_revision bigint not null check(billing_revision>0),required_credit_scope_digest bytea not null check(octet_length(required_credit_scope_digest)=32),\n state text not null check(state in('REVIEWED','PREPARING_DRAFTS','DRAFTS_READY','PARTIALLY_ISSUED','ISSUED','RETRY_WAIT','ACTION_REQUIRED')),\n credit_operation_id uuid references public.invoice_operations(id),credit_note_id uuid references public.invoices(id),\n replacement_invoice_id uuid check(replacement_invoice_id is null),parent_managed boolean not null check(parent_managed),\n state_revision bigint not null check(state_revision>0),created_by_user_id uuid not null references public.tms_users(id),\n created_at_utc timestamptz not null,receipt_json jsonb,\n unique(operation_id,original_invoice_id),unique(id,billing_revision),\n foreign key(operation_id,family_root_id) references private.timesheet_contract_move_operations(id,family_root_id)\n);"
+      },
+      {
+        "statementSha256": "91cdbcf68d12b7bb4bfcfa0dc2ee072cfdf2492c2959245b2068b186fcb938ac",
+        "statement": "create table private.timesheet_contract_move_invoice_scope_lines(\n scope_id uuid not null references private.timesheet_contract_move_invoice_scopes(id),\n original_invoice_line_id uuid not null references public.invoice_lines(id),original_timesheet_id uuid not null references public.timesheets(timesheet_id),\n current_timesheet_id uuid references public.timesheets(timesheet_id),original_line_snapshot_json jsonb not null,\n original_line_sha256 bytea not null check(octet_length(original_line_sha256)=32),replacement_component_key text not null,\n primary key(scope_id,original_invoice_line_id)\n);"
+      },
+      {
+        "statementSha256": "e1d768de37b8ce9e9119575b0cbc62e43300ac3c1fc6de5bf2b579657099d7b4",
+        "statement": "create table private.timesheet_contract_move_billing_slices(\n operation_id uuid not null,member_key text not null,slice_key text not null,scope_kind text not null,\n scope_id uuid not null,authority text not null check(authority in('SOURCE_FINANCIAL','CONTRACT_PRICED')),\n disposition text not null check(disposition in('PRESERVE_SOURCE','NO_INVOICE','EDIT_DRAFT','RELOCATE_DRAFT','REPLACE_ISSUED')),\n original_invoice_id uuid references public.invoices(id),original_financial_id uuid references public.timesheets_financials(id),\n issued_at timestamptz,original_state_json jsonb not null,original_group_json jsonb not null,hold_purpose_json jsonb not null,\n source_sha256 bytea not null check(octet_length(source_sha256)=32),billing_revision bigint not null check(billing_revision>0),\n primary key(operation_id,slice_key),unique(operation_id,billing_revision,slice_key),\n foreign key(operation_id,member_key) references private.timesheet_contract_move_members(operation_id,member_key)\n);"
+      },
+      {
+        "statementSha256": "2d8129e48f84d6ef8d4443a24b44385717efbe6180716e0a2153ca62540804ce",
+        "statement": "create table private.timesheet_contract_move_replacement_groups(\n operation_id uuid not null references private.timesheet_contract_move_operations(id),billing_revision bigint not null check(billing_revision>0),\n group_key text not null,native_group_json jsonb not null,group_sha256 bytea not null check(octet_length(group_sha256)=32),\n planned_invoice_id uuid not null unique,accepted_valuation_json jsonb not null,\n required_credit_scope_digest bytea not null check(octet_length(required_credit_scope_digest)=32),\n generation_operation_id uuid references public.invoice_operations(id),invoice_id uuid references public.invoices(id),\n issue_operation_id uuid references public.invoice_operations(id),document_id uuid references public.invoice_document_versions(id),\n native_state text not null,receipt_json jsonb,supersedes_operation_id uuid,supersedes_billing_revision bigint,\n primary key(operation_id,billing_revision,group_key)\n);"
+      },
+      {
+        "statementSha256": "c5b151397d2e0d5d672219048e3ecc2477f1b949374a4d6f3d7d10a736249438",
+        "statement": "create table private.timesheet_contract_move_replacement_members(\n operation_id uuid not null,billing_revision bigint not null,group_key text not null,slice_key text not null,\n current_timesheet_id uuid not null references public.timesheets(timesheet_id),current_financial_id uuid references public.timesheets_financials(id),\n component_key text not null,member_sha256 bytea not null check(octet_length(member_sha256)=32),\n primary key(operation_id,billing_revision,slice_key),\n foreign key(operation_id,billing_revision,group_key) references private.timesheet_contract_move_replacement_groups(operation_id,billing_revision,group_key),\n foreign key(operation_id,billing_revision,slice_key) references private.timesheet_contract_move_billing_slices(operation_id,billing_revision,slice_key)\n);"
+      },
+      {
+        "statementSha256": "77b1adcb80b32271e9adabc1755bc0d3b15b0806b89d0c59ba48122b7e9d640a",
+        "statement": "create table private.timesheet_contract_move_scope_fences(\n operation_id uuid not null references private.timesheet_contract_move_operations(id),billing_revision bigint not null check(billing_revision>0),\n scope_key text not null unique,scope_sha256 bytea not null check(octet_length(scope_sha256)=32),\n authority_receipt_id uuid not null,retired_by_native_receipt_id uuid,\n primary key(operation_id,billing_revision,scope_key)\n);"
+      },
+      {
+        "statementSha256": "4a39e510d68aee9b98e57a86be1745019c2a3fd604ea3633be9e56910f92d8ad",
+        "statement": "alter table private.timesheet_contract_move_invoice_scopes owner to postgres;"
+      },
+      {
+        "statementSha256": "2091b4532cb3e03cfbd75a8ba47ceb4e9eeaeae3667efccc21280a2ce95c33f5",
+        "statement": "alter table private.timesheet_contract_move_invoice_scope_lines owner to postgres;"
+      },
+      {
+        "statementSha256": "1f18ed0ade074b45458f4e670164866352a851d746946f49256ec18a9d099dfe",
+        "statement": "alter table private.timesheet_contract_move_billing_slices owner to postgres;"
+      },
+      {
+        "statementSha256": "9086103ea085c0b6fa0d3cbb021634b3907d3baad9986fc9433d5e6e249778c6",
+        "statement": "alter table private.timesheet_contract_move_replacement_groups owner to postgres;"
+      },
+      {
+        "statementSha256": "853e03cb778ec2bacdcdb8b6daa42abf96e0fb0a8e380f1450208ca1ef64cc1d",
+        "statement": "alter table private.timesheet_contract_move_replacement_members owner to postgres;"
+      },
+      {
+        "statementSha256": "2bb85d1e19c57879f03d91fd054fc4c5340e71310912233bdef18ef5a47c3440",
+        "statement": "alter table private.timesheet_contract_move_scope_fences owner to postgres;"
+      },
+      {
+        "statementSha256": "6e6689698c33073d3f34ed0cc84fe548ed3265c4adc3275c0f1b87d530fe47ab",
+        "statement": "do $acl$\ndeclare table_name text;\nbegin\n foreach table_name in array array['timesheet_contract_move_invoice_scopes','timesheet_contract_move_invoice_scope_lines',\n  'timesheet_contract_move_billing_slices','timesheet_contract_move_replacement_groups',\n  'timesheet_contract_move_replacement_members','timesheet_contract_move_scope_fences'] loop\n  execute format('alter table private.%I enable row level security',table_name);\n  execute format('alter table private.%I force row level security',table_name);\n  execute format('create policy invoice_correction_owner on private.%I to current_user using(true) with check(true)',table_name);\n  execute format('revoke all on table private.%I from public,anon,authenticated,service_role',table_name);\n end loop;\nend;\n$acl$;"
+      },
+      {
+        "statementSha256": "24879ee77389d5ed92b355fba1aa30c555c291d5d305033790b6d4e3220eeb5d",
+        "statement": "create index timesheet_contract_move_billing_slices_invoice_idx on private.timesheet_contract_move_billing_slices(original_invoice_id,operation_id,billing_revision,member_key);"
+      },
+      {
+        "statementSha256": "58fad9abe8af3e15a35f1357079755239f8e106b145e59dbc6a2cfe99e3b0c09",
+        "statement": "create index timesheet_contract_move_replacement_groups_invoice_idx on private.timesheet_contract_move_replacement_groups((coalesce(invoice_id,planned_invoice_id)));"
+      },
+      {
+        "statementSha256": "397599ab55040dfa91414b4610d39c60b5f22c977453bd9b1c170af2c8bceafd",
+        "statement": "create index timesheet_contract_move_scopes_credit_idx on private.timesheet_contract_move_invoice_scopes(credit_note_id);"
+      }
+    ]
+  },
+  "vat": {
+    "signature": "private._invoice_generation_vat_policy_batch(jsonb)",
+    "selectedCompleteCreateStatementSha256": "b84138660bd7751057ccb84f7817af7048c24a5b4ad41dcb38bb59d68944871d",
+    "nativeParentCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+    "nativeParentPath": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_vat_policy_batch.sql",
+    "nativeParentRawSha256": "e0f16651f794d8e68ebeb7ae8074302b815cacc92f062d3117838fe9226a2a70",
+    "nativeParentCanonicalLfSha256": "e0f16651f794d8e68ebeb7ae8074302b815cacc92f062d3117838fe9226a2a70",
+    "strategy": "EXACT_NATIVE_NO_CASCADE_DROP_THEN_COMPLETE_SELECTED_CREATE_THEN_EXACT_NATIVE_REVOKE_GRANT",
+    "abi": "Identical named jsonb input, twelve named TABLE outputs, SQL STABLE SECURITY DEFINER and search_path; selected body retained byte-for-byte after canonical LF.",
+    "completeBodyDelta": "Exactly one native timesheets join predicate expands t.is_current to (t.is_current OR timesheet_contract_source_original_eligible_v1(t.timesheet_id)); every other native CREATE byte is identical after LF normalization.",
+    "rootRequirement": "Mount only in one transaction after source_original eligibility helper and before final generation/callers and final099 ACL. Do not separately append CREATE-only033c.",
+    "dependencyEvidence": {
+      "qualification": "LITERAL_SOURCE_FILE_HITS_ONLY_NOT_POSTGRES_CATALOGUE",
+      "files": [
+        "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+        "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql",
+        "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_ordinary_isolation_v1.sql",
+        "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql",
+        "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_autoinvoice_candidate_groups.sql",
+        "supabase/repeatable/26072026_1947_invoice_batch_generate_candidate_rows_v1.sql",
+        "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql",
+        "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_12_private_invoice_generation_advance_core_v8.sql",
+        "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_generate_classification_v2.sql"
+      ],
+      "nativeDependencyDropProof": "NOT_RUN; exact no-CASCADE DROP must pass clean PostgreSQL17 and rollback rehearsal. No dependency deletion or CASCADE authorised."
+    }
+  },
+  "ordering": {
+    "preserved": "Selected file order except exact existing schema suppression and final099 moved after all selected helpers/native Expense owners.",
+    "finalAclPath": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+    "createTimeCandidateFoundationPreload": [],
+    "finalCandidate": "Mount finalCandidate55 after Invoice94 per f566 to avoid clobbering; existing0713 evidence_source(uuid)->jsonb supplies the only SQL Candidate dependency. All new pending calls are PLpgSQL runtime dependencies; full first use follows final definitions."
+  },
+  "physicalPrerequisites": [
+    "private.timesheet_contract_move_financial_row_guard_v1()",
+    "private.timesheet_contract_move_accepting_v1(uuid)",
+    "private.timesheet_contract_move_evidence_source_v1(uuid)",
+    "private.timesheet_contract_move_financial_economics_v1(jsonb)",
+    "private.daily_rate_correction_scope_v1(uuid,boolean)",
+    "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+    "private.daily_rate_correction_normalized_snapshot_v1(jsonb,jsonb,jsonb,uuid)",
+    "private.daily_rate_correction_financial_id_v1(uuid,text)",
+    "private.daily_rate_correction_accepting_v1(uuid)"
+  ],
+  "pendingPrerequisites": [
+    "private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)",
+    "private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)",
+    "private.timesheet_contract_native_pending_for_v1(uuid)",
+    "private.timesheet_contract_native_pending_week_v1(uuid)",
+    "private.timesheet_contract_native_pending_workflow_v1(jsonb,uuid)",
+    "Physical975 nullable current-placement schema, exact audited withdrawal/real allocation publishers, H103/accessors and deferred commit guard"
+  ],
+  "integrationBoundary": {
+    "rootAllocatesManagedAuthority": true,
+    "physicalFinalWorkflowOwner": {
+      "source": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "finalCandidateMap": "f5668bf45854ca36b47e713c0e8f3dd3ae4b852b",
+      "rule": "Use the complete final Physical-selected eight-argument workflow owner; never overwrite it with c86/150ac generic template. Retain exact f017 family-entry kernel. No new Bank ABI."
+    },
+    "dailyContractFamilyDependencies": "Root-owned complete Daily04b/04c/04d must precede their SQL callers; f017001 alone does not supply Daily Contract family.",
+    "sourceDutySeam": "Selected021a currently calls current-pay query scope; root must mount the exact coordinated immutable original-A Invoice-duty successor before current-pay refusal is activated.",
+    "invoiceEditContext": "This selection does not define public.weekly_source_invoice_edit_context_v1(jsonb); preserve root c29 selected CURRENT presentation invoice-line singleton refusal in both actual reader leaves.",
+    "bankingNativePublisher": "HELD; this assembly creates no Bank ABI or native financial producer."
+  },
+  "payloads": [
+    {
+      "sourceCommit": "f0172356c678695a68db80cd066ed69e80648a29",
+      "path": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc",
+      "rawSha256": "fd49adbd4620aee76d0ec0782658c7cca7046d80f0e2518e8689cefaf1d82034",
+      "canonicalLfSha256": "fd49adbd4620aee76d0ec0782658c7cca7046d80f0e2518e8689cefaf1d82034",
+      "assemblyPayloadSha256": "fd49adbd4620aee76d0ec0782658c7cca7046d80f0e2518e8689cefaf1d82034",
+      "byteStart": 381,
+      "byteEnd": 6865,
+      "functionCount": 2,
+      "effectCount": 4,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/010_source_invoice_facts.sqlinc",
+      "rawSha256": "9078a3008fb77d0f5cb3d5c9c9a7667adf3fbd623ae266ec85d892c7b205fad8",
+      "canonicalLfSha256": "9078a3008fb77d0f5cb3d5c9c9a7667adf3fbd623ae266ec85d892c7b205fad8",
+      "assemblyPayloadSha256": "9078a3008fb77d0f5cb3d5c9c9a7667adf3fbd623ae266ec85d892c7b205fad8",
+      "byteStart": 6865,
+      "byteEnd": 40198,
+      "functionCount": 1,
+      "effectCount": 2,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "330a4770a208f0c6a927fd3a7ebee366dbc96340",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc",
+      "rawSha256": "91080dc3dc322fd2f7540ad7724dc08c020fe49f007acf6623ba97cf1d13dbc9",
+      "canonicalLfSha256": "91080dc3dc322fd2f7540ad7724dc08c020fe49f007acf6623ba97cf1d13dbc9",
+      "assemblyPayloadSha256": "91080dc3dc322fd2f7540ad7724dc08c020fe49f007acf6623ba97cf1d13dbc9",
+      "byteStart": 40198,
+      "byteEnd": 44768,
+      "functionCount": 2,
+      "effectCount": 4,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/017_evidence_subject.sqlinc",
+      "rawSha256": "f1c45a5c395d679364b6a407e2d0c7c0996f7077fc8a33ce31a3f6bbb225868e",
+      "canonicalLfSha256": "f1c45a5c395d679364b6a407e2d0c7c0996f7077fc8a33ce31a3f6bbb225868e",
+      "assemblyPayloadSha256": "f1c45a5c395d679364b6a407e2d0c7c0996f7077fc8a33ce31a3f6bbb225868e",
+      "byteStart": 44768,
+      "byteEnd": 45779,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/018_source_original.sqlinc",
+      "rawSha256": "46d7cb7d66b03e64f9f4bb10e8024fd191b63a5b511518b65cca4bc1e78f1854",
+      "canonicalLfSha256": "46d7cb7d66b03e64f9f4bb10e8024fd191b63a5b511518b65cca4bc1e78f1854",
+      "assemblyPayloadSha256": "46d7cb7d66b03e64f9f4bb10e8024fd191b63a5b511518b65cca4bc1e78f1854",
+      "byteStart": 45779,
+      "byteEnd": 49277,
+      "functionCount": 2,
+      "effectCount": 2,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019_source_generation_witness.sqlinc",
+      "rawSha256": "74f06fce83bb96c5a3d851b66d66d38918f976574c4e2044c227e35268f86603",
+      "canonicalLfSha256": "74f06fce83bb96c5a3d851b66d66d38918f976574c4e2044c227e35268f86603",
+      "assemblyPayloadSha256": "74f06fce83bb96c5a3d851b66d66d38918f976574c4e2044c227e35268f86603",
+      "byteStart": 49277,
+      "byteEnd": 61740,
+      "functionCount": 4,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019a_source_admission_witness.sqlinc",
+      "rawSha256": "f0ebe9fb057ccee1a10f58dfd8a154a31de63e4b54a8fb37665d6fe876228351",
+      "canonicalLfSha256": "f0ebe9fb057ccee1a10f58dfd8a154a31de63e4b54a8fb37665d6fe876228351",
+      "assemblyPayloadSha256": "f0ebe9fb057ccee1a10f58dfd8a154a31de63e4b54a8fb37665d6fe876228351",
+      "byteStart": 61740,
+      "byteEnd": 74577,
+      "functionCount": 5,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019b_source_allocation_witness.sqlinc",
+      "rawSha256": "e9540570a286428daad3264c460cf67dbb1a60d82ce180d71118719f4940e603",
+      "canonicalLfSha256": "e9540570a286428daad3264c460cf67dbb1a60d82ce180d71118719f4940e603",
+      "assemblyPayloadSha256": "e9540570a286428daad3264c460cf67dbb1a60d82ce180d71118719f4940e603",
+      "byteStart": 74577,
+      "byteEnd": 84372,
+      "functionCount": 4,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/020_source_family.sqlinc",
+      "rawSha256": "142e3216e23a5b41fb4f089bc67401a525b220ac1a85620947cf198cb2778598",
+      "canonicalLfSha256": "142e3216e23a5b41fb4f089bc67401a525b220ac1a85620947cf198cb2778598",
+      "assemblyPayloadSha256": "142e3216e23a5b41fb4f089bc67401a525b220ac1a85620947cf198cb2778598",
+      "byteStart": 84372,
+      "byteEnd": 87121,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/021_source_lineage.sqlinc",
+      "rawSha256": "e7a52c3d953356663f7eea2eb4bcde3f6a70182da9602144e2f828a5578ad66a",
+      "canonicalLfSha256": "e7a52c3d953356663f7eea2eb4bcde3f6a70182da9602144e2f828a5578ad66a",
+      "assemblyPayloadSha256": "e7a52c3d953356663f7eea2eb4bcde3f6a70182da9602144e2f828a5578ad66a",
+      "byteStart": 87121,
+      "byteEnd": 93500,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/021a_source_duty.sqlinc",
+      "rawSha256": "0e74042257973b6ee0507f7f2168b5bad6f5f3f11a73f0c48673b70aaebecc99",
+      "canonicalLfSha256": "0e74042257973b6ee0507f7f2168b5bad6f5f3f11a73f0c48673b70aaebecc99",
+      "assemblyPayloadSha256": "0e74042257973b6ee0507f7f2168b5bad6f5f3f11a73f0c48673b70aaebecc99",
+      "byteStart": 93500,
+      "byteEnd": 129927,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/022_source_presentation.sqlinc",
+      "rawSha256": "052a8b6d0451160c510aa378d8a4759d077a80e4f171e49caf7b8d8b1e769ac0",
+      "canonicalLfSha256": "052a8b6d0451160c510aa378d8a4759d077a80e4f171e49caf7b8d8b1e769ac0",
+      "assemblyPayloadSha256": "052a8b6d0451160c510aa378d8a4759d077a80e4f171e49caf7b8d8b1e769ac0",
+      "byteStart": 129927,
+      "byteEnd": 255749,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/023_source_archive.sqlinc",
+      "rawSha256": "208d4c1dbf004f5803e2888dfa16fa634bf8ed1e951159885f49f4c79c404df9",
+      "canonicalLfSha256": "208d4c1dbf004f5803e2888dfa16fa634bf8ed1e951159885f49f4c79c404df9",
+      "assemblyPayloadSha256": "208d4c1dbf004f5803e2888dfa16fa634bf8ed1e951159885f49f4c79c404df9",
+      "byteStart": 255749,
+      "byteEnd": 257801,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/023a_native_document_source.sqlinc",
+      "rawSha256": "b0621a41ea1b188846dcb1f951c5b6f82d43001a95e9f68e9c3fad2f6753cdb8",
+      "canonicalLfSha256": "b0621a41ea1b188846dcb1f951c5b6f82d43001a95e9f68e9c3fad2f6753cdb8",
+      "assemblyPayloadSha256": "b0621a41ea1b188846dcb1f951c5b6f82d43001a95e9f68e9c3fad2f6753cdb8",
+      "byteStart": 257801,
+      "byteEnd": 287300,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc",
+      "rawSha256": "bc6d5e889c54e3803bc20d52fbc95a8497cce6768b446de43529fb28b019624e",
+      "canonicalLfSha256": "bc6d5e889c54e3803bc20d52fbc95a8497cce6768b446de43529fb28b019624e",
+      "assemblyPayloadSha256": "bc6d5e889c54e3803bc20d52fbc95a8497cce6768b446de43529fb28b019624e",
+      "byteStart": 287300,
+      "byteEnd": 292001,
+      "functionCount": 2,
+      "effectCount": 4,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024a_source_native_admission.sqlinc",
+      "rawSha256": "bc1ce152c05c7ab726503f67bdb8e84f7af8046ad767b34de9c334f70135ab60",
+      "canonicalLfSha256": "bc1ce152c05c7ab726503f67bdb8e84f7af8046ad767b34de9c334f70135ab60",
+      "assemblyPayloadSha256": "bc1ce152c05c7ab726503f67bdb8e84f7af8046ad767b34de9c334f70135ab60",
+      "byteStart": 292001,
+      "byteEnd": 341963,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024b_source_native_allocation.sqlinc",
+      "rawSha256": "f980846c742b528aaf862d59a2de0f20d1b24b30e1f36efbff9cf3a3c06cab09",
+      "canonicalLfSha256": "f980846c742b528aaf862d59a2de0f20d1b24b30e1f36efbff9cf3a3c06cab09",
+      "assemblyPayloadSha256": "f980846c742b528aaf862d59a2de0f20d1b24b30e1f36efbff9cf3a3c06cab09",
+      "byteStart": 341963,
+      "byteEnd": 370691,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+      "path": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/024_claim_pending.sqlinc",
+      "rawSha256": "3f8a75179c2a3949ec3eef2ae92f9b1a18cb3f884fa07ac556c109403852b128",
+      "canonicalLfSha256": "3f8a75179c2a3949ec3eef2ae92f9b1a18cb3f884fa07ac556c109403852b128",
+      "assemblyPayloadSha256": "3f8a75179c2a3949ec3eef2ae92f9b1a18cb3f884fa07ac556c109403852b128",
+      "byteStart": 370691,
+      "byteEnd": 375269,
+      "functionCount": 1,
+      "effectCount": 2,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+      "path": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/025_claim_placement.sqlinc",
+      "rawSha256": "c92466618483af23f5db63e18c6a60f5468cc1cbf3bb0f9e53660b1281d9e725",
+      "canonicalLfSha256": "c92466618483af23f5db63e18c6a60f5468cc1cbf3bb0f9e53660b1281d9e725",
+      "assemblyPayloadSha256": "c92466618483af23f5db63e18c6a60f5468cc1cbf3bb0f9e53660b1281d9e725",
+      "byteStart": 375269,
+      "byteEnd": 379834,
+      "functionCount": 1,
+      "effectCount": 2,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+      "path": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/026_claim_current.sqlinc",
+      "rawSha256": "45f595bbacf81eb6b9ee5ea2a4a8b6e5c97a93c23b95caa6ac22ef23b3a21dc6",
+      "canonicalLfSha256": "45f595bbacf81eb6b9ee5ea2a4a8b6e5c97a93c23b95caa6ac22ef23b3a21dc6",
+      "assemblyPayloadSha256": "45f595bbacf81eb6b9ee5ea2a4a8b6e5c97a93c23b95caa6ac22ef23b3a21dc6",
+      "byteStart": 379834,
+      "byteEnd": 382783,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+      "path": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/027_claim_owned.sqlinc",
+      "rawSha256": "26af6eb0947d1bfc91261d802d05ca1c39a203edc182c529c3bbcde2526c784f",
+      "canonicalLfSha256": "26af6eb0947d1bfc91261d802d05ca1c39a203edc182c529c3bbcde2526c784f",
+      "assemblyPayloadSha256": "26af6eb0947d1bfc91261d802d05ca1c39a203edc182c529c3bbcde2526c784f",
+      "byteStart": 382783,
+      "byteEnd": 385128,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+      "path": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/028_claim_lock.sqlinc",
+      "rawSha256": "df68f058ddda8ccbf8e1a55f7133d953e426d3b06bccadf23772da3b01afa04d",
+      "canonicalLfSha256": "df68f058ddda8ccbf8e1a55f7133d953e426d3b06bccadf23772da3b01afa04d",
+      "assemblyPayloadSha256": "df68f058ddda8ccbf8e1a55f7133d953e426d3b06bccadf23772da3b01afa04d",
+      "byteStart": 385128,
+      "byteEnd": 389333,
+      "functionCount": 1,
+      "effectCount": 2,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/029_claim_financial.sqlinc",
+      "rawSha256": "267c5817ca565f0ccecc4bc8b54c5b15189841aae710faddd7f59d656d1171cb",
+      "canonicalLfSha256": "267c5817ca565f0ccecc4bc8b54c5b15189841aae710faddd7f59d656d1171cb",
+      "assemblyPayloadSha256": "267c5817ca565f0ccecc4bc8b54c5b15189841aae710faddd7f59d656d1171cb",
+      "byteStart": 389333,
+      "byteEnd": 393790,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+      "path": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/030_claim_sync.sqlinc",
+      "rawSha256": "81e2c35db983e53636817e07fd41730c52f747ca126748672ff2aef644b60292",
+      "canonicalLfSha256": "81e2c35db983e53636817e07fd41730c52f747ca126748672ff2aef644b60292",
+      "assemblyPayloadSha256": "81e2c35db983e53636817e07fd41730c52f747ca126748672ff2aef644b60292",
+      "byteStart": 393790,
+      "byteEnd": 406350,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/031_source_line_owner.sqlinc",
+      "rawSha256": "ac0d0da1833e7b5b31180c029e835bcb05ca2671c009dd37a7acf60307bffb67",
+      "canonicalLfSha256": "ac0d0da1833e7b5b31180c029e835bcb05ca2671c009dd37a7acf60307bffb67",
+      "assemblyPayloadSha256": "ac0d0da1833e7b5b31180c029e835bcb05ca2671c009dd37a7acf60307bffb67",
+      "byteStart": 406350,
+      "byteEnd": 409539,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/032_prospective_group.sqlinc",
+      "rawSha256": "8e380f1f30176524f9a7d07b1dd9b0ed37e84e4cf0ea981e8820c7ccdff1c184",
+      "canonicalLfSha256": "8e380f1f30176524f9a7d07b1dd9b0ed37e84e4cf0ea981e8820c7ccdff1c184",
+      "assemblyPayloadSha256": "8e380f1f30176524f9a7d07b1dd9b0ed37e84e4cf0ea981e8820c7ccdff1c184",
+      "byteStart": 409539,
+      "byteEnd": 414167,
+      "functionCount": 2,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/032a_daily_native_basis.sqlinc",
+      "rawSha256": "ae71613414162b317cb3de0b21492e92cf7fc7c529cd554b5340d96142d85bda",
+      "canonicalLfSha256": "ae71613414162b317cb3de0b21492e92cf7fc7c529cd554b5340d96142d85bda",
+      "assemblyPayloadSha256": "ae71613414162b317cb3de0b21492e92cf7fc7c529cd554b5340d96142d85bda",
+      "byteStart": 414167,
+      "byteEnd": 422094,
+      "functionCount": 3,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033_native_grouping.sqlinc",
+      "rawSha256": "8427f61568b3a5fa978134b424fbbd04b2adae1f3c3d224e91ec2db85c49d6e6",
+      "canonicalLfSha256": "8427f61568b3a5fa978134b424fbbd04b2adae1f3c3d224e91ec2db85c49d6e6",
+      "assemblyPayloadSha256": "8427f61568b3a5fa978134b424fbbd04b2adae1f3c3d224e91ec2db85c49d6e6",
+      "byteStart": 422094,
+      "byteEnd": 457356,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033a_native_collection.sqlinc",
+      "rawSha256": "12662ec29d0fe31ce338f8a40c4cbe6a27883fe15e398ff8a66d70e0ff104c19",
+      "canonicalLfSha256": "12662ec29d0fe31ce338f8a40c4cbe6a27883fe15e398ff8a66d70e0ff104c19",
+      "assemblyPayloadSha256": "12662ec29d0fe31ce338f8a40c4cbe6a27883fe15e398ff8a66d70e0ff104c19",
+      "byteStart": 457356,
+      "byteEnd": 501303,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033b_native_references.sqlinc",
+      "rawSha256": "71698ead9aa3a773c857ba9551424f80323804601753895445d23a1a4dfb29ba",
+      "canonicalLfSha256": "71698ead9aa3a773c857ba9551424f80323804601753895445d23a1a4dfb29ba",
+      "assemblyPayloadSha256": "71698ead9aa3a773c857ba9551424f80323804601753895445d23a1a4dfb29ba",
+      "byteStart": 501303,
+      "byteEnd": 515841,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033c_native_vat_policy.sqlinc",
+      "rawSha256": "44c63c951b368d167131266a8220a64d5b3adee8c218844fc8c7ded7e759b217",
+      "canonicalLfSha256": "44c63c951b368d167131266a8220a64d5b3adee8c218844fc8c7ded7e759b217",
+      "assemblyPayloadSha256": "484e15b8e296015cb75737b9a939ba6ab4a870835727f666c631270b95d76d94",
+      "byteStart": 515841,
+      "byteEnd": 527204,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NATIVE_DROP_AND_ACL_AROUND_UNCHANGED_COMPLETE_CREATE"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033d_native_invoice_references.sqlinc",
+      "rawSha256": "c792009404507fb8a0719ee62accd9a0b55ec893bb75eaa4b003dc59d2a392e3",
+      "canonicalLfSha256": "c792009404507fb8a0719ee62accd9a0b55ec893bb75eaa4b003dc59d2a392e3",
+      "assemblyPayloadSha256": "c792009404507fb8a0719ee62accd9a0b55ec893bb75eaa4b003dc59d2a392e3",
+      "byteStart": 527204,
+      "byteEnd": 536831,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/034_contract_certificates.sqlinc",
+      "rawSha256": "e0dc74daca0c61a5e397e8cc6c3e8be2e197231fa39fc6d8a939933a75d1a648",
+      "canonicalLfSha256": "e0dc74daca0c61a5e397e8cc6c3e8be2e197231fa39fc6d8a939933a75d1a648",
+      "assemblyPayloadSha256": "e0dc74daca0c61a5e397e8cc6c3e8be2e197231fa39fc6d8a939933a75d1a648",
+      "byteStart": 536831,
+      "byteEnd": 545342,
+      "functionCount": 2,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/034a_document_preflight.sqlinc",
+      "rawSha256": "38557a757d802b9b0bd5741f6d65c089639c40000e82998ac4932a7f96d5fe8d",
+      "canonicalLfSha256": "38557a757d802b9b0bd5741f6d65c089639c40000e82998ac4932a7f96d5fe8d",
+      "assemblyPayloadSha256": "38557a757d802b9b0bd5741f6d65c089639c40000e82998ac4932a7f96d5fe8d",
+      "byteStart": 545342,
+      "byteEnd": 551278,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "330a4770a208f0c6a927fd3a7ebee366dbc96340",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc",
+      "rawSha256": "a40dc5388d7b020e0a07e7f64faff885691589c2cc99b7476c7cd27122ea7a60",
+      "canonicalLfSha256": "a40dc5388d7b020e0a07e7f64faff885691589c2cc99b7476c7cd27122ea7a60",
+      "assemblyPayloadSha256": "a40dc5388d7b020e0a07e7f64faff885691589c2cc99b7476c7cd27122ea7a60",
+      "byteStart": 551278,
+      "byteEnd": 567628,
+      "functionCount": 3,
+      "effectCount": 4,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/036_native_selected_edit.sqlinc",
+      "rawSha256": "04135f211f90e991a6c2976e3ad77ced587c3dae374285a2ecb277464e86ae5b",
+      "canonicalLfSha256": "04135f211f90e991a6c2976e3ad77ced587c3dae374285a2ecb277464e86ae5b",
+      "assemblyPayloadSha256": "04135f211f90e991a6c2976e3ad77ced587c3dae374285a2ecb277464e86ae5b",
+      "byteStart": 567628,
+      "byteEnd": 716389,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/036a_native_selected_unlock.sqlinc",
+      "rawSha256": "25af72528e6393f0f742c3c4ecf9674fff5869fc687842ef52fce090b5bff558",
+      "canonicalLfSha256": "25af72528e6393f0f742c3c4ecf9674fff5869fc687842ef52fce090b5bff558",
+      "assemblyPayloadSha256": "25af72528e6393f0f742c3c4ecf9674fff5869fc687842ef52fce090b5bff558",
+      "byteStart": 716389,
+      "byteEnd": 723835,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/037_selected_draft.sqlinc",
+      "rawSha256": "015fd6ede7064aa39f015fef0f423a76d574317a40c335845810c18286620ec9",
+      "canonicalLfSha256": "015fd6ede7064aa39f015fef0f423a76d574317a40c335845810c18286620ec9",
+      "assemblyPayloadSha256": "015fd6ede7064aa39f015fef0f423a76d574317a40c335845810c18286620ec9",
+      "byteStart": 723835,
+      "byteEnd": 731320,
+      "functionCount": 2,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/038_billing_read.sqlinc",
+      "rawSha256": "6b547368acb9359c40a490ea931a7d367fbe15391dde4429bf1954146b04cea8",
+      "canonicalLfSha256": "6b547368acb9359c40a490ea931a7d367fbe15391dde4429bf1954146b04cea8",
+      "assemblyPayloadSha256": "6b547368acb9359c40a490ea931a7d367fbe15391dde4429bf1954146b04cea8",
+      "byteStart": 731320,
+      "byteEnd": 739534,
+      "functionCount": 3,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/040_prepare.sqlinc",
+      "rawSha256": "956ddc1dec521eb4f721987f35ac52035e47e8312a973795c2185568433f7457",
+      "canonicalLfSha256": "956ddc1dec521eb4f721987f35ac52035e47e8312a973795c2185568433f7457",
+      "assemblyPayloadSha256": "956ddc1dec521eb4f721987f35ac52035e47e8312a973795c2185568433f7457",
+      "byteStart": 739534,
+      "byteEnd": 757758,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/045_preparation_native.sqlinc",
+      "rawSha256": "551bc083c9862e2e9b7a0b57ba14ad86bbaf91ba40a7801516c8d2c99e4b1a57",
+      "canonicalLfSha256": "551bc083c9862e2e9b7a0b57ba14ad86bbaf91ba40a7801516c8d2c99e4b1a57",
+      "assemblyPayloadSha256": "551bc083c9862e2e9b7a0b57ba14ad86bbaf91ba40a7801516c8d2c99e4b1a57",
+      "byteStart": 757758,
+      "byteEnd": 769402,
+      "functionCount": 3,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/050_credit_owner.sqlinc",
+      "rawSha256": "9600e697a2580bc89165087623129da9f126322b1d385a239ded5a5d049edce6",
+      "canonicalLfSha256": "9600e697a2580bc89165087623129da9f126322b1d385a239ded5a5d049edce6",
+      "assemblyPayloadSha256": "9600e697a2580bc89165087623129da9f126322b1d385a239ded5a5d049edce6",
+      "byteStart": 769402,
+      "byteEnd": 785569,
+      "functionCount": 3,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/055_credit_scope_projection.sqlinc",
+      "rawSha256": "d220d1a9d783aadecc7561f90428c510fb63ad2d52fbdea58c50987a7d80687b",
+      "canonicalLfSha256": "d220d1a9d783aadecc7561f90428c510fb63ad2d52fbdea58c50987a7d80687b",
+      "assemblyPayloadSha256": "d220d1a9d783aadecc7561f90428c510fb63ad2d52fbdea58c50987a7d80687b",
+      "byteStart": 785569,
+      "byteEnd": 788568,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/060_scoped_native.sqlinc",
+      "rawSha256": "ca9cc70f684a1f22eb61006c4ed9c83d09b013d3bb5ca1337c6f4b3a4f4257f5",
+      "canonicalLfSha256": "ca9cc70f684a1f22eb61006c4ed9c83d09b013d3bb5ca1337c6f4b3a4f4257f5",
+      "assemblyPayloadSha256": "ca9cc70f684a1f22eb61006c4ed9c83d09b013d3bb5ca1337c6f4b3a4f4257f5",
+      "byteStart": 788568,
+      "byteEnd": 800335,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/070_generation_native.sqlinc",
+      "rawSha256": "c8524ad717b322439f767c70ec46e038645878580157d1037c89f4f93400563f",
+      "canonicalLfSha256": "c8524ad717b322439f767c70ec46e038645878580157d1037c89f4f93400563f",
+      "assemblyPayloadSha256": "c8524ad717b322439f767c70ec46e038645878580157d1037c89f4f93400563f",
+      "byteStart": 800335,
+      "byteEnd": 923432,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/071_generation_dispatch.sqlinc",
+      "rawSha256": "83c8a0a6143cd9e8feec788903869fb0e0ec2cad4aa97d2674b5654140e9a202",
+      "canonicalLfSha256": "83c8a0a6143cd9e8feec788903869fb0e0ec2cad4aa97d2674b5654140e9a202",
+      "assemblyPayloadSha256": "83c8a0a6143cd9e8feec788903869fb0e0ec2cad4aa97d2674b5654140e9a202",
+      "byteStart": 923432,
+      "byteEnd": 928607,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/074_current_billing.sqlinc",
+      "rawSha256": "7688307a5e215615275c98d00cdd548577315993f819be9a4ac46aabd42bfcfd",
+      "canonicalLfSha256": "7688307a5e215615275c98d00cdd548577315993f819be9a4ac46aabd42bfcfd",
+      "assemblyPayloadSha256": "7688307a5e215615275c98d00cdd548577315993f819be9a4ac46aabd42bfcfd",
+      "byteStart": 928607,
+      "byteEnd": 931016,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/075_issue_owner.sqlinc",
+      "rawSha256": "4fb7492bae833baeb767e0df5799b79ff60371533a25ec3d2304a8dddc5f4921",
+      "canonicalLfSha256": "4fb7492bae833baeb767e0df5799b79ff60371533a25ec3d2304a8dddc5f4921",
+      "assemblyPayloadSha256": "4fb7492bae833baeb767e0df5799b79ff60371533a25ec3d2304a8dddc5f4921",
+      "byteStart": 931016,
+      "byteEnd": 940541,
+      "functionCount": 3,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/076_credit_issue_admission.sqlinc",
+      "rawSha256": "9dc224c09c1ac3399fd922a067f8aa01bc8b600e9a39fff838c7362f153bb994",
+      "canonicalLfSha256": "9dc224c09c1ac3399fd922a067f8aa01bc8b600e9a39fff838c7362f153bb994",
+      "assemblyPayloadSha256": "9dc224c09c1ac3399fd922a067f8aa01bc8b600e9a39fff838c7362f153bb994",
+      "byteStart": 940541,
+      "byteEnd": 942853,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/079_native_issue_admission.sqlinc",
+      "rawSha256": "2c533098962f92a962b5261e5837cb3232eb8500bee69d213fbe0445755fc9ff",
+      "canonicalLfSha256": "2c533098962f92a962b5261e5837cb3232eb8500bee69d213fbe0445755fc9ff",
+      "assemblyPayloadSha256": "2c533098962f92a962b5261e5837cb3232eb8500bee69d213fbe0445755fc9ff",
+      "byteStart": 942853,
+      "byteEnd": 974953,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/080_issue_native.sqlinc",
+      "rawSha256": "8557905c65d47509291cecb5cf4395d8da8f6b9e09777e02d405dda4147b5cbc",
+      "canonicalLfSha256": "8557905c65d47509291cecb5cf4395d8da8f6b9e09777e02d405dda4147b5cbc",
+      "assemblyPayloadSha256": "8557905c65d47509291cecb5cf4395d8da8f6b9e09777e02d405dda4147b5cbc",
+      "byteStart": 974953,
+      "byteEnd": 1013926,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/081_issue_registration.sqlinc",
+      "rawSha256": "ebb82d0c41f252b999e1cda0b03e6a26822bad4dee417d9fab0c1ae785565209",
+      "canonicalLfSha256": "ebb82d0c41f252b999e1cda0b03e6a26822bad4dee417d9fab0c1ae785565209",
+      "assemblyPayloadSha256": "ebb82d0c41f252b999e1cda0b03e6a26822bad4dee417d9fab0c1ae785565209",
+      "byteStart": 1013926,
+      "byteEnd": 1074257,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/082_issue_one.sqlinc",
+      "rawSha256": "f4b321f9e696fd117ef350d8982d899b6de984e5ea5320d463eeb8bc974486e9",
+      "canonicalLfSha256": "f4b321f9e696fd117ef350d8982d899b6de984e5ea5320d463eeb8bc974486e9",
+      "assemblyPayloadSha256": "f4b321f9e696fd117ef350d8982d899b6de984e5ea5320d463eeb8bc974486e9",
+      "byteStart": 1074257,
+      "byteEnd": 1101540,
+      "functionCount": 1,
+      "effectCount": 0,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/010_remove.sqlinc",
+      "rawSha256": "53001f8825993cd749a5258c902044e1ea109a481584e8a33b961426ff7566f5",
+      "canonicalLfSha256": "53001f8825993cd749a5258c902044e1ea109a481584e8a33b961426ff7566f5",
+      "assemblyPayloadSha256": "53001f8825993cd749a5258c902044e1ea109a481584e8a33b961426ff7566f5",
+      "byteStart": 1101540,
+      "byteEnd": 1114881,
+      "functionCount": 1,
+      "effectCount": 2,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/020_rebind.sqlinc",
+      "rawSha256": "e74189f87510eaa0baf14886b2332c305120c16aabf3d741eb665dcabbc184b4",
+      "canonicalLfSha256": "e74189f87510eaa0baf14886b2332c305120c16aabf3d741eb665dcabbc184b4",
+      "assemblyPayloadSha256": "e74189f87510eaa0baf14886b2332c305120c16aabf3d741eb665dcabbc184b4",
+      "byteStart": 1114881,
+      "byteEnd": 1149772,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/030_office_reject.sqlinc",
+      "rawSha256": "59758c131d3e928cfb2a5e77dbe0c4a6393e0a452b97e45f6e6535d83317e992",
+      "canonicalLfSha256": "59758c131d3e928cfb2a5e77dbe0c4a6393e0a452b97e45f6e6535d83317e992",
+      "assemblyPayloadSha256": "59758c131d3e928cfb2a5e77dbe0c4a6393e0a452b97e45f6e6535d83317e992",
+      "byteStart": 1149772,
+      "byteEnd": 1166650,
+      "functionCount": 1,
+      "effectCount": 2,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/040_component.sqlinc",
+      "rawSha256": "e8901182d1d1a7bb0033291d271af3699e1f6dbb8f32cb9ae76f7901f18be3a6",
+      "canonicalLfSha256": "e8901182d1d1a7bb0033291d271af3699e1f6dbb8f32cb9ae76f7901f18be3a6",
+      "assemblyPayloadSha256": "e8901182d1d1a7bb0033291d271af3699e1f6dbb8f32cb9ae76f7901f18be3a6",
+      "byteStart": 1166650,
+      "byteEnd": 1191756,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/050_whole.sqlinc",
+      "rawSha256": "5d63c9204eb802659910ad6056d576928b5d82f298416435ff57562366409650",
+      "canonicalLfSha256": "5d63c9204eb802659910ad6056d576928b5d82f298416435ff57562366409650",
+      "assemblyPayloadSha256": "5d63c9204eb802659910ad6056d576928b5d82f298416435ff57562366409650",
+      "byteStart": 1191756,
+      "byteEnd": 1214652,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/060_begin.sqlinc",
+      "rawSha256": "be4290111dd1585580c21193c0e262ff58fd56731ee8b049607647305ced94f9",
+      "canonicalLfSha256": "be4290111dd1585580c21193c0e262ff58fd56731ee8b049607647305ced94f9",
+      "assemblyPayloadSha256": "be4290111dd1585580c21193c0e262ff58fd56731ee8b049607647305ced94f9",
+      "byteStart": 1214652,
+      "byteEnd": 1234410,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/070_submit.sqlinc",
+      "rawSha256": "ba1dda600822cfe4f34126fa0acf83b37b3b7344ce21f4628c82bde7d2942d6e",
+      "canonicalLfSha256": "ba1dda600822cfe4f34126fa0acf83b37b3b7344ce21f4628c82bde7d2942d6e",
+      "assemblyPayloadSha256": "ba1dda600822cfe4f34126fa0acf83b37b3b7344ce21f4628c82bde7d2942d6e",
+      "byteStart": 1234410,
+      "byteEnd": 1252469,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/080_abort.sqlinc",
+      "rawSha256": "4bbbaa7341867183a3bb78b371bf2fd69b14b5f682edd90d421b58e4df981aee",
+      "canonicalLfSha256": "4bbbaa7341867183a3bb78b371bf2fd69b14b5f682edd90d421b58e4df981aee",
+      "assemblyPayloadSha256": "4bbbaa7341867183a3bb78b371bf2fd69b14b5f682edd90d421b58e4df981aee",
+      "byteStart": 1252469,
+      "byteEnd": 1269519,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/090_manager_hold.sqlinc",
+      "rawSha256": "92080e59b6e5fb2a6322c80bed4160b46cdc1cbe1891b3d735064e96085ae5fd",
+      "canonicalLfSha256": "92080e59b6e5fb2a6322c80bed4160b46cdc1cbe1891b3d735064e96085ae5fd",
+      "assemblyPayloadSha256": "92080e59b6e5fb2a6322c80bed4160b46cdc1cbe1891b3d735064e96085ae5fd",
+      "byteStart": 1269519,
+      "byteEnd": 1273722,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/100_paper_begin.sqlinc",
+      "rawSha256": "2dd83aedf4c69f391e5aea6341835bcf5db199dcdbc3e0748b7cc3e8b3f774c0",
+      "canonicalLfSha256": "2dd83aedf4c69f391e5aea6341835bcf5db199dcdbc3e0748b7cc3e8b3f774c0",
+      "assemblyPayloadSha256": "2dd83aedf4c69f391e5aea6341835bcf5db199dcdbc3e0748b7cc3e8b3f774c0",
+      "byteStart": 1273722,
+      "byteEnd": 1281790,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/110_category_resubmit.sqlinc",
+      "rawSha256": "d16b9f35704a57efe285e8c770b1d1ca764818859301c1d02e42c02f0e9f3c88",
+      "canonicalLfSha256": "d16b9f35704a57efe285e8c770b1d1ca764818859301c1d02e42c02f0e9f3c88",
+      "assemblyPayloadSha256": "d16b9f35704a57efe285e8c770b1d1ca764818859301c1d02e42c02f0e9f3c88",
+      "byteStart": 1281790,
+      "byteEnd": 1298499,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "path": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/120_recover.sqlinc",
+      "rawSha256": "5f394edc280e28bf8427a22ebe451a050ba2a80fc515551176a4989fea84a0f2",
+      "canonicalLfSha256": "5f394edc280e28bf8427a22ebe451a050ba2a80fc515551176a4989fea84a0f2",
+      "assemblyPayloadSha256": "5f394edc280e28bf8427a22ebe451a050ba2a80fc515551176a4989fea84a0f2",
+      "byteStart": 1298499,
+      "byteEnd": 1302602,
+      "functionCount": 1,
+      "effectCount": 3,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    },
+    {
+      "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "rawSha256": "4c9c50cae2047b31182ae2c29c7927d76aea0aa17ac773f9526c89815207e8a9",
+      "canonicalLfSha256": "4c9c50cae2047b31182ae2c29c7927d76aea0aa17ac773f9526c89815207e8a9",
+      "assemblyPayloadSha256": "4c9c50cae2047b31182ae2c29c7927d76aea0aa17ac773f9526c89815207e8a9",
+      "byteStart": 1302602,
+      "byteEnd": 1314632,
+      "functionCount": 0,
+      "effectCount": 102,
+      "modification": "NONE_COMPLETE_LF_PAYLOAD"
+    }
+  ],
+  "functions": [
+    {
+      "signature": "private.timesheet_contract_expense_families_enter_v1(text,uuid[],uuid,uuid)",
+      "statementSha256": "a08749d0a38edd9e6a7f6e563ea93f76c2bbcbd75df52c1a15bafe8adbf69353",
+      "source": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid)",
+      "statementSha256": "f76eeb1e779846f94665dbaeefd09f06b1494e66e9b83c7c9f00bec749d686f5",
+      "source": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc"
+    },
+    {
+      "signature": "private.weekly_source_invoice_preservation_facts_v1(uuid[],uuid[],boolean)",
+      "statementSha256": "f10ed2a4f0784b9d8dcfd68c68704010bf2cc03d4f1bfea2b87430673bdac735",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/010_source_invoice_facts.sqlinc"
+    },
+    {
+      "signature": "private.weekly_source_invoice_certificate_v1(uuid[],uuid[],boolean)",
+      "statementSha256": "7cad1e69b74b48537aa5803d1de62ee910a4524ebdc8337ffe4f680980b325c4",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc"
+    },
+    {
+      "signature": "private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean)",
+      "statementSha256": "788ca4870796f671045ebd4de397ae6de4daa5694d685171aba603df7f32c958",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_original_evidence_eligible_v1(uuid)",
+      "statementSha256": "ae7e8d0802c9765702ee5745a43f58171a24051e725d33ae3efe4c7e9af41577",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/017_evidence_subject.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "statementSha256": "12f9a9be4423695464d4011c7beaed0d06715f9c26526e4c68fe63bbea77936c",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/018_source_original.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_source_pay_only_v1(uuid)",
+      "statementSha256": "3c15353b3baa57ed1f504d51316d034da5c45cd83fec9cba1fda767378e08f6e",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/018_source_original.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_original_claim_enter_v1(jsonb,timestamp with time zone)",
+      "statementSha256": "e6506f55fb81ab3379edec9b4a5e721b0f9c6132707787cf75aa6302d639b906",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019_source_generation_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_original_claim_v1(uuid)",
+      "statementSha256": "f5ae8089c5a2b42ec0b658d9c4e8db3ddec7d50ff8add68ac8d29755c17c60b8",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019_source_generation_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_original_line_plan_v1(uuid,jsonb)",
+      "statementSha256": "a066d35c765205fef83dfabcd1838c4a1f7330ab916c361c1cb9af55311c9504",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019_source_generation_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_original_line_allowed_v1(jsonb)",
+      "statementSha256": "f3856ef150c8d578e5948607c9e742166d80cb651af3f6817ff17afbd35bbe13",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019_source_generation_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_admission_origin_v1(uuid)",
+      "statementSha256": "60c65a90e110686df94e9e9f9c46ad9b7d537dc699476c5fe056da72a4000221",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019a_source_admission_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_admission_line_claim_v1(uuid)",
+      "statementSha256": "5ba24043907f769aeb021335586b4523a8c3fd0bcbed900c61b4b0a6dadf77b5",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019a_source_admission_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_admission_line_enter_v1(uuid,uuid,uuid,jsonb)",
+      "statementSha256": "af3c960149cb427dc571ee2a3910eeafa86a0efe995b071c9030e6cf74b6d1f4",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019a_source_admission_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_admission_line_allowed_v1(jsonb)",
+      "statementSha256": "04c1291a0ae73bed6a5b4ce26d44489271b3e7d981be3de36dbbded247cd48c8",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019a_source_admission_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_admission_line_finish_v1(uuid,uuid)",
+      "statementSha256": "cdedb93fb913e826e7116a0f3324e545837fd75b7df301a0c1711b7420fdd7bd",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019a_source_admission_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_allocation_claim_v1(uuid)",
+      "statementSha256": "e7b9283b414baf6971f5af20a59c777063e6a943845b401eaa20166fde1af81f",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019b_source_allocation_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_allocation_enter_v1(uuid,uuid,uuid,uuid[])",
+      "statementSha256": "47feecbbd84d4a88620ad1954d05e1779a0bdf07f629617f313245b523496895",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019b_source_allocation_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_allocation_line_allowed_v1(jsonb)",
+      "statementSha256": "fdf73f71d3293233386a744b7f3fb0aa3f5ed70c0c1a7c5798bff781c93c8331",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019b_source_allocation_witness.sqlinc"
+    },
+    {
+      "signature": "private.invoice_source_allocation_finish_v1(uuid)",
+      "statementSha256": "ea3f4d630b2749f0f3c4b2adf6a62dc4447e1c402bb9fdfbdecf3ae6d304c6b2",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/019b_source_allocation_witness.sqlinc"
+    },
+    {
+      "signature": "private.weekly_source_invoice_family_timesheet_ids_v1(uuid)",
+      "statementSha256": "ee35912b3f752dfcd138099cdf389571da62cd11d53b5ec50343f6ea4e4d00f6",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/020_source_family.sqlinc"
+    },
+    {
+      "signature": "private.weekly_source_finalisation_lineage_assert_v1(uuid,uuid)",
+      "statementSha256": "4923490bd1a5f1720d0cfb269495f16b6ad2a62eaf104062b043b42df55ad1d9",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/021_source_lineage.sqlinc"
+    },
+    {
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "statementSha256": "f837fc330938f43a9484ee21efd4a10d909858c8dcfe0a937e99146ca5cec390",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/021a_source_duty.sqlinc"
+    },
+    {
+      "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+      "statementSha256": "3b1c1eaa2a591a89d63909e0224fdc874b95bd66935e452bc0dbc22d8bd5a2b4",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/022_source_presentation.sqlinc"
+    },
+    {
+      "signature": "public.invoice_line_archived_timesheet_guard_v1()",
+      "statementSha256": "ffcc29e5701e33fb218a22c34cb47ba0f84b39783307aaf4ec8cdf15506f8cd1",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/023_source_archive.sqlinc"
+    },
+    {
+      "signature": "private._invoice_document_advance_batch(jsonb,timestamp with time zone)",
+      "statementSha256": "5e0039d750270e10196d7e4a38945c87e9111ff56c078bdbde798c800a6ed24f",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/023a_native_document_source.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_line_allowed_v1(jsonb)",
+      "statementSha256": "a73029c6a729d42370bea255619b373e76404c305b6ec887de674de920291cc3",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_verified_unissue_v1(uuid)",
+      "statementSha256": "5dad562e8ae89a949479a08a939db28b4ca99df9b8f3fb39dcb9d28f492808e5",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc"
+    },
+    {
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "statementSha256": "49e4f533f41134b00e7826a90e9787b726b3b56bef4611859a0ab344dcbbf78a",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024a_source_native_admission.sqlinc"
+    },
+    {
+      "signature": "public.weekly_source_invoice_move_atomic_v1(jsonb)",
+      "statementSha256": "37768e4ab3eecdaa8e10c127fc4be0a89529dfdcb00420816ceed6903672fd76",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024b_source_native_allocation.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_claim_pending_v1(uuid,uuid,uuid)",
+      "statementSha256": "f2f7a03e3702771d8be3efacaa9730ab363fba55fe7f87ed377e9c56514164d2",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/024_claim_pending.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_claim_placement_v1(uuid,uuid,uuid)",
+      "statementSha256": "a08d222b91c84d23438cb2523e1dd235734c8bc35384091cfae98fff35d807c0",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/025_claim_placement.sqlinc"
+    },
+    {
+      "signature": "private._candidate_expense_current_timesheet_id_v1(uuid,uuid)",
+      "statementSha256": "5bc4ba579f7fb0dc448146ed71937341eeb4e810ca1b1a8df384f1e97399f54b",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/026_claim_current.sqlinc"
+    },
+    {
+      "signature": "private._candidate_expense_owned_timesheet_id_v1(uuid,uuid)",
+      "statementSha256": "dec7f07b7c4b71d9eb211b7511f563e24db8bd41477b447a8a0b0cbfe1b4f5ea",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/027_claim_owned.sqlinc"
+    },
+    {
+      "signature": "private._candidate_expense_owner_context_lock_v1(uuid)",
+      "statementSha256": "f0979b0cc01f1b085bf7b9a73bad346577d7a68c015369927eed7e178132ab1f",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/028_claim_lock.sqlinc"
+    },
+    {
+      "signature": "private._candidate_expense_components_sync_financial_v1(uuid,timestamp with time zone)",
+      "statementSha256": "30e0d6c14637cbed59c8a6033a47c3ab949dae3d65bd60c056decc233f8c1158",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/029_claim_financial.sqlinc"
+    },
+    {
+      "signature": "private._candidate_expense_components_sync_v1(uuid,timestamp with time zone)",
+      "statementSha256": "91b8a4c8c8ff85037a4d142b84c4a9fa420c291ab369bb7583c21db72d708483",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/030_claim_sync.sqlinc"
+    },
+    {
+      "signature": "private.weekly_source_invoice_line_owner_guard_v1()",
+      "statementSha256": "bec16984882cba1c25caa070983a3bb1d16e915085891016f7b4623b05ad515b",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/031_source_line_owner.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_prospective_source_v1(uuid,uuid,uuid)",
+      "statementSha256": "7961797391e906cda638b3a946076df76e42be9648ba55a66c2bbf850ed150a5",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/032_prospective_group.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_group_facts_v1(uuid,jsonb,boolean)",
+      "statementSha256": "992624daba60b4b262c7b025158bdee5827931fbd39879d373e1b1e637632b98",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/032_prospective_group.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_correction_scope_v1(uuid,boolean)",
+      "statementSha256": "f3e5bfbca1bd67cebb6c9bb0d37014dc3f0b39354c304926eca090ece949cbe0",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/032a_daily_native_basis.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_correction_prospective_source_v1(uuid,uuid,uuid,jsonb)",
+      "statementSha256": "76ef01466821b1fab87c7c796fd5c54f517cfdebbf582af1d63683a372ec7180",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/032a_daily_native_basis.sqlinc"
+    },
+    {
+      "signature": "private.invoice_daily_rate_actual_revision_assert_v1(uuid)",
+      "statementSha256": "d26b6decb7a16e61110c915dd74011649b288a83ea96ed1270525717b32fc4db",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/032a_daily_native_basis.sqlinc"
+    },
+    {
+      "signature": "private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamp with time zone)",
+      "statementSha256": "8f7db6be417adabd2b7d027486a8c68c845f049ddeb435a0c32ada898a783cf4",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033_native_grouping.sqlinc"
+    },
+    {
+      "signature": "private._invoice_batch_generate_classification_v2(boolean,text[],timestamp with time zone)",
+      "statementSha256": "5befe18b4535c445134b6c6ace3928e0a7158779c6307232f18bc15a46b52041",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033a_native_collection.sqlinc"
+    },
+    {
+      "signature": "private._invoice_source_reference_validate_batch(jsonb)",
+      "statementSha256": "dbcf55a03396b821cf36a0cc8aeb67e83f92ac45aac1aaaed14b53a12ec0e5b3",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033b_native_references.sqlinc"
+    },
+    {
+      "signature": "private._invoice_generation_vat_policy_batch(jsonb)",
+      "statementSha256": "b84138660bd7751057ccb84f7817af7048c24a5b4ad41dcb38bb59d68944871d",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033c_native_vat_policy.sqlinc"
+    },
+    {
+      "signature": "private._invoice_reference_rows_batch(uuid[])",
+      "statementSha256": "c7ed58c718510f303e97366502cf85efc6a9f1c9a6027bc71c16210405e24d61",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033d_native_invoice_references.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_source_coverage_v1(uuid)",
+      "statementSha256": "e4927908811a5db35b749b7142ee00face84d6e02b43e31a00dfcbdf79c68802",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/034_contract_certificates.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_move_invoice_certificate_v1(uuid,boolean)",
+      "statementSha256": "eee2131d0cfe976cdc1a7ba4916433e7bb4ea1e541506e114fd0ac673bb446b0",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/034_contract_certificates.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_correction_document_preflight_v1(jsonb,jsonb,uuid,jsonb)",
+      "statementSha256": "9eefdffed146b2126f7f84b8f3b92c41b92143d7c9f548287c34ed1117019bd0",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/034a_document_preflight.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_inspect_v1(jsonb,jsonb,uuid,boolean)",
+      "statementSha256": "fe9c8afa1a50b91e0464e786bc96133c4fd0148d14fc78ede0572e14b64a8f75",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_inspect_v1(jsonb,uuid,boolean)",
+      "statementSha256": "477c935ae3934c1a1ae125b7a2ee87c2b5d6f6c0816689fc178045f0229b732b",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_preflight_v1(uuid,uuid,boolean)",
+      "statementSha256": "5b1d159e60c47afddcd75d29429c5c7a4a54d5da1aef546c85fd85d98b409c2f",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc"
+    },
+    {
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "statementSha256": "b42a727a94d8adf5336f4b865ec9c332fe528be66611d08682de8a00ef334b41",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/036_native_selected_edit.sqlinc"
+    },
+    {
+      "signature": "public._inv_unlock_segments_for_invoice(uuid,uuid[])",
+      "statementSha256": "165e95366165e9c63fca2a529a6e7b6441621cde0f4d6621dae9cae16e2f35c1",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/036a_native_selected_unlock.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_selected_financial_authorise_v1(jsonb,jsonb,uuid)",
+      "statementSha256": "e6f6283d9dbbcdff4b9974bbfa067a211afd22fa1e26ec1398de67e4b0a11dc3",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/037_selected_draft.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_selected_drafts_prepare_v1(uuid,uuid,timestamp with time zone)",
+      "statementSha256": "003f02bb9732f33cf6e89cb88e1744980d0dcdb5a6560c43a6e04def073c07f2",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/037_selected_draft.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_source_certificate_v1(uuid,boolean)",
+      "statementSha256": "2b847acf28fd515abd3b8afda09956d1be36f86a89abb414429be3e583f41f3b",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/038_billing_read.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_invoice_after_seal_v1(uuid,bigint)",
+      "statementSha256": "f2119623d8342bcf8c91f3b9e46adf3935ea91423a77ae7ba003e4ff68fafc0f",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/038_billing_read.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_billing_read_v1(uuid,uuid)",
+      "statementSha256": "64eb2b4a35b0fde61ce9e5f76b8786df5f73ee16ddd39a1de6dfc27f2afc5672",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/038_billing_read.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_prepare_v1(uuid,bigint,uuid,timestamp with time zone)",
+      "statementSha256": "4c6ba0028762c4e98302f1bbcfb4316e030825dd1fe1b93955799cc202f6f719",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/040_prepare.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_obligation_assert_v1(uuid,bigint)",
+      "statementSha256": "fcfd210fb8cf9ea7648917d6d197dab90ae4c9439696f6c65dd40ad9eb04b177",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/045_preparation_native.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_prepare_advance_v1(jsonb,timestamp with time zone)",
+      "statementSha256": "3e8aeb91a59c9c6470b0734b97535504ef5994892bb76d405ca29013956313e6",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/045_preparation_native.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_line_reservation_assert_v1(jsonb)",
+      "statementSha256": "27ad16ebf29e066d50fd784a20007ee8b7fedac8665162bbcdc4fff5248b510b",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/045_preparation_native.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_draft_only_v1(uuid)",
+      "statementSha256": "e48d58bec37dd050bcc55718e5d5095ed29fd92c549cd5f4839347211bae00e9",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/050_credit_owner.sqlinc"
+    },
+    {
+      "signature": "private.invoice_credit_contract_move_context_v1(uuid,boolean)",
+      "statementSha256": "5d5c910a2d66343f2d07c9d2e758b4a92f411bca4ef6b2e21237e1ac27812bcb",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/050_credit_owner.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_credit_advance_v1(jsonb,timestamp with time zone)",
+      "statementSha256": "0990b05a7c1e755c765662d4f487566c89dedd0d7c8218a35b4f23678eec5069",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/050_credit_owner.sqlinc"
+    },
+    {
+      "signature": "private.invoice_credit_contract_move_scope_context_v1(uuid,boolean)",
+      "statementSha256": "018a869112becf54db87b0a683951f46239452180870ebd6d25d39f06ec55037",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/055_credit_scope_projection.sqlinc"
+    },
+    {
+      "signature": "private.invoice_credit_scoped_advance_v1(jsonb,timestamp with time zone)",
+      "statementSha256": "989aff12e8385583227f2fff381176e8814e54b1d3322c2641ddacad99210644",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/060_scoped_native.sqlinc"
+    },
+    {
+      "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "statementSha256": "655b8fcfa012b52efba3c52b629a6c5b5ae153d9424111bfc0b02aa7735a33ac",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/070_generation_native.sqlinc"
+    },
+    {
+      "signature": "private._invoice_generation_advance_batch(jsonb,timestamp with time zone)",
+      "statementSha256": "ab4024c5116ed6f99f912916ce9d6fe4388727a34d4866349f0341aa873b1375",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/071_generation_dispatch.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_current_billing_operations_v1(uuid)",
+      "statementSha256": "99eafdedee6ae8cb22c59dd9cafacc77576773117505da9921eb99042f25fb4d",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/074_current_billing.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_credit_ready_v1(uuid,boolean)",
+      "statementSha256": "eebd84a1c82f242869e3224429e2c3cfe4a63522f07624562175a1952f6f9132",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/075_issue_owner.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_issue_context_v1(uuid,uuid,boolean)",
+      "statementSha256": "c9866282548763a131551ca0d0de5b6efff8dd7e397ceaa367664b70852638a5",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/075_issue_owner.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_issue_commands_v1(jsonb,uuid)",
+      "statementSha256": "436be38056ae333f77208b5a96b3a6e45f71c37c9b70a50ada26c0209b43abfd",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/075_issue_owner.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_credit_invoice_valid_v1(uuid,boolean)",
+      "statementSha256": "515c629fecb9ea58b45fe3932510d0c181ff9d190073af5e2741eb7f692b5c3d",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/076_credit_issue_admission.sqlinc"
+    },
+    {
+      "signature": "private._invoice_issue_validate_batch(jsonb,date)",
+      "statementSha256": "cb82eb4a43c3d8d9b4ed4c9723524228ac4ff37e0d49fa397a8d9f5948e691bb",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/079_native_issue_admission.sqlinc"
+    },
+    {
+      "signature": "private._invoice_issue_advance_core_v8(jsonb,timestamp with time zone)",
+      "statementSha256": "5db97c1398d337835f28f294abb4472c3f91e34891c10e84e93ab2e51c4a017d",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/080_issue_native.sqlinc"
+    },
+    {
+      "signature": "private._invoice_operation_start_core_v8(jsonb,uuid,timestamp with time zone)",
+      "statementSha256": "a8b21d32d55e495c5ca778b2753b1ff3531d7163fcacd5e2ab53bcc0197dd6c8",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/081_issue_registration.sqlinc"
+    },
+    {
+      "signature": "public.invoice_issue_one(uuid,uuid)",
+      "statementSha256": "4ed1bea255fb61c98ebc3e7bb2694a0d0244b715990b61604d24c9833fdc2990",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/082_issue_one.sqlinc"
+    },
+    {
+      "signature": "private._candidate_expense_financial_remove_v1(uuid,integer,timestamp with time zone)",
+      "statementSha256": "dbfa9dadb7e9cbc817322a77611611855ce33d3a029fbc356b90600968b63505",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/010_remove.sqlinc"
+    },
+    {
+      "signature": "public.candidate_expense_update_rebind_atomic_v1(text,uuid,uuid,text,timestamp with time zone)",
+      "statementSha256": "c92ff6ff1e141dad9cddfe6f8e89e1b28786e3373d689c2f239461f04081cb18",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/020_rebind.sqlinc"
+    },
+    {
+      "signature": "public.candidate_office_expense_category_reject_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,text,text,timestamp with time zone)",
+      "statementSha256": "c43358f86937a43739fee90d374122085642b9ac2143d762e7b86e933ecadea7",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/030_office_reject.sqlinc"
+    },
+    {
+      "signature": "public.candidate_expense_component_action_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,text,timestamp with time zone)",
+      "statementSha256": "9b2e7e1234ca98b4f3619a98404cb8bde1d1f6e8fb5ee4338ef42dc69f899614",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/040_component.sqlinc"
+    },
+    {
+      "signature": "public.candidate_whole_claim_action_atomic_v1(uuid,text,uuid,integer,uuid,text,text,text,text,timestamp with time zone)",
+      "statementSha256": "584aa6ae8b6d157cd340a8144079b8a3c078a3cd73281e2881c9383e158b9290",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/050_whole.sqlinc"
+    },
+    {
+      "signature": "public.candidate_expense_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamp with time zone)",
+      "statementSha256": "7ffd18bdfb6f5a2b8d9637178de65b2a7594c0d48a32f4a2a20b53235d766072",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/060_begin.sqlinc"
+    },
+    {
+      "signature": "public.candidate_expense_update_submit_atomic_v1(uuid,text,uuid,integer,uuid,jsonb,text,timestamp with time zone)",
+      "statementSha256": "ce1ffffe8adbeef8ed34977a96b872afd314822bc69408ae27898f5f7d28f739",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/070_submit.sqlinc"
+    },
+    {
+      "signature": "public.candidate_expense_update_abort_atomic_v1(uuid,text,uuid,uuid,boolean,text,text,timestamp with time zone)",
+      "statementSha256": "810383707eedf50b3951c3be7d81d22ac0b86f0db69d581cbcc00edc48092c33",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/080_abort.sqlinc"
+    },
+    {
+      "signature": "public.candidate_expense_update_manager_hold_v1(text,uuid,text,timestamp with time zone)",
+      "statementSha256": "026d58a96c2c46ec072737d1169f15372c74ccacf07d5924f26dc24ec29f3f5f",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/090_manager_hold.sqlinc"
+    },
+    {
+      "signature": "public.candidate_expense_paper_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamp with time zone)",
+      "statementSha256": "be7b1f9a754d05319625d69e85a1759e6f8f2146d766b8250060425ceb80d9c5",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/100_paper_begin.sqlinc"
+    },
+    {
+      "signature": "public.candidate_expense_category_resubmit_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,timestamp with time zone)",
+      "statementSha256": "c96d28832428f4c783905771addbfda247dcd7215836171c098a8680ec722748",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/110_category_resubmit.sqlinc"
+    },
+    {
+      "signature": "public.candidate_expense_update_recover_expired_v1(text,integer,timestamp with time zone)",
+      "statementSha256": "6e4b6510d799712c1d8bafe04422e2920bf6576bc4f1747f1559a78b531fa002",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/120_recover.sqlinc"
+    }
+  ],
+  "nonFunctionEffects": [
+    {
+      "statementSha256": "64c591cc9ec02ba107df8548ccad895b72b70cc3dee0d42b1ecd0e850430edf4",
+      "statement": "alter function private.timesheet_contract_expense_families_enter_v1(text,uuid[],uuid,uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc"
+    },
+    {
+      "statementSha256": "cebe74b556c8148b6ee8f5c78b0e8a896983e3dd0960b67276d86b7c1fd78a4f",
+      "statement": "revoke all on function private.timesheet_contract_expense_families_enter_v1(text,uuid[],uuid,uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc"
+    },
+    {
+      "statementSha256": "f047743ae3e605b91803da9837ef9cdcf3ee0101d4e2ca0fb370dc787b9b965c",
+      "statement": "alter function private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc"
+    },
+    {
+      "statementSha256": "d8322484b96b0824f1c3216ec7124db1d9f179c22a3b32045919eb2b352e1cb9",
+      "statement": "revoke all on function private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc"
+    },
+    {
+      "statementSha256": "91b93f41a0d8eba2109557ec94306da2c1a643d5df803247f09dbbc1e6740667",
+      "statement": "alter function private.weekly_source_invoice_preservation_facts_v1(uuid[],uuid[],boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/010_source_invoice_facts.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/010_source_invoice_facts.sqlinc"
+    },
+    {
+      "statementSha256": "a100bec097bf7e07e252cd414e01b1f4983aff77112f6ec4dbd5033330d9033a",
+      "statement": "revoke all on function private.weekly_source_invoice_preservation_facts_v1(uuid[],uuid[],boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/010_source_invoice_facts.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/010_source_invoice_facts.sqlinc"
+    },
+    {
+      "statementSha256": "a186d187b5ad432e014ce1ec31aedbb2b136ba9eb4de5dc02275c87123b0c917",
+      "statement": "alter function private.weekly_source_invoice_certificate_v1(uuid[],uuid[],boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc"
+    },
+    {
+      "statementSha256": "c552f3e956ca4ddb73900194b7af85ce104b550c3970425f25cc62e7fa3d3633",
+      "statement": "alter function private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc"
+    },
+    {
+      "statementSha256": "992178decfc3381539e66c6cd5f2c96cd0e6ed13831190d9421b5d2cd04566a0",
+      "statement": "revoke all on function private.weekly_source_invoice_certificate_v1(uuid[],uuid[],boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc"
+    },
+    {
+      "statementSha256": "4045ff44343462acf356c4e3f4b67921fbe5ea3af1da3cfdb8fe016fba993d26",
+      "statement": "revoke all on function private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/015_source_certificate.sqlinc"
+    },
+    {
+      "statementSha256": "1434ca962b566ea279f46703fd19e420835907f8d66310117f33686ebed05da8",
+      "statement": "alter function private.timesheet_contract_source_original_eligible_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/018_source_original.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/018_source_original.sqlinc"
+    },
+    {
+      "statementSha256": "04eea45be9064551deb3799fc8517545225e7d8e7f3d02dab675b7b336daefc1",
+      "statement": "revoke all on function private.timesheet_contract_source_original_eligible_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/018_source_original.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/018_source_original.sqlinc"
+    },
+    {
+      "statementSha256": "437be979f1bb35046372674e6bf5ebf175cd5ce8b0d64b97a0dd863735197cae",
+      "statement": "alter function private.invoice_contract_move_line_allowed_v1(jsonb) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc"
+    },
+    {
+      "statementSha256": "2b1860e7f0797d76b50ad75086b025eaf9beec778056a280ef8053f67bd82b1d",
+      "statement": "alter function private.invoice_contract_move_verified_unissue_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc"
+    },
+    {
+      "statementSha256": "0af9dd792840cfbc4a57567a1505ab7d1597c4798fee721594ea7d86b587f4f2",
+      "statement": "revoke all on function private.invoice_contract_move_line_allowed_v1(jsonb) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc"
+    },
+    {
+      "statementSha256": "c97f186d309ec5e6c41b7fe657277ee69a794d1d063930824a78dcf56a51163b",
+      "statement": "revoke all on function private.invoice_contract_move_verified_unissue_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc"
+    },
+    {
+      "statementSha256": "145942facdf9bd16fb7bb6e3a9d68685f10d97dff1711dce2414d9ccd6493c8f",
+      "statement": "alter function private.timesheet_contract_claim_pending_v1(uuid,uuid,uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/024_claim_pending.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/024_claim_pending.sqlinc"
+    },
+    {
+      "statementSha256": "e9413e7eeb6682c01f1e236eefb8d4955e22e78b8bda72956bf2557a1de6a59f",
+      "statement": "revoke all on function private.timesheet_contract_claim_pending_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/024_claim_pending.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/024_claim_pending.sqlinc"
+    },
+    {
+      "statementSha256": "f6c620c35b7eeeb3f476a95b1f7aceb2b099cdcacbee32fb61495b54722edd37",
+      "statement": "alter function private.timesheet_contract_claim_placement_v1(uuid,uuid,uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/025_claim_placement.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/025_claim_placement.sqlinc"
+    },
+    {
+      "statementSha256": "a88b73e7bfac2770c01ec62a94d7c0a393cddee870da0efe4a7b02490023661a",
+      "statement": "revoke all on function private.timesheet_contract_claim_placement_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/025_claim_placement.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/025_claim_placement.sqlinc"
+    },
+    {
+      "statementSha256": "0866336c9e194b52075f47928099145dcaecfee88316620d0bb9ace26501722f",
+      "statement": "alter function private._candidate_expense_owner_context_lock_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/028_claim_lock.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/028_claim_lock.sqlinc"
+    },
+    {
+      "statementSha256": "ab7a47680023768de9ed62221dc0af4940c3b31ab2d1a1a54bc12711950034ac",
+      "statement": "revoke all on function private._candidate_expense_owner_context_lock_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/028_claim_lock.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/028_claim_lock.sqlinc"
+    },
+    {
+      "statementSha256": "3424b45882a506d9cb6efc698ec634afe0bad16ea0ebcca9ef3e598c6a4d44d1",
+      "statement": "drop function if exists private._invoice_generation_vat_policy_batch(jsonb);",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033c_native_vat_policy.sqlinc",
+      "provenance": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_vat_policy_batch.sql"
+    },
+    {
+      "statementSha256": "6d6657466609ff3eb3e2349cb82ecc62211f85e6a7820906c622fdfd5f362ed8",
+      "statement": "revoke all on function private._invoice_generation_vat_policy_batch(jsonb)\n  from public,anon,authenticated;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033c_native_vat_policy.sqlinc",
+      "provenance": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_vat_policy_batch.sql"
+    },
+    {
+      "statementSha256": "5920d95131cee48781a29ad609ec6e4ab8070cb4f84eb97e65af488bb50979a9",
+      "statement": "grant execute on function private._invoice_generation_vat_policy_batch(jsonb)\n  to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033c_native_vat_policy.sqlinc",
+      "provenance": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_vat_policy_batch.sql"
+    },
+    {
+      "statementSha256": "672f7decb1acc5421d5f63904d8ac68d90bd86a0732886ac46ac061863fe3c58",
+      "statement": "alter function private.invoice_contract_move_inspect_v1(jsonb,uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc"
+    },
+    {
+      "statementSha256": "db49644e8a575a8ae65c345dfb2164da9f5a98d7ba866f0f813791da9be66c71",
+      "statement": "alter function private.invoice_contract_move_preflight_v1(uuid,uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc"
+    },
+    {
+      "statementSha256": "5274d3b1d29008f1bc6d83a0791f2209dfd2a766e09ca30ecbbbe3c257a34599",
+      "statement": "revoke all on function private.invoice_contract_move_inspect_v1(jsonb,uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc"
+    },
+    {
+      "statementSha256": "cbc3a4d7d7a4f7279bbaad06b5488c5653ccab21f179a67382d5623d142e8a8b",
+      "statement": "revoke all on function private.invoice_contract_move_preflight_v1(uuid,uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/035_preflight.sqlinc"
+    },
+    {
+      "statementSha256": "17e1d024750aa65ec769924eb1e78660cafdc352ddca6466a06787a81f9a1c5d",
+      "statement": "alter function private._candidate_expense_financial_remove_v1(uuid,integer,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/010_remove.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/010_remove.sqlinc"
+    },
+    {
+      "statementSha256": "6318da95de2e808034776ed159fff23bef12f553c6874831c32787207b1f49ed",
+      "statement": "revoke all on function private._candidate_expense_financial_remove_v1(uuid,integer,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/010_remove.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/010_remove.sqlinc"
+    },
+    {
+      "statementSha256": "4bda9fd27166ae3d5d2450e576c9ce3ae92d2693bdcbf7c04b3141a42b421b37",
+      "statement": "alter function public.candidate_expense_update_rebind_atomic_v1(text,uuid,uuid,text,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/020_rebind.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/020_rebind.sqlinc"
+    },
+    {
+      "statementSha256": "0255546dd3f717db46f029d112abf880f914e393a55f692e57b4d66039db8da9",
+      "statement": "revoke all on function public.candidate_expense_update_rebind_atomic_v1(text,uuid,uuid,text,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/020_rebind.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/020_rebind.sqlinc"
+    },
+    {
+      "statementSha256": "58f3ac8957c2d24bb792bf60de0a188bf11b48de81c1f09adfce2d067a03ea0b",
+      "statement": "grant execute on function public.candidate_expense_update_rebind_atomic_v1(text,uuid,uuid,text,timestamptz) to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/020_rebind.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/020_rebind.sqlinc"
+    },
+    {
+      "statementSha256": "f7ce04c950b1d9a02ec4b482885a19f083d5eff429997a8aaabcad4b40a3d67a",
+      "statement": "alter function public.candidate_office_expense_category_reject_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,text,text,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/030_office_reject.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/030_office_reject.sqlinc"
+    },
+    {
+      "statementSha256": "e6b79d98936c1c4694eb5ceb93b6a28795155dc816700d535f5504a828f07f4d",
+      "statement": "revoke all on function public.candidate_office_expense_category_reject_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,text,text,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/030_office_reject.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/030_office_reject.sqlinc"
+    },
+    {
+      "statementSha256": "d815554610b79b7fc63be8a7b572271dd9556f759754ab64ca0bfe793b72fa9a",
+      "statement": "alter function public.candidate_expense_component_action_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,text,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/040_component.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/040_component.sqlinc"
+    },
+    {
+      "statementSha256": "a2cfa13bcd0f0e8456c78e15b38d69a840a9f6c733f22bc5b8f95fd6aeb62e3f",
+      "statement": "revoke all on function public.candidate_expense_component_action_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,text,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/040_component.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/040_component.sqlinc"
+    },
+    {
+      "statementSha256": "5742a43362b0fb409bd93afb92b0a6f3dac600aa81d744a48b5901954b1424ed",
+      "statement": "grant execute on function public.candidate_expense_component_action_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,text,timestamptz) to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/040_component.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/040_component.sqlinc"
+    },
+    {
+      "statementSha256": "7e240bb2b50b0d0ad9811281746555f72eb805566cf2b2cb96fb8058e79080cd",
+      "statement": "alter function public.candidate_whole_claim_action_atomic_v1(uuid,text,uuid,integer,uuid,text,text,text,text,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/050_whole.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/050_whole.sqlinc"
+    },
+    {
+      "statementSha256": "22a3ee6f2019970c4f54e9725a345d101dd11cc2073d49506536b1edec35d905",
+      "statement": "revoke all on function public.candidate_whole_claim_action_atomic_v1(uuid,text,uuid,integer,uuid,text,text,text,text,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/050_whole.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/050_whole.sqlinc"
+    },
+    {
+      "statementSha256": "56194b2729e6810d5928f7b2e576d8f6b929dd778a67588fe8e727f2a8eb4a0b",
+      "statement": "grant execute on function public.candidate_whole_claim_action_atomic_v1(uuid,text,uuid,integer,uuid,text,text,text,text,timestamptz) to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/050_whole.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/050_whole.sqlinc"
+    },
+    {
+      "statementSha256": "617f07769921d93c902ecafe61bf91a3f71b66531e3a820a21354b04bcecc3ea",
+      "statement": "alter function public.candidate_expense_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/060_begin.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/060_begin.sqlinc"
+    },
+    {
+      "statementSha256": "98b0f9c1d4900f89afac9778b3b9f4702f9bec46859726f9db3b15573ce5e86b",
+      "statement": "revoke all on function public.candidate_expense_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/060_begin.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/060_begin.sqlinc"
+    },
+    {
+      "statementSha256": "4a67e8e5988f24527e88b0def87405f38780582d6d9e290dce6458709d0bd443",
+      "statement": "grant execute on function public.candidate_expense_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamptz) to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/060_begin.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/060_begin.sqlinc"
+    },
+    {
+      "statementSha256": "51cc1e7b66dc0a14ff6109601481ded62d5f261583d9546fdc80502e268c85b4",
+      "statement": "alter function public.candidate_expense_update_submit_atomic_v1(\n  uuid,text,uuid,integer,uuid,jsonb,text,timestamptz\n) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/070_submit.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/070_submit.sqlinc"
+    },
+    {
+      "statementSha256": "f535633abd4863e4a8b24280706c8eee40b45790c3c5dc9c9a9d2a720787bc57",
+      "statement": "revoke all on function public.candidate_expense_update_submit_atomic_v1(\n  uuid,text,uuid,integer,uuid,jsonb,text,timestamptz\n) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/070_submit.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/070_submit.sqlinc"
+    },
+    {
+      "statementSha256": "e1dfb7cad82ae0a5a825f892eb6d630588641707564cb983e1feae4fe3fd52cc",
+      "statement": "grant execute on function public.candidate_expense_update_submit_atomic_v1(\n  uuid,text,uuid,integer,uuid,jsonb,text,timestamptz\n) to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/070_submit.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/070_submit.sqlinc"
+    },
+    {
+      "statementSha256": "ca92430ba6525d51b6bb3fdceea071398cea584db07c5eaf09e4ebf590a971d4",
+      "statement": "alter function public.candidate_expense_update_abort_atomic_v1(uuid,text,uuid,uuid,boolean,text,text,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/080_abort.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/080_abort.sqlinc"
+    },
+    {
+      "statementSha256": "c4bc86942e01f60aaa0b8555f8f4d9001fc768f3edeb7b1fc37987f5b25684aa",
+      "statement": "revoke all on function public.candidate_expense_update_abort_atomic_v1(uuid,text,uuid,uuid,boolean,text,text,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/080_abort.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/080_abort.sqlinc"
+    },
+    {
+      "statementSha256": "66ee4b4b95bc1dfc4f07723a3208bffa8291de20041f849dccaffc1f6bce60a4",
+      "statement": "grant execute on function public.candidate_expense_update_abort_atomic_v1(uuid,text,uuid,uuid,boolean,text,text,timestamptz) to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/080_abort.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/080_abort.sqlinc"
+    },
+    {
+      "statementSha256": "030dd92fce346554866c74667b6bf41d8da43c92a911d70d87499f24d62a3918",
+      "statement": "alter function public.candidate_expense_update_manager_hold_v1(text,uuid,text,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/090_manager_hold.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/090_manager_hold.sqlinc"
+    },
+    {
+      "statementSha256": "ac9d6759cc82963f951e4ad03ce42f27ac514484e15b9d9b13061d871937caac",
+      "statement": "revoke all on function public.candidate_expense_update_manager_hold_v1(text,uuid,text,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/090_manager_hold.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/090_manager_hold.sqlinc"
+    },
+    {
+      "statementSha256": "9857efc091c479b150a23a9277f3c15ee446c4550348781ebac091e654e2dd6e",
+      "statement": "grant execute on function public.candidate_expense_update_manager_hold_v1(text,uuid,text,timestamptz) to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/090_manager_hold.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/090_manager_hold.sqlinc"
+    },
+    {
+      "statementSha256": "ad4de06680decd511383ebecf2825ec0039e3abb019ace3953fe5b80bb053afe",
+      "statement": "alter function public.candidate_expense_paper_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/100_paper_begin.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/100_paper_begin.sqlinc"
+    },
+    {
+      "statementSha256": "bd443f40d256311219a8ea98d5774f9c9b8cfb81e394c684845e94cfcca3383a",
+      "statement": "revoke all on function public.candidate_expense_paper_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamptz)\n  from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/100_paper_begin.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/100_paper_begin.sqlinc"
+    },
+    {
+      "statementSha256": "fd47e2ab3894e355e38bf54be0f054561e30d19a5e68994db02fa4f0d0fbc885",
+      "statement": "grant execute on function public.candidate_expense_paper_update_begin_atomic_v1(uuid,text,uuid,integer,jsonb,text,timestamptz)\n  to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/100_paper_begin.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/100_paper_begin.sqlinc"
+    },
+    {
+      "statementSha256": "1397d22b58db488883c3aa2769be8490d81a492e65a3fa42cd3822302d055940",
+      "statement": "alter function public.candidate_expense_category_resubmit_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/110_category_resubmit.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/110_category_resubmit.sqlinc"
+    },
+    {
+      "statementSha256": "5ac2842275ee71bd61c89ba9cc6f75bd3786b66c3c91e1646f4bd5c29767f7da",
+      "statement": "revoke all on function public.candidate_expense_category_resubmit_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,timestamptz)\n  from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/110_category_resubmit.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/110_category_resubmit.sqlinc"
+    },
+    {
+      "statementSha256": "a6873fa3c1a30578bf7a13e7be6e923e29b63166a1e719ced0cdae1cd8fbfe7a",
+      "statement": "grant execute on function public.candidate_expense_category_resubmit_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,timestamptz)\n  to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/110_category_resubmit.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/110_category_resubmit.sqlinc"
+    },
+    {
+      "statementSha256": "01c3a83f78b2f90657fdcffadd769a97649348c6aad539f33acbf1971450ee17",
+      "statement": "alter function public.candidate_expense_update_recover_expired_v1(text,integer,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/120_recover.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/120_recover.sqlinc"
+    },
+    {
+      "statementSha256": "b82ed97a33fd96421199c54958d18b05ba3a31ec2de637665a1c31700d32b768",
+      "statement": "revoke all on function public.candidate_expense_update_recover_expired_v1(text,integer,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/120_recover.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/120_recover.sqlinc"
+    },
+    {
+      "statementSha256": "96763f5cafd968814265396d62a8eb4695e0c050ab663de7ca791357dfd3fee2",
+      "statement": "grant execute on function public.candidate_expense_update_recover_expired_v1(text,integer,timestamptz) to service_role;",
+      "source": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/120_recover.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-expense-family-ingress-20261016/forward/120_recover.sqlinc"
+    },
+    {
+      "statementSha256": "c58346533ab657d6f19f6b1a7991719984885e4ae21c3dca4ef9052fe0f0d279",
+      "statement": "alter function private.invoice_contract_correction_document_preflight_v1(jsonb,jsonb,uuid,jsonb) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "2cab53aa7d56e9c06b9582cac8fee10716cf974fbb9cf727eb2ed647fd2c3d4f",
+      "statement": "revoke all on function private.invoice_contract_correction_document_preflight_v1(jsonb,jsonb,uuid,jsonb) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "8fe16eeddf684defb19cbea353727613a96856087aaadd4b2eb311991846ee98",
+      "statement": "alter function private.invoice_contract_correction_prospective_source_v1(uuid,uuid,uuid,jsonb) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "70fc5b2d4b829a1111ba0a1457e1438e89aa6378baed10f982e3a694cd77f722",
+      "statement": "revoke all on function private.invoice_contract_correction_prospective_source_v1(uuid,uuid,uuid,jsonb) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "f3af088dfa54e826b8b2c372b7441727fdb7277ea5d9b53d20f6d0b63b252db2",
+      "statement": "alter function private.invoice_contract_correction_scope_v1(uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "95a69a0aa9914b8d978f6663ba2aaacc61ec1da5904dd33571eca4a1e18cc99d",
+      "statement": "revoke all on function private.invoice_contract_correction_scope_v1(uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "a5d97c6087d5d4d076d1e53b8e1823123fb6e44eed16ceab22ba545ed9d895ac",
+      "statement": "alter function private.invoice_contract_move_billing_read_v1(uuid,uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "b264bf080dfc7dc866cd90548aea17b9638969c09d238e65bb8c52497a7bda43",
+      "statement": "revoke all on function private.invoice_contract_move_billing_read_v1(uuid,uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "f63d0550ee48a6a4ba73646478b12d18d4675bb21a1e69991389f32dcd4f0b65",
+      "statement": "alter function private.invoice_contract_move_credit_advance_v1(jsonb,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "d2eb1eb6208bbb94766078de618f3372ffcfca3a6777d791ff6ff33b66af22ce",
+      "statement": "revoke all on function private.invoice_contract_move_credit_advance_v1(jsonb,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "a8ab86fa274c33d4d1bf6c14533aca9ba906ac326a484d8f991d9d1145019518",
+      "statement": "alter function private.invoice_contract_move_credit_invoice_valid_v1(uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "0cc80c2988a22d265498b373b268c02efd8f70691274466767bda08949624708",
+      "statement": "revoke all on function private.invoice_contract_move_credit_invoice_valid_v1(uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "04102681fe7c20f7ebbb22e6be74522004899bedbab6cf5918460393976cb4a6",
+      "statement": "alter function private.invoice_contract_move_credit_ready_v1(uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "0177c675562cf143a355d74a6cd554d4402f7d41c2556da78d02d3164d585f06",
+      "statement": "revoke all on function private.invoice_contract_move_credit_ready_v1(uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "9bd7db3db16e628b072f3d5f9657939c224701233f55a7103d3df8ae22aef0e3",
+      "statement": "alter function private.invoice_contract_move_current_billing_operations_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "f24dd2ff0905c1b453007a8fe80ac962ccfde95c1facf07427000fbb97e26cb4",
+      "statement": "revoke all on function private.invoice_contract_move_current_billing_operations_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "f5eba857381047b5d441f31f8c1f7310093f9f91702b6193d9436d0a3c10f720",
+      "statement": "alter function private.invoice_contract_move_draft_only_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "17fc2653a9613ead03742dae5a1c6187ee277da19957f4315d751b221a679791",
+      "statement": "revoke all on function private.invoice_contract_move_draft_only_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "8045fe6499713a4f85faaa10153ae0baa6f676b51d8ce370e0f0266d17fa6382",
+      "statement": "alter function private.invoice_contract_move_group_facts_v1(uuid,jsonb,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "74f38aec7dffdd9100d586ca570778be1e030853277d7dd2a215eee1f15e2e09",
+      "statement": "revoke all on function private.invoice_contract_move_group_facts_v1(uuid,jsonb,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "ea51bdb83aace5f5472ff04a300f677dcdecb979acebcc2109651c3332fbee66",
+      "statement": "alter function private.invoice_contract_move_inspect_v1(jsonb,jsonb,uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "a6aa049f2caa801c960cdde46ddcb14e8fac8fc629ff61245d3e1f2e7abe50b3",
+      "statement": "revoke all on function private.invoice_contract_move_inspect_v1(jsonb,jsonb,uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "672f7decb1acc5421d5f63904d8ac68d90bd86a0732886ac46ac061863fe3c58",
+      "statement": "alter function private.invoice_contract_move_inspect_v1(jsonb,uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "5274d3b1d29008f1bc6d83a0791f2209dfd2a766e09ca30ecbbbe3c257a34599",
+      "statement": "revoke all on function private.invoice_contract_move_inspect_v1(jsonb,uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "e92a6b157f974115c785535b71c59b38aca824bf33c0953bcdc115a76c8be3a5",
+      "statement": "alter function private.invoice_contract_move_invoice_after_seal_v1(uuid,bigint) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "8293a43c8b8735f5b6a9597c71e39efc90a3eb3c47195a87c15798d6b75fb654",
+      "statement": "revoke all on function private.invoice_contract_move_invoice_after_seal_v1(uuid,bigint) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "92122a28288979497ebcb6bceca511a56be39056a190a49f8f593e8230966603",
+      "statement": "alter function private.invoice_contract_move_issue_commands_v1(jsonb,uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "2d46dd0426dd5fbb233bb56d7b432fef6329b964b3f3836477c06282e71d1169",
+      "statement": "revoke all on function private.invoice_contract_move_issue_commands_v1(jsonb,uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "ad041f7e29410c21a51bdb3a8e511529c473ef69386242637bb386125395a7ce",
+      "statement": "alter function private.invoice_contract_move_issue_context_v1(uuid,uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "1940ced5ab8ac7c672bdc30ddbe2f7c9e96ea5ee14adb6c71a7959a6423eded7",
+      "statement": "revoke all on function private.invoice_contract_move_issue_context_v1(uuid,uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "437be979f1bb35046372674e6bf5ebf175cd5ce8b0d64b97a0dd863735197cae",
+      "statement": "alter function private.invoice_contract_move_line_allowed_v1(jsonb) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "0af9dd792840cfbc4a57567a1505ab7d1597c4798fee721594ea7d86b587f4f2",
+      "statement": "revoke all on function private.invoice_contract_move_line_allowed_v1(jsonb) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "5920466bfd97b0cbbf53a6696507c60dc1bcb59007c942d01c8a2178a18e7782",
+      "statement": "alter function private.invoice_contract_move_line_reservation_assert_v1(jsonb) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "44a180a94c990968671f7f53b317b1d4341372f6320e8a7a215135dfb790fd56",
+      "statement": "revoke all on function private.invoice_contract_move_line_reservation_assert_v1(jsonb) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "2b2a49e61e49e0a693a722928515fd292a5f833bd84db6b818242c50aa428d81",
+      "statement": "alter function private.invoice_contract_move_obligation_assert_v1(uuid,bigint) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "b54a433d08062d597ea94e2a8d43b49cea8edefafb71a300eb7cb08876a89ee0",
+      "statement": "revoke all on function private.invoice_contract_move_obligation_assert_v1(uuid,bigint) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "63d80aceb17b94927a5c760aa40cae4537f2a1f635fe8ae895fe05b19bc98f89",
+      "statement": "alter function private.invoice_contract_move_original_evidence_eligible_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "377f00a8686a79399e2a2a62377ba40af0f3b2b5891e48f68087de26f1632b3e",
+      "statement": "revoke all on function private.invoice_contract_move_original_evidence_eligible_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "db49644e8a575a8ae65c345dfb2164da9f5a98d7ba866f0f813791da9be66c71",
+      "statement": "alter function private.invoice_contract_move_preflight_v1(uuid,uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "cbc3a4d7d7a4f7279bbaad06b5488c5653ccab21f179a67382d5623d142e8a8b",
+      "statement": "revoke all on function private.invoice_contract_move_preflight_v1(uuid,uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "b294eb5d700bbbb46e0fb5b45f30df2e325974051bf5d159504c660a21a9d272",
+      "statement": "alter function private.invoice_contract_move_prepare_advance_v1(jsonb,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "0b5456025428946fe3ce83133db831c31de085136d5bb120d95e10de098be9a7",
+      "statement": "revoke all on function private.invoice_contract_move_prepare_advance_v1(jsonb,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "66f2c1d3f69131d33272d65b15f4ac2a55826a0de6098fd221fb749aaf111fb0",
+      "statement": "alter function private.invoice_contract_move_prepare_v1(uuid,bigint,uuid,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "144db3fbdc6a7aff63534fea32691d749a3769045389312cadd80abd944cc0c7",
+      "statement": "revoke all on function private.invoice_contract_move_prepare_v1(uuid,bigint,uuid,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "44892a70b4e5db4c53da2485993206f5376c99bb323d25fb25e1156f2b6d97bb",
+      "statement": "alter function private.invoice_contract_move_prospective_source_v1(uuid,uuid,uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "7833561d7b97a62873c3da1a4cc98823b1dc0f989cfe99bebb658cd9a4d3b516",
+      "statement": "revoke all on function private.invoice_contract_move_prospective_source_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "42e20ededc9809eb3886577ae30ed27e41d788beea2bd6949664763b3d60f0f9",
+      "statement": "alter function private.invoice_contract_move_selected_drafts_prepare_v1(uuid,uuid,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "c9cd2001b7a4c804bcad19fadce4124069bf82710d6fc9353ba450114ec2edcf",
+      "statement": "revoke all on function private.invoice_contract_move_selected_drafts_prepare_v1(uuid,uuid,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "914bab66886814713ea5afbaacdcedee2075480450929175095f138182f5f6a2",
+      "statement": "alter function private.invoice_contract_move_selected_financial_authorise_v1(jsonb,jsonb,uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "bdfc3fb7266f548290ac83fe53c53345baf9782ca7fd59124ab9f0934fee0fc9",
+      "statement": "revoke all on function private.invoice_contract_move_selected_financial_authorise_v1(jsonb,jsonb,uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "da2e9dde6fe68dad05c9aebc9bfe3c38064ef15d01fcc232e21816c68f3d04e5",
+      "statement": "alter function private.invoice_contract_move_source_certificate_v1(uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "5275d67278e31159a74d409857340c921648a81c34f497221f581e0c0c425496",
+      "statement": "revoke all on function private.invoice_contract_move_source_certificate_v1(uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "2b1860e7f0797d76b50ad75086b025eaf9beec778056a280ef8053f67bd82b1d",
+      "statement": "alter function private.invoice_contract_move_verified_unissue_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "c97f186d309ec5e6c41b7fe657277ee69a794d1d063930824a78dcf56a51163b",
+      "statement": "revoke all on function private.invoice_contract_move_verified_unissue_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "ebb05dea36a26fb4f4202230698a374991eee61c9529591ab046cfb1d922c54b",
+      "statement": "alter function private.invoice_credit_contract_move_context_v1(uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "bdd6bfc555519b650b15ac8843ff1c271a3d79b756b1a827393a2bec4e6ee022",
+      "statement": "revoke all on function private.invoice_credit_contract_move_context_v1(uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "b66648448abe4812312a379d74e4e062d14e230dc23aaf03c5f6350f55676b77",
+      "statement": "alter function private.invoice_credit_contract_move_scope_context_v1(uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "2c51e012c5e75d4930a9085c38f12ac4b461665aec0288088134d8bac787e08b",
+      "statement": "revoke all on function private.invoice_credit_contract_move_scope_context_v1(uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "bd726fb4e48816a80d412d996333dd8a59322d19db34f1925e2e9875c15ab0f2",
+      "statement": "alter function private.invoice_daily_rate_actual_revision_assert_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "17100c59bd342989a987f437c865d36ece91caca759c300e89e31a7fe31ff701",
+      "statement": "revoke all on function private.invoice_daily_rate_actual_revision_assert_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "2a9404c8e071f109813816d3fd1f282b25a6f35984bd8bb08667f2f54114ecb0",
+      "statement": "alter function private.invoice_source_admission_line_allowed_v1(jsonb) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "b84c01206d5fd6943f341dc38bba199953305dc0fd29731e4cdbfe63843e7daf",
+      "statement": "revoke all on function private.invoice_source_admission_line_allowed_v1(jsonb) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "36eab7dca1628676c3a621bee92fe170225e8401ecabeb5b026bf8f5fbc60e66",
+      "statement": "alter function private.invoice_source_admission_line_claim_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "c105c9e0f977637a21c33f2e5c6906346fa908bd02385317468be0f0c119012a",
+      "statement": "revoke all on function private.invoice_source_admission_line_claim_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "9bed6048d14f39e69b7013f31859c3a8c3d2e74ad8f7f56c9361103c5bb284d3",
+      "statement": "alter function private.invoice_source_admission_line_enter_v1(uuid,uuid,uuid,jsonb) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "c403f749f0e8e95ece318ce4b017307d3d149af7387f657b0b3e618fac25e48a",
+      "statement": "revoke all on function private.invoice_source_admission_line_enter_v1(uuid,uuid,uuid,jsonb) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "50c2e9b6c7a68d305af327f642fbe4c142bfd6ea0c904087b92f48a4bf6374d5",
+      "statement": "alter function private.invoice_source_admission_line_finish_v1(uuid,uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "8d5accda6c68f55c3efd0531cd9c2c6e5a855c1f13bd97d1bf83298aab1b90d3",
+      "statement": "revoke all on function private.invoice_source_admission_line_finish_v1(uuid,uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "2872b4f04ece2404589d6dd40bda7616ccbc303cc14c3828a04b6ec9136a697c",
+      "statement": "alter function private.invoice_source_admission_origin_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "b778f6ff7b7fc9b670a64113f97920a9e8b94a7178a91e1d5d78a1728fac9194",
+      "statement": "revoke all on function private.invoice_source_admission_origin_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "a01bd93b5e67f4830cf87441b03892e237a51d748827879358ceee7024a4116b",
+      "statement": "alter function private.invoice_source_allocation_claim_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "2b2f7743dc7bd3f87da219fbaad6f645acd0b170826775adf24f8863aabe0db4",
+      "statement": "revoke all on function private.invoice_source_allocation_claim_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "184151e9710efda4280018e1732a25f0ce80107c1d6ed74aaa0345635140724b",
+      "statement": "alter function private.invoice_source_allocation_enter_v1(uuid,uuid,uuid,uuid[]) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "21ada7bef362d5f555235d3e76d5a8c4a34d32685e4133eef287f258d0b7cab2",
+      "statement": "revoke all on function private.invoice_source_allocation_enter_v1(uuid,uuid,uuid,uuid[]) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "689a751868410c38e2fa3b3e6af953bed9b0c76619ceed58fab699fe7c6207e4",
+      "statement": "alter function private.invoice_source_allocation_finish_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "08f2e4908fe4db74f9529a22baa84dc5850c4d9990632adc159be8152f4ed51b",
+      "statement": "revoke all on function private.invoice_source_allocation_finish_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "84b182b7ecf8532ce2bf3db194408f397b67b32ec83bb35497955567d51b88ad",
+      "statement": "alter function private.invoice_source_allocation_line_allowed_v1(jsonb) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "97b7184b433d48ca40601e151849452c7b27c64a661c3c167bcd8989772e407f",
+      "statement": "revoke all on function private.invoice_source_allocation_line_allowed_v1(jsonb) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "10c481031d9163c82d9632bf4292b4995d33baf9c49b4f250c7cabb9885e337a",
+      "statement": "alter function private.invoice_source_original_claim_enter_v1(jsonb,timestamptz) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "1f032f472bc2fade55a743f692fbdea869c45bf064cf61a4e35c2351d422661e",
+      "statement": "revoke all on function private.invoice_source_original_claim_enter_v1(jsonb,timestamptz) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "03fc1c0f4bd8e41e1ba3af37afa9c11921958cf8d088ab2910c47e887d4582c7",
+      "statement": "alter function private.invoice_source_original_claim_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "165f3023a34b989bad45bba62e2c57f79d88714a61426b59733285d13c7151fa",
+      "statement": "revoke all on function private.invoice_source_original_claim_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "b45cb4c256ed9b3bd3d8ebbf481d51e206348a4030247e42f306e5f0f7d3e460",
+      "statement": "alter function private.invoice_source_original_line_allowed_v1(jsonb) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "e4a9d1ce05e6cff0ddbc30b5e44d5fb7c2b56460b3ee5f0c61afbaf6ee3a5485",
+      "statement": "revoke all on function private.invoice_source_original_line_allowed_v1(jsonb) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "987ea42acf4118d68b05dca3562d29c15b8ed09f2afba52f340127232be170b2",
+      "statement": "alter function private.invoice_source_original_line_plan_v1(uuid,jsonb) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "4ab3393b36dd1050913a86fcf0105ef8db57f521fb31ed96a04a60556796426d",
+      "statement": "revoke all on function private.invoice_source_original_line_plan_v1(uuid,jsonb) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "f6c620c35b7eeeb3f476a95b1f7aceb2b099cdcacbee32fb61495b54722edd37",
+      "statement": "alter function private.timesheet_contract_claim_placement_v1(uuid,uuid,uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "a88b73e7bfac2770c01ec62a94d7c0a393cddee870da0efe4a7b02490023661a",
+      "statement": "revoke all on function private.timesheet_contract_claim_placement_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "1c86d4246c8ca4dbe357bb513a611f199379497b0028499e4bfb9f8c135cd0f2",
+      "statement": "alter function private.timesheet_contract_move_invoice_certificate_v1(uuid,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "51bfcdb5bd9bc79f73fe82df5d46f36a2ff45b852b61b76aff9a684c28d22a53",
+      "statement": "revoke all on function private.timesheet_contract_move_invoice_certificate_v1(uuid,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "4b387d1ede61b879ba694bdfe6ce0ae076a87911357994d037e5f2e1faabb0c7",
+      "statement": "alter function private.timesheet_contract_source_coverage_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "3ad25a1d9de10ba27132bf814bad43b04d14dfc6f7410feff27a8887d8824fb3",
+      "statement": "revoke all on function private.timesheet_contract_source_coverage_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "1434ca962b566ea279f46703fd19e420835907f8d66310117f33686ebed05da8",
+      "statement": "alter function private.timesheet_contract_source_original_eligible_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "04eea45be9064551deb3799fc8517545225e7d8e7f3d02dab675b7b336daefc1",
+      "statement": "revoke all on function private.timesheet_contract_source_original_eligible_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "be85f9436316ba9ad19e166baad61671534e8bcf36c62d90aaea5721e1596fd8",
+      "statement": "alter function private.timesheet_contract_source_pay_only_v1(uuid) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "c37aa83bde958479793d5e3067004572025d43cb0eaec182e7be27dbd0e42714",
+      "statement": "revoke all on function private.timesheet_contract_source_pay_only_v1(uuid) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "c552f3e956ca4ddb73900194b7af85ce104b550c3970425f25cc62e7fa3d3633",
+      "statement": "alter function private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "4045ff44343462acf356c4e3f4b67921fbe5ea3af1da3cfdb8fe016fba993d26",
+      "statement": "revoke all on function private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "a186d187b5ad432e014ce1ec31aedbb2b136ba9eb4de5dc02275c87123b0c917",
+      "statement": "alter function private.weekly_source_invoice_certificate_v1(uuid[],uuid[],boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "992178decfc3381539e66c6cd5f2c96cd0e6ed13831190d9421b5d2cd04566a0",
+      "statement": "revoke all on function private.weekly_source_invoice_certificate_v1(uuid[],uuid[],boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "91b93f41a0d8eba2109557ec94306da2c1a643d5df803247f09dbbc1e6740667",
+      "statement": "alter function private.weekly_source_invoice_preservation_facts_v1(uuid[],uuid[],boolean) owner to postgres;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    },
+    {
+      "statementSha256": "a100bec097bf7e07e252cd414e01b1f4983aff77112f6ec4dbd5033330d9033a",
+      "statement": "revoke all on function private.weekly_source_invoice_preservation_facts_v1(uuid[],uuid[],boolean) from public,anon,authenticated,service_role;",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc",
+      "provenance": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/099_new_private_acl.sqlinc"
+    }
+  ],
+  "output": {
+    "path": "JOINED_INVOICE_SOURCE.sqlinc",
+    "sha256": "a8c57548c911fb11140be3b3d2256aba876995fb196396850b6fe38e2f0797f4",
+    "bytes": 1314632
+  },
+  "native": {
+    "postgres17": "NOT_RUN",
+    "rollback": "NOT_RUN",
+    "api": "NOT_RUN",
+    "acl": "NOT_RUN",
+    "concurrency": "NOT_RUN",
+    "financial": "NOT_RUN"
+  },
+  "sourcePreflight": {
+    "dbCheck": "BASELINE_FAIL_UNRECORDED_MIGRATION",
+    "detail": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql"
+  }
+}

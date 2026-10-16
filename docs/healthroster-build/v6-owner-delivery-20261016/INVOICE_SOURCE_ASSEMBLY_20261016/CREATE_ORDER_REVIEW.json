@@ -1,0 +1,240 @@
+{
+  "version": "HEALTH_INVOICE_CREATE_ORDER_SOURCE_REVIEW_V1",
+  "qualification": "DECLARED_SOURCE_NOT_NATIVE_CATALOGUE",
+  "assemblySha256": "a8c57548c911fb11140be3b3d2256aba876995fb196396850b6fe38e2f0797f4",
+  "candidateSelection": {
+    "commit": "f5668bf45854ca36b47e713c0e8f3dd3ae4b852b",
+    "path": "docs/healthroster-build/proposals/candidate-joined-final-20261016/REVIEWED_SELECTION.json",
+    "sha256": "866457b59011b0ff4ae912c03eb61203a3fe9ac55afcb85d67e8a249c6625941",
+    "functions": 55
+  },
+  "sqlDefinitionCount": 10,
+  "sqlDefinitions": [
+    {
+      "signature": "private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid)",
+      "statementSha256": "f76eeb1e779846f94665dbaeefd09f06b1494e66e9b83c7c9f00bec749d686f5",
+      "source": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc",
+      "language": "SQL",
+      "candidateCalls": [],
+      "allQualifiedCalls": [
+        "private.timesheet_contract_expense_families_enter_v1"
+      ]
+    },
+    {
+      "signature": "private.timesheet_contract_source_pay_only_v1(uuid)",
+      "statementSha256": "3c15353b3baa57ed1f504d51316d034da5c45cd83fec9cba1fda767378e08f6e",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/018_source_original.sqlinc",
+      "language": "SQL",
+      "candidateCalls": [],
+      "allQualifiedCalls": [
+        "private.timesheet_contract_move_accepting_v1"
+      ]
+    },
+    {
+      "signature": "private.weekly_source_invoice_family_timesheet_ids_v1(uuid)",
+      "statementSha256": "ee35912b3f752dfcd138099cdf389571da62cd11d53b5ec50343f6ea4e4d00f6",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/020_source_family.sqlinc",
+      "language": "SQL",
+      "candidateCalls": [],
+      "allQualifiedCalls": [
+        "private.timesheet_contract_move_accepting_v1",
+        "public._pay_timesheet_rotation_scope"
+      ]
+    },
+    {
+      "signature": "private.invoice_contract_move_verified_unissue_v1(uuid)",
+      "statementSha256": "5dad562e8ae89a949479a08a939db28b4ca99df9b8f3fb39dcb9d28f492808e5",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024_line_admission.sqlinc",
+      "language": "SQL",
+      "candidateCalls": [],
+      "allQualifiedCalls": []
+    },
+    {
+      "signature": "private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamp with time zone)",
+      "statementSha256": "8f7db6be417adabd2b7d027486a8c68c845f049ddeb435a0c32ada898a783cf4",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033_native_grouping.sqlinc",
+      "language": "SQL",
+      "candidateCalls": [],
+      "allQualifiedCalls": [
+        "private.timesheet_contract_source_original_eligible_v1",
+        "private.timesheet_correction_invoice_route_v1",
+        "private._candidate_feature_enabled_current_v1",
+        "private.invoice_contract_correction_prospective_source_v1",
+        "private._timesheet_settings_authority_frozen_v1",
+        "private.timesheet_contract_source_pay_only_v1",
+        "private._invoice_source_reference_validate_batch",
+        "private.invoice_credit_scope_context_v1"
+      ]
+    },
+    {
+      "signature": "private._invoice_source_reference_validate_batch(jsonb)",
+      "statementSha256": "dbcf55a03396b821cf36a0cc8aeb67e83f92ac45aac1aaaed14b53a12ec0e5b3",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033b_native_references.sqlinc",
+      "language": "SQL",
+      "candidateCalls": [],
+      "allQualifiedCalls": [
+        "private.timesheet_contract_source_original_eligible_v1",
+        "private._candidate_feature_enabled_current_v1",
+        "private.invoice_contract_correction_prospective_source_v1",
+        "private._timesheet_settings_authority_frozen_v1"
+      ]
+    },
+    {
+      "signature": "private._invoice_generation_vat_policy_batch(jsonb)",
+      "statementSha256": "b84138660bd7751057ccb84f7817af7048c24a5b4ad41dcb38bb59d68944871d",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033c_native_vat_policy.sqlinc",
+      "language": "SQL",
+      "candidateCalls": [],
+      "allQualifiedCalls": [
+        "private.timesheet_contract_source_original_eligible_v1",
+        "private._timesheet_settings_authority_frozen_v1"
+      ]
+    },
+    {
+      "signature": "private._invoice_reference_rows_batch(uuid[])",
+      "statementSha256": "c7ed58c718510f303e97366502cf85efc6a9f1c9a6027bc71c16210405e24d61",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033d_native_invoice_references.sqlinc",
+      "language": "SQL",
+      "candidateCalls": [],
+      "allQualifiedCalls": [
+        "private.timesheet_contract_source_original_eligible_v1"
+      ]
+    },
+    {
+      "signature": "private.invoice_contract_move_current_billing_operations_v1(uuid)",
+      "statementSha256": "99eafdedee6ae8cb22c59dd9cafacc77576773117505da9921eb99042f25fb4d",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/074_current_billing.sqlinc",
+      "language": "SQL",
+      "candidateCalls": [],
+      "allQualifiedCalls": []
+    },
+    {
+      "signature": "private._invoice_issue_validate_batch(jsonb,date)",
+      "statementSha256": "cb82eb4a43c3d8d9b4ed4c9723524228ac4ff37e0d49fa397a8d9f5948e691bb",
+      "source": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/079_native_issue_admission.sqlinc",
+      "language": "SQL",
+      "candidateCalls": [
+        {
+          "signature": "private.timesheet_contract_move_evidence_source_v1(uuid)",
+          "sourceCommit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+          "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/14_original_evidence_source.sqlinc",
+          "spanSha256": "536ee24d5d65ea9c8c31d7b1426a09ca1040bb10fbca29d42d99292228009853"
+        }
+      ],
+      "allQualifiedCalls": [
+        "private.invoice_contract_move_credit_invoice_valid_v1",
+        "private._invoice_reference_rows_batch",
+        "private._candidate_feature_enabled_current_v1",
+        "private._invoice_correction_validate_batch",
+        "private._invoice_delivery_routes_batch",
+        "private.timesheet_contract_move_evidence_source_v1",
+        "private.invoice_contract_move_original_evidence_eligible_v1",
+        "private.weekly_source_invoice_issue_blockers_v1"
+      ]
+    }
+  ],
+  "pendingRuntimeCallers": [
+    {
+      "signature": "private.timesheet_contract_claim_pending_v1(uuid,uuid,uuid)",
+      "statementSha256": "f2f7a03e3702771d8be3efacaa9730ab363fba55fe7f87ed377e9c56514164d2",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/024_claim_pending.sqlinc",
+      "language": "PLPGSQL",
+      "candidateCalls": [
+        {
+          "signature": "private.timesheet_contract_native_pending_workflow_v1(jsonb,uuid)",
+          "sourceCommit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+          "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/03f_pending_workflow.sqlinc",
+          "spanSha256": "197953f9f7edba46f848ddbe11de74be7b0c682ee78c8792127211463ab3c671"
+        },
+        {
+          "signature": "private.timesheet_contract_native_pending_for_v1(uuid)",
+          "sourceCommit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+          "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/03a_pending_read_enter.sqlinc",
+          "spanSha256": "05a93810ff58cad25d4e45a73496d5052e78a195506a0bff8ca285f803a73a3b"
+        },
+        {
+          "signature": "private.timesheet_contract_native_pending_week_v1(uuid)",
+          "sourceCommit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+          "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/03a_pending_read_enter.sqlinc",
+          "spanSha256": "0f3f07a2c010d46bbdf939e1a4eaf719546770e3de6ebf608ccc38a8a59339f1"
+        }
+      ],
+      "allQualifiedCalls": [
+        "private.timesheet_contract_native_pending_for_v1",
+        "private.timesheet_contract_native_pending_week_v1",
+        "private.timesheet_contract_native_pending_workflow_v1"
+      ]
+    },
+    {
+      "signature": "private.timesheet_contract_claim_placement_v1(uuid,uuid,uuid)",
+      "statementSha256": "a08d222b91c84d23438cb2523e1dd235734c8bc35384091cfae98fff35d807c0",
+      "source": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/025_claim_placement.sqlinc",
+      "language": "PLPGSQL",
+      "candidateCalls": [
+        {
+          "signature": "private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)",
+          "sourceCommit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+          "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/03c_rotation_bindings.sqlinc",
+          "spanSha256": "edc48e572c2f6c949dfe28d397f31009f2c85edc27831d708d0772f6fe59906c"
+        },
+        {
+          "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+          "sourceCommit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+          "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/04_current_placement.sqlinc",
+          "spanSha256": "c5bed2df9b498cfbe27695ec4a67ef390d2250e04efe6f4d375faad97dbc7827"
+        },
+        {
+          "signature": "private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)",
+          "sourceCommit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+          "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/02_allocation_binding.sqlinc",
+          "spanSha256": "999432493131a984cbb81ef2019035c1f3fc5fb8c40f22af6abd1620006af72a"
+        }
+      ],
+      "allQualifiedCalls": [
+        "private.timesheet_contract_claim_pending_v1",
+        "private.timesheet_contract_native_rotation_binding_v1",
+        "private.timesheet_contract_native_allocation_binding_v1",
+        "private.timesheet_contract_current_placement_v1"
+      ]
+    }
+  ],
+  "existingCreateTimeCandidateDependency": {
+    "signature": "private.timesheet_contract_move_evidence_source_v1(uuid)",
+    "returns": "jsonb",
+    "rootCommit": "77c629dba2efe39fa0e676e551e12bf5cf442664",
+    "existingRootPath": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+    "existingRootCanonicalLfSha256": "920248f7ed713c881e379ddc33a5400d9f3804a2ac3fcb7771be1bcc02002f39",
+    "existingDefinitionPath": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+    "existingFileCanonicalLfSha256": "40945fe7761856b8296ef9a760c7168bdeeabedcbba7d619e4a5413167a0b0db",
+    "existingStatementSha256": "7eb2098e826582e1f1a22a3a2cd1b74589739b35d82ec545b91e56bd6214a7c9",
+    "existingHeader": "create or replace function private.timesheet_contract_move_evidence_source_v1(p_timesheet_id uuid)\nreturns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'",
+    "finalCandidateSource": {
+      "commit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/14_original_evidence_source.sqlinc",
+      "fileSha256": "4bbd6895031ef92bb32c6d63f2f8e53e7eea54b8196ff4ded40f7d5cf1535846",
+      "statementIndex": 0,
+      "startByte": 0,
+      "endByteExclusive": 3926,
+      "spanSha256": "536ee24d5d65ea9c8c31d7b1426a09ca1040bb10fbca29d42d99292228009853",
+      "tag": "CreateFunctionStmt",
+      "signature": "private.timesheet_contract_move_evidence_source_v1(uuid)"
+    },
+    "finalHeader": "-- Immutable original invoice/document evidence remains readable when genuine\n-- native withdrawal leaves no current Timesheet, or later genuine inputs differ.\n-- This never makes original signatures certify changed current worked facts.\ncreate or replace function private.timesheet_contract_move_evidence_source_v1(p_timesheet_id uuid)\nreturns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'",
+    "sourceAbi": "Same single named uuid input and jsonb return; existing0713 routine resolves SQL issue-validator creation before finalCandidate55."
+  },
+  "requiredCandidateFoundationPreload": [],
+  "order": [
+    "Canonical Root01 schema and exact earlier Physical0713 core including evidence_source(uuid)->jsonb; Daily04b/04c/04d complete authority",
+    "Complete Invoice94 assembly with all retained DDL/ACL effects and final099",
+    "Complete finalCandidate55 and pending one-time schema/effects/final ACL according to f566 recipe; no duplicate full package or stub preload",
+    "Complete Source pending/current helper composition and exact full Invoice-duty successor in the same reviewed final composition",
+    "Final security/contract and first use after all final definitions are installed; preserve feature-off/intermediate native-prefix legacy behaviour"
+  ],
+  "noShortcut": [
+    "No invented preload",
+    "No stub or fake prologue",
+    "No check_function_bodies=off",
+    "No duplicate finalCandidate55"
+  ],
+  "limits": "PLpgSQL calls are runtime dependencies, not proof of successful first use. Native PostgreSQL17 CREATE, catalogue/ACL, full first-use and concurrency acceptance remain NOT_RUN."
+}

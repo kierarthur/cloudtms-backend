@@ -1,0 +1,14 @@
+{
+  "version": "HEALTH_SOURCE_QUALIFICATION_MANIFEST_V1",
+  "qualification": "SOURCE_ONLY_NOT_NATIVE_ACCEPTANCE",
+  "native": "NOT_RUN",
+  "files": {
+    "ASSEMBLY_MANIFEST.json": "f7261f85c3d409ed00e78e0f7a7508038752d1e09128b7c8224e0608677b960f",
+    "JOINED_INVOICE_SOURCE.sqlinc": "a8c57548c911fb11140be3b3d2256aba876995fb196396850b6fe38e2f0797f4",
+    "CREATE_ORDER_REVIEW.json": "a2dfcc73d1a543cd027742a80e5bee7e79705d42b905e88e78f1cf946896bf3d",
+    "build-assembly.mjs": "4ed28a0d400b895748f09cc172a314286a5eadd8e545d8560455e9086581ebae",
+    "review-create-order.mjs": "5f4a3a108accc0c5534a6ecabce1e9660e1a0c0fdad6ce49c8ec9a7a111946c5",
+    "verify-assembly.test.mjs": "a9c106ddbfa039370080c76844f93bdc8c7260171ff71712fc30a2260f1a8c94",
+    "README.md": "7fb99e8dfef546644807bd3daef84c83eed9b19206a825cafb8f5db3236f12d2"
+  }
+}
