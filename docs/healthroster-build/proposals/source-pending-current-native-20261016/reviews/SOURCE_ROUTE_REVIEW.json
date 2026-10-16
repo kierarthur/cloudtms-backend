@@ -1,0 +1,169 @@
+{
+  "version": "SOURCE_MISSING_ROUTE_MIN_REVIEW_V1",
+  "status": "SOURCE_REVIEW_ONLY_NATIVE_NOT_RUN",
+  "own_commit": "e4661d28219b85c66b854d99c6522b55aae33139",
+  "root_commit": "8af28a98efe4594594997a068ea3d4c4f2de16fb",
+  "conclusion": "No wrong-manager transport caused by this MIN was found in the traced controlling consumers. It is an intentionally lossy representative used to group one Candidate-directed missing Contract/week question; it is not a singleton recipient proof or a complete policy-route hash.",
+  "limits": [
+    "A non-minimum route change may leave the representative group key unchanged. This key must not be classified as sealing all manager addresses or policy facts.",
+    "The publication-bound missing-scope fingerprint independently seals every resolved row and its saved effective-policy fingerprint. It does not itself assert current manager policy. Current manager sends use separate actual-work-date facts and current per-action CAS.",
+    "A change in the minimum may change current display selection identity; existing workspace and selection CAS reject stale keys. No accepted request ID, membership, generation or clock is rewritten by the read.",
+    "The Candidate request owner deliberately resolves its own real cohort from first Contract/week at the native start point, not from MIN. Its retained owner lookup/replay uses actual membership and original generation. Missing Contract/week is not partitioned by manager address.",
+    "Other independent week-ending policy choices are outside this aggregate classification; no blanket claim that every manager route producer is qualified.",
+    "No SQL changed. No PostgreSQL/native/provider/race execution or F23 approval is claimed."
+  ],
+  "files": [
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/22_query_groups.sqlinc",
+      "sha256": "ca4bba75f1e1aa7ee977f72cc888a7fc821d8b2b9e9e5615d5b78d9490cc8361"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10_complete_source_readers_correction.sqlinc",
+      "sha256": "420139cda0467dfa61d9fb28240f6c8843317610313c8f736fe6278b00520f0c"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "sha256": "613c9d3502fbf9332b2c1d9a0c2262cdb8c9a47285d58868ab988fc699aa997a"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/14_manager_action_current_witness.sqlinc",
+      "sha256": "29d417aac44be428ccd894e907095dc2477618069d3eb4be823d5c1d667fe0b5"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/29_native_contact_bulk.sqlinc",
+      "sha256": "75d3a54270939e2a1d23bdf3cdfca193a383e0cd528b462d5389c75342db9f93"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/33_native_submission_pause.sqlinc",
+      "sha256": "ff8d76ddada432abaa5537a36b3e260e395e76fb437e8f9ea2990c84334677a2"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/38_native_submission_readers.sqlinc",
+      "sha256": "dccdc8e5843aee7fd6d18e0bebca9ab76a57a9e7691ddd3e1b216b11346861c4"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/39_native_submission_callers.sqlinc",
+      "sha256": "1d1c587b17750260804553b16aa46cd6ec2ee0138fddb332a3a2ae44480c9074"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/44_manager_selection_scope_locks.sqlinc",
+      "sha256": "9d69e2f9fcaf43754855b58741682e7ec8e396d03a7a15f1c8671c55fcaf2289"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/50_manager_selection_capture.sqlinc",
+      "sha256": "fab1d2d7885bead48ca5c4e9df27e5ac4cd975c081e7dc5c6f4e4ca7c9963f51"
+    },
+    {
+      "base": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/51_native_initial_manager_owner.sqlinc",
+      "sha256": "962d5bc5aad71a333bd1134a11ee876c9a4ed5e9f7402239c0426df40e68b04d"
+    }
+  ],
+  "proofs": [
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/22_query_groups.sqlinc",
+      "line": 253,
+      "exact": "(min(missing_rows.route_context->>'route_key'))::text route_key_hex",
+      "sha256": "5bd54ef8637bd6d8c2c06a64aca52305508b0e38bbdba5e39039997c8ba71b1d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/22_query_groups.sqlinc",
+      "line": 448,
+      "exact": "and pg_catalog.jsonb_array_length(coalesce(missing.scopes,'[]'::jsonb))=0 manager_eligible",
+      "sha256": "75a75cceb7251fc66272faa4887aa120bfd65b240228a232a40409841242fa77"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10_complete_source_readers_correction.sqlinc",
+      "line": 2187,
+      "exact": "and pg_catalog.jsonb_array_length(coalesce(missing.scopes,'[]'::jsonb))=0 manager_eligible",
+      "sha256": "75a75cceb7251fc66272faa4887aa120bfd65b240228a232a40409841242fa77"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "line": 746,
+      "exact": "'missing_scopes',groups.missing_scopes,'candidate_asked',groups.candidate_asked",
+      "sha256": "1bef23c240bedcf08488102f5405b7f3b9f9446a57a748e5885d28374ee0cfa4"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "line": 224,
+      "exact": "'effective_policy_fingerprint',case when effective_policy_fingerprint is null then null",
+      "sha256": "864bd306d3231ff03ed8f8ef072b4607e785bf46a8cf5ea7bd31c026123992eb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/14_manager_action_current_witness.sqlinc",
+      "line": 23,
+      "exact": "if not query.manager_eligible or cardinality(query.incident_ids)=0 or jsonb_array_length(query.missing_scopes)>0 then",
+      "sha256": "cfbdc8d75c3eef7971ec3002b3039845f03820ddae63ad81220d45c387ab8c9f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/29_native_contact_bulk.sqlinc",
+      "line": 459,
+      "exact": "where query.group_key=any(v_selected_keys) and query.manager_eligible",
+      "sha256": "a59e929af66b0baed46641373efc6b19ca74dfe109a4de42495f3ddecc39af70"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/29_native_contact_bulk.sqlinc",
+      "line": 460,
+      "exact": "and pg_catalog.jsonb_array_length(query.missing_scopes)=0",
+      "sha256": "b026021d57662af476dd74e350c71f6d2aed514bf8724e27aecd88db1cabd0bd"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/29_native_contact_bulk.sqlinc",
+      "line": 468,
+      "exact": "'projection_publication_id',v_publication_id,'incident_ids',to_jsonb(v_route.incident_ids))",
+      "sha256": "f7333525fc75b9bcc22468f2bd090f20241b8bd7812d4dc22749a3e8eba919c3"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/51_native_initial_manager_owner.sqlinc",
+      "line": 133,
+      "exact": "v_comparison.contract_id,v_event.work_date",
+      "sha256": "136146dee084e854926e6dd68c8ae42ce432ba2f9c5588392c214937635b8896"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/51_native_initial_manager_owner.sqlinc",
+      "line": 141,
+      "exact": "elsif v_route_id<>v_current_route_id then",
+      "sha256": "e32ab1051eb2a50eac4298e4b5d9e14484abae93df3570579fbb29837c41442d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/50_manager_selection_capture.sqlinc",
+      "line": 43,
+      "exact": "if recipient is null then recipient:=fact->>'manager_address';elsif recipient is distinct from fact->>'manager_address'then",
+      "sha256": "3e56d5dd8ac87a54779756d968e64ba1943b8cfa7a9c75e774e48c7cb1185376"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/39_native_submission_callers.sqlinc",
+      "line": 45,
+      "exact": "cross join lateral pg_catalog.jsonb_array_elements(groups.missing_scopes) membership",
+      "sha256": "4fc4c5827b554202ea44710187f0056b375dfa7485de3b242ffcbc1727164a1e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/33_native_submission_pause.sqlinc",
+      "line": 107,
+      "exact": "v_first_work_date:=(v_scope->>'week_ending')::date;",
+      "sha256": "d6a76a714d214bcbfc6b285ed99c9601f88891cd72843e77423343dd7c4079c7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/33_native_submission_pause.sqlinc",
+      "line": 162,
+      "exact": "v_context:=private.weekly_source_query_cohort_ensure_v1(v_cycle_id,v_candidate_id,v_first_client_id,v_first_contract_id,v_first_work_date);",
+      "sha256": "c5439ed229fa57277035b0d8ff85f7504cd3a0fad20846cac14015637eb25c22"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+alter function private._candidate_expense_source_family_v1(uuid) owner to postgres;
+revoke all on function private._candidate_expense_source_family_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_resolve_root_identity_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_resolve_root_identity_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_lock_family_rows_v1(uuid[],uuid) owner to postgres;
+revoke all on function private.weekly_source_lock_family_rows_v1(uuid[],uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_pay_query_scope_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_pay_query_scope_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean) owner to postgres;
+revoke all on function private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean) from public,anon,authenticated,service_role;
+alter function private.weekly_source_invoice_duty_scope_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_invoice_duty_scope_v1(uuid) from public,anon,authenticated,service_role;

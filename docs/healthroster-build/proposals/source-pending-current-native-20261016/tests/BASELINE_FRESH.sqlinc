@@ -1,0 +1,16 @@
+-- Bounded read-only before/fresh source catalogue. No definitions or fixtures.
+with expected(signature) as(values
+ ('private._candidate_expense_source_family_v1(uuid)'),
+ ('private.weekly_source_resolve_root_identity_v1(uuid)'),
+ ('private.weekly_source_lock_family_rows_v1(uuid[],uuid)'),
+ ('private.weekly_source_pay_query_scope_v1(uuid)'),
+ ('private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)'),
+ ('private.weekly_source_invoice_duty_scope_v1(uuid)'))
+select expected.signature,p.oid is not null as present,
+ case when p.oid is null then null else encode(sha256(convert_to(pg_get_functiondef(p.oid),'UTF8')),'hex') end as definition_sha256,
+ role.rolname as owner_name,p.prosecdef,p.provolatile,p.proconfig,
+ case when p.oid is null then null else has_function_privilege('anon',p.oid,'EXECUTE') end as anon_execute,
+ case when p.oid is null then null else has_function_privilege('authenticated',p.oid,'EXECUTE') end as authenticated_execute,
+ case when p.oid is null then null else has_function_privilege('service_role',p.oid,'EXECUTE') end as service_execute
+from expected left join pg_proc p on p.oid=to_regprocedure(expected.signature)
+left join pg_roles role on role.oid=p.proowner order by expected.signature;

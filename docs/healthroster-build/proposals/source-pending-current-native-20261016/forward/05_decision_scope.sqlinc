@@ -1,0 +1,171 @@
+create or replace function private.weekly_source_pay_decision_resolved_scope_v1(p_browser jsonb,p_actor uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public as $function$
+declare body jsonb;selection jsonb:='[]';entry jsonb;subject jsonb;resolved jsonb;first_client uuid;root uuid;
+ family public.weekly_exceptional_pay_target_families%rowtype;lineage public.weekly_source_row_timesheet_lineages%rowtype;
+ primary_scope jsonb;required jsonb:='[]';active record;issues jsonb;issue_ids jsonb;invoice jsonb;
+ invoices uuid[];prior jsonb:='[]';old_member record;component text;member_key text;old_decisions uuid[]:='{}';
+ candidate uuid;scope_item jsonb;witnesses jsonb:='[]';invoice_witnesses jsonb:='[]';prior_count integer;original_row uuid;selection_identity jsonb;
+begin
+ body:=private.weekly_source_pay_decision_request_v1(p_browser,'PREVIEW');
+ -- Pure discovery first. Do not take a metadata/FK parent lock before all
+ -- Candidate gates and real roots have been acquired in their native order.
+ for entry in select value from jsonb_array_elements(body->'selection') loop
+  subject:=private.weekly_source_pay_decision_source_subject_v1((entry->>'source_row_id')::uuid);
+  select count(distinct d.original_source_row_id),(array_agg(distinct d.original_source_row_id))[1] into prior_count,original_row
+   from private.bpay_next_worker_pay_disposition_subject_binding binding join private.bpay_next_worker_pay_disposition d on d.id=binding.disposition_id
+   where binding.accepted_source_resolution_id=(subject->>'source_resolution_id')::uuid
+    and binding.original_source_row_id=d.original_source_row_id and d.candidate_id=(subject->>'candidate_id')::uuid
+    and d.actual_client_id=(subject->>'actual_client_id')::uuid;
+  if prior_count>1 then raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+  subject:=subject||jsonb_build_object('observed_source_row_id',subject->'source_row_id',
+    'source_row_id',coalesce(original_row,(subject->>'source_row_id')::uuid));
+  perform private.weekly_source_pay_decision_scope_access_v1(p_actor,(subject->>'source_group_id')::uuid,
+   (subject->>'actual_client_id')::uuid,(subject->>'scope_date')::date);
+  if first_client is null then first_client:=(subject->>'actual_client_id')::uuid;
+  elsif first_client::text is distinct from subject->>'actual_client_id' then
+   raise exception 'SOURCE_PAY_DECISION_CROSS_CLIENT_SELECTION' using errcode='22023';end if;
+  if (entry->'source_work_event_id' is distinct from subject->'source_work_event_id'
+      and not(entry->>'scope_kind'='SOURCE_ROW' and entry->'source_work_event_id'='null'::jsonb))
+    or not(entry->'work_dates' @> jsonb_build_array(subject->>'work_date')) then
+   raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+  root:=(entry->>'family_root_id')::uuid;
+  if root is not null then
+   -- Exact accepted lineage/native event membership only; no date/name join
+   -- creates a subject association. Direct physical H103 resolves moved roots.
+   if private.timesheet_contract_native_pending_for_v1(root) is not null then
+    raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   primary_scope:=private.timesheet_contract_current_placement_v1(root);
+   if primary_scope->>'current_timesheet_id' is null then
+    raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   if primary_scope->>'family_root_id' is null then raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   select l.* into lineage from public.weekly_source_row_timesheet_lineages l
+    where l.row_resolution_id=(subject->>'source_resolution_id')::uuid and l.upload_row_id=(subject->>'observed_source_row_id')::uuid
+     and l.candidate_id=(subject->>'candidate_id')::uuid and l.client_id=first_client;
+   if (select count(*) from public.weekly_exceptional_pay_target_families f where f.root_timesheet_id=(primary_scope->>'family_root_id')::uuid
+     and f.candidate_id=(subject->>'candidate_id')::uuid)>1 then raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   select f.* into family from public.weekly_exceptional_pay_target_families f
+    where f.root_timesheet_id=(primary_scope->>'family_root_id')::uuid and f.candidate_id=(subject->>'candidate_id')::uuid;
+   if not((lineage.id is not null and (private.timesheet_contract_current_placement_v1(lineage.timesheet_id)->>'family_root_id')
+      =primary_scope->>'family_root_id') or (family.id is not null and exists(
+      select 1 from public.weekly_exceptional_pay_family_events e where e.family_id=family.id
+       and e.durable_work_event_id=(subject->>'source_work_event_id')::uuid))) then
+    raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   root:=(primary_scope->>'family_root_id')::uuid;
+  else lineage:=null;family:=null;primary_scope:=null;
+  end if;
+  selection_identity:=private.weekly_source_pay_decision_selection_identity_v1(entry||subject||jsonb_build_object('family_root_id',root));
+  member_key:='source:'||encode(private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_MEMBER_ID_V1',selection_identity),'hex');
+  resolved:=entry||subject||jsonb_build_object('member_key',member_key,'family_root_id',root,
+   'current_placement',primary_scope,'native_family_id',family.id);
+  selection:=selection||jsonb_build_array(resolved);
+ end loop;
+ if exists(select 1 from jsonb_array_elements(selection) lhs join jsonb_array_elements(selection) rhs
+   on lhs.value->>'member_key'<rhs.value->>'member_key' and lhs.value->>'source_row_id'=rhs.value->>'source_row_id'
+   where lhs.value->>'scope_mode'='WHOLE_SHIFT' or rhs.value->>'scope_mode'='WHOLE_SHIFT' or exists(
+    select 1 from jsonb_array_elements_text(lhs.value->'component_keys') l join jsonb_array_elements_text(rhs.value->'component_keys') r on r.value=l.value)) then
+  raise exception 'SOURCE_PAY_DECISION_SELECTION_OVERLAP' using errcode='22023';end if;
+ if p_lock then
+  perform private.weekly_source_pay_query_admit_v2();
+  for candidate in select distinct (x.value->>'candidate_id')::uuid from jsonb_array_elements(selection) x order by 1 loop
+   perform private.weekly_source_candidate_serial_gate_v1(candidate,'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',
+    (body->>'decision_id')::uuid,'SOURCE_PAY_DECISION');
+  end loop;
+  for scope_item in select distinct jsonb_build_object('root',x.value->'family_root_id','candidate',x.value->'candidate_id')
+    from jsonb_array_elements(selection) x where x.value->>'family_root_id' is not null order by 1 loop
+   perform private.timesheet_contract_move_family_lock_v1((scope_item->>'root')::uuid);
+  end loop;
+  -- Fresh exact facts after any native wait, before own metadata locks.
+  for scope_item in select value from jsonb_array_elements(selection) loop
+   if scope_item->>'family_root_id' is not null then
+    if private.timesheet_contract_native_pending_for_v1((scope_item#>>'{current_placement,requested_timesheet_id}')::uuid) is not null
+      or private.timesheet_contract_current_placement_v1((scope_item#>>'{current_placement,requested_timesheet_id}')::uuid)
+        is distinct from scope_item->'current_placement' then
+     raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+   end if;
+   subject:=private.weekly_source_pay_decision_source_subject_v1((scope_item->>'observed_source_row_id')::uuid);
+   if scope_item->'source_witness' is distinct from subject->'source_witness' then
+    raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+  end loop;
+ end if;
+ -- Enrich only factual invoice/contact/protection and current aggregate facts.
+ -- Native financial quantities/amounts remain the genuine Banking cut's owner.
+ resolved:='[]';
+ for scope_item in select value from jsonb_array_elements(selection) order by value->>'member_key' loop
+  perform private.weekly_source_pay_decision_scope_access_v1(p_actor,(scope_item->>'source_group_id')::uuid,
+   first_client,(scope_item->>'scope_date')::date);
+  select coalesce(array_agg(distinct l.timesheet_id order by l.timesheet_id),'{}'::uuid[]) into invoices
+   from public.weekly_source_row_timesheet_lineages l where l.upload_row_id=any(array[(scope_item->>'source_row_id')::uuid,(scope_item->>'observed_source_row_id')::uuid])
+    and l.candidate_id=(scope_item->>'candidate_id')::uuid and l.client_id=first_client;
+  invoice:=private.weekly_source_invoice_certificate_v1(invoices,array(select distinct x from unnest(array[(scope_item->>'source_row_id')::uuid,(scope_item->>'observed_source_row_id')::uuid]) x),p_lock);
+  select coalesce(jsonb_agg(jsonb_build_object('incident',to_jsonb(i),'comparison',to_jsonb(c)) order by i.id),'[]'::jsonb),
+    coalesce(jsonb_agg(i.id order by i.id),'[]'::jsonb) into issues,issue_ids
+   from public.weekly_discrepancy_incidents i join public.weekly_issue_comparison_revisions c on c.id=i.current_comparison_revision_id
+   where i.candidate_id=(scope_item->>'candidate_id')::uuid and i.client_id=first_client and i.state='OPEN'
+    and i.source_cycle_id=(scope_item->>'source_cycle_id')::uuid and c.source_row_id=(scope_item->>'observed_source_row_id')::uuid
+    and i.work_event_id=(scope_item->>'source_work_event_id')::uuid
+    and (not exists(select 1 from private.weekly_source_pay_decisions accepted_decision where accepted_decision.id=(body->>'decision_id')::uuid and accepted_decision.accept_request_id is not null)
+      or exists(select 1 from private.weekly_source_pay_decision_members accepted_member where accepted_member.decision_id=(body->>'decision_id')::uuid
+       and accepted_member.member_key=scope_item->>'member_key' and i.id=any(accepted_member.contact_issue_ids)))
+    and c.issue_family in('SOURCE_MISSING_OR_NOT_AUTHORISED','SOURCE_HOURS_DIFFER','HEALTHROSTER_NOT_FINALISED')
+    and (scope_item->>'scope_mode'='WHOLE_SHIFT' or exists(
+     select 1 from private.bpay_next_approved_line line join private.bpay_next_work work on work.current_revision_id=line.revision_id
+      join public.contracts contract on contract.id=work.contract_id
+     where work.candidate_id=i.candidate_id and contract.client_id=i.client_id and line.component_kind in('WORK','PROTECTED_WORK')
+      and line.work_date=(scope_item->>'work_date')::date and scope_item->'component_keys' ? line.component_key
+      and (private.timesheet_contract_current_placement_v1(work.original_timesheet_id)->>'family_root_id')=scope_item->>'family_root_id')
+     or exists(select 1 from public.weekly_source_entitlement_heads head join public.weekly_source_entitlement_head_components component on component.head_id=head.id
+      where head.state='COMMITTED_CURRENT' and component.component_kind='WORKED_TIME'
+       and component.component_member_identity=scope_item->>'source_work_event_id'
+       and scope_item->'component_keys' ? ('SOURCE:'||component.component_id::text)
+       and (private.timesheet_contract_current_placement_v1(head.root_timesheet_id)->>'family_root_id')=scope_item->>'family_root_id'));
+  if body->>'decision'='EXCLUDE_FUTURE_WORK_PAY' and scope_item->>'source_work_event_id' is not null then
+   for active in select distinct f.id as family_id,t.durable_work_event_id as work_event_id
+     from public.weekly_exceptional_pending_reconciliation_targets t
+     join public.weekly_exceptional_payment_approvals a on a.id=t.approval_id and a.pay_target_family_id=t.family_id
+      and a.work_event_id=t.durable_work_event_id and a.withdrawn_at_utc is null
+     join public.weekly_exceptional_pay_target_families f on f.id=t.family_id and f.ownership_state='TARGET_MANAGED'
+      and f.candidate_id=(scope_item->>'candidate_id')::uuid and a.client_id=first_client
+     where t.state='ACTIVE' and t.durable_work_event_id=(scope_item->>'source_work_event_id')::uuid loop
+    if scope_item->>'family_root_id' is not null and not exists(select 1 from public.weekly_exceptional_pay_target_families f
+      where f.id=active.family_id and (private.timesheet_contract_current_placement_v1(f.root_timesheet_id)->>'family_root_id')=scope_item->>'family_root_id') then
+     raise exception 'SOURCE_PAY_DECISION_PROTECTION_SCOPE_INVALID' using errcode='23514';end if;
+    if exists(select 1 from jsonb_array_elements(required) q where q.value->>'member_key'=scope_item->>'member_key') then
+     raise exception 'SOURCE_PAY_DECISION_PROTECTION_SCOPE_AMBIGUOUS' using errcode='23514';end if;
+    required:=required||jsonb_build_array(jsonb_build_object('member_key',scope_item->'member_key','family_id',active.family_id,'work_event_id',active.work_event_id));
+   end loop;
+  end if;
+  for component in select value from jsonb_array_elements_text(case when jsonb_array_length(scope_item->'component_keys')=0
+    then '[null]'::jsonb else scope_item->'component_keys' end) loop
+   select count(*) into prior_count from (select distinct p.id,m.member_decision_id,p.current_version
+    from private.bpay_next_worker_pay_disposition p join private.bpay_next_worker_pay_disposition_member m
+      on m.disposition_id=p.id and m.version_no=p.current_version
+    where p.candidate_id=(scope_item->>'candidate_id')::uuid and p.actual_client_id=first_client
+     and p.original_source_row_id=(scope_item->>'source_row_id')::uuid and m.component_key is not distinct from component) native_prior;
+   if prior_count>1 then raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   select distinct p.id as disposition_id,m.member_decision_id as decision_id,p.current_version into old_member
+    from private.bpay_next_worker_pay_disposition p join private.bpay_next_worker_pay_disposition_member m
+      on m.disposition_id=p.id and m.version_no=p.current_version
+    where p.candidate_id=(scope_item->>'candidate_id')::uuid and p.actual_client_id=first_client
+     and p.original_source_row_id=(scope_item->>'source_row_id')::uuid and m.component_key is not distinct from component;
+   if found then old_decisions:=array_append(old_decisions,old_member.decision_id);end if;
+   prior:=prior||jsonb_build_array(jsonb_build_object('member_key',scope_item->'member_key','component_key',component,
+    'disposition_id',old_member.disposition_id,'decision_id',old_member.decision_id,'disposition_version',old_member.current_version::text));
+  end loop;
+  resolved:=resolved||jsonb_build_array(scope_item||jsonb_build_object('invoice_certificate',invoice,
+   'selected_issue_ids',issue_ids,'issue_witnesses',issues));
+  invoice_witnesses:=invoice_witnesses||jsonb_build_array(jsonb_build_object('member_key',scope_item->'member_key','certificate',invoice));
+  witnesses:=witnesses||jsonb_build_array(jsonb_build_object('member_key',scope_item->'member_key','issues',issues));
+ end loop;
+ return jsonb_build_object('version','SOURCE_PAY_DECISION_DRAFT_SCOPE_V1','decision',body->'decision','selection',resolved,
+  'selection_sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_ACCEPTED_SELECTION_V1',
+    (select jsonb_agg(private.weekly_source_pay_decision_selection_identity_v1(x.value) order by x.value->>'member_key') from jsonb_array_elements(resolved) x)),'hex'),
+  'evidence_refs',body->'evidence_refs','financial_history_refs',body->'financial_history_refs','actual_client_id',first_client,
+  'required_quote_members',required,'prior_dispositions',prior,
+  'prior_dispositions_sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_PRIOR_DISPOSITIONS_V1',prior),'hex'),
+  'supersedes_decision_id',case when cardinality(array(select distinct x from unnest(old_decisions) x))=1 then old_decisions[1] else null end,
+  'source_invoice_witness_sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_INVOICE_SET_V1',invoice_witnesses),'hex'),
+  'issue_witness_sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_ISSUE_SET_V1',witnesses),'hex'));
+exception when no_data_found or too_many_rows then
+ raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';
+end;
+$function$;

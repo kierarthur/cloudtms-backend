@@ -1,0 +1,256 @@
+{
+  "version": "SOURCE_PENDING_CURRENT_NATIVE_SOURCE_V1",
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN",
+  "source_base_commit": "e4661d28219b85c66b854d99c6522b55aae33139",
+  "source_pay_decision_frozen_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+  "inputs": [
+    {
+      "commit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "path": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "signature": "private._candidate_expense_source_family_v1",
+      "whole_file_sha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d",
+      "complete_function_sha256": "1b488e791b654ae8934a6de19d4cf2711debe81ec77afe4d2a1f54987927de65",
+      "header_sha256": "aeee6b81e352e167e8c273ff17f93752ebb997e7e41e46ddf568aaee2e5b0d8f"
+    },
+    {
+      "commit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "path": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "signature": "private.weekly_source_resolve_root_identity_v1",
+      "whole_file_sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+      "complete_function_sha256": "10c3dbd61db13c7d7342fce39c2f0ecd7c8a746bdba863ff7d5b7dccce6e179c",
+      "header_sha256": "546e360f64afecfdc39cf2169ee13fa9926fb7ae7e3c0b3f5f9162341030b3ba"
+    },
+    {
+      "commit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "path": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "signature": "private.weekly_source_lock_family_rows_v1",
+      "whole_file_sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+      "complete_function_sha256": "ee0fc76bc9deeec0e8573d621ebe05218ac2173847d26a41817ce09c060c1fbd",
+      "header_sha256": "335d861344b9c1f86bbd213fabbb31352df0bb7425320bf877b45d1ab8f52d0d"
+    },
+    {
+      "commit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/27_certified_current_native_scope.sqlinc",
+      "signature": "private.weekly_source_pay_query_scope_v1",
+      "whole_file_sha256": "56bc22447a069c21e9bb518cbe9f5b0744e2b2873b26d3320104def19b0e3b3b",
+      "complete_function_sha256": "5f6bfce5434a9719e844375115763cfa445bfea43a20daa492d2e2777c0bb220",
+      "header_sha256": "0d2aa7c35f80f221e32c5d8b282199a1a25934e11a76d950b8569c63f1408237"
+    },
+    {
+      "commit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/33_genuine_source_subject_and_scope.sqlinc",
+      "signature": "private.weekly_source_pay_decision_resolved_scope_v1",
+      "whole_file_sha256": "1fb7a294e506bec52c6c0fa8379da71784a259f636e8e97caf3af8e015605ae2",
+      "complete_function_sha256": "aae48f6f4867670c1e9dc5fd3514c35076100130174a99701c44d052599f8289",
+      "header_sha256": "7b70a06e220a15635408dad9c4abfc4c54b38468a67beca3ba98bd5cd60514ce"
+    }
+  ],
+  "dependencies": [
+    {
+      "commit": "00f25571ac7fb65f44351a52beced0710211138e",
+      "path": "docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/forward/sql/02_physical_apply.sqlinc",
+      "sha256": "916d7a0438014aa1a700878cc5ea76f97eb3138484947691801917ffe4abeea9"
+    },
+    {
+      "commit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/00_pending_binding.sqlinc",
+      "sha256": "69f0d5d13ed732ede9a2b5a84a03c5ed0019f9c3ba079521183cf06fd3080ea0"
+    },
+    {
+      "commit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/03a_pending_read_enter.sqlinc",
+      "sha256": "30183fe608e64d5e54570ae8581afeb639b13bbf2c6f57ad6115f3beb2e2825b"
+    },
+    {
+      "commit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/04_current_placement.sqlinc",
+      "sha256": "cbc671065fefa41025ce7b850b477206422221f33c186fa444a9264a33b1a7da"
+    },
+    {
+      "commit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/05_family_lock.sqlinc",
+      "sha256": "31a6501f083e43f50b0724f4b62fefac7a545d8321ae6327aa0e69ea4eac0a66"
+    },
+    {
+      "commit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/07_native_withdrawal.sqlinc",
+      "sha256": "fd035309dc4f52a212fb8365726dab1b21242e1d8edea132edd94fcc4fad9672"
+    },
+    {
+      "commit": "f5668bf45854ca36b47e713c0e8f3dd3ae4b852b",
+      "path": "docs/healthroster-build/proposals/candidate-joined-final-20261016/REVIEWED_SELECTION.json",
+      "sha256": "866457b59011b0ff4ae912c03eb61203a3fe9ac55afcb85d67e8a249c6625941"
+    },
+    {
+      "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/018_source_original.sqlinc",
+      "sha256": "46d7cb7d66b03e64f9f4bb10e8024fd191b63a5b511518b65cca4bc1e78f1854"
+    },
+    {
+      "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/021a_source_duty.sqlinc",
+      "sha256": "0e74042257973b6ee0507f7f2168b5bad6f5f3f11a73f0c48673b70aaebecc99"
+    },
+    {
+      "commit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+      "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/029_claim_financial.sqlinc",
+      "sha256": "267c5817ca565f0ccecc4bc8b54c5b15189841aae710faddd7f59d656d1171cb"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "forward/01_source_family.sqlinc",
+      "signature": "private._candidate_expense_source_family_v1",
+      "sha256": "83c869d2060148612b66c9f4d185a3e4e6ffeeb85373c46a482199fd4303615e",
+      "bytes": 4412,
+      "header_sha256": "aeee6b81e352e167e8c273ff17f93752ebb997e7e41e46ddf568aaee2e5b0d8f",
+      "full_reverse_equals_input": true,
+      "deltas": [
+        {
+          "reason": "Declared exact native pending/original witnesses",
+          "from": "  v_source boolean;",
+          "to": "  v_source boolean;\n  v_pending jsonb;v_physical jsonb;v_original_invoice boolean:=false;\n  v_alias private.timesheet_contract_family_aliases%rowtype;"
+        },
+        {
+          "reason": "Certified pending refusal before ordinary ownership fallback; exact original-A invoice correlation",
+          "from": "BEGIN\n  SELECT EXISTS (",
+          "to": "BEGIN\n  -- The accessor validates the complete native withdrawal/CW/workflow proof.\n  -- A registered revoked B cannot become an ordinary claim by returning false.\n  v_pending:=private.timesheet_contract_native_pending_for_v1(p_timesheet_id);\n  select alias.* into v_alias from private.timesheet_contract_family_aliases alias where alias.timesheet_id=p_timesheet_id;\n  if found then\n    v_physical:=private.timesheet_contract_current_placement_v1(p_timesheet_id);\n    if v_pending is not null and v_alias.original_timesheet_id is distinct from p_timesheet_id then\n      raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE' using errcode='55000';end if;\n    if v_alias.original_timesheet_id=p_timesheet_id\n      and v_physical->>'requested_timesheet_id'=p_timesheet_id::text\n      and v_physical->>'family_root_id'=v_alias.family_root_id::text\n      and v_physical->'legacy_origin'='false'::jsonb then\n      v_original_invoice:=private.timesheet_contract_source_original_eligible_v1(p_timesheet_id)\n        and exists(\n    select 1 from private.timesheet_contract_move_operations operation\n    join private.timesheet_contract_move_members member on member.operation_id=operation.id\n    join public.timesheets original on original.timesheet_id=p_timesheet_id\n    join public.contracts original_contract on original_contract.id=original.contract_id\n    where operation.id=v_alias.accepted_operation_id\n      and (operation.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(operation.id))\n      and operation.purpose='CONTRACT_CORRECTION' and operation.accepted_review_id is not null\n      and operation.invoice_authority in('SOURCE_FINANCIAL','MIXED')\n      and operation.family_root_id=v_alias.family_root_id\n      and operation.candidate_id=original_contract.candidate_id and operation.actual_client_id=original_contract.client_id\n      and member.member_key=v_alias.member_key and member.family_root_id=v_alias.family_root_id\n      and member.role=v_alias.member_role and member.from_timesheet_id=p_timesheet_id\n      and member.from_version=original.version and member.from_contract_id is not distinct from original.contract_id\n      and member.original_booking_id=original.booking_id\n  );\n    end if;\n  end if;\n  SELECT EXISTS ("
+        },
+        {
+          "reason": "Only original CW-current pointer may use exact immutable original-A invoice authority",
+          "from": "      AND EXISTS (\n        SELECT 1 FROM public.contract_weeks cw\n        WHERE cw.contract_id=t.contract_id AND cw.week_ending_date=t.week_ending_date\n          AND cw.additional_seq=0 AND NOT cw.is_adjustment\n          AND cw.timesheet_id=t.timesheet_id\n      )",
+          "to": "      AND (EXISTS (\n        SELECT 1 FROM public.contract_weeks cw\n        WHERE cw.contract_id=t.contract_id AND cw.week_ending_date=t.week_ending_date\n          AND cw.additional_seq=0 AND NOT cw.is_adjustment\n          AND cw.timesheet_id=t.timesheet_id\n      ) OR v_original_invoice)"
+        }
+      ]
+    },
+    {
+      "path": "forward/02_root_identity.sqlinc",
+      "signature": "private.weekly_source_resolve_root_identity_v1",
+      "sha256": "9803fde8c0d7a59d207a245b01625fa9d25de4307eddda4e7a9f254d5d4084e1",
+      "bytes": 6343,
+      "header_sha256": "546e360f64afecfdc39cf2169ee13fa9926fb7ae7e3c0b3f5f9162341030b3ba",
+      "full_reverse_equals_input": true,
+      "deltas": [
+        {
+          "reason": "Exact certified pending failure before native booking resolver",
+          "from": "  with scope as (",
+          "to": "  -- Actual native pending has no current row. Never let the old booking's\n  -- canonical representative or historical original A masquerade as current.\n  if private.timesheet_contract_native_pending_for_v1(p_timesheet_id) is not null then\n    return pg_catalog.jsonb_build_object(\n      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE',\n      'reason','CURRENT_ROW_CARDINALITY','timesheet_id',p_timesheet_id,\n      'family_booking_id',(select t.booking_id from public.timesheets t where t.timesheet_id=p_timesheet_id)\n    );\n  end if;\n\n  with scope as ("
+        }
+      ]
+    },
+    {
+      "path": "forward/03_family_rows.sqlinc",
+      "signature": "private.weekly_source_lock_family_rows_v1",
+      "sha256": "1ee30dd5cde7f772b41bd6fe203961087eb4a8363b50b67efa72954527de3cb0",
+      "bytes": 13858,
+      "header_sha256": "335d861344b9c1f86bbd213fabbb31352df0bb7425320bf877b45d1ab8f52d0d",
+      "full_reverse_equals_input": true,
+      "deltas": [
+        {
+          "reason": "Exact per-request H103 witnesses",
+          "from": "  v_failure text;",
+          "to": "  v_failure text;\n  v_requested uuid;v_physical jsonb;\n  v_physical_before jsonb:='{}'::jsonb;v_physical_after jsonb:='{}'::jsonb;"
+        },
+        {
+          "reason": "Pending preflight and full registered H103 discovery before existing locks",
+          "from": "  -- Step 2 (first half): the booking identity of every requested row, read",
+          "to": "  -- Native Candidate serial admission remains with the existing caller.\n  -- Read only certified direct aliases here; preserve the native booking/row\n  -- lock order below and compare all eight H103 facts after those waits.\n  for v_requested in select id from pg_catalog.unnest(v_ids) id order by id loop\n    if private.timesheet_contract_native_pending_for_v1(v_requested) is not null then\n      return pg_catalog.jsonb_build_object(\n        'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,\n        'reason','CURRENT_ROW_CARDINALITY');\n    end if;\n    if exists(select 1 from private.timesheet_contract_family_aliases alias where alias.timesheet_id=v_requested) then\n      v_physical:=private.timesheet_contract_current_placement_v1(v_requested);\n      v_physical_before:=v_physical_before||pg_catalog.jsonb_build_object(v_requested::text,v_physical);\n    end if;\n  end loop;\n\n  -- Step 2 (first half): the booking identity of every requested row, read"
+        },
+        {
+          "reason": "Revalidate exact H103 after original advisory/Timesheet row waits before native booking resolution",
+          "from": "  -- Step 3: the booking identity must be unchanged since step 2.",
+          "to": "  for v_requested in select id from pg_catalog.unnest(v_ids) id order by id loop\n    if private.timesheet_contract_native_pending_for_v1(v_requested) is not null then\n      return pg_catalog.jsonb_build_object(\n        'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,\n        'reason','CURRENT_ROW_CARDINALITY');\n    end if;\n    if exists(select 1 from private.timesheet_contract_family_aliases alias where alias.timesheet_id=v_requested) then\n      v_physical:=private.timesheet_contract_current_placement_v1(v_requested);\n      v_physical_after:=v_physical_after||pg_catalog.jsonb_build_object(v_requested::text,v_physical);\n    end if;\n  end loop;\n  if v_physical_after is distinct from v_physical_before then\n    return pg_catalog.jsonb_build_object(\n      'ok',false,'code','WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE','retryable',false,\n      'reason','BOOKING_REPOINTED_DURING_LOCK');\n  end if;\n\n  -- Step 3: the booking identity must be unchanged since step 2."
+        }
+      ]
+    },
+    {
+      "path": "forward/04_current_pay_query.sqlinc",
+      "signature": "private.weekly_source_pay_query_scope_v1",
+      "sha256": "0ea9b3ba3b918589ea75cf591aa91c7fd43814ac222d5c4083b09ac09e537d68",
+      "bytes": 6202,
+      "header_sha256": "0d2aa7c35f80f221e32c5d8b282199a1a25934e11a76d950b8569c63f1408237",
+      "full_reverse_equals_input": true,
+      "deltas": [
+        {
+          "reason": "Certified pending refuses before existing current NULL/ordinary arms; Invoice duty has separate original authority",
+          "from": "  -- This existing identity owner refuses raw/trimmed collisions, multiple",
+          "to": "  if private.timesheet_contract_native_pending_for_v1(p_root_timesheet_id) is not null then\n    raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE' using errcode='55000';end if;\n  -- This existing identity owner refuses raw/trimmed collisions, multiple"
+        }
+      ]
+    },
+    {
+      "path": "forward/05_decision_scope.sqlinc",
+      "signature": "private.weekly_source_pay_decision_resolved_scope_v1",
+      "sha256": "90264c74fdb8f4e1e5290a855c8d45acf8730e027052fa68cd57f4f78e661747",
+      "bytes": 16194,
+      "header_sha256": "7b70a06e220a15635408dad9c4abfc4c54b38468a67beca3ba98bd5cd60514ce",
+      "full_reverse_equals_input": true,
+      "deltas": [
+        {
+          "reason": "Explicit family selection requires a genuine current physical allocation, before association/enrichment",
+          "from": "   primary_scope:=private.timesheet_contract_current_placement_v1(root);",
+          "to": "   if private.timesheet_contract_native_pending_for_v1(root) is not null then\n    raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;\n   primary_scope:=private.timesheet_contract_current_placement_v1(root);\n   if primary_scope->>'current_timesheet_id' is null then\n    raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;"
+        },
+        {
+          "reason": "Revalidate saved complete H103 after actual physical family wait before metadata/enrichment",
+          "from": "   subject:=private.weekly_source_pay_decision_source_subject_v1((scope_item->>'observed_source_row_id')::uuid);\n   if scope_item->'source_witness' is distinct from subject->'source_witness' then",
+          "to": "   if scope_item->>'family_root_id' is not null then\n    if private.timesheet_contract_native_pending_for_v1((scope_item#>>'{current_placement,requested_timesheet_id}')::uuid) is not null\n      or private.timesheet_contract_current_placement_v1((scope_item#>>'{current_placement,requested_timesheet_id}')::uuid)\n        is distinct from scope_item->'current_placement' then\n     raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;\n   end if;\n   subject:=private.weekly_source_pay_decision_source_subject_v1((scope_item->>'observed_source_row_id')::uuid);\n   if scope_item->'source_witness' is distinct from subject->'source_witness' then"
+        }
+      ]
+    },
+    {
+      "path": "forward/06_invoice_duty_scope.sqlinc",
+      "signature": "private.weekly_source_invoice_duty_scope_v1",
+      "sha256": "b85aa8b6601e0fe7b93b42d453ae4c1ec165b4a9103ecf768de258feddca648d",
+      "bytes": 4995,
+      "header_sha256": "300941cc6e1e238d95141f119c9a018089c86410a225091a9aee7fa7228896c9",
+      "full_reverse_equals_input": null,
+      "deltas": []
+    }
+  ],
+  "acl": {
+    "path": "forward/99_acl.sqlinc",
+    "sha256": "37805e3b1abe5aa378a11e03faee0529b7a9ea5b5b07be438768cb0061cc431f"
+  },
+  "derived": [
+    {
+      "purpose": "Dedicated exact immutable original-A Invoice duty",
+      "signature": "private.weekly_source_invoice_duty_scope_v1",
+      "original_query_scope_commit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "original_query_scope_path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/27_certified_current_native_scope.sqlinc",
+      "exact_native_return_sha256": "340323d39f855d0149327128d04855e090507fcbc5aace9789e0a32d8a6ae6ef",
+      "scope_keys": [
+        "root_timesheet_id",
+        "family_booking_id",
+        "target_family_id",
+        "candidate_id",
+        "client_id",
+        "contract_id",
+        "week_ending_date",
+        "root_version",
+        "family_bound_version"
+      ],
+      "note": "The native query actually has nine keys (not ten); no new field is introduced. All IDs/Contract/date/version remain original A."
+    }
+  ],
+  "mount_order": [
+    "forward/01_source_family.sqlinc",
+    "forward/02_root_identity.sqlinc",
+    "forward/03_family_rows.sqlinc",
+    "forward/04_current_pay_query.sqlinc",
+    "forward/05_decision_scope.sqlinc",
+    "forward/06_invoice_duty_scope.sqlinc",
+    "forward/99_acl.sqlinc"
+  ],
+  "root_integration_requirements": [
+    "Install exact Candidate975/f566 pending full closure, Invoice018 original authority and Source d863 full closure first",
+    "Invoice lane must replace only the full duty021a call with weekly_source_invoice_duty_scope_v1",
+    "Keep all historical roots/final-definer companions and genuine native ordinary financial suffixes",
+    "Generate/review current contract and finite exact final registry through sole root integrator",
+    "Native ACL/currentness/concurrency/full first-use acceptance is NOT_RUN; source tests do not qualify install"
+  ],
+  "no_database_or_deployment": true,
+  "no_bank_body_edits": true,
+  "no_public_abi_change": true,
+  "policy_x": "UNCHANGED"
+}

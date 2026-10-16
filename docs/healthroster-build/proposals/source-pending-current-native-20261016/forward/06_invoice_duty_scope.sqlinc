@@ -1,0 +1,66 @@
+-- The current PAY placement never substitutes for immutable original invoice duty.
+create or replace function private.weekly_source_invoice_duty_scope_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+declare
+  v_root public.timesheets%rowtype;v_contract public.contracts%rowtype;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_alias private.timesheet_contract_family_aliases%rowtype;v_physical jsonb;v_booking text;v_count integer;
+begin
+  select alias.* into v_alias from private.timesheet_contract_family_aliases alias where alias.timesheet_id=p_timesheet_id;
+  if not found or v_alias.original_timesheet_id is distinct from p_timesheet_id then
+    -- Ordinary current scope retains its complete native owner; pending B
+    -- refuses there, before NULL/unmatched/current fallback.
+    return private.weekly_source_pay_query_scope_v1(p_timesheet_id);
+  end if;
+  if private.timesheet_contract_source_original_eligible_v1(p_timesheet_id) is distinct from true then return null;end if;
+  v_physical:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
+  if v_physical->>'requested_timesheet_id' is distinct from p_timesheet_id::text
+    or v_physical->>'family_root_id' is distinct from v_alias.family_root_id::text
+    or v_physical->'legacy_origin' is distinct from 'false'::jsonb
+    or not exists(
+    select 1 from private.timesheet_contract_move_operations operation
+    join private.timesheet_contract_move_members member on member.operation_id=operation.id
+    join public.timesheets original on original.timesheet_id=p_timesheet_id
+    join public.contracts original_contract on original_contract.id=original.contract_id
+    where operation.id=v_alias.accepted_operation_id
+      and (operation.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(operation.id))
+      and operation.purpose='CONTRACT_CORRECTION' and operation.accepted_review_id is not null
+      and operation.invoice_authority in('SOURCE_FINANCIAL','MIXED')
+      and operation.family_root_id=v_alias.family_root_id
+      and operation.candidate_id=original_contract.candidate_id and operation.actual_client_id=original_contract.client_id
+      and member.member_key=v_alias.member_key and member.family_root_id=v_alias.family_root_id
+      and member.role=v_alias.member_role and member.from_timesheet_id=p_timesheet_id
+      and member.from_version=original.version and member.from_contract_id is not distinct from original.contract_id
+      and member.original_booking_id=original.booking_id
+  ) then
+    raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE' using errcode='55000';end if;
+  -- Retain every native Source ownership condition and the separate-component
+  -- refusal. Original eligibility alone never makes a Timesheet Source-owned.
+  if private._candidate_expense_source_family_v1(p_timesheet_id) is distinct from true then return null;end if;
+  select t.* into strict v_root from public.timesheets t where t.timesheet_id=p_timesheet_id;
+  select c.* into strict v_contract from public.contracts c where c.id=v_root.contract_id;
+  if v_root.sheet_scope is distinct from 'WEEKLY'
+    or v_root.line_type is distinct from 'HOURS' or v_root.is_adjustment is distinct from false
+    or v_root.week_ending_date is null or v_root.version is null or v_root.version<1
+    or nullif(btrim(v_root.booking_id),'') is null or v_contract.candidate_id is null or v_contract.client_id is null then return null;end if;
+  v_booking:=btrim(v_root.booking_id);
+  select count(*) into v_count from public.weekly_exceptional_pay_target_families f where btrim(f.root_family_booking_id)=v_booking;
+  if v_count>1 then raise exception 'WEEKLY_SOURCE_TARGET_FAMILY_AMBIGUOUS' using errcode='55000';end if;
+  if v_count=1 then
+    select f.* into strict v_family from public.weekly_exceptional_pay_target_families f where btrim(f.root_family_booking_id)=v_booking;
+    if v_family.root_timesheet_id is distinct from p_timesheet_id
+      or v_family.root_family_booking_id is distinct from v_root.booking_id
+      or v_family.candidate_id is distinct from v_contract.candidate_id or v_family.contract_id is distinct from v_root.contract_id
+      or v_family.week_ending_date is distinct from v_root.week_ending_date
+      or v_family.week_start_date is distinct from (v_root.week_ending_date-6)
+      or v_family.bound_version is null or v_family.bound_version<1 then
+      raise exception 'WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE' using errcode='55000';end if;
+  end if;
+  return jsonb_build_object('root_timesheet_id',v_root.timesheet_id,
+    'family_booking_id',v_root.booking_id,'target_family_id',v_family.id,
+    'candidate_id',v_contract.candidate_id,'client_id',v_contract.client_id,
+    'contract_id',v_contract.id,'week_ending_date',v_root.week_ending_date,
+    'root_version',v_root.version::text,'family_bound_version',v_family.bound_version::text);
+end;
+$function$;

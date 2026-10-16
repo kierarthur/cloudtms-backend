@@ -1,0 +1,356 @@
+{
+  "version": "SOURCE_PENDING_CURRENT_OFFLINE_PG17_V1",
+  "qualification": "OFFLINE_ONLY_NATIVE_COMPILE_FIRST_USE_ACL_CONCURRENCY_NOT_RUN",
+  "source_receipt_sha256": "a8a64b1acb1b19bfa7e83b044b0de31e7baddd6bb40896a1b6635793eabefc94",
+  "schema_commit": "3b2f6f385052b51df4004be6b68766ad62c6c17e",
+  "schema_inputs": [
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82"
+    }
+  ],
+  "counts": {
+    "sql_leaves": 8,
+    "sql_statements": 19,
+    "plpgsql_bodies": 6,
+    "declared_row_variables": 10,
+    "declared_row_fields": 55
+  },
+  "declared_fields": [
+    {
+      "routine": "private._candidate_expense_source_family_v1",
+      "variable": "v_alias",
+      "relation": "private.timesheet_contract_family_aliases",
+      "field": "accepted_operation_id"
+    },
+    {
+      "routine": "private._candidate_expense_source_family_v1",
+      "variable": "v_alias",
+      "relation": "private.timesheet_contract_family_aliases",
+      "field": "family_root_id"
+    },
+    {
+      "routine": "private._candidate_expense_source_family_v1",
+      "variable": "v_alias",
+      "relation": "private.timesheet_contract_family_aliases",
+      "field": "member_key"
+    },
+    {
+      "routine": "private._candidate_expense_source_family_v1",
+      "variable": "v_alias",
+      "relation": "private.timesheet_contract_family_aliases",
+      "field": "member_role"
+    },
+    {
+      "routine": "private._candidate_expense_source_family_v1",
+      "variable": "v_alias",
+      "relation": "private.timesheet_contract_family_aliases",
+      "field": "original_timesheet_id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "archived_at_utc"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "booking_id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "contract_id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "is_adjustment"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "is_current"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "line_type"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "revoked_at"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "sheet_scope"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "timesheet_id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "version"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "week_ending_date"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_contract",
+      "relation": "public.contracts",
+      "field": "candidate_id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_contract",
+      "relation": "public.contracts",
+      "field": "client_id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_contract",
+      "relation": "public.contracts",
+      "field": "id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_contract",
+      "relation": "public.contracts",
+      "field": "self_bill"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "bound_version"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "candidate_id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "contract_id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "root_family_booking_id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "root_timesheet_id"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "week_ending_date"
+    },
+    {
+      "routine": "private.weekly_source_pay_query_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "week_start_date"
+    },
+    {
+      "routine": "private.weekly_source_pay_decision_resolved_scope_v1",
+      "variable": "family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "id"
+    },
+    {
+      "routine": "private.weekly_source_pay_decision_resolved_scope_v1",
+      "variable": "lineage",
+      "relation": "public.weekly_source_row_timesheet_lineages",
+      "field": "id"
+    },
+    {
+      "routine": "private.weekly_source_pay_decision_resolved_scope_v1",
+      "variable": "lineage",
+      "relation": "public.weekly_source_row_timesheet_lineages",
+      "field": "timesheet_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "booking_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "contract_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "is_adjustment"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "line_type"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "sheet_scope"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "timesheet_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "version"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_root",
+      "relation": "public.timesheets",
+      "field": "week_ending_date"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_contract",
+      "relation": "public.contracts",
+      "field": "candidate_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_contract",
+      "relation": "public.contracts",
+      "field": "client_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_contract",
+      "relation": "public.contracts",
+      "field": "id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "bound_version"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "candidate_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "contract_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "root_family_booking_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "root_timesheet_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "week_ending_date"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_family",
+      "relation": "public.weekly_exceptional_pay_target_families",
+      "field": "week_start_date"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_alias",
+      "relation": "private.timesheet_contract_family_aliases",
+      "field": "accepted_operation_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_alias",
+      "relation": "private.timesheet_contract_family_aliases",
+      "field": "family_root_id"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_alias",
+      "relation": "private.timesheet_contract_family_aliases",
+      "field": "member_key"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_alias",
+      "relation": "private.timesheet_contract_family_aliases",
+      "field": "member_role"
+    },
+    {
+      "routine": "private.weekly_source_invoice_duty_scope_v1",
+      "variable": "v_alias",
+      "relation": "private.timesheet_contract_family_aliases",
+      "field": "original_timesheet_id"
+    }
+  ],
+  "errors": []
+}
