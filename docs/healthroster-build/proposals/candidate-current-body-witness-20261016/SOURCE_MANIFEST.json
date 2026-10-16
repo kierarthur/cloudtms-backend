@@ -1,0 +1,30 @@
+{
+  "status": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "files": [
+    {
+      "path": "MOUNT_RECIPE.json",
+      "sha256": "2ae26595c98a69188838e855c8ddc884e192be26cf6cd2984876c76a7757e661",
+      "bytes": 1420
+    },
+    {
+      "path": "README.md",
+      "sha256": "82e434601424c2a33d1fb1353fafa6a15e0d16d39892efa361a9c96d6b3d3ea1",
+      "bytes": 1685
+    },
+    {
+      "path": "build.mjs",
+      "sha256": "c02067e2ce5cf5d4238cffd9f20f283626527e24d30045fe7549ae6a078ec2f6",
+      "bytes": 1036
+    },
+    {
+      "path": "forward/00_current_body_witness.sqlinc",
+      "sha256": "0df4abd48fbb8c4771ac32952e52f703cc645bccd19c72e9c6706ea1625dfd54",
+      "bytes": 10974
+    },
+    {
+      "path": "tests/source.test.mjs",
+      "sha256": "3fe2fb9eda5b33382321c2a49cae95cc4d274c8b3837dc2040549329292dc4ba",
+      "bytes": 1871
+    }
+  ]
+}

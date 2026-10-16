@@ -1,0 +1,28 @@
+{
+  "status": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "predecessor": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+  "signature": "private.candidate_contract_move_context_v1(text,uuid,uuid,uuid)",
+  "payload": "forward/00_current_body_witness.sqlinc",
+  "sha256": "0df4abd48fbb8c4771ac32952e52f703cc645bccd19c72e9c6706ea1625dfd54",
+  "soleSemanticDelta": "Restore exact c475 reviewed native_workflows aggregate through complete workflow_facts receipt/body witness; all975 pending/alias/DTO logic unchanged",
+  "reviewedAggregate": {
+    "commit": "c47530caa7e4c7e2412a5d6b03b76bbb7f6dc8bb",
+    "path": "docs/healthroster-build/proposals/candidate-contract-move-lifecycle-20261016/forward/05_worked_fact_projection.sqlinc",
+    "sha256": "8771c474ae4adf1c2b79ef1bab9aa13f1c7240a756622ad3805135236470ff46"
+  },
+  "dependencies": [
+    "Complete c47504_accepted_body_witness.sqlinc",
+    "Exact118a02a/02b normalization",
+    "Complete975 pending/native allocation closure"
+  ],
+  "security": "Same SECURITY DEFINER/STABLE/search_path and owner-only ACL; final joined ACL required",
+  "publicFieldsAdded": 0,
+  "verification": {
+    "sourceCases": 3,
+    "grammar": "00_current_body_witness.sqlinc: grammar parsed\n8 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+    "native": "NOT_RUN",
+    "api": "NOT_RUN",
+    "acl": "NOT_RUN",
+    "databaseCalls": 0
+  }
+}
