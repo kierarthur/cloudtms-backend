@@ -1,0 +1,52 @@
+{
+  "parser": "pglast v7.20",
+  "database_execution": false,
+  "fixture_grammar_checks": [
+    {
+      "file": "fixtures/native-source-membership-assertions.sqlinc",
+      "sql_statements": 7,
+      "plpgsql_functions": 7,
+      "inner_sql_expressions": 49,
+      "native": "REQUIRED_NOT_RUN"
+    }
+  ],
+  "checks": [
+    {
+      "file": "010_native_logical_members.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 50,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "020_native_budget.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 14,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "030_native_enrol_assert.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 22,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "040_native_accept.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 8,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "090_acl.sqlinc",
+      "sql_statements": 8,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    }
+  ],
+  "failures": [],
+  "native": "REQUIRED_NOT_RUN"
+}

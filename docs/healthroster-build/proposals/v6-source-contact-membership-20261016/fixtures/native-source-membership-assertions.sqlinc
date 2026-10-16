@@ -1,0 +1,131 @@
+-- REQUIRED_NOT_RUN. Genuine saved native identities, current leases and
+-- original result receipts are inputs. Only root's TEST rollback may invoke.
+-- No provider is called and no provider acceptance/receipt is fabricated.
+create or replace function pg_temp.source_contact_generation_identity_assert_v1(p_original_command uuid,p_regenerated_command uuid)
+returns void language plpgsql as $function$
+declare original jsonb;regenerated jsonb;
+begin
+ original:=private.weekly_contact_source_logical_members_v1(p_original_command);
+ regenerated:=private.weekly_contact_source_logical_members_v1(p_regenerated_command);
+ if p_original_command=p_regenerated_command or not exists(select 1 from jsonb_array_elements(original->'members')a
+  cross join jsonb_array_elements(regenerated->'members')b where a->>'logical_contact_key'=b->>'logical_contact_key' and a->'send_ordinal'=b->'send_ordinal') then
+  raise exception 'GENUINE_REGENERATED_SAME_WORK_AND_NATIVE_SLOT_REQUIRED';end if;
+ if not exists(select 1 from jsonb_array_elements(original->'members')a cross join jsonb_array_elements(regenerated->'members')b
+  where a->>'logical_contact_key'=b->>'logical_contact_key' and a->'native_basis' is distinct from b->'native_basis') then
+  raise exception 'GENUINE_DISTINCT_NATIVE_GENERATION_EVIDENCE_REQUIRED';end if;
+end;
+$function$;
+
+create or replace function pg_temp.source_contact_native_start_enrol_assert_v1(p_exact_native_start jsonb)
+returns jsonb language plpgsql as $function$
+declare t public.weekly_message_dispatch_targets%rowtype;r jsonb;p uuid;facts jsonb;
+begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ select * into strict t from public.weekly_message_dispatch_targets where id=(p_exact_native_start->>'dispatch_target_id')::uuid;
+ if t.state<>'LEASED' or exists(select 1 from public.weekly_contact_delivery_memberships where delivery_id=t.dispatch_command_id) then
+  raise exception 'GENUINE_FRESH_CLAIMED_NATIVE_COMMAND_REQUIRED';end if;
+ r:=public.weekly_source_message_dispatch_target_start_atomic_v1(p_exact_native_start);
+ p:=coalesce(r->>'permit_id',r->>'contact_permit_id')::uuid;
+ if r->'ok'<>'true'::jsonb or p is null then raise exception 'NATIVE_START_DID_NOT_ADMIT';end if;
+ facts:=private.weekly_contact_source_logical_members_v1(t.dispatch_command_id);
+ if(select count(*) from public.weekly_contact_delivery_memberships where delivery_id=t.dispatch_command_id)<>jsonb_array_length(facts->'members')
+  or exists(select 1 from public.weekly_contact_delivery_memberships where delivery_id=t.dispatch_command_id and accepted_at_utc is not null) then
+  raise exception 'START_MEMBERSHIP_OR_UNSPENT_BUDGET_INVALID';end if;
+ return jsonb_build_object('provider_attempt_id',r->'provider_attempt_id','permit_id',p,'members',jsonb_array_length(facts->'members'));
+end;
+$function$;
+
+create or replace function pg_temp.source_contact_accepted_replay_sibling_assert_v1(p_exact_original_result jsonb,p_unsent_sibling uuid)
+returns void language plpgsql as $function$
+declare a public.weekly_message_target_attempts%rowtype;t public.weekly_message_dispatch_targets%rowtype;
+ sibling public.weekly_message_dispatch_targets%rowtype;before_members jsonb;after_members jsonb;before_sibling jsonb;r jsonb;
+begin
+ select * into strict a from public.weekly_message_target_attempts where id=(p_exact_original_result->>'provider_attempt_id')::uuid;
+ select * into strict t from public.weekly_message_dispatch_targets where id=a.dispatch_target_id;
+ select * into strict sibling from public.weekly_message_dispatch_targets where id=p_unsent_sibling;
+ if a.outcome<>'ACCEPTED' or a.completed_at_utc is null or t.state<>'ACCEPTED' or sibling.id=t.id
+  or sibling.dispatch_command_id<>t.dispatch_command_id or sibling.state not in('READY','LEASED','TRANSIENT_FAILURE')
+  or p_exact_original_result->>'outcome'<>'ACCEPTED' then raise exception 'GENUINE_ACCEPTED_ORIGINAL_AND_UNSENT_SIBLING_REQUIRED';end if;
+ select jsonb_agg(to_jsonb(m) order by m.id) into before_members from public.weekly_contact_delivery_memberships m where delivery_id=t.dispatch_command_id;
+ if before_members is null or exists(select 1 from public.weekly_contact_delivery_memberships where delivery_id=t.dispatch_command_id and accepted_at_utc is null) then
+  raise exception 'GENUINE_ACCEPTED_LOGICAL_MEMBERS_REQUIRED';end if;
+ before_sibling:=to_jsonb(sibling);
+ r:=public.weekly_source_message_dispatch_target_result_atomic_v1(p_exact_original_result);
+ select jsonb_agg(to_jsonb(m) order by m.id) into after_members from public.weekly_contact_delivery_memberships m where delivery_id=t.dispatch_command_id;
+ if before_members is distinct from after_members or before_sibling is distinct from(select to_jsonb(x) from public.weekly_message_dispatch_targets x where id=sibling.id)
+  or r->'replay'<>'true'::jsonb or private.weekly_contact_source_budget_v1(t.dispatch_command_id)->'allowed'<>'true'::jsonb then
+  raise exception 'RESULT_REPLAY_MUTATED_LOGICAL_BUDGET_OR_CLOSED_SIBLING';end if;
+end;
+$function$;
+
+create or replace function pg_temp.source_contact_sibling_start_consume_assert_v1(p_exact_sibling_start jsonb)
+returns jsonb language plpgsql as $function$
+declare t public.weekly_message_dispatch_targets%rowtype;c public.weekly_message_dispatch_commands%rowtype;
+ before_members jsonb;after_members jsonb;r jsonb;consumed jsonb;p uuid;
+begin
+ select * into strict t from public.weekly_message_dispatch_targets where id=(p_exact_sibling_start->>'dispatch_target_id')::uuid;
+ select * into strict c from public.weekly_message_dispatch_commands where id=t.dispatch_command_id;
+ if t.channel<>'PUSH' or t.state<>'LEASED' or not exists(select 1 from public.weekly_message_dispatch_targets where dispatch_command_id=c.id and id<>t.id and state='ACCEPTED') then
+  raise exception 'GENUINE_ACCEPTED_FIRST_DEVICE_AND_CLAIMED_ORIGINAL_PUSH_SIBLING_REQUIRED';end if;
+ select jsonb_agg(to_jsonb(m) order by m.id) into before_members from public.weekly_contact_delivery_memberships m where delivery_id=c.id;
+ if before_members is null or exists(select 1 from public.weekly_contact_delivery_memberships where delivery_id=c.id and accepted_at_utc is null) then
+  raise exception 'GENUINE_ACCEPTED_LOGICAL_MEMBERS_REQUIRED';end if;
+ r:=public.weekly_source_message_dispatch_target_start_atomic_v1(p_exact_sibling_start);p:=(r->>'permit_id')::uuid;
+ if r->'ok'<>'true'::jsonb or r->'replay'<>'false'::jsonb or p is null then raise exception 'SIBLING_NATIVE_START_WAS_CLOSED_BY_LOGICAL_ACCEPTANCE';end if;
+ consumed:=public.weekly_contact_submission_consume_v1(jsonb_build_object('permit_id',p,'provider_attempt_id',r->'provider_attempt_id',
+  'dispatch_target_id',t.id,'dispatch_command_id',c.id,'target_snapshot_hash',encode(t.target_snapshot_hash,'hex'),'provider',t.provider,
+  'content_hash',encode(t.rendered_content_hash,'hex'),'agency_id',c.agency_id,'environment',c.environment));
+ select jsonb_agg(to_jsonb(m) order by m.id) into after_members from public.weekly_contact_delivery_memberships m where delivery_id=c.id;
+ if consumed->'call_once'<>'true'::jsonb or before_members is distinct from after_members then
+  raise exception 'SIBLING_CONSUMPTION_CHANGED_OR_CLOSED_ORIGINAL_LOGICAL_OWNER';end if;
+ return jsonb_build_object('provider_attempt_id',r->'provider_attempt_id','permit_id',p,'call_once',consumed->'call_once');
+end;
+$function$;
+
+create or replace function pg_temp.source_contact_frozen_tamper_assert_v1(p_genuine_started_permit uuid)
+returns void language plpgsql as $function$
+declare p public.weekly_contact_submission_permits%rowtype;m uuid;message text;
+begin
+ select * into strict p from public.weekly_contact_submission_permits where id=p_genuine_started_permit and status='STARTED';
+ select id into strict m from public.weekly_contact_delivery_memberships where delivery_id=p.dispatch_command_id order by id limit 1;
+ begin
+  update public.weekly_contact_delivery_memberships set purpose=purpose||'_ALTERED' where id=m;
+  perform private.weekly_contact_source_memberships_v1(p.id,true);
+  raise exception 'ALTERED_NATIVE_MEMBERSHIP_WAS_ACCEPTED';
+ exception when check_violation then get stacked diagnostics message=message_text;
+  if message<>'CONTACT_SOURCE_FROZEN_MEMBERSHIP_CHANGED' then raise;end if;
+ end;
+end;
+$function$;
+
+create or replace function pg_temp.source_contact_original_history_owner_assert_v1(p_genuine_previous_command uuid,p_genuine_new_command uuid)
+returns void language plpgsql as $function$
+declare before_count bigint;r jsonb;
+begin
+ perform pg_temp.source_contact_generation_identity_assert_v1(p_genuine_previous_command,p_genuine_new_command);
+ if not exists(select 1 from public.weekly_message_dispatch_targets t join public.weekly_message_target_attempts a on a.dispatch_target_id=t.id where t.dispatch_command_id=p_genuine_previous_command)
+  and not exists(select 1 from public.weekly_message_provider_attempts where dispatch_command_id=p_genuine_previous_command) then
+  raise exception 'GENUINE_ORIGINAL_NATIVE_ATTEMPT_REQUIRED';end if;
+ select count(*) into before_count from public.weekly_contact_delivery_memberships;
+ r:=private.weekly_contact_source_budget_v1(p_genuine_new_command);
+ if r->'allowed'<>'false'::jsonb or before_count<>(select count(*) from public.weekly_contact_delivery_memberships) then
+  raise exception 'HISTORY_REFILLED_ALLOWANCE_OR_FABRICATED_MEMBERSHIP';end if;
+end;
+$function$;
+
+create or replace function pg_temp.source_contact_two_accepted_devices_once_assert_v1(p_original_command uuid)
+returns void language plpgsql as $function$
+declare facts jsonb;first_at timestamptz;
+begin
+ if(select count(*) from public.weekly_message_dispatch_targets where dispatch_command_id=p_original_command and state='ACCEPTED')<2 then
+  raise exception 'TWO_GENUINE_ACCEPTED_NATIVE_DEVICES_REQUIRED';end if;
+ select min(p.accepted_at_utc) into first_at from public.weekly_contact_submission_permits p
+  join public.weekly_message_target_attempts a on a.id=p.provider_attempt_id
+  where p.dispatch_command_id=p_original_command and p.owner_kind='WEEKLY_SOURCE_TARGET' and p.status='ACCEPTED'
+   and p.consumed_at_utc is not null and a.completed_at_utc is not null and a.outcome='ACCEPTED';
+ facts:=private.weekly_contact_source_logical_members_v1(p_original_command);
+ if first_at is null or(select count(*) from public.weekly_contact_delivery_memberships where delivery_id=p_original_command)<>jsonb_array_length(facts->'members')
+  or exists(select 1 from public.weekly_contact_delivery_memberships where delivery_id=p_original_command and accepted_at_utc is distinct from first_at) then
+  raise exception 'MULTIPLE_DEVICES_REFILLED_OR_RETIMED_LOGICAL_ACCEPTANCE';end if;
+end;
+$function$;

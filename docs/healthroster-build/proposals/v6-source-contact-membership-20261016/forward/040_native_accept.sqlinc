@@ -1,0 +1,28 @@
+create or replace function private.weekly_contact_source_membership_accept_v1(p_attempt_id uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare p public.weekly_contact_submission_permits%rowtype;m public.weekly_contact_delivery_memberships%rowtype;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict p from public.weekly_contact_submission_permits where provider_attempt_id=p_attempt_id;
+ -- This assertion locks the original command and validates the real current
+ -- attempt/target, consumed ACCEPTED permit and every frozen native member.
+ -- It never rechecks later pause/reply/current-publication or creates a row.
+ perform private.weekly_contact_source_memberships_v1(p.id,false);
+ for m in select x.* from public.weekly_contact_delivery_memberships x where x.delivery_id=p.dispatch_command_id order by x.logical_contact_key for update loop
+  if m.accepted_at_utc is null then
+   update public.weekly_contact_delivery_memberships set accepted_at_utc=p.accepted_at_utc where id=m.id;
+  elsif not exists(select 1 from public.weekly_contact_submission_permits previous
+   join public.weekly_message_target_attempts attempt on attempt.id=previous.provider_attempt_id
+   join public.weekly_message_dispatch_targets target on target.id=previous.dispatch_target_id
+   where previous.owner_kind='WEEKLY_SOURCE_TARGET' and previous.dispatch_command_id=p.dispatch_command_id
+    and previous.status='ACCEPTED' and previous.accepted_at_utc=m.accepted_at_utc and previous.consumed_at_utc is not null
+    and previous.content_hash=p.content_hash and attempt.dispatch_target_id=target.id and target.dispatch_command_id=p.dispatch_command_id
+    and attempt.completed_at_utc is not null and attempt.outcome='ACCEPTED') then
+   raise exception 'CONTACT_SOURCE_ACCEPTED_OWNER_INVALID' using errcode='23514';
+  end if;
+ end loop;
+ -- Command-level acceptance is recorded once. The existing native result
+ -- remains the only writer of this target and aggregate/sibling transport.
+end;
+$function$;

@@ -1,0 +1,33 @@
+{
+  "version": "SOURCE_LOGICAL_MEMBERSHIP_COMPOSITION_V1",
+  "patches": [
+    {
+      "target": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "source": "reference/admission.sql",
+      "description": "Under already-held common sorted scopes, before native attempt allocation; same original command siblings stay eligible",
+      "before": " v_admission:=jsonb_build_object('scope_revisions',v_scopes,'content_hash',v_after->>'content_hash',\n",
+      "after": " if not (private.weekly_contact_source_budget_v1(v_command.id)->>'allowed')::boolean then\n  return jsonb_build_object('ok',false,'version','CONTACT_START_RESULT_V1','owner_kind','WEEKLY_SOURCE_TARGET',\n   'channel',v_target.channel,'reason','OBSOLETE','dispatch_target_id',v_target.id,'next_eligible_at_utc',null);end if;\n v_admission:=jsonb_build_object('scope_revisions',v_scopes,'content_hash',v_after->>'content_hash',\n"
+    },
+    {
+      "target": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "source": "reference/admission.sql",
+      "description": "Only the genuine native START permit allocates frozen command members",
+      "before": " returning id into v_permit;\n if v_target.channel='PUSH' then",
+      "after": " returning id into v_permit;\n perform private.weekly_contact_source_memberships_v1(v_permit,true);\n if v_target.channel='PUSH' then"
+    },
+    {
+      "target": "supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql",
+      "source": "reference/result-hook.sql",
+      "description": "Serialize actual command before permit, then sample acceptance after every native row-lock wait",
+      "before": " select * into strict v_target from public.weekly_message_dispatch_targets where id=v_attempt.dispatch_target_id;\n select * into v_permit from public.weekly_contact_submission_permits where provider_attempt_id=p_attempt_id for update;\n v_no_network:=",
+      "after": " select * into strict v_target from public.weekly_message_dispatch_targets where id=v_attempt.dispatch_target_id;\n perform 1 from public.weekly_message_dispatch_commands where id=v_target.dispatch_command_id for update;\n select * into v_permit from public.weekly_contact_submission_permits where provider_attempt_id=p_attempt_id for update;\n v_at:=clock_timestamp();\n v_no_network:="
+    },
+    {
+      "target": "supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql",
+      "source": "reference/result-hook.sql",
+      "description": "First true accepted native device result records logical acceptance once; no target/aggregate/sibling writes",
+      "before": "  accepted_result_json=case when p_outcome='ACCEPTED' then v_result end where id=v_permit.id;\nend;",
+      "after": "  accepted_result_json=case when p_outcome='ACCEPTED' then v_result end where id=v_permit.id;\n if p_outcome='ACCEPTED' then perform private.weekly_contact_source_membership_accept_v1(p_attempt_id);end if;\nend;"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+-- True only at original native START after its real attempt + bound permit.
+-- False only inside the original native result, after it classified that same
+-- real consumed permit ACCEPTED. No provider call or target state mutation.
+create or replace function private.weekly_contact_source_memberships_v1(p_permit_id uuid,p_enrol boolean)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare p public.weekly_contact_submission_permits%rowtype;t public.weekly_message_dispatch_targets%rowtype;
+ a public.weekly_message_target_attempts%rowtype;c public.weekly_message_dispatch_commands%rowtype;
+ saved public.weekly_contact_delivery_memberships%rowtype;facts jsonb;member jsonb;scope jsonb;expected jsonb;actual jsonb;count_members integer;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict p from public.weekly_contact_submission_permits where id=p_permit_id;
+ select * into strict a from public.weekly_message_target_attempts where id=p.provider_attempt_id;
+ select * into strict t from public.weekly_message_dispatch_targets where id=a.dispatch_target_id;
+ select * into strict c from public.weekly_message_dispatch_commands where id=t.dispatch_command_id for update;
+ if p_enrol is null or p.owner_kind<>'WEEKLY_SOURCE_TARGET' or p.dispatch_target_id<>t.id or p.dispatch_command_id<>c.id
+  or p.agency_id<>c.agency_id or p.environment<>c.environment or p.channel<>t.channel or p.provider<>t.provider
+  or p.content_hash<>t.rendered_content_hash or p.content_hash<>c.rendered_content_hash or p.recipient_hash<>t.keyed_target_fingerprint
+  or p.lease_owner<>a.lease_owner or p.lease_token<>a.lease_token::text or p.provider_idempotency_identity is distinct from a.provider_idempotency_key
+  or a.completed_at_utc is not null or t.state<>'SUBMISSION_STARTED' or t.attempt_count<>a.attempt_number
+  or(p_enrol and p.status<>'STARTED') or(not p_enrol and(p.status<>'ACCEPTED' or p.consumed_at_utc is null or p.accepted_at_utc is null)) then
+  raise exception 'CONTACT_SOURCE_NATIVE_RESULT_SCOPE_INVALID' using errcode='42501';end if;
+ facts:=private.weekly_contact_source_logical_members_v1(c.id);
+ for member in select value from jsonb_array_elements(facts->'members') order by value->>'logical_contact_key' loop
+  select value into strict scope from jsonb_array_elements(p.scope_revisions_json)x(value)
+   where value->>'candidate_id'=member->>'candidate_id' and value->>'client_id'=member->>'client_id' and value->>'audience'=member->>'audience';
+  if not exists(select 1 from public.weekly_contact_pause_scopes s where s.id=(scope->>'scope_id')::uuid
+   and s.agency_id=c.agency_id and s.environment=c.environment and s.candidate_id=(member->>'candidate_id')::uuid and s.client_id=(member->>'client_id')::uuid) then
+   raise exception 'CONTACT_SOURCE_NATIVE_RESULT_SCOPE_INVALID' using errcode='42501';end if;
+  if p_enrol then
+   insert into public.weekly_contact_delivery_memberships(logical_contact_key,work_event_id,incident_id,incident_episode,purpose,audience,
+    candidate_id,client_id,scope_id,scope_revision,delivery_id,payload_revision,content_hash,send_ordinal,budget_owner_key)
+   values(decode(member->>'logical_contact_key','hex'),(member->>'work_event_id')::uuid,(member->>'incident_id')::uuid,(member->>'incident_episode')::integer,
+    member->>'purpose',member->>'audience',(member->>'candidate_id')::uuid,(member->>'client_id')::uuid,(scope->>'scope_id')::uuid,
+    private.weekly_contact_revision_v1(scope->'revision',false),c.id,(facts->>'payload_revision')::bigint,c.rendered_content_hash,
+    (member->>'send_ordinal')::integer,decode(member->>'budget_owner_key','hex'))
+   on conflict(delivery_id,logical_contact_key,send_ordinal) do nothing;
+  end if;
+  select * into strict saved from public.weekly_contact_delivery_memberships m where m.delivery_id=c.id
+   and m.logical_contact_key=decode(member->>'logical_contact_key','hex') and m.send_ordinal=(member->>'send_ordinal')::integer for update;
+  expected:=jsonb_build_object('logical_contact_key',decode(member->>'logical_contact_key','hex'),'work_event_id',member->'work_event_id',
+   'incident_id',member->'incident_id','incident_episode',member->'incident_episode','purpose',member->'purpose','audience',member->'audience',
+   'candidate_id',member->'candidate_id','client_id',member->'client_id','scope_id',scope->'scope_id','delivery_id',c.id,
+   'payload_revision',(facts->>'payload_revision')::bigint,'content_hash',c.rendered_content_hash,'send_ordinal',member->'send_ordinal',
+   'budget_owner_key',decode(member->>'budget_owner_key','hex'),'supersedes_unsubmitted_delivery_id',null);
+  actual:=to_jsonb(saved)-array['id','scope_revision','accepted_at_utc','created_at_utc'];
+  -- A later sibling can START after another pause revision. Its own permit
+  -- captures that current revision; the membership retains its genuine first
+  -- registration revision rather than rewriting earlier accepted provenance.
+  if actual is distinct from expected or not exists(select 1 from public.weekly_contact_submission_permits previous
+   cross join lateral jsonb_array_elements(previous.scope_revisions_json)s where previous.dispatch_command_id=c.id
+    and previous.owner_kind='WEEKLY_SOURCE_TARGET' and previous.content_hash=c.rendered_content_hash
+    and s->>'scope_id'=saved.scope_id::text and s->>'candidate_id'=saved.candidate_id::text and s->>'client_id'=saved.client_id::text
+    and s->>'audience'=saved.audience and s->>'revision'=saved.scope_revision::text) then
+   raise exception 'CONTACT_SOURCE_FROZEN_MEMBERSHIP_CHANGED' using errcode='23514';end if;
+ end loop;
+ select count(*) into count_members from public.weekly_contact_delivery_memberships where delivery_id=c.id;
+ if count_members<>jsonb_array_length(facts->'members') then raise exception 'CONTACT_SOURCE_FROZEN_MEMBERSHIP_CHANGED' using errcode='23514';end if;
+end;
+$function$;

@@ -1,0 +1,130 @@
+{
+  "database_execution": false,
+  "rowtype_checks": [
+    {
+      "file": "010_native_logical_members.sqlinc",
+      "variable": "c",
+      "table": "public.weekly_message_dispatch_commands"
+    },
+    {
+      "file": "010_native_logical_members.sqlinc",
+      "variable": "i",
+      "table": "public.weekly_message_intents"
+    },
+    {
+      "file": "010_native_logical_members.sqlinc",
+      "variable": "r",
+      "table": "public.weekly_message_renders"
+    },
+    {
+      "file": "010_native_logical_members.sqlinc",
+      "variable": "g",
+      "table": "public.weekly_candidate_outreach_generations"
+    },
+    {
+      "file": "010_native_logical_members.sqlinc",
+      "variable": "request",
+      "table": "public.weekly_timesheet_submission_requests"
+    },
+    {
+      "file": "010_native_logical_members.sqlinc",
+      "variable": "b",
+      "table": "public.weekly_manager_review_batches"
+    },
+    {
+      "file": "020_native_budget.sqlinc",
+      "variable": "c",
+      "table": "public.weekly_message_dispatch_commands"
+    },
+    {
+      "file": "030_native_enrol_assert.sqlinc",
+      "variable": "p",
+      "table": "public.weekly_contact_submission_permits"
+    },
+    {
+      "file": "030_native_enrol_assert.sqlinc",
+      "variable": "t",
+      "table": "public.weekly_message_dispatch_targets"
+    },
+    {
+      "file": "030_native_enrol_assert.sqlinc",
+      "variable": "a",
+      "table": "public.weekly_message_target_attempts"
+    },
+    {
+      "file": "030_native_enrol_assert.sqlinc",
+      "variable": "c",
+      "table": "public.weekly_message_dispatch_commands"
+    },
+    {
+      "file": "030_native_enrol_assert.sqlinc",
+      "variable": "saved",
+      "table": "public.weekly_contact_delivery_memberships"
+    },
+    {
+      "file": "040_native_accept.sqlinc",
+      "variable": "p",
+      "table": "public.weekly_contact_submission_permits"
+    },
+    {
+      "file": "040_native_accept.sqlinc",
+      "variable": "m",
+      "table": "public.weekly_contact_delivery_memberships"
+    },
+    {
+      "file": "native-source-membership-assertions.sqlinc",
+      "variable": "t",
+      "table": "public.weekly_message_dispatch_targets"
+    },
+    {
+      "file": "native-source-membership-assertions.sqlinc",
+      "variable": "a",
+      "table": "public.weekly_message_target_attempts"
+    },
+    {
+      "file": "native-source-membership-assertions.sqlinc",
+      "variable": "t",
+      "table": "public.weekly_message_dispatch_targets"
+    },
+    {
+      "file": "native-source-membership-assertions.sqlinc",
+      "variable": "sibling",
+      "table": "public.weekly_message_dispatch_targets"
+    },
+    {
+      "file": "native-source-membership-assertions.sqlinc",
+      "variable": "t",
+      "table": "public.weekly_message_dispatch_targets"
+    },
+    {
+      "file": "native-source-membership-assertions.sqlinc",
+      "variable": "c",
+      "table": "public.weekly_message_dispatch_commands"
+    },
+    {
+      "file": "native-source-membership-assertions.sqlinc",
+      "variable": "p",
+      "table": "public.weekly_contact_submission_permits"
+    }
+  ],
+  "composed_current_native_grammar": "PASS",
+  "native_write_scope": [
+    {
+      "file": "030_native_enrol_assert.sqlinc",
+      "command": "InsertStmt",
+      "relation": "public.weekly_contact_delivery_memberships",
+      "update_columns": []
+    },
+    {
+      "file": "040_native_accept.sqlinc",
+      "command": "UpdateStmt",
+      "relation": "public.weekly_contact_delivery_memberships",
+      "update_columns": [
+        "accepted_at_utc"
+      ]
+    }
+  ],
+  "sibling_target_command_render_generation_writes_from_new_owners": false,
+  "failures": [],
+  "native": "REQUIRED_NOT_RUN"
+}

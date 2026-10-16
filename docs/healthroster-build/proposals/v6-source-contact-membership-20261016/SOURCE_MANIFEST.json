@@ -1,0 +1,75 @@
+{
+  "version": "SOURCE_LOGICAL_MEMBERSHIP_OWNER_V1",
+  "database_execution": false,
+  "native": "REQUIRED_NOT_RUN",
+  "schema_changes": false,
+  "ordered_sql": [
+    "forward/010_native_logical_members.sqlinc",
+    "forward/020_native_budget.sqlinc",
+    "forward/030_native_enrol_assert.sqlinc",
+    "forward/040_native_accept.sqlinc",
+    "forward/090_acl.sqlinc"
+  ],
+  "functions": [
+    {
+      "signature": "private.weekly_contact_source_logical_members_v1(uuid)",
+      "payload": "forward/010_native_logical_members.sqlinc"
+    },
+    {
+      "signature": "private.weekly_contact_source_budget_v1(uuid)",
+      "payload": "forward/020_native_budget.sqlinc"
+    },
+    {
+      "signature": "private.weekly_contact_source_memberships_v1(uuid,boolean)",
+      "payload": "forward/030_native_enrol_assert.sqlinc"
+    },
+    {
+      "signature": "private.weekly_contact_source_membership_accept_v1(uuid)",
+      "payload": "forward/040_native_accept.sqlinc"
+    }
+  ],
+  "native_composition": "NATIVE_PATCH.json",
+  "owner_targets": [
+    "private.weekly_contact_source_admission_v1(jsonb)",
+    "private.weekly_contact_source_permit_v1(uuid,uuid,jsonb)",
+    "private.weekly_contact_source_result_v1(uuid,text,text,jsonb,jsonb)"
+  ],
+  "existing_native_target_result_and_aggregate": "Unchanged complete actual owners in15092026_2311; no sibling target writes or command finalisation from logical acceptance.",
+  "files": [
+    {
+      "file": "forward/010_native_logical_members.sqlinc",
+      "sha256": "25fb04d1466e9f25c9e341d543cbe852c74614683f6e9c49dbc5dac21dc7e3a8"
+    },
+    {
+      "file": "forward/020_native_budget.sqlinc",
+      "sha256": "92f349dd431dc1808e4d6a851794a3cd51dbb898e804d3495592e2f51d382a7e"
+    },
+    {
+      "file": "forward/030_native_enrol_assert.sqlinc",
+      "sha256": "eed10421aa5248b6fe923456211b95189f0924c39de2eb158ebeb9d8e9d515ec"
+    },
+    {
+      "file": "forward/040_native_accept.sqlinc",
+      "sha256": "cab29973854389e28cbd22b3ac9a85c9dd5dcc6063156d499667c9c57367b914"
+    },
+    {
+      "file": "forward/090_acl.sqlinc",
+      "sha256": "3675ad3c2327fa0b41ad836ff9995e708868d2decda3660cac22e2b1e142bb39"
+    },
+    {
+      "file": "NATIVE_PATCH.json",
+      "sha256": "37d8349844a1778b64b6148724174bb55ff25307ced8ee5798826914e68547e5"
+    },
+    {
+      "file": "fixtures/native-source-membership-assertions.sqlinc",
+      "sha256": "478c3af403445be957159ef5e3ee7c943de986b60c0963953a8a9541636e9ebd"
+    }
+  ],
+  "qualifications": [
+    "MANAGER_MANUAL_RESEND has no genuine native producer/explicit ordinal witness; refuses instead of inventing max-accepted followup.",
+    "Pre-install genuine native attempts retain actual owner/budget; no fabricated captured pause revisions or accepted memberships. New-command refill is refused.",
+    "A frozen Source body containing another command's already-owned logical slot is OBSOLETE; this owner cannot send an eligible subset with that old body. Genuine generation/render recomposition remains with its native producer.",
+    "New Source initial/reminder/manually staged slots use exact current native tranche/sequence writers; no generation/publication allowance renewal.",
+    "All catalogue/ACL/RLS, native result replay, dual-device concurrency/currentness, historical-owner and full runtime tests REQUIRED_NOT_RUN."
+  ]
+}
