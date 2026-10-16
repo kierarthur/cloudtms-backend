@@ -1,0 +1,765 @@
+{
+  "version": "INDEPENDENT_CONTACT_INTERIM_ASSEMBLY_REVIEW_V1",
+  "status": "BLOCKED_SOURCE_CORRECTION_REQUIRED_NOT_FINAL_PART_B",
+  "sourceCommit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+  "currentRootCommit": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+  "censusSha256": "26cfb2b26a1dc64205c589f0aebc4e9f60d8bc24d7b2b1fa324ca8adbda581ee",
+  "blockers": [
+    {
+      "id": "CONTACT_LEGACY_COMMAND_START_REOPENED",
+      "severity": "P1",
+      "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+      "repairInput": "BLOCKER_REPAIR_INPUT.json",
+      "repairSha256": "45e0f555d76f884b34fc2ba4b0cf20e7d1a4ee170db3fb8a0ade75ef027c2197"
+    }
+  ],
+  "prerequisiteReview": [
+    {
+      "signature": "private.weekly_contact_source_render_attempted_v1(uuid)",
+      "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/07_native_unsubmitted_recomposition.sqlinc",
+      "wholeFileSha256": "98e721a035422ae94af1c3e7cf21dcb26130ae70e4e510472d8bcf847f077238",
+      "completeFunctionStatementSha256": "deba2fa62884eaf3bc0cacb3a5c0e5f9b2d06cae362eca82a2d6cfa3cb257075",
+      "wholeFunctionUnchanged": true,
+      "independentWholeFunctionEqual": true,
+      "doesNotCallLegacyStart": true,
+      "doesNotAllocateProviderAttempt": true
+    },
+    {
+      "signature": "private.weekly_contact_source_candidate_render_assert_v1(uuid)",
+      "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/01_current_native_members.sqlinc",
+      "wholeFileSha256": "5d176a81113d2f9e39225831b9e2e31cc94d4fc70463941c0690d405778528cd",
+      "completeFunctionStatementSha256": "c7d54bbd048a52f1d8c7c48d86da753ba44412083654a23072ee1f672d782bb3",
+      "wholeFunctionUnchanged": true,
+      "independentWholeFunctionEqual": true,
+      "doesNotCallLegacyStart": true,
+      "doesNotAllocateProviderAttempt": true
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_initial_owned_v1(uuid)",
+      "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/01_current_native_members.sqlinc",
+      "wholeFileSha256": "5d176a81113d2f9e39225831b9e2e31cc94d4fc70463941c0690d405778528cd",
+      "completeFunctionStatementSha256": "6ecf46eb3c847a7850b611e91ae293134d349f680a3a81849e1956955eb66a65",
+      "wholeFunctionUnchanged": true,
+      "independentWholeFunctionEqual": true,
+      "doesNotCallLegacyStart": true,
+      "doesNotAllocateProviderAttempt": true
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamp with time zone)",
+      "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/01_current_native_members.sqlinc",
+      "wholeFileSha256": "5d176a81113d2f9e39225831b9e2e31cc94d4fc70463941c0690d405778528cd",
+      "completeFunctionStatementSha256": "4ff854c06eb693c390bc2ede6ca7e91ed94192943b30f8d89fa4e27666d46c43",
+      "wholeFunctionUnchanged": true,
+      "independentWholeFunctionEqual": true,
+      "doesNotCallLegacyStart": true,
+      "doesNotAllocateProviderAttempt": true
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamp with time zone)",
+      "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/01_current_native_members.sqlinc",
+      "wholeFileSha256": "5d176a81113d2f9e39225831b9e2e31cc94d4fc70463941c0690d405778528cd",
+      "completeFunctionStatementSha256": "897e57ce9196358c591251b07197cfd9b9135b30ef21225cadb09389aa3c2efc",
+      "wholeFunctionUnchanged": true,
+      "independentWholeFunctionEqual": true,
+      "doesNotCallLegacyStart": true,
+      "doesNotAllocateProviderAttempt": true
+    }
+  ],
+  "prerequisiteAcl": {
+    "sha256": "32e6cdaa74acf44ea336670d14b3e7a6ce4a1fb08ecfd5171d79ba478d5657aa",
+    "originalFileSha256": "75bc5d2f258d1a10183ac10cae111073a9dbbcab8652ffe632216f5ea009d18a",
+    "statements": [
+      "alter function private.weekly_contact_source_candidate_render_assert_v1(uuid) owner to postgres;",
+      "revoke all on function private.weekly_contact_source_candidate_render_assert_v1(uuid) from public,anon,authenticated,service_role;",
+      "alter function private.weekly_contact_source_manager_initial_owned_v1(uuid) owner to postgres;",
+      "revoke all on function private.weekly_contact_source_manager_initial_owned_v1(uuid) from public,anon,authenticated,service_role;",
+      "alter function private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamptz) owner to postgres;",
+      "revoke all on function private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamptz) from public,anon,authenticated,service_role;",
+      "alter function private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamptz) owner to postgres;",
+      "revoke all on function private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamptz) from public,anon,authenticated,service_role;",
+      "alter function private.weekly_contact_source_render_attempted_v1(uuid) owner to postgres;",
+      "revoke all on function private.weekly_contact_source_render_attempted_v1(uuid) from public,anon,authenticated,service_role;"
+    ],
+    "exactOriginalSelectedStatements": true,
+    "noServiceOrBrowserGrant": true
+  },
+  "registryReview": {
+    "baseSha256": "673c67620d74f7fa51d0b68f76ddd318acf160fd482b34874c108276ca57c34a",
+    "currentRootSameBase": true,
+    "updated": 12,
+    "added": 99,
+    "unrelatedAndEditorPreserved": true,
+    "limitation": "Mechanically preserved registry still proposes an unsafe final body for legacy START; correction requires its own final-owner/pin/count reconciliation."
+  },
+  "metadataReview": [
+    {
+      "originalCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "originalPath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/SOURCE_COMPLETION_RECIPE.json",
+      "originalSha256": "8f838c1a3b306243c66cd5c7501b299c469fd91bd120497c047b01fd0e43566d",
+      "successorPath": "metadata/CONTACT_SOURCE_COMPLETION_RECIPE_REVIEWED_SUCCESSOR.json",
+      "successorSha256": "f294792ed773277d01f8a7389f7332ad44e53a855cd2027e1851d51b991d558e",
+      "exactOnlyChangedPath": "/assembly/repeatable/52/sha256"
+    },
+    {
+      "originalCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+      "originalPath": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/RUNTIME_CONTRIBUTION.json",
+      "originalSha256": "af1f5af6a79bf2f50fa8b532b74a7f4421e4800bfc5274f2e4342688b1641188",
+      "successorPath": "metadata/RUNTIME_CONTRIBUTION_REVIEWED_SUCCESSOR.json",
+      "successorSha256": "5ec424eca893b004a114d7988941cb4b443695afb3bf21ab6be1a43f0e1f6454",
+      "exactOnlyChangedPath": "/leaf/sha256"
+    }
+  ],
+  "providerDispatchReview": {
+    "providerAttemptWritingFunctions": [
+      {
+        "number": 73,
+        "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+        "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+        "completeStatementSha256": "de9458f5f3b8b6f9413c060dafcbc5c82c6af5e1d165a5167aee4c653e57c8ce"
+      }
+    ],
+    "dispatchDefinitions": [
+      {
+        "number": 73,
+        "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+        "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+        "completeStatementSha256": "de9458f5f3b8b6f9413c060dafcbc5c82c6af5e1d165a5167aee4c653e57c8ce"
+      }
+    ],
+    "otherLegacyOrPerTargetResultOverrides": 0,
+    "new5NeedLegacyBypass": false,
+    "currentPerTargetStartChain": {
+      "signature": "public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+      "finalPhysical": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+        "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+        "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+        "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql"
+      ],
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B preserve current TEST successor; BD178 first-install final reload wrapper retains exact native physical owner",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json"
+    },
+    "currentPerTargetStartSourceSha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152",
+    "runtimeParentSha256": "cda0983c5292f6f86c6c812cccd176057ce8dc34059753e3009d25bcf398ea75",
+    "runtimeContributionSha256": "b5b7109136fe51b26b643a4b4381d411e56efc8009a7ff0ce67e6b7c763cdaa5",
+    "anchors": 3
+  },
+  "guardReview": {
+    "completeCorrectedSha256": "650f736b80474576dcfc72ffba5eecbbb0aac954b893e3fb2e1cc81c3d83d796",
+    "reverseWholeBodyEqual": true
+  },
+  "checks": [
+    {
+      "name": "Exact full original18f helper private.weekly_contact_source_render_attempted_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact full original18f helper private.weekly_contact_source_candidate_render_assert_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact full original18f helper private.weekly_contact_source_manager_initial_owned_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact full original18f helper private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact full original18f helper private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact original private five-helper owner/revoke ACL",
+      "result": "PASS"
+    },
+    {
+      "name": "Current root registry equals pinned32ee parent",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact12updates99adds111delta rows",
+      "result": "PASS"
+    },
+    {
+      "name": "All unrelated registry rows/top-level/editor fields preserved",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_checking_logical_keys_v1(uuid,text,uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_checking_pair_facts_v1(uuid,text,uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_checking_scope_facts_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_checking_scope_revision_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_checking_version_guard_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_manual_enqueue_v1(jsonb,jsonb,jsonb,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_manual_manager_generation_v1(jsonb,uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_manual_manifest_seal_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_manual_manifest_v1(jsonb,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_manual_member_facts_v1(uuid,text,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_manual_raise_public_v1(text,text)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_manual_request_assert_v1(jsonb,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_manual_scopes_lock_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_producer_immutable_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_push_dispatch_context_v1(uuid,uuid,text,bytea,uuid,text)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_recheck_native_ids_v1(uuid,text,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_recheck_next_due_v1(uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_recheck_progress_guard_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_recheck_record_v1(uuid,text,uuid,bigint,bigint,bytea,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_recheck_selection_scope_facts_v1(uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_recheck_task_selected_v1(uuid,jsonb,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_recheck_task_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_activation_lock_v1(uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_activation_scope_facts_v1(uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_budget_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_bulk_lock_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_bulk_scope_facts_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_candidate_render_assert_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_capture_assert_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_capture_current_v1(uuid,timestamp with time zone,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_capture_deferred_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_capture_dispatch_membership_v1(uuid,uuid,text)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_capture_insert_v1(uuid,text,uuid,uuid,jsonb,jsonb,integer,uuid,timestamp with time zone,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_capture_logical_members_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_capture_notification_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_capture_pairs_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_cutoff_classification_v1(uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_cycle_lock_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_due_rebase_assert_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_expected_week_fact_v1(uuid,uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_followup_candidate_v1(uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_generation_lock_v1(uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_generation_scope_facts_v1(uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_identity_v1(uuid,text,uuid,uuid,text,text,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_intent_composition_lock_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_intent_composition_scope_facts_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_intent_current_subset_v1(uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_intent_lock_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_logical_history_v1(uuid,text,uuid,uuid,bytea)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_logical_members_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_action_lock_v1(uuid,uuid,uuid,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_action_v1(uuid,uuid,uuid,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_followup_enqueue_v1(uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_followup_group_enqueue_v1(uuid[],timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_followup_state_v1(uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_initial_owned_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_manual_step_v1(uuid,uuid,uuid,uuid[],text)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_members_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_recompose_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_row_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_selection_capture_v1(uuid,uuid,uuid,jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_selection_lock_v1(uuid[],jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_manager_selection_scope_facts_v1(uuid[])",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_membership_v1(uuid,uuid,text)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_ordinal_owner_guard_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_recompose_intent_v1(uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_render_attempted_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_retire_unsubmitted_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_route_lock_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_route_scope_facts_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_scheduler_selection_lock_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_scheduler_selection_v1(timestamp with time zone,integer)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_scheduler_work_facts_v1(text,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_scope_first_activation_v1(uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_submission_lock_v1(uuid,uuid,jsonb,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_source_submission_partition_v1(jsonb,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_submission_identity_deferred_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_submission_request_assert_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_submission_request_for_generation_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_contact_submission_view_request_v1(uuid,uuid,date,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_candidate_app_projection_v1(uuid,uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained private.weekly_source_candidate_notification_intent_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_candidate_notification_intent_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained private.weekly_source_candidate_notification_retire_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_candidate_notification_retire_v1()",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_candidate_view_request_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained private.weekly_source_import_outreach_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_import_outreach_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained private.weekly_source_manager_followup_timing_v1(uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_manager_followup_timing_v1(uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_query_candidate_generation_v1(uuid,uuid,uuid,uuid,text,uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_query_manager_intent_v1(uuid,uuid,uuid[],text,integer,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row private.weekly_source_submission_request_start_v1(jsonb,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_candidate_query_get_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_candidate_reminder_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_contact_manual_enquiry_accept_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_contact_manual_enquiry_preview_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_contact_recheck_batch_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_manager_route_prepare_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_message_render_input_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_message_render_stage_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained public.weekly_source_office_workspace_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_office_workspace_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Prior owner/fields/companions retained public.weekly_source_projection_publish_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_projection_publish_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_query_scheduler_tick_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_query_send_manager_now_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Proposed exact delta row public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
+      "result": "PASS"
+    },
+    {
+      "name": "Registered final closure selects exact current native closed physical owner",
+      "result": "PASS"
+    },
+    {
+      "name": "Actual committed Contact final body reopens provider allocation",
+      "result": "PASS"
+    },
+    {
+      "name": "Systematic provider-attempt write census finds only this reopened body",
+      "result": "PASS"
+    },
+    {
+      "name": "No other legacy/per-target START/result definition is shadowed",
+      "result": "PASS"
+    },
+    {
+      "name": "New5helpers need no legacy START/provider write bypass",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact old38whole-leaf reverse provenance",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact current runtime anchor once import { weeklySourceDeploymentContext } from './routes.js';",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact current runtime anchor once   const renders = await renderDueIntents(env, dependencies, limit);",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact current runtime anchor once     scheduler,\n    renders,",
+      "result": "PASS"
+    },
+    {
+      "name": "Complete actual parent equals exact three-edit contribution",
+      "result": "PASS"
+    },
+    {
+      "name": "Actual runtime stays on per-target START/result",
+      "result": "PASS"
+    },
+    {
+      "name": "Actual current per-target START retains Contact permit authority",
+      "result": "PASS"
+    },
+    {
+      "name": "650complete guard sole bounded kind addition reverses whole body",
+      "result": "PASS"
+    },
+    {
+      "name": "Only exact one-field metadata successor /assembly/repeatable/52/sha256",
+      "result": "PASS"
+    },
+    {
+      "name": "Only exact one-field metadata successor /leaf/sha256",
+      "result": "PASS"
+    }
+  ],
+  "passed": 147,
+  "qualification": "Interim exact source/body/caller/predecessor/ACL review. No complete-flow/native/API/permission/concurrency/provider acceptance inferred from symbols, counts, hashes or tests.",
+  "native": "NOT_RUN",
+  "databaseConnections": 0,
+  "rootOrProducerEdits": false
+}

@@ -1,0 +1,67 @@
+{
+  "version": "CONTACT_CLOSED_NATIVE_COMMAND_START_REPAIR_INPUT_V1",
+  "status": "ROOT_CORRECTION_REQUIRED_FROZEN2D74UNTOUCHED",
+  "severity": "P1",
+  "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+  "sourceProposalCommit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+  "oldContact": {
+    "path": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+    "fileSha256": "dccdc8e5843aee7fd6d18e0bebca9ab76a57a9e7691ddd3e1b216b11346861c4",
+    "completeFunctionSha256": "de9458f5f3b8b6f9413c060dafcbc5c82c6af5e1d165a5167aee4c653e57c8ce",
+    "startByte": 20300,
+    "endByteExclusive": 34777,
+    "actualProviderInsert": "public.weekly_message_provider_attempts",
+    "missingAuthority": "No per-target identity/Contact submission permit or shared Contact scope/pause admission before allocation; unsafe command-level route was already retired"
+  },
+  "currentRegisteredNative": {
+    "rootCommit": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+    "registryPath": "docs/bpay-next/final-definer-closures.json",
+    "registrySha256": "673c67620d74f7fa51d0b68f76ddd318acf160fd482b34874c108276ca57c34a",
+    "chain": {
+      "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "finalPhysical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+      ],
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    "physicalFileSha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+    "completeFunctionSha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d",
+    "startByte": 11358,
+    "endByteExclusive": 11771,
+    "closureSha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c",
+    "exactFinalPhysicalIncludeVerified": true
+  },
+  "completeCorrection": {
+    "path": "forward/01_complete_current_closed_command_start.sqlinc",
+    "sha256": "524fd763e1f0822b64cf3f471b99b22461083516df3a3be2daa07085bf037628",
+    "bytes": 414,
+    "wholeFunctionEqualsCurrentNative": true,
+    "abiErrorSecuritySearchPathUnchanged": true,
+    "acl": "Preserve current owner and native final private/browser isolation/service ACL; no new grants or calls. Existing service callers receive the exact native closed error."
+  },
+  "wholeOldLeafReplacementEvidence": {
+    "onlySpanReplacement": true,
+    "correctedLeafSha256": "71e27752fc91e9177992fdad51c131a7d71626da43d5067ab8b0de30c7d7db47",
+    "reverseWholeLeafEqualsFrozen": true,
+    "qualification": "Provenance only; corrected whole leaf not authored or mounted. Root may retain frozen leaf then select this complete native reassertion after all old bodies, before final ACL."
+  },
+  "requiredRootReconciliation": [
+    "Do not mount/release the uncorrected2d74closure.",
+    "Add exact complete registered native closed successor after old38 and before final99, or review an equally exact full-leaf selection correction.",
+    "Update final-definer delta/physical owner/hash/allowed predecessor chain and all manifest/count/payload hashes; preserve the frozen original proposal/review.",
+    "An added complete successor gives114totaldeclarations/111unique and412managedstatements if this is the only added statement; independently recount the final corrected assembly.",
+    "Recheck effective ACL and final API/native legacy-refusal/per-target permit semantics with genuine acceptance; this source proof does not execute a provider or database."
+  ],
+  "native": "NOT_RUN"
+}

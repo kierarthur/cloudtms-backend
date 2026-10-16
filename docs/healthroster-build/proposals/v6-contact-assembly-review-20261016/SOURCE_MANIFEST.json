@@ -1,0 +1,59 @@
+{
+  "version": "INDEPENDENT_CONTACT_INTERIM_REVIEW_SOURCE_PINS_V1",
+  "sourceProposalCommit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+  "currentRootCommit": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+  "status": "BLOCKED_SOURCE_CORRECTION_REQUIRED_NOT_FINAL_PART_B",
+  "files": [
+    {
+      "path": "BLOCKER_REPAIR_INPUT.json",
+      "sha256": "45e0f555d76f884b34fc2ba4b0cf20e7d1a4ee170db3fb8a0ade75ef027c2197",
+      "bytes": 4260
+    },
+    {
+      "path": "CENSUS.json",
+      "sha256": "26cfb2b26a1dc64205c589f0aebc4e9f60d8bc24d7b2b1fa324ca8adbda581ee",
+      "bytes": 221842
+    },
+    {
+      "path": "extract.mjs",
+      "sha256": "f91ed6f789b3e87cee09a6369fe5dba63b360b4bc73365be84a1665d63397988",
+      "bytes": 3444
+    },
+    {
+      "path": "forward/01_complete_current_closed_command_start.sqlinc",
+      "sha256": "524fd763e1f0822b64cf3f471b99b22461083516df3a3be2daa07085bf037628",
+      "bytes": 414
+    },
+    {
+      "path": "REVIEW.json",
+      "sha256": "b91f2254e3ee69ba0f2ed1194604c642ccad5d33db7beddc5399d43a97764963",
+      "bytes": 31889
+    },
+    {
+      "path": "REVIEW.md",
+      "sha256": "330b442dfd1facc55ecc803ecd1716180be1fb280af207c6dc23391f89391286",
+      "bytes": 8141
+    },
+    {
+      "path": "review.mjs",
+      "sha256": "05fed6be56cb81ef8f811d39642bc87301b5389df4871833ffbd275679e988f4",
+      "bytes": 14221
+    },
+    {
+      "path": "schema-review.py",
+      "sha256": "94f137aca868f848d8ff56a47cc1acd092cd1e4346dc0420d5bcd6403e1df3c0",
+      "bytes": 7678
+    },
+    {
+      "path": "SCHEMA_REVIEW.json",
+      "sha256": "955e66921572d4eed928982af984e2838e02474724ec6c40f020094ade084995",
+      "bytes": 294017
+    },
+    {
+      "path": "TEST_EVIDENCE.json",
+      "sha256": "fac7a48a0cd4a5b4c82a50dd0909056cc32adc93f308f5b0a7bd414588ba72dc",
+      "bytes": 1150
+    }
+  ],
+  "native": "NOT_RUN"
+}

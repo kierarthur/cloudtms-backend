@@ -1,0 +1,27 @@
+{
+  "qualification": "OFFLINE_SOURCE_CHECKS_AND_RUNTIME_DOUBLES_ONLY_SOURCE_BLOCKER_STILL_OPEN",
+  "proposalTests": {
+    "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+    "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/assembly.test.mjs",
+    "sha256": "dde738720eadd131e7fda90f6bfcca0d10fddb782b50aec2da7539fe584d903a",
+    "savedEqualsCommit": true,
+    "command": "node --test <Report>/docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/assembly.test.mjs",
+    "tests": 11,
+    "passed": 11,
+    "failed": 0,
+    "scope": "Assembly/source checks and actual contributed parent body against transport/owner doubles; no DB/provider/API/native call"
+  },
+  "independentSourceChecks": {
+    "path": "REVIEW.json",
+    "sha256": "b91f2254e3ee69ba0f2ed1194604c642ccad5d33db7beddc5399d43a97764963",
+    "passed": 147
+  },
+  "independentSchemaChecks": {
+    "path": "SCHEMA_REVIEW.json",
+    "sha256": "955e66921572d4eed928982af984e2838e02474724ec6c40f020094ade084995",
+    "passed": 195
+  },
+  "status": "BLOCKED_SOURCE_CORRECTION_REQUIRED",
+  "native": "NOT_RUN",
+  "databaseConnections": 0
+}
