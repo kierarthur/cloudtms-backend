@@ -1,0 +1,68 @@
+{
+  "version": "HEALTHROSTER_MYTMS_SOURCE_REVIEW_CHECKPOINT_V1",
+  "status": "SOURCE_REVIEW_CONTINUING_NATIVE_SUCCESSOR_REQUIRED",
+  "worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-mytms-13102026",
+  "firstSourceCommit": "9261f692827f4791889f1f8a26b9d1004a7d7c6a",
+  "pendingSourceCommit": "e6c0a1ce21ec7dd489516956cff5edd0d20c1e8f",
+  "publishedReceiptTip": "b2fed43f6805a309783dd87d1ccf408f833935c8",
+  "manifests": [
+    {
+      "path": "docs/healthroster-build/MYTMS_CONTRACT_MOVE_V6_SOURCE_MANIFEST.json",
+      "sha256": "72ed604964de661c9efada0af978c56f994e1edaeee2846574b83389fd68be9a"
+    },
+    {
+      "path": "docs/healthroster-build/MYTMS_CONTRACT_MOVE_PENDING_V6_SOURCE_MANIFEST.json",
+      "sha256": "d60988b9c96c71aef33d140966ab8582240353d0560eb524dfc6857d19a6bf9a"
+    }
+  ],
+  "independentChecks": {
+    "committedGitBlobFiles": [
+      {
+        "checkpoint": "INITIAL_MOVE",
+        "sourceCommit": "9261f692827f4791889f1f8a26b9d1004a7d7c6a",
+        "count": 48,
+        "result": "ALL_EXACT_HASH_MATCH"
+      },
+      {
+        "checkpoint": "PENDING_SUCCESSOR",
+        "sourceCommit": "e6c0a1ce21ec7dd489516956cff5edd0d20c1e8f",
+        "count": 8,
+        "result": "ALL_EXACT_HASH_MATCH"
+      }
+    ],
+    "pendingSavedFiles": 8,
+    "pendingSavedHashes": "ALL_MATCH",
+    "operationSecurity": {
+      "baseline": "33412161bb5fb1479797f8517f3c7f614bf3fbb7",
+      "currentSource": "e6c0a1ce21ec7dd489516956cff5edd0d20c1e8f",
+      "count": 72,
+      "result": "EXACTLY_UNCHANGED",
+      "normalization": "Sorted path then method; operation.security falling back to contract.security",
+      "sha256": "21ca7f9132ac07dff994849fad3015ed7c32b01812fe534afdbce210ac31e09b"
+    }
+  },
+  "bodyReview": [
+    "Complete submit.ts successor diff read against344fca. Original ordinary body is persisted before its first POST and retained as acceptedSubmission; retries replay that body before deriving new current context.",
+    "Receipt replay is separate from the current factual witness. It does not bind an arbitrary changed live hash; final refreshed native detail must independently satisfy the original same-facts check.",
+    "A changed still-editable native draft enters explicit review and fresh-signature handling, then the original normal predecessor supersede/create path. It does not use rejected-workflow rebind.",
+    "Current17-field DTO, original workflow/component/evidence identity and method/security tuple are preserved; no current-device/API/financial acceptance is inferred."
+  ],
+  "producer": {
+    "historicalSource": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+    "currentSourceNotQualified": true,
+    "requiredSuccessor": [
+      "Pure factual domain must normalize genuine raw draft to canonical accepted body without treating B-rate-only values as changed hours.",
+      "Native immutable accepted-body SHA and real WORKER_SUBMIT render/request receipt must independently certify submitted generation.",
+      "Cache invalidation during AFTER workflow update must use strict current-placement/CW identity without invoking an outward accepted-body proof before that receipt exists.",
+      "Actual current-B lifecycle/mutation/finalizer/reset/PREPARING and real device journeys remain pending; Banking current-B financial producer must be genuine."
+    ]
+  },
+  "testEvidence": "Producer manifest records719 Candidate cases,80owner cases and type/network/contract/storage guards. Root verified exact source and tuple evidence here; no additional full app test run claimed.",
+  "native": "NOT_RUN",
+  "testFlight": "NOT_BUILT",
+  "installed": "NO",
+  "partBCriticSignoff": false,
+  "earlierApprovalsPreserved": true,
+  "databaseCalls": 0,
+  "deployments": 0
+}
