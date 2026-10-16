@@ -68,6 +68,8 @@ begin
         (generation.request_kind='SUBMIT_TIMESHEET' and exists(
           select 1 from public.weekly_timesheet_submission_requests submission
           where submission.candidate_cohort_id=generation.candidate_cohort_id
+            and submission.source_cycle_id=generation.source_cycle_id and submission.candidate_id=generation.candidate_id
+            and submission.request_generation=generation.generation_number and submission.membership_hash=generation.membership_hash
             and submission.state in ('ACTIVE','PARTLY_SUBMITTED')
         ))
       )

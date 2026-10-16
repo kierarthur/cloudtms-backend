@@ -21,7 +21,7 @@ begin
  select * into progress from public.weekly_contact_recheck_progress where task_id=task.id for update;
  if not found or progress.phase='COMPLETE' or(progress.scope_revision,progress.checking_revision)
     is distinct from(scope.revision,(checking->>'revision')::bigint) then
-  perform private.weekly_contact_recheck_record_v1(task.id,'SOURCE_WORKER',null,scope.revision,(checking->>'revision')::bigint,
+  perform private.weekly_contact_recheck_record_v1(task.id,'SOURCE_ACTIVATION',null,scope.revision,(checking->>'revision')::bigint,
    decode(checking->>'facts_sha256','hex'),jsonb_build_object('version','CONTACT_RECHECK_OBSERVATION_V1','disposition','CURRENT_SCOPE_BEGIN'));
   select * into strict progress from public.weekly_contact_recheck_progress where task_id=task.id;
  end if;
@@ -29,7 +29,9 @@ begin
   phase:=progress.phase;
   select native_id into native from private.weekly_contact_recheck_native_ids_v1(scope.id,phase,progress.last_native_id) order by native_id limit 1;
   if native is not null then
-   if phase in('SOURCE_WORKER','SOURCE_MANAGER') then
+   if phase='SOURCE_ACTIVATION' then
+    result:=private.weekly_contact_source_scope_first_activation_v1(scope.id,native);
+   elsif phase in('SOURCE_WORKER','SOURCE_MANAGER') then
     result:=private.weekly_contact_source_recompose_intent_v1(native,null);
    elsif phase='LEGACY_OUTBOX' then
     -- This is the actual existing query-body/attachment/outbox recomposer,
@@ -43,7 +45,8 @@ begin
    return jsonb_build_object('version','CONTACT_RECHECK_TASK_RESULT_V1','task_id',task.id,'disposition','CONTINUE',
     'phase',phase,'native_id',native,'native_disposition',result->'disposition');
   end if;
-  phase:=case phase when 'SOURCE_WORKER' then 'SOURCE_MANAGER' when 'SOURCE_MANAGER' then 'LEGACY_OUTBOX' else 'COMPLETE' end;
+  phase:=case phase when 'SOURCE_ACTIVATION' then 'SOURCE_WORKER' when 'SOURCE_WORKER' then 'SOURCE_MANAGER'
+   when 'SOURCE_MANAGER' then 'LEGACY_OUTBOX' else 'COMPLETE' end;
   perform private.weekly_contact_recheck_record_v1(task.id,phase,null,scope.revision,(checking->>'revision')::bigint,
    decode(checking->>'facts_sha256','hex'),jsonb_build_object('version','CONTACT_RECHECK_OBSERVATION_V1','disposition','PHASE_EXHAUSTED'));
   if phase='COMPLETE' then exit;end if;

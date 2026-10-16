@@ -4,17 +4,17 @@ as $function$
 begin
  if TG_OP='DELETE' then raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
  if TG_OP='INSERT' then
-  if new.revision<>1 or new.phase<>'SOURCE_WORKER' or new.last_native_id is not null then
+  if new.revision<>1 or new.phase<>'SOURCE_ACTIVATION' or new.last_native_id is not null then
    raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
  else
   if new.task_id<>old.task_id or new.revision<>old.revision+1 or new.recorded_at_utc<old.recorded_at_utc then
    raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
-  if new.phase='SOURCE_WORKER' and new.last_native_id is null and(
+  if new.phase='SOURCE_ACTIVATION' and new.last_native_id is null and(
    (new.scope_revision,new.checking_revision) is distinct from(old.scope_revision,old.checking_revision) or old.phase='COMPLETE') then
    null; -- An evidenced current-facts reset or an actual existing future wake.
   elsif old.phase<>'COMPLETE' then
-   if array_position(array['SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE'],new.phase)
-      <array_position(array['SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE'],old.phase)
+   if array_position(array['SOURCE_ACTIVATION','SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE'],new.phase)
+      <array_position(array['SOURCE_ACTIVATION','SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE'],old.phase)
     or(new.phase=old.phase and old.last_native_id is not null and(new.last_native_id is null or new.last_native_id<=old.last_native_id)) then
     raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
   else
@@ -54,6 +54,20 @@ $function$;
 create or replace function private.weekly_contact_recheck_native_ids_v1(p_scope uuid,p_phase text,p_after uuid)
 returns table(native_id uuid) language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
 as $function$
+ select cycle.id from public.weekly_contact_pause_scopes scope join public.weekly_source_groups source_group
+  on source_group.agency_id=scope.agency_id and source_group.environment=scope.environment
+ join public.weekly_source_cycles cycle on cycle.source_group_id=source_group.id
+ join public.weekly_source_projection_publications publication on publication.id=cycle.current_projection_publication_id
+  and publication.state='CURRENT' and publication.correction_session_id is null
+ where scope.id=p_scope and p_phase='SOURCE_ACTIVATION' and cycle.state in('OPEN','FINALISABLE')
+  and(p_after is null or cycle.id>p_after) and(
+   exists(select 1 from public.weekly_discrepancy_incidents incident where incident.source_cycle_id=cycle.id
+    and incident.candidate_id=scope.candidate_id and incident.client_id=scope.client_id and incident.state='OPEN')
+   or exists(select 1 from public.weekly_source_upload_rows source_row join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+    where source_row.upload_id=publication.upload_id and resolution.candidate_id=scope.candidate_id and resolution.client_id=scope.client_id
+     and resolution.mapping_state='RESOLVED' and resolution.generation=(select max(current_resolution.generation)
+      from public.weekly_source_row_resolutions current_resolution where current_resolution.upload_row_id=source_row.id)))
+ union
  select intent.id from public.weekly_contact_pause_scopes scope join public.weekly_message_intents intent
   on intent.agency_id=scope.agency_id and intent.environment=scope.environment
  join public.weekly_candidate_outreach_generations generation on generation.id=intent.candidate_generation_id

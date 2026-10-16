@@ -38,9 +38,9 @@ begin
   'routine_sequence',step->'sequence','mode',step->'mode','due_at_utc',case when due is null then null
     else to_char(due at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end,
   'basis_accepted_membership_id',basis,'routine_in_scope',cutoff->'routine'->'in_scope',
-  'reason',case when history->'last_accepted_send'='null'::jsonb then 'NO_ACCEPTED_CONTACT'
-   when history->'unknown_original'='true'::jsonb then 'ORIGINAL_SUBMISSION_UNCERTAIN'
+  'reason',case when history->'unknown_original'='true'::jsonb then 'ORIGINAL_SUBMISSION_UNCERTAIN'
    when history->'original_retry_pending'='true'::jsonb then 'ORIGINAL_ATTEMPT_OWNER_PENDING'
+   when history->'last_accepted_send'='null'::jsonb then 'NO_ACCEPTED_CONTACT'
    when cutoff->'routine'->'in_scope' is distinct from 'true'::jsonb then 'OUTSIDE_ROUTINE_SCOPE'
    when step is null then 'FOLLOWUPS_COMPLETE' else 'SCHEDULED' end,'requires_current_start_admission',true);
 end;

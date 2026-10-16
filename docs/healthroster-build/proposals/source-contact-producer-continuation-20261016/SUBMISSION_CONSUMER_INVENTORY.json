@@ -1,0 +1,464 @@
+{
+  "version": "CONTACT_SUBMISSION_CURRENT_SOURCE_CONSUMER_INVENTORY_V1",
+  "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+  "owners": [
+    {
+      "function_name": "public.candidate_workflow_transition_atomic_v1",
+      "source_path": "supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "aaacefad8b276418414ce730bfd45a61e7b2896724419d28ed6d1fb6e23304a5",
+      "lookups": [
+        {
+          "source_line": 1251,
+          "excerpt": "          select 1\n          from public.weekly_timesheet_submission_requests submission\n          join public.weekly_candidate_outreach_generations generation\n            on generation.candidate_cohort_id=submission.candidate_cohort_id\n           and generation.source_cycle_id=submission.source_cycle_id\n           and generation.candidate_id=submission.candidate_id\n           and generation.generation_number=submission.request_generation"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_office_contact_policy_v1",
+      "source_path": "supabase/repeatable/10102026_0810_weekly_source_contact_policy_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "de3af6f265ddc781be237cb176ea4a963ce1c5b96e2f217e3bab99940cc7e709",
+      "lookups": [
+        {
+          "source_line": 66,
+          "excerpt": "    v_all_asked:=not exists(select 1 from jsonb_array_elements(v_missing) scope\n      where not exists(select 1 from public.weekly_timesheet_submission_requests request\n        join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id\n        where request.source_cycle_id=p_source_cycle_id and request.candidate_id=v_candidate\n          and request.state in ('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n          and membership.state='WAITING'\n          and membership.client_id=(scope->>'client_id')::uuid"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_candidate_check_materialise_atomic_v1",
+      "source_path": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "c62c9a31c5261c09cdda56cce621a4806f92b69790f8afe8b4851a9c4d26ca45",
+      "lookups": [
+        {
+          "source_line": 586,
+          "excerpt": "      select 1 from public.weekly_timesheet_submission_request_memberships membership\n      join public.weekly_timesheet_submission_requests submission\n        on submission.id=membership.submission_request_id\n      where submission.candidate_id=v_candidate_id\n        and submission.state in ('ACTIVE','PARTLY_SUBMITTED','OVERDUE')\n        and membership.state='WAITING'\n        and membership.contract_id=v_workflow.contract_id"
+        },
+        {
+          "source_line": 933,
+          "excerpt": "    select * into strict v_submission\n    from public.weekly_timesheet_submission_requests\n    where candidate_cohort_id=v_generation.candidate_cohort_id\n      and candidate_id=v_candidate_id and source_cycle_id=v_cycle.id\n      and current_projection_publication_id=v_projection_publication_id\n      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n    for update;"
+        }
+      ]
+    },
+    {
+      "function_name": "public.candidate_workflow_transition_atomic_v1",
+      "source_path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "edb0c680c23afdb20528e112eb2af6b89a5a55cc131af06674a6f18469947c63",
+      "lookups": [
+        {
+          "source_line": 961,
+          "excerpt": "          select 1\n          from public.weekly_timesheet_submission_requests submission\n          join public.weekly_candidate_outreach_generations generation\n            on generation.candidate_cohort_id=submission.candidate_cohort_id\n           and generation.source_cycle_id=submission.source_cycle_id\n           and generation.candidate_id=submission.candidate_id\n           and generation.generation_number=submission.request_generation"
+        }
+      ]
+    },
+    {
+      "function_name": "private.candidate_notification_visible_v1",
+      "source_path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "642dd4ad56c3c3ceb9f83db6156cb0c27c10c42f9e56de6bd1fc410d2f86b86c",
+      "lookups": [
+        {
+          "source_line": 31,
+          "excerpt": "          (generation.request_kind='SUBMIT_TIMESHEET' and exists(\n            select 1 from public.weekly_timesheet_submission_requests request\n            join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id\n            where request.candidate_cohort_id=generation.candidate_cohort_id\n              and request.source_cycle_id=generation.source_cycle_id\n              and request.candidate_id=generation.candidate_id\n              and request.request_generation=generation.generation_number"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_message_dispatch_target_start_atomic_v1",
+      "source_path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "b48391490bc6edb5c558e2d6a7f9c409da34e217fc1ddc62839ae71dce16ae1d",
+      "lookups": [
+        {
+          "source_line": 462,
+          "excerpt": "    from public.weekly_candidate_outreach_generations generation\n    join public.weekly_timesheet_submission_requests submission\n      on submission.candidate_cohort_id=generation.candidate_cohort_id\n     and submission.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n    join public.weekly_timesheet_submission_request_memberships membership\n      on membership.submission_request_id=submission.id and membership.state='WAITING'\n    where generation.id=v_command.candidate_generation_id"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_candidate_submission_compare_sync_v1",
+      "source_path": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "63e2e83e5fb93cd663226a3e85d0c70bd32fdc339ff1603882a3ba699896ae20",
+      "lookups": [
+        {
+          "source_line": 1766,
+          "excerpt": "    select * into strict v_submission\n    from public.weekly_timesheet_submission_requests\n    where candidate_cohort_id=v_generation.candidate_cohort_id\n      and candidate_id=v_generation.candidate_id\n      and source_cycle_id=v_cycle.id\n      and current_projection_publication_id=v_publication.id\n      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_office_workspace_v1",
+      "source_path": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "d2ff1045d9d68265e56d7124973bcacbed668983aa7dcf175b09ce07087b1d78",
+      "lookups": [
+        {
+          "source_line": 2677,
+          "excerpt": "          and generation.request_kind='SUBMIT_TIMESHEET'\n        join public.weekly_timesheet_submission_requests request\n          on request.candidate_cohort_id=cohort.id and request.request_generation=generation.generation_number\n          and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n        join public.weekly_timesheet_submission_request_memberships membership\n          on membership.submission_request_id=request.id and membership.state='WAITING'\n        where cohort.source_cycle_id=v_cycle.id and cohort.candidate_id=query.candidate_id"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_office_workspace_v1",
+      "source_path": "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "e9cf238437e3a5b0d348b6fb8ca50f632bc3f1a295d447a02825524671a1eaf7",
+      "lookups": [
+        {
+          "source_line": 944,
+          "excerpt": "          and generation.request_kind='SUBMIT_TIMESHEET'\n        join public.weekly_timesheet_submission_requests request\n          on request.candidate_cohort_id=cohort.id and request.request_generation=generation.generation_number\n          and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n        join public.weekly_timesheet_submission_request_memberships membership\n          on membership.submission_request_id=request.id and membership.state='WAITING'\n        where cohort.source_cycle_id=v_cycle.id and cohort.candidate_id=query.candidate_id"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_office_workspace_v1",
+      "source_path": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "1e5c57ddb7990e8fc0764b9a71d83d9cbb5079f47393f5e0f9b02464cf92ae9d",
+      "lookups": [
+        {
+          "source_line": 934,
+          "excerpt": "          and generation.request_kind='SUBMIT_TIMESHEET'\n        join public.weekly_timesheet_submission_requests request\n          on request.candidate_cohort_id=cohort.id and request.request_generation=generation.generation_number\n          and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n        join public.weekly_timesheet_submission_request_memberships membership\n          on membership.submission_request_id=request.id and membership.state='WAITING'\n        where cohort.source_cycle_id=v_cycle.id and cohort.candidate_id=query.candidate_id"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_candidate_submission_compare_sync_v1",
+      "source_path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07_submission_comparison.sqlinc",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "f0a13c2dda4865eaf0b868af4a62f5c8634520b9cd55e65f6a01a1e7eb17c335",
+      "lookups": [
+        {
+          "source_line": 123,
+          "excerpt": "    select * into strict v_submission\n    from public.weekly_timesheet_submission_requests\n    where candidate_cohort_id=v_generation.candidate_cohort_id\n      and candidate_id=v_generation.candidate_id\n      and source_cycle_id=v_cycle.id\n      and current_projection_publication_id=v_publication.id\n      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_query_manager_generation_v1",
+      "source_path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "2b604acdfa996d608b198ab7dadeb363e5e0d6d5aebaed74894c78b39cebd346",
+      "lookups": [
+        {
+          "source_line": 308,
+          "excerpt": "  join public.weekly_work_events work_event on work_event.id=incident.work_event_id\n  join public.weekly_timesheet_submission_requests request\n    on request.source_cycle_id=incident.source_cycle_id and request.candidate_id=incident.candidate_id\n  join public.weekly_timesheet_submission_request_memberships requested\n    on requested.submission_request_id=request.id and requested.client_id=incident.client_id\n    and requested.contract_id=comparison.contract_id and work_event.work_date>requested.week_ending-7\n    and work_event.work_date<=requested.week_ending and requested.state='SUBMITTED_WITH_ISSUES'"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_candidate_submission_compare_sync_v1",
+      "source_path": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "ae1706b97eb2d7c165f5880126993bb0ec731263afbd5741038322b2f4e5a36f",
+      "lookups": [
+        {
+          "source_line": 194,
+          "excerpt": "    select * into strict v_submission\n    from public.weekly_timesheet_submission_requests\n    where candidate_cohort_id=v_generation.candidate_cohort_id\n      and candidate_id=v_generation.candidate_id\n      and source_cycle_id=v_cycle.id\n      and current_projection_publication_id=v_publication.id\n      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_office_workspace_v1",
+      "source_path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "d2ff1045d9d68265e56d7124973bcacbed668983aa7dcf175b09ce07087b1d78",
+      "lookups": [
+        {
+          "source_line": 2657,
+          "excerpt": "          and generation.request_kind='SUBMIT_TIMESHEET'\n        join public.weekly_timesheet_submission_requests request\n          on request.candidate_cohort_id=cohort.id and request.request_generation=generation.generation_number\n          and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n        join public.weekly_timesheet_submission_request_memberships membership\n          on membership.submission_request_id=request.id and membership.state='WAITING'\n        where cohort.source_cycle_id=v_cycle.id and cohort.candidate_id=query.candidate_id"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_candidate_submission_compare_sync_v1",
+      "source_path": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "5e5fe617ade07891d732ae29cc2fe46374b795b378a88ca42212e0f2240e0522",
+      "lookups": [
+        {
+          "source_line": 152,
+          "excerpt": "    select * into strict v_submission\n    from public.weekly_timesheet_submission_requests\n    where candidate_cohort_id=v_generation.candidate_cohort_id\n      and candidate_id=v_generation.candidate_id\n      and source_cycle_id=v_cycle.id\n      and current_projection_publication_id=v_publication.id\n      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_waiting_requested_week_v1",
+      "source_path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "e324edb43d6fa2147acbf7225c79b06e95602f308ab8d7bbbe4677d3db1f5f91",
+      "lookups": [
+        {
+          "source_line": 31,
+          "excerpt": "as $function$\n  select exists(select 1 from public.weekly_timesheet_submission_requests request\n    join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id\n    where request.source_cycle_id=p_cycle_id and request.candidate_id=p_candidate_id\n      and request.state in ('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n      and membership.state='WAITING' and membership.client_id=p_client_id\n      and membership.contract_id=p_contract_id"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_candidate_query_get_v1",
+      "source_path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "10df1530350d2a8c6855c638957325b985732afe968cc7d7a2a44524ad64e6bf",
+      "lookups": [
+        {
+          "source_line": 181,
+          "excerpt": "  if v_generation.request_kind='SUBMIT_TIMESHEET' then\n    select * into strict v_submission from public.weekly_timesheet_submission_requests\n    where candidate_cohort_id=v_generation.candidate_cohort_id\n      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED');\n    select coalesce(pg_catalog.jsonb_agg(\n      pg_catalog.jsonb_build_object(\n        'request_membership_id',membership.id,'week_ending',membership.week_ending,"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_timesheet_submission_complete_atomic_v1",
+      "source_path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "eecb77c8c3a19859e87f1cd91399469071b811d12e8cebf26a82805ee05d5bbc",
+      "lookups": [
+        {
+          "source_line": 434,
+          "excerpt": "  end;\n  select * into strict v_submission from public.weekly_timesheet_submission_requests\n  where id=v_submission_id for update;\n  if v_submission.candidate_id<>v_candidate_id\n     or v_submission.state not in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED') then\n    if v_submission.candidate_id=v_candidate_id and v_submission.state='COMPLETE' then\n      return pg_catalog.jsonb_build_object('ok',true,'replay',true,'submission_request_id',v_submission.id);"
+        },
+        {
+          "source_line": 578,
+          "excerpt": "            where submission_request_id=v_submission.id and state='WAITING') then\n    update public.weekly_timesheet_submission_requests\n    set state='PARTLY_SUBMITTED',updated_at_utc=pg_catalog.transaction_timestamp()\n    where id=v_submission.id;\n  else\n    update public.weekly_timesheet_submission_requests\n    set state='COMPLETE',updated_at_utc=pg_catalog.transaction_timestamp()"
+        },
+        {
+          "source_line": 582,
+          "excerpt": "  else\n    update public.weekly_timesheet_submission_requests\n    set state='COMPLETE',updated_at_utc=pg_catalog.transaction_timestamp()\n    where id=v_submission.id;\n    update public.weekly_candidate_outreach_generations set state='COMPLETE'\n    where id=v_generation.id;\n    update public.weekly_message_intents set state='RETIRED'"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_message_dispatch_submission_start_atomic_v1",
+      "source_path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "085a838c051e9bcd05709ad5099e9a67e86710795b240a2fdf6639cfa06fd93c",
+      "lookups": [
+        {
+          "source_line": 1489,
+          "excerpt": "      from public.weekly_candidate_outreach_generations generation\n      join public.weekly_timesheet_submission_requests submission\n        on submission.candidate_cohort_id=generation.candidate_cohort_id\n       and submission.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n      join public.weekly_timesheet_submission_request_memberships membership\n        on membership.submission_request_id=submission.id and membership.state='WAITING'\n      where generation.id=v_command.candidate_generation_id"
+        },
+        {
+          "source_line": 1515,
+          "excerpt": "      from public.weekly_candidate_outreach_generations generation\n      join public.weekly_timesheet_submission_requests submission\n        on submission.candidate_cohort_id=generation.candidate_cohort_id\n       and submission.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n      join public.weekly_timesheet_submission_request_memberships membership\n        on membership.submission_request_id=submission.id and membership.state='WAITING'\n      where generation.id=v_command.candidate_generation_id"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_query_scheduler_tick_v1",
+      "source_path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "2c3cbf5348d3717a144408928091732cd21dd5302428db0b23ce09cbc0fa4e85",
+      "lookups": [
+        {
+          "source_line": 2347,
+          "excerpt": "        (generation.request_kind='SUBMIT_TIMESHEET' and exists(\n          select 1 from public.weekly_timesheet_submission_requests submission\n          where submission.candidate_cohort_id=generation.candidate_cohort_id\n            and submission.state in ('ACTIVE','PARTLY_SUBMITTED')\n        ))\n      )\n    order by generation.reminder_due_at_utc,generation.id"
+        },
+        {
+          "source_line": 2383,
+          "excerpt": "\n  update public.weekly_timesheet_submission_requests submission\n  set state='OVERDUE',updated_at_utc=v_now\n  where submission.state in ('ACTIVE','PARTLY_SUBMITTED') and submission.deadline_at_utc<=v_now;\n  get diagnostics v_overdue_count=row_count;\n\n  for v_route in"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_candidate_reminder_atomic_v1",
+      "source_path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "b03476d153a3cbaa2a92caf5fee1e9dcfed409a540b32962a5efc0e6a08afab6",
+      "lookups": [
+        {
+          "source_line": 3184,
+          "excerpt": "    or (v_generation.request_kind='SUBMIT_TIMESHEET' and not exists(\n      select 1 from public.weekly_timesheet_submission_requests request\n      join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id\n      where request.candidate_cohort_id=v_generation.candidate_cohort_id\n        and request.request_generation=v_generation.generation_number\n        and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and membership.state='WAITING')) then\n    raise exception 'WEEKLY_SOURCE_CANDIDATE_REMINDER_UNAVAILABLE' using errcode='55000';"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_submission_request_start_v1",
+      "source_path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "65b0b5cb432b3a0429f59d926bae4ff74f6af5e4bb599c5536a0218e17a503ed",
+      "lookups": [
+        {
+          "source_line": 3441,
+          "excerpt": "  select * into v_old_request\n  from public.weekly_timesheet_submission_requests\n  where source_cycle_id=v_cycle_id and candidate_id=v_candidate_id\n    and state in ('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n  for update;\n  if found and (v_old_request.membership_hash=v_hash or (p_automatic and not exists (\n    -- A new publication ID is not a new request. Compare relevant waiting"
+        },
+        {
+          "source_line": 3469,
+          "excerpt": "  if found then\n    update public.weekly_timesheet_submission_requests\n    set state='SUPERSEDED',updated_at_utc=pg_catalog.transaction_timestamp()\n    where id=v_old_request.id;\n  end if;\n  insert into public.weekly_route_activations(\n    source_cycle_id,candidate_id,client_id,audience_route,route_mode,"
+        },
+        {
+          "source_line": 3516,
+          "excerpt": "  update public.weekly_candidate_cohorts set current_submission_generation_id=v_generation.id where id=v_cohort.id;\n  insert into public.weekly_timesheet_submission_requests(\n    environment,agency_id,source_cycle_id,candidate_id,candidate_cohort_id,\n    request_generation,current_upload_id,current_projection_publication_id,state,\n    started_at_utc,reminder_due_at_utc,deadline_at_utc,membership_hash\n  )\n  select source_group.environment,source_group.agency_id,v_cycle_id,v_candidate_id,v_cohort.id,"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_query_manager_generation_v1",
+      "source_path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "10ce06a1565e72ced00e18b76a22e4ffd216598c1c19d127d908cdd59e5f908f",
+      "lookups": [
+        {
+          "source_line": 3886,
+          "excerpt": "  join public.weekly_work_events work_event on work_event.id=incident.work_event_id\n  join public.weekly_timesheet_submission_requests request\n    on request.source_cycle_id=incident.source_cycle_id and request.candidate_id=incident.candidate_id\n  join public.weekly_timesheet_submission_request_memberships requested\n    on requested.submission_request_id=request.id and requested.client_id=incident.client_id\n    and requested.contract_id=comparison.contract_id and work_event.work_date>requested.week_ending-7\n    and work_event.work_date<=requested.week_ending and requested.state='SUBMITTED_WITH_ISSUES'"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_office_workspace_v1",
+      "source_path": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "d55747be8d6b4445886f5775debd83a4793570e447bac003507ae5ea6b0dcc18",
+      "lookups": [
+        {
+          "source_line": 1658,
+          "excerpt": "          and generation.request_kind='SUBMIT_TIMESHEET'\n        join public.weekly_timesheet_submission_requests request\n          on request.candidate_cohort_id=cohort.id and request.request_generation=generation.generation_number\n          and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n        join public.weekly_timesheet_submission_request_memberships membership\n          on membership.submission_request_id=request.id and membership.state='WAITING'\n        where cohort.source_cycle_id=v_cycle.id and cohort.candidate_id=query.candidate_id"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_candidate_app_projection_v1",
+      "source_path": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "c56a20e9d5973ffe46a7877be54c4e3ae067f744f939ebed39321b3bcb8fef0c",
+      "lookups": [
+        {
+          "source_line": 537,
+          "excerpt": "    select * into v_submission\n    from public.weekly_timesheet_submission_requests\n    where candidate_cohort_id=v_generation.candidate_cohort_id\n      and candidate_id=p_candidate_id\n      and state not in ('SUPERSEDED','CANCELLED')\n    order by request_generation desc,id desc limit 1;\n    if not found then"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_candidate_submission_compare_sync_v1",
+      "source_path": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "4e699ad0c47d75de04becd6469a0a18f04d6521883be4a93f4ab184886637d07",
+      "lookups": [
+        {
+          "source_line": 1342,
+          "excerpt": "    select * into strict v_submission\n    from public.weekly_timesheet_submission_requests\n    where candidate_cohort_id=v_generation.candidate_cohort_id\n      and candidate_id=v_generation.candidate_id\n      and source_cycle_id=v_cycle.id\n      and current_projection_publication_id=v_publication.id\n      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_candidate_check_materialise_atomic_v1",
+      "source_path": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "8ed51e439a1bf3b06c47204f7a5019098aab45faa9b2c5123cb31db513c6878a",
+      "lookups": [
+        {
+          "source_line": 2364,
+          "excerpt": "      select 1 from public.weekly_timesheet_submission_request_memberships membership\n      join public.weekly_timesheet_submission_requests submission\n        on submission.id=membership.submission_request_id\n      where submission.candidate_id=v_candidate_id\n        and submission.state in ('ACTIVE','PARTLY_SUBMITTED','OVERDUE')\n        and membership.state='WAITING'\n        and membership.contract_id=v_workflow.contract_id"
+        },
+        {
+          "source_line": 2711,
+          "excerpt": "    select * into strict v_submission\n    from public.weekly_timesheet_submission_requests\n    where candidate_cohort_id=v_generation.candidate_cohort_id\n      and candidate_id=v_candidate_id and source_cycle_id=v_cycle.id\n      and current_projection_publication_id=v_projection_publication_id\n      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n    for update;"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_message_dispatch_target_start_atomic_v1",
+      "source_path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "14a7679b37a05824828e143f9ce60f7de044ee9d8d03dd8140423e2cf8f7069f",
+      "lookups": [
+        {
+          "source_line": 500,
+          "excerpt": "    from public.weekly_candidate_outreach_generations generation\n    join public.weekly_timesheet_submission_requests submission\n      on submission.candidate_cohort_id=generation.candidate_cohort_id\n     and submission.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n    join public.weekly_timesheet_submission_request_memberships membership\n      on membership.submission_request_id=submission.id and membership.state='WAITING'\n    where generation.id=v_command.candidate_generation_id"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_candidate_notification_intent_v1",
+      "source_path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "2573428c471a7fac1dcea18dd8b53ceba905bde30a2f3836e459a9bbe8edf9bb",
+      "lookups": [
+        {
+          "source_line": 1110,
+          "excerpt": "      into v_timesheet_count,v_week_ending\n    from public.weekly_timesheet_submission_requests submission\n    join public.weekly_timesheet_submission_request_memberships membership\n      on membership.submission_request_id=submission.id\n    where submission.candidate_cohort_id=v_generation.candidate_cohort_id\n      and submission.source_cycle_id=v_generation.source_cycle_id\n      and submission.candidate_id=v_generation.candidate_id"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_contact_push_dispatch_context_v1",
+      "source_path": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "ab8e120d521063a8b30b0179f4ba0ee2ef4ff26ecbeef16e35dc2cf7f85d38c4",
+      "lookups": [
+        {
+          "source_line": 52,
+          "excerpt": "  union\n  select distinct r.candidate_id,m.client_id from public.weekly_timesheet_submission_requests r\n   join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id\n   where v_generation.request_kind='SUBMIT_TIMESHEET' and r.candidate_cohort_id=v_generation.candidate_cohort_id\n    and r.candidate_id=v_generation.candidate_id and r.source_cycle_id=v_command.source_cycle_id\n    and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and m.state='WAITING'\n )x;"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_contact_source_membership_v1",
+      "source_path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "76c40fc39d3288233cc130b93e5c81f4f04ef1d9da0fdc388aba8966352793a0",
+      "lookups": [
+        {
+          "source_line": 77,
+          "excerpt": "    order by x.candidate_id,x.client_id),'[]'::jsonb) into v_pairs from(\n    select distinct r.candidate_id,m.client_id from public.weekly_timesheet_submission_requests r\n    join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id\n    where r.candidate_cohort_id=v_generation.candidate_cohort_id and r.candidate_id=v_generation.candidate_id\n     and r.source_cycle_id=v_generation.source_cycle_id and r.membership_hash=v_generation.membership_hash\n     and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n   )x;"
+        },
+        {
+          "source_line": 84,
+          "excerpt": "   v_current:=v_current and not exists(\n    select 1 from public.weekly_timesheet_submission_requests r\n    join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id\n    where r.candidate_cohort_id=v_generation.candidate_cohort_id and r.candidate_id=v_generation.candidate_id\n     and r.source_cycle_id=v_generation.source_cycle_id and r.membership_hash=v_generation.membership_hash\n     and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and m.state<>'WAITING');\n  else raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_source_candidate_view_request_v1",
+      "source_path": "supabase/repeatable/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "5d3ffccbe6f7892aab606dfb90f896d932f533b71939803cf56d00b35d9779c2",
+      "lookups": [
+        {
+          "source_line": 184,
+          "excerpt": "    into v_request_id,v_scope_id,v_kind\n  from public.weekly_timesheet_submission_requests submission\n  join public.weekly_candidate_outreach_generations generation\n    on generation.candidate_cohort_id=submission.candidate_cohort_id\n   and generation.source_cycle_id=submission.source_cycle_id\n   and generation.candidate_id=submission.candidate_id\n   and generation.generation_number=submission.request_generation"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_contact_source_logical_members_v1",
+      "source_path": "supabase/repeatable/includes/weekly_contact_source_memberships/010_native_logical_members.sqlinc",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "1423c8fbcb87989ace47caa48f9edd6c535d925d3e6d35b5ed87fb0036205492",
+      "lookups": [
+        {
+          "source_line": 51,
+          "excerpt": "   -- outreach generation. No latest/max request or synthetic expected week.\n   select * into strict request from public.weekly_timesheet_submission_requests x\n    where x.candidate_cohort_id=g.candidate_cohort_id and x.candidate_id=g.candidate_id and x.source_cycle_id=g.source_cycle_id\n     and x.request_generation=g.generation_number and x.membership_hash=g.membership_hash and x.environment=c.environment and x.agency_id=c.agency_id;\n   select count(*) into expected_count from public.weekly_timesheet_submission_request_memberships where submission_request_id=request.id;\n   for member in select m.id native_member_id,null::uuid incident_id,null::integer incident_episode,null::uuid work_event_id,\n    request.candidate_id,m.client_id,"
+        }
+      ]
+    },
+    {
+      "function_name": "private.weekly_contact_source_budget_v1",
+      "source_path": "supabase/repeatable/includes/weekly_contact_source_memberships/020_native_budget.sqlinc",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "3978de2d61786141e4eed95d5e90d94821fc0da4bfa08b8c40c35bdc6f053ade",
+      "lookups": [
+        {
+          "source_line": 32,
+          "excerpt": "    or(m->>'purpose'='SUBMIT_TIMESHEET' and exists(\n     select 1 from public.weekly_candidate_outreach_generations generation join public.weekly_timesheet_submission_requests request\n      on request.candidate_cohort_id=generation.candidate_cohort_id and request.request_generation=generation.generation_number\n       and request.candidate_id=generation.candidate_id and request.source_cycle_id=generation.source_cycle_id and request.membership_hash=generation.membership_hash\n     join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id\n     where generation.id=old.candidate_generation_id and generation.request_kind='SUBMIT_TIMESHEET' and request.candidate_id=(m->>'candidate_id')::uuid\n      and membership.client_id=(m->>'client_id')::uuid and membership.contract_id=(m->'native_basis'->>'contract_id')::uuid"
+        }
+      ]
+    },
+    {
+      "function_name": "public.weekly_source_message_dispatch_target_start_atomic_v1",
+      "source_path": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "function_sha256_normalized_lf": "45779de1b09f1e535f68f7e9342dfe9f303ca9b63c5e12702a35ebf2891b8c90",
+      "lookups": [
+        {
+          "source_line": 182,
+          "excerpt": "    from public.weekly_candidate_outreach_generations generation\n    join public.weekly_timesheet_submission_requests submission\n      on submission.candidate_cohort_id=generation.candidate_cohort_id\n     and submission.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n    join public.weekly_timesheet_submission_request_memberships membership\n      on membership.submission_request_id=submission.id and membership.state='WAITING'\n    where generation.id=v_command.candidate_generation_id"
+        }
+      ]
+    }
+  ],
+  "status": "READ_SOURCE_ONLY_NOT_CURRENT_DEFINITION_OR_NATIVE_PROOF",
+  "note": "Includes retained historical definitions. Root/current recipe selects exact controlling complete definitions before source successors; no Banking body is edited."
+}

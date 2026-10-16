@@ -52,6 +52,7 @@ begin
    join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id
    where v_generation.request_kind='SUBMIT_TIMESHEET' and r.candidate_cohort_id=v_generation.candidate_cohort_id
     and r.candidate_id=v_generation.candidate_id and r.source_cycle_id=v_command.source_cycle_id
+    and r.membership_hash=v_generation.membership_hash and r.request_generation=v_generation.generation_number
     and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and m.state='WAITING'
  )x;
  end if;

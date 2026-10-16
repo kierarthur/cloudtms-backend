@@ -71,6 +71,7 @@ begin
     join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id
     where r.candidate_cohort_id=v_generation.candidate_cohort_id and r.candidate_id=v_generation.candidate_id
      and r.source_cycle_id=v_generation.source_cycle_id and r.membership_hash=v_generation.membership_hash
+     and r.request_generation=v_generation.generation_number
      and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED')
    )x;
    v_current:=v_current and not exists(
@@ -78,6 +79,7 @@ begin
     join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id
     where r.candidate_cohort_id=v_generation.candidate_cohort_id and r.candidate_id=v_generation.candidate_id
      and r.source_cycle_id=v_generation.source_cycle_id and r.membership_hash=v_generation.membership_hash
+     and r.request_generation=v_generation.generation_number
      and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and m.state<>'WAITING');
   else raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
  elsif v_intent.audience_kind='MANAGER' and v_target.channel='EMAIL' then

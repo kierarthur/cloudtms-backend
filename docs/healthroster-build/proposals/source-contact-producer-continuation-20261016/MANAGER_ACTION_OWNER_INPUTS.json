@@ -24,7 +24,7 @@
     },
     {
       "path": "forward/29_native_contact_bulk.sqlinc",
-      "sha256": "3ed93a677573603dcf83a66c0738f84fd0080fa5a7a0d9d28a87d69a7a0964df"
+      "sha256": "0191d438e127b12d0d0d54c131b2c2c8a4af9c9cd3a2266bbdcb81f4e208b05d"
     }
   ],
   "qualification": "Authored complete finite successors; existing public ABI unchanged; PostgreSQL/pay-isolation/concurrency NOT_RUN"

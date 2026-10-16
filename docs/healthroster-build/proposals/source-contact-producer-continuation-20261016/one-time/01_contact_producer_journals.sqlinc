@@ -99,7 +99,7 @@ create table public.weekly_contact_recheck_progress (
  task_id uuid primary key references public.weekly_contact_recheck_tasks(id) on delete restrict,
  scope_revision bigint not null check(scope_revision>=0),
  checking_revision bigint not null check(checking_revision>=0),
- phase text not null check(phase in('SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE')),
+ phase text not null check(phase in('SOURCE_ACTIVATION','SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE')),
  last_native_id uuid,
  revision bigint not null check(revision>=1),
  recorded_at_utc timestamptz not null
@@ -108,7 +108,7 @@ create table public.weekly_contact_recheck_steps (
  id uuid primary key default gen_random_uuid(),
  task_id uuid not null references public.weekly_contact_recheck_tasks(id) on delete restrict,
  progress_revision bigint not null check(progress_revision>=1),
- phase text not null check(phase in('SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE')),
+ phase text not null check(phase in('SOURCE_ACTIVATION','SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE')),
  native_id uuid,
  scope_revision bigint not null check(scope_revision>=0),
  checking_revision bigint not null check(checking_revision>=0),

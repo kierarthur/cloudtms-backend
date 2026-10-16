@@ -36,6 +36,11 @@ retire=once(retire,`  if new.audience_kind='CANDIDATE' and new.state='RETIRED' a
     end if;`);
 write('30_native_notification_retirement.sqlinc',retire);
 let scheduler=source('docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/08_native_scheduler.sqlinc',checkpoint);
+scheduler=once(scheduler,`          where submission.candidate_cohort_id=generation.candidate_cohort_id
+            and submission.state in ('ACTIVE','PARTLY_SUBMITTED')`,`          where submission.candidate_cohort_id=generation.candidate_cohort_id
+            and submission.source_cycle_id=generation.source_cycle_id and submission.candidate_id=generation.candidate_id
+            and submission.request_generation=generation.generation_number and submission.membership_hash=generation.membership_hash
+            and submission.state in ('ACTIVE','PARTLY_SUBMITTED')`);
 scheduler=once(scheduler,'  v_actionable integer;','  v_actionable integer;\n  v_followup record;\n  v_followup_result jsonb;\n  v_followup_results jsonb:=\'[]\';\n  v_followup_held integer:=0;');
 scheduler=once(scheduler,'  perform private.weekly_contact_source_candidate_due_collapse_v1(v_now,v_limit);',
 `  perform private.weekly_contact_source_candidate_due_collapse_v1(v_now,v_limit);

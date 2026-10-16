@@ -1,0 +1,162 @@
+-- Exact original generation lookup, including legacy mixed-client requests.
+-- No latest/max generation or Client-to-cohort guess participates.
+create or replace function private.weekly_contact_source_submission_lock_v1(p_cycle uuid,p_candidate uuid,p_scopes jsonb,p_publication uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare source_group public.weekly_source_groups%rowtype;pair record;
+begin
+ select groups.* into strict source_group from public.weekly_source_cycles cycle
+  join public.weekly_source_groups groups on groups.id=cycle.source_group_id where cycle.id=p_cycle;
+ if jsonb_typeof(p_scopes) is distinct from 'array' or(p_publication is not null and not exists(
+  select 1 from public.weekly_source_projection_publications publication join public.weekly_source_cycles cycle on cycle.id=publication.source_cycle_id
+   where publication.id=p_publication and cycle.source_group_id=source_group.id)) then
+  raise exception 'WEEKLY_SOURCE_QUERY_PUBLICATION_SCOPE_INVALID' using errcode='55000';end if;
+ perform private.weekly_contact_deployment_lock_v1(source_group.agency_id,source_group.environment);
+ perform private.weekly_contact_context_v1(source_group.agency_id,source_group.environment);
+ for pair in
+  select candidate_id,client_id from public.weekly_candidate_cohorts where source_cycle_id=p_cycle
+  union select candidate_id,client_id from public.weekly_discrepancy_incidents where source_cycle_id=p_cycle
+  union select request.candidate_id,member.client_id from public.weekly_timesheet_submission_requests request
+   join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id where request.source_cycle_id=p_cycle
+  union select resolution.candidate_id,resolution.client_id from public.weekly_source_projection_publications publication
+   join public.weekly_source_upload_rows source_row on source_row.upload_id=publication.upload_id
+   join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+   where publication.id=p_publication and resolution.mapping_state='RESOLVED' and resolution.candidate_id is not null and resolution.client_id is not null
+    and resolution.generation=(select max(current_resolution.generation) from public.weekly_source_row_resolutions current_resolution
+     where current_resolution.upload_row_id=source_row.id)
+  union select p_candidate,(scope->>'client_id')::uuid from jsonb_array_elements(p_scopes)scope where p_candidate is not null
+  order by candidate_id,client_id
+ loop
+  perform private.weekly_contact_scope_lock_v1(source_group.agency_id,source_group.environment,pair.candidate_id,pair.client_id);
+ end loop;
+end;
+$function$;
+
+create or replace function private.weekly_contact_submission_request_for_generation_v1(p_generation uuid)
+returns uuid language plpgsql stable security definer set search_path='pg_catalog','public','pg_temp'
+as $function$
+declare result uuid;
+begin
+ select request.id into strict result from public.weekly_candidate_outreach_generations generation
+  join public.weekly_timesheet_submission_requests request on request.candidate_cohort_id=generation.candidate_cohort_id
+   and request.request_generation=generation.generation_number and request.source_cycle_id=generation.source_cycle_id
+   and request.candidate_id=generation.candidate_id and request.membership_hash=generation.membership_hash
+   and(request.started_at_utc,request.reminder_due_at_utc,request.deadline_at_utc)=
+    (generation.started_at_utc,generation.reminder_due_at_utc,generation.deadline_at_utc)
+  where generation.id=p_generation and generation.request_kind='SUBMIT_TIMESHEET';
+ return result;
+exception when no_data_found or too_many_rows then
+ raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';
+end;
+$function$;
+
+create or replace function private.weekly_contact_submission_view_request_v1(p_candidate uuid,p_contract uuid,p_week date,p_timesheet uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','pg_temp'
+as $function$
+declare matches jsonb;result jsonb;
+begin
+ select coalesce(jsonb_agg(jsonb_build_object('request_id',generation.id,'scope_id',member.id,'request_kind','SUBMIT_TIMESHEET')
+  order by generation.id,member.id),'[]') into matches
+ from public.weekly_timesheet_submission_requests request
+ join public.weekly_candidate_outreach_generations generation on generation.candidate_cohort_id=request.candidate_cohort_id
+  and generation.source_cycle_id=request.source_cycle_id and generation.candidate_id=request.candidate_id
+  and generation.generation_number=request.request_generation and generation.membership_hash=request.membership_hash
+  and generation.request_kind='SUBMIT_TIMESHEET' and generation.state='ACTIVE'
+ join public.weekly_candidate_cohorts cohort on cohort.id=generation.candidate_cohort_id and cohort.current_submission_generation_id=generation.id
+ join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+ where request.candidate_id=p_candidate and request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+  and member.contract_id=p_contract and member.week_ending=p_week;
+ if jsonb_array_length(matches)>1 then raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+ if jsonb_array_length(matches)=1 then return matches->0;end if;
+ -- An old completed scope still identifies the exact signed Timesheet it
+ -- actually submitted. It does not borrow another cohort's largest number.
+ select coalesce(jsonb_agg(jsonb_build_object('request_id',generation.id,'scope_id',member.id,'request_kind','SUBMIT_TIMESHEET')
+  order by generation.id,member.id),'[]') into matches
+ from public.weekly_timesheet_submission_requests request
+ join public.weekly_candidate_outreach_generations generation on generation.candidate_cohort_id=request.candidate_cohort_id
+  and generation.source_cycle_id=request.source_cycle_id and generation.candidate_id=request.candidate_id
+  and generation.generation_number=request.request_generation and generation.membership_hash=request.membership_hash
+  and generation.request_kind='SUBMIT_TIMESHEET' and generation.state='COMPLETE'
+ join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+ where request.candidate_id=p_candidate and request.state='COMPLETE' and member.contract_id=p_contract and member.week_ending=p_week
+  and member.submitted_timesheet_id=p_timesheet and member.state in('SUBMITTED_MATCHED','SUBMITTED_WITH_ISSUES');
+ if jsonb_array_length(matches)>1 then raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+ return case when jsonb_array_length(matches)=1 then matches->0 else
+  jsonb_build_object('request_id',null,'scope_id',null,'request_kind',null) end;
+end;
+$function$;
+
+create or replace function private.weekly_contact_submission_request_assert_v1(p_request uuid)
+returns void language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare request public.weekly_timesheet_submission_requests%rowtype;generation public.weekly_candidate_outreach_generations%rowtype;
+ cohort public.weekly_candidate_cohorts%rowtype;
+begin
+ select * into strict request from public.weekly_timesheet_submission_requests where id=p_request;
+ select * into strict cohort from public.weekly_candidate_cohorts where id=request.candidate_cohort_id;
+ select * into strict generation from public.weekly_candidate_outreach_generations g where g.candidate_cohort_id=request.candidate_cohort_id
+  and g.generation_number=request.request_generation and g.request_kind='SUBMIT_TIMESHEET';
+ if private.weekly_contact_submission_request_for_generation_v1(generation.id) is distinct from request.id
+  or(cohort.candidate_id,cohort.source_cycle_id) is distinct from(request.candidate_id,request.source_cycle_id)
+  or not exists(select 1 from public.weekly_source_cycles cycle join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+   where cycle.id=request.source_cycle_id and(source_group.agency_id,source_group.environment)=(request.agency_id,request.environment))
+  or not exists(select 1 from public.weekly_timesheet_submission_request_memberships where submission_request_id=request.id)
+  or exists(select 1 from public.weekly_timesheet_submission_request_memberships member
+   left join public.contracts contract on contract.id=member.contract_id and contract.candidate_id=request.candidate_id and contract.client_id=member.client_id
+   where member.submission_request_id=request.id and contract.id is null) then
+  raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+ if request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED') then
+  if generation.state<>'ACTIVE' or cohort.current_submission_generation_id is distinct from generation.id then
+   raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+  -- Restrict every lookup to this actual request's Candidate/cycle and exact
+  -- business members. There is no history count or unrelated cycle sweep.
+  if exists(select 1 from public.weekly_timesheet_submission_request_memberships member
+   join public.weekly_timesheet_submission_requests other on other.source_cycle_id=request.source_cycle_id
+    and other.candidate_id=request.candidate_id and other.id<>request.id and other.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+   join public.weekly_timesheet_submission_request_memberships overlap on overlap.submission_request_id=other.id
+    and(overlap.client_id,overlap.contract_id,overlap.week_ending)=(member.client_id,member.contract_id,member.week_ending)
+   where member.submission_request_id=request.id) then
+   raise exception 'CONTACT_SOURCE_SUBMISSION_SCOPE_CONFLICT' using errcode='55000';end if;
+ elsif request.state='COMPLETE' and generation.state<>'COMPLETE' then
+  raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';
+ end if;
+end;
+$function$;
+
+create or replace function private.weekly_contact_submission_identity_deferred_v1()
+returns trigger language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare request_id uuid;cohort_id uuid;generation_id uuid;
+begin
+ if tg_table_name='weekly_timesheet_submission_requests' then
+  perform private.weekly_contact_submission_request_assert_v1(new.id);
+ elsif tg_table_name='weekly_timesheet_submission_request_memberships' then
+  perform private.weekly_contact_submission_request_assert_v1(new.submission_request_id);
+ elsif tg_table_name='weekly_candidate_cohorts' then
+  cohort_id:=new.id;
+  for request_id in select id from public.weekly_timesheet_submission_requests where candidate_cohort_id=cohort_id
+   and state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED') order by id loop
+   perform private.weekly_contact_submission_request_assert_v1(request_id);end loop;
+ elsif tg_table_name='weekly_candidate_outreach_generations' then
+  if new.request_kind='SUBMIT_TIMESHEET' then
+   generation_id:=new.id;
+   for request_id in select id from public.weekly_timesheet_submission_requests where candidate_cohort_id=new.candidate_cohort_id
+    and request_generation=new.generation_number order by id loop
+    perform private.weekly_contact_submission_request_assert_v1(request_id);end loop;
+  end if;
+ else raise exception 'CONTACT_SOURCE_SUBMISSION_GUARD_INVALID' using errcode='23514';end if;
+ return new;
+end;
+$function$;
+drop trigger if exists weekly_contact_submission_identity on public.weekly_timesheet_submission_requests;
+create constraint trigger weekly_contact_submission_identity after insert or update on public.weekly_timesheet_submission_requests
+ deferrable initially deferred for each row execute function private.weekly_contact_submission_identity_deferred_v1();
+drop trigger if exists weekly_contact_submission_member_identity on public.weekly_timesheet_submission_request_memberships;
+create constraint trigger weekly_contact_submission_member_identity after insert or update on public.weekly_timesheet_submission_request_memberships
+ deferrable initially deferred for each row execute function private.weekly_contact_submission_identity_deferred_v1();
+drop trigger if exists weekly_contact_submission_cohort_identity on public.weekly_candidate_cohorts;
+create constraint trigger weekly_contact_submission_cohort_identity after insert or update on public.weekly_candidate_cohorts
+ deferrable initially deferred for each row execute function private.weekly_contact_submission_identity_deferred_v1();
+drop trigger if exists weekly_contact_submission_generation_identity on public.weekly_candidate_outreach_generations;
+create constraint trigger weekly_contact_submission_generation_identity after insert or update on public.weekly_candidate_outreach_generations
+ deferrable initially deferred for each row execute function private.weekly_contact_submission_identity_deferred_v1();

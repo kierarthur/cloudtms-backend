@@ -23,6 +23,10 @@ declare
   v_expected_version text;
   v_current_version text;
   v_manager_action jsonb;
+  v_contact_guard jsonb;
+  v_candidate_included_count integer;
+  v_candidate_excluded_count integer;
+  v_candidate_exclusions jsonb;
   v_action text;
   v_selection jsonb;
   v_mode text;
@@ -172,6 +176,8 @@ begin
   end if;
   if v_action='SEND_MANAGER_NOW' then
     perform private.weekly_contact_source_manager_action_lock_v1(v_actor,v_cycle_id,v_publication_id,v_filters);
+  elsif v_action='ASK_CANDIDATES' then
+    perform private.weekly_contact_source_submission_lock_v1(v_cycle_id,null,'[]',v_publication_id);
   end if;
   select * into strict v_cycle from public.weekly_source_cycles
   where id=v_cycle_id for update;
@@ -320,28 +326,8 @@ begin
       v_candidate_results:='[]'::jsonb;
       v_candidate_issue_count:=0;
       v_candidate_failed:=false;
+      v_candidate_included_count:=0;v_candidate_excluded_count:=0;v_candidate_exclusions:='[]';
       begin
-        select coalesce(pg_catalog.jsonb_agg(scope.value order by
-          (scope.value->>'week_ending')::date,(scope.value->>'client_id')::uuid,(scope.value->>'contract_id')::uuid),'[]'::jsonb)
-        into v_scopes
-        from (
-          select distinct on (value->>'week_ending',value->>'client_id',value->>'contract_id') value
-          from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters) query
-          cross join lateral pg_catalog.jsonb_array_elements(query.missing_scopes) value
-          where query.group_key=any(v_selected_keys) and query.candidate_id=v_candidate.candidate_id
-            and (query.outreach_eligible or not query.candidate_app_available)
-          order by value->>'week_ending',value->>'client_id',value->>'contract_id',value::text
-        ) scope;
-        if pg_catalog.jsonb_array_length(v_scopes)>0 then
-          v_owner_result:=public.weekly_source_timesheet_submission_request_start_atomic_v1(
-            pg_catalog.jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_cycle_id,
-              'projection_publication_id',v_publication_id,'candidate_id',v_candidate.candidate_id,
-              'scopes',v_scopes)
-          );
-          v_candidate_results:=v_candidate_results||pg_catalog.jsonb_build_array(v_owner_result);
-          v_candidate_issue_count:=v_candidate_issue_count+pg_catalog.jsonb_array_length(v_scopes);
-        end if;
-
         for v_client in
           select query.client_id,
             pg_catalog.array_agg(query.group_key order by query.group_key) group_keys,
@@ -351,7 +337,38 @@ begin
             and (query.outreach_eligible or not query.candidate_app_available)
           group by query.client_id order by query.client_id
         loop
-          if v_client.has_missing_scope then continue; end if;
+          v_contact_guard:=private.weekly_contact_scope_guard_v1(v_candidate.candidate_id,v_client.client_id,'WORKER',clock_timestamp());
+          if v_contact_guard->'allow' is distinct from 'true'::jsonb then
+            v_candidate_excluded_count:=v_candidate_excluded_count+cardinality(v_client.group_keys);
+            v_candidate_exclusions:=v_candidate_exclusions||jsonb_build_array(jsonb_build_object(
+              'candidate_id',v_candidate.candidate_id,'client_id',v_client.client_id,'group_keys',to_jsonb(v_client.group_keys),
+              'status','CONTACT_PAUSED','next_allowed_utc',v_contact_guard->'next_allowed_utc'));
+            continue;
+          end if;
+          if v_client.has_missing_scope then
+            select coalesce(jsonb_agg(scope.value order by(scope.value->>'week_ending')::date,
+              (scope.value->>'contract_id')::uuid),'[]') into v_scopes from(
+              select distinct on(value->>'week_ending',value->>'client_id',value->>'contract_id')value
+              from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters)query
+              cross join lateral jsonb_array_elements(query.missing_scopes)value
+              where query.group_key=any(v_selected_keys) and query.candidate_id=v_candidate.candidate_id and query.client_id=v_client.client_id
+                and(query.outreach_eligible or not query.candidate_app_available)
+              order by value->>'week_ending',value->>'client_id',value->>'contract_id',value::text)scope;
+            v_owner_result:=private.weekly_contact_source_submission_partition_v1(jsonb_build_object('actor_user_id',v_actor,
+              'source_cycle_id',v_cycle_id,'projection_publication_id',v_publication_id,'candidate_id',v_candidate.candidate_id,'scopes',v_scopes),false);
+            if jsonb_array_length(v_owner_result->'exclusions')>0 then
+              v_candidate_excluded_count:=v_candidate_excluded_count+cardinality(v_client.group_keys);
+              v_candidate_exclusions:=v_candidate_exclusions||jsonb_build_array(jsonb_build_object(
+                'candidate_id',v_candidate.candidate_id,'client_id',v_client.client_id,'group_keys',to_jsonb(v_client.group_keys),
+                'status',v_owner_result->'exclusions'->0->'status','next_allowed_utc',v_owner_result->'exclusions'->0->'next_allowed_utc'));
+            else
+              v_candidate_results:=v_candidate_results||coalesce((select jsonb_agg(child->'receipt')
+                from jsonb_array_elements(v_owner_result->'results')child),'[]');
+              v_candidate_included_count:=v_candidate_included_count+cardinality(v_client.group_keys);
+              v_candidate_issue_count:=v_candidate_issue_count+jsonb_array_length(v_scopes);
+            end if;
+            continue;
+          end if;
           select pg_catalog.array_agg(incident.id order by incident.id) into v_exact_incidents
           from public.weekly_discrepancy_incidents incident
           join public.weekly_issue_comparison_revisions comparison
@@ -361,14 +378,27 @@ begin
             and incident.client_id=v_client.client_id and incident.state='OPEN'
             and not private.weekly_source_covered_hours_incident_v1(incident.id)
             and incident.candidate_action_state not in ('RESPONDED','NOT_REQUIRED');
-          if coalesce(pg_catalog.cardinality(v_exact_incidents),0)=0 then continue; end if;
+          if coalesce(pg_catalog.cardinality(v_exact_incidents),0)=0 then
+            v_candidate_excluded_count:=v_candidate_excluded_count+cardinality(v_client.group_keys);
+            v_candidate_exclusions:=v_candidate_exclusions||jsonb_build_array(jsonb_build_object(
+              'candidate_id',v_candidate.candidate_id,'client_id',v_client.client_id,'group_keys',to_jsonb(v_client.group_keys),
+              'status','NO_ACTIONABLE_INCIDENTS'));
+            continue;end if;
           v_owner_result:=public.weekly_source_query_ask_candidate_atomic_v1(
             pg_catalog.jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_cycle_id,
               'projection_publication_id',v_publication_id,'candidate_id',v_candidate.candidate_id,
               'client_id',v_client.client_id,'incident_ids',to_jsonb(v_exact_incidents))
           );
-          v_candidate_results:=v_candidate_results||pg_catalog.jsonb_build_array(v_owner_result);
-          v_candidate_issue_count:=v_candidate_issue_count+pg_catalog.cardinality(v_exact_incidents);
+          if v_owner_result->>'status' in('CREATED','UNCHANGED') then
+            v_candidate_results:=v_candidate_results||pg_catalog.jsonb_build_array(v_owner_result);
+            v_candidate_included_count:=v_candidate_included_count+cardinality(v_client.group_keys);
+            v_candidate_issue_count:=v_candidate_issue_count+pg_catalog.cardinality(v_exact_incidents);
+          else
+            v_candidate_excluded_count:=v_candidate_excluded_count+cardinality(v_client.group_keys);
+            v_candidate_exclusions:=v_candidate_exclusions||jsonb_build_array(jsonb_build_object(
+              'candidate_id',v_candidate.candidate_id,'client_id',v_client.client_id,'group_keys',to_jsonb(v_client.group_keys),
+              'status',v_owner_result->'status','next_allowed_utc',v_owner_result->'next_allowed_utc'));
+          end if;
         end loop;
       exception when sqlstate '55000' then
         get stacked diagnostics v_message=message_text;
@@ -389,7 +419,12 @@ begin
         end if;
       else
         v_results:=v_results||v_candidate_results;
-        v_included_count:=v_included_count+pg_catalog.cardinality(v_candidate.group_keys);
+        v_included_count:=v_included_count+v_candidate_included_count;
+        v_excluded_count:=v_excluded_count+v_candidate_excluded_count;
+        -- Existing bounded response presentation, with complete omitted count.
+        -- It never truncates selected business work or its actual effects.
+        select coalesce(jsonb_agg(value order by ordinal),'[]') into v_exclusions
+          from jsonb_array_elements(v_exclusions||v_candidate_exclusions)with ordinality item(value,ordinal) where ordinal<=100;
         v_included_issue_count:=v_included_issue_count+v_candidate_issue_count;
       end if;
     end loop;

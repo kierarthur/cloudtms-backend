@@ -11,7 +11,8 @@ function extract(text,name){const start=text.indexOf(`create or replace function
 function once(text,old,next){if(text.split(old).length!==2)throw Error(`Expected unique ${old.slice(0,100)}`);return text.replace(old,next);}
 function write(name,text){writeFileSync(path.join(base,'forward',name),text.trimEnd()+'\n');}
 const prior='docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/';
-let manager=extract(source(prior+'01_current_native_members.sqlinc',checkpoint),'private.weekly_contact_source_manager_members_v1');
+const currentMembers=source(prior+'01_current_native_members.sqlinc',checkpoint);
+let manager=extract(currentMembers,'private.weekly_contact_source_manager_members_v1');
 manager=once(manager,' select * into strict v_intent from public.weekly_message_intents where id=p_intent_id;',` select * into strict v_intent from public.weekly_message_intents where id=p_intent_id;
  if exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=v_intent.id) then
   if not private.weekly_contact_source_capture_current_v1(v_intent.id,v_at,true) then
@@ -59,8 +60,22 @@ membership=once(membership," v_current:=v_target.state='LEASED' and v_intent.sta
   return private.weekly_contact_source_capture_dispatch_membership_v1(v_target.id,p_agency,p_environment);
  end if;
  v_current:=v_target.state='LEASED' and v_intent.state='RENDERED' and v_render.state='CURRENT';`);
+const requestGenerationAnchor='and r.source_cycle_id=v_generation.source_cycle_id and r.membership_hash=v_generation.membership_hash';
+if(membership.split(requestGenerationAnchor).length!==3)throw Error('Two exact current membership request lookups');
+membership=membership.replaceAll(requestGenerationAnchor,requestGenerationAnchor+'\n     and r.request_generation=v_generation.generation_number');
 write('25_native_current_membership.sqlinc',membership);
+let cycleLock=extract(currentMembers,'private.weekly_contact_source_cycle_lock_v1');
+cycleLock=once(cycleLock,'g public.weekly_source_groups%rowtype;pair record;n integer;','g public.weekly_source_groups%rowtype;pair record;');
+const countStart=cycleLock.indexOf(' select count(*) into n from('),countEnd=cycleLock.indexOf(' for pair in',countStart);
+if(countStart<0||countEnd<=countStart||!cycleLock.slice(countStart,countEnd).includes("if n>1000 then raise exception 'CONTACT_SOURCE_SCOPE_CAPACITY_EXCEEDED'"))
+ throw Error('Exact prior cycle capacity block missing');
+cycleLock=cycleLock.slice(0,countStart)+` -- Lock the complete actual native cycle scope set. Closed unrelated history
+ -- cannot impose an invented lifetime1000-scope capacity on eligible work.
+`+cycleLock.slice(countEnd);
+write('35_native_cycle_scope_lock.sqlinc',cycleLock);
 let push=extract(source('supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql'),'private.weekly_contact_push_dispatch_context_v1');
+push=once(push,'and r.candidate_id=v_generation.candidate_id and r.source_cycle_id=v_command.source_cycle_id',
+ 'and r.candidate_id=v_generation.candidate_id and r.source_cycle_id=v_command.source_cycle_id\n    and r.membership_hash=v_generation.membership_hash and r.request_generation=v_generation.generation_number');
 const start=push.indexOf(' select coalesce(jsonb_agg('),end=push.indexOf(' if jsonb_array_length(v_pairs)>500',start);
 if(start<0||end<0)throw Error('push exact scope projection');
 push=push.slice(0,start)+` if exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=v_intent.id) then
@@ -80,4 +95,4 @@ membership=once(membership,"'MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND')",
 write('25_native_current_membership.sqlinc',membership);
 writeFileSync(path.join(base,'NATIVE_OWNER_INPUTS.json'),JSON.stringify({version:'CONTACT_CAPTURE_NATIVE_OWNER_INPUTS_V1',inputs,
  qualification:'Exact finite complete source successors only; native PostgreSQL/runtime acceptance NOT_RUN'},null,2)+'\n');
-console.log(JSON.stringify({complete_native_owners:9,inputs:inputs.length,status:'SOURCE_ONLY_NATIVE_NOT_RUN'}));
+console.log(JSON.stringify({complete_native_owners:10,inputs:inputs.length,status:'SOURCE_ONLY_NATIVE_NOT_RUN'}));

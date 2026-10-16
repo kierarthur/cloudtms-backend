@@ -1,8 +1,9 @@
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const UTC=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
-const PHASES=new Set(['SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX']);
+const PHASES=new Set(['SOURCE_ACTIVATION','SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX']);
 const NATIVE_DISPOSITIONS=new Set(['ORIGINAL_ATTEMPT_OWNER','CURRENT_CAPTURE_UNCHANGED','NO_CURRENT_ELIGIBLE_SUBSET',
- 'ORIGINAL_SUBSET_REPLAY','EXACT_CURRENT_SUBSET_QUEUED','CURRENT','RECOMPOSED','CHECK_ORIGINAL_ATTEMPT','PAUSED','OBSOLETE']);
+ 'ORIGINAL_SUBSET_REPLAY','EXACT_CURRENT_SUBSET_QUEUED','CURRENT','RECOMPOSED','CHECK_ORIGINAL_ATTEMPT','PAUSED','OBSOLETE',
+ 'FIRST_ACTIVATION_RECHECKED','CURRENT_SOURCE_NOT_INITIAL_CAMPAIGN']);
 function fail(){throw new Error('CONTACT_RECHECK_REPLY_INVALID');}
 function object(value){return value!==null&&typeof value==='object'&&!Array.isArray(value);}
 function closed(value,keys){if(!object(value)||Object.keys(value).length!==keys.length||keys.some(key=>!Object.hasOwn(value,key)))fail();}

@@ -1,0 +1,74 @@
+{
+  "version": "CONTACT_SUBMISSION_READER_OWNER_INPUTS_V1",
+  "inputs": [
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "sha256_normalized_lf": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "path": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "sha256_normalized_lf": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "sha256_normalized_lf": "abc874b2d4ed90529ad591ea08a0a5131a6bc32c86109911631c8516e18b2e94"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "sha256_normalized_lf": "c3ca231ecac79b0be0bf5473762952ccd8ffb703f37a66a57b11688fbd061a0f"
+    },
+    {
+      "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "sha256_normalized_lf": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+    },
+    {
+      "path": "supabase/repeatable/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "sha256_normalized_lf": "077e1f34271adfb97ee6d5d3d2d718ce21186f0c1a9d99e221c51d94dd02b77a"
+    }
+  ],
+  "owners": [
+    {
+      "name": "public.weekly_source_candidate_query_get_v1",
+      "original_sha256_normalized_lf": "10df1530350d2a8c6855c638957325b985732afe968cc7d7a2a44524ad64e6bf"
+    },
+    {
+      "name": "public.weekly_source_timesheet_submission_complete_atomic_v1",
+      "original_sha256_normalized_lf": "eecb77c8c3a19859e87f1cd91399469071b811d12e8cebf26a82805ee05d5bbc"
+    },
+    {
+      "name": "public.weekly_source_message_dispatch_submission_start_atomic_v1",
+      "original_sha256_normalized_lf": "085a838c051e9bcd05709ad5099e9a67e86710795b240a2fdf6639cfa06fd93c"
+    },
+    {
+      "name": "private.weekly_source_candidate_app_projection_v1",
+      "original_sha256_normalized_lf": "c56a20e9d5973ffe46a7877be54c4e3ae067f744f939ebed39321b3bcb8fef0c"
+    },
+    {
+      "name": "public.weekly_source_candidate_check_materialise_atomic_v1",
+      "original_sha256_normalized_lf": "c62c9a31c5261c09cdda56cce621a4806f92b69790f8afe8b4851a9c4d26ca45"
+    },
+    {
+      "name": "private.weekly_source_candidate_submission_compare_sync_v1",
+      "original_sha256_normalized_lf": "5e5fe617ade07891d732ae29cc2fe46374b795b378a88ca42212e0f2240e0522"
+    },
+    {
+      "name": "private.weekly_source_candidate_notification_intent_v1",
+      "original_sha256_normalized_lf": "2573428c471a7fac1dcea18dd8b53ceba905bde30a2f3836e459a9bbe8edf9bb"
+    },
+    {
+      "name": "private.weekly_source_candidate_view_request_v1",
+      "original_sha256_normalized_lf": "5d3ffccbe6f7892aab606dfb90f896d932f533b71939803cf56d00b35d9779c2"
+    }
+  ],
+  "output": {
+    "path": "forward/38_native_submission_readers.sqlinc",
+    "sha256": "77e58e93578755b897841114fc0f31ad6da232baccb33765e253908f36d59aba"
+  },
+  "qualification": "Finite complete current Health-owned readers only; native/ABI/concurrency NOT_RUN; original financial/admission bodies preserved except exact request identity operands."
+}
