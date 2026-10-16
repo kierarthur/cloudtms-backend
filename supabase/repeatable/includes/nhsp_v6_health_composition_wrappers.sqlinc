@@ -95,9 +95,8 @@ begin
    raise exception 'CORRECTION_REQUEST_CONFLICT' using errcode='22023';end if;
   return private.timesheet_contract_move_read_v1(v_operation_id,actor_id);
  end if;
- -- Same active Office admin authority as the genuine native Contract/week allocator.
- if not private.weekly_source_pay_actor_allowed_v1(actor_id)
-  or not exists(select 1 from public.tms_users u where u.id=actor_id and u.is_active and lower(btrim(u.role))='admin') then
+ -- Contract correction uses current WP-PP authority; native scope and any required Invoice preparation permission are rechecked separately.
+ if not private.weekly_source_pay_actor_allowed_v1(actor_id) then
   raise exception 'CORRECTION_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
  if to_regprocedure('private.bpay_next_contract_move_cut_v1(uuid,boolean)') is null
   or to_regprocedure('private.bpay_next_contract_move_stage_v1(uuid,bytea)') is null

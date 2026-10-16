@@ -6563,5 +6563,16 @@
     "unchangedMethodPathOperationSecurity": true,
     "original92ObjectsPreserved": true,
     "install2": "NOT_INSTALLED"
+  },
+  "contract_accept_permission_source_continuation_20261016": {
+    "status": "SOURCE_CORRECTED_NATIVE_REQUIRED_NOT_RUN",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/CONTRACT_ACCEPT_WP_PP_CORRECTION.json",
+    "root": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+    "currentClosureSha256": "18d8258b0ad864f131a4cf60d4789cf30dd53ff0abc46b7931d31a16b52a818e",
+    "sourceOnly": true,
+    "publicExposure": "OWNER_ONLY_UNEXPOSED",
+    "invoiceAdminGates": "UNCHANGED",
+    "dailyAdminGates": "UNCHANGED",
+    "original92ObjectsPreserved": true
   }
 }

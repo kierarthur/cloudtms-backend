@@ -1,0 +1,73 @@
+{
+  "version": "HEALTH_CONTRACT_ACCEPT_WP_PP_AUTHORITY_CORRECTION_V1",
+  "status": "SOURCE_CORRECTED_NATIVE_REQUIRED_NOT_RUN",
+  "sourceParent": "e9913ff279483dd9beed189079a68469646e1509",
+  "file": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+  "beforeSha256": "d900ad23fbc0b4b5130b6c8138767ba9d7827b3e8506feefcac12e12cbaaae10",
+  "afterSha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8",
+  "exactDelta": {
+    "old": " -- Same active Office admin authority as the genuine native Contract/week allocator.\n if not private.weekly_source_pay_actor_allowed_v1(actor_id)\n  or not exists(select 1 from public.tms_users u where u.id=actor_id and u.is_active and lower(btrim(u.role))='admin') then",
+    "new": " -- Contract correction uses current WP-PP authority; native scope and any required Invoice preparation permission are rechecked separately.\n if not private.weekly_source_pay_actor_allowed_v1(actor_id) then",
+    "substitutions": 1,
+    "completeFileReverseEquality": true
+  },
+  "contract": {
+    "file": "NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json",
+    "pointer": "/cm16/permissions",
+    "requirement": "Actual active weekly_source_pay_actor_allowed_v1/Worker pay predicate and genuine record/client/date visibility; no blanket admin gate. Genuine Case/bank/invoice authority remains separate.",
+    "exactSharedPermissionText": "Actual active weekly_source_pay_actor_allowed_v1/Worker pay predicate and genuine record/client/date visibility, SQL recheck. No manage-move permission, blanket admin-only gate, browser service key or universal NEXT activation gate. Genuine outcome/Case/bank/invoice authority remains separate.",
+    "sharedSourceSha256": "213c4ff9afc09b9fbf3be54b75b4d3629342647ba6f32119a9b13d269eec7c8f"
+  },
+  "preserved": [
+    "Early actual active-user admission before replay",
+    "Exact committed replay before fresh scope/financial/invoice currentness",
+    "Actual current WP-PP predicate on fresh acceptance",
+    "Saved operation actor ownership and actual scope/date/currentness",
+    "Native Invoice preparation readiness and required actual Invoice admin permission",
+    "Separate INVOICE_SELECTED_EDIT/RELOCATE admin capability",
+    "Daily explicit active admin context/review admission",
+    "All native financial/placement/Invoice/current-result dependency refusals",
+    "Public Accept stays owner-only/unexposed until complete qualified producer/public flow"
+  ],
+  "composition": {
+    "root": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+    "currentClosureSha256": "18d8258b0ad864f131a4cf60d4789cf30dd53ff0abc46b7931d31a16b52a818e",
+    "functions": 41,
+    "signatureAclChanges": 0,
+    "originalApprovedSourcePreserved": "00f proposal immutable; current managed repeatable has explicit bounded successor"
+  },
+  "interimReview": {
+    "lane": "Source Sol6.1 xhigh",
+    "finding": "No contrary blanket lower Contract role gate in frozen01/02/03/04; scope and ACCEPT_PLACEMENT use WP-PP, Invoice slices retain own permission",
+    "finalPartB": false
+  },
+  "nativeRequired": [
+    "Actual active permitted non-admin with genuine Client/date/current scope reaches relevant native preflight; denied WP-PP refuses",
+    "Required Invoice preparation permission remains independently enforced/redacted",
+    "Inactive/foreign/not-permitted actor refuses; exact saved replay follows retained current-reader permission",
+    "Daily remains admin only; public features stay off before qualified release"
+  ],
+  "effects": {
+    "dbCalls": 0,
+    "sharedLockHeld": false,
+    "deployment": false,
+    "publicExecutionGranted": false,
+    "bankingBodyChanges": 0
+  },
+  "validation": {
+    "integrity": "PASS408migrations1079repeatables",
+    "offlinePg17": {
+      "outerStatements": 6,
+      "plpgsqlBodies": 4,
+      "rowtypeAlias": "Parser only",
+      "native": false
+    },
+    "existingSourceRegression": {
+      "passed": 42,
+      "failed": 0,
+      "includes": "3 actual final-definer selection/closure checks;3 daterange identity checks;36 unrelated existing Contract-preset transport compatibility checks",
+      "permissionBehaviorProved": false
+    },
+    "completeFileReverseProof": true
+  }
+}
