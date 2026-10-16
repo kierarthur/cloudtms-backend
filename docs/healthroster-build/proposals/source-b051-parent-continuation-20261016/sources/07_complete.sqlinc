@@ -1,0 +1,39 @@
+create or replace function public.weekly_exceptional_pay_action_context_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,private,public as $function$
+declare run public.weekly_exceptional_orchestration_runs%rowtype;actor uuid;facts jsonb;
+ keys constant text[]:=array['schema_version','actor_user_id','family_id','orchestration_run_id',
+  'source_cycle_id','work_event_id','protected_schedule','evidence_timesheet_id'];
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),
+  nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,keys) or not(p_request ?& keys)
+  or p_request->>'schema_version' is distinct from 'WEEKLY_PROTECTED_ACTION_CONTEXT_V1' then
+  raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;
+ if actor is null or not private.weekly_source_pay_actor_allowed_v1(actor) then
+  raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_ACTOR_REQUIRED' using errcode='42501';end if;
+ select r.* into strict run from public.weekly_exceptional_orchestration_runs r
+  where r.id=(p_request->>'orchestration_run_id')::uuid and r.family_id=(p_request->>'family_id')::uuid;
+ if run.requested_by_user_id is distinct from actor or run.state not in('RUNNING','COMPLETE')
+  or run.request_kind not in('APPROVE','AMEND','WITHDRAW','WAIT','RECONCILE','RECORD_NOT_WORKED') then
+  raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_SCOPE_INVALID' using errcode='55000';end if;
+ facts:=private.weekly_source_protected_action_facts_v1((p_request-'orchestration_run_id')
+  ||jsonb_build_object('schema_version','WEEKLY_PROTECTED_ACTION_FACTS_V1'),run.request_kind);
+ -- Recheck the genuine run after native locks. No fabricated preview run.
+ perform 1 from public.weekly_exceptional_orchestration_runs r where r.id=run.id
+  and r.family_id=run.family_id and r.requested_by_user_id=actor and r.request_kind=run.request_kind
+  and r.request_fingerprint=run.request_fingerprint and r.state in('RUNNING','COMPLETE') for share;
+ if not found then raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_SCOPE_INVALID' using errcode='55000';end if;
+ -- Preserve the normal Local context's pre-existing scalar/optional-field
+ -- representation; the private run-free fact projection is canonical instead.
+ if facts->'next_source_segments'='null'::jsonb and not exists(
+   select 1 from private.weekly_source_pay_decision_unprotect_preparations p where p.orchestration_run_id=run.id) then
+  facts:=(facts-'next_source_segments')||jsonb_build_object('family_bound_version',(facts->>'family_bound_version')::bigint);
+ end if;
+ return facts||jsonb_build_object('ok',true,'contract','WEEKLY_PROTECTED_ACTION_CONTEXT_V1','orchestration_run_id',run.id);
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_SCOPE_INVALID' using errcode='55000';
+end;
+$function$;

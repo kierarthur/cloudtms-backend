@@ -1,0 +1,134 @@
+{
+  "version": "HEALTH_SOURCE_B051_PARENT_CONTINUATION_PROPOSAL_V1",
+  "checkpoint": "39aa5b30042711956b83a7bf899f416d2f3b4771",
+  "files": [
+    {
+      "path": "build.mjs",
+      "bytes": 1245,
+      "sha256": "6b6ba2cc06ae2a6f92e0fe145f37532a365639c340a1e5e77b54358d5af11123"
+    },
+    {
+      "path": "CAPABILITY_ENTRY_PROPOSAL.json",
+      "bytes": 5408,
+      "sha256": "7756764494cf379fe43f75668b7f2a563bf6636e5693e6ff1ffca9e049b4fcc3"
+    },
+    {
+      "path": "CONTINUATION.json",
+      "bytes": 6077,
+      "sha256": "a8724a0e29bd15c7ab536b39fada626f62998f5cfe2dbe1a7a635336e6458820"
+    },
+    {
+      "path": "freeze-evidence.mjs",
+      "bytes": 5488,
+      "sha256": "5cf184b27233e6366b18c3d8def69e30e2a114b63fc34af5016ee1f6fcc2e374"
+    },
+    {
+      "path": "PARENT_EDITS.json",
+      "bytes": 5860,
+      "sha256": "2d17f5c908371bea39386122763d90012bdeb45e03b62a7308cb61b037a83cdd"
+    },
+    {
+      "path": "PROPOSED_ROUTES.js",
+      "bytes": 69069,
+      "sha256": "5c639cd21f579f34ea3b7c9e2b832fa4d148f8caf3d9ecdceba88756b7013471"
+    },
+    {
+      "path": "README.md",
+      "bytes": 10596,
+      "sha256": "f0839f00e69f8f93514a98900c65f236ffa5ad4d0709e2447988eb84bf1c2491"
+    },
+    {
+      "path": "recipe.mjs",
+      "bytes": 6151,
+      "sha256": "c13d9c26410f4684e3f5a5597524a3390184eb6499ce0a5957bef6a26deed3ca"
+    },
+    {
+      "path": "runtime/source-pay-decision-http.mjs",
+      "bytes": 7436,
+      "sha256": "7a359bdb27998ae48e9fc3f4d65804864511ab0ca7f0024c2eac82eab2e9b5cc"
+    },
+    {
+      "path": "seal.mjs",
+      "bytes": 2353,
+      "sha256": "5bafd176dd4daf44e706c37033b5d46c4fe33496ef627ac52f4d77f15031d6f0"
+    },
+    {
+      "path": "SHARED_DECLARATIONS.json",
+      "bytes": 50456,
+      "sha256": "d39b7f08f78f8bb006039973cbe2ae2ad5807e7ab38fe57bdbf9488c87494213"
+    },
+    {
+      "path": "SOURCE_EVIDENCE.json",
+      "bytes": 13620,
+      "sha256": "b3db3b464c67f76695a625f6c29bd02308bf158d9320fac5ec75707cd6c3ef02"
+    },
+    {
+      "path": "sources/01_complete.sqlinc",
+      "bytes": 6657,
+      "sha256": "cbc671065fefa41025ce7b850b477206422221f33c186fa444a9264a33b1a7da"
+    },
+    {
+      "path": "sources/02_complete.sqlinc",
+      "bytes": 9857,
+      "sha256": "2d3eb8da4dcdf329225bb0f8eaa96dd4df8a9466304d0d52fc48ab88960c0cad"
+    },
+    {
+      "path": "sources/03_complete.sqlinc",
+      "bytes": 700,
+      "sha256": "04b999eb284b81eb29e619d83f75c601576bc65113d1c561c4105b230d65f97d"
+    },
+    {
+      "path": "sources/04_complete.sqlinc",
+      "bytes": 5188,
+      "sha256": "8b4ce285782595b7f1d111bb498eb44157991af69badaf3306275551f1fedc45"
+    },
+    {
+      "path": "sources/05_complete.sqlinc",
+      "bytes": 23442,
+      "sha256": "6ce4e6f1b8ae8a63e18e40455662fcb3659a651289fe83b6548ea03962fcd683"
+    },
+    {
+      "path": "sources/06_complete.sqlinc",
+      "bytes": 4588,
+      "sha256": "cd33b1dd1177b4a96256281b5599fa93d0db65d16a10b27920c47559ec7d393c"
+    },
+    {
+      "path": "sources/07_complete.sqlinc",
+      "bytes": 3143,
+      "sha256": "af7ee869363d020b7150920483a79c03b1bbb68e61852e8f90144263c5d7d9d9"
+    },
+    {
+      "path": "sources/08_complete.sqlinc",
+      "bytes": 14365,
+      "sha256": "06df8168074d0fcf270a51604147e84bd8010fda15dfa2b5ebb34433237c6994"
+    },
+    {
+      "path": "sources/09_complete.sqlinc",
+      "bytes": 14485,
+      "sha256": "803c4f832d3175199266274fe23fe457e05343e0742f7b4ac0c81b450cc421be"
+    },
+    {
+      "path": "TEST_RESULTS.json",
+      "bytes": 2204,
+      "sha256": "8727661fc92407be9656c17e4d73566bbec408b9cd1b0ca5f3915df99f813737"
+    },
+    {
+      "path": "test.mjs",
+      "bytes": 17286,
+      "sha256": "a45c2112473a1fae4eb3a2903c76db4f40745390ab5bb26e368855f367b0948c"
+    }
+  ],
+  "parentEdits": 6,
+  "fullParentsReversed": 2,
+  "completeCurrentHealthFunctions": 9,
+  "sourceTests": 37,
+  "sourceQualification": "ACTUAL_COMPOSED_PARENT_REAL_WORKERS_STRICT_DECODERS_MOCKED_RPC_ONLY",
+  "publicReadProjection": "TRUTHFULLY_CLOSED_EXACT_SHARED_FINANCIAL_CHILD_AND_OUTER_SCHEMA_REQUIRED",
+  "capabilityContract": "PROPOSAL_NOT_PUBLISHED_ABI",
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "rootEdits": 0,
+  "bankEdits": 0,
+  "sqlEdits": 0,
+  "dbConnections": 0
+}

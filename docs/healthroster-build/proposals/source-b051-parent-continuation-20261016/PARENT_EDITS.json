@@ -1,0 +1,84 @@
+{
+  "version": "HEALTH_SOURCE_PAY_HTTP_PARENT_CONTRIBUTION_V1",
+  "checkpoint": "39aa5b30042711956b83a7bf899f416d2f3b4771",
+  "files": [
+    {
+      "target": "broker/src/weekly-source/routes.js",
+      "kind": "routes",
+      "preimageBytes": 68489,
+      "preimageSha256": "34c284a8b19be9ad3320b88b2db62e4d805e297a84e3fa3b0fb245373a910121",
+      "postimageBytes": 69069,
+      "postimageSha256": "5c639cd21f579f34ea3b7c9e2b832fa4d148f8caf3d9ecdceba88756b7013471",
+      "preimageCrlf": 41,
+      "preimageBareLf": 1387,
+      "fullReverseByteEquality": true,
+      "edits": [
+        {
+          "id": "source-pay-import",
+          "before": "import {CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,isContactManualEnquiryCommand,parseContactManualEnquiryBody,handleContactManualEnquiryOfficeCommand} from './contact-manual-enquiry-office.mjs';",
+          "after": "import {CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,isContactManualEnquiryCommand,parseContactManualEnquiryBody,handleContactManualEnquiryOfficeCommand} from './contact-manual-enquiry-office.mjs';\r\nimport {matchSourcePayDecisionRoute,handleSourcePayDecisionHttp,SOURCE_PAY_DECISION_HTTP_ROUTES} from './source-pay-decision-http.mjs';",
+          "beforeSha256": "312634c751a618f43d8bd04905fd5e0dbc75879fba88905721dcac245411d41e",
+          "afterSha256": "0a37f344834eb1c314be2a25a783b3a6cb4a52b4324c2a2576a10c5f52650a3b"
+        },
+        {
+          "id": "source-pay-path-admission",
+          "before": "  if (!path.startsWith(`${officePrefix}/`) && path !== officePrefix) return null;",
+          "after": "  const payDecisionRoute = matchSourcePayDecisionRoute(path);\r\n  if (!path.startsWith(`${officePrefix}/`) && path !== officePrefix && !payDecisionRoute) return null;",
+          "beforeSha256": "c9a3424c829a05e6501a1e65c15e6180c431c6206e9a0fd7ae0c7a06259ee28c",
+          "afterSha256": "fc71013f5dabdbd7c9af870f345e42c2c5f5ac0521051434df99663b217f1a23"
+        },
+        {
+          "id": "source-pay-authenticated-dispatch",
+          "before": "    const user = await requireOfficeUser(req, env, dependencies);",
+          "after": "    const user = await requireOfficeUser(req, env, dependencies);\r\n    if (payDecisionRoute) return await handleSourcePayDecisionHttp({\r\n      req, url, user, route: payDecisionRoute,\r\n      preview: dependencies.previewSourcePayDecision,\r\n      confirm: dependencies.confirmSourcePayDecision,\r\n      readSource: dependencies.readSourcePayDecisionSource,\r\n    });",
+          "beforeSha256": "34921ca8a6d69fded091e3ee59e65fffb7bfc91cae08b6de82956439e5ef5a71",
+          "afterSha256": "f8c68714a5b887830ca7e6ceb52b5e7e39a5347242e3c273e46b210624d1384a"
+        },
+        {
+          "id": "source-pay-route-contract",
+          "before": "  contactManualEnquiryRpcCommands: CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,",
+          "after": "  contactManualEnquiryRpcCommands: CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,\r\n  sourcePayDecisionRoutes: SOURCE_PAY_DECISION_HTTP_ROUTES,",
+          "beforeSha256": "92df428ba28af26c31179e7e053d00b3f2fa5ec90a7de47442f7172ced0db9ae",
+          "afterSha256": "db896ecd7af7a3fefc629a224d12424e5df611f65391cdcd4088c625e06a8ae6"
+        }
+      ]
+    },
+    {
+      "target": "broker/src/index.js",
+      "kind": "index",
+      "preimageBytes": 8934165,
+      "preimageSha256": "640645a70afa96e0d88bbb407666d854d8ddd8d5477e5919562b591cce727335",
+      "postimageBytes": 8935016,
+      "postimageSha256": "bdbbb4dba07b694f4c791a62a0fed898b75751f7402b30e575147879a31b4b6a",
+      "preimageCrlf": 595,
+      "preimageBareLf": 201778,
+      "fullReverseByteEquality": true,
+      "edits": [
+        {
+          "id": "source-pay-worker-import",
+          "before": "import { dispatchWeeklySourceRequest, weeklySourceDeploymentContext } from './weekly-source/routes.js';",
+          "after": "import { dispatchWeeklySourceRequest, weeklySourceDeploymentContext } from './weekly-source/routes.js';\r\nimport { previewSourcePayDecision,confirmSourcePayDecision,readSourcePayDecisionSource } from './weekly-source/source-pay-decision-worker.mjs';",
+          "beforeSha256": "691ed3619116fa70c973be58038ffe3d7b9ddf56a0c1795942676029b58806ce",
+          "afterSha256": "5210a0e0c2ef6acd542a379224fc457adde60ad90928181836e14ac75477b6f5"
+        },
+        {
+          "id": "source-pay-native-worker-dependencies",
+          "before": "        rpc: weeklySourceOffRpc,\n        previewUpload: weeklySourceUploadOwner.previewUpload,",
+          "after": "        rpc: weeklySourceOffRpc,\n        previewSourcePayDecision: ({ request, actorUserId }) => previewSourcePayDecision({\n          request, actorUserId, dataRpc: weeklySourceOffRecordingRpc,\n          calculateWeeklySnapshot: (input) => calculateWeeklyProtectedSnapshot(env, input)\n        }),\n        confirmSourcePayDecision: ({ request, actorUserId }) => confirmSourcePayDecision({\n          request, actorUserId, dataRpc: weeklySourceOffRecordingRpc,\n          calculateWeeklySnapshot: (input) => calculateWeeklyProtectedSnapshot(env, input)\n        }),\n        readSourcePayDecisionSource: ({ request, actorUserId }) => readSourcePayDecisionSource({\n          request, actorUserId, dataRpc: weeklySourceOffRecordingRpc\n        }),\n        previewUpload: weeklySourceUploadOwner.previewUpload,",
+          "beforeSha256": "cfb70d622813d1159621aa6435411cb3f4b91f5f8202fcd50001db5bc90f5e52",
+          "afterSha256": "dfab57d9721103423ad6e0fef9cd4b23559387e5d0fb30f6553ff84ad6cdf31d"
+        }
+      ]
+    }
+  ],
+  "module": {
+    "source": "runtime/source-pay-decision-http.mjs",
+    "target": "broker/src/weekly-source/source-pay-decision-http.mjs",
+    "sha256": "7a359bdb27998ae48e9fc3f4d65804864511ab0ca7f0024c2eac82eab2e9b5cc",
+    "bytes": 7436
+  },
+  "rootSoleIntegrator": true,
+  "bankBodiesChanged": 0,
+  "sqlChanged": 0,
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,9 @@
+create or replace function private.timesheet_contract_move_context_actor_allowed_v1(p_operation_id uuid,p_phase text,p_actor_user_id uuid)
+returns boolean language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select exists(select 1 from private.timesheet_contract_move_operations o join public.tms_users u on u.id=p_actor_user_id
+  where o.id=p_operation_id and u.is_active and
+   ((p_phase in('ACCEPT_PLACEMENT','DAILY_RATE_REVISION') and o.created_by_user_id=u.id
+     and private.weekly_source_pay_actor_allowed_v1(u.id))
+    or (p_phase in('INVOICE_SELECTED_EDIT','INVOICE_SELECTED_RELOCATE') and upper(u.role::text)='ADMIN')))
+$function$;
