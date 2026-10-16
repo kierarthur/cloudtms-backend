@@ -1,0 +1,17 @@
+{
+  "version": "HEALTHROSTER_FOUR_PREBODY_DYNAMIC_SOURCE_TESTS_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "tests": 16,
+  "passed": 16,
+  "failed": 0,
+  "installedTest": true,
+  "parserOverrideAbsent": true,
+  "fourPoints": 4,
+  "boundSourceFiles": 95,
+  "relativeCompilerGraphFiles": 56,
+  "completeSourceGateReverse": true,
+  "sourceGateSyntax": true,
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "native0400": "NOT_RUN"
+}

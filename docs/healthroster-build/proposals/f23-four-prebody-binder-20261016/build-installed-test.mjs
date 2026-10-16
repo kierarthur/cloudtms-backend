@@ -1,0 +1,14 @@
+import fs from'node:fs';import path from'node:path';import assert from'node:assert/strict';import{fileURLToPath}from'node:url';
+const dir=path.dirname(fileURLToPath(import.meta.url)),runnerPath=path.join(dir,'test-binder.mjs');let runner=fs.readFileSync(runnerPath,'utf8'),cases;
+if(runner.includes(' const spec=String.raw`')){const from=runner.indexOf(' const spec=String.raw`'),start=from+' const spec=String.raw`'.length,end=runner.indexOf('\n`;\n save(',start);assert(end>start);cases=runner.slice(start,end);fs.writeFileSync(path.join(dir,'cases.template.mjs'),cases);runner=runner.slice(0,from)+runner.slice(end+'\n`;\n'.length);runner=runner.replace("save('prebody.test.mjs',spec);const result=","const result=").replace("path.join(fixture,'prebody.test.mjs')","path.join(fixture,'tests/healthroster-prebody-dynamic-review.test.mjs')");fs.writeFileSync(runnerPath,runner);}else cases=fs.readFileSync(path.join(dir,'cases.template.mjs'),'utf8');
+let installed=cases.replaceAll("from'./scripts/","from'../scripts/");
+installed=installed.replace("import test from'node:test';","import os from'node:os';import{fileURLToPath}from'node:url';\nimport test from'node:test';");
+const anchor='const root=process.cwd(),read=file=>fs.readFileSync(path.join(root,file)),review=JSON.parse(read(reviewPath)),classifier=';assert.equal(installed.split(anchor).length,2);
+installed=installed.replace(anchor,String.raw`const installedRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),fixture=fs.mkdtempSync(path.join(os.tmpdir(),'hr-f23-prebody-installed-'));
+function dispose(){const at=fs.realpathSync(fixture);assert.equal(path.dirname(at),fs.realpathSync(os.tmpdir()));assert(path.basename(at).startsWith('hr-f23-prebody-installed-'));fs.rmSync(at,{recursive:true,force:false});}
+function copy(file){const to=path.resolve(fixture,file);assert(to.startsWith(fixture+path.sep));fs.mkdirSync(path.dirname(to),{recursive:true});fs.writeFileSync(to,fs.readFileSync(path.join(installedRoot,file)));}
+try{const captured=JSON.parse(fs.readFileSync(path.join(installedRoot,reviewPath)));for(const input of captured.dependencies)copy(input.file);copy(reviewPath);copy(captured.priorReview.path);for(const p of captured.files.flatMap(f=>f.points))copy(p.bodyFile);}catch(error){dispose();throw error;}
+test.after(()=>dispose());
+const root=fixture,read=file=>fs.readFileSync(path.join(root,file)),review=JSON.parse(read(reviewPath)),classifier=`);
+installed=installed.replace("await import(process.env.HEALTHROSTER_PREBODY_PARSER_URL)","await import(new URL('../scripts/bpay-next-source-gates.mjs',import.meta.url).href)");
+const target='forward/tests/healthroster-prebody-dynamic-review.test.mjs';fs.mkdirSync(path.dirname(path.join(dir,target)),{recursive:true});fs.writeFileSync(path.join(dir,target),installed);console.log('Built complete installed16-case test using owned fixture only');

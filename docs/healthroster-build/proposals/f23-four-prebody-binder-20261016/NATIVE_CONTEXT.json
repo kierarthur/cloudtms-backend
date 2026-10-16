@@ -1,0 +1,21 @@
+{
+  "version": "HEALTHROSTER_PREBODY_INTEGRATOR_CONTEXT_ONLY_V1",
+  "native": [
+    {
+      "sourceCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/native-money-predecessor-negatives-32ee8711/SUMMARY.json",
+      "sha256": "2ec921d674f46a1457b1cab1463c325825950e0f2b57878ea4681704e55fdb49",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/native-context/native-money-predecessor-negatives-32ee8711/SUMMARY.json",
+      "approvalUse": "CONTEXT_ONLY_NOT_NEW_COMPANION_NATIVE_APPROVAL"
+    },
+    {
+      "sourceCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/native-money-predecessor-contention-efd18231/SUMMARY.json",
+      "sha256": "a65755306dd6b2d7845abe4413e83256677f6d90335352539f0de736d550116a",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/native-context/native-money-predecessor-contention-efd18231/SUMMARY.json",
+      "approvalUse": "CONTEXT_ONLY_NOT_NEW_COMPANION_NATIVE_APPROVAL"
+    }
+  ],
+  "independentDatabaseCalls": 0,
+  "native0400": "NOT_RUN"
+}

@@ -1,0 +1,221 @@
+{
+  "version": "HEALTHROSTER_CAPABILITY0400_PREBODY_SOURCE_DESIGN_V1",
+  "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+  "sourceCandidate": "bcfd75a051d5c88e524a5ddb552b269c71c407b1",
+  "inputs": [
+    {
+      "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/native-capability-prefix-bcfd75a0/NATIVE_PREDECESSOR_CENSUS.json",
+      "preserved": "inputs/NATIVE_PREDECESSOR_CENSUS.json",
+      "sha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6"
+    },
+    {
+      "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/native-capability-prefix-bcfd75a0/SUMMARY.json",
+      "preserved": "inputs/SUMMARY.json",
+      "sha256": "2617a9e826cf22eb8d52701771f889653bca47198536ca147638341c10b52627"
+    },
+    {
+      "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/native-capability-prefix-bcfd75a0/NATIVE_R2.json",
+      "preserved": "inputs/NATIVE_R2.json",
+      "sha256": "0a8997f662d045996832a384866d1fa26c08f5f9db188f6f855d1fe4eb255086"
+    },
+    {
+      "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/native-capability-prefix-bcfd75a0/INPUT_RECEIPT_R1.json",
+      "preserved": "inputs/INPUT_RECEIPT_R1.json",
+      "sha256": "e0c99e59c94c70f49e3db388cd493fcb1684738558741dd189bc839c1116ee2a"
+    },
+    {
+      "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/native-capability-prefix-bcfd75a0/PLAN.json",
+      "preserved": "inputs/PLAN.json",
+      "sha256": "e75b276f6e766f4d98d10729982352e4b9801bb2ec16bb8cc28f231e492399eb"
+    },
+    {
+      "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/native-capability-prefix-bcfd75a0/RESTORATION.json",
+      "preserved": "inputs/RESTORATION.json",
+      "sha256": "582ba3016d5fcc9673036032e78ad786c5a3b88abeb472f40f3b1f73c896e1fc"
+    },
+    {
+      "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+      "path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "preserved": "inputs/CONSTRUCTOR_1133.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+    },
+    {
+      "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+      "path": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "preserved": "inputs/IMMUTABLE_CONSUMER_0400.sql",
+      "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16"
+    }
+  ],
+  "prefixInputs": [
+    {
+      "path": "supabase/migrations/13102026_1112_healthroster_invoice_support_members_v1.sql",
+      "sourceSha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b",
+      "compiledSha256": "663d93125c4cf121b9960481d0f6a11c4e2cd2271e3bbf54f30ab529f453a1d8",
+      "preserved": "inputs/PREFIX_01_13102026_1112_healthroster_invoice_support_members_v1.sql"
+    },
+    {
+      "path": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sourceSha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+      "compiledSha256": "79f8591b808879f2bae46ba93967f12ac96a71751e8a44b858b38cee5d051c0f",
+      "preserved": "inputs/PREFIX_02_13102026_1127_healthroster_timesheet_correction_requests_v1.sql"
+    },
+    {
+      "path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sourceSha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "compiledSha256": "0884899495bea783cad34abeb82610b954e3fc6c0940f1e2fd19994b89455af0",
+      "preserved": "inputs/PREFIX_03_13102026_1133_weekly_source_rule_sets_schema.sql"
+    },
+    {
+      "path": "supabase/migrations/13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+      "sourceSha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6",
+      "compiledSha256": "526e2b99328eaaa4bbbac27d98988c3a6526eb30c2ab0cd06272197af7e71aee",
+      "preserved": "inputs/PREFIX_04_13102026_1210_weekly_source_final_value_snapshot_authority.sql"
+    },
+    {
+      "path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "sourceSha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+      "compiledSha256": "2892c587e484ee05b289a575a81f6fff117d01cd4c8d928bf821d10e88cc17e8",
+      "preserved": "inputs/PREFIX_05_13102026_1344_weekly_source_self_bill_report_schema.sql"
+    },
+    {
+      "path": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sourceSha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "compiledSha256": "b4f75ad6dd6d2d0a897d00af7577b031a1a29abbcb92523767cd6ebd67629113",
+      "preserved": "inputs/PREFIX_06_13102026_1430_weekly_source_invoice_money_origins.sql"
+    },
+    {
+      "path": "supabase/migrations/13102026_1456_weekly_source_protection_query_support_v1.sql",
+      "sourceSha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17",
+      "compiledSha256": "738f59118143bf5be8fcddc6a3b13c28f79041e14f4fd59d7eb7c5ff6ad95d4e",
+      "preserved": "inputs/PREFIX_07_13102026_1456_weekly_source_protection_query_support_v1.sql"
+    },
+    {
+      "path": "supabase/migrations/13102026_1519_healthroster_correction_reason_bound_v1.sql",
+      "sourceSha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2",
+      "compiledSha256": "44ec25b68ea6b1c40bfbadba3db5a8406c01e00f387d4397e02e7f28dff8cd1c",
+      "preserved": "inputs/PREFIX_08_13102026_1519_healthroster_correction_reason_bound_v1.sql"
+    },
+    {
+      "path": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "sourceSha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+      "compiledSha256": "45f247ed3e681e6721306391358c4708df8a1783ae744413e36ecf2249e013b7",
+      "preserved": "inputs/PREFIX_09_13102026_1680_weekly_source_invoice_window_receipt_schema.sql"
+    }
+  ],
+  "program": {
+    "proposedPath": "supabase/release/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+    "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+    "placement": "BEFORE_IMMUTABLE_BODY_SAME_TRANSACTION",
+    "statements": 2,
+    "statementSha256": [
+      "36c0abeb1bc4b31d6741eed04e7806f0168d754445432a2e08609c21f281799f",
+      "b97b8204efef03757c0138a212634810dad3983f9b19d2277adc1b04bc4e8758"
+    ]
+  },
+  "consumer": {
+    "kind": "migration",
+    "path": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+    "sourceSha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+    "bodyStatementSha256": "fd049b67ce8026d9c3866f6e409b765776c5b4f2afaf33c7721be1115f0b35a0",
+    "f23StatementSha256": "ab5bdf121ab1e57c4ae894025cd8e7b176fb5f43d1ed6b7c6110103b44e0331a",
+    "f23KeySha256": "55c651bdae7ee05d16f38a718f7441b8b5d9d40dc4a53551d295dd2ee7e0845d",
+    "enclosingBodySha256": "20127141ea6162fcf351b396a6c1fc1003746b7480f1b528cbb8616493c32427",
+    "closureFiles": [
+      {
+        "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+        "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16"
+      }
+    ],
+    "immutableBytesUnchanged": true
+  },
+  "constructor": {
+    "path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+    "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+    "rawSourceOnlyLogicalOwner": "postgres",
+    "managedOwnerMapping": "Only audited postgres -> CURRENT_USER; unchanged protected compiler gate"
+  },
+  "exactExpectedSelectedChecks": [
+    {
+      "is_local": true,
+      "is_deferred": false,
+      "is_validated": true,
+      "is_deferrable": false,
+      "is_no_inherit": false,
+      "selector_role": "VERSION",
+      "constraint_name": "weekly_source_group_rule_assignments_check2",
+      "inherited_count": 0,
+      "key_columns_sorted": [
+        "feature_purpose",
+        "rule_set_version_id"
+      ],
+      "has_no_parent_constraint": true,
+      "key_columns_in_native_order": [
+        "feature_purpose",
+        "rule_set_version_id"
+      ],
+      "evidence_definition_pretty_true": "CHECK (feature_purpose IS NULL OR (rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text))",
+      "evidence_expression_pretty_true": "feature_purpose IS NULL OR (rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text)",
+      "selector_definition_default_false": "CHECK (((feature_purpose IS NULL) OR ((rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text))))"
+    },
+    {
+      "is_local": true,
+      "is_deferred": false,
+      "is_validated": true,
+      "is_deferrable": false,
+      "is_no_inherit": false,
+      "selector_role": "PURPOSE",
+      "constraint_name": "weekly_source_group_rule_assignments_feature_purpose_check",
+      "inherited_count": 0,
+      "key_columns_sorted": [
+        "feature_purpose"
+      ],
+      "has_no_parent_constraint": true,
+      "key_columns_in_native_order": [
+        "feature_purpose"
+      ],
+      "evidence_definition_pretty_true": "CHECK (feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text]))",
+      "evidence_expression_pretty_true": "feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text])",
+      "selector_definition_default_false": "CHECK ((feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text])))"
+    }
+  ],
+  "allCheckCount": 10,
+  "retainedCheckCount": 8,
+  "historicalCapture": {
+    "sha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6",
+    "expressionApproved": false,
+    "nativeCompanionApproved": false,
+    "preservedWithoutEdit": true
+  },
+  "successor": {
+    "expressionSourceComparison": "APPROVED_ONLY_FOR_EXACT_CAPTURE_CONSTRUCTOR_AND_SELECTOR",
+    "expressionReview": {
+      "file": "EXPRESSION_REVIEW.json",
+      "sha256": "640ad6a503cf889e7b337eaac2269d61c2c0de5777d3de78ff32e89ca06245c4"
+    },
+    "sourceDesignApproved": true,
+    "nativeCompanionApproved": false,
+    "nativeCompanion": "NOT_RUN"
+  },
+  "requiredIntegration": [
+    "Exact kind/path/source body/closure pins; bind this program and all evidence hashes. No dynamic exemption yet.",
+    "Canonical actual managed prefix includes constructor1133 and unchanged0400 predecessor order; no fake/partial schema.",
+    "Within the existing BEGIN/writer/context/ledger envelope: LOCK/assertion, then unchanged0400 body, then existing writer guard/original migration ledger/COMMIT.",
+    "Same ordering in full rehearsal; exact compiled receipt, source binding and companion statement hashes must enter review/manifest admission.",
+    "Native positive exact predecessor+companion+unchanged0400, negative rename/NOTVALID/extra matching/expression/key/metadata/count drift and two-session DDL lock race, complete fresh restoration required."
+  ],
+  "limits": [
+    "No SQL executed by this lane. Published native prefix capture is evidence for exact predecessor state only.",
+    "Eight retained CHECKs are not selected/dropped; their full native expressions were not captured. Count10 is conservative; do not infer approval of arbitrary retained expressions.",
+    "Ordinary table/actual current owner/no inheritance are additional conservative constructor-derived refusals, not claimed native capture fields.",
+    "Lock prevents concurrent DDL between assertion and consumer; existing protected writer/context/ledger gates remain mandatory.",
+    "No Bank/business rows/financial/provider/API/release/PartB approval."
+  ],
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}

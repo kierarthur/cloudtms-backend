@@ -1,0 +1,1305 @@
+{
+  "version": "HEALTH_F23_FINITE_NATIVE_PREDECESSOR_REVIEW_V1",
+  "status": "SOURCE_DERIVED_PREDECESSOR_SET_CLOSED_IMPLEMENTATION_AND_NATIVE_NOT_RUN",
+  "sourceCommit": "3b2f6f385052b51df4004be6b68766ad62c6c17e",
+  "physicalReviewParent": "0716b661530c6147e778231db8663a8abefb56f3",
+  "observedRoot": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "moneyInput": {
+    "jsonSha256": "ec6085b5746ef5542c38c1cb4624b04e86040ba66aef3a82e45f82b0d2de631a",
+    "mdSha256": "3cd43dfd2e3fd95d84c233f1849af3f23aedf51f329f6075a566408a4ace2822",
+    "counts": {
+      "diagnostics": 95,
+      "statement_keys": 95,
+      "file_signature_groups": 35,
+      "enclosing_producers": 41,
+      "all_current_files_equal_frozen_census": true,
+      "real_execute_points": 95,
+      "inert_only_points": 0,
+      "primary_predecessor_census_gaps": 2
+    }
+  },
+  "sourcePins": [
+    {
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+    },
+    {
+      "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+    },
+    {
+      "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16"
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    },
+    {
+      "file": "supabase/release/migration-lock.json",
+      "sha256": "f2afa08d1c8efe06790348a26665ac80535c56c294ca092ef86d80893111a204"
+    },
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "a52b9b1e1ad2f121096cebbcf514a06fac021069e8692fb28a86d52a512c1a8c"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "scripts/healthroster-contact-claim-boundary.mjs",
+      "sha256": "505abc1c41cf7adc21aa16c4c7f5f42d6678a58818cd694d992d3d0271fbff0d"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "c645182b08c6e7b6d5af01ee88d4d24f86072a024c2ca68e01bc3da6cc0720ff"
+    }
+  ],
+  "lockedMigrationsVerified": 407,
+  "sourceOrder": {
+    "migrationCount": 407,
+    "orderedMigrationPathsSha256": "88e9c98e2b1760d286deec6feefa3fdfa2492254f2e10ec28390384c93a24371",
+    "originIndex": 233,
+    "moneyIndex": 389,
+    "capabilityOriginIndex": 386,
+    "capabilityIndex": 396,
+    "relevantMigrations": [
+      {
+        "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+        "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+        "order": 233,
+        "ddl": [
+          {
+            "statementSha256": "d376619aad9b20201afe43e555745a9c91ad84cdf6f00270252d7dd4a6261beb",
+            "head": "create table public.weekly_source_charge_checks ("
+          },
+          {
+            "statementSha256": "b4a63258fdaa6d356dff2cf13fbb2984ec486aee8f7e7f4147e359aa4f6dc715",
+            "head": "alter table public.weekly_source_charge_checks owner to postgres;"
+          },
+          {
+            "statementSha256": "f9a88981887bc7cce1b9e20e403c0afce6944c32a9441d7d2958ef5344ff6f88",
+            "head": "create table public.weekly_source_charge_acceptances ("
+          },
+          {
+            "statementSha256": "8f60eecf47b51e0e6928e22003fdf24e277610ccea03a6f76f22feda14684a89",
+            "head": "create table public.weekly_source_final_snapshot_lines ("
+          },
+          {
+            "statementSha256": "a794755874456ff35765994312cde5c151a8c2810b9ef2e1060c680d68b570f9",
+            "head": "create table public.weekly_source_billing_movements ("
+          },
+          {
+            "statementSha256": "4977d81f16c0ae19b9462271bb4c7496da6804179de48df9a7674222e7231538",
+            "head": "alter table public.weekly_source_billing_movements owner to postgres;"
+          },
+          {
+            "statementSha256": "238d0486c472cecc11c5ece2e303923e702d6f46917ef9b7e89d35b80c67e3e1",
+            "head": "create unique index weekly_source_billing_movements_transition_role_uq"
+          },
+          {
+            "statementSha256": "686bb1087d9b8a4ddcdbcaf57dd604261a93999d83847e642f23cd3200c5c708",
+            "head": "create unique index weekly_source_billing_movements_expense_role_uq"
+          },
+          {
+            "statementSha256": "144cd2d0e40863807d49873418858252b4960396544ed094eb6dfb9b229982ee",
+            "head": "alter table public.weekly_source_billing_movements"
+          },
+          {
+            "statementSha256": "04f7fbc61fb4992ac568514db9095bddde65bff4d6d01e732a9667b2acc7e48b",
+            "head": "create index weekly_source_billing_movements_admission_idx"
+          },
+          {
+            "statementSha256": "253e3a7210951a2b4fe423186d424eb9d1d954c5c54cb2f35ecedb0026af5041",
+            "head": "create index weekly_source_billing_movements_timesheet_lineage_idx"
+          },
+          {
+            "statementSha256": "fd4e980a42240a4b62cfbeab3a3a825b5bb2b6693dd91dac22fa85c6251f19a7",
+            "head": "create table public.weekly_source_manifest_movements ("
+          },
+          {
+            "statementSha256": "980a3936f5a97e79d154c0dc94c08bf89d0b31178ceb096d6897f6a7a619595a",
+            "head": "create table public.weekly_source_invoice_presentation_lines ("
+          },
+          {
+            "statementSha256": "56ab19a0f25052b7883a2f89ed08d96eadf97f360ba417d7a1d813b3e16dd5dc",
+            "head": "alter table public.weekly_source_invoice_presentation_lines owner to postgres;"
+          },
+          {
+            "statementSha256": "43060900b32a4323895b6a0e88d9ac8c3a80b272051ef6953c7824493e28658d",
+            "head": "create index weekly_source_invoice_presentation_lines_manifest_idx"
+          },
+          {
+            "statementSha256": "c37bccf75e09fc467af1e1f299059ece6d7c1c3423907de9bff859fdde1b053a",
+            "head": "create index weekly_source_invoice_presentation_lines_companion_idx"
+          },
+          {
+            "statementSha256": "ec767f4930e4dc3bbdcecf81a31b900edc389e3d6fab60e7c00aa8a37fb07773",
+            "head": "create table public.weekly_source_invoice_line_bindings ("
+          },
+          {
+            "statementSha256": "a1da9449ecf87744f3090738c5a550ff4f89480ac700e5dfd79c849b096a3d68",
+            "head": "create table public.weekly_source_invoice_placements ("
+          },
+          {
+            "statementSha256": "a36316d84d5cdeb55cef9b8ac5ccf11f13026b300af21dcb25f0d92c30c5d1af",
+            "head": "alter table public.weekly_source_billing_movements"
+          },
+          {
+            "statementSha256": "3bc575392346530d3558005c36174031858a6ba1ca9c067afe5a287d5ea3c85a",
+            "head": "create table public.weekly_source_expense_materialisations ("
+          },
+          {
+            "statementSha256": "30a9274043989405dddbc213fa2422df8627a412f0d15df8f0d89bf01dd44a6d",
+            "head": "create table public.weekly_source_expense_pay_materialisations ("
+          }
+        ]
+      },
+      {
+        "file": "supabase/migrations/04102026_0470_banking_pay_next_source_current_selector.sql",
+        "sha256": "aaa556bd02cb80f1107f450909ea13aa17c69d6a13f27ce6b1c119edfd3045cd",
+        "order": 264,
+        "ddl": [
+          {
+            "statementSha256": "9e6974673b19fcf4c42956649b441815d02e16eb5c7197b9446b708ac2f2ba25",
+            "head": "create table private.bpay_next_source_current_origins ("
+          },
+          {
+            "statementSha256": "698ae45e372cf9e9be6220a5b5aec00a8cd0c48d770d090e20d4560b47a4b1f5",
+            "head": "create table private.bpay_next_source_current_magnitudes ("
+          },
+          {
+            "statementSha256": "fa0050e3b79f07c2048203c9d10eef2fe02be1f68f072fd47712a970470a41f2",
+            "head": "create table private.bpay_next_source_current_snapshots ("
+          },
+          {
+            "statementSha256": "acb5cba5c1470ea8c92b1d717c87b1b43ca1ce2a859ae70e8030bf28f159c125",
+            "head": "create table private.bpay_next_source_current_events ("
+          }
+        ]
+      },
+      {
+        "file": "supabase/migrations/04102026_0500_banking_pay_next_source_current_hooks.sql",
+        "sha256": "dc6150316e0095ab9397ccaad05c82e184d60a776370757bb3547f2f88bfcf86",
+        "order": 266,
+        "ddl": [
+          {
+            "statementSha256": "78eed950801a0a7352c1cf6aa9f8aa6dafba1fd1c9cc9ec33495ab9761c9f966",
+            "head": "create index bp_next_source_nhsp_emission_idx on public.weekly_source_billing_movements"
+          }
+        ]
+      },
+      {
+        "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+        "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+        "order": 386,
+        "ddl": [
+          {
+            "statementSha256": "dc5f4dac64696ac9e9b7cdcccdc9ff26f2bc28f18b79000c4cfa1b8f249c587b",
+            "head": "create table public.weekly_source_group_rule_assignments ("
+          },
+          {
+            "statementSha256": "1e571e430d1da8ffa1b812a76df7d5e20c75f56540ce11671b44b233f8d47d31",
+            "head": "create index weekly_source_group_rule_assignments_version_idx on public.weekly_source_group_rule_assignments(rule_set_version_id);"
+          },
+          {
+            "statementSha256": "c8d34bf97ea8a6b0826b6d13e962ceaf129a01b22dd60f206b733b9198b4619f",
+            "head": "alter table public.weekly_source_group_rule_assignments owner to postgres;"
+          },
+          {
+            "statementSha256": "b0d648c2d9d41813a724a6732c76af60c77ea75ed7b05815d78cc617cc9aa958",
+            "head": "do $security$"
+          }
+        ]
+      },
+      {
+        "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+        "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+        "order": 389,
+        "ddl": [
+          {
+            "statementSha256": "d38cf74f0157032c8fe8dae3fccd2f679c1e8a523808d6906ed6e9c3145ef800",
+            "head": "do $block$"
+          },
+          {
+            "statementSha256": "9828b6c2cd7d6689424a7ad1c5fc93f0a968cd1ef5afffb90f33154877f1eb22",
+            "head": "alter table public.weekly_source_charge_checks"
+          },
+          {
+            "statementSha256": "8a8b4b8a6a345662ef23734030e7b433a0b66c9670896fdceda8ee1066b67736",
+            "head": "alter table public.weekly_source_billing_movements"
+          },
+          {
+            "statementSha256": "39fcbe973878e5ce1f45b7b5f5ed31834569e1fb5213a58e6db70d2ab0a248e1",
+            "head": "create unique index weekly_source_billing_movements_report_row_uq on public.weekly_source_billing_movements(self_bill_report_row_id) where self_bill_report_row_id is not null;"
+          },
+          {
+            "statementSha256": "7618be48271d43475e6eb92532e1e96b894db47f1360ca03da64493806635064",
+            "head": "create unique index weekly_source_billing_movements_vat_rounding_client_uq on public.weekly_source_billing_movements(vat_rounding_revision_id,actual_client_id) where vat_rounding_r"
+          },
+          {
+            "statementSha256": "2238f6ce749844c4796a3455530a8307e99a82553f4ad9683cc59b03c671fc45",
+            "head": "do $block$"
+          },
+          {
+            "statementSha256": "209f49a1f250a229e7eaa7f983465595d754633a2c3c224d13baaa1f7cde5cd1",
+            "head": "alter table public.weekly_source_billing_movements"
+          },
+          {
+            "statementSha256": "c122b8d9f307831edb604ff0444504bbd543495d346523844d2519051caec57e",
+            "head": "do $block$"
+          },
+          {
+            "statementSha256": "523f92568dffc8453bb5fcbe236ad60c21c7c8e337057c2cc9b1d73ed96c6d6d",
+            "head": "alter table public.weekly_source_invoice_presentation_lines"
+          }
+        ]
+      },
+      {
+        "file": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+        "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+        "order": 394,
+        "ddl": [
+          {
+            "statementSha256": "44799732bdef526ff936b03e17c93435d8ceb3f7bbd3fb4ae3b176b05e5be1ba",
+            "head": "alter table public.weekly_source_billing_movements add column invoice_window_cycle_id uuid"
+          },
+          {
+            "statementSha256": "60ecb14185be878568507a56219cc563dfb6ff824d5389558f00641cadd57535",
+            "head": "alter table public.weekly_source_invoice_presentation_lines add column invoice_rounding_authority_json jsonb,"
+          },
+          {
+            "statementSha256": "1855301ac6333669aa52f37385880027a52a002a22d8e01330cb63166e27e4d3",
+            "head": "do $index$"
+          },
+          {
+            "statementSha256": "baafa8474fea813e89c9ea2d3f0aa2d700b553e770b04d0299796e91a09f1f71",
+            "head": "drop index public.weekly_source_billing_movements_vat_rounding_client_uq;"
+          },
+          {
+            "statementSha256": "ff34e4b5b1a6bf3bc8d063a9aa60cc49951a8e2b6c0dcbd6c976fb37974a0113",
+            "head": "create unique index weekly_source_billing_movements_vat_rounding_client_window_uq"
+          }
+        ]
+      },
+      {
+        "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+        "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+        "order": 396,
+        "ddl": [
+          {
+            "statementSha256": "fd049b67ce8026d9c3866f6e409b765776c5b4f2afaf33c7721be1115f0b35a0",
+            "head": "do $extend_existing_purpose$"
+          }
+        ]
+      }
+    ],
+    "repeatableFilesMentioningTargets": 117,
+    "repeatableMentionSourcePins": [
+      {
+        "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+        "sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b"
+      },
+      {
+        "file": "supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+        "sha256": "48d1e30514857162ed3d6af55474ee31a10cc33615079628033d539f643c0fe0"
+      },
+      {
+        "file": "supabase/repeatable/04102026_0475_banking_pay_next_source_current_selector_v1.sql",
+        "sha256": "becdec3d6892a241dec27995b1c1dba592da1372fb043c911dd11c55f94fccae"
+      },
+      {
+        "file": "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+        "sha256": "7a30917400df10227dc62cf35f5b3ed49b42481d4e3fe764d1133ff18990fb51"
+      },
+      {
+        "file": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+        "sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6"
+      },
+      {
+        "file": "supabase/repeatable/05102026_0645_weekly_source_selected_source_witness_v1.sql",
+        "sha256": "1d455ca1a9088ce591b046e9c4659b5994967a5f901808faf5ab7fbd1ce04c8d"
+      },
+      {
+        "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+        "sha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f"
+      },
+      {
+        "file": "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+        "sha256": "91972ea67ab5c4898ff513a970a4cb63fa8a333a599ebcee4634977662f58511"
+      },
+      {
+        "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+        "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2"
+      },
+      {
+        "file": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+        "sha256": "3682178b5da113aac0587a08b0f07cab893a61b6d5c9332fd1d3925a8361967b"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+        "sha256": "4fe37de72a11c3a938d89d25660e996367a2ab6bfaca9bbf54a50a787062c3ae"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+        "sha256": "4d5bd92b34ce4bdb659d3178144b3f1e7822f053dc91cf9c4d40c356dbbcbbba"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+        "sha256": "dc2de45c684fd3856e9147cc7724c39e07390242e1c22d5a3bedf7ac76c9548b"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+        "sha256": "a59d938b7403608103aa747be95dd202e5d7f0dd6a40d09dbdf0177e0e14a50a"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_completed_rows.sqlinc",
+        "sha256": "19e4a480cc63e1bb33166557504d31248c9dcca0931ab04d640c7c5730c51f61"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+        "sha256": "be9f1e7dd5b3351510b027044dd00bca32b54c58a0c9e6fc6bf47f94dd79c40f"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_duplicate_hold.sqlinc",
+        "sha256": "f881ad41948121ec2ef13b34d4f6bcaca4bcb71dc2002ba20be278d892914243"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+        "sha256": "4a0937f2608551801733ec3fbd2ec8c2ddf800344233b4f53340386bcd53ebe8"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_invoice_duty.sqlinc",
+        "sha256": "6dcaf79339c8ed3139b9d4bc0ca6641bf803fdb402af3b87e118c1b71ca3f36e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+        "sha256": "c968bad8bd17e046623d971c99c0e2a662e0230350c7edfaed0d14031835d6f4"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_prior_binding.sqlinc",
+        "sha256": "03e5426be6df9f735dfad97c7227105e28c2f07bd19a9cf1b0a9a7d0df43061d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+        "sha256": "3a3f3e2c7f8d165064d94453436ce63e833f0815b64d25ccebcd73df046db495"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1359_weekly_source_timing_coverage_group_guards_v1.sql",
+        "sha256": "20c98eb0c3ae673b25e3edf6834fde9bfd0fa8c06b2e98ceb224a4f08db58fe3"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1432_weekly_source_invoice_money_publication_v1.sql",
+        "sha256": "a20938845a21d9510ca9f574799742a83c875f7f0a8a7126f2a34a24ddd21d11"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+        "sha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+        "sha256": "9f9c5ace5716f123cc547dd5c2deebef4b8c10d677e6abc2285d3f4e47d86190"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+        "sha256": "d88a9a55af9c3bb360f73eedf42106fa8ce8b3d2ac15f7b786956047f7102aa7"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+        "sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/03_receipt_and_window_owners.sqlinc",
+        "sha256": "dd9d5ceb119867a6a07a768b86cc6f06c07d4949d4376207b13cd9ebe91bb2e9"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
+        "sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+        "sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/06_complete_allocation_issue.sqlinc",
+        "sha256": "d23855453b7b6f8f2db9d96aa2b46d8f83e8af6dd18967e7599a9d7cdb57830a"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/07_complete_header_move.sqlinc",
+        "sha256": "7a1f6eddd8cdc60bd52b10309bfab5107700ddab39aad3164df89afed7aa716d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+        "sha256": "304c56dcd2015e4dab934f2e20d3d9616a038c460d8145132a9e5cd18dd26063"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10_complete_source_readers_correction.sqlinc",
+        "sha256": "420139cda0467dfa61d9fb28240f6c8843317610313c8f736fe6278b00520f0c"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10b_complete_remaining_manifest_consumers.sqlinc",
+        "sha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10d_retained_report_and_date_boundaries.sqlinc",
+        "sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+        "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+        "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/03_invoice_issue_validate.sqlinc",
+        "sha256": "3d04a8f41daa61980f733d279f6fa3bb0ea3c37bc6a9a4c66ce240b4d75839ef"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+        "sha256": "dc198c718436d8135c4ba6282896bc3aa7dab5099c3ba63650e9fa5aca2681fb"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+        "sha256": "6b3a87eb80d738755eeb92b21e92f52d65685ae7c1a3abfbb2f670b47396ebbb"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+        "sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/06_expense_evidence.sqlinc",
+        "sha256": "f7991259460ce88edaa2ba166eb570174940f61bf5360fe6e7670dc88b79c861"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+        "sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+        "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/01_cap_original_functions_02_source_cas.sqlinc",
+        "sha256": "0ec5032e9bfe7d7b88ee5d85c5b207f235fbd6cbdb81f854f25becc4b219208b"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/02_cap_original_functions_03_capability_owners.sqlinc",
+        "sha256": "434e6455857920740700009f52f88735071e1bd57e3d37e4440cfa19d359fd23"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/05_cap_original_functions_05_complete_existing_activation.sqlinc",
+        "sha256": "9660e82a270e84718e79352272307db98bf8fdac10a95b71963c5b66cfa26974"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/22_q45_actor_event_closed_dto_cross_session_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+        "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/23_q45_actor_event_closed_dto_cross_session_CAPABILITY_OWNERS.sqlinc",
+        "sha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/32_q45_actor_event_closed_dto_cross_session_TEST_JOURNEY_SCOPE.sqlinc",
+        "sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/34_q45_actor_event_closed_dto_cross_session_04_complete_capability_receipt.sqlinc",
+        "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/37_q45_actor_event_closed_dto_cross_session_07_complete_existing_feature_setup.sqlinc",
+        "sha256": "3120acf64d9e4076050c8985b51296ae68790bc5740f942c02a237aea4d0fe8c"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/49_f12_first_use_full_inventory_TEST_JOURNEY_SCOPE.sqlinc",
+        "sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/50_final_original_source_cas_schema_lineage_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+        "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+        "sha256": "bea5502f430a3933d3b0101a4c3e6a0fc759c4723c754233f2e2d06154076250"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/02_HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+        "sha256": "ea11961b8fd26f352cd45ee28a2e6582f0781e68ccfef961cdbc5e52b8dad202"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/03_HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+        "sha256": "62427e8448747206f82c9e533f615d469164b27a9fe0f5dc7e6208b16d948f28"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+        "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "sha256": "7daf9acc89cc8cfbb387524d180fd55e2482326e51b4fee6eadccb6a6ee434a8"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/09_01_operational_rule_projection.sqlinc",
+        "sha256": "43a1f07212674c233e35dc24c6917377f639e703fe0a0a44fc18443b09113e5a"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+        "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/11_03_cas_operational_projection.sqlinc",
+        "sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/12_04_final_revision_rule_guard.sqlinc",
+        "sha256": "e2349dc619a7b30c74328d62a8f1aace2435a361d30309b9c43e3ff543fef3a3"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/13_05_coverage_floor_owner.sqlinc",
+        "sha256": "6f34e8d9ab9bf08a7bb0fc240fea49a35edc420ff7b7d1f98210a697476f34f3"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/16_10_complete_bulk_test_scope.sqlinc",
+        "sha256": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/17_ACTIVATION_WINDOW_BINDING.sqlinc",
+        "sha256": "883eab37fd437a4b802c2f6331de865b7eb0e1bca8d5ec12d2624d9a950604a4"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/20_ACTIVATION_PROBE_SCOPE.sqlinc",
+        "sha256": "03e72b4f50fe5716f5baf206e4979a799da161f365a5b8338792308c5b408bf6"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/22_POST_VERIFIED_SETUP_ASSERT.sqlinc",
+        "sha256": "ff735bbfdc0d640ff4d2637ca36e3a7acde4f4921967e6d2d307ead85c63a0eb"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/23_POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc",
+        "sha256": "81fbe2c9cd141d10a909072f140a734e8a759a39ce5102691b57ed25fd40982d"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/28_12_complete_report_nullable_rounding_owner.sqlinc",
+        "sha256": "c41ff4b378ab64eb4e566fc552c4f589100e8fab6a6a9f2d4361985b1c3c2312"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/29_11_complete_historical_fixture_native_assignment.sqlinc",
+        "sha256": "c1e8aa26fbea0b47aa4bd800efb5ca293469deb8363c1f51f61645d731b3b5ac"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/30_09_complete_controlled_setup_transport.sqlinc",
+        "sha256": "e4eec42ef792b737b09517e64faaaad93c7cd3e41bf3bf93f300824fd2a1c3bb"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/02_complete_clock_scope.sqlinc",
+        "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+        "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/02_release_feature_strategy.sqlinc",
+        "sha256": "3dcfe4aa8ae3d407a184f24c0ca99f704be888161c34a1459bb5b99ea524433a"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+        "sha256": "920a2fedc2f53680536b588d297e32b83fce8801b11167827c94b7ba7abe263e"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/05_complete_current_feature_setup.sqlinc",
+        "sha256": "9f91941a1a95831ec9669fc7b04cf1db94d01f028cb2098167c66519ade4d252"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc",
+        "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/14_complete_native_snapshot_assembler.sqlinc",
+        "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+        "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+        "sha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+        "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+      },
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+        "sha256": "2234a1645fded87fd79dff419ccb341c987c6bd65e6dd1800f5ab6e5cae91dd7"
+      },
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_charge_acceptance_v1.sql",
+        "sha256": "05217b8f913073e58b7f9f673c62a425306d6d3830121fdc23c039b643acc7b0"
+      },
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+        "sha256": "55786d5a85f69447054677f02df2406c710438987539c8f21efbe0ebbec552f5"
+      },
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+        "sha256": "19018ea7be5e06a510fdd748409bcd84a18d0e31724daa19afb0a4471349a95b"
+      },
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+        "sha256": "2286ac3053804b758cac928a995498bd52a1993db7be09fd2dfcd0654c5593c9"
+      },
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+        "sha256": "b58117b6ca5e7da905cc4bc3b8c562f29d9644f6caa90bb33e468b0bd0e0e0f7"
+      },
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+        "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+      },
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_projection_build_v1.sql",
+        "sha256": "b61ae1f1ed98fb1e8ec53bd30fe1a999cf3222d91b4c499e26f45d70d4dc1281"
+      },
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+        "sha256": "9d29792128720bb20ae4155d0ce78f43ee100ddf885ac2fab9283fa533f78d19"
+      },
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+        "sha256": "613c9d3502fbf9332b2c1d9a0c2262cdb8c9a47285d58868ab988fc699aa997a"
+      },
+      {
+        "file": "supabase/repeatable/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+        "sha256": "2d0f9225dc4607932b2d731b453f07ce2665a5208ddc6ee764ddb8aa02488709"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+        "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/04_complete_native_lock_fence.sqlinc",
+        "sha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/04_native_source_footprint.sqlinc",
+        "sha256": "7ce58452bf0980476076ad7f5ff9fd9e90ab0d49ddd40b99b37f32e7ddc6d59e"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/05_raw_selector_helpers.sqlinc",
+        "sha256": "dcce82193c28b7b68caad8532c798aa851f5c93aeca521c34d3529ff86d710de"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/06_complete_source_witness_policy_projection.sqlinc",
+        "sha256": "1be247f3656ce583549cbe4456d8ba5c7088a31bb983637df92c53060e5ccfd1"
+      },
+      {
+        "file": "supabase/repeatable/16102026_0319_weekly_contact_office_projection_v1.sql",
+        "sha256": "d94522d3ae20fa2c4e2a0ee0d0918dbdd9ccc33e345995ae921cf8e19a07e597"
+      },
+      {
+        "file": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/010_off_rule_scope.sqlinc",
+        "sha256": "da3ebc0afa128d52f2de4727fb1af82ec5dec46bdec56a1731807d65094da04f"
+      },
+      {
+        "file": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/020_historical_assignment.sqlinc",
+        "sha256": "8b443f96b919c98c91fb92600e562a0a154f0b2a989abce46df106e1c060e847"
+      },
+      {
+        "file": "supabase/repeatable/17092026_0600_weekly_source_first_authorisation_v1.sql",
+        "sha256": "09fbe853b875393170ea2f538eddd41a0e4be41ab65cf5cb54cb663eae2ada71"
+      },
+      {
+        "file": "supabase/repeatable/17092026_1200_weekly_source_audit_and_export_v1.sql",
+        "sha256": "8afb340a7222b9d66469758a6c56fb7c7de7a004c3fe54f6183c86532b571dcd"
+      },
+      {
+        "file": "supabase/repeatable/24092026_1440_weekly_source_invoice_evidence_lookup_v1.sql",
+        "sha256": "c637b5ca7c0679bf2e09afb626e53ff9aa861e7f9c85bd903ab8b2e56aac2aa4"
+      },
+      {
+        "file": "supabase/repeatable/30092026_2129_weekly_source_office_resolution_v1.sql",
+        "sha256": "1004ec450d81b550fe581f7b60423dd2a8ccca3594d40013d29d2eb05871b27a"
+      },
+      {
+        "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+        "sha256": "5757ef54f996c82cfb72353702ca9982ac9862222f20ca13420370fcde9ff7a5"
+      },
+      {
+        "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+        "sha256": "7ee49ed797ccb4b469677a9ccddb20b7a821f6a318cb56e64dd31e8f34ddbb13"
+      },
+      {
+        "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+        "sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987"
+      },
+      {
+        "file": "supabase/repeatable/support/13102026_1210_weekly_source_final_value_helpers_v1.sql",
+        "sha256": "cb441a2dbf78ba3246c02c3f33af1cbb46b94c006d76748e5ae0cf65dac518c1"
+      }
+    ],
+    "topLevelExplicitTargetTableDdlInRepeatables": [],
+    "migrationPhasePrecedesRepeatablePhase": true
+  },
+  "groups": [
+    {
+      "relation": "weekly_source_charge_checks",
+      "expectedCount": 11,
+      "needles": [
+        "comparison_profile_version",
+        "comparison_result",
+        "row_sign_kind"
+      ],
+      "statementSha256": "de65c105cb2c826faf50b02c53b2b5a4299219a8e6e605a7d4309bfe82d81d96",
+      "constraints": [
+        {
+          "name": "weekly_source_charge_checks_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (comparison_result = 'UNVERIFIABLE'::text OR source_commission_pence IS NOT NULL AND source_total_cost_pence IS NOT NULL AND source_shift_charge_pence IS NOT NULL AND calculated_segment_charge_pence IS NOT NULL AND source_charge_difference_pence IS NOT NULL)"
+        },
+        {
+          "name": "weekly_source_charge_checks_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (comparison_result <> 'EXACT'::text OR source_charge_difference_pence = 0)"
+        },
+        {
+          "name": "weekly_source_charge_checks_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (comparison_result <> 'SOURCE_ROUNDING_EQUIVALENT'::text OR (source_charge_difference_pence = ANY (ARRAY[1::bigint, '-1'::integer::bigint])) AND (source_shift_charge_pence > 0 AND calculated_segment_charge_pence > 0 OR source_shift_charge_pence < 0 AND calculated_segment_charge_pence < 0))"
+        },
+        {
+          "name": "weekly_source_charge_checks_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((comparison_result <> ALL (ARRAY['MISMATCH'::text, 'ZERO_SOURCE_CHARGE'::text, 'UNVERIFIABLE'::text])) OR (phase_severity = ANY (ARRAY['PROVISIONAL_WARNING'::text, 'FINALISATION_BLOCKER'::text])))"
+        },
+        {
+          "name": "weekly_source_charge_checks_check6",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((comparison_result = ANY (ARRAY['MISMATCH'::text, 'ZERO_SOURCE_CHARGE'::text, 'UNVERIFIABLE'::text])) OR blocker_code IS NULL)"
+        },
+        {
+          "name": "weekly_source_charge_checks_check7",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (comparison_result <> 'ZERO_SOURCE_CHARGE'::text OR source_commission_pence = 0 AND source_total_cost_pence = 0 AND source_shift_charge_pence = 0 AND calculated_segment_charge_pence <> 0 AND blocker_code IS NULL)"
+        },
+        {
+          "name": "weekly_source_charge_checks_check8",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (row_sign_kind <> 'POSITIVE'::text OR comparison_result = 'UNVERIFIABLE'::text OR source_commission_pence >= 0 AND source_total_cost_pence >= 0 AND (source_shift_charge_pence > 0 AND calculated_segment_charge_pence > 0 OR comparison_result = 'ZERO_SOURCE_CHARGE'::text AND source_shift_charge_pence = 0 AND calculated_segment_charge_pence > 0))"
+        },
+        {
+          "name": "weekly_source_charge_checks_check9",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (row_sign_kind <> 'FULL_NEGATIVE'::text OR comparison_result = 'UNVERIFIABLE'::text OR source_commission_pence <= 0 AND source_total_cost_pence <= 0 AND source_shift_charge_pence < 0 AND calculated_segment_charge_pence < 0)"
+        },
+        {
+          "name": "weekly_source_charge_checks_comparison_profile_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (comparison_profile_version = 'NHSP_TWO_COMPONENT_PENCE_V1'::text)"
+        },
+        {
+          "name": "weekly_source_charge_checks_comparison_result_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (comparison_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'MISMATCH'::text, 'ZERO_SOURCE_CHARGE'::text, 'UNVERIFIABLE'::text]))"
+        },
+        {
+          "name": "weekly_source_charge_checks_row_sign_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (row_sign_kind = ANY (ARRAY['POSITIVE'::text, 'FULL_NEGATIVE'::text]))"
+        }
+      ],
+      "independentRetainedChecks": [
+        {
+          "name": "weekly_source_charge_checks_blocker_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (blocker_code IS NULL OR (blocker_code = ANY (ARRAY['NHSP_SOURCE_CHARGE_MISMATCH'::text, 'NHSP_PRICING_METHOD_UNVERIFIABLE'::text, 'NHSP_SOURCE_CHARGE_INVALID'::text])))"
+        },
+        {
+          "name": "weekly_source_charge_checks_calculated_segment_charge_pen_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (calculated_segment_charge_pence >= '-999999999999'::bigint AND calculated_segment_charge_pence <= '999999999999'::bigint)"
+        },
+        {
+          "name": "weekly_source_charge_checks_charge_calculation_fingerprin_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(charge_calculation_fingerprint) = 32)"
+        },
+        {
+          "name": "weekly_source_charge_checks_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT source_shift_charge_pence IS DISTINCT FROM (source_commission_pence + source_total_cost_pence) OR source_commission_pence IS NULL OR source_total_cost_pence IS NULL)"
+        },
+        {
+          "name": "weekly_source_charge_checks_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT source_charge_difference_pence IS DISTINCT FROM (source_shift_charge_pence - calculated_segment_charge_pence) OR source_shift_charge_pence IS NULL OR calculated_segment_charge_pence IS NULL)"
+        },
+        {
+          "name": "weekly_source_charge_checks_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (generation >= 1)"
+        },
+        {
+          "name": "weekly_source_charge_checks_phase_severity_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (phase_severity = ANY (ARRAY['NONE'::text, 'INFORMATION'::text, 'PROVISIONAL_WARNING'::text, 'FINALISATION_BLOCKER'::text]))"
+        },
+        {
+          "name": "weekly_source_charge_checks_source_charge_difference_penc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_charge_difference_pence >= '-999999999999'::bigint AND source_charge_difference_pence <= '999999999999'::bigint)"
+        },
+        {
+          "name": "weekly_source_charge_checks_source_commission_pence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_commission_pence >= '-999999999999'::bigint AND source_commission_pence <= '999999999999'::bigint)"
+        },
+        {
+          "name": "weekly_source_charge_checks_source_shift_charge_pence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_shift_charge_pence >= '-999999999999'::bigint AND source_shift_charge_pence <= '999999999999'::bigint)"
+        },
+        {
+          "name": "weekly_source_charge_checks_source_total_cost_pence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_total_cost_pence >= '-999999999999'::bigint AND source_total_cost_pence <= '999999999999'::bigint)"
+        }
+      ]
+    },
+    {
+      "relation": "weekly_source_billing_movements",
+      "expectedCount": 12,
+      "needles": [
+        "transition_id",
+        "nhsp_upload_row_id",
+        "expense_authority_generation_id",
+        "source_profile_kind",
+        "source_line_kind",
+        "movement_role",
+        "price_check_result"
+      ],
+      "statementSha256": "0a76cc05e5b41b81096a60989ee5b7769a971fe1db767acbcf0222a3c2ef9575",
+      "constraints": [
+        {
+          "name": "weekly_source_billing_movements_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (((transition_id IS NOT NULL)::integer + (nhsp_upload_row_id IS NOT NULL)::integer + (expense_authority_generation_id IS NOT NULL)::integer) = 1)"
+        },
+        {
+          "name": "weekly_source_billing_movements_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((source_profile_kind = 'NHSP_TRUST_BACKING_REPORT'::text) = (nhsp_upload_row_id IS NOT NULL))"
+        },
+        {
+          "name": "weekly_source_billing_movements_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((expense_authority_generation_id IS NOT NULL) = (source_line_kind = 'SOURCE_FIXED_EXPENSE'::text))"
+        },
+        {
+          "name": "weekly_source_billing_movements_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((expense_authority_generation_id IS NOT NULL) = (movement_role = ANY (ARRAY['EXPENSE_POSITIVE'::text, 'EXPENSE_REVERSAL'::text, 'EXPENSE_REPLACEMENT'::text])))"
+        },
+        {
+          "name": "weekly_source_billing_movements_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_profile_kind <> 'NHSP_TRUST_BACKING_REPORT'::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND (price_check_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text])))"
+        },
+        {
+          "name": "weekly_source_billing_movements_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((price_check_result = ANY (ARRAY['ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text])) = (charge_acceptance_id IS NOT NULL))"
+        },
+        {
+          "name": "weekly_source_billing_movements_check6",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_line_kind <> 'SOURCE_FIXED_EXPENSE'::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND price_check_result = 'NOT_APPLICABLE'::text)"
+        },
+        {
+          "name": "weekly_source_billing_movements_check7",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_profile_kind = 'NHSP_TRUST_BACKING_REPORT'::text OR (price_check_result = ANY (ARRAY['NOT_APPLICABLE'::text, 'EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text])) AND charge_acceptance_id IS NULL)"
+        },
+        {
+          "name": "weekly_source_billing_movements_movement_role_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (movement_role = ANY (ARRAY['POSITIVE'::text, 'REVERSAL'::text, 'REPLACEMENT'::text, 'NET_DIFFERENCE_PRESENTATION'::text, 'EXPENSE_POSITIVE'::text, 'EXPENSE_REVERSAL'::text, 'EXPENSE_REPLACEMENT'::text]))"
+        },
+        {
+          "name": "weekly_source_billing_movements_price_check_result_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (price_check_result = ANY (ARRAY['NOT_APPLICABLE'::text, 'EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text]))"
+        },
+        {
+          "name": "weekly_source_billing_movements_source_line_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_line_kind = ANY (ARRAY['SOURCE_ORDINARY'::text, 'SOURCE_REPLACEMENT'::text, 'GENERATED_HISTORICAL_REVERSAL'::text, 'NON_NHSP_DIFFERENCE'::text, 'NHSP_PHYSICAL_POSITIVE'::text, 'NHSP_PHYSICAL_FULL_NEGATIVE'::text, 'SOURCE_FIXED_EXPENSE'::text]))"
+        },
+        {
+          "name": "weekly_source_billing_movements_source_profile_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_profile_kind = ANY (ARRAY['GENERIC_COMPLETE_SNAPSHOT'::text, 'NHSP_TRUST_BACKING_REPORT'::text, 'HEALTHROSTER_ACTUAL_ROWS'::text]))"
+        }
+      ],
+      "independentRetainedChecks": [
+        {
+          "name": "weekly_source_billing_moveme_calculated_comparison_charge_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (calculated_comparison_charge_pence >= '-999999999999'::bigint AND calculated_comparison_charge_pence <= '999999999999'::bigint)"
+        },
+        {
+          "name": "weekly_source_billing_moveme_canonical_charge_vector_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(canonical_charge_vector_json) = 'object'::text)"
+        },
+        {
+          "name": "weekly_source_billing_moveme_invoice_presentation_charge__check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (invoice_presentation_charge_pence >= '-999999999999'::bigint AND invoice_presentation_charge_pence <= '999999999999'::bigint)"
+        },
+        {
+          "name": "weekly_source_billing_moveme_mapping_rate_policy_fingerpr_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(mapping_rate_policy_fingerprint) = 32)"
+        },
+        {
+          "name": "weekly_source_billing_moveme_source_validation_charge_pen_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_validation_charge_pence >= '-999999999999'::bigint AND source_validation_charge_pence <= '999999999999'::bigint)"
+        },
+        {
+          "name": "weekly_source_billing_movements_canonical_pay_vector_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(canonical_pay_vector_json) = 'object'::text)"
+        },
+        {
+          "name": "weekly_source_billing_movements_movement_economic_hash_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(movement_economic_hash) = 32)"
+        },
+        {
+          "name": "weekly_source_billing_movements_placement_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (placement_state = ANY (ARRAY['UNPLACED'::text, 'PLACED'::text, 'ISSUED'::text, 'VOIDED_BY_CORRECT_FINAL'::text]))"
+        },
+        {
+          "name": "weekly_source_billing_movements_price_check_fingerprint_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (price_check_fingerprint IS NULL OR octet_length(price_check_fingerprint) = 32)"
+        },
+        {
+          "name": "weekly_source_billing_movements_source_facts_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(source_facts_json) = 'object'::text)"
+        },
+        {
+          "name": "weekly_source_billing_movements_vat_rate_pct_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (vat_rate_pct >= 0::numeric AND vat_rate_pct <= 100::numeric)"
+        }
+      ]
+    }
+  ],
+  "priceEnum": {
+    "expectedCount": 1,
+    "constraint": {
+      "name": "weekly_source_invoice_presentation_lin_price_check_result_check",
+      "type": "c",
+      "deferred": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (price_check_result = ANY (ARRAY['NOT_APPLICABLE'::text, 'EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text]))"
+    },
+    "definitionEvidence": "Pinned current-contract exporter uses pg_get_constraintdef(oid,true), unlike immutable selector default-false form. Compare true-to-true under pg_catalog, public; preserve original selector for candidate census.",
+    "statementSha256": "a5d195541446398e49ef0bf39c0c14fab07384bbb817f30fdd2e39e0b9a11462"
+  },
+  "capability": {
+    "expectedMatchingCount": 2,
+    "origin": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+    "migration": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+    "statementSha256": "ab5bdf121ab1e57c4ae894025cd8e7b176fb5f43d1ed6b7c6110103b44e0331a",
+    "exactSourceExpressions": [
+      "feature_purpose in ('RULE_SET','SIGNED_CHECK_ONLY')",
+      "feature_purpose is null or ((rule_set_version_id is null)=(feature_purpose='SIGNED_CHECK_ONLY'))"
+    ],
+    "nativeExpressionAndNameCensus": "NOT_AVAILABLE_IN_BASELINE_CURRENT_CONTRACT; DO_NOT_GUESS_POSTGRES_DEPARSE_OR_AUTONAME",
+    "recommendation": "Before exact 14102026_0400 body, obtain a data-free native PG17 receipt after the full pending prefix; lock the exact assignment relation and compare the complete two matching CHECK names/expressions/metadata to that reviewed receipt. No inferred deparse/autoname, temporary-table constructor assumption, substring waiver or approval is supplied here."
+  },
+  "proposal": {
+    "file": "16102026_0943_money_prebody_assertion_proposal.sqlinc",
+    "sha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+    "statementCount": 2,
+    "placement": "BEGIN / writer assertion / LOCK+prebody assertion / immutable body / writer assertion / immutable migration ledger / COMMIT; rehearsal identical prebody before same body in rollback transaction",
+    "integration": "Root must add exact immutable file, closure, producer and statement bindings to compiler/harness; proposal is not a generic runtime exemption or new permanent migration.",
+    "native": "NOT_RUN",
+    "lockPurpose": "Closes check/drop race; same transaction retains ACCESS EXCLUSIVE until immutable body and ledger commit. No early commit, unrelated table lock, external call, or persisted helper."
+  },
+  "model": {
+    "status": "PASS_SOURCE_MODEL_ONLY",
+    "checks": [
+      {
+        "relation": "weekly_source_charge_checks",
+        "case": "exact",
+        "result": "ADMIT_EXACT_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_charge_checks",
+        "case": "missing",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_charge_checks",
+        "case": "extra",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_charge_checks",
+        "case": "expression-change",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_charge_checks",
+        "case": "renamed",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_charge_checks",
+        "case": "not-validated",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_charge_checks",
+        "case": "swapped-name-expressions",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_billing_movements",
+        "case": "exact",
+        "result": "ADMIT_EXACT_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_billing_movements",
+        "case": "missing",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_billing_movements",
+        "case": "extra",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_billing_movements",
+        "case": "expression-change",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_billing_movements",
+        "case": "renamed",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_billing_movements",
+        "case": "not-validated",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      },
+      {
+        "relation": "weekly_source_billing_movements",
+        "case": "swapped-name-expressions",
+        "result": "REFUSE_CHANGED_PREDECESSOR"
+      }
+    ]
+  },
+  "nativeStatus": "NOT_RUN",
+  "databaseCalls": 0,
+  "deployments": 0,
+  "secretsPrinted": false,
+  "policyX": "No finance, payment, provider, settlement, banking or post-draft economic behavior changed. Constraint/predecessor review only.",
+  "offlineGrammar": {
+    "status": "PASS_OFFLINE_GRAMMAR_ONLY",
+    "pglastVersion": "v7.20",
+    "postgresqlParserVersion": [
+      17,
+      7
+    ],
+    "sourceSha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+    "topLevelStatements": 2,
+    "completeDoBodies": 1,
+    "databaseCalls": 0,
+    "native": "NOT_RUN"
+  }
+}

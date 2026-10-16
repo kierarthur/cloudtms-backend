@@ -1,0 +1,83 @@
+{
+  "version": "HEALTHROSTER_CAPABILITY0400_SOURCE_PROPOSAL_TEST_RESULTS_V1",
+  "status": "PASS_SOURCE_MODEL_AND_GRAMMAR_ONLY",
+  "passed": 18,
+  "tests": [
+    {
+      "name": "actual captured two-set passes exact source model",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "row order only does not alter JSONB ordered-set contract",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "renamed original CHECK refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "same CHECK NOT VALID refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "extra matching CHECK refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "missing original matching CHECK refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "same expected name with changed expression refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "default-false selector definition drift refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "pretty-true evidence definition drift refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "native key order drift refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "inherited CHECK refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "parent-bound CHECK refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "deferrable CHECK metadata refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "already extended expression refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "extra unmatched CHECK count refused conservatively",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "nonordinary, foreign owner or inherited relation refused",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "complete proposed program has LOCK then one DO and no transaction/effect statements",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    },
+    {
+      "name": "immutable source and historical false approval flags preserved",
+      "status": "PASS_SOURCE_MODEL_ONLY"
+    }
+  ],
+  "proposalSha256": "ccdf7881bb4d2d728a00d66959cdb8846ead1027b9378c9f322d142c62946b9e",
+  "databaseCalls": 0,
+  "nativeCompanion": "NOT_RUN",
+  "limits": "JS source-model refusals do not replace actual native companion/consumer/negative/two-session concurrency/restoration tests or integrated compiler/harness packet proof."
+}

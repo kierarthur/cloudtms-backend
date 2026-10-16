@@ -1,0 +1,26 @@
+{
+  "version": "HEALTHROSTER_FOUR_PREBODY_DYNAMIC_PROPOSAL_V1",
+  "baseSavedCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "classificationSha256": "69d2b3aee092e78e36386642a8fbf65df406d5fc9f5d8e6a6d42bccf993895b0",
+  "helperSha256": "55f3eb1bbb747f5377d7128b8506e6ed10ff8d3c4067943700065e19a33aebdc",
+  "sourceGate": {
+    "file": "scripts/bpay-next-source-gates.mjs",
+    "beforeSha256": "4c5a4ad0f2174217a247aa031b930a8339cd92053226f9a660071821249fbc07",
+    "afterSha256": "2a785685248edbd5eaad51b39c51edbb667b9843550f0a57dff9cf2ed849881d",
+    "exactEdits": 3,
+    "fullReverseEquality": true
+  },
+  "points": 4,
+  "compilerRelativeGraphFiles": 56,
+  "boundInputs": 95,
+  "forwardFiles": 9,
+  "preservationFiles": 115,
+  "testsSha256": "b87f6c0acfb2be0746e85ebc2199c1b14c6b56cbc6d42c9336fb2b2399c82ac2",
+  "passedSourceTests": 16,
+  "rootEdits": 0,
+  "databaseCalls": 0,
+  "bankEdits": 0,
+  "native0400": "NOT_RUN",
+  "contactP1Repair": "SEPARATE_PENDING_INTEGRATOR_REVIEW_AND_SUCCESSOR_IF_BOUND_GRAPH_CHANGES",
+  "partB": "NOT_APPROVED"
+}

@@ -1,0 +1,1059 @@
+{
+  "version": "HEALTHROSTER_FOUR_PREBODY_DYNAMIC_SOURCE_CLASSIFICATION_V1",
+  "status": "SOURCE_CONSTRUCTION_ONLY_NATIVE0400_NOT_RUN",
+  "sourceConstructionOnly": true,
+  "rootSavedHead": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "baseCompilerProposalCommit": "7fbafccff632603e9d5e59ac960296353195e5b5",
+  "points": 4,
+  "context": {
+    "releaseId": "HEALTHROSTER_F23_PREBODY_SOURCE_ONLY_20261016"
+  },
+  "writerGuardSha256": "bc30b9541d2d6668f9e36e783e56a38aa769e9729dee9f683bca9ab81981fc4b",
+  "compilerRelativeGraphFiles": 56,
+  "priorReview": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/PRIOR_REVIEW.json",
+    "sha256": "cae4974a5686868d23acc92a28b455d4cffbce5db15530b08a0640fe6cec19b3"
+  },
+  "dependencies": [
+    {
+      "file": "broker/src/weekly-source/acacium-report-normalise.js",
+      "sha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/acacium-report-normalise.js"
+    },
+    {
+      "file": "broker/src/weekly-source/contract-qualification.js",
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/contract-qualification.js"
+    },
+    {
+      "file": "broker/src/weekly-source/coverage-warnings.mjs",
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/coverage-warnings.mjs"
+    },
+    {
+      "file": "broker/src/weekly-source/csv-evidence.js",
+      "sha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/csv-evidence.js"
+    },
+    {
+      "file": "broker/src/weekly-source/economic-snapshot.js",
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/economic-snapshot.js"
+    },
+    {
+      "file": "broker/src/weekly-source/errors.js",
+      "sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/errors.js"
+    },
+    {
+      "file": "broker/src/weekly-source/healthroster-normalise.js",
+      "sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/healthroster-normalise.js"
+    },
+    {
+      "file": "broker/src/weekly-source/html-evidence.js",
+      "sha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/html-evidence.js"
+    },
+    {
+      "file": "broker/src/weekly-source/index.js",
+      "sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/index.js"
+    },
+    {
+      "file": "broker/src/weekly-source/manager-email.js",
+      "sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/manager-email.js"
+    },
+    {
+      "file": "broker/src/weekly-source/money.js",
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/money.js"
+    },
+    {
+      "file": "broker/src/weekly-source/nhsp-normalise.js",
+      "sha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/nhsp-normalise.js"
+    },
+    {
+      "file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/off-rule-native-proxy.mjs"
+    },
+    {
+      "file": "broker/src/weekly-source/profiles.js",
+      "sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/profiles.js"
+    },
+    {
+      "file": "broker/src/weekly-source/protected-target-schedule.js",
+      "sha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/protected-target-schedule.js"
+    },
+    {
+      "file": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/report-upload-provenance.mjs"
+    },
+    {
+      "file": "broker/src/weekly-source/roster-summary-normalise.js",
+      "sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/roster-summary-normalise.js"
+    },
+    {
+      "file": "broker/src/weekly-source/rule-set-validation.js",
+      "sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/rule-set-validation.js"
+    },
+    {
+      "file": "broker/src/weekly-source/shared.js",
+      "sha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/shared.js"
+    },
+    {
+      "file": "broker/src/weekly-source/source-finalised-time.js",
+      "sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/source-finalised-time.js"
+    },
+    {
+      "file": "broker/src/weekly-source/source-invoice-money.js",
+      "sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/source-invoice-money.js"
+    },
+    {
+      "file": "broker/src/weekly-source/source-price-comparator.js",
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/source-price-comparator.js"
+    },
+    {
+      "file": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/upload-staging-adapter.mjs"
+    },
+    {
+      "file": "broker/src/weekly-source/weekly-rate-owner.js",
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/weekly-rate-owner.js"
+    },
+    {
+      "file": "broker/src/weekly-source/xlsx-evidence.js",
+      "sha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/broker/src/weekly-source/xlsx-evidence.js"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+      "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+      "preservedRawSha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/build-proposal.mjs",
+      "sha256": "d5ae4c0a6485c0075d15e003fb5475b5f31d08376cae0210bc2fba0738d94019",
+      "preservedRawSha256": "d5ae4c0a6485c0075d15e003fb5475b5f31d08376cae0210bc2fba0738d94019",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/build-proposal.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/check_expressions.py",
+      "sha256": "3caed0f8ac684841db69d308d827ab3afe6b0665c075db1993fc0a685fe51bb8",
+      "preservedRawSha256": "3caed0f8ac684841db69d308d827ab3afe6b0665c075db1993fc0a685fe51bb8",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/check_expressions.py"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/EXPRESSION_REVIEW.json",
+      "sha256": "730f8126b447e64bf0a7d39c59fc9ffbb04ca63accc025ac7f8897bd6322ba48",
+      "preservedRawSha256": "640ad6a503cf889e7b337eaac2269d61c2c0de5777d3de78ff32e89ca06245c4",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/EXPRESSION_REVIEW.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/CONSTRUCTOR_1133.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "preservedRawSha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/CONSTRUCTOR_1133.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/IMMUTABLE_CONSUMER_0400.sql",
+      "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+      "preservedRawSha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/IMMUTABLE_CONSUMER_0400.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/INPUT_RECEIPT_R1.json",
+      "sha256": "e0c99e59c94c70f49e3db388cd493fcb1684738558741dd189bc839c1116ee2a",
+      "preservedRawSha256": "e0c99e59c94c70f49e3db388cd493fcb1684738558741dd189bc839c1116ee2a",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/INPUT_RECEIPT_R1.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/NATIVE_PREDECESSOR_CENSUS.json",
+      "sha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6",
+      "preservedRawSha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/NATIVE_PREDECESSOR_CENSUS.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/NATIVE_R2.json",
+      "sha256": "0a8997f662d045996832a384866d1fa26c08f5f9db188f6f855d1fe4eb255086",
+      "preservedRawSha256": "0a8997f662d045996832a384866d1fa26c08f5f9db188f6f855d1fe4eb255086",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/NATIVE_R2.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PLAN.json",
+      "sha256": "e75b276f6e766f4d98d10729982352e4b9801bb2ec16bb8cc28f231e492399eb",
+      "preservedRawSha256": "e75b276f6e766f4d98d10729982352e4b9801bb2ec16bb8cc28f231e492399eb",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PLAN.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_01_13102026_1112_healthroster_invoice_support_members_v1.sql",
+      "sha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b",
+      "preservedRawSha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_01_13102026_1112_healthroster_invoice_support_members_v1.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_02_13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+      "preservedRawSha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_02_13102026_1127_healthroster_timesheet_correction_requests_v1.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_03_13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "preservedRawSha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_03_13102026_1133_weekly_source_rule_sets_schema.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_04_13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+      "sha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6",
+      "preservedRawSha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_04_13102026_1210_weekly_source_final_value_snapshot_authority.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_05_13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+      "preservedRawSha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_05_13102026_1344_weekly_source_self_bill_report_schema.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_06_13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "preservedRawSha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_06_13102026_1430_weekly_source_invoice_money_origins.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_07_13102026_1456_weekly_source_protection_query_support_v1.sql",
+      "sha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17",
+      "preservedRawSha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_07_13102026_1456_weekly_source_protection_query_support_v1.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_08_13102026_1519_healthroster_correction_reason_bound_v1.sql",
+      "sha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2",
+      "preservedRawSha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_08_13102026_1519_healthroster_correction_reason_bound_v1.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_09_13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+      "preservedRawSha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_09_13102026_1680_weekly_source_invoice_window_receipt_schema.sql"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/RESTORATION.json",
+      "sha256": "582ba3016d5fcc9673036032e78ad786c5a3b88abeb472f40f3b1f73c896e1fc",
+      "preservedRawSha256": "582ba3016d5fcc9673036032e78ad786c5a3b88abeb472f40f3b1f73c896e1fc",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/RESTORATION.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/SUMMARY.json",
+      "sha256": "2617a9e826cf22eb8d52701771f889653bca47198536ca147638341c10b52627",
+      "preservedRawSha256": "2617a9e826cf22eb8d52701771f889653bca47198536ca147638341c10b52627",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/SUMMARY.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/MOUNT_PLAN.json",
+      "sha256": "006f98080472d362ec48317917c1927ae07c0b22d700084fdd0c8aa6b0aecde3",
+      "preservedRawSha256": "006f98080472d362ec48317917c1927ae07c0b22d700084fdd0c8aa6b0aecde3",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/MOUNT_PLAN.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/PROPOSAL.json",
+      "sha256": "ccdf7881bb4d2d728a00d66959cdb8846ead1027b9378c9f322d142c62946b9e",
+      "preservedRawSha256": "ccdf7881bb4d2d728a00d66959cdb8846ead1027b9378c9f322d142c62946b9e",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/PROPOSAL.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/README.md",
+      "sha256": "7fd291b8dc98fb86feb06933931d90e7fbea2e1f3ac60e67716df27b990e9f91",
+      "preservedRawSha256": "7fd291b8dc98fb86feb06933931d90e7fbea2e1f3ac60e67716df27b990e9f91",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/README.md"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/seal-review.mjs",
+      "sha256": "1dfa95956c5bbdc01e28876f8d702f08ee48a679ddf8c0bfa88efb8630ef03e5",
+      "preservedRawSha256": "1dfa95956c5bbdc01e28876f8d702f08ee48a679ddf8c0bfa88efb8630ef03e5",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/seal-review.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/TEST_RESULTS.json",
+      "sha256": "337a8fe8e6d6b4681db20d775b8693ff00d9c85fa9fe695b1e58052560ab8588",
+      "preservedRawSha256": "337a8fe8e6d6b4681db20d775b8693ff00d9c85fa9fe695b1e58052560ab8588",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/TEST_RESULTS.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/test-proposal.mjs",
+      "sha256": "e97b9bcb0e8f3cae3b5a04c2f94f267af82b2766d7dd9e448996f443eaff0055",
+      "preservedRawSha256": "e97b9bcb0e8f3cae3b5a04c2f94f267af82b2766d7dd9e448996f443eaff0055",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/test-proposal.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/REVIEW.json",
+      "sha256": "10573f03cf4d6667627efe08d9e614a8a71d18d77dab9b70f259bf006a688799",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/REVIEW.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_CALLEE_AUDIT.json",
+      "sha256": "8f8fdc98d361b5054e3b6cceb2b9d12097616b0df7ae3293280f75a774dfef28",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_CALLEE_AUDIT.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json",
+      "sha256": "57994305ab9fab1f9fabebb675e35be3028b4d2a3befc1fda0d5567ad4bb7f83",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json"
+    },
+    {
+      "file": "package-lock.json",
+      "sha256": "70a6d57701a89269103a3b17665444572b90cd82668fe37bd7587bfb1a63ff73",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/package-lock.json"
+    },
+    {
+      "file": "package.json",
+      "sha256": "10368cfa19ee3c886e7063fa55b659e003da61b06afa08f8d3194eabf5d8c7f9",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/package.json"
+    },
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/bpay-next-final-definers.mjs"
+    },
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/cloudtms-db-release-lib.mjs"
+    },
+    {
+      "file": "scripts/cloudtms-managed-execution-policy.mjs",
+      "sha256": "069e6d1d2361c6c8026b193116db565d40503b9a2e338ddb75c4b1dadb15d415",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/cloudtms-managed-execution-policy.mjs"
+    },
+    {
+      "file": "scripts/cloudtms-managed-psql.mjs",
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/cloudtms-managed-psql.mjs"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/cloudtms-managed-release-sql.mjs"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/cloudtms-managed-release.mjs"
+    },
+    {
+      "file": "scripts/healthroster-capability-predecessor-boundary.mjs",
+      "sha256": "e24e16cd1bd0cd8afe28b7e697a5fd7ec0c03a4edeb0e458ca81e1eecd47bbc3",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-capability-predecessor-boundary.mjs"
+    },
+    {
+      "file": "scripts/healthroster-contact-claim-boundary.mjs",
+      "sha256": "505abc1c41cf7adc21aa16c4c7f5f42d6678a58818cd694d992d3d0271fbff0d",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-contact-claim-boundary.mjs"
+    },
+    {
+      "file": "scripts/healthroster-f5-post-verified-gate.mjs",
+      "sha256": "dfd1454e057c27e6693a012aef107382f9bc0479322fd0e3ae09b35bb19e99a3",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-f5-post-verified-gate.mjs"
+    },
+    {
+      "file": "scripts/healthroster-f5-synthetic-fixture.mjs",
+      "sha256": "d9223bcfc5448b9d01636463d60c42312bdd2107ade9881f08d70cfcc9380a66",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-f5-synthetic-fixture.mjs"
+    },
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "sha256": "53c301664b449168b34803ca995eedcfd4cf90df1533c6d78086637df6488550",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-full-rehearsal-protocol.mjs"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-install1-full-rehearsal.mjs"
+    },
+    {
+      "file": "scripts/healthroster-install1-verifier-census.mjs",
+      "sha256": "742635a7ed15dfb190d77dda9063fd49315ec3390f573982bc461bfd8f1e862c",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-install1-verifier-census.mjs"
+    },
+    {
+      "file": "scripts/healthroster-install2-native-gate.mjs",
+      "sha256": "ec3c2eca5b648fdf2996dbeb3c116e39ef37fdc54d1e896cfb4489682cbad9be",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-install2-native-gate.mjs"
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-live-test-restoration.mjs"
+    },
+    {
+      "file": "scripts/healthroster-money-predecessor-boundary.mjs",
+      "sha256": "3c49e8aa9e128dfb331d282551c17cc2e12528075ff33866347e51eb2328dbc6",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-money-predecessor-boundary.mjs"
+    },
+    {
+      "file": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "sha256": "53b92b41b522851a68126447f88d11862974e70895c829e9e79b1877ea86c19b",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-reviewed-managed-envelope.mjs"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/healthroster-turn-control.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-activation-window-binding.mjs",
+      "sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-activation-window-binding.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-native-fixture-participants.mjs",
+      "sha256": "8a9dec4e027a1967ca07b6aa69ded0156f25a9aca126bff3c7f4bac8ee94d696",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-native-fixture-participants.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "sha256": "5b0392bcd30c0b9b55692c3793a444bb7591aa89a77d22cea3fbb5c0128eb5e8",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-off-rule-setup-evidence.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "sha256": "7c0342fe85df257a28b19f19158f98123bb03d4bb574f913d341fdaac80fd853",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-post-verified-evidence-controller.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-protected-activation-probe-evidence.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-protected-execution-tree.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-protected-operational-evidence.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-protected-partial-native-evidence.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "sha256": "42717a80f6d60598b99790106e1d9c4e182c1137f7039b97782017da189865cc",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-protected-prerequisite-evidence.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-protected-probe-native-evidence.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-protected-release-qualification.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "sha256": "12a4988d8d7626edc8748092b4780cdc881482be288e496f3f464533e959e610",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-protected-test-setup-evidence.mjs"
+    },
+    {
+      "file": "scripts/weekly-source-reader-release.mjs",
+      "sha256": "b35b0d8698fbddecfc2b98f9226d5ecc88a076643366533822c3e3178b72e313",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/scripts/weekly-source-reader-release.mjs"
+    },
+    {
+      "file": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+      "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql"
+    },
+    {
+      "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql"
+    },
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql"
+    },
+    {
+      "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql"
+    },
+    {
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql"
+    },
+    {
+      "file": "supabase/release/16102026_0943_healthroster_money_predecessor_assertion.sqlinc",
+      "sha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/supabase/release/16102026_0943_healthroster_money_predecessor_assertion.sqlinc"
+    },
+    {
+      "file": "supabase/release/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+      "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+      "preservation": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/root/supabase/release/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc"
+    }
+  ],
+  "files": [
+    {
+      "path": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "kind": "migration",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "closureSha256": "ab41e992a869943bff423239b9fe53f0e08b43a6c693e517cf489790a87d6154",
+      "version": "HEALTHROSTER_MONEY_CHECK_PREBODY_COMPANION_V1",
+      "receiptField": "moneyPredecessorCompanion",
+      "program": {
+        "file": "supabase/release/16102026_0943_healthroster_money_predecessor_assertion.sqlinc",
+        "sha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+        "statementSha256": [
+          "d2076c625cc3fdf42cddee457a6984e25229e6dec706ab74795d8b463269a5b0",
+          "16788e23c365e22250810acb22646697e0fb8d5ea2bf86cdf477557d0b6465f5"
+        ]
+      },
+      "points": [
+        {
+          "signature": "outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+          "key": "[\"outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  for c in select conname from pg_catalog.pg_constraint where conrelid='public.weekly_source_charge_checks'::regclass and contype='c'\\n    and (pg_catalog.pg_get_constraintdef(oid) like '%comparison_profile_version%'\\n      or pg_catalog.pg_get_constraintdef(oid) like '%comparison_result%'\\n      or pg_catalog.pg_get_constraintdef(oid) like '%row_sign_kind%')\\n  loop execute format('alter table public.weekly_source_charge_checks drop constraint %I',c.conname);\"]",
+          "keySha256": "d2a1473ea6bcb752b5be5c2f9d92d00f3f5f16398cf955983dc1a50a230f8b30",
+          "statement": "begin\n  for c in select conname from pg_catalog.pg_constraint where conrelid='public.weekly_source_charge_checks'::regclass and contype='c'\n    and (pg_catalog.pg_get_constraintdef(oid) like '%comparison_profile_version%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%comparison_result%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%row_sign_kind%')\n  loop execute format('alter table public.weekly_source_charge_checks drop constraint %I',c.conname);",
+          "statementSha256": "de65c105cb2c826faf50b02c53b2b5a4299219a8e6e605a7d4309bfe82d81d96",
+          "bodySha256": "e39700fba8f01d791f4bb99a8204c2d875d43a447d29fa2c67ec8c56dc565bb2",
+          "bodyFile": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/producers/03-e39700fba8f0.sqlinc",
+          "count": 1
+        },
+        {
+          "signature": "outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+          "key": "[\"outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  for c in select conname from pg_catalog.pg_constraint where conrelid='public.weekly_source_billing_movements'::regclass and contype='c'\\n    and (pg_catalog.pg_get_constraintdef(oid) like '%transition_id%'\\n      or pg_catalog.pg_get_constraintdef(oid) like '%nhsp_upload_row_id%'\\n      or pg_catalog.pg_get_constraintdef(oid) like '%expense_authority_generation_id%'\\n      or pg_catalog.pg_get_constraintdef(oid) like '%source_profile_kind%'\\n      or pg_catalog.pg_get_constraintdef(oid) like '%source_line_kind%'\\n      or pg_catalog.pg_get_constraintdef(oid) like '%movement_role%'\\n      or pg_catalog.pg_get_constraintdef(oid) like '%price_check_result%')\\n  loop execute format('alter table public.weekly_source_billing_movements drop constraint %I',c.conname);\"]",
+          "keySha256": "029dbd512f56bf52a746b01462e3d81ee658d7e618cd0a461e114c6b41534d08",
+          "statement": "begin\n  for c in select conname from pg_catalog.pg_constraint where conrelid='public.weekly_source_billing_movements'::regclass and contype='c'\n    and (pg_catalog.pg_get_constraintdef(oid) like '%transition_id%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%nhsp_upload_row_id%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%expense_authority_generation_id%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%source_profile_kind%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%source_line_kind%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%movement_role%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%price_check_result%')\n  loop execute format('alter table public.weekly_source_billing_movements drop constraint %I',c.conname);",
+          "statementSha256": "0a76cc05e5b41b81096a60989ee5b7769a971fe1db767acbcf0222a3c2ef9575",
+          "bodySha256": "0d59b85eff3da4213aabd73adde09f55dc3645c227edf78c5ba773f45a12cc58",
+          "bodyFile": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/producers/04-0d59b85eff3d.sqlinc",
+          "count": 1
+        },
+        {
+          "signature": "outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+          "key": "[\"outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute format('alter table public.weekly_source_invoice_presentation_lines drop constraint %I',constraint_name);\"]",
+          "keySha256": "82f916cb3bcb344bab0da88f7bda0eede3fdb6afb7729fc72c1d15e9da06c888",
+          "statement": "execute format('alter table public.weekly_source_invoice_presentation_lines drop constraint %I',constraint_name);",
+          "statementSha256": "a5d195541446398e49ef0bf39c0c14fab07384bbb817f30fdd2e39e0b9a11462",
+          "bodySha256": "a3a31a5654c8038289d92f6b70ee07422632515ffd6fa592225c598044d1d1f1",
+          "bodyFile": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/producers/05-a3a31a5654c8.sqlinc",
+          "count": 1
+        }
+      ],
+      "variants": [
+        {
+          "mapping": "RAW",
+          "sourceSha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+          "bodySha256": "faca7a0392015a812bf7e1aea9089387ee38030f7e2994fe5b4cc46da01695b5",
+          "releasePacketSha256": "c85992c830a6a1b185063fff3b1c98424285c9d9ceb63a0e5204ac7dad0f3d08",
+          "rehearsalSqlSha256": "1c55656f4038a9a75cb16ee6abd5e48fc54a42c7c799faf08f17b489f11c1d54",
+          "rehearsalReceiptSha256": "9c37627b4baf0becd34da0d036a4f50082597cfcb28dfb39e98ebc9477179a17",
+          "rehearsalReceipt": {
+            "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+            "kind": "migration",
+            "sql": "-- REVIEW PROPOSAL ONLY. Not installed, not executed, native qualification NOT_RUN.\n-- Attach only before the exact immutable 13102026_1430 body in one existing atomic unit.\n-- Keep the existing writer/identity admission, ledger and outer transaction.\nlock table public.weekly_source_charge_checks, public.weekly_source_billing_movements,\n  public.weekly_source_invoice_presentation_lines in access exclusive mode;\ndo $health_f23_money_predecessor$\ndeclare previous_path text;\nbegin\n  previous_path:=pg_catalog.current_setting('search_path');\n  perform pg_catalog.set_config('search_path','pg_catalog, public',true);\n  if exists (\n    with expected(name, definition, is_validated, is_deferrable, is_deferred) as (values\n      ('weekly_source_charge_checks_check2', 'CHECK (comparison_result = ''UNVERIFIABLE''::text OR source_commission_pence IS NOT NULL AND source_total_cost_pence IS NOT NULL AND source_shift_charge_pence IS NOT NULL AND calculated_segment_charge_pence IS NOT NULL AND source_charge_difference_pence IS NOT NULL)', true, false, false),\n      ('weekly_source_charge_checks_check3', 'CHECK (comparison_result <> ''EXACT''::text OR source_charge_difference_pence = 0)', true, false, false),\n      ('weekly_source_charge_checks_check4', 'CHECK (comparison_result <> ''SOURCE_ROUNDING_EQUIVALENT''::text OR (source_charge_difference_pence = ANY (ARRAY[1::bigint, ''-1''::integer::bigint])) AND (source_shift_charge_pence > 0 AND calculated_segment_charge_pence > 0 OR source_shift_charge_pence < 0 AND calculated_segment_charge_pence < 0))', true, false, false),\n      ('weekly_source_charge_checks_check5', 'CHECK ((comparison_result <> ALL (ARRAY[''MISMATCH''::text, ''ZERO_SOURCE_CHARGE''::text, ''UNVERIFIABLE''::text])) OR (phase_severity = ANY (ARRAY[''PROVISIONAL_WARNING''::text, ''FINALISATION_BLOCKER''::text])))', true, false, false),\n      ('weekly_source_charge_checks_check6', 'CHECK ((comparison_result = ANY (ARRAY[''MISMATCH''::text, ''ZERO_SOURCE_CHARGE''::text, ''UNVERIFIABLE''::text])) OR blocker_code IS NULL)', true, false, false),\n      ('weekly_source_charge_checks_check7', 'CHECK (comparison_result <> ''ZERO_SOURCE_CHARGE''::text OR source_commission_pence = 0 AND source_total_cost_pence = 0 AND source_shift_charge_pence = 0 AND calculated_segment_charge_pence <> 0 AND blocker_code IS NULL)', true, false, false),\n      ('weekly_source_charge_checks_check8', 'CHECK (row_sign_kind <> ''POSITIVE''::text OR comparison_result = ''UNVERIFIABLE''::text OR source_commission_pence >= 0 AND source_total_cost_pence >= 0 AND (source_shift_charge_pence > 0 AND calculated_segment_charge_pence > 0 OR comparison_result = ''ZERO_SOURCE_CHARGE''::text AND source_shift_charge_pence = 0 AND calculated_segment_charge_pence > 0))', true, false, false),\n      ('weekly_source_charge_checks_check9', 'CHECK (row_sign_kind <> ''FULL_NEGATIVE''::text OR comparison_result = ''UNVERIFIABLE''::text OR source_commission_pence <= 0 AND source_total_cost_pence <= 0 AND source_shift_charge_pence < 0 AND calculated_segment_charge_pence < 0)', true, false, false),\n      ('weekly_source_charge_checks_comparison_profile_version_check', 'CHECK (comparison_profile_version = ''NHSP_TWO_COMPONENT_PENCE_V1''::text)', true, false, false),\n      ('weekly_source_charge_checks_comparison_result_check', 'CHECK (comparison_result = ANY (ARRAY[''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''MISMATCH''::text, ''ZERO_SOURCE_CHARGE''::text, ''UNVERIFIABLE''::text]))', true, false, false),\n      ('weekly_source_charge_checks_row_sign_kind_check', 'CHECK (row_sign_kind = ANY (ARRAY[''POSITIVE''::text, ''FULL_NEGATIVE''::text]))', true, false, false)\n    ), actual as (\n      select c.conname::text name, pg_catalog.pg_get_constraintdef(c.oid,true) definition,\n        c.convalidated is_validated,c.condeferrable is_deferrable,c.condeferred is_deferred\n      from pg_catalog.pg_constraint c\n      where c.conrelid='public.weekly_source_charge_checks'::pg_catalog.regclass and c.contype='c'\n        and (pg_catalog.pg_get_constraintdef(c.oid) like '%comparison_profile_version%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%comparison_result%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%row_sign_kind%')\n    )\n    select 1 from expected e full join actual a using (name)\n    where (e.definition,e.is_validated,e.is_deferrable,e.is_deferred)\n      is distinct from (a.definition,a.is_validated,a.is_deferrable,a.is_deferred)\n  ) then raise exception 'HEALTH_F23_WEEKLY_SOURCE_CHARGE_CHECKS_PREDECESSOR_CHANGED' using errcode='55000'; end if;\n  if exists (\n    with expected(name, definition, is_validated, is_deferrable, is_deferred) as (values\n      ('weekly_source_billing_movements_check', 'CHECK (((transition_id IS NOT NULL)::integer + (nhsp_upload_row_id IS NOT NULL)::integer + (expense_authority_generation_id IS NOT NULL)::integer) = 1)', true, false, false),\n      ('weekly_source_billing_movements_check1', 'CHECK ((source_profile_kind = ''NHSP_TRUST_BACKING_REPORT''::text) = (nhsp_upload_row_id IS NOT NULL))', true, false, false),\n      ('weekly_source_billing_movements_check2', 'CHECK ((expense_authority_generation_id IS NOT NULL) = (source_line_kind = ''SOURCE_FIXED_EXPENSE''::text))', true, false, false),\n      ('weekly_source_billing_movements_check3', 'CHECK ((expense_authority_generation_id IS NOT NULL) = (movement_role = ANY (ARRAY[''EXPENSE_POSITIVE''::text, ''EXPENSE_REVERSAL''::text, ''EXPENSE_REPLACEMENT''::text])))', true, false, false),\n      ('weekly_source_billing_movements_check4', 'CHECK (source_profile_kind <> ''NHSP_TRUST_BACKING_REPORT''::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND (price_check_result = ANY (ARRAY[''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text])))', true, false, false),\n      ('weekly_source_billing_movements_check5', 'CHECK ((price_check_result = ANY (ARRAY[''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text])) = (charge_acceptance_id IS NOT NULL))', true, false, false),\n      ('weekly_source_billing_movements_check6', 'CHECK (source_line_kind <> ''SOURCE_FIXED_EXPENSE''::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND price_check_result = ''NOT_APPLICABLE''::text)', true, false, false),\n      ('weekly_source_billing_movements_check7', 'CHECK (source_profile_kind = ''NHSP_TRUST_BACKING_REPORT''::text OR (price_check_result = ANY (ARRAY[''NOT_APPLICABLE''::text, ''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text])) AND charge_acceptance_id IS NULL)', true, false, false),\n      ('weekly_source_billing_movements_movement_role_check', 'CHECK (movement_role = ANY (ARRAY[''POSITIVE''::text, ''REVERSAL''::text, ''REPLACEMENT''::text, ''NET_DIFFERENCE_PRESENTATION''::text, ''EXPENSE_POSITIVE''::text, ''EXPENSE_REVERSAL''::text, ''EXPENSE_REPLACEMENT''::text]))', true, false, false),\n      ('weekly_source_billing_movements_price_check_result_check', 'CHECK (price_check_result = ANY (ARRAY[''NOT_APPLICABLE''::text, ''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text]))', true, false, false),\n      ('weekly_source_billing_movements_source_line_kind_check', 'CHECK (source_line_kind = ANY (ARRAY[''SOURCE_ORDINARY''::text, ''SOURCE_REPLACEMENT''::text, ''GENERATED_HISTORICAL_REVERSAL''::text, ''NON_NHSP_DIFFERENCE''::text, ''NHSP_PHYSICAL_POSITIVE''::text, ''NHSP_PHYSICAL_FULL_NEGATIVE''::text, ''SOURCE_FIXED_EXPENSE''::text]))', true, false, false),\n      ('weekly_source_billing_movements_source_profile_kind_check', 'CHECK (source_profile_kind = ANY (ARRAY[''GENERIC_COMPLETE_SNAPSHOT''::text, ''NHSP_TRUST_BACKING_REPORT''::text, ''HEALTHROSTER_ACTUAL_ROWS''::text]))', true, false, false)\n    ), actual as (\n      select c.conname::text name, pg_catalog.pg_get_constraintdef(c.oid,true) definition,\n        c.convalidated is_validated,c.condeferrable is_deferrable,c.condeferred is_deferred\n      from pg_catalog.pg_constraint c\n      where c.conrelid='public.weekly_source_billing_movements'::pg_catalog.regclass and c.contype='c'\n        and (pg_catalog.pg_get_constraintdef(c.oid) like '%transition_id%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%nhsp_upload_row_id%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%expense_authority_generation_id%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%source_profile_kind%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%source_line_kind%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%movement_role%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%price_check_result%')\n    )\n    select 1 from expected e full join actual a using (name)\n    where (e.definition,e.is_validated,e.is_deferrable,e.is_deferred)\n      is distinct from (a.definition,a.is_validated,a.is_deferrable,a.is_deferred)\n  ) then raise exception 'HEALTH_F23_WEEKLY_SOURCE_BILLING_MOVEMENTS_PREDECESSOR_CHANGED' using errcode='55000'; end if;\n  if (select count(*) from pg_catalog.pg_constraint c\n    where c.conrelid='public.weekly_source_invoice_presentation_lines'::pg_catalog.regclass\n      and c.contype='c'\n      and c.conkey=array[(select a.attnum from pg_catalog.pg_attribute a\n        where a.attrelid=c.conrelid and a.attname='price_check_result' and not a.attisdropped)]::smallint[]\n      and pg_catalog.pg_get_constraintdef(c.oid) like '%NOT_APPLICABLE%')<>1\n    or not exists (select 1 from pg_catalog.pg_constraint c\n      where c.conrelid='public.weekly_source_invoice_presentation_lines'::pg_catalog.regclass\n        and c.contype='c' and c.conname='weekly_source_invoice_presentation_lin_price_check_result_check'\n        and c.conkey=array[(select a.attnum from pg_catalog.pg_attribute a\n          where a.attrelid=c.conrelid and a.attname='price_check_result' and not a.attisdropped)]::smallint[]\n        and pg_catalog.pg_get_constraintdef(c.oid,true)='CHECK (price_check_result = ANY (ARRAY[''NOT_APPLICABLE''::text, ''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text]))'\n        and c.convalidated and not c.condeferrable and not c.condeferred) then\n    raise exception 'HEALTH_F23_PRICE_ENUM_PREDECESSOR_CHANGED' using errcode='55000';\n  end if;\n  perform pg_catalog.set_config('search_path',previous_path,true);\nend;\n$health_f23_money_predecessor$;\n\n-- HealthRoster v2 F5/F6. No existing money is rewritten. NULL source columns\n-- preserve the installed NHSP/ordinary/signed/legacy-HealthRoster path.\n\n\n\nalter table public.weekly_source_upload_rows\n  add column source_gross_pence bigint check (source_gross_pence between -999999999999 and 999999999999),\n  add column source_vat_pence bigint check (source_vat_pence between -999999999999 and 999999999999),\n  add column finalised_at_utc timestamptz check (finalised_at_utc is null or isfinite(finalised_at_utc)),\n  add constraint weekly_source_upload_rows_invoice_money_shape check (\n    (source_gross_pence is null and source_vat_pence is null)\n    or (source_gross_pence is not null and source_vat_pence is not null\n      and source_shift_charge_pence is not null\n      and (row_finalisation_state='SOURCE_REPORT_LINE'\n        or source_shift_charge_pence::numeric+source_vat_pence::numeric=source_gross_pence::numeric))\n  );\n\nalter table public.weekly_source_money_cell_evidence\n  drop constraint weekly_source_money_cell_evidence_money_field_kind_check,\n  add constraint weekly_source_money_cell_evidence_money_field_kind_check\n  check (money_field_kind in ('COMMISSION','TOTAL_COST','FMC','BOTTOM_TOTAL_COST','SOURCE_NET','SOURCE_GROSS','SOURCE_VAT'));\n\n-- Drop only the checks coupled to the closed comparison profile. The exact\n-- legacy NHSP conjunction is reinstated below; independent IDs/FKs/uniques,\n-- canonical-calculation fingerprint and money bounds remain in force.\ndo $block$\ndeclare c record;\nbegin\n  for c in select conname from pg_catalog.pg_constraint where conrelid='public.weekly_source_charge_checks'::regclass and contype='c'\n    and (pg_catalog.pg_get_constraintdef(oid) like '%comparison_profile_version%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%comparison_result%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%row_sign_kind%')\n  loop execute format('alter table public.weekly_source_charge_checks drop constraint %I',c.conname); end loop;\nend;\n$block$;\nalter table public.weekly_source_charge_checks\n  add constraint weekly_source_charge_checks_profile_result check (\n    (comparison_profile_version='NHSP_TWO_COMPONENT_PENCE_V1'\n      and row_sign_kind in ('POSITIVE','FULL_NEGATIVE')\n      and comparison_result in ('EXACT','SOURCE_ROUNDING_EQUIVALENT','MISMATCH','ZERO_SOURCE_CHARGE','UNVERIFIABLE')\n      and (comparison_result='UNVERIFIABLE' or (source_commission_pence is not null and source_total_cost_pence is not null\n        and source_shift_charge_pence is not null and calculated_segment_charge_pence is not null and source_charge_difference_pence is not null))\n      and (comparison_result<>'EXACT' or source_charge_difference_pence=0)\n      and (comparison_result<>'SOURCE_ROUNDING_EQUIVALENT' or (source_charge_difference_pence in (1,-1)\n        and ((source_shift_charge_pence>0 and calculated_segment_charge_pence>0) or (source_shift_charge_pence<0 and calculated_segment_charge_pence<0))))\n      and (comparison_result not in ('MISMATCH','ZERO_SOURCE_CHARGE','UNVERIFIABLE') or phase_severity in ('PROVISIONAL_WARNING','FINALISATION_BLOCKER'))\n      and (comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE','UNVERIFIABLE') or blocker_code is null)\n      and (comparison_result<>'ZERO_SOURCE_CHARGE' or (source_commission_pence=0 and source_total_cost_pence=0 and source_shift_charge_pence=0 and calculated_segment_charge_pence<>0 and blocker_code is null))\n      and (row_sign_kind<>'POSITIVE' or comparison_result='UNVERIFIABLE' or (source_commission_pence>=0 and source_total_cost_pence>=0\n        and ((source_shift_charge_pence>0 and calculated_segment_charge_pence>0) or (comparison_result='ZERO_SOURCE_CHARGE' and source_shift_charge_pence=0 and calculated_segment_charge_pence>0))))\n      and (row_sign_kind<>'FULL_NEGATIVE' or comparison_result='UNVERIFIABLE' or (source_commission_pence<=0 and source_total_cost_pence<=0 and source_shift_charge_pence<0 and calculated_segment_charge_pence<0)))\n    or (comparison_profile_version='SOURCE_INVOICE_MONEY_PENCE_V1' and row_sign_kind='POSITIVE'\n      and comparison_result in ('EXACT','SOURCE_ROUNDING_EQUIVALENT','SOURCE_AMOUNT_DIFFERS')\n      and source_commission_pence is null and source_total_cost_pence is null\n      and source_shift_charge_pence is not null and source_shift_charge_pence>=0\n      and calculated_segment_charge_pence is not null and calculated_segment_charge_pence>0\n      and source_charge_difference_pence is not null\n      and source_charge_difference_pence=source_shift_charge_pence-calculated_segment_charge_pence\n      and comparison_result=case when source_charge_difference_pence=0 then 'EXACT'\n        when abs(source_charge_difference_pence)=1 then 'SOURCE_ROUNDING_EQUIVALENT' else 'SOURCE_AMOUNT_DIFFERS' end\n      and phase_severity=case when comparison_result='SOURCE_AMOUNT_DIFFERS' then 'INFORMATION' else 'NONE' end and blocker_code is null)\n  );\n\ncreate table public.weekly_source_invoice_hold_releases (\n  id uuid primary key default pg_catalog.gen_random_uuid(),\n  upload_row_id uuid not null references public.weekly_source_upload_rows(id) on delete restrict,\n  hold_kind text not null check (hold_kind in ('VAT_FIT','DUPLICATE_REQUEST_ID')),\n  action text not null check (action in ('BILL_AT_NET_PLUS_20','BILL_AS_FILE')),\n  net_pence bigint not null check (net_pence between -999999999999 and 999999999999),\n  vat_pence bigint not null check (vat_pence between -999999999999 and 999999999999),\n  gross_pence bigint not null check (gross_pence between -999999999999 and 999999999999),\n  actor_user_id uuid not null references public.tms_users(id) on delete restrict,\n  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),\n  release_hash bytea not null check (pg_catalog.octet_length(release_hash)=32),\n  check (net_pence::numeric+vat_pence::numeric=gross_pence::numeric),\n  check (hold_kind<>'DUPLICATE_REQUEST_ID' or action='BILL_AS_FILE'),\n  unique (upload_row_id,hold_kind), unique (release_hash)\n);\nalter table public.weekly_source_invoice_hold_releases owner to postgres;\nalter table public.weekly_source_invoice_hold_releases enable row level security;\nalter table public.weekly_source_invoice_hold_releases force row level security;\ncreate policy cloudtms_miget_service_owner_all on public.weekly_source_invoice_hold_releases\n  for all to CURRENT_USER,service_role using (true) with check (true);\nrevoke all on public.weekly_source_invoice_hold_releases from public,anon,authenticated,service_role;\n\nalter table public.weekly_source_billing_movements\n  add column self_bill_report_row_id uuid references public.weekly_source_upload_rows(id) on delete restrict,\n  add column vat_rounding_revision_id uuid references public.weekly_source_final_revisions(id) on delete restrict,\n  alter column candidate_id drop not null, alter column contract_id drop not null,\n  alter column work_event_id drop not null, alter column invoice_timesheet_id drop not null;\ncreate unique index weekly_source_billing_movements_report_row_uq on public.weekly_source_billing_movements(self_bill_report_row_id) where self_bill_report_row_id is not null;\ncreate unique index weekly_source_billing_movements_vat_rounding_client_uq on public.weekly_source_billing_movements(vat_rounding_revision_id,actual_client_id) where vat_rounding_revision_id is not null;\n-- The origin/role/profile/price checks are replaced as one closed contract.\n-- Retain every independent economic/range/hash/placement check and all FKs.\ndo $block$\ndeclare c record;\nbegin\n  for c in select conname from pg_catalog.pg_constraint where conrelid='public.weekly_source_billing_movements'::regclass and contype='c'\n    and (pg_catalog.pg_get_constraintdef(oid) like '%transition_id%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%nhsp_upload_row_id%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%expense_authority_generation_id%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%source_profile_kind%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%source_line_kind%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%movement_role%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%price_check_result%')\n  loop execute format('alter table public.weekly_source_billing_movements drop constraint %I',c.conname); end loop;\nend;\n$block$;\nalter table public.weekly_source_billing_movements\n  add constraint weekly_source_billing_movements_five_origins check (\n    (transition_id is not null)::integer+(nhsp_upload_row_id is not null)::integer\n    +(expense_authority_generation_id is not null)::integer+(self_bill_report_row_id is not null)::integer\n    +(vat_rounding_revision_id is not null)::integer=1),\n  add constraint weekly_source_billing_movements_invoice_contract check (\n    source_profile_kind in ('GENERIC_COMPLETE_SNAPSHOT','NHSP_TRUST_BACKING_REPORT','HEALTHROSTER_ACTUAL_ROWS','SELF_BILL_REPORT')\n    and movement_role in ('POSITIVE','REVERSAL','REPLACEMENT','NET_DIFFERENCE_PRESENTATION','EXPENSE_POSITIVE','EXPENSE_REVERSAL','EXPENSE_REPLACEMENT','STANDALONE_NEGATIVE','CORRECTION_UNWIND')\n    and source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT','GENERATED_HISTORICAL_REVERSAL','NON_NHSP_DIFFERENCE','NHSP_PHYSICAL_POSITIVE','NHSP_PHYSICAL_FULL_NEGATIVE','SOURCE_FIXED_EXPENSE','SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n    and ((source_profile_kind='NHSP_TRUST_BACKING_REPORT')=(nhsp_upload_row_id is not null))\n    and ((self_bill_report_row_id is not null)=(source_line_kind='SELF_BILL_REPORT_LINE'))\n    and (self_bill_report_row_id is null or source_profile_kind='SELF_BILL_REPORT')\n    and (source_profile_kind<>'SELF_BILL_REPORT' or source_line_kind in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING'))\n    and ((vat_rounding_revision_id is not null)=(source_line_kind='INVOICE_VAT_ROUNDING'))\n    and (vat_rounding_revision_id is null or vat_rounding_revision_id=final_revision_id)\n    and ((expense_authority_generation_id is not null)=(source_line_kind='SOURCE_FIXED_EXPENSE'))\n    and ((expense_authority_generation_id is not null)=(movement_role in ('EXPENSE_POSITIVE','EXPENSE_REVERSAL','EXPENSE_REPLACEMENT')))\n    and (movement_role<>'STANDALONE_NEGATIVE' or (source_line_kind='SELF_BILL_REPORT_LINE' and invoice_presentation_charge_pence<0))\n    and (movement_role<>'CORRECTION_UNWIND' or (source_line_kind='SOURCE_INVOICE_CORRECTION' and transition_id is not null))\n    and (source_line_kind<>'SOURCE_REBILL_LINE' or (transition_id is not null and movement_role='POSITIVE'))\n    and (source_line_kind<>'SOURCE_INVOICE_CORRECTION' or (transition_id is not null and movement_role in ('REVERSAL','REPLACEMENT','CORRECTION_UNWIND')))\n    and (source_line_kind<>'SELF_BILL_REPORT_LINE' or movement_role in ('POSITIVE','STANDALONE_NEGATIVE')\n      or (movement_role='REVERSAL' and prior_movement_id is not null))\n    and (source_line_kind<>'INVOICE_VAT_ROUNDING' or (movement_role='POSITIVE' and invoice_presentation_charge_pence=0 and calculated_comparison_charge_pence=0))\n    and ((source_line_kind='INVOICE_VAT_ROUNDING' or (source_line_kind='SELF_BILL_REPORT_LINE' and movement_role='STANDALONE_NEGATIVE'))\n      or (candidate_id is not null and contract_id is not null and work_event_id is not null and invoice_timesheet_id is not null))\n    and price_check_result in ('NOT_APPLICABLE','EXACT','SOURCE_ROUNDING_EQUIVALENT','SOURCE_AMOUNT_DIFFERS','ACCEPTED_DISPARITY','ACCEPTED_ZERO')\n    and ((price_check_result in ('ACCEPTED_DISPARITY','ACCEPTED_ZERO'))=(charge_acceptance_id is not null))\n    and (source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' or (source_validation_charge_pence is not null\n      and invoice_presentation_charge_pence=source_validation_charge_pence and price_check_result in ('EXACT','SOURCE_ROUNDING_EQUIVALENT','ACCEPTED_DISPARITY','ACCEPTED_ZERO')))\n    and (source_line_kind<>'SOURCE_FIXED_EXPENSE' or (source_validation_charge_pence is not null\n      and invoice_presentation_charge_pence=source_validation_charge_pence and price_check_result='NOT_APPLICABLE'))\n    and (source_profile_kind='NHSP_TRUST_BACKING_REPORT' or price_check_result in ('NOT_APPLICABLE','EXACT','SOURCE_ROUNDING_EQUIVALENT','SOURCE_AMOUNT_DIFFERS','ACCEPTED_DISPARITY'))\n  ),\n  add constraint weekly_source_billing_movements_invoice_only_zero_pay check (\n    source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n    or coalesce((total_pay_ex_vat=0 and canonical_pay_vector_json->>'total_pence'='0'\n      and (canonical_pay_vector_json->>'paid_minutes')::numeric=0\n      and (canonical_pay_vector_json->>'break_minutes')::numeric=0\n      and canonical_pay_vector_json->'hours'='{\"day\":0,\"night\":0,\"sat\":0,\"sun\":0,\"bh\":0}'::jsonb),false)\n  );\n\n-- PostgreSQL auto-names the old 65-character enum constraint by shortening\n-- the relation component. Resolve its exact one-column CHECK through catalogue\n-- identity instead of guessing a truncated identifier or dropping coupled checks.\ndo $block$\ndeclare constraint_name text; price_att smallint;\nbegin\n  select attnum into strict price_att from pg_catalog.pg_attribute where attrelid='public.weekly_source_invoice_presentation_lines'::regclass and attname='price_check_result' and not attisdropped;\n  select conname into strict constraint_name from pg_catalog.pg_constraint where conrelid='public.weekly_source_invoice_presentation_lines'::regclass and contype='c'\n    and conkey=array[price_att]::smallint[] and pg_catalog.pg_get_constraintdef(oid) like '%NOT_APPLICABLE%';\n  execute format('alter table public.weekly_source_invoice_presentation_lines drop constraint %I',constraint_name);\nend;\n$block$;\n\nalter table public.weekly_source_invoice_presentation_lines\n  add column invoice_hold_release_id uuid references public.weekly_source_invoice_hold_releases(id) on delete restrict,\n  alter column candidate_id drop not null, alter column contract_id drop not null,\n  alter column work_event_id drop not null, alter column source_shift_group_id drop not null,\n  alter column work_date drop not null, alter column start_at_local drop not null,\n  alter column end_at_local drop not null, alter column break_minutes drop not null,\n  alter column candidate_display_snapshot drop not null, alter column description_snapshot drop not null,\n  drop constraint weekly_source_invoice_presentation_lines_line_kind_check,\n  drop constraint weekly_source_invoice_presentation_lines_origin_kind_check,\n  add constraint weekly_source_invoice_presentation_lines_line_kind_check check (line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT','GENERATED_HISTORICAL_REVERSAL','NON_NHSP_DIFFERENCE','SOURCE_FIXED_EXPENSE','SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')),\n  add constraint weekly_source_invoice_presentation_lines_origin_kind_check check (origin_kind in ('GENERIC_TRANSITION','HEALTHROSTER_TRANSITION','NHSP_PHYSICAL_ROW','SOURCE_FIXED_EXPENSE','SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SELF_BILL_REPORT_STANDALONE_CREDIT')),\n  add constraint weekly_source_invoice_presentation_lines_price_result_chk check (price_check_result in ('NOT_APPLICABLE','EXACT','SOURCE_ROUNDING_EQUIVALENT','SOURCE_AMOUNT_DIFFERS','ACCEPTED_DISPARITY','ACCEPTED_ZERO')),\n  add constraint weekly_source_invoice_presentation_lines_nullable_invoice_identity check (\n    (line_kind='INVOICE_VAT_ROUNDING' and origin_kind='INVOICE_VAT_ROUNDING' and total_pay_ex_vat=0)\n    or (line_kind='SELF_BILL_REPORT_LINE' and origin_kind='SELF_BILL_REPORT_STANDALONE_CREDIT' and total_pay_ex_vat=0 and total_charge_ex_vat<0)\n    or (candidate_id is not null and contract_id is not null and work_event_id is not null\n      and source_shift_group_id is not null and work_date is not null and start_at_local is not null and end_at_local is not null and break_minutes is not null\n      and candidate_display_snapshot is not null and description_snapshot is not null)\n  );\nalter table public.weekly_source_invoice_placements alter column source_shift_group_id drop not null;\n\n",
+            "sqlHash": "1c55656f4038a9a75cb16ee6abd5e48fc54a42c7c799faf08f17b489f11c1d54",
+            "sourceSqlHash": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+            "phase": "migration",
+            "sourceFiles": [
+              {
+                "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+                "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+              },
+              {
+                "file": "supabase/release/16102026_0943_healthroster_money_predecessor_assertion.sqlinc",
+                "sha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50"
+              },
+              {
+                "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+                "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+              }
+            ],
+            "atomicMoneyPredecessorCompanion": {
+              "version": "HEALTHROSTER_MONEY_CHECK_PREBODY_COMPANION_V1",
+              "companionSha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+              "statementSha256": [
+                "d2076c625cc3fdf42cddee457a6984e25229e6dec706ab74795d8b463269a5b0",
+                "16788e23c365e22250810acb22646697e0fb8d5ea2bf86cdf477557d0b6465f5"
+              ],
+              "placement": "BEFORE_IMMUTABLE_BODY_SAME_TRANSACTION",
+              "evidenceFiles": [
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/REVIEW.json",
+                  "sha256": "10573f03cf4d6667627efe08d9e614a8a71d18d77dab9b70f259bf006a688799"
+                }
+              ],
+              "nativeProof": "NOT_RUN"
+            }
+          }
+        },
+        {
+          "mapping": "AUDITED_CURRENT_USER",
+          "sourceSha256": "95f0967a011df18b2cbe5b4d554387c226b3a24d2d2ed6e9b051f30641924ea6",
+          "bodySha256": "a30e64be80a1381daab403c1bd2c52b0f7d4bc4cd076bee66a1949b8385f6a20",
+          "releasePacketSha256": "526dd53c1a45773ce05dad8940f92cbc085005e20b3ef472b7563fb205f48b82",
+          "rehearsalSqlSha256": "b4f75ad6dd6d2d0a897d00af7577b031a1a29abbcb92523767cd6ebd67629113",
+          "rehearsalReceiptSha256": "15e0fa708d4350a815d3043a860796e56fd111cd20ac911f0069b40f9e27db2b",
+          "rehearsalReceipt": {
+            "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+            "kind": "migration",
+            "sql": "-- REVIEW PROPOSAL ONLY. Not installed, not executed, native qualification NOT_RUN.\n-- Attach only before the exact immutable 13102026_1430 body in one existing atomic unit.\n-- Keep the existing writer/identity admission, ledger and outer transaction.\nlock table public.weekly_source_charge_checks, public.weekly_source_billing_movements,\n  public.weekly_source_invoice_presentation_lines in access exclusive mode;\ndo $health_f23_money_predecessor$\ndeclare previous_path text;\nbegin\n  previous_path:=pg_catalog.current_setting('search_path');\n  perform pg_catalog.set_config('search_path','pg_catalog, public',true);\n  if exists (\n    with expected(name, definition, is_validated, is_deferrable, is_deferred) as (values\n      ('weekly_source_charge_checks_check2', 'CHECK (comparison_result = ''UNVERIFIABLE''::text OR source_commission_pence IS NOT NULL AND source_total_cost_pence IS NOT NULL AND source_shift_charge_pence IS NOT NULL AND calculated_segment_charge_pence IS NOT NULL AND source_charge_difference_pence IS NOT NULL)', true, false, false),\n      ('weekly_source_charge_checks_check3', 'CHECK (comparison_result <> ''EXACT''::text OR source_charge_difference_pence = 0)', true, false, false),\n      ('weekly_source_charge_checks_check4', 'CHECK (comparison_result <> ''SOURCE_ROUNDING_EQUIVALENT''::text OR (source_charge_difference_pence = ANY (ARRAY[1::bigint, ''-1''::integer::bigint])) AND (source_shift_charge_pence > 0 AND calculated_segment_charge_pence > 0 OR source_shift_charge_pence < 0 AND calculated_segment_charge_pence < 0))', true, false, false),\n      ('weekly_source_charge_checks_check5', 'CHECK ((comparison_result <> ALL (ARRAY[''MISMATCH''::text, ''ZERO_SOURCE_CHARGE''::text, ''UNVERIFIABLE''::text])) OR (phase_severity = ANY (ARRAY[''PROVISIONAL_WARNING''::text, ''FINALISATION_BLOCKER''::text])))', true, false, false),\n      ('weekly_source_charge_checks_check6', 'CHECK ((comparison_result = ANY (ARRAY[''MISMATCH''::text, ''ZERO_SOURCE_CHARGE''::text, ''UNVERIFIABLE''::text])) OR blocker_code IS NULL)', true, false, false),\n      ('weekly_source_charge_checks_check7', 'CHECK (comparison_result <> ''ZERO_SOURCE_CHARGE''::text OR source_commission_pence = 0 AND source_total_cost_pence = 0 AND source_shift_charge_pence = 0 AND calculated_segment_charge_pence <> 0 AND blocker_code IS NULL)', true, false, false),\n      ('weekly_source_charge_checks_check8', 'CHECK (row_sign_kind <> ''POSITIVE''::text OR comparison_result = ''UNVERIFIABLE''::text OR source_commission_pence >= 0 AND source_total_cost_pence >= 0 AND (source_shift_charge_pence > 0 AND calculated_segment_charge_pence > 0 OR comparison_result = ''ZERO_SOURCE_CHARGE''::text AND source_shift_charge_pence = 0 AND calculated_segment_charge_pence > 0))', true, false, false),\n      ('weekly_source_charge_checks_check9', 'CHECK (row_sign_kind <> ''FULL_NEGATIVE''::text OR comparison_result = ''UNVERIFIABLE''::text OR source_commission_pence <= 0 AND source_total_cost_pence <= 0 AND source_shift_charge_pence < 0 AND calculated_segment_charge_pence < 0)', true, false, false),\n      ('weekly_source_charge_checks_comparison_profile_version_check', 'CHECK (comparison_profile_version = ''NHSP_TWO_COMPONENT_PENCE_V1''::text)', true, false, false),\n      ('weekly_source_charge_checks_comparison_result_check', 'CHECK (comparison_result = ANY (ARRAY[''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''MISMATCH''::text, ''ZERO_SOURCE_CHARGE''::text, ''UNVERIFIABLE''::text]))', true, false, false),\n      ('weekly_source_charge_checks_row_sign_kind_check', 'CHECK (row_sign_kind = ANY (ARRAY[''POSITIVE''::text, ''FULL_NEGATIVE''::text]))', true, false, false)\n    ), actual as (\n      select c.conname::text name, pg_catalog.pg_get_constraintdef(c.oid,true) definition,\n        c.convalidated is_validated,c.condeferrable is_deferrable,c.condeferred is_deferred\n      from pg_catalog.pg_constraint c\n      where c.conrelid='public.weekly_source_charge_checks'::pg_catalog.regclass and c.contype='c'\n        and (pg_catalog.pg_get_constraintdef(c.oid) like '%comparison_profile_version%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%comparison_result%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%row_sign_kind%')\n    )\n    select 1 from expected e full join actual a using (name)\n    where (e.definition,e.is_validated,e.is_deferrable,e.is_deferred)\n      is distinct from (a.definition,a.is_validated,a.is_deferrable,a.is_deferred)\n  ) then raise exception 'HEALTH_F23_WEEKLY_SOURCE_CHARGE_CHECKS_PREDECESSOR_CHANGED' using errcode='55000'; end if;\n  if exists (\n    with expected(name, definition, is_validated, is_deferrable, is_deferred) as (values\n      ('weekly_source_billing_movements_check', 'CHECK (((transition_id IS NOT NULL)::integer + (nhsp_upload_row_id IS NOT NULL)::integer + (expense_authority_generation_id IS NOT NULL)::integer) = 1)', true, false, false),\n      ('weekly_source_billing_movements_check1', 'CHECK ((source_profile_kind = ''NHSP_TRUST_BACKING_REPORT''::text) = (nhsp_upload_row_id IS NOT NULL))', true, false, false),\n      ('weekly_source_billing_movements_check2', 'CHECK ((expense_authority_generation_id IS NOT NULL) = (source_line_kind = ''SOURCE_FIXED_EXPENSE''::text))', true, false, false),\n      ('weekly_source_billing_movements_check3', 'CHECK ((expense_authority_generation_id IS NOT NULL) = (movement_role = ANY (ARRAY[''EXPENSE_POSITIVE''::text, ''EXPENSE_REVERSAL''::text, ''EXPENSE_REPLACEMENT''::text])))', true, false, false),\n      ('weekly_source_billing_movements_check4', 'CHECK (source_profile_kind <> ''NHSP_TRUST_BACKING_REPORT''::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND (price_check_result = ANY (ARRAY[''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text])))', true, false, false),\n      ('weekly_source_billing_movements_check5', 'CHECK ((price_check_result = ANY (ARRAY[''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text])) = (charge_acceptance_id IS NOT NULL))', true, false, false),\n      ('weekly_source_billing_movements_check6', 'CHECK (source_line_kind <> ''SOURCE_FIXED_EXPENSE''::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND price_check_result = ''NOT_APPLICABLE''::text)', true, false, false),\n      ('weekly_source_billing_movements_check7', 'CHECK (source_profile_kind = ''NHSP_TRUST_BACKING_REPORT''::text OR (price_check_result = ANY (ARRAY[''NOT_APPLICABLE''::text, ''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text])) AND charge_acceptance_id IS NULL)', true, false, false),\n      ('weekly_source_billing_movements_movement_role_check', 'CHECK (movement_role = ANY (ARRAY[''POSITIVE''::text, ''REVERSAL''::text, ''REPLACEMENT''::text, ''NET_DIFFERENCE_PRESENTATION''::text, ''EXPENSE_POSITIVE''::text, ''EXPENSE_REVERSAL''::text, ''EXPENSE_REPLACEMENT''::text]))', true, false, false),\n      ('weekly_source_billing_movements_price_check_result_check', 'CHECK (price_check_result = ANY (ARRAY[''NOT_APPLICABLE''::text, ''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text]))', true, false, false),\n      ('weekly_source_billing_movements_source_line_kind_check', 'CHECK (source_line_kind = ANY (ARRAY[''SOURCE_ORDINARY''::text, ''SOURCE_REPLACEMENT''::text, ''GENERATED_HISTORICAL_REVERSAL''::text, ''NON_NHSP_DIFFERENCE''::text, ''NHSP_PHYSICAL_POSITIVE''::text, ''NHSP_PHYSICAL_FULL_NEGATIVE''::text, ''SOURCE_FIXED_EXPENSE''::text]))', true, false, false),\n      ('weekly_source_billing_movements_source_profile_kind_check', 'CHECK (source_profile_kind = ANY (ARRAY[''GENERIC_COMPLETE_SNAPSHOT''::text, ''NHSP_TRUST_BACKING_REPORT''::text, ''HEALTHROSTER_ACTUAL_ROWS''::text]))', true, false, false)\n    ), actual as (\n      select c.conname::text name, pg_catalog.pg_get_constraintdef(c.oid,true) definition,\n        c.convalidated is_validated,c.condeferrable is_deferrable,c.condeferred is_deferred\n      from pg_catalog.pg_constraint c\n      where c.conrelid='public.weekly_source_billing_movements'::pg_catalog.regclass and c.contype='c'\n        and (pg_catalog.pg_get_constraintdef(c.oid) like '%transition_id%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%nhsp_upload_row_id%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%expense_authority_generation_id%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%source_profile_kind%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%source_line_kind%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%movement_role%'\n        or pg_catalog.pg_get_constraintdef(c.oid) like '%price_check_result%')\n    )\n    select 1 from expected e full join actual a using (name)\n    where (e.definition,e.is_validated,e.is_deferrable,e.is_deferred)\n      is distinct from (a.definition,a.is_validated,a.is_deferrable,a.is_deferred)\n  ) then raise exception 'HEALTH_F23_WEEKLY_SOURCE_BILLING_MOVEMENTS_PREDECESSOR_CHANGED' using errcode='55000'; end if;\n  if (select count(*) from pg_catalog.pg_constraint c\n    where c.conrelid='public.weekly_source_invoice_presentation_lines'::pg_catalog.regclass\n      and c.contype='c'\n      and c.conkey=array[(select a.attnum from pg_catalog.pg_attribute a\n        where a.attrelid=c.conrelid and a.attname='price_check_result' and not a.attisdropped)]::smallint[]\n      and pg_catalog.pg_get_constraintdef(c.oid) like '%NOT_APPLICABLE%')<>1\n    or not exists (select 1 from pg_catalog.pg_constraint c\n      where c.conrelid='public.weekly_source_invoice_presentation_lines'::pg_catalog.regclass\n        and c.contype='c' and c.conname='weekly_source_invoice_presentation_lin_price_check_result_check'\n        and c.conkey=array[(select a.attnum from pg_catalog.pg_attribute a\n          where a.attrelid=c.conrelid and a.attname='price_check_result' and not a.attisdropped)]::smallint[]\n        and pg_catalog.pg_get_constraintdef(c.oid,true)='CHECK (price_check_result = ANY (ARRAY[''NOT_APPLICABLE''::text, ''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text]))'\n        and c.convalidated and not c.condeferrable and not c.condeferred) then\n    raise exception 'HEALTH_F23_PRICE_ENUM_PREDECESSOR_CHANGED' using errcode='55000';\n  end if;\n  perform pg_catalog.set_config('search_path',previous_path,true);\nend;\n$health_f23_money_predecessor$;\n\n-- HealthRoster v2 F5/F6. No existing money is rewritten. NULL source columns\n-- preserve the installed NHSP/ordinary/signed/legacy-HealthRoster path.\n\n\n\nalter table public.weekly_source_upload_rows\n  add column source_gross_pence bigint check (source_gross_pence between -999999999999 and 999999999999),\n  add column source_vat_pence bigint check (source_vat_pence between -999999999999 and 999999999999),\n  add column finalised_at_utc timestamptz check (finalised_at_utc is null or isfinite(finalised_at_utc)),\n  add constraint weekly_source_upload_rows_invoice_money_shape check (\n    (source_gross_pence is null and source_vat_pence is null)\n    or (source_gross_pence is not null and source_vat_pence is not null\n      and source_shift_charge_pence is not null\n      and (row_finalisation_state='SOURCE_REPORT_LINE'\n        or source_shift_charge_pence::numeric+source_vat_pence::numeric=source_gross_pence::numeric))\n  );\n\nalter table public.weekly_source_money_cell_evidence\n  drop constraint weekly_source_money_cell_evidence_money_field_kind_check,\n  add constraint weekly_source_money_cell_evidence_money_field_kind_check\n  check (money_field_kind in ('COMMISSION','TOTAL_COST','FMC','BOTTOM_TOTAL_COST','SOURCE_NET','SOURCE_GROSS','SOURCE_VAT'));\n\n-- Drop only the checks coupled to the closed comparison profile. The exact\n-- legacy NHSP conjunction is reinstated below; independent IDs/FKs/uniques,\n-- canonical-calculation fingerprint and money bounds remain in force.\ndo $block$\ndeclare c record;\nbegin\n  for c in select conname from pg_catalog.pg_constraint where conrelid='public.weekly_source_charge_checks'::regclass and contype='c'\n    and (pg_catalog.pg_get_constraintdef(oid) like '%comparison_profile_version%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%comparison_result%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%row_sign_kind%')\n  loop execute format('alter table public.weekly_source_charge_checks drop constraint %I',c.conname); end loop;\nend;\n$block$;\nalter table public.weekly_source_charge_checks\n  add constraint weekly_source_charge_checks_profile_result check (\n    (comparison_profile_version='NHSP_TWO_COMPONENT_PENCE_V1'\n      and row_sign_kind in ('POSITIVE','FULL_NEGATIVE')\n      and comparison_result in ('EXACT','SOURCE_ROUNDING_EQUIVALENT','MISMATCH','ZERO_SOURCE_CHARGE','UNVERIFIABLE')\n      and (comparison_result='UNVERIFIABLE' or (source_commission_pence is not null and source_total_cost_pence is not null\n        and source_shift_charge_pence is not null and calculated_segment_charge_pence is not null and source_charge_difference_pence is not null))\n      and (comparison_result<>'EXACT' or source_charge_difference_pence=0)\n      and (comparison_result<>'SOURCE_ROUNDING_EQUIVALENT' or (source_charge_difference_pence in (1,-1)\n        and ((source_shift_charge_pence>0 and calculated_segment_charge_pence>0) or (source_shift_charge_pence<0 and calculated_segment_charge_pence<0))))\n      and (comparison_result not in ('MISMATCH','ZERO_SOURCE_CHARGE','UNVERIFIABLE') or phase_severity in ('PROVISIONAL_WARNING','FINALISATION_BLOCKER'))\n      and (comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE','UNVERIFIABLE') or blocker_code is null)\n      and (comparison_result<>'ZERO_SOURCE_CHARGE' or (source_commission_pence=0 and source_total_cost_pence=0 and source_shift_charge_pence=0 and calculated_segment_charge_pence<>0 and blocker_code is null))\n      and (row_sign_kind<>'POSITIVE' or comparison_result='UNVERIFIABLE' or (source_commission_pence>=0 and source_total_cost_pence>=0\n        and ((source_shift_charge_pence>0 and calculated_segment_charge_pence>0) or (comparison_result='ZERO_SOURCE_CHARGE' and source_shift_charge_pence=0 and calculated_segment_charge_pence>0))))\n      and (row_sign_kind<>'FULL_NEGATIVE' or comparison_result='UNVERIFIABLE' or (source_commission_pence<=0 and source_total_cost_pence<=0 and source_shift_charge_pence<0 and calculated_segment_charge_pence<0)))\n    or (comparison_profile_version='SOURCE_INVOICE_MONEY_PENCE_V1' and row_sign_kind='POSITIVE'\n      and comparison_result in ('EXACT','SOURCE_ROUNDING_EQUIVALENT','SOURCE_AMOUNT_DIFFERS')\n      and source_commission_pence is null and source_total_cost_pence is null\n      and source_shift_charge_pence is not null and source_shift_charge_pence>=0\n      and calculated_segment_charge_pence is not null and calculated_segment_charge_pence>0\n      and source_charge_difference_pence is not null\n      and source_charge_difference_pence=source_shift_charge_pence-calculated_segment_charge_pence\n      and comparison_result=case when source_charge_difference_pence=0 then 'EXACT'\n        when abs(source_charge_difference_pence)=1 then 'SOURCE_ROUNDING_EQUIVALENT' else 'SOURCE_AMOUNT_DIFFERS' end\n      and phase_severity=case when comparison_result='SOURCE_AMOUNT_DIFFERS' then 'INFORMATION' else 'NONE' end and blocker_code is null)\n  );\n\ncreate table public.weekly_source_invoice_hold_releases (\n  id uuid primary key default pg_catalog.gen_random_uuid(),\n  upload_row_id uuid not null references public.weekly_source_upload_rows(id) on delete restrict,\n  hold_kind text not null check (hold_kind in ('VAT_FIT','DUPLICATE_REQUEST_ID')),\n  action text not null check (action in ('BILL_AT_NET_PLUS_20','BILL_AS_FILE')),\n  net_pence bigint not null check (net_pence between -999999999999 and 999999999999),\n  vat_pence bigint not null check (vat_pence between -999999999999 and 999999999999),\n  gross_pence bigint not null check (gross_pence between -999999999999 and 999999999999),\n  actor_user_id uuid not null references public.tms_users(id) on delete restrict,\n  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),\n  release_hash bytea not null check (pg_catalog.octet_length(release_hash)=32),\n  check (net_pence::numeric+vat_pence::numeric=gross_pence::numeric),\n  check (hold_kind<>'DUPLICATE_REQUEST_ID' or action='BILL_AS_FILE'),\n  unique (upload_row_id,hold_kind), unique (release_hash)\n);\nalter table public.weekly_source_invoice_hold_releases OWNER TO CURRENT_USER;\nalter table public.weekly_source_invoice_hold_releases enable row level security;\nalter table public.weekly_source_invoice_hold_releases force row level security;\ncreate policy cloudtms_miget_service_owner_all on public.weekly_source_invoice_hold_releases\n  for all to CURRENT_USER,service_role using (true) with check (true);\nrevoke all on public.weekly_source_invoice_hold_releases from public,anon,authenticated,service_role;\n\nalter table public.weekly_source_billing_movements\n  add column self_bill_report_row_id uuid references public.weekly_source_upload_rows(id) on delete restrict,\n  add column vat_rounding_revision_id uuid references public.weekly_source_final_revisions(id) on delete restrict,\n  alter column candidate_id drop not null, alter column contract_id drop not null,\n  alter column work_event_id drop not null, alter column invoice_timesheet_id drop not null;\ncreate unique index weekly_source_billing_movements_report_row_uq on public.weekly_source_billing_movements(self_bill_report_row_id) where self_bill_report_row_id is not null;\ncreate unique index weekly_source_billing_movements_vat_rounding_client_uq on public.weekly_source_billing_movements(vat_rounding_revision_id,actual_client_id) where vat_rounding_revision_id is not null;\n-- The origin/role/profile/price checks are replaced as one closed contract.\n-- Retain every independent economic/range/hash/placement check and all FKs.\ndo $block$\ndeclare c record;\nbegin\n  for c in select conname from pg_catalog.pg_constraint where conrelid='public.weekly_source_billing_movements'::regclass and contype='c'\n    and (pg_catalog.pg_get_constraintdef(oid) like '%transition_id%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%nhsp_upload_row_id%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%expense_authority_generation_id%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%source_profile_kind%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%source_line_kind%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%movement_role%'\n      or pg_catalog.pg_get_constraintdef(oid) like '%price_check_result%')\n  loop execute format('alter table public.weekly_source_billing_movements drop constraint %I',c.conname); end loop;\nend;\n$block$;\nalter table public.weekly_source_billing_movements\n  add constraint weekly_source_billing_movements_five_origins check (\n    (transition_id is not null)::integer+(nhsp_upload_row_id is not null)::integer\n    +(expense_authority_generation_id is not null)::integer+(self_bill_report_row_id is not null)::integer\n    +(vat_rounding_revision_id is not null)::integer=1),\n  add constraint weekly_source_billing_movements_invoice_contract check (\n    source_profile_kind in ('GENERIC_COMPLETE_SNAPSHOT','NHSP_TRUST_BACKING_REPORT','HEALTHROSTER_ACTUAL_ROWS','SELF_BILL_REPORT')\n    and movement_role in ('POSITIVE','REVERSAL','REPLACEMENT','NET_DIFFERENCE_PRESENTATION','EXPENSE_POSITIVE','EXPENSE_REVERSAL','EXPENSE_REPLACEMENT','STANDALONE_NEGATIVE','CORRECTION_UNWIND')\n    and source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT','GENERATED_HISTORICAL_REVERSAL','NON_NHSP_DIFFERENCE','NHSP_PHYSICAL_POSITIVE','NHSP_PHYSICAL_FULL_NEGATIVE','SOURCE_FIXED_EXPENSE','SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n    and ((source_profile_kind='NHSP_TRUST_BACKING_REPORT')=(nhsp_upload_row_id is not null))\n    and ((self_bill_report_row_id is not null)=(source_line_kind='SELF_BILL_REPORT_LINE'))\n    and (self_bill_report_row_id is null or source_profile_kind='SELF_BILL_REPORT')\n    and (source_profile_kind<>'SELF_BILL_REPORT' or source_line_kind in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING'))\n    and ((vat_rounding_revision_id is not null)=(source_line_kind='INVOICE_VAT_ROUNDING'))\n    and (vat_rounding_revision_id is null or vat_rounding_revision_id=final_revision_id)\n    and ((expense_authority_generation_id is not null)=(source_line_kind='SOURCE_FIXED_EXPENSE'))\n    and ((expense_authority_generation_id is not null)=(movement_role in ('EXPENSE_POSITIVE','EXPENSE_REVERSAL','EXPENSE_REPLACEMENT')))\n    and (movement_role<>'STANDALONE_NEGATIVE' or (source_line_kind='SELF_BILL_REPORT_LINE' and invoice_presentation_charge_pence<0))\n    and (movement_role<>'CORRECTION_UNWIND' or (source_line_kind='SOURCE_INVOICE_CORRECTION' and transition_id is not null))\n    and (source_line_kind<>'SOURCE_REBILL_LINE' or (transition_id is not null and movement_role='POSITIVE'))\n    and (source_line_kind<>'SOURCE_INVOICE_CORRECTION' or (transition_id is not null and movement_role in ('REVERSAL','REPLACEMENT','CORRECTION_UNWIND')))\n    and (source_line_kind<>'SELF_BILL_REPORT_LINE' or movement_role in ('POSITIVE','STANDALONE_NEGATIVE')\n      or (movement_role='REVERSAL' and prior_movement_id is not null))\n    and (source_line_kind<>'INVOICE_VAT_ROUNDING' or (movement_role='POSITIVE' and invoice_presentation_charge_pence=0 and calculated_comparison_charge_pence=0))\n    and ((source_line_kind='INVOICE_VAT_ROUNDING' or (source_line_kind='SELF_BILL_REPORT_LINE' and movement_role='STANDALONE_NEGATIVE'))\n      or (candidate_id is not null and contract_id is not null and work_event_id is not null and invoice_timesheet_id is not null))\n    and price_check_result in ('NOT_APPLICABLE','EXACT','SOURCE_ROUNDING_EQUIVALENT','SOURCE_AMOUNT_DIFFERS','ACCEPTED_DISPARITY','ACCEPTED_ZERO')\n    and ((price_check_result in ('ACCEPTED_DISPARITY','ACCEPTED_ZERO'))=(charge_acceptance_id is not null))\n    and (source_profile_kind<>'NHSP_TRUST_BACKING_REPORT' or (source_validation_charge_pence is not null\n      and invoice_presentation_charge_pence=source_validation_charge_pence and price_check_result in ('EXACT','SOURCE_ROUNDING_EQUIVALENT','ACCEPTED_DISPARITY','ACCEPTED_ZERO')))\n    and (source_line_kind<>'SOURCE_FIXED_EXPENSE' or (source_validation_charge_pence is not null\n      and invoice_presentation_charge_pence=source_validation_charge_pence and price_check_result='NOT_APPLICABLE'))\n    and (source_profile_kind='NHSP_TRUST_BACKING_REPORT' or price_check_result in ('NOT_APPLICABLE','EXACT','SOURCE_ROUNDING_EQUIVALENT','SOURCE_AMOUNT_DIFFERS','ACCEPTED_DISPARITY'))\n  ),\n  add constraint weekly_source_billing_movements_invoice_only_zero_pay check (\n    source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')\n    or coalesce((total_pay_ex_vat=0 and canonical_pay_vector_json->>'total_pence'='0'\n      and (canonical_pay_vector_json->>'paid_minutes')::numeric=0\n      and (canonical_pay_vector_json->>'break_minutes')::numeric=0\n      and canonical_pay_vector_json->'hours'='{\"day\":0,\"night\":0,\"sat\":0,\"sun\":0,\"bh\":0}'::jsonb),false)\n  );\n\n-- PostgreSQL auto-names the old 65-character enum constraint by shortening\n-- the relation component. Resolve its exact one-column CHECK through catalogue\n-- identity instead of guessing a truncated identifier or dropping coupled checks.\ndo $block$\ndeclare constraint_name text; price_att smallint;\nbegin\n  select attnum into strict price_att from pg_catalog.pg_attribute where attrelid='public.weekly_source_invoice_presentation_lines'::regclass and attname='price_check_result' and not attisdropped;\n  select conname into strict constraint_name from pg_catalog.pg_constraint where conrelid='public.weekly_source_invoice_presentation_lines'::regclass and contype='c'\n    and conkey=array[price_att]::smallint[] and pg_catalog.pg_get_constraintdef(oid) like '%NOT_APPLICABLE%';\n  execute format('alter table public.weekly_source_invoice_presentation_lines drop constraint %I',constraint_name);\nend;\n$block$;\n\nalter table public.weekly_source_invoice_presentation_lines\n  add column invoice_hold_release_id uuid references public.weekly_source_invoice_hold_releases(id) on delete restrict,\n  alter column candidate_id drop not null, alter column contract_id drop not null,\n  alter column work_event_id drop not null, alter column source_shift_group_id drop not null,\n  alter column work_date drop not null, alter column start_at_local drop not null,\n  alter column end_at_local drop not null, alter column break_minutes drop not null,\n  alter column candidate_display_snapshot drop not null, alter column description_snapshot drop not null,\n  drop constraint weekly_source_invoice_presentation_lines_line_kind_check,\n  drop constraint weekly_source_invoice_presentation_lines_origin_kind_check,\n  add constraint weekly_source_invoice_presentation_lines_line_kind_check check (line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT','GENERATED_HISTORICAL_REVERSAL','NON_NHSP_DIFFERENCE','SOURCE_FIXED_EXPENSE','SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')),\n  add constraint weekly_source_invoice_presentation_lines_origin_kind_check check (origin_kind in ('GENERIC_TRANSITION','HEALTHROSTER_TRANSITION','NHSP_PHYSICAL_ROW','SOURCE_FIXED_EXPENSE','SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SELF_BILL_REPORT_STANDALONE_CREDIT')),\n  add constraint weekly_source_invoice_presentation_lines_price_result_chk check (price_check_result in ('NOT_APPLICABLE','EXACT','SOURCE_ROUNDING_EQUIVALENT','SOURCE_AMOUNT_DIFFERS','ACCEPTED_DISPARITY','ACCEPTED_ZERO')),\n  add constraint weekly_source_invoice_presentation_lines_nullable_invoice_identity check (\n    (line_kind='INVOICE_VAT_ROUNDING' and origin_kind='INVOICE_VAT_ROUNDING' and total_pay_ex_vat=0)\n    or (line_kind='SELF_BILL_REPORT_LINE' and origin_kind='SELF_BILL_REPORT_STANDALONE_CREDIT' and total_pay_ex_vat=0 and total_charge_ex_vat<0)\n    or (candidate_id is not null and contract_id is not null and work_event_id is not null\n      and source_shift_group_id is not null and work_date is not null and start_at_local is not null and end_at_local is not null and break_minutes is not null\n      and candidate_display_snapshot is not null and description_snapshot is not null)\n  );\nalter table public.weekly_source_invoice_placements alter column source_shift_group_id drop not null;\n\n",
+            "sqlHash": "b4f75ad6dd6d2d0a897d00af7577b031a1a29abbcb92523767cd6ebd67629113",
+            "sourceSqlHash": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+            "phase": "migration",
+            "sourceFiles": [
+              {
+                "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+                "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+              },
+              {
+                "file": "supabase/release/16102026_0943_healthroster_money_predecessor_assertion.sqlinc",
+                "sha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50"
+              },
+              {
+                "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+                "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+              }
+            ],
+            "atomicMoneyPredecessorCompanion": {
+              "version": "HEALTHROSTER_MONEY_CHECK_PREBODY_COMPANION_V1",
+              "companionSha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+              "statementSha256": [
+                "d2076c625cc3fdf42cddee457a6984e25229e6dec706ab74795d8b463269a5b0",
+                "16788e23c365e22250810acb22646697e0fb8d5ea2bf86cdf477557d0b6465f5"
+              ],
+              "placement": "BEFORE_IMMUTABLE_BODY_SAME_TRANSACTION",
+              "evidenceFiles": [
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/REVIEW.json",
+                  "sha256": "10573f03cf4d6667627efe08d9e614a8a71d18d77dab9b70f259bf006a688799"
+                }
+              ],
+              "nativeProof": "NOT_RUN"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "kind": "migration",
+      "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+      "closureSha256": "601493c1cda73cc21a177dfc834c6c68db36bc1f0b6cd185e5d7b96e241023c4",
+      "version": "HEALTHROSTER_CAPABILITY_CHECK_PREBODY_COMPANION_V1",
+      "receiptField": "capabilityPredecessorCompanion",
+      "program": {
+        "file": "supabase/release/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+        "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+        "statementSha256": [
+          "36c0abeb1bc4b31d6741eed04e7806f0168d754445432a2e08609c21f281799f",
+          "b97b8204efef03757c0138a212634810dad3983f9b19d2277adc1b04bc4e8758"
+        ]
+      },
+      "points": [
+        {
+          "signature": "outer:supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+          "key": "[\"outer:supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute format('alter table public.weekly_source_group_rule_assignments drop constraint %I',row_data.conname);\"]",
+          "keySha256": "55c651bdae7ee05d16f38a718f7441b8b5d9d40dc4a53551d295dd2ee7e0845d",
+          "statement": "execute format('alter table public.weekly_source_group_rule_assignments drop constraint %I',row_data.conname);",
+          "statementSha256": "ab5bdf121ab1e57c4ae894025cd8e7b176fb5f43d1ed6b7c6110103b44e0331a",
+          "bodySha256": "20127141ea6162fcf351b396a6c1fc1003746b7480f1b528cbb8616493c32427",
+          "bodyFile": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/producers/07-20127141ea61.sqlinc",
+          "count": 1
+        }
+      ],
+      "variants": [
+        {
+          "mapping": "RAW",
+          "sourceSha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+          "bodySha256": "f2383f31b668a683282d70491e1cd2a93a1e0053f3fd9fae70da970147fdf7e4",
+          "releasePacketSha256": "54b521c7424a3539cfeafcf409607ca0a8b344e4300fa6b5f2ea3c2fa2b98a24",
+          "rehearsalSqlSha256": "190f4f5974297dd4391c8ef3067338ae11e8a9e3a460df77a6ea0b9a4b0d141a",
+          "rehearsalReceiptSha256": "86ef8c9f545d8a69f3a9eda7dfe44a7d75d0bbd25c0d41243012d245249127e0",
+          "rehearsalReceipt": {
+            "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+            "kind": "migration",
+            "sql": "-- Exact0400 predecessor companion; no transaction wrapper or migration edit.\n-- Capture32ee8711 / actual canonical pending prefixbcfd75a0 / PG17.11.\n-- Same existing atomic transaction: LOCK + assertion BEFORE immutable0400 DO.\nlock table public.weekly_source_group_rule_assignments in access exclusive mode;\n\ndo $health_capability_prebody$\ndeclare v_actual jsonb; v_all_checks integer;\nbegin\n  if not exists(select 1 from pg_catalog.pg_class c\n    join pg_catalog.pg_namespace n on n.oid=c.relnamespace\n    where c.oid='public.weekly_source_group_rule_assignments'::regclass\n      and n.nspname='public' and c.relname='weekly_source_group_rule_assignments'\n      and c.relkind='r' and not c.relispartition\n      and c.relowner=(select oid from pg_catalog.pg_roles where rolname=current_user)\n      and not exists(select 1 from pg_catalog.pg_inherits i where i.inhrelid=c.oid or i.inhparent=c.oid)) then\n    raise exception 'HEALTHROSTER_CAPABILITY_PREDECESSOR_RELATION_CHANGED' using errcode='55000';\n  end if;\n  select count(*)::integer into v_all_checks from pg_catalog.pg_constraint c\n    where c.conrelid='public.weekly_source_group_rule_assignments'::regclass and c.contype='c';\n  select coalesce(jsonb_agg(jsonb_build_object(\n    'constraint_name',c.conname::text,\n    'selector_definition_default_false',d.definition,\n    'evidence_definition_pretty_true',pg_catalog.pg_get_constraintdef(c.oid,true),\n    'evidence_expression_pretty_true',pg_catalog.pg_get_expr(c.conbin,c.conrelid,true),\n    'selector_role',case when position('PROTECTED_SOURCE' in d.definition)>0 then 'ALREADY_EXTENDED'\n      when position('rule_set_version_id' in d.definition)>0 then 'VERSION'\n      when position('RULE_SET' in d.definition)>0 then 'PURPOSE' else 'UNEXPECTED' end,\n    'key_columns_in_native_order',array(select a.attname::text\n      from unnest(c.conkey) with ordinality k(attnum,ord)\n      join pg_catalog.pg_attribute a on a.attrelid=c.conrelid and a.attnum=k.attnum\n      order by k.ord),\n    'key_columns_sorted',array(select a.attname::text\n      from unnest(c.conkey) k(attnum)\n      join pg_catalog.pg_attribute a on a.attrelid=c.conrelid and a.attnum=k.attnum\n      order by a.attname),\n    'is_local',c.conislocal,'is_validated',c.convalidated,\n    'is_deferred',c.condeferred,'is_deferrable',c.condeferrable,\n    'is_no_inherit',c.connoinherit,'inherited_count',c.coninhcount,\n    'has_no_parent_constraint',c.conparentid=0\n  ) order by c.conname),'[]'::jsonb) into v_actual\n  from pg_catalog.pg_constraint c\n  cross join lateral(select pg_catalog.pg_get_constraintdef(c.oid) definition)d\n  where c.conrelid='public.weekly_source_group_rule_assignments'::regclass and c.contype='c'\n    and position('feature_purpose' in d.definition)>0\n    and position('SIGNED_CHECK_ONLY' in d.definition)>0;\n  if v_all_checks<>10 or jsonb_array_length(v_actual)<>2\n     or v_actual is distinct from $expected0400$[{\"is_local\":true,\"is_deferred\":false,\"is_validated\":true,\"is_deferrable\":false,\"is_no_inherit\":false,\"selector_role\":\"VERSION\",\"constraint_name\":\"weekly_source_group_rule_assignments_check2\",\"inherited_count\":0,\"key_columns_sorted\":[\"feature_purpose\",\"rule_set_version_id\"],\"has_no_parent_constraint\":true,\"key_columns_in_native_order\":[\"feature_purpose\",\"rule_set_version_id\"],\"evidence_definition_pretty_true\":\"CHECK (feature_purpose IS NULL OR (rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text))\",\"evidence_expression_pretty_true\":\"feature_purpose IS NULL OR (rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text)\",\"selector_definition_default_false\":\"CHECK (((feature_purpose IS NULL) OR ((rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text))))\"},{\"is_local\":true,\"is_deferred\":false,\"is_validated\":true,\"is_deferrable\":false,\"is_no_inherit\":false,\"selector_role\":\"PURPOSE\",\"constraint_name\":\"weekly_source_group_rule_assignments_feature_purpose_check\",\"inherited_count\":0,\"key_columns_sorted\":[\"feature_purpose\"],\"has_no_parent_constraint\":true,\"key_columns_in_native_order\":[\"feature_purpose\"],\"evidence_definition_pretty_true\":\"CHECK (feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text]))\",\"evidence_expression_pretty_true\":\"feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text])\",\"selector_definition_default_false\":\"CHECK ((feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text])))\"}]$expected0400$::jsonb then\n    raise exception 'HEALTHROSTER_CAPABILITY_PREDECESSOR_CHECKS_CHANGED' using errcode='55000';\n  end if;\nend;\n$health_capability_prebody$;\n\n-- One-time reviewed capability CHECK extension; source only until protected release.\n\n-- Proposal: extend only two existing assignment CHECK constraints. No table,\n-- column, pricing setting, capability store, policy overlay or exposed route.\ndo $extend_existing_purpose$\ndeclare row_data record; purpose_checks integer:=0; version_checks integer:=0;\nbegin\n  for row_data in select conname,pg_get_constraintdef(oid) definition from pg_catalog.pg_constraint\n    where conrelid='public.weekly_source_group_rule_assignments'::regclass and contype='c'\n  loop\n    if position('feature_purpose' in row_data.definition)>0 and position('SIGNED_CHECK_ONLY' in row_data.definition)>0 then\n      if position('PROTECTED_SOURCE' in row_data.definition)>0 then\n        raise exception 'WEEKLY_SOURCE_CAPABILITY_SCHEMA_ALREADY_EXTENDED' using errcode='55000'; end if;\n      if position('rule_set_version_id' in row_data.definition)>0 then version_checks:=version_checks+1;\n      elsif position('RULE_SET' in row_data.definition)>0 then purpose_checks:=purpose_checks+1;\n      else raise exception 'WEEKLY_SOURCE_CAPABILITY_SCHEMA_UNEXPECTED_CHECK' using errcode='55000'; end if;\n      execute format('alter table public.weekly_source_group_rule_assignments drop constraint %I',row_data.conname);\n    end if;\n  end loop;\n  if purpose_checks<>1 or version_checks<>1 then\n    raise exception 'WEEKLY_SOURCE_CAPABILITY_SCHEMA_CHECK_CENSUS_CHANGED' using errcode='55000'; end if;\n  alter table public.weekly_source_group_rule_assignments add constraint weekly_source_assignment_feature_purpose_v2\n    check (feature_purpose in ('RULE_SET','SIGNED_CHECK_ONLY','PROTECTED_SOURCE'));\n  alter table public.weekly_source_group_rule_assignments add constraint weekly_source_assignment_feature_version_v2\n    check (feature_purpose is null or ((rule_set_version_id is null)=(feature_purpose in ('SIGNED_CHECK_ONLY','PROTECTED_SOURCE'))));\nend;\n$extend_existing_purpose$;\n\n\n",
+            "sqlHash": "190f4f5974297dd4391c8ef3067338ae11e8a9e3a460df77a6ea0b9a4b0d141a",
+            "sourceSqlHash": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+            "phase": "migration",
+            "sourceFiles": [
+              {
+                "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+                "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16"
+              },
+              {
+                "file": "supabase/release/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+                "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c"
+              },
+              {
+                "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+                "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+              }
+            ],
+            "atomicCapabilityPredecessorCompanion": {
+              "version": "HEALTHROSTER_CAPABILITY_CHECK_PREBODY_COMPANION_V1",
+              "companionSha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+              "statementSha256": [
+                "36c0abeb1bc4b31d6741eed04e7806f0168d754445432a2e08609c21f281799f",
+                "b97b8204efef03757c0138a212634810dad3983f9b19d2277adc1b04bc4e8758"
+              ],
+              "placement": "BEFORE_IMMUTABLE_BODY_SAME_TRANSACTION",
+              "evidenceFiles": [
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+                  "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+                  "preservedRawSha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/build-proposal.mjs",
+                  "sha256": "d5ae4c0a6485c0075d15e003fb5475b5f31d08376cae0210bc2fba0738d94019",
+                  "preservedRawSha256": "d5ae4c0a6485c0075d15e003fb5475b5f31d08376cae0210bc2fba0738d94019"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/check_expressions.py",
+                  "sha256": "3caed0f8ac684841db69d308d827ab3afe6b0665c075db1993fc0a685fe51bb8",
+                  "preservedRawSha256": "3caed0f8ac684841db69d308d827ab3afe6b0665c075db1993fc0a685fe51bb8"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/EXPRESSION_REVIEW.json",
+                  "sha256": "730f8126b447e64bf0a7d39c59fc9ffbb04ca63accc025ac7f8897bd6322ba48",
+                  "preservedRawSha256": "640ad6a503cf889e7b337eaac2269d61c2c0de5777d3de78ff32e89ca06245c4"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/CONSTRUCTOR_1133.sql",
+                  "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+                  "preservedRawSha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/IMMUTABLE_CONSUMER_0400.sql",
+                  "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+                  "preservedRawSha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/INPUT_RECEIPT_R1.json",
+                  "sha256": "e0c99e59c94c70f49e3db388cd493fcb1684738558741dd189bc839c1116ee2a",
+                  "preservedRawSha256": "e0c99e59c94c70f49e3db388cd493fcb1684738558741dd189bc839c1116ee2a"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/NATIVE_PREDECESSOR_CENSUS.json",
+                  "sha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6",
+                  "preservedRawSha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/NATIVE_R2.json",
+                  "sha256": "0a8997f662d045996832a384866d1fa26c08f5f9db188f6f855d1fe4eb255086",
+                  "preservedRawSha256": "0a8997f662d045996832a384866d1fa26c08f5f9db188f6f855d1fe4eb255086"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PLAN.json",
+                  "sha256": "e75b276f6e766f4d98d10729982352e4b9801bb2ec16bb8cc28f231e492399eb",
+                  "preservedRawSha256": "e75b276f6e766f4d98d10729982352e4b9801bb2ec16bb8cc28f231e492399eb"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_01_13102026_1112_healthroster_invoice_support_members_v1.sql",
+                  "sha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b",
+                  "preservedRawSha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_02_13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+                  "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+                  "preservedRawSha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_03_13102026_1133_weekly_source_rule_sets_schema.sql",
+                  "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+                  "preservedRawSha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_04_13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+                  "sha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6",
+                  "preservedRawSha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_05_13102026_1344_weekly_source_self_bill_report_schema.sql",
+                  "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+                  "preservedRawSha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_06_13102026_1430_weekly_source_invoice_money_origins.sql",
+                  "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+                  "preservedRawSha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_07_13102026_1456_weekly_source_protection_query_support_v1.sql",
+                  "sha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17",
+                  "preservedRawSha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_08_13102026_1519_healthroster_correction_reason_bound_v1.sql",
+                  "sha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2",
+                  "preservedRawSha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_09_13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+                  "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+                  "preservedRawSha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/RESTORATION.json",
+                  "sha256": "582ba3016d5fcc9673036032e78ad786c5a3b88abeb472f40f3b1f73c896e1fc",
+                  "preservedRawSha256": "582ba3016d5fcc9673036032e78ad786c5a3b88abeb472f40f3b1f73c896e1fc"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/SUMMARY.json",
+                  "sha256": "2617a9e826cf22eb8d52701771f889653bca47198536ca147638341c10b52627",
+                  "preservedRawSha256": "2617a9e826cf22eb8d52701771f889653bca47198536ca147638341c10b52627"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/MOUNT_PLAN.json",
+                  "sha256": "006f98080472d362ec48317917c1927ae07c0b22d700084fdd0c8aa6b0aecde3",
+                  "preservedRawSha256": "006f98080472d362ec48317917c1927ae07c0b22d700084fdd0c8aa6b0aecde3"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/PROPOSAL.json",
+                  "sha256": "ccdf7881bb4d2d728a00d66959cdb8846ead1027b9378c9f322d142c62946b9e",
+                  "preservedRawSha256": "ccdf7881bb4d2d728a00d66959cdb8846ead1027b9378c9f322d142c62946b9e"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/README.md",
+                  "sha256": "7fd291b8dc98fb86feb06933931d90e7fbea2e1f3ac60e67716df27b990e9f91",
+                  "preservedRawSha256": "7fd291b8dc98fb86feb06933931d90e7fbea2e1f3ac60e67716df27b990e9f91"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/seal-review.mjs",
+                  "sha256": "1dfa95956c5bbdc01e28876f8d702f08ee48a679ddf8c0bfa88efb8630ef03e5",
+                  "preservedRawSha256": "1dfa95956c5bbdc01e28876f8d702f08ee48a679ddf8c0bfa88efb8630ef03e5"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/test-proposal.mjs",
+                  "sha256": "e97b9bcb0e8f3cae3b5a04c2f94f267af82b2766d7dd9e448996f443eaff0055",
+                  "preservedRawSha256": "e97b9bcb0e8f3cae3b5a04c2f94f267af82b2766d7dd9e448996f443eaff0055"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/TEST_RESULTS.json",
+                  "sha256": "337a8fe8e6d6b4681db20d775b8693ff00d9c85fa9fe695b1e58052560ab8588",
+                  "preservedRawSha256": "337a8fe8e6d6b4681db20d775b8693ff00d9c85fa9fe695b1e58052560ab8588"
+                }
+              ],
+              "nativeProof": "NOT_RUN"
+            }
+          }
+        },
+        {
+          "mapping": "AUDITED_CURRENT_USER",
+          "sourceSha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+          "bodySha256": "f2383f31b668a683282d70491e1cd2a93a1e0053f3fd9fae70da970147fdf7e4",
+          "releasePacketSha256": "54b521c7424a3539cfeafcf409607ca0a8b344e4300fa6b5f2ea3c2fa2b98a24",
+          "rehearsalSqlSha256": "190f4f5974297dd4391c8ef3067338ae11e8a9e3a460df77a6ea0b9a4b0d141a",
+          "rehearsalReceiptSha256": "86ef8c9f545d8a69f3a9eda7dfe44a7d75d0bbd25c0d41243012d245249127e0",
+          "rehearsalReceipt": {
+            "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+            "kind": "migration",
+            "sql": "-- Exact0400 predecessor companion; no transaction wrapper or migration edit.\n-- Capture32ee8711 / actual canonical pending prefixbcfd75a0 / PG17.11.\n-- Same existing atomic transaction: LOCK + assertion BEFORE immutable0400 DO.\nlock table public.weekly_source_group_rule_assignments in access exclusive mode;\n\ndo $health_capability_prebody$\ndeclare v_actual jsonb; v_all_checks integer;\nbegin\n  if not exists(select 1 from pg_catalog.pg_class c\n    join pg_catalog.pg_namespace n on n.oid=c.relnamespace\n    where c.oid='public.weekly_source_group_rule_assignments'::regclass\n      and n.nspname='public' and c.relname='weekly_source_group_rule_assignments'\n      and c.relkind='r' and not c.relispartition\n      and c.relowner=(select oid from pg_catalog.pg_roles where rolname=current_user)\n      and not exists(select 1 from pg_catalog.pg_inherits i where i.inhrelid=c.oid or i.inhparent=c.oid)) then\n    raise exception 'HEALTHROSTER_CAPABILITY_PREDECESSOR_RELATION_CHANGED' using errcode='55000';\n  end if;\n  select count(*)::integer into v_all_checks from pg_catalog.pg_constraint c\n    where c.conrelid='public.weekly_source_group_rule_assignments'::regclass and c.contype='c';\n  select coalesce(jsonb_agg(jsonb_build_object(\n    'constraint_name',c.conname::text,\n    'selector_definition_default_false',d.definition,\n    'evidence_definition_pretty_true',pg_catalog.pg_get_constraintdef(c.oid,true),\n    'evidence_expression_pretty_true',pg_catalog.pg_get_expr(c.conbin,c.conrelid,true),\n    'selector_role',case when position('PROTECTED_SOURCE' in d.definition)>0 then 'ALREADY_EXTENDED'\n      when position('rule_set_version_id' in d.definition)>0 then 'VERSION'\n      when position('RULE_SET' in d.definition)>0 then 'PURPOSE' else 'UNEXPECTED' end,\n    'key_columns_in_native_order',array(select a.attname::text\n      from unnest(c.conkey) with ordinality k(attnum,ord)\n      join pg_catalog.pg_attribute a on a.attrelid=c.conrelid and a.attnum=k.attnum\n      order by k.ord),\n    'key_columns_sorted',array(select a.attname::text\n      from unnest(c.conkey) k(attnum)\n      join pg_catalog.pg_attribute a on a.attrelid=c.conrelid and a.attnum=k.attnum\n      order by a.attname),\n    'is_local',c.conislocal,'is_validated',c.convalidated,\n    'is_deferred',c.condeferred,'is_deferrable',c.condeferrable,\n    'is_no_inherit',c.connoinherit,'inherited_count',c.coninhcount,\n    'has_no_parent_constraint',c.conparentid=0\n  ) order by c.conname),'[]'::jsonb) into v_actual\n  from pg_catalog.pg_constraint c\n  cross join lateral(select pg_catalog.pg_get_constraintdef(c.oid) definition)d\n  where c.conrelid='public.weekly_source_group_rule_assignments'::regclass and c.contype='c'\n    and position('feature_purpose' in d.definition)>0\n    and position('SIGNED_CHECK_ONLY' in d.definition)>0;\n  if v_all_checks<>10 or jsonb_array_length(v_actual)<>2\n     or v_actual is distinct from $expected0400$[{\"is_local\":true,\"is_deferred\":false,\"is_validated\":true,\"is_deferrable\":false,\"is_no_inherit\":false,\"selector_role\":\"VERSION\",\"constraint_name\":\"weekly_source_group_rule_assignments_check2\",\"inherited_count\":0,\"key_columns_sorted\":[\"feature_purpose\",\"rule_set_version_id\"],\"has_no_parent_constraint\":true,\"key_columns_in_native_order\":[\"feature_purpose\",\"rule_set_version_id\"],\"evidence_definition_pretty_true\":\"CHECK (feature_purpose IS NULL OR (rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text))\",\"evidence_expression_pretty_true\":\"feature_purpose IS NULL OR (rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text)\",\"selector_definition_default_false\":\"CHECK (((feature_purpose IS NULL) OR ((rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text))))\"},{\"is_local\":true,\"is_deferred\":false,\"is_validated\":true,\"is_deferrable\":false,\"is_no_inherit\":false,\"selector_role\":\"PURPOSE\",\"constraint_name\":\"weekly_source_group_rule_assignments_feature_purpose_check\",\"inherited_count\":0,\"key_columns_sorted\":[\"feature_purpose\"],\"has_no_parent_constraint\":true,\"key_columns_in_native_order\":[\"feature_purpose\"],\"evidence_definition_pretty_true\":\"CHECK (feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text]))\",\"evidence_expression_pretty_true\":\"feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text])\",\"selector_definition_default_false\":\"CHECK ((feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text])))\"}]$expected0400$::jsonb then\n    raise exception 'HEALTHROSTER_CAPABILITY_PREDECESSOR_CHECKS_CHANGED' using errcode='55000';\n  end if;\nend;\n$health_capability_prebody$;\n\n-- One-time reviewed capability CHECK extension; source only until protected release.\n\n-- Proposal: extend only two existing assignment CHECK constraints. No table,\n-- column, pricing setting, capability store, policy overlay or exposed route.\ndo $extend_existing_purpose$\ndeclare row_data record; purpose_checks integer:=0; version_checks integer:=0;\nbegin\n  for row_data in select conname,pg_get_constraintdef(oid) definition from pg_catalog.pg_constraint\n    where conrelid='public.weekly_source_group_rule_assignments'::regclass and contype='c'\n  loop\n    if position('feature_purpose' in row_data.definition)>0 and position('SIGNED_CHECK_ONLY' in row_data.definition)>0 then\n      if position('PROTECTED_SOURCE' in row_data.definition)>0 then\n        raise exception 'WEEKLY_SOURCE_CAPABILITY_SCHEMA_ALREADY_EXTENDED' using errcode='55000'; end if;\n      if position('rule_set_version_id' in row_data.definition)>0 then version_checks:=version_checks+1;\n      elsif position('RULE_SET' in row_data.definition)>0 then purpose_checks:=purpose_checks+1;\n      else raise exception 'WEEKLY_SOURCE_CAPABILITY_SCHEMA_UNEXPECTED_CHECK' using errcode='55000'; end if;\n      execute format('alter table public.weekly_source_group_rule_assignments drop constraint %I',row_data.conname);\n    end if;\n  end loop;\n  if purpose_checks<>1 or version_checks<>1 then\n    raise exception 'WEEKLY_SOURCE_CAPABILITY_SCHEMA_CHECK_CENSUS_CHANGED' using errcode='55000'; end if;\n  alter table public.weekly_source_group_rule_assignments add constraint weekly_source_assignment_feature_purpose_v2\n    check (feature_purpose in ('RULE_SET','SIGNED_CHECK_ONLY','PROTECTED_SOURCE'));\n  alter table public.weekly_source_group_rule_assignments add constraint weekly_source_assignment_feature_version_v2\n    check (feature_purpose is null or ((rule_set_version_id is null)=(feature_purpose in ('SIGNED_CHECK_ONLY','PROTECTED_SOURCE'))));\nend;\n$extend_existing_purpose$;\n\n\n",
+            "sqlHash": "190f4f5974297dd4391c8ef3067338ae11e8a9e3a460df77a6ea0b9a4b0d141a",
+            "sourceSqlHash": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+            "phase": "migration",
+            "sourceFiles": [
+              {
+                "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+                "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16"
+              },
+              {
+                "file": "supabase/release/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+                "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c"
+              },
+              {
+                "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+                "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+              }
+            ],
+            "atomicCapabilityPredecessorCompanion": {
+              "version": "HEALTHROSTER_CAPABILITY_CHECK_PREBODY_COMPANION_V1",
+              "companionSha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+              "statementSha256": [
+                "36c0abeb1bc4b31d6741eed04e7806f0168d754445432a2e08609c21f281799f",
+                "b97b8204efef03757c0138a212634810dad3983f9b19d2277adc1b04bc4e8758"
+              ],
+              "placement": "BEFORE_IMMUTABLE_BODY_SAME_TRANSACTION",
+              "evidenceFiles": [
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+                  "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+                  "preservedRawSha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/build-proposal.mjs",
+                  "sha256": "d5ae4c0a6485c0075d15e003fb5475b5f31d08376cae0210bc2fba0738d94019",
+                  "preservedRawSha256": "d5ae4c0a6485c0075d15e003fb5475b5f31d08376cae0210bc2fba0738d94019"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/check_expressions.py",
+                  "sha256": "3caed0f8ac684841db69d308d827ab3afe6b0665c075db1993fc0a685fe51bb8",
+                  "preservedRawSha256": "3caed0f8ac684841db69d308d827ab3afe6b0665c075db1993fc0a685fe51bb8"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/EXPRESSION_REVIEW.json",
+                  "sha256": "730f8126b447e64bf0a7d39c59fc9ffbb04ca63accc025ac7f8897bd6322ba48",
+                  "preservedRawSha256": "640ad6a503cf889e7b337eaac2269d61c2c0de5777d3de78ff32e89ca06245c4"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/CONSTRUCTOR_1133.sql",
+                  "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+                  "preservedRawSha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/IMMUTABLE_CONSUMER_0400.sql",
+                  "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+                  "preservedRawSha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/INPUT_RECEIPT_R1.json",
+                  "sha256": "e0c99e59c94c70f49e3db388cd493fcb1684738558741dd189bc839c1116ee2a",
+                  "preservedRawSha256": "e0c99e59c94c70f49e3db388cd493fcb1684738558741dd189bc839c1116ee2a"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/NATIVE_PREDECESSOR_CENSUS.json",
+                  "sha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6",
+                  "preservedRawSha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/NATIVE_R2.json",
+                  "sha256": "0a8997f662d045996832a384866d1fa26c08f5f9db188f6f855d1fe4eb255086",
+                  "preservedRawSha256": "0a8997f662d045996832a384866d1fa26c08f5f9db188f6f855d1fe4eb255086"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PLAN.json",
+                  "sha256": "e75b276f6e766f4d98d10729982352e4b9801bb2ec16bb8cc28f231e492399eb",
+                  "preservedRawSha256": "e75b276f6e766f4d98d10729982352e4b9801bb2ec16bb8cc28f231e492399eb"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_01_13102026_1112_healthroster_invoice_support_members_v1.sql",
+                  "sha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b",
+                  "preservedRawSha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_02_13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+                  "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+                  "preservedRawSha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_03_13102026_1133_weekly_source_rule_sets_schema.sql",
+                  "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+                  "preservedRawSha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_04_13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+                  "sha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6",
+                  "preservedRawSha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_05_13102026_1344_weekly_source_self_bill_report_schema.sql",
+                  "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+                  "preservedRawSha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_06_13102026_1430_weekly_source_invoice_money_origins.sql",
+                  "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+                  "preservedRawSha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_07_13102026_1456_weekly_source_protection_query_support_v1.sql",
+                  "sha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17",
+                  "preservedRawSha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_08_13102026_1519_healthroster_correction_reason_bound_v1.sql",
+                  "sha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2",
+                  "preservedRawSha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_09_13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+                  "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+                  "preservedRawSha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/RESTORATION.json",
+                  "sha256": "582ba3016d5fcc9673036032e78ad786c5a3b88abeb472f40f3b1f73c896e1fc",
+                  "preservedRawSha256": "582ba3016d5fcc9673036032e78ad786c5a3b88abeb472f40f3b1f73c896e1fc"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/SUMMARY.json",
+                  "sha256": "2617a9e826cf22eb8d52701771f889653bca47198536ca147638341c10b52627",
+                  "preservedRawSha256": "2617a9e826cf22eb8d52701771f889653bca47198536ca147638341c10b52627"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/MOUNT_PLAN.json",
+                  "sha256": "006f98080472d362ec48317917c1927ae07c0b22d700084fdd0c8aa6b0aecde3",
+                  "preservedRawSha256": "006f98080472d362ec48317917c1927ae07c0b22d700084fdd0c8aa6b0aecde3"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/PROPOSAL.json",
+                  "sha256": "ccdf7881bb4d2d728a00d66959cdb8846ead1027b9378c9f322d142c62946b9e",
+                  "preservedRawSha256": "ccdf7881bb4d2d728a00d66959cdb8846ead1027b9378c9f322d142c62946b9e"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/README.md",
+                  "sha256": "7fd291b8dc98fb86feb06933931d90e7fbea2e1f3ac60e67716df27b990e9f91",
+                  "preservedRawSha256": "7fd291b8dc98fb86feb06933931d90e7fbea2e1f3ac60e67716df27b990e9f91"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/seal-review.mjs",
+                  "sha256": "1dfa95956c5bbdc01e28876f8d702f08ee48a679ddf8c0bfa88efb8630ef03e5",
+                  "preservedRawSha256": "1dfa95956c5bbdc01e28876f8d702f08ee48a679ddf8c0bfa88efb8630ef03e5"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/test-proposal.mjs",
+                  "sha256": "e97b9bcb0e8f3cae3b5a04c2f94f267af82b2766d7dd9e448996f443eaff0055",
+                  "preservedRawSha256": "e97b9bcb0e8f3cae3b5a04c2f94f267af82b2766d7dd9e448996f443eaff0055"
+                },
+                {
+                  "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/TEST_RESULTS.json",
+                  "sha256": "337a8fe8e6d6b4681db20d775b8693ff00d9c85fa9fe695b1e58052560ab8588",
+                  "preservedRawSha256": "337a8fe8e6d6b4681db20d775b8693ff00d9c85fa9fe695b1e58052560ab8588"
+                }
+              ],
+              "nativeProof": "NOT_RUN"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "native0400": "NOT_RUN",
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "limits": [
+    "Four exact immutable source diagnostics only; no native approval or generic catalogue exception.",
+    "1430 native positive, schema drift and contention receipts are separate integrator evidence.",
+    "0400 constructor native capture proved only predecessor state; new companion native execution remains NOT RUN.",
+    "Existing writer, context, ledger, final-definer, ACL, verifier and release gates remain independently required.",
+    "Contact P1 repair is separate; changing any bound compiler graph file invalidates this source classification."
+  ]
+}
