@@ -74,8 +74,8 @@
   "module": {
     "source": "runtime/source-pay-decision-http.mjs",
     "target": "broker/src/weekly-source/source-pay-decision-http.mjs",
-    "sha256": "7a359bdb27998ae48e9fc3f4d65804864511ab0ca7f0024c2eac82eab2e9b5cc",
-    "bytes": 7436
+    "sha256": "4e6e5f84839bce46b71fce26389a2a988e5ac073ca0b4bb29bb22345dd9a042d",
+    "bytes": 7885
   },
   "rootSoleIntegrator": true,
   "bankBodiesChanged": 0,

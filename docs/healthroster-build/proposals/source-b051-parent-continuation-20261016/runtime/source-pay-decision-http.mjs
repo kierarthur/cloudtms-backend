@@ -23,12 +23,19 @@ export function matchSourcePayDecisionRoute(path){
 const fail=(code,status)=>{throw Object.assign(new Error(code),{code,status,sourceHttpLocal:true});};
 const response=(status,value)=>Response.json(value,{status,headers:{'cache-control':'no-store'}});
 async function body(req){
- const length=req.headers.get('content-length');
- if(length!==null&&(!/^\d+$/.test(length)||Number(length)>maximumBytes))fail('SOURCE_PAY_DECISION_REQUEST_INVALID',400);
- let bytes,text,value;
- try{bytes=await req.arrayBuffer();if(bytes.byteLength>maximumBytes)fail('SOURCE_PAY_DECISION_REQUEST_INVALID',400);text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);value=parsePushTimingJson(text);}
- catch{fail('SOURCE_PAY_DECISION_REQUEST_INVALID',400);}
- return value;
+ let reader;let complete=false;
+ try{
+  reader=req.body?.getReader();if(!reader)fail('SOURCE_PAY_DECISION_REQUEST_INVALID',400);
+  const length=req.headers.get('content-length');
+  if(length!==null&&(!/^\d+$/.test(length)||Number(length)>maximumBytes))fail('SOURCE_PAY_DECISION_REQUEST_INVALID',400);
+  const decoder=new TextDecoder('utf-8',{fatal:true}),chunks=[];let bytes=0;
+  for(;;){const part=await reader.read();if(part.done)break;
+   if(!(part.value instanceof Uint8Array)||part.value.byteLength>maximumBytes-bytes)fail('SOURCE_PAY_DECISION_REQUEST_INVALID',400);
+   bytes+=part.value.byteLength;chunks.push(decoder.decode(part.value,{stream:true}));
+  }
+  chunks.push(decoder.decode());const value=parsePushTimingJson(chunks.join(''));complete=true;return value;
+ }catch{fail('SOURCE_PAY_DECISION_REQUEST_INVALID',400);}
+ finally{if(reader){if(!complete)try{await reader.cancel();}catch{}reader.releaseLock();}}
 }
 const localCodes=Object.freeze({SOURCE_PAY_DECISION_REQUEST_INVALID:400,SOURCE_PAY_DECISION_RESULT_INVALID:502,
  SOURCE_PAY_DECISION_DEPENDENCY_REQUIRED:503,SOURCE_PAY_DECISION_READ_PROJECTION_DEPENDENCY_REQUIRED:503,

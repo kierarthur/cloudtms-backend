@@ -1,6 +1,8 @@
 {
   "version": "HEALTH_SOURCE_B051_PARENT_CONTINUATION_PROPOSAL_V1",
   "checkpoint": "39aa5b30042711956b83a7bf899f416d2f3b4771",
+  "historicalSourceProposal": "13b135445b495e1e8cb49ff8487031c154380494",
+  "successorScope": "Bounded streaming UTF8 body reader/cancellation and four refusal/split-byte tests; all six parent edits and complete SQL evidence unchanged.",
   "files": [
     {
       "path": "build.mjs",
@@ -25,7 +27,7 @@
     {
       "path": "PARENT_EDITS.json",
       "bytes": 5860,
-      "sha256": "2d17f5c908371bea39386122763d90012bdeb45e03b62a7308cb61b037a83cdd"
+      "sha256": "b9f136f94a0be936682d07c92943a7e1e0db912977b70ed4f3e17b9cfee33980"
     },
     {
       "path": "PROPOSED_ROUTES.js",
@@ -34,8 +36,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 10596,
-      "sha256": "f0839f00e69f8f93514a98900c65f236ffa5ad4d0709e2447988eb84bf1c2491"
+      "bytes": 10913,
+      "sha256": "6e619781ce8f85df09b10f715be92560c6efe2c4582d07ebf80bc098ae40b4c0"
     },
     {
       "path": "recipe.mjs",
@@ -44,13 +46,13 @@
     },
     {
       "path": "runtime/source-pay-decision-http.mjs",
-      "bytes": 7436,
-      "sha256": "7a359bdb27998ae48e9fc3f4d65804864511ab0ca7f0024c2eac82eab2e9b5cc"
+      "bytes": 7885,
+      "sha256": "4e6e5f84839bce46b71fce26389a2a988e5ac073ca0b4bb29bb22345dd9a042d"
     },
     {
       "path": "seal.mjs",
-      "bytes": 2353,
-      "sha256": "5bafd176dd4daf44e706c37033b5d46c4fe33496ef627ac52f4d77f15031d6f0"
+      "bytes": 2579,
+      "sha256": "ede369d838ab2b4bf7f5f6af2cdc08608cb8875f81600c919a8644a2dc74f975"
     },
     {
       "path": "SHARED_DECLARATIONS.json",
@@ -109,19 +111,19 @@
     },
     {
       "path": "TEST_RESULTS.json",
-      "bytes": 2204,
-      "sha256": "8727661fc92407be9656c17e4d73566bbec408b9cd1b0ca5f3915df99f813737"
+      "bytes": 2403,
+      "sha256": "2da18b54e4cde5a5719374dadfd187641c9f11ac57cb00c1c98e4cfbc5683d15"
     },
     {
       "path": "test.mjs",
-      "bytes": 17286,
-      "sha256": "a45c2112473a1fae4eb3a2903c76db4f40745390ab5bb26e368855f367b0948c"
+      "bytes": 19257,
+      "sha256": "69b65d4445b0abbf30019a060239cb257f5ede96190fa51e8c65fda8af026589"
     }
   ],
   "parentEdits": 6,
   "fullParentsReversed": 2,
   "completeCurrentHealthFunctions": 9,
-  "sourceTests": 37,
+  "sourceTests": 41,
   "sourceQualification": "ACTUAL_COMPOSED_PARENT_REAL_WORKERS_STRICT_DECODERS_MOCKED_RPC_ONLY",
   "publicReadProjection": "TRUTHFULLY_CLOSED_EXACT_SHARED_FINANCIAL_CHILD_AND_OUTER_SCHEMA_REQUIRED",
   "capabilityContract": "PROPOSAL_NOT_PUBLISHED_ABI",

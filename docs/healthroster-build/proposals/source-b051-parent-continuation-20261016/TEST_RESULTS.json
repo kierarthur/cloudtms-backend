@@ -1,6 +1,6 @@
 {
   "version": "HEALTH_SOURCE_PAY_PARENT_SOURCE_TESTS_V1",
-  "passed": 37,
+  "passed": 41,
   "failed": 0,
   "checks": [
     "full-root-parent-recipe-and-reverse",
@@ -39,7 +39,11 @@
     "existing-Source-scope-route-and-unrelated-prefix-retained",
     "index-actual-auth-off-rule-recording-calculator-and-no-Bank-parent-edit",
     "actual-index-callback-expressions-forward-actor-native-RPC-calculator",
-    "body-byte-bound-and-invalid-UTF8-refuse-before-worker"
+    "body-byte-bound-and-invalid-UTF8-refuse-before-worker",
+    "bounded-stream-cancels-oversize-missing-length",
+    "bounded-stream-cancels-oversize-1",
+    "fatal-stream-decoder-preserves-split-multibyte-UTF8",
+    "fatal-stream-tail-cancels-with-no-RPC"
   ],
   "scope": "ACTUAL_COMPOSED_PARENT_REAL_WORKERS_STRICT_DECODERS_MOCKED_RPC_ONLY",
   "native": "NOT_RUN",
