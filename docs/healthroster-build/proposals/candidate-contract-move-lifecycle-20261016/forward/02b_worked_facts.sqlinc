@@ -1,0 +1,20 @@
+-- Successor worked-fact domain. Identity/ancestry and accepted body proof are
+-- independently checked by the native context and private workflow fact reader.
+create or replace function private.candidate_contract_move_facts_v1(p_timesheet jsonb,p_workflows jsonb)
+returns jsonb language sql immutable security definer set search_path=pg_catalog,private,pg_temp
+as $function$
+ select jsonb_build_object('version','CANDIDATE_MOVE_FACTS_V2',
+  'timesheet',jsonb_build_object('week_ending_date',p_timesheet->'week_ending_date',
+   'actual_schedule_json',p_timesheet->'actual_schedule_json','worked_start_iso',p_timesheet->'worked_start_iso',
+   'worked_end_iso',p_timesheet->'worked_end_iso','worked_minutes',p_timesheet->'worked_minutes',
+   'break_start_iso',p_timesheet->'break_start_iso','break_end_iso',p_timesheet->'break_end_iso','break_minutes',p_timesheet->'break_minutes',
+   'additional_units_week',p_timesheet->'additional_units_week','additional_units_per_day',p_timesheet->'additional_units_per_day',
+   'reference_number',p_timesheet->'reference_number','day_references_json',p_timesheet->'day_references_json'),
+  'workflows',coalesce((select jsonb_agg(distinct facts order by facts) from (
+    select coalesce(w->'worked_facts',private.candidate_contract_move_signature_facts_v1(
+      coalesce(nullif(w->'input_snapshot_json','null'::jsonb),nullif(w->'immutable_submission_json','null'::jsonb),'{}'::jsonb))) facts
+    from jsonb_array_elements(p_workflows) w
+   ) projected where facts<>private.candidate_contract_move_signature_facts_v1('{}'::jsonb)),'[]'::jsonb));
+$function$;
+alter function private.candidate_contract_move_facts_v1(jsonb,jsonb) owner to postgres;
+revoke all on function private.candidate_contract_move_facts_v1(jsonb,jsonb) from public,anon,authenticated,service_role;

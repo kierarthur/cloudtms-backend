@@ -1,0 +1,73 @@
+-- Worked/body fact projection, not a financial calculator. Exact native input
+-- selection: buildCandidateWeeklySubmissionThroughCanonicalAuthority and native
+-- normaliseAdaptiveBreakEntry/normaliseCandidateBreakInput. Current worked rows
+-- and immutable source receipt checks remain separate.
+create or replace function private.candidate_contract_move_signature_facts_v1(p_submission jsonb)
+returns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,pg_temp
+as $function$
+declare
+ h jsonb; e jsonb; schedule jsonb; segment jsonb; entry jsonb; normalized jsonb:='[]'::jsonb;
+ amount_key text; amount_text text; kind text; start_value text; end_value text; start_minutes integer; end_minutes integer; minutes integer;
+begin
+ h:=coalesce(nullif(p_submission->'hours_submission','null'::jsonb),p_submission,'{}'::jsonb);
+ h:=coalesce(nullif(h->'timesheet_patch_json','null'::jsonb),h);
+ e:=coalesce(nullif(p_submission->'expense_submission','null'::jsonb),nullif(p_submission->'expense_claim','null'::jsonb),p_submission,'{}'::jsonb);
+ e:=coalesce(nullif(e->'canonical_tsfin_snapshot','null'::jsonb),e);
+ for amount_key in select unnest(array['mileage_units',case when e ? 'travel_amount' then 'travel_amount' else 'travel_pay_ex_vat' end,
+  case when e ? 'accommodation_amount' then 'accommodation_amount' else 'accommodation_pay_ex_vat' end,
+  case when e ? 'other_amount' then 'other_amount' else 'other_pay_ex_vat' end]) loop
+  amount_text:=btrim(e->>amount_key);
+  if amount_text is not null and amount_text<>'' and (amount_text !~ '^[+]?[0-9]+([.][0-9]+)?$'
+   or jsonb_typeof(e->amount_key) not in('number','string')) then
+   raise exception 'CANDIDATE_MOVE_FACTS_INVALID' using errcode='22023';end if;
+ end loop;
+ schedule:=coalesce(nullif(h->'actual_schedule_json','null'::jsonb),'[]'::jsonb);
+ if jsonb_typeof(schedule)<>'array' then raise exception 'CANDIDATE_MOVE_FACTS_INVALID' using errcode='22023';end if;
+ for segment in select value from jsonb_array_elements(schedule) loop
+  if jsonb_typeof(segment)<>'object' then raise exception 'CANDIDATE_MOVE_FACTS_INVALID' using errcode='22023';end if;
+  entry:=segment->'break_entry';
+  if entry is not null then
+   if jsonb_typeof(entry)<>'object' or exists(select 1 from jsonb_object_keys(entry) k
+    where k not in('kind','break_start','break_end','calculated_break_minutes','break_minutes','no_break')) then
+    raise exception 'CANDIDATE_MOVE_FACTS_INVALID' using errcode='22023';end if;
+   kind:=upper(entry->>'kind');
+   if kind='NO_BREAK' and entry->'no_break'='true'::jsonb and entry->>'break_minutes'='0'
+     and not entry ?| array['break_start','break_end','calculated_break_minutes'] then
+    segment:=(segment-'break_entry')||jsonb_build_object('no_break',true,'break_minutes',0);
+   elsif kind='DURATION_MINUTES' and entry->>'break_minutes' ~ '^[0-9]+$'
+     and (entry->>'break_minutes')::numeric between 1 and 1440
+     and not entry ?| array['break_start','break_end','calculated_break_minutes','no_break'] then
+    segment:=(segment-'break_entry')||jsonb_build_object('break_minutes',(entry->>'break_minutes')::integer);
+   elsif kind='START_END_TIMES' and entry->>'break_start' ~ '^[0-2][0-9]:[0-5][0-9]$'
+     and entry->>'break_end' ~ '^[0-2][0-9]:[0-5][0-9]$' and not entry ?| array['break_minutes','no_break'] then
+    start_value:=entry->>'break_start';end_value:=entry->>'break_end';
+    start_minutes:=split_part(start_value,':',1)::integer*60+split_part(start_value,':',2)::integer;
+    end_minutes:=split_part(end_value,':',1)::integer*60+split_part(end_value,':',2)::integer;
+    minutes:=case when end_minutes>start_minutes then end_minutes-start_minutes else end_minutes+1440-start_minutes end;
+    if start_minutes>=1440 or end_minutes>=1440 or start_minutes=end_minutes
+      or entry->>'calculated_break_minutes' is distinct from minutes::text then
+     raise exception 'CANDIDATE_MOVE_FACTS_INVALID' using errcode='22023';end if;
+    segment:=(segment-'break_entry')||jsonb_build_object('break_start',start_value,'break_end',end_value,'break_minutes',minutes);
+   else raise exception 'CANDIDATE_MOVE_FACTS_INVALID' using errcode='22023';end if;
+  end if;
+  -- Exact native zero-break canonicalization. Keep every other segment field,
+  -- including dates, worked start/end aliases, references, and additional facts.
+  if segment->'no_break'='true'::jsonb or segment->'noBreak'='true'::jsonb
+    or coalesce(nullif(segment->>'break_minutes',''),nullif(segment->>'break_mins','')) ~ '^[+]?0+([.]0+)?$' then
+   segment:=segment||jsonb_build_object('no_break',true,'break_minutes',0,'break_mins',0,'breaks','[]'::jsonb,
+    'break_start',null,'break_end',null,'break_start_iso',null,'break_end_iso',null);
+  end if;
+  normalized:=normalized||jsonb_build_array(segment);
+ end loop;
+ return jsonb_build_object('actual_schedule_json',normalized,
+  'additional_units_week',coalesce(nullif(h->'additional_units_week','null'::jsonb),'{}'::jsonb),
+  'additional_units_per_day',coalesce(nullif(h->'additional_units_per_day','null'::jsonb),'{}'::jsonb),
+  'mileage_units',floor(private._candidate_expense_number_v1(e,'mileage_units')::double precision*100+0.5)::numeric/100,
+  'travel_amount',floor(private._candidate_expense_number_v1(e,case when e ? 'travel_amount' then 'travel_amount' else 'travel_pay_ex_vat' end)::double precision*100+0.5)::numeric/100,
+  'accommodation_amount',floor(private._candidate_expense_number_v1(e,case when e ? 'accommodation_amount' then 'accommodation_amount' else 'accommodation_pay_ex_vat' end)::double precision*100+0.5)::numeric/100,
+  'other_amount',floor(private._candidate_expense_number_v1(e,case when e ? 'other_amount' then 'other_amount' else 'other_pay_ex_vat' end)::double precision*100+0.5)::numeric/100,
+  'description',btrim(coalesce(e->>'description',e->>'expenses_description','')));
+end;
+$function$;
+alter function private.candidate_contract_move_signature_facts_v1(jsonb) owner to postgres;
+revoke all on function private.candidate_contract_move_signature_facts_v1(jsonb) from public,anon,authenticated,service_role;
