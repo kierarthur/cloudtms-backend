@@ -1,0 +1,56 @@
+{
+  "scope": "OFFLINE_PG17_SOURCE_ONLY",
+  "pglast": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "completeFunctions": [
+    {
+      "name": "private.daily_rate_correction_public_assert_v1",
+      "arguments": "p_value jsonb,p_shape text",
+      "wholeBytes": 12600,
+      "wholeSha256": "ba3df30ace474bb25d617a92ee1fae3a61c1f0383360460c7ab1502d281719b5",
+      "completeCreateStatement": true,
+      "parsedBody": true,
+      "returns": "jsonb",
+      "securityDefiner": true
+    },
+    {
+      "name": "public.timesheet_daily_rate_correction_preview_v1",
+      "arguments": "p_args jsonb",
+      "wholeBytes": 1783,
+      "wholeSha256": "48c04e0d084352f6a7422d3dda37a0112f947a99ea54b7dd8f3ec3775e2156e6",
+      "completeCreateStatement": true,
+      "parsedBody": true,
+      "returns": "jsonb",
+      "securityDefiner": true
+    },
+    {
+      "name": "public.timesheet_daily_rate_correction_accept_v1",
+      "arguments": "p_args jsonb",
+      "wholeBytes": 2735,
+      "wholeSha256": "34f413e4613db01f35aeb33678b9bbeb822ed2a9858f4802260192a269370978",
+      "completeCreateStatement": true,
+      "parsedBody": true,
+      "returns": "jsonb",
+      "securityDefiner": true
+    },
+    {
+      "name": "public.timesheet_daily_rate_correction_result_v1",
+      "arguments": "p_args jsonb",
+      "wholeBytes": 1526,
+      "wholeSha256": "651f193920a2e9c41c55767670b75e730057a953a0eafe780b7d5ae1013a428d",
+      "completeCreateStatement": true,
+      "parsedBody": true,
+      "returns": "jsonb",
+      "securityDefiner": true
+    }
+  ],
+  "aclStatements": 11,
+  "expandedRootStatements": 18,
+  "postAclNotifyBeforeCommit": true,
+  "nativeCreationResolutionRolesAclApiConcurrency": "NOT_RUN",
+  "missingPrivateDelegatesCreated": false,
+  "financialBodiesCreated": false
+}

@@ -1,0 +1,108 @@
+{
+  "version": "HEALTH_DAILY_PUBLIC_INTEGRATION_SOURCE_V1",
+  "sourceStatus": "FOUR_COMPLETE_SERVICE_CALLERS_AND_ACTUAL_ROUTER_PROPOSAL; FRESH_ECONOMIC_COMPOSITION_HELD",
+  "historicalPredecessor": "7fda1321502f1576487dd86889aa22ebe7896766",
+  "files": [
+    {
+      "file": "ASSEMBLY.json",
+      "bytes": 13118,
+      "sha256": "ca68d5078ed849e8f6c807e0336156ef5d00ad1c02845c76dee4d96716c6a1a2"
+    },
+    {
+      "file": "DEPENDENCY_REVIEW.json",
+      "bytes": 5556,
+      "sha256": "7c33b6d00669af5e72576a0a2e5538543a676de7b5eb9f1746959547bdace4b7"
+    },
+    {
+      "file": "dependency-review.mjs",
+      "bytes": 4322,
+      "sha256": "30aa55b1ad0fcb28b5d41208e3d23d4b009345b6864d85990db3019f971c9160"
+    },
+    {
+      "file": "existing-exact/broker/src/contract-correction-v3.mjs",
+      "bytes": 12418,
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
+    },
+    {
+      "file": "existing-exact/broker/src/daily-canonical-authority.js",
+      "bytes": 18725,
+      "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942"
+    },
+    {
+      "file": "existing-exact/broker/src/daily-rate-correction.js",
+      "bytes": 14101,
+      "sha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84"
+    },
+    {
+      "file": "forward/daily_public_services_v1.sql",
+      "bytes": 284,
+      "sha256": "1b76e78b1baad084f4d48ce914a1b1dae50254f2071132ed9b9b9ae2b27b05a7"
+    },
+    {
+      "file": "forward/host/daily-rate-correction.dispatch.jsinc",
+      "bytes": 728,
+      "sha256": "3873a7fa533febfd19fc0bd945671c58054483a4a85ecf8e58e29ce6e5dc0e73"
+    },
+    {
+      "file": "forward/host/daily-rate-correction.import.jsinc",
+      "bytes": 108,
+      "sha256": "9c12a999a7ef6e1f7d3ff70bb220e34deeddadfc1a8044ebe4f0a267f9502c1b"
+    },
+    {
+      "file": "forward/sql/01_public_services.sqlinc",
+      "bytes": 18959,
+      "sha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34"
+    },
+    {
+      "file": "forward/sql/99_acl.sqlinc",
+      "bytes": 1256,
+      "sha256": "939c5ae6782b76183f18a65d16be9eada916db846cad23de879c9988394c7235"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2294,
+      "sha256": "c4b8e397bfe629cb823b0ca2ec8ecee66911501066ddb3806667a260606eb28f"
+    },
+    {
+      "file": "GRAMMAR_RESULT.json",
+      "bytes": 1832,
+      "sha256": "e6fbae045b5b50454a7ec4b403aafca924995d122d5883f970c9d0b491d34ddc"
+    },
+    {
+      "file": "grammar-review.py",
+      "bytes": 2125,
+      "sha256": "0f6d26904545e946c03430cfb61b9520b00fa175121d9a2aacfa0d4738a0e99f"
+    },
+    {
+      "file": "integration.test.mjs",
+      "bytes": 7289,
+      "sha256": "77902ccba4c81197a35707285cf5cb3eca307e7d2fa1f375893838e8575088c4"
+    },
+    {
+      "file": "original-http.test.mjs",
+      "bytes": 11172,
+      "sha256": "75e8f82c58a1d0ae723a63fcd2e3ffbb19cfd86af408701fb3de3ad5e25f9022"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 9872,
+      "sha256": "a7220000605714a8db64ed8d571d7b02c7fa00f1e27b24f8f2c32bd7cf219457"
+    },
+    {
+      "file": "README.md",
+      "bytes": 9279,
+      "sha256": "5a89ade4918fa8f462d56689b4286615951c3dd427253354bebd403de8f5a245"
+    },
+    {
+      "file": "REGISTRY_ADDITIONS.json",
+      "bytes": 1533,
+      "sha256": "45c62aa72300b2296f172b6367b1bd38357e90d8d5453f74b94d479317b7ce46"
+    },
+    {
+      "file": "SOURCE_CHECKS.json",
+      "bytes": 514,
+      "sha256": "bb16e25c4d1ca4ec273e6e4f9bb2910c5064c5122a278afb96e1e0f6163630bf"
+    }
+  ],
+  "native": "NOT_RUN"
+}

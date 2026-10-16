@@ -1,0 +1,141 @@
+{
+  "scope": "REVIEWED_DELIVERY_PACK_AND_CURRENT_I2_ONLY",
+  "readOnly": true,
+  "searchedCurrentFiles": [
+    {
+      "file": "supabase/repeatable\\16102026_0858_nhsp_v6_daily_native_authority\\02_admission.sqlinc",
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e"
+    }
+  ],
+  "wantedCurrentDefinitions": [
+    "private.daily_rate_correction_review_v1",
+    "private.daily_rate_correction_accept_v1",
+    "private.daily_rate_correction_result_v1",
+    "private.bpay_next_daily_rate_correction_publish_v1"
+  ],
+  "currentDefinitions": [],
+  "packInputs": [
+    {
+      "file": "Health_CODE_AUDIT.md",
+      "sha256": "36ddfdb380e221d2bcda4738b4607f45df43ce3d70d1199ec5690750fa49de05",
+      "declaredSymbols": [
+        "daily_rate_correction_accept_v1",
+        "daily_rate_correction_context_v1",
+        "daily_rate_correction_preview_v1",
+        "daily_rate_correction_result_v1",
+        "private.bpay_next_daily_rate_correction_publish_v1",
+        "private.bpay_next_daily_rate_correction_resolution_review_v1",
+        "private.daily_rate_correction_accept_v1",
+        "private.daily_rate_correction_context_v1",
+        "private.daily_rate_correction_result_v1",
+        "private.daily_rate_correction_review_v1",
+        "private.daily_rate_correction_revision_admit_v1"
+      ]
+    },
+    {
+      "file": "BANKING_CODE_AUDIT.md",
+      "sha256": "a79c24f994f83774b54501e29a5c84993819cc35f09db1e8b49a00b4b5b3aedd",
+      "declaredSymbols": [
+        "private.bpay_next_daily_rate_correction_publish_v1"
+      ]
+    },
+    {
+      "file": "HISTORY_RECONCILIATION_CONTRACT.md",
+      "sha256": "8bdd8e3bedb43e26ba661842687e8d24d74cc20dc3a261b79b7c9c77588822cd",
+      "declaredSymbols": [
+        "private.daily_rate_correction_review_v1"
+      ]
+    },
+    {
+      "file": "OWNERSHIP.md",
+      "sha256": "928794146dc8d89d0f72409214fbcf052971d7591470e819f9855ea2a418b9a5",
+      "declaredSymbols": [
+        "private.bpay_next_daily_rate_correction_publish_v1"
+      ]
+    },
+    {
+      "file": "WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "sha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1",
+      "declaredSymbols": [
+        "daily_rate_correction_accept_v1",
+        "daily_rate_correction_context_v1",
+        "daily_rate_correction_preview_v1",
+        "daily_rate_correction_result_v1",
+        "private.bpay_next_daily_rate_correction_publish_v1",
+        "private.bpay_next_daily_rate_correction_resolution_review_v1",
+        "private.daily_rate_correction_accept_v1",
+        "private.daily_rate_correction_context_v1",
+        "private.daily_rate_correction_result_v1",
+        "private.daily_rate_correction_review_v1",
+        "private.daily_rate_correction_revision_admit_v1"
+      ]
+    },
+    {
+      "file": "WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.json",
+      "sha256": "26340d197b911b4b64ec4889e4207f95d79b1b080fac8f03734cfeb5cf50123d",
+      "declaredSymbols": []
+    },
+    {
+      "file": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json",
+      "sha256": "213c4ff9afc09b9fbf3be54b75b4d3629342647ba6f32119a9b13d269eec7c8f",
+      "declaredSymbols": []
+    },
+    {
+      "file": "WORKING_PREPARATION/BATCH_DECISION_INTEGRATION_DELTA_PLAN.json",
+      "sha256": "f32426f72bc2808b06e673638efe11da8c2316e63d3d29e46e00139f0e7e62c7",
+      "declaredSymbols": [
+        "private.daily_rate_correction_accept_v1",
+        "private.daily_rate_correction_review_v1"
+      ]
+    }
+  ],
+  "contractualHealthDelegates": [
+    {
+      "signature": "private.daily_rate_correction_review_v1(jsonb)",
+      "returns": "jsonb",
+      "body": "NOT_PRESENT_CURRENT_I2"
+    },
+    {
+      "signature": "private.daily_rate_correction_accept_v1(jsonb)",
+      "returns": "jsonb",
+      "body": "NOT_PRESENT_CURRENT_I2"
+    },
+    {
+      "signature": "private.daily_rate_correction_result_v1(uuid,uuid)",
+      "returns": "jsonb",
+      "body": "NOT_PRESENT_CURRENT_I2"
+    }
+  ],
+  "contractualBankContribution": {
+    "signature": "private.bpay_next_daily_rate_correction_publish_v1(uuid,uuid)",
+    "returns": "jsonb",
+    "closedResult": [
+      "version:DAILY_RATE_PUBLICATION_V1",
+      "work_id",
+      "revision_id",
+      "command_id",
+      "agency_sequence",
+      "state:REGISTERED",
+      "summary_dto"
+    ],
+    "onceOnlyPath": "approval_route_v1 Daily arm -> publish_ordinary_from_financial_v1 -> publish_staged_revision_v1 -> existing POSITION_APPLY",
+    "currentI2Body": "NOT_PRESENT",
+    "native": "NOT_RUN"
+  },
+  "missingBeforeFreshReady": [
+    "Actual native original/current paid/frozen/history basis and canonical SummaryDTO preflight for Daily",
+    "Exact non-Contract native preflight/delegate ABI with lock/currentness/role behavior",
+    "Complete Health immutable review/CAS/accept/result composers using that genuine basis",
+    "Genuine once-only Daily publication producer and narrowly composed ordinary INSERT trigger guard",
+    "Atomic revision admission/publication/invoice exclusive preparation/completion proof"
+  ],
+  "rejectedSubstitutes": [
+    "Contract cut/stage ABI relabelled Daily",
+    "RETIRED resolution_review/resolution_adopt",
+    "NoWork guessed as NOT_REQUIRED",
+    "Nominal/zero money, fake cut/command/receipt, Ready from transport success",
+    "Copied pending Source/internal result cast as public Daily DTO"
+  ],
+  "sourceImplementationBoundary": "Public Health callers/route/sole generated decoder are concrete; fresh Daily economic composition remains HELD",
+  "native": "NOT_RUN"
+}
