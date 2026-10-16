@@ -53,22 +53,24 @@
     {
       "repository": "Office",
       "path": "js/weekly-source/combined-review.js",
-      "sha256": "9e7c63dcd93aebab4504c89fd55957f655e35b70992e435b55067817a62c4e4b"
+      "sha256": "1a9b23e7f0f3233acba626b8645678ccf59861355bfdc77b18501fa3ab73c7af"
     },
     {
       "repository": "Office",
       "path": "js/weekly-source/import-workspace.js",
-      "sha256": "caaa46c217add6b58c9eaa07eb89cc56dae253f19eb531b7a558d07a198f42a5"
+      "sha256": "1856a97e74c4d6f2b6c2c680d3d67c702260c5a47c1c850927a363c1305a391c"
     },
     {
       "repository": "Office",
       "path": "js/weekly-source/workspace-actions.js",
-      "sha256": "d1184992204ec0b86d63b612dd04016de4c862a0620f7e861e5216e22595b339"
+      "sha256": "d87297811a1ca4783307711dc9c9f382cf2f40c0f50b4090db79991c5cd3f0c9"
     },
     {
       "repository": "Office",
       "path": "tests/unit/contact-controls-parent.test.cjs",
       "sha256": "b4b8bfe84ee289df0cceef964dc734a534c418d490c8f489ebe238140b0b6017"
     }
-  ]
+  ],
+  "office_commit": "1683791ab511996adefb6ab854386172b83d2885",
+  "newline_review": "Office files match exact pre-change repository LF format; finite semantic diff verified before publication."
 }
