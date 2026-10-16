@@ -1,0 +1,51 @@
+{
+  "version": "HEALTH_MANUAL_PARENT_TEST_PEER_MANIFEST_V1",
+  "files": [
+    {
+      "file": "CURRENT_TEST.mjs",
+      "bytes": 7086,
+      "sha256": "0bb6ebc89a487c0a4d3c6eea9f02cfd423e4a0fb4305b2ad2b71246f6854f980"
+    },
+    {
+      "file": "EXACT_EDITS.json",
+      "bytes": 2603,
+      "sha256": "972d7fd0f4c4752edab86cf97bfa06ae9a5d9b0372347274d3f20b0f57426899"
+    },
+    {
+      "file": "ORIGINAL_TEST.mjs",
+      "bytes": 5766,
+      "sha256": "046dd813dd65a40790f2a6846306c0fa26f30326a8700b42cde6f8549e853e8e"
+    },
+    {
+      "file": "PARENT_EDITS.json",
+      "bytes": 5860,
+      "sha256": "b9f136f94a0be936682d07c92943a7e1e0db912977b70ed4f3e17b9cfee33980"
+    },
+    {
+      "file": "README.md",
+      "bytes": 1528,
+      "sha256": "73444962b742f233c3059bd9b74a763879471f600da06094b0399612fd21288b"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 1240,
+      "sha256": "76f6b8b4e305655ad09f084914e585b8c0a9687b45b5b6bbf8087e7f8107db4d"
+    },
+    {
+      "file": "ROOT_SUCCESSOR_RECEIPT.json",
+      "bytes": 1231,
+      "sha256": "81b371a4dd25e8594082e633221ebcf2a935a6f8006f16b464b484e05b33c778"
+    },
+    {
+      "file": "forbid-network.mjs",
+      "bytes": 73,
+      "sha256": "a9f25d548e41316c7a3fb06f7251bc9adf8a584c2e8d64d66db1f23823d9f4f4"
+    },
+    {
+      "file": "review.mjs",
+      "bytes": 6178,
+      "sha256": "94fc4ab80bfc913d87528330ca719aea176db74f85d1e7958f8c51af44b03a79"
+    }
+  ],
+  "native": "NOT_RUN"
+}

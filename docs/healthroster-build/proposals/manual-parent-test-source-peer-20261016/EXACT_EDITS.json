@@ -1,0 +1,20 @@
+[
+  {
+    "before": "for(const input of proof.inputs)assert.equal(hash(fs.readFileSync(path.join(root,input.path))),input.path===proof.routes.source?'34c284a8b19be9ad3320b88b2db62e4d805e297a84e3fa3b0fb245373a910121':input.rawSha256,input.path);\n",
+    "after": "// Reverse only the exact reviewed Source contribution before the older Manual\n// parent guards. Runtime cases below still execute the full current router.\nconst sourceRecipeBytes=fs.readFileSync(path.join(root,'docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_HTTP_PARENT_REVIEW_20261016/PARENT_EDITS.json'));\nassert.equal(hash(sourceRecipeBytes),'b9f136f94a0be936682d07c92943a7e1e0db912977b70ed4f3e17b9cfee33980');\nconst sourceRecipe=JSON.parse(sourceRecipeBytes);\nassert.equal(sourceRecipe.checkpoint,'39aa5b30042711956b83a7bf899f416d2f3b4771');\nconst sourceRoute=sourceRecipe.files.find(row=>row.target===proof.routes.source);\nassert.equal(sourceRoute.edits.length,4);\nconst actualRouteRaw=fs.readFileSync(path.join(root,proof.routes.source),'utf8');\nassert.equal(hash(actualRouteRaw),sourceRoute.postimageSha256);\nlet manualOnlyRaw=actualRouteRaw;\nfor(const {before,after,beforeSha256,afterSha256} of [...sourceRoute.edits].reverse()){\n assert.equal(hash(before),beforeSha256);assert.equal(hash(after),afterSha256);\n assert.equal(manualOnlyRaw.split(after).length,2);manualOnlyRaw=manualOnlyRaw.replace(after,before);\n}\nassert.equal(hash(manualOnlyRaw),sourceRoute.preimageSha256);\nfor(const input of proof.inputs)assert.equal(hash(input.path===proof.routes.source?Buffer.from(manualOnlyRaw):fs.readFileSync(path.join(root,input.path))),input.path===proof.routes.source?'34c284a8b19be9ad3320b88b2db62e4d805e297a84e3fa3b0fb245373a910121':input.rawSha256,input.path);\n",
+    "beforeSha256": "6aa7dfcdd3e42516ebd8455842a1d90cfa1725cf6c485b920657c11df43f2c38",
+    "afterSha256": "e4faf9dc95f17791a7c4bd865b2c25386a7f631809dd9c9daf849ef48cb6d472"
+  },
+  {
+    "before": "assert.equal(hash(proposed),proof.routes.afterLfSha256);",
+    "after": "const manualOnly=manualOnlyRaw.replaceAll('\\r\\n','\\n');\nassert.equal(hash(manualOnly),proof.routes.afterLfSha256);",
+    "beforeSha256": "05da8ed6405b3c4320d9a7002a9a9bebfa52dcffbe087370dd4a0aa0077e3235",
+    "afterSha256": "7b092f2ab31328907228782604441af4515bb8fa60d4afe698f9d54aed4e5acc"
+  },
+  {
+    "before": "let restored=proposed;",
+    "after": "let restored=manualOnly;",
+    "beforeSha256": "42f27295c4a0ef21e83be279c09764922ea242b76b2f7b90bb5a93b545d3cbdd",
+    "afterSha256": "1c1c1ec3c4d1845b65f3a57819b62629e41bb469f1aa87102e4db94a6f243f5a"
+  }
+]
