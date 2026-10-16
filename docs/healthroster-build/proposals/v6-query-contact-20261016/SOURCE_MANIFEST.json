@@ -178,6 +178,40 @@
     "recipe": "INDEX_DRAIN_PATCH.json",
     "scope": "drainEmailOutboxOnce only"
   },
+  "native_fixture_prefix": {
+    "installation": "PG_TEMP_ONLY_ROOT_SERVER_OWNED_TEST_ROLLBACK",
+    "recipe": "fixtures/QUERY_NATIVE_PREFIX.md",
+    "inputs": "fixtures/QUERY_NATIVE_PREFIX_INPUTS.json",
+    "qualification": "fixtures/QUERY_NATIVE_PREFIX_QUALIFICATION.json",
+    "trial_recipe": "fixtures/QUERY_NATIVE_TRIAL_RECIPE.md",
+    "closure_preparation": "fixtures/QUERY_NATIVE_CLOSURE_PREPARATION.json",
+    "genuine_producers": [
+      "public.import_review_create_v1",
+      "public.import_review_save_v1",
+      "public.import_review_get_v1",
+      "public.hr_weekly_apply_transactional",
+      "public.timesheet_query_email_enqueue_v1"
+    ],
+    "current_phase": [
+      "fixtures/native-query-contact-assertions.sqlinc",
+      "fixtures/query-native-inputs.sqlinc",
+      "fixtures/query-native-prefix.sqlinc",
+      "fixtures/query-native-cases.sqlinc",
+      "fixtures/query-native-older-cases.sqlinc"
+    ],
+    "legacy_pre_ddl": [
+      "fixtures/query-native-prefix.sqlinc",
+      "fixtures/query-native-legacy-prefix.sqlinc"
+    ],
+    "legacy_post_ddl": [
+      "fixtures/query-native-legacy-assertions.sqlinc"
+    ],
+    "default_provider_result": false,
+    "optional_controlled_sql_result": "Do not enable in current recommended trial. Accepted-result/resume remains NOT_RUN pending separately reviewed explicit fake-effect SQL harness; never external acceptance.",
+    "shared_pdf_boundary": "fixtures/SHARED_PDF_OWNER_BOUNDARY.md",
+    "expiry": "Genuine older saved inputs only; transaction timestamp is never altered.",
+    "native": "REQUIRED_NOT_RUN"
+  },
   "files": [
     {
       "file": "forward/010_existing_delivery_lineage.sqlinc",
@@ -280,8 +314,68 @@
       "sha256": "b58c2626f8d7217bdcf093dda4a126533b5129c77508a82a136069fb1f6c69f2"
     },
     {
+      "file": "fixtures/QUERY_NATIVE_CLOSURE_PREPARATION.json",
+      "sha256": "ba22ac7b620a452431c82598afc5f4f498ab2f8088a29d4975a6974c834ed80a"
+    },
+    {
+      "file": "fixtures/QUERY_NATIVE_PREFIX.md",
+      "sha256": "0cca5f4054a5ca34bbfb0c7993098f6fc3dc9a819cad5acf9e273ef9542d3a27"
+    },
+    {
+      "file": "fixtures/QUERY_NATIVE_PREFIX_INPUTS.json",
+      "sha256": "aef229e69a6c802ceeb9d60785810fb9e9f177bbf821535f8e9c5168b44a2337"
+    },
+    {
+      "file": "fixtures/QUERY_NATIVE_PREFIX_QUALIFICATION.json",
+      "sha256": "01b3136ebd89f8e00f912f8f169d240bf298e129b6bf3d67e37fc188ebf99d42"
+    },
+    {
+      "file": "fixtures/QUERY_NATIVE_TRIAL_RECIPE.md",
+      "sha256": "2f733e02326ac3b7eac4bda1edb656dd134a3ac7dae530e2cc9317ad0297d90d"
+    },
+    {
+      "file": "fixtures/SHARED_PDF_OWNER_BOUNDARY.md",
+      "sha256": "c046c766c869cd227611b2518c896c10e7161d4c89b585bc9a4cbdd007515fee"
+    },
+    {
+      "file": "fixtures/capture-prefix-inputs.mjs",
+      "sha256": "d01b65ad2fbe1fe7d1ab889bbe7e437712ca9aa26002cc52582d21dbe059fe77"
+    },
+    {
       "file": "fixtures/native-query-contact-assertions.sqlinc",
       "sha256": "d86f73f06decf6c95acaf499ba4184a239fa79bc810f0d2d714a15fb0a665498"
+    },
+    {
+      "file": "fixtures/prepare-native-query-closure.py",
+      "sha256": "df5c2bfc0efe53631ed2266b1a5f42178f9f7407995f7b87b2465349cb6ca1b9"
+    },
+    {
+      "file": "fixtures/qualify-native-prefix.py",
+      "sha256": "8dc7fcc4f8a4d8467efeb32aba00bd0dd7af5ded3583b7b1b665f5a65f16d592"
+    },
+    {
+      "file": "fixtures/query-native-cases.sqlinc",
+      "sha256": "8e305ed162b4a6c1bd6486ad1d921819f4cc9b5b249930fdec9c9f18fa72fc32"
+    },
+    {
+      "file": "fixtures/query-native-inputs.sqlinc",
+      "sha256": "214ff933c7beb562466a471da67635f5f29265077e54767ef8348ebb940e9960"
+    },
+    {
+      "file": "fixtures/query-native-legacy-assertions.sqlinc",
+      "sha256": "ad8267ac869cf4464d6d56eec5253cade1243e1c71b0df55b4f045fa3fdb80b4"
+    },
+    {
+      "file": "fixtures/query-native-legacy-prefix.sqlinc",
+      "sha256": "f8a51fb55b24d8a88de4360db4b062008a4e8e6db4498fd14ee0e79e69169c23"
+    },
+    {
+      "file": "fixtures/query-native-older-cases.sqlinc",
+      "sha256": "b5b3bc0b4fcde0350b104b0027b8eddceb59d63b27b8dc78c0050a7de4e5670b"
+    },
+    {
+      "file": "fixtures/query-native-prefix.sqlinc",
+      "sha256": "71a5664a5f9e6faede4bdbba80beb883c7f00e5188e217f6a7eeef38a2e9a8b5"
     }
   ],
   "focused_dependencies": [

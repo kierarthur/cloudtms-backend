@@ -1,0 +1,40 @@
+-- POST-DDL: the same real active claim must remain legacy uncertainty after the
+-- atomic010 snapshot/fence. It is not made expired to satisfy a stronger case.
+create or replace function pg_temp.query_contact_native_legacy_snapshot_assert_v1(p_import_id uuid,p_agency uuid)
+returns jsonb language plpgsql as $function$
+declare prefix record;prior record;delivery public.hr_issue_email_deliveries%rowtype;mail public.mail_outbox%rowtype;inflight jsonb;r jsonb;
+begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ select * into strict prefix from pg_temp.query_contact_native_prefix_receipts_v1 where import_id=p_import_id;
+ select * into strict prior from pg_temp.query_contact_native_legacy_claim_receipts_v1 where delivery_id=prefix.delivery_id;
+ if prefix.transaction_id<>pg_current_xact_id() or prior.transaction_id<>pg_current_xact_id() then raise exception 'ORIGINAL_NATIVE_CLAIM_TRANSACTION_REQUIRED';end if;
+ perform private.weekly_contact_context_v1(p_agency,'TEST');
+ select * into strict delivery from public.hr_issue_email_deliveries where id=prior.delivery_id;
+ select * into strict mail from public.mail_outbox where id=prior.mail_outbox_id;
+ if delivery.contact_managed is distinct from false or delivery.original_delivery_id is distinct from delivery.id or delivery.payload_revision<>1
+  or delivery.legacy_claim_lease_token is distinct from prior.lease_token or delivery.legacy_claim_leased_at_utc is distinct from prior.leased_at_utc
+  or delivery.legacy_claim_expires_at_utc is distinct from prior.lease_expires_at_utc or to_jsonb(mail) is distinct from prior.claimed_native_mail
+  or exists(select 1 from public.weekly_contact_submission_permits where query_delivery_id=delivery.id) then
+  raise exception 'ATOMIC_INSTALL_DID_NOT_PRESERVE_ACTUAL_LEGACY_CLAIM';end if;
+ inflight:=private.weekly_contact_query_legacy_claims_v1(prefix.first_candidate_id,prefix.client_id,p_agency,'TEST');
+ if not exists(select 1 from jsonb_array_elements(inflight)x where x->>'query_delivery_id'=delivery.id::text
+   and x->>'kind'='LEGACY_QUERY_CLAIM' and x->>'status'='CHECKING_ORIGINAL_LEGACY_CLAIM'
+   and x->'provider_submission_established'='false'::jsonb and x->'can_auto_resend'='false'::jsonb and not(x?'permit_id')) then
+  raise exception 'ACTUAL_LEGACY_CLAIM_PREVIEW_MISSING';end if;
+ r:=public.timesheet_query_email_enqueue_v1(prefix.import_id,prefix.operation_id,
+  (select jsonb_agg(x order by x) from unnest(array[prefix.first_action_id,prefix.second_action_id])x),delivery.created_by_user_id,5000,100);
+ if r->>'new_delivery_count' is distinct from '0' or r->'groups'->0->>'delivery_id' is distinct from delivery.id::text then
+  raise exception 'GENUINE_LEGACY_ROOT_REPLAY_REFILLED_BUDGET';end if;
+ r:=private.weekly_contact_query_recompose_v1(delivery.id,p_agency,'TEST');
+ if r->>'disposition' is distinct from 'CHECK_ORIGINAL_ATTEMPT'
+  or exists(select 1 from public.hr_issue_email_deliveries where id=delivery.id and status='RETIRED')
+  or exists(select 1 from public.hr_issue_email_deliveries where original_delivery_id=delivery.id and id<>delivery.id)
+  or exists(select 1 from public.weekly_contact_submission_permits where query_delivery_id=delivery.id) then
+  raise exception 'ACTUAL_LEGACY_CLAIM_WAS_RECOMPOSED_OR_GIVEN_FAKE_START';end if;
+ if prefix.source_financial_invoice_snapshot is distinct from pg_temp.query_contact_native_economics_v1(array(
+  select timesheet_id from public.import_review_decisions where action_id in(prefix.first_action_id,prefix.second_action_id) order by action_id)) then
+  raise exception 'LEGACY_QUERY_CASE_CHANGED_SIGNED_SOURCE_FINANCE_INVOICE_OR_DOCUMENT';end if;
+ return jsonb_build_object('scenario','GENUINE_PRE_DDL_ACTIVE_LEGACY_CLAIM_PRESERVED','query_delivery_id',delivery.id,
+  'native_source_unchanged',true,'expired_claim_proved',false,'can_auto_resend',false,'provider_submission_established',false,'provider_called',false);
+end;
+$function$;

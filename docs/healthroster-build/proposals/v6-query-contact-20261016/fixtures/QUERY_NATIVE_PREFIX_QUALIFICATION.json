@@ -1,0 +1,151 @@
+{
+  "version": "QUERY_NATIVE_PREFIX_QUALIFICATION_V1",
+  "database_execution": false,
+  "provider_called": false,
+  "r2_route_verified": false,
+  "root_source_head": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
+  "source_input_files": 41,
+  "checks": {
+    "offline_pg17_and_inner_sql_grammar": "PASS",
+    "temporary_fixture_functions": 17,
+    "native_declared_rowtype_checks": 58,
+    "original_native_render_attachment_ast_queries_unchanged": 3,
+    "fixture_direct_write_inventory": "PASS"
+  },
+  "temporary_functions": [
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "function": "pg_temp.query_contact_old_claim_guard_assert_v1"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "function": "pg_temp.query_contact_current_claim_assert_v1"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "function": "pg_temp.query_contact_legacy_claim_inflight_assert_v1"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "function": "pg_temp.query_contact_mixed_prepare_assert_v1"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "function": "pg_temp.query_contact_resume_after_accept_assert_v1"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "function": "pg_temp.query_contact_result_replay_assert_v1"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "function": "pg_temp.query_contact_unknown_reclaim_assert_v1"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "function": "pg_temp.query_contact_native_claim_v1"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "function": "pg_temp.query_contact_native_mixed_case_v1"
+    },
+    {
+      "file": "query-native-inputs.sqlinc",
+      "function": "pg_temp.query_contact_native_inputs_v1"
+    },
+    {
+      "file": "query-native-legacy-assertions.sqlinc",
+      "function": "pg_temp.query_contact_native_legacy_snapshot_assert_v1"
+    },
+    {
+      "file": "query-native-legacy-prefix.sqlinc",
+      "function": "pg_temp.query_contact_native_legacy_claim_prefix_v1"
+    },
+    {
+      "file": "query-native-older-cases.sqlinc",
+      "function": "pg_temp.query_contact_native_older_inputs_v1"
+    },
+    {
+      "file": "query-native-older-cases.sqlinc",
+      "function": "pg_temp.query_contact_native_expired_legacy_case_v1"
+    },
+    {
+      "file": "query-native-older-cases.sqlinc",
+      "function": "pg_temp.query_contact_native_unknown_reclaim_case_v1"
+    },
+    {
+      "file": "query-native-prefix.sqlinc",
+      "function": "pg_temp.query_contact_native_economics_v1"
+    },
+    {
+      "file": "query-native-prefix.sqlinc",
+      "function": "pg_temp.query_contact_native_import_prefix_v1"
+    }
+  ],
+  "direct_writes": [
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "function": "pg_temp.query_contact_old_claim_guard_assert_v1",
+      "kind": "UpdateStmt",
+      "target": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-legacy-prefix.sqlinc",
+      "function": "pg_temp.query_contact_native_legacy_claim_prefix_v1",
+      "kind": "InsertStmt",
+      "target": "pg_temp.query_contact_native_legacy_claim_receipts_v1"
+    },
+    {
+      "file": "query-native-prefix.sqlinc",
+      "function": "pg_temp.query_contact_native_import_prefix_v1",
+      "kind": "InsertStmt",
+      "target": "pg_temp.query_contact_native_prefix_receipts_v1"
+    }
+  ],
+  "source_files": [
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "sha256": "d86f73f06decf6c95acaf499ba4184a239fa79bc810f0d2d714a15fb0a665498"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "sha256": "8e305ed162b4a6c1bd6486ad1d921819f4cc9b5b249930fdec9c9f18fa72fc32"
+    },
+    {
+      "file": "query-native-inputs.sqlinc",
+      "sha256": "214ff933c7beb562466a471da67635f5f29265077e54767ef8348ebb940e9960"
+    },
+    {
+      "file": "query-native-legacy-assertions.sqlinc",
+      "sha256": "ad8267ac869cf4464d6d56eec5253cade1243e1c71b0df55b4f045fa3fdb80b4"
+    },
+    {
+      "file": "query-native-legacy-prefix.sqlinc",
+      "sha256": "f8a51fb55b24d8a88de4360db4b062008a4e8e6db4498fd14ee0e79e69169c23"
+    },
+    {
+      "file": "query-native-older-cases.sqlinc",
+      "sha256": "b5b3bc0b4fcde0350b104b0027b8eddceb59d63b27b8dc78c0050a7de4e5670b"
+    },
+    {
+      "file": "query-native-prefix.sqlinc",
+      "sha256": "71a5664a5f9e6faede4bdbba80beb883c7f00e5188e217f6a7eeef38a2e9a8b5"
+    }
+  ],
+  "native_case_status": {
+    "real_review_selected_query_apply_outcomes_enqueue": "REQUIRED_NOT_RUN",
+    "old_cached_claim_update_fenced": "REQUIRED_NOT_RUN",
+    "current_native_claim_stamp_cleanup": "REQUIRED_NOT_RUN",
+    "genuine_pre_ddl_active_legacy_snapshot": "REQUIRED_NOT_RUN",
+    "genuine_older_expired_legacy_inflight": "REQUIRED_NOT_RUN",
+    "original_multiworker_pause_subset_html_attachment_lineage_replay": "REQUIRED_NOT_RUN",
+    "controlled_sql_result_replay_resume_no_refill": "REQUIRED_NOT_RUN",
+    "genuine_older_unknown_reclaim_no_second_call": "REQUIRED_NOT_RUN",
+    "shared_pdf_refusal_and_source_preservation": "REQUIRED_NOT_RUN",
+    "fresh_rollback_restoration": "REQUIRED_NOT_RUN"
+  },
+  "controlled_sql_success": "Do not enable in current recommended trial. Accepted-result/resume remains NOT_RUN pending separately reviewed explicit fake-effect SQL harness; never external acceptance proof.",
+  "clock_limit": "Original native claim uses transaction_timestamp(); no backdating or fake expiry. Genuine older inputs required.",
+  "failures": [],
+  "native": "REQUIRED_NOT_RUN"
+}

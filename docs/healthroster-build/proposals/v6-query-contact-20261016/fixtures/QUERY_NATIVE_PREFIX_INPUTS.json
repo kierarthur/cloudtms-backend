@@ -1,0 +1,317 @@
+{
+  "version": "QUERY_NATIVE_PREFIX_SOURCE_INPUTS_V1",
+  "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "root_head": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
+  "database_execution": false,
+  "fixture_installation": "PG_TEMP_ONLY_IN_ROOT_SERVER_OWNED_TEST_ROLLBACK",
+  "native": "REQUIRED_NOT_RUN",
+  "owners": {
+    "ingress": [
+      "broker/src/index.js:findImportStageReplay",
+      "broker/src/index.js:parseHealthRosterWorkbookIntoHrRows",
+      "broker/src/index.js:handleHrAutoprocessImport"
+    ],
+    "review": [
+      "public.import_review_create_v1",
+      "public.import_review_save_v1",
+      "public.import_review_get_v1",
+      "public.hr_weekly_apply_transactional",
+      "public._import_review_apply_complete_core_v1"
+    ],
+    "evidence": [
+      "private.weekly_source_issued_signed_query_evidence_v1",
+      "private.timesheet_correction_signed_witness_v1",
+      "public._import_review_query_evidence_core_v1"
+    ],
+    "native_query": [
+      "public.timesheet_query_email_enqueue_v1",
+      "public.email_outbox_claim_ready_batch",
+      "public.email_outbox_claim_ready_batch_contact_v1",
+      "public.weekly_contact_submission_start_v1",
+      "public.timesheet_query_email_contact_result_v1"
+    ],
+    "document": [
+      "private._invoice_operation_start_core_v8",
+      "private._invoice_document_advance_batch",
+      "public.trg_timesheet_document_invalidate",
+      "broker/src/invoice-async-http.js",
+      "broker/src/invoice-queue-runtime.js"
+    ]
+  },
+  "inputs": [
+    {
+      "file": "broker/src/index.js",
+      "sha256": "f5bff8ca19712b957eea1e51a1732d54b4f8584d79fe4f57a3a018b782b1b21f",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "broker/src/invoice-async-http.js",
+      "sha256": "77120b6ef29f010ebd9864e9fbe1507f64b0cdfd261ec02f3fa98a1c9bdcd9f3",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "broker/src/invoice-queue-runtime.js",
+      "sha256": "963ed02dd68e65ac62c0910c76a39740c84945eebcb9417958173b5c8be27b9d",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+      "sha256": "82a3d0487cb483e692c7fdf590a75280a4dd88a7a1057b43a7fb39639da4e9e7",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/05102026_1417_weekly_source_coverage_support/qualified_coverage.inc",
+      "sha256": "45a8a0bc2364318d734c1ec678d79fa617d549a62c3a532ef851c928773aee6e",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "sha256": "e573b48cc58db6a107848e0548b201f28584308577c2f5ff8629cdc9a269bdf3",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_planner.sqlinc",
+      "sha256": "905e85ab37073350203e8e322ce194f47307aa1f24aa7fbb4a02ccfdde54e71e",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_start.sqlinc",
+      "sha256": "23f71a8b14940a9b94b10e99488e2857bf502ea162c0526235bc517d26c9d1e2",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "sha256": "5e7e51c44f2c0ef713df0fd35fe284b9e264f437efaff72da33811b6eaf26a4c",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc",
+      "sha256": "50ecf38150cfdfcb5d197fd43bd6684a7a8c7ad510841c53178621a2c6b54f55",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "git_saved_status": "CLEAN",
+      "include_files": [
+        "supabase/repeatable/05102026_1417_weekly_source_coverage_support/qualified_coverage.inc",
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+      "sha256": "d83c11d3eae6ee290b545e714738e45f22c70a12de5d0a1188717b065f8bceff",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "sha256": "3b44a121db9bffd51351e579c251556c631ce19985d7a3b79b3c09c0f525c88f",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+      "sha256": "ca631e753a0eb31c7468d5a757f89863e608012a66b11408c7a17a6109758037",
+      "git_saved_status": "CLEAN",
+      "include_files": [
+        "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_0339_weekly_contact_query_native_lifecycle_v1.sql",
+      "sha256": "d7e7919d601e8d6a8eaf82a7fb30f3c46a287c2b08f95c98f8a7bdbbfefb2e79",
+      "git_saved_status": "CLEAN",
+      "include_files": [
+        "supabase/repeatable/includes/weekly_contact_query/020_native_member.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/021_native_payload.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/030_native_enqueue_core.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/040_native_recomposition.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/050_native_entrypoints.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/060_native_result.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/065_native_followup.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/070_native_mark.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/080_native_integrity.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/081_native_claim_guard.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/083_native_claim_bridge.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/086_pause_inflight.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/090_acl.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/091_claim_acl.sqlinc"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "sha256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql",
+      "sha256": "4b89ee5e1e0ac4b2bedf5cf0563f6b8e0d90c308eb73b26e38744db12130a83b",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql",
+      "sha256": "3106e43bbc693e3c2ecf406c62b83845bafea8fe62e2c4e3cbb3a4de5cce8eef",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql",
+      "sha256": "9559e417369550cfca8ffff0fd078034c1201abf1975f87d6bcc0b0a43909ace",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql",
+      "sha256": "dcc7b965fc9bab19aece8a2f78f555c89e1939d35ba7cf93f2c51f1a58eb07c1",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql",
+      "sha256": "7c30d8293f3a9729d93a92f05c23ffee63b7627d0093e205db13199b0aede60c",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_11_private_invoice_operation_start_core_v8.sql",
+      "sha256": "5bb036fd44f31e86cfd346e3eefc2987b0c1c567538687a74a37b973478b9810",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/020_native_member.sqlinc",
+      "sha256": "fc8c7e3f3ec942984a22fb5756c89f7e3f7315d067143b91c04cc1a00e665cfa",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/021_native_payload.sqlinc",
+      "sha256": "f7b74f5bda6d2bc5c3b009af10c5260b1b9928f2b7eeeab5d97d91417823aa37",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/030_native_enqueue_core.sqlinc",
+      "sha256": "80e333e33685204838b49ae2c67a055d5df5bf2534d9c66026a58955111d25de",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/040_native_recomposition.sqlinc",
+      "sha256": "74283f975ceb265dc07137652136414144c9c64d4f24a0cdfbf5fd80ae7ae7f6",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/050_native_entrypoints.sqlinc",
+      "sha256": "0958ee3673664c3f7b82860c0522d09db21bd73f25da67d35ac7d4ffc9a9476f",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/060_native_result.sqlinc",
+      "sha256": "9f0294f2aba86d207959eef9e3578736158c45595cc12693c01d39b8e06792b8",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/065_native_followup.sqlinc",
+      "sha256": "44847094bae7a1a33200a03540421c99d4f2bf1a69fcd7cb208f7a7da7ebc3e4",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/070_native_mark.sqlinc",
+      "sha256": "a76b9149dbadd5e9375a00eae5e2018d3bc74a5ced34b5f0b6fbaf4c0ed39705",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/080_native_integrity.sqlinc",
+      "sha256": "c416deb4987780e37714f99762c9c894266db5ef6409742773d6158885c00272",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/081_native_claim_guard.sqlinc",
+      "sha256": "eaf1a4f28f5fbb207b8e1ad8a30ca1de20966a78973c3ec1e50240284c261f3b",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+      "sha256": "9f9a54c9c3e650f6d71ccfd6fa0bd8181b9dfe816b6789e8be5907ea92a381dc",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/083_native_claim_bridge.sqlinc",
+      "sha256": "659c5c8c7186f99696fefcfed804fab35716b8826b2c89bc32d780a79017c3e9",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/086_pause_inflight.sqlinc",
+      "sha256": "788f41a4fba9de808fef4c7dc2bbacb11f887b6da2c74d54ff22d1b92fbe602e",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/090_acl.sqlinc",
+      "sha256": "d18558c0ab5ad72ae5fd17ad9d3de806d4b43cf7ff804137c4b1a5ff2a74bfa2",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/091_claim_acl.sqlinc",
+      "sha256": "5bdc4ac616da2e68d7e2b6e2b75338ad2addf86fb8b521f19be88ad35246e7cb",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152",
+      "git_saved_status": "CLEAN",
+      "include_files": []
+    }
+  ],
+  "limits": [
+    "Source bytes and signatures only; no PostgreSQL binding or execution proof.",
+    "Input discovery returns candidates; actual review catalogue decides eligibility.",
+    "Existing signed/issued/current READY metadata is consumed, never fabricated; R2 object/route and external acceptance remain unverified.",
+    "Original generic claim is used only before query migration/bridge exists; real legacy snapshot is checked after atomic installation.",
+    "Fresh native leases cannot become reclaimable inside one transaction because original claim uses transaction_timestamp(); older expiry cases require genuine older inputs."
+  ]
+}

@@ -1,0 +1,38 @@
+-- Temporary TEST rollback PRE-DDL prefix. Load/call this only while the genuine
+-- original generic claim owner still owns query work and before mounting010.
+-- It is not a backdated claim, fake START, result or provider call.
+create or replace function pg_temp.query_contact_native_legacy_claim_prefix_v1(p_import_id uuid,p_limit integer default 500)
+returns jsonb language plpgsql as $function$
+declare receipt record;mail public.mail_outbox%rowtype;claimed public.mail_outbox%rowtype;
+ token text:=gen_random_uuid()::text;found_target boolean:=false;
+begin
+ if current_database()<>'cloudtms_test_clone' or p_limit is null or p_limit not between 1 and 500 then raise exception 'TEST_BOUNDED_NATIVE_CLAIM_REQUIRED';end if;
+ if to_regprocedure('public.email_outbox_claim_ready_batch_contact_v1(jsonb)') is not null
+  or exists(select 1 from pg_attribute where attrelid='public.hr_issue_email_deliveries'::regclass and attname='contact_managed' and not attisdropped) then
+  raise exception 'REAL_PRE_CONTACT_MIGRATION_OWNER_REQUIRED';end if;
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict receipt from pg_temp.query_contact_native_prefix_receipts_v1 where import_id=p_import_id;
+ if receipt.transaction_id<>pg_current_xact_id() then raise exception 'ORIGINAL_NATIVE_PREFIX_TRANSACTION_REQUIRED';end if;
+ select * into strict mail from public.mail_outbox where id=receipt.mail_outbox_id;
+ if mail.status::text is distinct from 'QUEUED' or mail.type is distinct from 'TIMESHEET_QUERY' or mail.sent_at is not null
+  or mail.attempt_lease_token is not null then raise exception 'GENUINE_NEW_NATIVE_QUERY_QUEUE_ROW_REQUIRED';end if;
+ for claimed in select * from public.email_outbox_claim_ready_batch(p_limit,token,5) loop
+  if claimed.id=mail.id then found_target:=true;end if;
+ end loop;
+ if not found_target then raise exception 'GENUINE_NATIVE_QUEUE_DID_NOT_CLAIM_FIXTURE_WITHIN_BOUND';end if;
+ select * into strict claimed from public.mail_outbox where id=mail.id;
+ if claimed.attempt_lease_token is distinct from token or claimed.attempt_leased_at_utc is distinct from transaction_timestamp()
+  or claimed.attempt_lease_expires_at_utc is distinct from transaction_timestamp()+interval '5 minutes'
+  or (to_jsonb(claimed)-array['attempt_lease_token','attempt_leased_at_utc','attempt_lease_expires_at_utc'])
+   is distinct from(to_jsonb(mail)-array['attempt_lease_token','attempt_leased_at_utc','attempt_lease_expires_at_utc']) then
+  raise exception 'ORIGINAL_NATIVE_CLAIM_PROJECTION_CHANGED';end if;
+ create temporary table if not exists query_contact_native_legacy_claim_receipts_v1(
+  delivery_id uuid primary key,mail_outbox_id uuid not null,lease_token text not null,leased_at_utc timestamptz not null,
+  lease_expires_at_utc timestamptz not null,claimed_native_mail jsonb not null,transaction_id xid8 not null) on commit drop;
+ insert into pg_temp.query_contact_native_legacy_claim_receipts_v1 values(receipt.delivery_id,mail.id,token,
+  claimed.attempt_leased_at_utc,claimed.attempt_lease_expires_at_utc,to_jsonb(claimed),pg_current_xact_id());
+ return jsonb_build_object('query_delivery_id',receipt.delivery_id,'mail_outbox_id',mail.id,
+  'real_original_native_claim',true,'leased_at_utc',claimed.attempt_leased_at_utc,'lease_expires_at_utc',claimed.attempt_lease_expires_at_utc,
+  'expired_claim_proved',false,'provider_submission_established',false,'provider_called',false);
+end;
+$function$;

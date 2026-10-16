@@ -1,0 +1,111 @@
+-- Temporary TEST rollback cases. No sender/network/R2 route is invoked.
+-- The optional SUCCESS branch is explicitly controlled SQL input ONLY. It
+-- proves SQL accounting/replay, never genuine external provider acceptance.
+create or replace function pg_temp.query_contact_native_claim_v1(p_outbox_id uuid,p_agency uuid,p_limit integer default 500)
+returns text language plpgsql as $function$
+declare token text:=gen_random_uuid()::text;row public.mail_outbox%rowtype;found_target boolean:=false;
+begin
+ if current_database()<>'cloudtms_test_clone' or p_limit not between 1 and 500 then raise exception 'TEST_BOUNDED_NATIVE_CLAIM_REQUIRED';end if;
+ -- Preserve the real native global ordering/bounds/SKIP LOCKED. Returned
+ -- leases are temporary in this outer rollback; no provider is called for any.
+ for row in select * from public.email_outbox_claim_ready_batch_contact_v1(jsonb_build_object('version','EMAIL_OUTBOX_CONTACT_CLAIM_V1',
+  'limit',p_limit,'attempt_lease_token',token,'lease_minutes',5,'worker_id','codex:query-sql-rollback','agency_id',p_agency,'environment','TEST')) loop
+  if row.id=p_outbox_id then found_target:=true;end if;
+ end loop;
+ if not found_target then raise exception 'GENUINE_NATIVE_QUEUE_DID_NOT_CLAIM_FIXTURE_WITHIN_BOUND';end if;
+ perform pg_temp.query_contact_current_claim_assert_v1(p_outbox_id,token);
+ return token;
+end;
+$function$;
+
+create or replace function pg_temp.query_contact_native_mixed_case_v1(p_import_id uuid,p_actor uuid,p_agency uuid,p_controlled_sql_success boolean default false)
+returns jsonb language plpgsql as $function$
+declare receipt record;original_mail public.mail_outbox%rowtype;child public.hr_issue_email_deliveries%rowtype;child_mail public.mail_outbox%rowtype;
+ resumed public.hr_issue_email_deliveries%rowtype;resumed_mail public.mail_outbox%rowtype;
+ first_action public.import_review_decisions%rowtype;second_action public.import_review_decisions%rowtype;
+ state jsonb;paused jsonb;prepared jsonb;started jsonb;replay jsonb;result_request jsonb;recorded jsonb;resumed_result jsonb;
+ token text;expected_first jsonb;expected_second jsonb;expected_original jsonb;first_marker text;second_marker text;
+begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ select * into strict receipt from pg_temp.query_contact_native_prefix_receipts_v1 where import_id=p_import_id;
+ if receipt.transaction_id<>pg_current_xact_id() then raise exception 'ORIGINAL_NATIVE_PREFIX_TRANSACTION_REQUIRED';end if;
+ perform private.weekly_contact_context_v1(p_agency,'TEST');
+ if private.weekly_contact_scope_guard_v1(receipt.first_candidate_id,receipt.client_id,'MANAGER',clock_timestamp())->'allow' is distinct from 'true'::jsonb
+  or private.weekly_contact_scope_guard_v1(receipt.second_candidate_id,receipt.client_id,'MANAGER',clock_timestamp())->'allow' is distinct from 'true'::jsonb then
+  raise exception 'GENUINE_INITIALLY_UNPAUSED_INPUT_SCOPES_REQUIRED';end if;
+ select * into strict original_mail from public.mail_outbox where id=receipt.mail_outbox_id;
+ select * into strict first_action from public.import_review_decisions where action_id=receipt.first_action_id;
+ select * into strict second_action from public.import_review_decisions where action_id=receipt.second_action_id;
+ first_marker:='<tr><td style="padding:8px;border:1px solid #dbe2ea">'||public._import_review_html_escape_v1(first_action.summary_json->>'candidate_name')||'</td>';
+ second_marker:='<tr><td style="padding:8px;border:1px solid #dbe2ea">'||public._import_review_html_escape_v1(second_action.summary_json->>'candidate_name')||'</td>';
+ expected_first:=jsonb_build_array(jsonb_build_object('r2_key',receipt.first_native_evidence->>'attachment_r2_key',
+  'filename',receipt.first_native_evidence->>'attachment_filename'));
+ expected_second:=jsonb_build_array(jsonb_build_object('r2_key',receipt.second_native_evidence->>'attachment_r2_key',
+  'filename',receipt.second_native_evidence->>'attachment_filename'));
+ select jsonb_agg(x order by x) into expected_original from(select distinct value x from jsonb_array_elements(expected_first||expected_second))a;
+ if position(first_marker in coalesce(original_mail.body_html,''))=0 or position(second_marker in coalesce(original_mail.body_html,''))=0
+  or(select jsonb_agg(x order by x) from jsonb_array_elements(original_mail.attachments)x) is distinct from expected_original then
+  raise exception 'NATIVE_ORIGINAL_HTML_AND_ATTACHMENT_LINEAGE_REQUIRED';end if;
+ perform pg_temp.query_contact_old_claim_guard_assert_v1(original_mail.id);
+ state:=public.weekly_source_contact_pause_get_v1(jsonb_build_object('candidate_id',receipt.second_candidate_id,'client_id',receipt.client_id,
+  'actor_user_id',p_actor,'agency_id',p_agency,'environment','TEST'));
+ paused:=public.weekly_source_contact_pause_atomic_v1(jsonb_build_object('candidate_id',receipt.second_candidate_id,'client_id',receipt.client_id,
+  'actor_user_id',p_actor,'agency_id',p_agency,'environment','TEST','request_id',gen_random_uuid(),'expected_revision',state#>'{scope,revision}',
+  'audience','MANAGER','note','Controlled TEST rollback query proof; no sender or network'));
+ if receipt.first_native_evidence->>'attachment_r2_key'=receipt.second_native_evidence->>'attachment_r2_key' then
+  begin
+   perform pg_temp.query_contact_mixed_prepare_assert_v1(receipt.delivery_id,p_agency,'TEST',receipt.first_action_id,receipt.second_action_id);
+   raise exception 'SHARED_PDF_WAS_CARRIED_TO_ELIGIBLE_SUBSET';
+  exception when object_not_in_prerequisite_state then
+   if sqlerrm<>'CONTACT_QUERY_SHARED_ATTACHMENT_REQUIRES_NATIVE_REBUILD' then raise;end if;
+  end;
+  if receipt.source_financial_invoice_snapshot is distinct from pg_temp.query_contact_native_economics_v1(array[first_action.timesheet_id,second_action.timesheet_id]) then
+   raise exception 'QUERY_SHARED_PDF_CASE_CHANGED_SIGNED_SOURCE_FINANCE_INVOICE_OR_DOCUMENT';end if;
+  return jsonb_build_object('scenario','SHARED_PDF_REFUSAL','native_source_unchanged',true,
+   'r2_route_verified',false,'provider_called',false,'native_pdf_rebuild','UNPROVIDED_SAFE_BOUNDARY');
+ end if;
+ prepared:=pg_temp.query_contact_mixed_prepare_assert_v1(receipt.delivery_id,p_agency,'TEST',receipt.first_action_id,receipt.second_action_id);
+ select * into strict child from public.hr_issue_email_deliveries where id=(prepared->'replacements'->0->>'query_delivery_id')::uuid;
+ select * into strict child_mail from public.mail_outbox where id=child.mail_outbox_id;
+ if child_mail.attachments is distinct from expected_first or position(first_marker in child_mail.body_html)=0 or position(second_marker in child_mail.body_html)>0
+  or position(' | '||(second_action.summary_json->>'candidate_name')||' | ' in child_mail.body_text)>0 then
+  raise exception 'EXCLUDED_WORKER_LEAKED_IN_NATIVE_HTML_TEXT_OR_ATTACHMENTS';end if;
+ token:=pg_temp.query_contact_native_claim_v1(child.mail_outbox_id,p_agency,500);
+ started:=public.weekly_contact_submission_start_v1(jsonb_build_object('version','CONTACT_START_V1','owner_kind','TIMESHEET_QUERY_OUTBOX',
+  'mail_outbox_id',child.mail_outbox_id,'query_delivery_id',child.id,'attempt_lease_token',token,'worker_id','codex:query-sql-rollback','agency_id',p_agency,'environment','TEST'));
+ if started->'call_once' is distinct from 'true'::jsonb then raise exception 'ACTUAL_NATIVE_START_DID_NOT_ADMIT';end if;
+ replay:=public.weekly_contact_submission_start_v1(jsonb_build_object('version','CONTACT_START_V1','owner_kind','TIMESHEET_QUERY_OUTBOX',
+  'mail_outbox_id',child.mail_outbox_id,'query_delivery_id',child.id,'attempt_lease_token',token,'worker_id','codex:query-sql-rollback','agency_id',p_agency,'environment','TEST'));
+ if replay->'call_once' is distinct from 'false'::jsonb or replay->>'reason' is distinct from 'CHECK_ORIGINAL_ATTEMPT' then raise exception 'ORIGINAL_UNKNOWN_REPLAY_GRANTED_SECOND_CALL';end if;
+ if receipt.source_financial_invoice_snapshot is distinct from pg_temp.query_contact_native_economics_v1(array[first_action.timesheet_id,second_action.timesheet_id]) then
+  raise exception 'QUERY_NATIVE_START_CHANGED_SIGNED_SOURCE_FINANCE_INVOICE_OR_DOCUMENT';end if;
+ if not coalesce(p_controlled_sql_success,false) then
+  return jsonb_build_object('scenario','NATIVE_MIXED_SUBSET_START_AND_UNKNOWN_REPLAY','original_delivery_id',receipt.delivery_id,'child_delivery_id',child.id,
+   'controlled_sql_result_used',false,'native_source_unchanged',true,'r2_route_verified',false,'provider_called',false,'provider_acceptance_verified',false);
+ end if;
+ -- Unexecuted preparation for a separately reviewed explicit fake-effect SQL
+ -- harness. Keep false in the current trial; never claim provider acceptance.
+ result_request:=jsonb_build_object('version','TIMESHEET_QUERY_RESULT_V1','contact_permit_id',started->'contact_permit_id',
+  'mail_outbox_id',child.mail_outbox_id,'query_delivery_id',child.id,'attempt_lease_token',token,'worker_id','codex:query-sql-rollback',
+  'content_hash',started->'content_hash','agency_id',p_agency,'environment','TEST','provider_result',
+  jsonb_build_object('status','SUCCESS','provider_message_id','SQL_ONLY_CONTROLLED_RESPONSE:'||gen_random_uuid()::text,'error',null));
+ recorded:=public.timesheet_query_email_contact_result_v1(result_request);
+ if recorded->>'disposition' is distinct from 'ACCEPTED' then raise exception 'CONTROLLED_SQL_RESULT_NOT_RECORDED';end if;
+ perform pg_temp.query_contact_result_replay_assert_v1(result_request);
+ state:=public.weekly_source_contact_pause_get_v1(jsonb_build_object('candidate_id',receipt.second_candidate_id,'client_id',receipt.client_id,
+  'actor_user_id',p_actor,'agency_id',p_agency,'environment','TEST'));
+ perform public.weekly_source_contact_resume_atomic_v1(jsonb_build_object('candidate_id',receipt.second_candidate_id,'client_id',receipt.client_id,
+  'actor_user_id',p_actor,'agency_id',p_agency,'environment','TEST','request_id',gen_random_uuid(),'expected_revision',state#>'{scope,revision}',
+  'audience','MANAGER','note','Controlled TEST rollback native resume; no provider'));
+ resumed_result:=pg_temp.query_contact_resume_after_accept_assert_v1(receipt.delivery_id,p_agency,'TEST',receipt.first_action_id,receipt.second_action_id);
+ select * into strict resumed from public.hr_issue_email_deliveries where id=(resumed_result->'replacements'->0->>'query_delivery_id')::uuid;
+ select * into strict resumed_mail from public.mail_outbox where id=resumed.mail_outbox_id;
+ if resumed_mail.attachments is distinct from expected_second or position(second_marker in resumed_mail.body_html)=0 or position(first_marker in resumed_mail.body_html)>0
+  or position(' | '||(first_action.summary_json->>'candidate_name')||' | ' in resumed_mail.body_text)>0 then raise exception 'RESUME_REINTRODUCED_ALREADY_COUNTED_WORKER';end if;
+ if receipt.source_financial_invoice_snapshot is distinct from pg_temp.query_contact_native_economics_v1(array[first_action.timesheet_id,second_action.timesheet_id]) then
+  raise exception 'QUERY_SQL_CASE_CHANGED_SIGNED_SOURCE_FINANCE_INVOICE_OR_DOCUMENT';end if;
+ return jsonb_build_object('scenario','CONTROLLED_SQL_SUCCESS_REPLAY_AND_NATIVE_RESUME_SUBSET','original_delivery_id',receipt.delivery_id,
+  'first_child_delivery_id',child.id,'second_child_delivery_id',resumed.id,'controlled_sql_result_used',true,'native_source_unchanged',true,
+  'r2_route_verified',false,'provider_called',false,'provider_acceptance_verified',false);
+end;
+$function$;

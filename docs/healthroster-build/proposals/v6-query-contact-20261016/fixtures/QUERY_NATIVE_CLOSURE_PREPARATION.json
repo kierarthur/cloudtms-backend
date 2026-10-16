@@ -1,0 +1,37 @@
+{
+  "version": "QUERY_NATIVE_CLOSURE_PREPARATION_V1",
+  "database_execution": false,
+  "root_source_head": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
+  "source_units": [
+    "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+    "supabase/repeatable/16102026_0339_weekly_contact_query_native_lifecycle_v1.sql"
+  ],
+  "flattened_input_files": [
+    "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+    "supabase/repeatable/16102026_0339_weekly_contact_query_native_lifecycle_v1.sql",
+    "supabase/repeatable/includes/weekly_contact_query/020_native_member.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/021_native_payload.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/030_native_enqueue_core.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/040_native_recomposition.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/050_native_entrypoints.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/060_native_result.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/065_native_followup.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/070_native_mark.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/080_native_integrity.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/081_native_claim_guard.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/083_native_claim_bridge.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/086_pause_inflight.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/090_acl.sqlinc",
+    "supabase/repeatable/includes/weekly_contact_query/091_claim_acl.sqlinc"
+  ],
+  "query_slice_sql_bytes": 195105,
+  "query_slice_statements": 163,
+  "query_slice_sha256": "068f97690b060565240fe77b6fffc92958d3078ff2d6adc6eef3e99e39e93898",
+  "whole_native_trial_size_proved": false,
+  "native_business_constructor_required": true,
+  "default_controlled_success_enabled": false,
+  "accepted_result_assertions": "REQUIRED_NOT_RUN_PENDING_REVIEWED_FAKE_EFFECT_HARNESS",
+  "output": "test-runtime/query-native-current-closure.sql",
+  "native": "REQUIRED_NOT_RUN"
+}

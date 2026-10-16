@@ -1,0 +1,48 @@
+-- Read-only genuine input discovery. Candidate rows are NOT native review
+-- eligibility/approval. Actual create/catalogue/save/apply must still succeed.
+-- No import, signature, invoice, financial, READY document or audit is inserted.
+create or replace function pg_temp.query_contact_native_inputs_v1(p_import_id uuid default null,p_limit integer default 10)
+returns jsonb language plpgsql stable as $function$
+declare result jsonb;
+begin
+ if current_database()<>'cloudtms_test_clone' or p_limit is null or p_limit not between 1 and 25 then raise exception 'TEST_BOUNDED_DISCOVERY_REQUIRED';end if;
+ perform private.weekly_source_query_require_service_v1();
+ with staged as materialized(
+  select i.*,stats.first_date,stats.last_date,stats.row_count from public.hr_imports i
+  cross join lateral(select min(date_local)first_date,max(date_local)last_date,count(*)row_count from public.hr_rows where import_id=i.id)stats
+  where(p_import_id is null or i.id=p_import_id) and i.source_system::text='HEALTHROSTER' and i.import_scope='HR_WEEKLY'
+   and i.client_id is not null and i.applied_at is null and i.pruned_at is null and i.coverage_locked_at is null
+   and coalesce(i.source_file_sha256,'')~'^[0-9a-f]{64}$' and nullif(btrim(i.parser_version),'') is not null and nullif(btrim(i.file_r2_key),'') is not null
+   and not exists(select 1 from public.import_review_states where import_id=i.id)
+   and stats.row_count between 1 and 500 and stats.last_date-stats.first_date<=366
+  order by i.id limit p_limit
+ ),bounded as materialized(
+  select i.id import_id,i.client_id,i.source_file_sha256,i.parser_version,i.first_date,i.last_date,i.row_count,
+   t.timesheet_id,t.contract_id,t.candidate_id,t.route
+  from staged i cross join lateral(
+   select ts.timesheet_id,ts.contract_id,c.candidate_id,public._timesheet_query_recipient_resolve_core_v1(c.client_id,c.id)route
+   from public.timesheets ts join public.contracts c on c.id=ts.contract_id
+   where c.client_id=i.client_id and c.candidate_id is not null and ts.is_current and ts.revoked_at is null and ts.archived_at_utc is null
+    and ts.sheet_scope::text='WEEKLY' and ts.week_ending_date between i.first_date and i.last_date+6
+   order by ts.timesheet_id limit 20
+  )t
+ ),evidence as materialized(
+  select b.*,private.weekly_source_issued_signed_query_evidence_v1(b.timesheet_id,b.import_id)native_evidence from bounded b
+ ),eligible_evidence as materialized(
+  select * from evidence where native_evidence->>'query_purpose'='SIGNED_CHECK_ONLY_AFTER_ISSUE'
+   and native_evidence->>'reason_code' is null and native_evidence->'document_ready'='true'::jsonb
+   and nullif(route->>'recipient_email','') is not null
+ ),pairs as(
+  select a.import_id,a.client_id,a.source_file_sha256,a.parser_version,a.first_date,a.last_date,a.row_count,
+   a.timesheet_id first_timesheet_id,b.timesheet_id second_timesheet_id,a.candidate_id first_candidate_id,b.candidate_id second_candidate_id,
+   a.native_evidence->>'issued_invoice_id' first_invoice_id,b.native_evidence->>'issued_invoice_id' second_invoice_id,
+   a.native_evidence->>'issued_document_version_id' first_issued_document_version_id,b.native_evidence->>'issued_document_version_id' second_issued_document_version_id,
+   a.native_evidence->>'attachment_r2_key'=b.native_evidence->>'attachment_r2_key' shared_attachment_key
+  from eligible_evidence a join eligible_evidence b on b.import_id=a.import_id and b.timesheet_id>a.timesheet_id
+   and b.candidate_id<>a.candidate_id and b.route->>'recipient_email'=a.route->>'recipient_email'
+  order by a.import_id,a.timesheet_id,b.timesheet_id limit 100
+ )select coalesce(jsonb_agg(to_jsonb(p) order by import_id,first_timesheet_id,second_timesheet_id),'[]'::jsonb) into result from pairs p;
+ return jsonb_build_object('version','QUERY_NATIVE_INPUT_CANDIDATES_V1','candidate_inputs',result,'native_catalogue_eligibility_proved',false,
+  'genuine_document_metadata_only',true,'r2_route_verified',false,'provider_called',false);
+end;
+$function$;

@@ -1,0 +1,75 @@
+-- These cases require genuine older inputs. They never backdate a lease,
+-- override now()/transaction_timestamp(), fabricate a START or infer an outcome.
+create or replace function pg_temp.query_contact_native_older_inputs_v1(p_agency uuid)
+returns jsonb language plpgsql stable as $function$
+declare result jsonb;
+begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ perform private.weekly_source_query_require_service_v1();perform private.weekly_contact_context_v1(p_agency,'TEST');
+ select jsonb_build_object('legacy_claims',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from(
+  select d.id,d.mail_outbox_id,d.legacy_claim_leased_at_utc,d.legacy_claim_expires_at_utc from public.hr_issue_email_deliveries d
+  join public.mail_outbox o on o.id=d.mail_outbox_id where not d.contact_managed and d.legacy_claim_lease_token is not null
+   and d.legacy_claim_expires_at_utc<transaction_timestamp() and d.status<>'SENT' and o.sent_at is null and o.status::text<>'SENT'
+  order by d.id limit 25)x),'[]'::jsonb),'original_unknown_permits',coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from(
+  select p.id,p.query_delivery_id,p.mail_outbox_id,p.status,p.admitted_at_utc,p.lease_expires_at_utc from public.weekly_contact_submission_permits p
+  join public.mail_outbox o on o.id=p.mail_outbox_id join public.hr_issue_email_deliveries d on d.id=p.query_delivery_id
+  where p.owner_kind='TIMESHEET_QUERY_OUTBOX' and p.agency_id=p_agency and p.environment='TEST' and p.status in('STARTED','AMBIGUOUS')
+   and p.lease_expires_at_utc<transaction_timestamp() and d.contact_managed and d.status='QUEUED' and d.retired_at_utc is null
+   and o.type='TIMESHEET_QUERY' and o.status::text='QUEUED' and o.sent_at is null
+   and(o.attempt_lease_token is null or o.attempt_lease_expires_at_utc is null or o.attempt_lease_expires_at_utc<=transaction_timestamp())
+  order by p.id limit 25)x),'[]'::jsonb)) into result;
+ return result||jsonb_build_object('genuine_older_input_required',true,'expiry_is_outcome_proof',false,'provider_called',false);
+end;
+$function$;
+
+create or replace function pg_temp.query_contact_native_expired_legacy_case_v1(p_delivery uuid,p_agency uuid)
+returns jsonb language plpgsql as $function$
+declare delivery public.hr_issue_email_deliveries%rowtype;pair record;pair_count integer:=0;
+begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ perform private.weekly_source_query_require_service_v1();perform private.weekly_contact_context_v1(p_agency,'TEST');
+ select * into strict delivery from public.hr_issue_email_deliveries where id=p_delivery;
+ if delivery.legacy_claim_expires_at_utc is null or delivery.legacy_claim_expires_at_utc>=transaction_timestamp() then
+  raise exception 'GENUINE_OLDER_EXPIRED_LEGACY_CLAIM_REQUIRED';end if;
+ for pair in select distinct a.candidate_id,a.client_id from public.hr_issue_email_delivery_items item
+  join public.import_review_decisions a on a.action_id=item.action_id where item.delivery_id=delivery.id order by a.candidate_id,a.client_id loop
+  perform pg_temp.query_contact_legacy_claim_inflight_assert_v1(delivery.id,pair.candidate_id,pair.client_id,p_agency,'TEST');pair_count:=pair_count+1;
+ end loop;
+ if pair_count=0 then raise exception 'GENUINE_LEGACY_NATIVE_MEMBERS_REQUIRED';end if;
+ return jsonb_build_object('scenario','GENUINE_EXPIRED_LEGACY_REMAINS_UNCERTAIN','query_delivery_id',delivery.id,
+  'expired_claim_proved',true,'can_auto_resend',false,'provider_submission_established',false,'provider_called',false);
+end;
+$function$;
+
+create or replace function pg_temp.query_contact_native_unknown_reclaim_case_v1(p_original_permit uuid)
+returns jsonb language plpgsql as $function$
+declare permit public.weekly_contact_submission_permits%rowtype;mail public.mail_outbox%rowtype;claimed public.mail_outbox%rowtype;
+ token text:=gen_random_uuid()::text;found_target boolean:=false;before_count bigint;
+begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ perform private.weekly_source_query_require_service_v1();
+ select * into strict permit from public.weekly_contact_submission_permits where id=p_original_permit;
+ perform private.weekly_contact_context_v1(permit.agency_id,'TEST');
+ select * into strict mail from public.mail_outbox where id=permit.mail_outbox_id;
+ if permit.environment is distinct from 'TEST' or permit.owner_kind is distinct from 'TIMESHEET_QUERY_OUTBOX'
+  or permit.status not in('STARTED','AMBIGUOUS') or permit.lease_expires_at_utc is null or permit.lease_expires_at_utc>=transaction_timestamp()
+  or mail.status::text is distinct from 'QUEUED' or mail.sent_at is not null or(mail.attempt_lease_token is not null
+   and mail.attempt_lease_expires_at_utc is not null and mail.attempt_lease_expires_at_utc>transaction_timestamp()) then
+  raise exception 'GENUINE_OLDER_UNKNOWN_AND_NATIVE_CLAIM_ELIGIBILITY_REQUIRED';end if;
+ select count(*) into before_count from public.weekly_contact_submission_permits where query_delivery_id=permit.query_delivery_id;
+ for claimed in select * from public.email_outbox_claim_ready_batch_contact_v1(jsonb_build_object('version','EMAIL_OUTBOX_CONTACT_CLAIM_V1',
+  'limit',500,'attempt_lease_token',token,'lease_minutes',5,'worker_id','codex:query-sql-rollback','agency_id',permit.agency_id,'environment','TEST')) loop
+  if claimed.id=mail.id then found_target:=true;end if;
+ end loop;
+ if not found_target then raise exception 'GENUINE_NATIVE_QUEUE_DID_NOT_RECLAIM_OLDER_UNKNOWN_WITHIN_BOUND';end if;
+ if not exists(select 1 from public.mail_outbox o join public.hr_issue_email_deliveries d on d.mail_outbox_id=o.id
+  where o.id=mail.id and o.attempt_lease_token=token and o.attempt_leased_at_utc=transaction_timestamp()
+   and d.contact_claim_backend_pid is null and d.contact_claim_transaction_id is null and d.contact_claim_token is null
+   and d.contact_claim_at_utc is null and d.contact_claim_expires_at_utc is null) then raise exception 'GENUINE_RECLAIM_OR_CLEANUP_MISSING';end if;
+ perform pg_temp.query_contact_unknown_reclaim_assert_v1(permit.id,'codex:query-sql-rollback');
+ if before_count<>(select count(*) from public.weekly_contact_submission_permits where query_delivery_id=permit.query_delivery_id) then
+  raise exception 'NATIVE_RECLAIM_REFILLED_SUBMISSION_ALLOWANCE';end if;
+ return jsonb_build_object('scenario','GENUINE_OLDER_UNKNOWN_RECLAIM_HAS_NO_SECOND_CALL','contact_permit_id',permit.id,
+  'query_delivery_id',permit.query_delivery_id,'new_permit_created',false,'provider_called',false,'outcome_established',false);
+end;
+$function$;

@@ -1,0 +1,116 @@
+-- PROPOSAL / REQUIRED_NOT_RUN. Temporary server-owned TEST rollback prefix.
+-- Inputs are genuine staged parsed imports and actual signed/issued native
+-- Timesheets. No source approval, financial publication, audit, document READY
+-- flag, provider acceptance or expired clock is inserted by this constructor.
+create or replace function pg_temp.query_contact_native_economics_v1(p_timesheet_ids uuid[])
+returns jsonb language sql stable as $function$
+ select jsonb_build_object(
+  'timesheets',(select jsonb_agg(to_jsonb(t) order by t.timesheet_id) from public.timesheets t where t.timesheet_id=any(p_timesheet_ids)),
+  'workflows',(select jsonb_agg(to_jsonb(w) order by w.id) from public.candidate_submission_workflows w where w.id in(select candidate_workflow_id from public.timesheets where timesheet_id=any(p_timesheet_ids))),
+  'approval_requests',(select jsonb_agg(to_jsonb(a) order by a.id) from public.candidate_approval_requests a where a.workflow_id in(select candidate_workflow_id from public.timesheets where timesheet_id=any(p_timesheet_ids))),
+  'components',(select jsonb_agg(to_jsonb(c) order by c.id) from public.candidate_submission_components c where c.workflow_id in(select candidate_workflow_id from public.timesheets where timesheet_id=any(p_timesheet_ids))),
+  'timesheet_evidence',(select jsonb_agg(to_jsonb(e) order by e.id) from public.timesheet_evidence e where e.timesheet_id=any(p_timesheet_ids)),
+  'document_assets',(select jsonb_agg(to_jsonb(a) order by a.id) from public.invoice_document_assets a where a.id in(select manual_document_asset_id from public.timesheets where timesheet_id=any(p_timesheet_ids))
+   or a.id in(select document_asset_id from public.timesheet_evidence where timesheet_id=any(p_timesheet_ids))),
+  'financials',(select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f where f.timesheet_id=any(p_timesheet_ids)),
+  'invoices',(select jsonb_agg(to_jsonb(i) order by i.id) from public.invoices i where i.id in(select invoice_id from public.invoice_lines where timesheet_id=any(p_timesheet_ids))),
+  'invoice_lines',(select jsonb_agg(to_jsonb(l) order by l.id) from public.invoice_lines l where l.invoice_id in(select invoice_id from public.invoice_lines where timesheet_id=any(p_timesheet_ids))),
+  'document_versions',(select jsonb_agg(to_jsonb(d) order by d.id) from public.invoice_document_versions d where
+   (d.entity_type='TIMESHEET' and d.entity_id=any(p_timesheet_ids)) or(d.entity_type='INVOICE' and d.entity_id in(select invoice_id from public.invoice_lines where timesheet_id=any(p_timesheet_ids)))));
+$function$;
+
+create or replace function pg_temp.query_contact_native_import_prefix_v1(
+ p_staged_import_id uuid,p_actor_user_id uuid,p_first_timesheet_id uuid,p_second_timesheet_id uuid,p_verify_enqueue_replay boolean default true
+) returns jsonb language plpgsql as $function$
+declare hi public.hr_imports%rowtype;state public.import_review_states%rowtype;delivery public.hr_issue_email_deliveries%rowtype;
+ first_action public.import_review_decisions%rowtype;second_action public.import_review_decisions%rowtype;
+ start_date date;end_date date;before_economics jsonb;created jsonb;saved jsonb;viewed jsonb;envelope jsonb;payload jsonb;
+ selected_ids jsonb;changes jsonb;applied jsonb;enqueued jsonb;replayed jsonb;v_operation_id uuid:=gen_random_uuid();evidence_a jsonb;evidence_b jsonb;
+begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ perform private.weekly_source_query_require_service_v1();perform public._import_review_assert_actor_v1(p_actor_user_id);
+ select * into strict hi from public.hr_imports where id=p_staged_import_id for update;
+ if hi.source_system::text is distinct from 'HEALTHROSTER' or hi.import_scope is distinct from 'HR_WEEKLY' or hi.client_id is null
+  or hi.applied_at is not null or hi.pruned_at is not null or hi.coverage_locked_at is not null
+  or coalesce(hi.source_file_sha256,'')!~'^[0-9a-f]{64}$' or nullif(btrim(hi.parser_version),'') is null or nullif(btrim(hi.file_r2_key),'') is null
+  or exists(select 1 from public.import_review_states where import_id=hi.id) or p_first_timesheet_id is null or p_second_timesheet_id is null
+  or p_first_timesheet_id=p_second_timesheet_id then
+  raise exception 'GENUINE_PARSED_UNREVIEWED_HR_WEEKLY_IMPORT_REQUIRED';end if;
+ select min(date_local),max(date_local) into start_date,end_date from public.hr_rows where import_id=hi.id;
+ if start_date is null or end_date-start_date>366 or(select count(*) from public.hr_rows where import_id=hi.id)>500 then
+  raise exception 'GENUINE_BOUNDED_PARSED_HR_ROWS_REQUIRED';end if;
+ -- This is the actual D10 owner, not reconstructed signature/issue truth.
+ evidence_a:=private.weekly_source_issued_signed_query_evidence_v1(p_first_timesheet_id,hi.id);
+ evidence_b:=private.weekly_source_issued_signed_query_evidence_v1(p_second_timesheet_id,hi.id);
+ if evidence_a->>'query_purpose' is distinct from 'SIGNED_CHECK_ONLY_AFTER_ISSUE'
+  or evidence_b->>'query_purpose' is distinct from 'SIGNED_CHECK_ONLY_AFTER_ISSUE'
+  or evidence_a->>'reason_code' is not null or evidence_b->>'reason_code' is not null
+  or evidence_a->'document_ready' is distinct from 'true'::jsonb or evidence_b->'document_ready' is distinct from 'true'::jsonb then
+  raise exception 'GENUINE_D10_SIGNED_ISSUED_TIMESHEET_EVIDENCE_REQUIRED';end if;
+ before_economics:=pg_temp.query_contact_native_economics_v1(array[p_first_timesheet_id,p_second_timesheet_id]);
+ created:=public.import_review_create_v1(hi.id,'PARTIAL',start_date,end_date,
+  jsonb_build_array(jsonb_build_object('source_client_key','client:'||hi.client_id::text,'client_id',hi.client_id)),
+  '[]'::jsonb,hi.source_file_sha256,hi.parser_version,p_actor_user_id,'QUERY_SQL_ROLLBACK:'||v_operation_id::text);
+ select * into strict state from public.import_review_states where import_id=hi.id;
+ -- Select exactly the two real native EMAIL_ISSUE actions. Every other
+ -- selectable action is explicitly deselected through native CAS/save.
+ select * into strict first_action from public.import_review_decisions where import_id=hi.id and is_current and selectable and not blocking
+  and action_kind='EMAIL_ISSUE' and timesheet_id=p_first_timesheet_id;
+ select * into strict second_action from public.import_review_decisions where import_id=hi.id and is_current and selectable and not blocking
+  and action_kind='EMAIL_ISSUE' and timesheet_id=p_second_timesheet_id;
+ if first_action.candidate_id is null or second_action.candidate_id is null or first_action.candidate_id=second_action.candidate_id
+  or first_action.client_id is distinct from hi.client_id or second_action.client_id is distinct from hi.client_id
+  or first_action.summary_json->>'candidate_name' is not distinct from second_action.summary_json->>'candidate_name'
+  or nullif(first_action.summary_json->>'candidate_name','') is null or nullif(second_action.summary_json->>'candidate_name','') is null
+  or public._timesheet_query_recipient_resolve_core_v1(first_action.client_id,first_action.contract_id)->>'recipient_email'
+   is distinct from public._timesheet_query_recipient_resolve_core_v1(second_action.client_id,second_action.contract_id)->>'recipient_email'
+  or(select count(*) from public.import_review_decisions where import_id=hi.id and is_current and selectable)>500 then
+  raise exception 'GENUINE_TWO_WORKERS_SAME_ACTUAL_RECIPIENT_REQUIRED';end if;
+ select jsonb_agg(jsonb_build_object('action_id',d.action_id,'selected',d.action_id in(first_action.action_id,second_action.action_id)) order by d.action_id)
+  into changes from public.import_review_decisions d where d.import_id=hi.id and d.is_current and d.selectable;
+ saved:=public.import_review_save_v1(hi.id,state.state_version,state.preview_generation,state.preview_fingerprint,changes,null,p_actor_user_id,gen_random_uuid());
+ viewed:=public.import_review_get_v1(hi.id,p_actor_user_id,null,200,null,50);
+ envelope:=viewed#>'{state,apply_contract,request_envelope}';selected_ids:=viewed#>'{state,apply_contract,selected_action_ids}';
+ if selected_ids is distinct from(select jsonb_agg(x order by x) from unnest(array[first_action.action_id,second_action.action_id])x)
+  or envelope->'reference_invalidation_action_ids' is distinct from '[]'::jsonb or envelope->'correction_units' is distinct from '[]'::jsonb
+  or envelope->'reconciliation_units' is distinct from '[]'::jsonb or viewed#>'{state,editability,can_apply}' is distinct from 'true'::jsonb then
+  raise exception 'NATIVE_QUERY_ONLY_READY_ENVELOPE_REQUIRED';end if;
+ payload:=jsonb_build_object('review_contract',jsonb_build_object('operation_id',v_operation_id,
+  'state_version',viewed#>'{state,state_version}','coverage_fingerprint',viewed#>'{import,coverage_fingerprint}',
+  'preview_fingerprint',viewed#>'{state,preview_fingerprint}','request_hash',viewed#>'{state,apply_contract,request_hash}'),
+  'review_selected_action_ids',selected_ids,'invalidation_action_ids','[]'::jsonb);
+ applied:=public.hr_weekly_apply_transactional(hi.id,payload,p_actor_user_id);
+ if applied->'affected_timesheet_ids' is distinct from '[]'::jsonb or applied->'auto_authorise_timesheet_ids' is distinct from '[]'::jsonb
+  or applied->'post_commit_reauthorise_timesheet_ids' is distinct from '[]'::jsonb or applied->'post_commit_email_action_ids' is distinct from selected_ids
+  or(select count(*) from public.import_review_action_outcomes o where o.operation_id=v_operation_id and o.import_id=hi.id)<>2 then
+  raise exception 'NATIVE_QUERY_ONLY_APPLY_OUTCOME_REQUIRED';end if;
+ -- No direct outcome or audit insertion: complete/commit comes from apply.
+ enqueued:=public.timesheet_query_email_enqueue_v1(hi.id,v_operation_id,applied->'post_commit_email_action_ids',p_actor_user_id,5000,100);
+ if enqueued->>'group_count' is distinct from '1' or enqueued->>'new_delivery_count' is distinct from '1' then raise exception 'NATIVE_ORIGINAL_MULTI_WORKER_GROUP_REQUIRED';end if;
+ select * into strict delivery from public.hr_issue_email_deliveries where id=(enqueued->'groups'->0->>'delivery_id')::uuid;
+ if(select count(*) from public.hr_issue_email_delivery_items where delivery_id=delivery.id)<>2 or delivery.status is distinct from 'QUEUED'
+  or to_jsonb(delivery)->>'retired_at_utc' is not null then raise exception 'NATIVE_ORIGINAL_TWO_UNSENT_ITEMS_REQUIRED';end if;
+ -- The historical pre-DDL owner creates a native temp table without dropping
+ -- it on same-TX replay. In the explicit legacy-prefix mode defer replay to
+ -- the genuine installed successor; never edit its old temp table to bypass it.
+ if coalesce(p_verify_enqueue_replay,true) then
+  replayed:=public.timesheet_query_email_enqueue_v1(hi.id,v_operation_id,applied->'post_commit_email_action_ids',p_actor_user_id,5000,100);
+  if replayed->>'new_delivery_count' is distinct from '0' or replayed->'groups'->0->>'delivery_id' is distinct from delivery.id::text then raise exception 'NATIVE_ORIGINAL_ENQUEUE_REPLAY_FAILED';end if;
+ end if;
+ if before_economics is distinct from pg_temp.query_contact_native_economics_v1(array[p_first_timesheet_id,p_second_timesheet_id]) then
+  raise exception 'QUERY_ONLY_PREFIX_CHANGED_SIGNED_SOURCE_FINANCE_INVOICE_OR_DOCUMENT';end if;
+ create temporary table if not exists query_contact_native_prefix_receipts_v1(
+  import_id uuid primary key,operation_id uuid not null,delivery_id uuid not null,mail_outbox_id uuid not null,
+  first_action_id text not null,second_action_id text not null,first_candidate_id uuid not null,second_candidate_id uuid not null,client_id uuid not null,
+  source_financial_invoice_snapshot jsonb not null,first_native_evidence jsonb not null,second_native_evidence jsonb not null,
+  source_file_sha256 text not null,parser_version text not null,transaction_id xid8 not null,enqueue_replay_verified boolean not null,
+  r2_route_verified boolean not null default false,provider_called boolean not null default false) on commit drop;
+ insert into pg_temp.query_contact_native_prefix_receipts_v1 values(hi.id,v_operation_id,delivery.id,delivery.mail_outbox_id,
+  first_action.action_id,second_action.action_id,first_action.candidate_id,second_action.candidate_id,hi.client_id,
+  before_economics,evidence_a,evidence_b,hi.source_file_sha256,hi.parser_version,pg_current_xact_id(),coalesce(p_verify_enqueue_replay,true),false,false);
+ return jsonb_build_object('import_id',hi.id,'operation_id',v_operation_id,'original_delivery_id',delivery.id,'mail_outbox_id',delivery.mail_outbox_id,
+  'first_action_id',first_action.action_id,'second_action_id',second_action.action_id,'client_id',hi.client_id,
+  'first_candidate_id',first_action.candidate_id,'second_candidate_id',second_action.candidate_id,
+  'native_review_apply_enqueue',true,'enqueue_replay_verified',coalesce(p_verify_enqueue_replay,true),'native_economics_unchanged',true,'r2_route_verified',false,'provider_called',false);
+end;
+$function$;

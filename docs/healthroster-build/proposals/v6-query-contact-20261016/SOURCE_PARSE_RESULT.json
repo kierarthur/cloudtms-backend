@@ -8,6 +8,48 @@
       "plpgsql_functions": 7,
       "inner_sql_expressions": 47,
       "native": "REQUIRED_NOT_RUN"
+    },
+    {
+      "file": "fixtures/query-native-cases.sqlinc",
+      "sql_statements": 2,
+      "plpgsql_functions": 2,
+      "inner_sql_expressions": 55,
+      "native": "REQUIRED_NOT_RUN"
+    },
+    {
+      "file": "fixtures/query-native-inputs.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 4,
+      "native": "REQUIRED_NOT_RUN"
+    },
+    {
+      "file": "fixtures/query-native-legacy-assertions.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 16,
+      "native": "REQUIRED_NOT_RUN"
+    },
+    {
+      "file": "fixtures/query-native-legacy-prefix.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 18,
+      "native": "REQUIRED_NOT_RUN"
+    },
+    {
+      "file": "fixtures/query-native-older-cases.sqlinc",
+      "sql_statements": 3,
+      "plpgsql_functions": 3,
+      "inner_sql_expressions": 33,
+      "native": "REQUIRED_NOT_RUN"
+    },
+    {
+      "file": "fixtures/query-native-prefix.sqlinc",
+      "sql_statements": 2,
+      "plpgsql_functions": 2,
+      "inner_sql_expressions": 37,
+      "native": "REQUIRED_NOT_RUN"
     }
   ],
   "checks": [

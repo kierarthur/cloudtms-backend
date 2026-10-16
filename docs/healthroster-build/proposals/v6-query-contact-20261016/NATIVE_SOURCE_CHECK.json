@@ -185,6 +185,111 @@
       "file": "native-query-contact-assertions.sqlinc",
       "variable": "o",
       "table": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "variable": "row",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "variable": "original_mail",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "variable": "child",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "variable": "child_mail",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "variable": "resumed",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "variable": "resumed_mail",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "variable": "first_action",
+      "table": "public.import_review_decisions"
+    },
+    {
+      "file": "query-native-cases.sqlinc",
+      "variable": "second_action",
+      "table": "public.import_review_decisions"
+    },
+    {
+      "file": "query-native-legacy-assertions.sqlinc",
+      "variable": "delivery",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "query-native-legacy-assertions.sqlinc",
+      "variable": "mail",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-legacy-prefix.sqlinc",
+      "variable": "mail",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-legacy-prefix.sqlinc",
+      "variable": "claimed",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-older-cases.sqlinc",
+      "variable": "delivery",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "query-native-older-cases.sqlinc",
+      "variable": "permit",
+      "table": "public.weekly_contact_submission_permits"
+    },
+    {
+      "file": "query-native-older-cases.sqlinc",
+      "variable": "mail",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-older-cases.sqlinc",
+      "variable": "claimed",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "query-native-prefix.sqlinc",
+      "variable": "hi",
+      "table": "public.hr_imports"
+    },
+    {
+      "file": "query-native-prefix.sqlinc",
+      "variable": "state",
+      "table": "public.import_review_states"
+    },
+    {
+      "file": "query-native-prefix.sqlinc",
+      "variable": "delivery",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "query-native-prefix.sqlinc",
+      "variable": "first_action",
+      "table": "public.import_review_decisions"
+    },
+    {
+      "file": "query-native-prefix.sqlinc",
+      "variable": "second_action",
+      "table": "public.import_review_decisions"
     }
   ],
   "root0226_composition_grammar": "PASS",
