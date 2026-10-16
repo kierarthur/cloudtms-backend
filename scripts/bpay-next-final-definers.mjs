@@ -149,7 +149,9 @@ export function closeFinalDefinerSelection(pending, current = inventory()) {
     added = false;
     for (const chain of registry.chains) {
       if (!chain.predecessors?.some(file => selected.has(file))) continue;
-      for (const file of chain.finalClosures) {
+      // The declared final owner is mandatory even when a historical row has
+      // no companion closures. Keep every explicitly registered companion.
+      for (const file of new Set([chain.finalRoot, ...chain.finalClosures])) {
         if (!current.repeatables.some(row => row.path === file)) throw Error(`BPAY_NEXT_FINAL_CLOSURE_MISSING: ${file}`);
         if (!selected.has(file)) { selected.add(file); added = true; }
       }
