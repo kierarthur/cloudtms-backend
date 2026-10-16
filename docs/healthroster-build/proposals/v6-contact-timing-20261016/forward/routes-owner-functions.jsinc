@@ -58,4 +58,3 @@ async function handleSettingsPut(req, env, dependencies, user, kind, id = null) 
   });
   return jsonResponse(200, kind === 'global' ? decodeGlobalContactSettingsState(result) : result);
 }
-
