@@ -82,6 +82,8 @@ V6 source continuation58260260977c73ebf2eae91470670adf1c17c953 adds checking pau
 
 ## Final V6 schema root01 — source published, not installed
 
+Source commit **3b902b877b3e6f3e2f4f21342171e1c8f7abd198** is freshly remote-verified on `codex/healthroster-install2-14102026`; this is a non-deploying source checkpoint, with full contract/native runtime/release gates still open.
+
 Health sole-integration root `supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql`, SHA256 `d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82`, exact staged Git blob `e745e839b0cf2f828d65b0c9f8c60996d347f1e8`, composes the complete 23 Health-owned physical, invoice and Source decision/review/preparation tables. Exact immutable producer source pins and all table names are retained in the migration and `v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json`. The composer reproduces the complete bytes from those immutable inputs; no Banking body is authored here.
 
 The exact staged constructor passed all57 native statements on agency TEST through this account’s Kier Operations rollback tool. Validated keys, the exact changed Timesheet archive constraint, owner-only FORCE RLS/policies and absence of all direct browser/service grants passed. Fresh rollback proved all23 tables absent, unchanged parent constraint/trigger catalogue and both ledgers, and LEGACY:1. Shared turn147446 was explicitly unlocked and closed at01:08:26.711UTC16October. This is DDL-constructor qualification only: no business rows, functions, cut, valuation, canonical publication, complete contract, full rehearsal, install or activation is proved.
