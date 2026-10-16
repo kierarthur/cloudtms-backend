@@ -1,0 +1,173 @@
+-- Daily rate correction admission: genuine same physical Daily, no Contract.
+-- Native context and dated selector are reused. This file calculates no money.
+create or replace function private.daily_rate_authority_lock_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare ids uuid[]; v_client_id uuid;
+begin
+ if tg_table_schema<>'public' or tg_table_name not in('rates_client_defaults','rates_candidate_overrides') then
+  raise exception 'DAILY_RATE_AUTHORITY_RELATION_INVALID' using errcode='42501';end if;
+ ids:=case tg_op when 'INSERT' then array[new.client_id] when 'DELETE' then array[old.client_id] else array[old.client_id,new.client_id] end;
+ for v_client_id in select distinct value from unnest(ids) value where value is not null order by value loop
+  perform pg_advisory_xact_lock(hashtextextended('DAILY_RATE_AUTHORITY_CLIENT:'||v_client_id::text,0));
+ end loop;
+ if tg_op='DELETE' then return old;end if;return new;
+end;
+$function$;
+create or replace trigger daily_rate_authority_client_lock_v1 before insert or update or delete on public.rates_client_defaults
+ for each row execute function private.daily_rate_authority_lock_v1();
+create or replace trigger daily_rate_authority_candidate_lock_v1 before insert or update or delete on public.rates_candidate_overrides
+ for each row execute function private.daily_rate_authority_lock_v1();
+
+create or replace function private.daily_rate_correction_authority_v1(p_selection_args jsonb,p_lock boolean)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare a jsonb:=p_selection_args; selected jsonb; override_row jsonb; default_row jsonb; competing jsonb;
+ selection_hash text; resolver_hash text; provenance jsonb; v_candidate_id uuid; v_client_id uuid; v_work_date date;
+begin
+ if p_lock is null or jsonb_typeof(a) is distinct from 'object'
+  or not(a ?& array['k','candidate_id','client_id','role','band','date','rate_type'])
+  or a-array['k','candidate_id','client_id','role','band','date','rate_type']<>'{}'::jsonb
+  or coalesce(a->>'rate_type','') not in('PAYE','UMBRELLA') or nullif(a->>'role','') is null then
+  raise exception 'DAILY_RATE_SELECTION_INVALID' using errcode='22023';end if;
+ v_candidate_id:=(a->>'candidate_id')::uuid;v_client_id:=(a->>'client_id')::uuid;v_work_date:=(a->>'date')::date;
+ if v_candidate_id is null or v_client_id is null or v_work_date is null then raise exception 'DAILY_RATE_SELECTION_INVALID' using errcode='22023';end if;
+ if p_lock then
+  perform pg_advisory_xact_lock(hashtextextended('DAILY_RATE_AUTHORITY_CLIENT:'||v_client_id::text,0));
+  -- Every selector writer takes this same mutex. Do not also wait on row
+  -- locks: a native UPDATE owns its tuple before its BEFORE ROW trigger can
+  -- acquire this mutex. The mutex protects selected and phantom rows alike.
+ end if;
+ -- One existing selector, including its exact tie order, date/band rules and
+ -- disabled handling. A NULL used override PAY cell never falls back to Client.
+ select to_jsonb(r) into strict selected from public.tsfin_resolve_rates_batch(jsonb_build_array(a)) r;
+ select to_jsonb(v) into override_row from public.rates_candidate_overrides v where v.id=(selected->>'override_id')::uuid;
+ select to_jsonb(d) into default_row from public.rates_client_defaults d where d.id=(selected->>'default_id')::uuid;
+ select jsonb_build_object('overrides',coalesce((select jsonb_agg(to_jsonb(v) order by v.id)
+   from public.rates_candidate_overrides v where v.client_id=v_client_id and v.candidate_id=v_candidate_id
+    and v.role=a->>'role' and v.rate_type=a->>'rate_type' and v.band is not distinct from (a->>'band')
+    and v.date_from<=v_work_date and (v.date_to is null or v.date_to>=v_work_date)),'[]'::jsonb),
+  'defaults',coalesce((select jsonb_agg(to_jsonb(d) order by d.id) from public.rates_client_defaults d
+   where d.client_id=v_client_id and d.role=a->>'role' and d.band is not distinct from (a->>'band')
+    and d.date_from<=v_work_date and (d.date_to is null or d.date_to>=v_work_date)),'[]'::jsonb)) into competing;
+ resolver_hash:=encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(pg_get_functiondef('public.tsfin_resolve_rates_batch(jsonb)'::regprocedure))),'hex');
+ selection_hash:=encode(private.timesheet_contract_move_row_hash_v1(jsonb_build_object('selection',a,'competing',competing,
+  'resolver_sha256',resolver_hash,'selected',selected)),'hex');
+ if selected->>'source_kind' in('CANDIDATE_OVERRIDE','CLIENT_DEFAULT') and default_row is not null then
+  provenance:=jsonb_build_object('version','DAILY_RATE_AUTHORITY_V1',
+   'pay',jsonb_build_object('kind',selected->>'source_kind','override_id',selected->'override_id',
+    'default_id',case when override_row is not null then 'null'::jsonb else selected->'default_id' end,
+    'effective_from',coalesce(override_row,default_row)->'date_from','effective_to',coalesce(override_row,default_row)->'date_to',
+    'rate_type',a->'rate_type','source_row_sha256',encode(private.timesheet_contract_move_row_hash_v1(coalesce(override_row,default_row)),'hex'),
+    'selection_context_sha256',selection_hash),
+   'charge',jsonb_build_object('kind','CLIENT_DEFAULT','default_id',selected->'default_id','effective_from',default_row->'date_from',
+    'effective_to',default_row->'date_to','source_row_sha256',encode(private.timesheet_contract_move_row_hash_v1(default_row),'hex'),
+    'selection_context_sha256',selection_hash));
+ end if;
+ return jsonb_build_object('version','DAILY_RATE_SELECTION_V1','selection_args',a,'selected_rates',selected,
+  'rate_provenance',provenance,'selection_context_sha256',selection_hash,'resolver_sha256',resolver_hash,
+  'competing_selector_rows',competing);
+end;
+$function$;
+
+create or replace function private.daily_rate_correction_context_v1(p_timesheet_id uuid,p_actor_user_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare t public.timesheets%rowtype; f public.timesheets_financials%rowtype; w private.bpay_next_work%rowtype;
+ control private.bpay_next_worker_control%rowtype; native_context record; checked record; v_candidate_id uuid; v_client_id uuid;
+ selection jsonb; authority jsonb; result jsonb; original_facts jsonb; context_hash text; v_rate_type text;
+begin
+ if p_timesheet_id is null or p_actor_user_id is null or p_lock is null
+  or not private.weekly_source_pay_actor_allowed_v1(p_actor_user_id)
+  or not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
+  raise exception 'DAILY_RATE_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
+ select v.* into t from public.timesheets v where v.timesheet_id=p_timesheet_id;
+ if t.timesheet_id is null or t.sheet_scope::text is distinct from 'DAILY' or t.contract_id is not null
+  or not t.is_current or t.archived_at_utc is not null or t.revoked_at is not null then
+  raise exception 'DAILY_RATE_CURRENT_CONTRACTLESS_TARGET_REQUIRED' using errcode='22023';end if;
+ if (select count(*) from public.timesheets v where v.booking_id=t.booking_id and v.is_current and v.archived_at_utc is null)<>1
+  or private.bpay_next_approval_route_v1(t.timesheet_id) is distinct from 'DAILY_HOURS' then
+  raise exception 'DAILY_RATE_NATIVE_IDENTITY_UNBOUND' using errcode='23514';end if;
+ select v.* into strict native_context from public.tsfin_load_context_batch(array[t.timesheet_id]) v;
+ v_candidate_id:=(native_context.out_candidate->>'id')::uuid;v_client_id:=native_context.out_client_id;
+ if v_candidate_id is null or v_client_id is null or native_context.effective_timesheet_id is distinct from t.timesheet_id then
+  raise exception 'DAILY_RATE_NATIVE_CONTEXT_UNBOUND' using errcode='23514';end if;
+ if p_lock then
+  perform 1 from private.bpay_next_module_control v where v.id=1 and v.active_owner='NEXT' for share;
+  if not found then raise exception 'DAILY_RATE_NATIVE_OWNER_UNAVAILABLE' using errcode='55000';end if;
+  perform pg_advisory_xact_lock(hashtextextended('DAILY_RATE_AUTHORITY_CLIENT:'||v_client_id::text,0));
+  perform 1 from public.clients v where v.id=v_client_id for share;
+  perform 1 from public.candidates v where v.id=v_candidate_id for update;
+  perform 1 from public.umbrellas v join public.candidates c on c.umbrella_id=v.id where c.id=v_candidate_id for share of v;
+  perform 1 from private.bpay_next_worker_control v where v.candidate_id=v_candidate_id for update;
+  perform 1 from public.timesheets v where v.booking_id=t.booking_id order by v.timesheet_id for update;
+  perform 1 from public.timesheets_financials v where v.timesheet_id=t.timesheet_id and v.is_current order by v.id for update;
+  perform 1 from public.candidate_submission_workflows v where v.id=t.candidate_workflow_id
+   or v.anchor_timesheet_id=t.timesheet_id or v.target_timesheet_id=t.timesheet_id order by v.id for update;
+  perform 1 from public.candidate_expense_components v where v.owning_timesheet_id=t.timesheet_id order by v.expense_component_id for update;
+  select v.* into strict checked from public.tsfin_load_context_batch(array[t.timesheet_id]) v;
+  if checked.effective_timesheet_id is distinct from t.timesheet_id or checked.out_candidate->>'id' is distinct from v_candidate_id::text
+   or checked.out_client_id is distinct from v_client_id then raise exception 'REVIEW_STALE' using errcode='40001';end if;
+  native_context:=checked;
+  select v.* into strict t from public.timesheets v where v.timesheet_id=p_timesheet_id;
+  if not t.is_current or t.archived_at_utc is not null or t.contract_id is not null then raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ end if;
+ if (select count(*) from public.timesheets_financials v where v.timesheet_id=t.timesheet_id and v.is_current)<>1 then
+  raise exception 'DAILY_RATE_CURRENT_FINANCIAL_UNBOUND' using errcode='23514';end if;
+ select v.* into strict f from public.timesheets_financials v where v.timesheet_id=t.timesheet_id and v.is_current;
+ if f.id::text is distinct from native_context.out_cur_fin->>'id' or f.timesheet_version is distinct from t.version
+  or f.candidate_id is distinct from v_candidate_id or f.client_id is distinct from v_client_id or f.basis::text is distinct from 'SELF_REPORTED'
+  or f.is_stale or f.authorised_at_utc is null or t.authorised_at_server is null
+  or t.worked_start_iso is null or t.worked_end_iso is null
+  or t.worked_end_iso<=t.worked_start_iso or nullif(f.role,'') is null
+  or f.role is distinct from t.job_title_norm or f.band is distinct from t.band then
+  raise exception 'DAILY_RATE_NATIVE_FACTS_REVIEW_REQUIRED' using errcode='23514';end if;
+ v_rate_type:=upper(native_context.out_candidate->>'pay_method');
+ if v_rate_type is null or v_rate_type not in('PAYE','UMBRELLA') then raise exception 'DAILY_RATE_CURRENT_CHANNEL_MISSING' using errcode='23514';end if;
+ select v.* into w from private.bpay_next_work v where v.booking_id=t.booking_id;
+ if w.id is not null and (w.contract_id is not null or w.candidate_id is distinct from v_candidate_id or w.original_timesheet_id is distinct from t.timesheet_id
+  or w.origin_kind is distinct from 'DAILY' or w.origin_work_date is distinct from (t.worked_start_iso at time zone 'Europe/London')::date
+  or w.work_kind is distinct from 'ORDINARY') then raise exception 'DAILY_RATE_NATIVE_WORK_IDENTITY_CONFLICT' using errcode='23514';end if;
+ select v.* into control from private.bpay_next_worker_control v where v.candidate_id=v_candidate_id;
+ selection:=jsonb_build_object('k',t.timesheet_id,'candidate_id',v_candidate_id,'client_id',v_client_id,'role',f.role,'band',f.band,
+  'date',(t.worked_start_iso at time zone 'Europe/London')::date,'rate_type',v_rate_type);
+ authority:=private.daily_rate_correction_authority_v1(selection,p_lock);
+ original_facts:=private.timesheet_contract_move_evidence_v1(t.timesheet_id);
+ result:=jsonb_build_object('version','DAILY_RATE_CONTEXT_V1','identity',jsonb_build_object('timesheet_id',t.timesheet_id,
+   'timesheet_version',t.version::text,'booking_id',t.booking_id,'current_work_id',w.id,'candidate_id',v_candidate_id,'client_id',v_client_id,
+   'origin','DAILY','contract_id',null),
+  'current_financial_id',f.id,'current_financial_revision',case when w.id is not null then w.current_revision_no::text else null end,
+  'unchanged_work_sha256',encode(private.timesheet_contract_move_row_hash_v1(original_facts),'hex'),
+  'native_calculation_input',to_jsonb(native_context),'authority_selection_args',selection,'rate_authority',authority,
+  'calculator_contract_version','CANONICAL_DAILY_RATE_CORRECTION_V1',
+  'native_claim_charge_authority',(select jsonb_build_object('client_id',c.id,'mileage_charge_rate',c.mileage_charge_rate) from public.clients c where c.id=v_client_id),
+  'original_evidence_basis',original_facts,'billing_basis',jsonb_build_object('original_financial_id',f.id,
+   'original_financial_sha256',encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(f)),'hex'),
+   'invoice_breakdown_json',f.invoice_breakdown_json,'locked_by_invoice_id',f.locked_by_invoice_id),
+  'native_financial_basis',jsonb_build_object('work',case when w.id is null then null else to_jsonb(w) end,
+   'worker_control',case when control.candidate_id is null then null else to_jsonb(control) end,
+   'current_channel',v_rate_type,'current_umbrella_id',native_context.out_candidate->'umbrella_id',
+   'current_umbrella_vat_chargeable',native_context.out_umbrella->'vat_chargeable'),
+  'context_reader_sha256',encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(pg_get_functiondef('public.tsfin_load_context_batch(uuid[])'::regprocedure))),'hex'));
+ context_hash:=encode(private.timesheet_contract_move_row_hash_v1(result),'hex');
+ return result||jsonb_build_object('context_digest',context_hash);
+end;
+$function$;
+
+create or replace function public.timesheet_daily_rate_correction_context_v1(p_args jsonb)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare k text;
+begin
+ if jsonb_typeof(p_args) is distinct from 'object' or not(p_args ?& array['timesheet_id','actor_user_id'])
+  or p_args-array['timesheet_id','actor_user_id']<>'{}'::jsonb then raise exception 'DAILY_RATE_REQUEST_INVALID' using errcode='22023';end if;
+ foreach k in array array['timesheet_id','actor_user_id'] loop
+  if jsonb_typeof(p_args->k) is distinct from 'string' or p_args->>k !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+   raise exception 'DAILY_RATE_REQUEST_INVALID' using errcode='22023';end if;
+ end loop;
+ return private.daily_rate_correction_context_v1((p_args->>'timesheet_id')::uuid,(p_args->>'actor_user_id')::uuid,false);
+end;
+$function$;
+alter function public.timesheet_daily_rate_correction_context_v1(jsonb) owner to current_user;
+revoke all on function public.timesheet_daily_rate_correction_context_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.timesheet_daily_rate_correction_context_v1(jsonb) to service_role;

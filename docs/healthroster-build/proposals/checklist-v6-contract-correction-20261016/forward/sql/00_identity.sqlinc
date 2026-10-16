@@ -250,8 +250,14 @@ returns trigger language plpgsql security definer set search_path='pg_catalog','
 as $function$
 declare o private.timesheet_contract_move_operations%rowtype;
 begin
- select v.* into o from private.timesheet_contract_move_operations v where v.id=new.id;
- if o.state='REVIEWED' and (o.to_timesheet_id is not null or o.placement_receipt_json is not null)
+ if tg_table_name='timesheet_contract_move_members' then
+  select v.* into o from private.timesheet_contract_move_operations v where v.id=new.operation_id;
+ else
+  select v.* into o from private.timesheet_contract_move_operations v where v.id=new.id;
+ end if;
+ if o.state='REVIEWED' and (o.to_timesheet_id is not null or o.placement_receipt_json is not null
+   or exists(select 1 from private.timesheet_contract_move_members m where m.operation_id=o.id
+    and (m.to_timesheet_id is not null or m.to_financial_id is not null)))
   or o.expected_scope_hash is null or o.before_pay_cut_hash is null or o.before_invoice_hash is null
   or not exists(select 1 from private.timesheet_contract_move_reviews r where r.operation_id=o.id
     and r.scope_hash=o.expected_scope_hash and r.pay_cut_hash=o.before_pay_cut_hash and r.invoice_hash=o.before_invoice_hash)
@@ -261,6 +267,8 @@ begin
  end if;
  if o.state='COMPLETE' and o.purpose='CONTRACT_CORRECTION' then
   perform private.timesheet_contract_move_assert_v1(o.id,o.accepted_review_id);
+ elsif o.state='COMPLETE' and o.purpose='DAILY_RATE_CORRECTION' then
+  perform private.daily_rate_correction_assert_v1(o.id,o.accepted_review_id);
  end if;
  return null;
 end;
@@ -275,3 +283,5 @@ create or replace trigger timesheet_contract_move_alias_immutable before update 
 create or replace trigger timesheet_contract_move_consumption_immutable before update or delete on private.timesheet_contract_move_capability_consumptions for each row execute function private.timesheet_contract_move_immutable_v1();
 drop trigger if exists timesheet_contract_move_commit_guard on private.timesheet_contract_move_operations;
 create constraint trigger timesheet_contract_move_commit_guard after insert or update on private.timesheet_contract_move_operations deferrable initially deferred for each row execute function private.timesheet_contract_move_commit_guard_v1();
+drop trigger if exists timesheet_contract_move_member_commit_guard on private.timesheet_contract_move_members;
+create constraint trigger timesheet_contract_move_member_commit_guard after insert or update on private.timesheet_contract_move_members deferrable initially deferred for each row execute function private.timesheet_contract_move_commit_guard_v1();

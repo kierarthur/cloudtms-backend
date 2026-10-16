@@ -3,6 +3,17 @@ do $acl$
 declare signature text;
 begin
  foreach signature in array array[
+  'private.daily_rate_authority_lock_v1()',
+  'private.daily_rate_calculator_round_assert_v1(double precision,numeric)',
+  'private.daily_rate_correction_accepting_v1(uuid)',
+  'private.daily_rate_correction_assert_v1(uuid,uuid)',
+  'private.daily_rate_correction_authority_v1(jsonb,boolean)',
+  'private.daily_rate_correction_context_v1(uuid,uuid,boolean)',
+  'private.daily_rate_correction_financial_id_v1(uuid,text)',
+  'private.daily_rate_correction_normalized_snapshot_v1(jsonb,jsonb,jsonb,uuid)',
+  'private.daily_rate_correction_revision_admit_v1(uuid,text)',
+  'private.daily_rate_correction_scope_v1(uuid,boolean)',
+  'private.daily_rate_correction_snapshot_assert_v1(jsonb,jsonb,jsonb,uuid)',
   'private.timesheet_contract_current_placement_v1(uuid)',
   'private.timesheet_contract_move_accepting_v1(uuid)',
   'private.timesheet_contract_move_assert_v1(uuid,uuid)',

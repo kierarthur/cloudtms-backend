@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "reviewedFinalContentSha256": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
   "canonicalInputCommit": "7f5a5a876a9b485beee2b040409233eef70448c7",
-  "purpose": "Health physical Contract correction and shared V3/Daily DTO source checkpoint",
+  "purpose": "Health Contract correction plus Daily same-record context/calculator/revision admission source checkpoint",
   "files": [
     {
       "file": "forward/sql/00_identity.sqlinc",
-      "sha256": "e2fa25ded097d7ce46eba2c79864f6a02020f51c30504556a7e474395eef1d43",
-      "bytes": 20787
+      "sha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346",
+      "bytes": 21633
     },
     {
       "file": "forward/sql/01_capability.sqlinc",
@@ -16,8 +16,8 @@
     },
     {
       "file": "forward/sql/02_physical_apply.sqlinc",
-      "sha256": "19653673c3fb690543350b535be931627e9a50c422f0d63b72ebbb397179d0e9",
-      "bytes": 37769
+      "sha256": "57e9fc7d33a859afefcbf75f60ecbeaec3bc9bffb18bbd91b1d11e2440376b40",
+      "bytes": 37896
     },
     {
       "file": "forward/sql/03_native_guards.sqlinc",
@@ -35,14 +35,24 @@
       "bytes": 13430
     },
     {
+      "file": "forward/sql/04b_daily_context.sqlinc",
+      "sha256": "80badf4eec2f15034cd9d550646f9afc8b5090619b9aa9cdfe9018d75630147f",
+      "bytes": 15137
+    },
+    {
+      "file": "forward/sql/04c_daily_admission.sqlinc",
+      "sha256": "6c419edd7a1fe95cb5dfd7a501a3d1a4c8cd105917664eb3563d60e495695025",
+      "bytes": 38061
+    },
+    {
       "file": "forward/sql/physical-schema.sqlinc",
       "sha256": "5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115",
       "bytes": 15551
     },
     {
       "file": "forward/sql/05_acl.sqlinc",
-      "sha256": "0d3d7f6e26af8f9cffb620a03ad05ae5c8e1d2dd85c49e64927be65498082085",
-      "bytes": 2961
+      "sha256": "4be798a9f43e23d72b7db7f5cb604d79306c5be624e85bcaa4315bf68555f667",
+      "bytes": 3664
     },
     {
       "file": "forward/contracts/contract-correction-v3.mjs",
@@ -56,8 +66,8 @@
     },
     {
       "file": "tests/parse-source.py",
-      "sha256": "91a2fa5b8ea2fa2d3e3c30d525ec6a4517c4f210293a3d4cdb3e5a4377788551",
-      "bytes": 3525
+      "sha256": "37d075631d4ec878f5ed1b21ec9fa63cfb9c7afa3078e2cb7e7ff78a9b75c346",
+      "bytes": 3577
     },
     {
       "file": "tests/native-scalars.sql",
@@ -66,8 +76,8 @@
     },
     {
       "file": "verification/catalogue.sql",
-      "sha256": "1f01549eb0ebf0768958b671ce825962e9e6adaf2c8b9de35e668ab26a41bcf8",
-      "bytes": 6873
+      "sha256": "33f5111100073fff28a6004c3d86fe436141e8b0f17b8a32e25095f98448e9a9",
+      "bytes": 8029
     },
     {
       "file": "build-native-guards.py",
@@ -76,13 +86,33 @@
     },
     {
       "file": "build-closure.mjs",
-      "sha256": "3dcf6ea96a4aa41c2ca684987815563af34008f27225eee0337c33a8a0a43836",
-      "bytes": 10265
+      "sha256": "464074684016995f009ed0f3430f647c39be63438cf90a97d0fc6d425ea23676",
+      "bytes": 13180
     },
     {
       "file": "NATIVE_GUARD_INPUTS.json",
       "sha256": "ad74b2f80a087e7d59bb18091fae67595ac4855004e83564542793b78085fd76",
       "bytes": 1452
+    },
+    {
+      "file": "tests/daily-rate-calculator.test.mjs",
+      "sha256": "2fe652066ca5b0efe992075364537a23391f62501276b19339e0fc0de49f7d68",
+      "bytes": 7465
+    },
+    {
+      "file": "tests/daily-native-scalars.sql",
+      "sha256": "7be6db86f9f2680d5f40dff1801dc631335c6fda4877ae6fb9467dee4335cefe",
+      "bytes": 1362
+    },
+    {
+      "file": "../../../../broker/src/daily-canonical-authority.js",
+      "sha256": "495c7d267006a25ba45a78a3c4755a16b15e8c396b4abfabae66cc03b91805cf",
+      "bytes": 17788
+    },
+    {
+      "file": "../../../../tests/daily-canonical-authority.test.mjs",
+      "sha256": "28fab39ac84477b3a86d742d014d05b2877fd5f23c99bcc3a1e7adbe3ed62038",
+      "bytes": 20670
     }
   ],
   "functions": [
@@ -454,6 +484,116 @@
       "searchPathControlled": true,
       "executeRoles": [],
       "sourceDeclarationSha256": "b11c1117515d4df6bf6fe677147d5915c8ab120df86df47e7317cabcfa128bc0"
+    },
+    {
+      "signature": "private.daily_rate_authority_lock_v1()",
+      "source": "forward/sql/04b_daily_context.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "95360b68c71f83272de04cee7210f38d1c0710d17cbb64fecc5785d36d57a87c"
+    },
+    {
+      "signature": "private.daily_rate_correction_authority_v1(jsonb,boolean)",
+      "source": "forward/sql/04b_daily_context.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "1cb5ef6a7c0af3e7c99beb54b655716001cbbca24dc84d237702810b4cc4b2f7"
+    },
+    {
+      "signature": "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+      "source": "forward/sql/04b_daily_context.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "809202ebd05f8bc067ad8d142ad25279c8e3a016695db4d7636798677a910a96"
+    },
+    {
+      "signature": "public.timesheet_daily_rate_correction_context_v1(jsonb)",
+      "source": "forward/sql/04b_daily_context.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [
+        "service_role"
+      ],
+      "sourceDeclarationSha256": "4d0810fa04c867ddbaa1695dd306d8c2029bb72a7cc00902f233b9bbfb24221c"
+    },
+    {
+      "signature": "private.daily_rate_correction_scope_v1(uuid,boolean)",
+      "source": "forward/sql/04c_daily_admission.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "b36e3245ca9878e43acf5748b25129674a01d7b898fe4b1a28c990f8a6accb2d"
+    },
+    {
+      "signature": "private.daily_rate_calculator_round_assert_v1(double precision,numeric)",
+      "source": "forward/sql/04c_daily_admission.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "8ec34a1c23aaa70e1b85e9bbe1012e3d4ea887c4f06b760ca1b9431ad3eaa925"
+    },
+    {
+      "signature": "private.daily_rate_correction_snapshot_assert_v1(jsonb,jsonb,jsonb,uuid)",
+      "source": "forward/sql/04c_daily_admission.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "a955e1b3a2ee28637d4fe3471b5e59eaf8c13d439264ff6016269d5a991102cd"
+    },
+    {
+      "signature": "private.daily_rate_correction_normalized_snapshot_v1(jsonb,jsonb,jsonb,uuid)",
+      "source": "forward/sql/04c_daily_admission.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "d7b8ef406c6db7b67d17da372cc8f9c084a785834992e4a9e9d7088a1f1baf8a"
+    },
+    {
+      "signature": "private.daily_rate_correction_financial_id_v1(uuid,text)",
+      "source": "forward/sql/04c_daily_admission.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "ed429b7f18dd880d9bfbaee377a946645ad59914281a7e32e2e7e0426d89642f"
+    },
+    {
+      "signature": "private.daily_rate_correction_revision_admit_v1(uuid,text)",
+      "source": "forward/sql/04c_daily_admission.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "664b3bf3acdeb2d3dd225bd98bad6e35672332e4f6dd809e7a3e6f3a363f4e15"
+    },
+    {
+      "signature": "private.daily_rate_correction_accepting_v1(uuid)",
+      "source": "forward/sql/04c_daily_admission.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "b08f6ad7023f6831684c54e7bcb27c4fa0c5a9e5d19523a493a8bde96b921989"
+    },
+    {
+      "signature": "private.daily_rate_correction_assert_v1(uuid,uuid)",
+      "source": "forward/sql/04c_daily_admission.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "382baeeef5a90e656e79f35b990059dd9107965e0061c4fd6df20a35ce88e675"
     }
   ],
   "triggers": [
@@ -514,6 +654,13 @@
       "definitionSha256": "53415747c5abc3bf0798afb4115cdd5d6d56a67612aa7d9bc75b88dfcbdca554"
     },
     {
+      "name": "timesheet_contract_move_member_commit_guard",
+      "relation": "private.timesheet_contract_move_members",
+      "function": "private.timesheet_contract_move_commit_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "0849bb414f9c6967cfa171436254cff0b6cfdc3d8f8b377a1db42ee555a6597c"
+    },
+    {
       "name": "timesheet_contract_move_context_guard",
       "relation": "private.timesheet_contract_move_execution_contexts",
       "function": "private.timesheet_contract_move_context_guard_v1()",
@@ -533,6 +680,20 @@
       "function": "private.timesheet_contract_move_financial_row_guard_v1()",
       "source": "forward/sql/03_native_guards.sqlinc",
       "definitionSha256": "56042338077166a8ab2d936d0673aa469e771474ac0b03fb174e00066929f530"
+    },
+    {
+      "name": "daily_rate_authority_client_lock_v1",
+      "relation": "public.rates_client_defaults",
+      "function": "private.daily_rate_authority_lock_v1()",
+      "source": "forward/sql/04b_daily_context.sqlinc",
+      "definitionSha256": "c7934c6736325421aacab5383a70b40b92444832790843a0458ac3ecb7cd337a"
+    },
+    {
+      "name": "daily_rate_authority_candidate_lock_v1",
+      "relation": "public.rates_candidate_overrides",
+      "function": "private.daily_rate_authority_lock_v1()",
+      "source": "forward/sql/04b_daily_context.sqlinc",
+      "definitionSha256": "90791f5e2818aa5740696e2a826fab7b890e397501a8d2a8a93fef384d6ab93e"
     },
     {
       "name": "trg_timesheet_archive_row_guard_v1",
@@ -555,12 +716,14 @@
       "02_physical_apply.sqlinc",
       "03_native_guards.sqlinc",
       "04_atomic_assert.sqlinc",
+      "04b_daily_context.sqlinc",
+      "04c_daily_admission.sqlinc",
       "04a_accept_composition.sqlinc",
       "05_acl.sqlinc"
     ],
     "mount": "Finite Health owned fragments only. Root applies selected seven-module composition; no stale parent transplant.",
     "sourceIngressConsumer": "private.timesheet_contract_current_placement_v1(uuid) exact CURRENT_CONTRACT_PLACEMENT_V1",
-    "daily": "Shared metadata/DTO only. No Contract-Daily allocator, aliases, chooser or retired Daily booking-origin tables."
+    "daily": "04b context belongs to health_review_context; 04c admission/assertion belongs to health_native_apply. Shared 00_identity adds a deferred member/operation completion guard; 02 review enrollment delegates genuine Daily scope. No Daily aliases/Contract allocator. Calculator is an exact bounded extension of sole existing owner, baseline SHA256 64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b; root source-carries only its reviewed diff."
   },
   "dependencies": [
     {
@@ -607,6 +770,24 @@
       "signature": "private.invoice_contract_move_prepare_v1(uuid,bigint,uuid,timestamp with time zone)",
       "author": "HEALTH invoice lane",
       "required": "Same transaction after actual placement, before final COMPLETE."
+    },
+    {
+      "signature": "private.bpay_next_daily_rate_correction_publish_v1(uuid,uuid)",
+      "author": "BANKING",
+      "original": "DAILY-RATE-ADMISSION-01 / DY02/04/05/06/10",
+      "required": "Actual once-only existing ordinary publication plus named INSERT deferral in real ordinary authorisation trigger. Health admission fails before writes when publisher is absent. No direct ordinary publisher shortcut or auth toggle."
+    },
+    {
+      "signature": null,
+      "author": "BANKING",
+      "original": "DAILY-RATE-ADMISSION-01 / DY02/04/05/06/10",
+      "required": "Actual paid/frozen original financial preflight, known freeze admission and canonical SummaryDTO preview/current reader interface remain unprovided; no signature guessed and no review Ready/result fabricated. Actual NOT_REQUIRED certificate ABI also remains unprovided."
+    },
+    {
+      "signature": null,
+      "author": "HEALTH + actual native Additional rate owner",
+      "original": "DAILY-RATE-ADMISSION-01",
+      "required": "Current native Client/Candidate schema supplies five standard buckets and mileage only. Used/unknown Additional needs actual selector authority; unused zero is valid and does not block."
     }
   ],
   "qualification": {
@@ -618,6 +799,9 @@
     "installed": false,
     "nativeScalarAssertions": "NOT_RUN: executable tests/native-scalars.sql supplied for root rollback rehearsal; no stubs/business fixtures.",
     "publicPreviewAcceptResultWrappers": "Actual Accept/GET SQL composition supplied, explicitly ungranted. Preview and private current Result remain DEPENDENCY_HELD on exact native cut hash/valuation/current financial presentation ABI; none fabricated or exposed.",
-    "sourceGate": "Run npm run db:check again before handoff; proposal files are not selected release roots."
+    "sourceGate": "Run npm run db:check again before handoff; proposal files are not selected release roots.",
+    "dailyCalculatorTests": "20 tests passed (9 correction cases plus 11 existing Daily regressions); existing baseline economic golden unchanged.",
+    "dailyWrappers": "Genuine service-only context wrapper supplied; Preview/Accept/Result remain dependency-held on exact native paid/frozen/Summary/freeze-preview seam. Same-record admission/assertion implemented without a fake publisher or new queue. Full REGISTERED native publication asserted; no unprovided NOT_REQUIRED certificate inferred.",
+    "dailyNativeScalarAssertions": "NOT_RUN: executable tests/daily-native-scalars.sql invokes real rounding helper with missing/zero/binary boundary assertions; no stubs or business fixtures."
   }
 }

@@ -122,6 +122,7 @@ export function buildCanonicalDailyFinancialSnapshot({
   ratesRow = null,
   effectiveFlags = null,
   preserveUnprocessed = false,
+  rateCorrectionContext = null,
   subtractBreak,
   classifyMinutes,
   resolveEffectivePayChannel
@@ -132,6 +133,49 @@ export function buildCanonicalDailyFinancialSnapshot({
   }
 
   const rates = ratesRow || {};
+  if (rateCorrectionContext !== null) {
+    const sealed = rateCorrectionContext;
+    const identity = sealed.identity || {};
+    const authority = sealed.rate_authority?.selected_rates || {};
+    if (sealed.version !== 'DAILY_RATE_CONTEXT_V1' || identity.contract_id !== null ||
+        identity.timesheet_id !== timesheet.timesheet_id ||
+        identity.timesheet_version !== String(timesheet.version || 1) ||
+        identity.candidate_id !== candidateId || identity.client_id !== clientId ||
+        sealed.current_financial_id !== currentFinancials?.id ||
+        sealed.native_calculation_input?.out_candidate?.id !== candidate?.id ||
+        sealed.native_calculation_input?.out_candidate?.pay_method !== candidate?.pay_method ||
+        sealed.authority_selection_args?.role !== role ||
+        sealed.authority_selection_args?.band !== band) {
+      throw new Error('DAILY_RATE_CALCULATION_CONTEXT_MISMATCH');
+    }
+    for (const key of ['source_kind', 'override_id', 'default_id', 'rate_type',
+      'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh',
+      'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh']) {
+      if ((rates[key] ?? null) !== (authority[key] ?? null)) {
+        throw new Error('DAILY_RATE_CALCULATION_AUTHORITY_MISMATCH');
+      }
+    }
+    for (const key of ['worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes',
+      'candidate_workflow_id', 'candidate_workflow_generation']) {
+      if ((timesheet[key] ?? null) !== (sealed.native_calculation_input?.out_timesheet?.[key] ?? null)) {
+        throw new Error('DAILY_RATE_WORKED_FACTS_MISMATCH');
+      }
+    }
+    const originalFinancial = sealed.native_calculation_input.out_cur_fin;
+    const additional = Object.values(originalFinancial?.additional_units_json || {});
+    if (additional.some(value => {
+      const quantity = typeof value === 'object' && value !== null ? value.units ?? value.quantity : value;
+      return quantity == null || !Number.isFinite(Number(quantity)) || Number(quantity) !== 0;
+    }) ||
+        !Number.isFinite(Number(originalFinancial?.additional_pay_ex_vat ?? 0)) ||
+        !Number.isFinite(Number(originalFinancial?.additional_charge_ex_vat ?? 0)) ||
+        Number(originalFinancial?.additional_pay_ex_vat ?? 0) !== 0 ||
+        Number(originalFinancial?.additional_charge_ex_vat ?? 0) !== 0) {
+      // Current Client/Candidate tables expose no native Additional selector.
+      // A used unit must obtain its real owner authority before this action is Ready.
+      throw new Error('DAILY_RATE_ADDITIONAL_AUTHORITY_REQUIRED');
+    }
+  }
   const pay = {
     day: rates.pay_day ?? null,
     night: rates.pay_night ?? null,
@@ -159,6 +203,17 @@ export function buildCanonicalDailyFinancialSnapshot({
   );
   const hours = classifyMinutes(env, policy || {}, segments);
   const missingRates = missingUsedRates(hours, pay, charge);
+  if (rateCorrectionContext !== null && missingRates) {
+    throw new Error('DAILY_RATE_USED_RATE_MISSING');
+  }
+  if (rateCorrectionContext !== null) {
+    for (const bucket of ['day', 'night', 'sat', 'sun', 'bh']) {
+      if (Number(hours[`hours_${bucket}`]) > 0 &&
+          [pay[bucket], charge[bucket]].some(value => !Number.isFinite(Number(value)) || Number(value) < 0)) {
+        throw new Error('DAILY_RATE_USED_RATE_INVALID');
+      }
+    }
+  }
 
   // Preserve the pre-extraction TSFIN worker rule exactly: candidate PAYE or
   // UMBRELLA wins; otherwise retain the factual timesheet pay_method value.
@@ -183,6 +238,7 @@ export function buildCanonicalDailyFinancialSnapshot({
   } catch {
     payChannelBad = true;
   }
+  if (rateCorrectionContext !== null && payChannelBad) throw new Error('DAILY_RATE_CURRENT_CHANNEL_MISSING');
 
   const validationRequired = boolish(effectiveFlags?.hr_validation_required_for_invoice);
   const validationStatus = String(effectiveFlags?.validation_status || '').toUpperCase();
@@ -268,7 +324,7 @@ export function buildCanonicalDailyFinancialSnapshot({
     }
   };
 
-  return {
+  const snapshot = {
     timesheet_id: timesheet.timesheet_id,
     timesheet_version: timesheet.version || 1,
     basis: 'SELF_REPORTED',
@@ -322,4 +378,44 @@ export function buildCanonicalDailyFinancialSnapshot({
     has_pay_channel_issue: hasPayChannelIssue,
     invoice_breakdown_json: invoiceBreakdown
   };
+  if (rateCorrectionContext !== null) {
+    const old = rateCorrectionContext.native_calculation_input.out_cur_fin;
+    const economic = value => {
+      if (!Number.isFinite(Number(value ?? 0))) throw new Error('DAILY_RATE_NATIVE_ECONOMIC_BASIS_UNKNOWN');
+      return Number(value ?? 0);
+    };
+    const mileageUnits = economic(old.mileage_units);
+    const mileagePayRate = rateCorrectionContext.native_calculation_input.out_candidate?.mileage_pay_rate ?? null;
+    const mileageChargeRate = rateCorrectionContext.native_claim_charge_authority?.mileage_charge_rate ?? null;
+    if (mileageUnits < 0 || (mileageUnits > 0 && (mileagePayRate == null || mileageChargeRate == null))) {
+      throw new Error('DAILY_RATE_USED_MILEAGE_RATE_MISSING');
+    }
+    if (mileageUnits > 0 && [mileagePayRate, mileageChargeRate].some(value => !Number.isFinite(Number(value)) || Number(value) < 0)) {
+      throw new Error('DAILY_RATE_USED_MILEAGE_RATE_INVALID');
+    }
+    const categoryPay = economic(old.travel_pay_ex_vat) + economic(old.accommodation_pay_ex_vat) + economic(old.other_pay_ex_vat);
+    const categoryCharge = economic(old.travel_charge_ex_vat) + economic(old.accommodation_charge_ex_vat) + economic(old.other_charge_ex_vat);
+    const fixedPay = round2(categoryPay !== 0 ? categoryPay : economic(old.expenses_pay_ex_vat));
+    const fixedCharge = round2(categoryCharge !== 0 ? categoryCharge : economic(old.expenses_charge_ex_vat));
+    const mileagePay = mileageUnits > 0 ? round2(mileageUnits * Number(mileagePayRate)) : round2(economic(old.mileage_pay_ex_vat));
+    const mileageCharge = mileageUnits > 0 ? round2(mileageUnits * Number(mileageChargeRate)) : round2(economic(old.mileage_charge_ex_vat));
+    const nonsegPay = round2(fixedPay + mileagePay);
+    const nonsegCharge = round2(fixedCharge + mileageCharge);
+    snapshot.expenses_pay_ex_vat = fixedPay;
+    snapshot.expenses_charge_ex_vat = fixedCharge;
+    for (const key of ['travel_pay_ex_vat', 'travel_charge_ex_vat', 'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat',
+      'other_pay_ex_vat', 'other_charge_ex_vat', 'expenses_description', 'expenses_evidence_manifest',
+      'expenses_evidence_r2_key', 'mileage_evidence_manifest', 'mileage_evidence_r2_key']) snapshot[key] = old[key] ?? null;
+    snapshot.mileage_units = mileageUnits;
+    snapshot.mileage_pay_rate = mileagePayRate;
+    snapshot.mileage_charge_rate = mileageChargeRate;
+    snapshot.mileage_pay_ex_vat = mileagePay;
+    snapshot.mileage_charge_ex_vat = mileageCharge;
+    snapshot.total_pay_ex_vat = round2(totalPayExVat + nonsegPay);
+    snapshot.total_charge_ex_vat = round2(totalChargeExVat + nonsegCharge);
+    snapshot.margin_ex_vat = round2(marginExVat + nonsegCharge - nonsegPay);
+    invoiceBreakdown.additional = { units: {}, pay_ex_vat: nonsegPay, charge_ex_vat: nonsegCharge, margin_ex_vat: round2(nonsegCharge - nonsegPay) };
+    invoiceBreakdown.totals = { total_pay_ex_vat: snapshot.total_pay_ex_vat, total_charge_ex_vat: snapshot.total_charge_ex_vat, margin_ex_vat: snapshot.margin_ex_vat };
+  }
+  return snapshot;
 }

@@ -1,0 +1,384 @@
+-- Health same-record Daily rate revision. No new physical row/booking/Work,
+-- no authorisation toggle, no ordinary in-place paid-row upsert.
+create or replace function private.daily_rate_correction_scope_v1(p_operation_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype; t public.timesheets%rowtype; f public.timesheets_financials%rowtype;
+ context jsonb; evidence jsonb; member jsonb; result jsonb;
+begin
+ select v.* into strict o from private.timesheet_contract_move_operations v where v.id=p_operation_id;
+ if o.purpose<>'DAILY_RATE_CORRECTION' or o.from_contract_id is not null or o.to_contract_id is not null then
+  raise exception 'DAILY_RATE_PURPOSE_INVALID' using errcode='22023';end if;
+ context:=private.daily_rate_correction_context_v1(o.from_timesheet_id,o.created_by_user_id,p_lock);
+ if o.family_root_id is distinct from o.from_timesheet_id
+  or o.candidate_id::text is distinct from context#>>'{identity,candidate_id}'
+  or o.actual_client_id::text is distinct from context#>>'{identity,client_id}' then
+  raise exception 'DAILY_RATE_NATIVE_IDENTITY_UNBOUND' using errcode='23514';end if;
+ select v.* into strict t from public.timesheets v where v.timesheet_id=o.from_timesheet_id;
+ select v.* into strict f from public.timesheets_financials v where v.id=(context->>'current_financial_id')::uuid;
+ evidence:=context->'original_evidence_basis';
+ member:=jsonb_build_object('member_key',t.timesheet_id::text,'role','WORK','from_timesheet_id',t.timesheet_id,'from_version',t.version,
+  'from_financial_id',f.id,'from_contract_id',null,'to_contract_id',null,'original_timesheet_id',t.timesheet_id,'parent_timesheet_id',null,
+  'source_row_sha256',encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(t)),'hex'),
+  'financial_row_sha256',encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(f)),'hex'),
+  'financial_economics_sha256',encode(private.timesheet_contract_move_row_hash_v1(private.timesheet_contract_move_financial_economics_v1(to_jsonb(f))),'hex'),
+  'immutable_evidence_hash',context->>'unchanged_work_sha256',
+  'approval_evidence_hash',encode(private.timesheet_contract_move_row_hash_v1(evidence->'workflows'),'hex'),
+  'expense_component_ids',coalesce((select jsonb_agg(e.expense_component_id order by e.expense_component_id) from public.candidate_expense_components e where e.owning_timesheet_id=t.timesheet_id),'[]'::jsonb),
+  'workflow_ids',coalesce((select jsonb_agg(w.id order by w.id) from public.candidate_submission_workflows w
+   where w.id=t.candidate_workflow_id or w.anchor_timesheet_id=t.timesheet_id or w.target_timesheet_id=t.timesheet_id),'[]'::jsonb),
+  'source_lineage_ids',coalesce((select jsonb_agg(l.id order by l.id) from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=t.timesheet_id),'[]'::jsonb),
+  'original_booking_id',t.booking_id,'week_ending_date',t.week_ending_date,'native_settings_authority',t.settings_authority_json);
+ result:=jsonb_build_object('version','DAILY_RATE_SCOPE_V1','operation_id',o.id,'family_root_id',t.timesheet_id,
+  'candidate_id',o.candidate_id,'actual_client_id',o.actual_client_id,'from_contract_id',null,'to_contract_id',null,
+  'current_placement',jsonb_build_object('version','CURRENT_DAILY_REVISION_V1','timesheet_id',t.timesheet_id,'financial_id',f.id,
+   'work_id',context#>'{identity,current_work_id}','revision_no',context->'current_financial_revision'),'members',jsonb_build_array(member));
+ return result||jsonb_build_object('scope_sha256',encode(private.timesheet_contract_move_row_hash_v1(result),'hex'));
+end;
+$function$;
+
+-- Only validates the existing canonical JavaScript calculator's rounding rule;
+-- never an alternate producer/quote or money authority.
+create or replace function private.daily_rate_calculator_round_assert_v1(p_value double precision,p_actual numeric)
+returns void language plpgsql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+begin
+ if p_value is null or p_value::text in('NaN','Infinity','-Infinity')
+  or p_actual is null or p_actual::text in('NaN','Infinity','-Infinity')
+  or (p_actual::double precision) is distinct from (floor(p_value*100::double precision+0.5::double precision)/100::double precision) then
+  raise exception 'DAILY_RATE_CALCULATOR_BALANCE_MISMATCH' using errcode='23514';end if;
+end;
+$function$;
+
+create or replace function private.daily_rate_correction_snapshot_assert_v1(p_context jsonb,p_snapshot jsonb,p_provenance jsonb,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare old_f public.timesheets_financials%rowtype; snap jsonb:=p_snapshot; rates jsonb:=p_context#>'{rate_authority,selected_rates}';
+ native_t jsonb:=p_context#>'{native_calculation_input,out_timesheet}'; policy jsonb:=p_context#>'{native_calculation_input,out_policy}';
+ expected_provenance jsonb; keys text[]; bucket text; key text; units numeric; pay_rate numeric; charge_rate numeric;
+ fresh_context jsonb; fixed_pay_raw double precision; fixed_charge_raw double precision;
+ pay_sum double precision:=0; charge_sum double precision:=0; hours_sum double precision:=0;
+ base_pay numeric; base_charge numeric; fixed_pay numeric; fixed_charge numeric; mile_pay numeric; mile_charge numeric;
+ nonseg_pay numeric; nonseg_charge numeric; pay_cost double precision; erni double precision; margin numeric;
+begin
+ if p_context->>'version' is distinct from 'DAILY_RATE_CONTEXT_V1' or jsonb_typeof(snap) is distinct from 'object'
+  or p_context#>'{identity,contract_id}' is distinct from 'null'::jsonb then raise exception 'DAILY_RATE_CALCULATION_CONTEXT_MISMATCH' using errcode='22023';end if;
+ fresh_context:=private.daily_rate_correction_context_v1((p_context#>>'{identity,timesheet_id}')::uuid,p_actor_user_id,false);
+ if fresh_context is distinct from p_context then raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ select v.* into strict old_f from public.timesheets_financials v where v.id=(p_context->>'current_financial_id')::uuid;
+ if encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(old_f)),'hex') is distinct from p_context#>>'{billing_basis,original_financial_sha256}' then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ keys:=array['timesheet_id','timesheet_version','basis','occupant_key_norm','worked_start_iso','worked_end_iso','break_start_iso','break_end_iso','break_minutes',
+  'candidate_id','client_id','role','band','pay_method','policy_snapshot_json','rate_source_refs_json',
+  'hours_day','hours_night','hours_sat','hours_sun','hours_bh','pay_day','pay_night','pay_sat','pay_sun','pay_bh',
+  'charge_day','charge_night','charge_sat','charge_sun','charge_bh','total_hours','total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat',
+  'additional_units_json','additional_pay_ex_vat','additional_charge_ex_vat','additional_margin_ex_vat','pay_wtr_rate_pct_snapshot',
+  'candidate_assignment','processing_status','has_rate_issue','has_pay_channel_issue','invoice_breakdown_json',
+  'expenses_pay_ex_vat','expenses_charge_ex_vat','travel_pay_ex_vat','travel_charge_ex_vat','accommodation_pay_ex_vat','accommodation_charge_ex_vat',
+  'other_pay_ex_vat','other_charge_ex_vat','expenses_description','expenses_evidence_manifest','expenses_evidence_r2_key',
+  'mileage_evidence_manifest','mileage_evidence_r2_key','mileage_units','mileage_pay_rate','mileage_charge_rate','mileage_pay_ex_vat','mileage_charge_ex_vat'];
+ if not(snap ?& keys) or snap-keys<>'{}'::jsonb
+  or snap->>'timesheet_id' is distinct from p_context#>>'{identity,timesheet_id}'
+  or snap->>'timesheet_version' is distinct from p_context#>>'{identity,timesheet_version}'
+  or snap->>'basis' is distinct from 'SELF_REPORTED' or snap->>'candidate_assignment' is distinct from 'ASSIGNED'
+  or snap->>'candidate_id' is distinct from p_context#>>'{identity,candidate_id}' or snap->>'client_id' is distinct from p_context#>>'{identity,client_id}'
+  or snap->'policy_snapshot_json' is distinct from policy or snap->>'pay_method' is distinct from p_context#>>'{authority_selection_args,rate_type}'
+  or snap->'role' is distinct from p_context#>'{authority_selection_args,role}' or snap->'band' is distinct from p_context#>'{authority_selection_args,band}'
+  or snap->'has_rate_issue' is distinct from 'false'::jsonb or snap->'has_pay_channel_issue' is distinct from 'false'::jsonb
+  or coalesce(snap->>'processing_status','') not in('READY_FOR_INVOICE','READY_FOR_HR')
+  or snap->'pay_wtr_rate_pct_snapshot' is distinct from 'null'::jsonb then
+  raise exception 'DAILY_RATE_CALCULATION_SNAPSHOT_INVALID' using errcode='23514';end if;
+ foreach key in array array['hours_day','hours_night','hours_sat','hours_sun','hours_bh','total_hours','total_pay_ex_vat','total_charge_ex_vat',
+  'margin_ex_vat','additional_pay_ex_vat','additional_charge_ex_vat','additional_margin_ex_vat','expenses_pay_ex_vat','expenses_charge_ex_vat',
+  'mileage_units','mileage_pay_ex_vat','mileage_charge_ex_vat'] loop
+  if jsonb_typeof(snap->key) is distinct from 'number' or not pg_input_is_valid(snap->>key,'numeric')
+   or (snap->>key)::numeric::text in('NaN','Infinity','-Infinity') then
+   raise exception 'DAILY_RATE_CALCULATION_SNAPSHOT_INVALID' using errcode='23514';end if;
+ end loop;
+ if jsonb_typeof(snap->'invoice_breakdown_json') is distinct from 'object'
+  or not(snap->'invoice_breakdown_json' ?& array['mode','base_hours','additional','totals'])
+  or snap->'invoice_breakdown_json'-array['mode','base_hours','additional','totals']<>'{}'::jsonb
+  or not(snap#>'{invoice_breakdown_json,base_hours}' ?& array['day','night','sat','sun','bh','pay_rates','charge_rates','pay_ex_vat','charge_ex_vat'])
+  or snap#>'{invoice_breakdown_json,base_hours}'-array['day','night','sat','sun','bh','pay_rates','charge_rates','pay_ex_vat','charge_ex_vat']<>'{}'::jsonb
+  or snap#>'{invoice_breakdown_json,base_hours,pay_rates}'-array['day','night','sat','sun','bh']<>'{}'::jsonb
+  or snap#>'{invoice_breakdown_json,base_hours,charge_rates}'-array['day','night','sat','sun','bh']<>'{}'::jsonb
+  or snap#>'{invoice_breakdown_json,additional}'-array['units','pay_ex_vat','charge_ex_vat','margin_ex_vat']<>'{}'::jsonb
+  or snap#>'{invoice_breakdown_json,totals}'-array['total_pay_ex_vat','total_charge_ex_vat','margin_ex_vat']<>'{}'::jsonb then
+  raise exception 'DAILY_RATE_CALCULATION_SNAPSHOT_INVALID' using errcode='23514';end if;
+ foreach key in array array['occupant_key_norm','worked_start_iso','worked_end_iso','break_start_iso','break_end_iso','break_minutes'] loop
+  if snap->key is distinct from coalesce(native_t->key,'null'::jsonb) then raise exception 'DAILY_RATE_WORKED_FACTS_MISMATCH' using errcode='23514';end if;
+ end loop;
+ if snap->'rate_source_refs_json' is distinct from jsonb_build_object('kind',rates->'source_kind','override_id',rates->'override_id',
+  'default_id',rates->'default_id','rate_type',rates->'rate_type') then raise exception 'DAILY_RATE_CALCULATION_AUTHORITY_MISMATCH' using errcode='23514';end if;
+ expected_provenance:=p_context#>'{rate_authority,rate_provenance}';
+ if expected_provenance is not null and expected_provenance<>'null'::jsonb then
+  expected_provenance:=expected_provenance||jsonb_build_object('calculation_context_sha256',p_context->>'context_digest','worked_facts_sha256',p_context->>'unchanged_work_sha256');end if;
+ if p_provenance is distinct from expected_provenance then raise exception 'DAILY_RATE_PROVENANCE_MISMATCH' using errcode='23514';end if;
+ foreach bucket in array array['day','night','sat','sun','bh'] loop
+  units:=(snap->>('hours_'||bucket))::numeric;pay_rate:=(rates->>('pay_'||bucket))::numeric;charge_rate:=(rates->>('charge_'||bucket))::numeric;
+  if units is null or units<0 or units::text in('NaN','Infinity','-Infinity')
+   or units is distinct from (to_jsonb(old_f)->>('hours_'||bucket))::numeric
+   or snap->('pay_'||bucket) is distinct from rates->('pay_'||bucket) or snap->('charge_'||bucket) is distinct from rates->('charge_'||bucket)
+   or (units>0 and (pay_rate is null or charge_rate is null or pay_rate<0 or charge_rate<0
+    or pay_rate::text in('NaN','Infinity','-Infinity') or charge_rate::text in('NaN','Infinity','-Infinity'))) then
+   raise exception 'DAILY_RATE_USED_RATE_OR_WORKED_BUCKET_INVALID' using errcode='23514';end if;
+  if snap#>array['invoice_breakdown_json','base_hours',bucket] is distinct from snap->('hours_'||bucket)
+   or snap#>array['invoice_breakdown_json','base_hours','pay_rates',bucket] is distinct from rates->('pay_'||bucket)
+   or snap#>array['invoice_breakdown_json','base_hours','charge_rates',bucket] is distinct from rates->('charge_'||bucket) then
+   raise exception 'DAILY_RATE_CALCULATOR_BALANCE_MISMATCH' using errcode='23514';end if;
+  hours_sum:=hours_sum+units::double precision;
+  if units>0 then pay_sum:=pay_sum+units::double precision*pay_rate::double precision;charge_sum:=charge_sum+units::double precision*charge_rate::double precision;end if;
+ end loop;
+ perform private.daily_rate_calculator_round_assert_v1(hours_sum,(snap->>'total_hours')::numeric);
+ base_pay:=(snap#>>'{invoice_breakdown_json,base_hours,pay_ex_vat}')::numeric;base_charge:=(snap#>>'{invoice_breakdown_json,base_hours,charge_ex_vat}')::numeric;
+ perform private.daily_rate_calculator_round_assert_v1(pay_sum,base_pay);perform private.daily_rate_calculator_round_assert_v1(charge_sum,base_charge);
+ foreach key in array array['travel_pay_ex_vat','travel_charge_ex_vat','accommodation_pay_ex_vat','accommodation_charge_ex_vat',
+  'other_pay_ex_vat','other_charge_ex_vat','expenses_description','expenses_evidence_manifest','expenses_evidence_r2_key','mileage_evidence_manifest','mileage_evidence_r2_key'] loop
+  if snap->key is distinct from to_jsonb(old_f)->key then raise exception 'DAILY_RATE_FIXED_REIMBURSEMENT_CHANGED' using errcode='23514';end if;
+ end loop;
+ -- Exactly the native category-vs-fallback fixed reimbursement rule; no reprice.
+ fixed_pay_raw:=coalesce(old_f.travel_pay_ex_vat,0)::double precision+coalesce(old_f.accommodation_pay_ex_vat,0)::double precision+coalesce(old_f.other_pay_ex_vat,0)::double precision;
+ fixed_charge_raw:=coalesce(old_f.travel_charge_ex_vat,0)::double precision+coalesce(old_f.accommodation_charge_ex_vat,0)::double precision+coalesce(old_f.other_charge_ex_vat,0)::double precision;
+ if fixed_pay_raw=0 then fixed_pay_raw:=coalesce(old_f.expenses_pay_ex_vat,0)::double precision;end if;
+ if fixed_charge_raw=0 then fixed_charge_raw:=coalesce(old_f.expenses_charge_ex_vat,0)::double precision;end if;
+ fixed_pay:=(snap->>'expenses_pay_ex_vat')::numeric;fixed_charge:=(snap->>'expenses_charge_ex_vat')::numeric;
+ perform private.daily_rate_calculator_round_assert_v1(fixed_pay_raw,fixed_pay);
+ perform private.daily_rate_calculator_round_assert_v1(fixed_charge_raw,fixed_charge);
+ if snap->'additional_units_json'<>'{}'::jsonb or (snap->>'additional_pay_ex_vat')::numeric<>0
+  or (snap->>'additional_charge_ex_vat')::numeric<>0 or (snap->>'additional_margin_ex_vat')::numeric<>0
+  or coalesce(old_f.additional_pay_ex_vat,0)<>0 or coalesce(old_f.additional_charge_ex_vat,0)<>0
+  or exists(select 1 from jsonb_each(old_f.additional_units_json) x cross join lateral (
+    select case when jsonb_typeof(x.value)='object' then coalesce(x.value->>'units',x.value->>'quantity') else x.value#>>'{}' end quantity
+   ) q where case when pg_input_is_valid(q.quantity,'numeric') then q.quantity::numeric<>0 else true end) then
+  raise exception 'DAILY_RATE_ADDITIONAL_AUTHORITY_REQUIRED' using errcode='23514';end if;
+ units:=coalesce(old_f.mileage_units,0);pay_rate:=(p_context#>>'{native_calculation_input,out_candidate,mileage_pay_rate}')::numeric;
+ charge_rate:=(p_context#>>'{native_claim_charge_authority,mileage_charge_rate}')::numeric;
+ if (snap->>'mileage_units')::numeric<>units or snap->'mileage_pay_rate' is distinct from coalesce(to_jsonb(pay_rate),'null'::jsonb)
+  or snap->'mileage_charge_rate' is distinct from coalesce(to_jsonb(charge_rate),'null'::jsonb)
+  or (units>0 and (pay_rate is null or charge_rate is null or pay_rate<0 or charge_rate<0)) then
+  raise exception 'DAILY_RATE_USED_MILEAGE_RATE_MISSING' using errcode='23514';end if;
+ mile_pay:=(snap->>'mileage_pay_ex_vat')::numeric;mile_charge:=(snap->>'mileage_charge_ex_vat')::numeric;
+ if units>0 then
+  perform private.daily_rate_calculator_round_assert_v1(units::double precision*pay_rate::double precision,mile_pay);
+  perform private.daily_rate_calculator_round_assert_v1(units::double precision*charge_rate::double precision,mile_charge);
+ else
+  perform private.daily_rate_calculator_round_assert_v1(coalesce(old_f.mileage_pay_ex_vat,0)::double precision,mile_pay);
+  perform private.daily_rate_calculator_round_assert_v1(coalesce(old_f.mileage_charge_ex_vat,0)::double precision,mile_charge);
+ end if;
+ nonseg_pay:=(snap#>>'{invoice_breakdown_json,additional,pay_ex_vat}')::numeric;
+ nonseg_charge:=(snap#>>'{invoice_breakdown_json,additional,charge_ex_vat}')::numeric;
+ perform private.daily_rate_calculator_round_assert_v1(fixed_pay::double precision+mile_pay::double precision,nonseg_pay);
+ perform private.daily_rate_calculator_round_assert_v1(fixed_charge::double precision+mile_charge::double precision,nonseg_charge);
+ perform private.daily_rate_calculator_round_assert_v1(nonseg_charge::double precision-nonseg_pay::double precision,(snap#>>'{invoice_breakdown_json,additional,margin_ex_vat}')::numeric);
+ if snap#>'{invoice_breakdown_json,additional,units}' is distinct from '{}'::jsonb then raise exception 'DAILY_RATE_CALCULATOR_BALANCE_MISMATCH' using errcode='23514';end if;
+ perform private.daily_rate_calculator_round_assert_v1(base_pay::double precision+nonseg_pay::double precision,(snap->>'total_pay_ex_vat')::numeric);
+ perform private.daily_rate_calculator_round_assert_v1(base_charge::double precision+nonseg_charge::double precision,(snap->>'total_charge_ex_vat')::numeric);
+ erni:=coalesce((policy->>'erni_pct')::double precision,0);
+ if erni::text in('NaN','Infinity','-Infinity') or erni<=0 then erni:=0;elsif erni>1 then erni:=erni/100;end if;
+ pay_cost:=base_pay::double precision;
+ if erni>0 and (upper(coalesce(policy->>'apply_erni_to','PAYE_ONLY'))='ALL'
+  or (upper(coalesce(policy->>'apply_erni_to','PAYE_ONLY'))='PAYE_ONLY' and snap->>'pay_method'='PAYE')) then
+  pay_cost:=floor(pay_cost*(1+erni)*100::double precision+0.5::double precision)/100::double precision;end if;
+ margin:=(floor((base_charge::double precision-pay_cost)*100::double precision+0.5::double precision)/100::double precision)::numeric;
+ perform private.daily_rate_calculator_round_assert_v1(margin::double precision+nonseg_charge::double precision-nonseg_pay::double precision,(snap->>'margin_ex_vat')::numeric);
+ if snap#>>'{invoice_breakdown_json,mode}' is distinct from 'AGGREGATE'
+  or snap#>'{invoice_breakdown_json,totals}' is distinct from jsonb_build_object('total_pay_ex_vat',snap->'total_pay_ex_vat',
+   'total_charge_ex_vat',snap->'total_charge_ex_vat','margin_ex_vat',snap->'margin_ex_vat') then
+  raise exception 'DAILY_RATE_CALCULATOR_BALANCE_MISMATCH' using errcode='23514';end if;
+ perform public._ctms_assert_tsfin_snapshot_policy_v1(old_f.timesheet_id,snap);
+ if public._tsfin_invalid_segment_count(snap->'invoice_breakdown_json')<>0 then raise exception 'DAILY_RATE_CALCULATOR_BALANCE_MISMATCH' using errcode='23514';end if;
+ return snap;
+end;
+$function$;
+
+-- Full native grouping input uses the actual original finance/Timesheet IDs.
+-- It is a validated preview overlay, never an allocated or approved new row.
+create or replace function private.daily_rate_correction_normalized_snapshot_v1(p_context jsonb,p_snapshot jsonb,p_provenance jsonb,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare old_f public.timesheets_financials%rowtype; snap jsonb;
+begin
+ snap:=private.daily_rate_correction_snapshot_assert_v1(p_context,p_snapshot,p_provenance,p_actor_user_id);
+ select v.* into strict old_f from public.timesheets_financials v where v.id=(p_context->>'current_financial_id')::uuid;
+ return to_jsonb(old_f)||snap;
+end;
+$function$;
+
+create or replace function private.daily_rate_correction_financial_id_v1(p_operation_id uuid,p_member_key text)
+returns uuid language sql immutable strict security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+ select substr(encode(private.timesheet_contract_move_row_hash_v1(jsonb_build_array('DAILY_RATE_CORRECTION_V1',p_operation_id,p_member_key,'APPROVED_FINANCIAL')),'hex'),1,32)::uuid
+$function$;
+
+create or replace function private.daily_rate_correction_revision_admit_v1(p_operation_id uuid,p_member_key text)
+returns uuid language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype; r private.timesheet_contract_move_reviews%rowtype;
+ m private.timesheet_contract_move_members%rowtype; c private.timesheet_contract_move_execution_contexts%rowtype;
+ old_f public.timesheets_financials%rowtype; retained public.timesheets_financials%rowtype; new_f public.timesheets_financials%rowtype;
+ context jsonb; snap jsonb; cap_id uuid; authority_receipt uuid; new_id uuid; now_utc timestamptz:=now();
+begin
+ -- A caller cannot commit only a paid-row rotation: exact context consumption
+ -- and the operation's deferred COMPLETE guard span this entire transaction.
+ if to_regprocedure('private.bpay_next_daily_rate_correction_publish_v1(uuid,uuid)') is null then
+  raise exception 'DAILY_RATE_NATIVE_PUBLICATION_UNAVAILABLE' using errcode='55000';end if;
+ c:=private.timesheet_contract_move_context_v1();
+ select v.* into strict o from private.timesheet_contract_move_operations v where v.id=p_operation_id for update;
+ select v.* into strict r from private.timesheet_contract_move_reviews v where v.operation_id=o.id and v.id=o.accepted_review_id;
+ select v.* into strict m from private.timesheet_contract_move_members v where v.operation_id=o.id and v.member_key=p_member_key;
+ if c.id is null or c.operation_id<>o.id or c.phase<>'DAILY_RATE_REVISION' or c.review_id<>r.id
+  or o.purpose<>'DAILY_RATE_CORRECTION' or o.state<>'REVIEWED' or o.from_timesheet_id is distinct from m.from_timesheet_id
+  or m.to_timesheet_id is distinct from m.from_timesheet_id or m.to_version is distinct from m.from_version
+  or o.from_contract_id is not null or o.to_contract_id is not null or m.from_contract_id is not null or m.to_contract_id is not null
+  or o.accepted_review_digest is distinct from r.review_digest or m.to_financial_id is not null then
+  raise exception 'DAILY_RATE_REVISION_CONTEXT_REQUIRED' using errcode='42501';end if;
+ context:=private.daily_rate_correction_context_v1(o.from_timesheet_id,c.actor_user_id,true);
+ if r.manifest_json#>'{daily,context}' is distinct from context then raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ snap:=private.daily_rate_correction_snapshot_assert_v1(context,r.manifest_json#>'{daily,calculation_snapshot}',r.manifest_json#>'{daily,rate_provenance}',c.actor_user_id);
+ if r.manifest_json#>'{daily,normalized_snapshot}' is distinct from
+   private.daily_rate_correction_normalized_snapshot_v1(context,snap,r.manifest_json#>'{daily,rate_provenance}',c.actor_user_id) then
+  raise exception 'DAILY_RATE_CALCULATION_SNAPSHOT_INVALID' using errcode='23514';end if;
+ select v.* into strict old_f from public.timesheets_financials v where v.id=m.from_financial_id for update;
+ if not old_f.is_current or old_f.timesheet_id<>o.from_timesheet_id or old_f.timesheet_version<>m.from_version then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ new_id:=private.daily_rate_correction_financial_id_v1(o.id,m.member_key);
+ if exists(select 1 from public.timesheets_financials v where v.id=new_id) then raise exception 'DAILY_RATE_FINANCIAL_ID_CONFLICT' using errcode='23505';end if;
+ select (x->>'authority_receipt_id')::uuid into authority_receipt from jsonb_array_elements(c.native_manifest_json->'members') x
+  where x->>'member_key'=m.member_key;
+ if authority_receipt is null then raise exception 'DAILY_RATE_APPROVAL_RECEIPT_REQUIRED' using errcode='23514';end if;
+ retained:=old_f;retained.is_current:=false;retained.updated_at:=now_utc;
+ perform private.timesheet_contract_move_event_register_v1(m.member_key,'private.timesheet_contract_move_financial_row_guard_v1',
+  'public.timesheets_financials'::regclass,'UPDATE',to_jsonb(old_f),to_jsonb(retained),authority_receipt);
+ cap_id:=private.timesheet_contract_move_capability_issue_v1(o.id,m.member_key,'DAILY_RATE_REVISION','private.timesheet_contract_move_financial_row_guard_v1');
+ update public.timesheets_financials set is_current=false,updated_at=now_utc where id=old_f.id;
+ new_f:=jsonb_populate_record(old_f,snap);new_f.id:=new_id;new_f.is_current:=true;new_f.is_stale:=false;new_f.stale_reason:=null;
+ new_f.created_at:=now_utc;new_f.updated_at:=now_utc;new_f.computed_at_utc:=now_utc;
+ new_f.authorised_at_utc:=now_utc;new_f.authorised_by_user_id:=c.actor_user_id;
+ new_f.processed_at_utc:=null;new_f.processed_by_user_id:=null;
+ new_f.locked_at_utc:=null;new_f.locked_by_invoice_id:=null;new_f.unlocked_by_credit_note_id:=null;
+ new_f.paid_at_utc:=null;new_f.paid_by_user_id:=null;new_f.payment_reference:=null;
+ new_f.pay_vat_rate_pct_snapshot:=null;new_f.pay_vat_amount_snapshot:=null;new_f.pay_total_inc_vat_snapshot:=null;
+ new_f.remittance_last_sent_at_utc:=null;new_f.remittance_send_count:=0;
+ new_f.rate_source_refs_json:=snap->'rate_source_refs_json'||case when jsonb_typeof(r.manifest_json#>'{daily,rate_provenance}')='object' then r.manifest_json#>'{daily,rate_provenance}' else '{}'::jsonb end
+  ||jsonb_build_object('approval_purpose','RATE_CORRECTION','correction_operation_id',o.id,'accepted_review_id',r.id,
+    'approved_by_user_id',c.actor_user_id,'approved_at_utc',now_utc,'original_financial_id',old_f.id,
+    'calculation_context_sha256',context->>'context_digest','worked_facts_sha256',context->>'unchanged_work_sha256');
+ perform private.timesheet_contract_move_event_register_v1(m.member_key,'private.timesheet_contract_move_financial_row_guard_v1',
+  'public.timesheets_financials'::regclass,'INSERT',null,to_jsonb(new_f),authority_receipt);
+ -- The real Banking trigger must consume its separate exact named deferred
+ -- event. It is never disabled, bypassed by a timestamp toggle or reimplemented.
+ perform private.timesheet_contract_move_event_register_v1(m.member_key,'private.bpay_next_ordinary_authorisation_trigger_v1',
+  'public.timesheets_financials'::regclass,'INSERT',null,to_jsonb(new_f),authority_receipt);
+ cap_id:=private.timesheet_contract_move_capability_issue_v1(o.id,m.member_key,'DAILY_RATE_REVISION','private.timesheet_contract_move_financial_row_guard_v1');
+ perform private.timesheet_contract_move_capability_issue_v1(o.id,m.member_key,'DAILY_RATE_REVISION','private.bpay_next_ordinary_authorisation_trigger_v1');
+ insert into public.timesheets_financials select (new_f).*;
+ update private.timesheet_contract_move_members set to_financial_id=new_id where operation_id=o.id and member_key=m.member_key;
+ if (select to_jsonb(v)-array['is_current','updated_at'] from public.timesheets_financials v where v.id=old_f.id)
+   is distinct from (to_jsonb(old_f)-array['is_current','updated_at']) then raise exception 'DAILY_RATE_OLD_FINANCE_CHANGED' using errcode='23514';end if;
+ return new_id;
+end;
+$function$;
+
+-- Same-transaction reader admission after physical context cleanup. This is
+-- real consumed native INSERT authority, never a caller name or GUC permission.
+create or replace function private.daily_rate_correction_accepting_v1(p_operation_id uuid)
+returns boolean language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select exists(select 1 from private.timesheet_contract_move_operations o
+  join private.timesheet_contract_move_reviews r on r.operation_id=o.id and r.id=o.accepted_review_id and r.review_digest=o.accepted_review_digest
+  join private.timesheet_contract_move_members m on m.operation_id=o.id and m.from_timesheet_id=o.from_timesheet_id
+   and m.to_timesheet_id=m.from_timesheet_id and m.to_version=m.from_version
+  join public.timesheets t on t.timesheet_id=m.to_timesheet_id and t.version=m.to_version and t.is_current and t.archived_at_utc is null
+   and t.sheet_scope::text='DAILY' and t.contract_id is null and t.booking_id=m.current_booking_id
+  join public.timesheets_financials f on f.id=m.to_financial_id and f.timesheet_id=t.timesheet_id and f.timesheet_version=t.version
+   and f.is_current and not f.is_stale and f.authorised_at_utc is not null
+  where o.id=p_operation_id and o.purpose='DAILY_RATE_CORRECTION' and o.state='REVIEWED'
+   and o.from_contract_id is null and o.to_contract_id is null and o.family_root_id=t.timesheet_id
+   and o.placement_receipt_json->>'version'='DAILY_RATE_REVISION_RECEIPT_V1'
+   and o.placement_receipt_json->>'operation_id'=o.id::text and o.placement_receipt_json->>'review_id'=r.id::text
+   and o.placement_receipt_json->>'current_timesheet_id'=t.timesheet_id::text
+   and o.placement_receipt_json->>'previous_financial_id'=m.from_financial_id::text
+   and o.placement_receipt_json->>'current_financial_id'=f.id::text
+   and f.id=private.daily_rate_correction_financial_id_v1(o.id,m.member_key)
+   and exists(select 1 from private.timesheet_contract_move_capability_consumptions k
+    where k.operation_id=o.id and k.member_key=m.member_key and k.billing_revision=o.billing_revision
+     and k.phase='DAILY_RATE_REVISION' and k.guard_name='private.timesheet_contract_move_financial_row_guard_v1'
+     and k.relation_oid='public.timesheets_financials'::regclass and k.row_operation='INSERT'
+     and k.backend_pid=pg_backend_pid() and k.transaction_id=pg_current_xact_id_if_assigned()
+     and k.authority_receipt_id=(o.placement_receipt_json->>'receipt_id')::uuid))
+$function$;
+
+create or replace function private.daily_rate_correction_assert_v1(p_operation_id uuid,p_review_id uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype; r private.timesheet_contract_move_reviews%rowtype;
+ m private.timesheet_contract_move_members%rowtype; t public.timesheets%rowtype; old_f public.timesheets_financials%rowtype;
+ new_f public.timesheets_financials%rowtype; w private.bpay_next_work%rowtype; revision private.bpay_next_work_revision%rowtype;
+ receipt jsonb; original_context jsonb; snap jsonb; source_member jsonb; key text; expected_refs jsonb;
+begin
+ select v.* into strict o from private.timesheet_contract_move_operations v where v.id=p_operation_id for update;
+ select v.* into strict r from private.timesheet_contract_move_reviews v where v.operation_id=o.id and v.id=p_review_id;
+ select v.* into strict m from private.timesheet_contract_move_members v where v.operation_id=o.id;
+ select v.* into strict t from public.timesheets v where v.timesheet_id=m.to_timesheet_id;
+ select v.* into strict old_f from public.timesheets_financials v where v.id=m.from_financial_id;
+ select v.* into strict new_f from public.timesheets_financials v where v.id=m.to_financial_id;
+ receipt:=o.placement_receipt_json;original_context:=r.manifest_json#>'{daily,context}';snap:=r.manifest_json#>'{daily,calculation_snapshot}';
+ source_member:=r.manifest_json#>'{physical,members,0}';
+ if o.purpose<>'DAILY_RATE_CORRECTION' or o.state not in('REVIEWED','COMPLETE')
+  or o.accepted_review_id is distinct from r.id or o.accepted_review_digest is distinct from r.review_digest
+  or o.from_timesheet_id is distinct from t.timesheet_id or o.to_timesheet_id is distinct from t.timesheet_id
+  or m.from_timesheet_id is distinct from t.timesheet_id or old_f.timesheet_id is distinct from t.timesheet_id
+  or o.from_contract_id is not null or o.to_contract_id is not null or m.from_contract_id is not null or m.to_contract_id is not null
+  or m.to_version is distinct from m.from_version or m.to_version is distinct from t.version
+  or t.contract_id is not null or t.sheet_scope::text is distinct from 'DAILY' or not t.is_current or t.archived_at_utc is not null
+  or m.original_booking_id is distinct from t.booking_id or m.current_booking_id is distinct from t.booking_id
+  or o.family_root_id is distinct from t.timesheet_id or m.family_root_id is distinct from t.timesheet_id
+  or source_member is null or m.member_hash is distinct from private.timesheet_contract_move_row_hash_v1(source_member)
+  or private.timesheet_contract_move_row_hash_v1(private.timesheet_contract_move_evidence_v1(t.timesheet_id)) is distinct from o.unchanged_work_sha256
+  or encode(o.unchanged_work_sha256,'hex') is distinct from original_context->>'unchanged_work_sha256'
+  or (to_jsonb(old_f)-array['is_current','updated_at']) is distinct from (original_context#>'{native_calculation_input,out_cur_fin}'-array['is_current','updated_at'])
+  or old_f.is_current or not new_f.is_current or new_f.is_stale or new_f.timesheet_id is distinct from t.timesheet_id
+  or new_f.candidate_id is distinct from o.candidate_id or new_f.client_id is distinct from o.actual_client_id
+  or new_f.timesheet_version is distinct from t.version or new_f.id is distinct from private.daily_rate_correction_financial_id_v1(o.id,m.member_key)
+  or new_f.authorised_at_utc is null or new_f.authorised_by_user_id is distinct from o.created_by_user_id
+  or new_f.paid_at_utc is not null or new_f.paid_by_user_id is not null
+  or receipt->>'version' is distinct from 'DAILY_RATE_REVISION_RECEIPT_V1' or receipt->>'operation_id' is distinct from o.id::text
+  or receipt->>'review_id' is distinct from r.id::text or receipt->>'current_timesheet_id' is distinct from t.timesheet_id::text
+  or receipt->>'previous_financial_id' is distinct from old_f.id::text or receipt->>'current_financial_id' is distinct from new_f.id::text
+  or receipt->>'unchanged_work_sha256' is distinct from encode(o.unchanged_work_sha256,'hex') then
+  raise exception 'DAILY_RATE_REVISION_NOT_PROVED' using errcode='23514';end if;
+ foreach key in array (select array_agg(k) from jsonb_object_keys(snap) k where k<>'rate_source_refs_json') loop
+  if to_jsonb(new_f)->key is distinct from snap->key then raise exception 'DAILY_RATE_APPROVED_CALCULATION_CHANGED' using errcode='23514';end if;
+ end loop;
+ expected_refs:=snap->'rate_source_refs_json'||case when jsonb_typeof(r.manifest_json#>'{daily,rate_provenance}')='object'
+  then r.manifest_json#>'{daily,rate_provenance}' else '{}'::jsonb end
+  ||jsonb_build_object('approval_purpose','RATE_CORRECTION','correction_operation_id',o.id,'accepted_review_id',r.id,
+   'approved_by_user_id',o.created_by_user_id,'approved_at_utc',new_f.authorised_at_utc,'original_financial_id',old_f.id,
+   'calculation_context_sha256',original_context->>'context_digest','worked_facts_sha256',original_context->>'unchanged_work_sha256');
+ if new_f.rate_source_refs_json is distinct from expected_refs then raise exception 'DAILY_RATE_APPROVAL_PROVENANCE_CHANGED' using errcode='23514';end if;
+ select v.* into strict w from private.bpay_next_work v where v.id=(receipt->>'work_id')::uuid;
+ select v.* into strict revision from private.bpay_next_work_revision v where v.id=(receipt->>'revision_id')::uuid;
+ if w.contract_id is not null or w.work_kind<>'ORDINARY' or w.origin_kind<>'DAILY' or w.candidate_id<>o.candidate_id
+  or w.booking_id<>t.booking_id or w.original_timesheet_id<>t.timesheet_id or w.approval_state<>'APPROVED'
+  or w.origin_work_date is distinct from (original_context#>>'{authority_selection_args,date}')::date
+  or w.week_ending_date is distinct from t.week_ending_date
+  or (original_context#>>'{identity,current_work_id}' is not null and w.id::text is distinct from original_context#>>'{identity,current_work_id}')
+  or revision.work_id<>w.id or revision.id is distinct from w.current_revision_id or revision.financial_snapshot_id is distinct from new_f.id
+  or revision.physical_timesheet_id<>t.timesheet_id or revision.physical_timesheet_version<>t.version
+  or revision.approved_at_utc is null or revision.sealed_at_utc is null or revision.source_kind<>'ORDINARY'
+  or receipt->>'command_id' is distinct from o.financial_command_id::text or o.financial_state<>'QUALIFIED'
+  or not exists(select 1 from private.bpay_next_publication p join private.bpay_next_command c on c.id=p.command_id
+   join private.bpay_next_command_member cm on cm.command_id=c.id and cm.candidate_id=o.candidate_id and cm.member_no=1
+   where p.work_id=w.id and p.revision_id=revision.id and p.candidate_id=o.candidate_id and c.id=o.financial_command_id
+    and c.command_kind='POSITION_APPLY' and c.status='SEALED' and c.expected_member_count=1 and c.sealed_at_utc is not null)
+  or not exists(select 1 from private.timesheet_contract_move_capability_consumptions k where k.operation_id=o.id and k.member_key=m.member_key
+   and k.billing_revision=o.billing_revision and k.phase='DAILY_RATE_REVISION' and k.guard_name='private.timesheet_contract_move_financial_row_guard_v1'
+   and k.relation_oid='public.timesheets_financials'::regclass and k.row_operation='INSERT'
+   and k.authority_receipt_id=(receipt->>'receipt_id')::uuid and k.backend_pid=pg_backend_pid() and k.transaction_id=pg_current_xact_id_if_assigned()) then
+  raise exception 'DAILY_RATE_NATIVE_PUBLICATION_NOT_PROVED' using errcode='23514';end if;
+ perform private.invoice_contract_move_obligation_assert_v1(o.id,o.billing_revision);
+ if exists(select 1 from private.timesheet_contract_move_execution_contexts c where c.operation_id=o.id)
+  or exists(select 1 from private.timesheet_contract_move_capabilities c where c.operation_id=o.id) then
+  raise exception 'DAILY_RATE_LIVE_AUTHORITY_AT_COMPLETION' using errcode='23514';end if;
+end;
+$function$;

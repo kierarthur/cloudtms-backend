@@ -143,7 +143,11 @@ begin
  if o.state<>'REVIEWED' or o.accepted_review_id is not null or exists(
   select 1 from private.timesheet_contract_move_reviews r where r.operation_id=o.id) then
   raise exception 'CONTRACT_MOVE_REVIEW_MEMBERS_ALREADY_SEALED' using errcode='55000';end if;
- actual_scope:=private.timesheet_contract_move_scope_v1(o.id,false);
+ if o.purpose='DAILY_RATE_CORRECTION' then
+  actual_scope:=private.daily_rate_correction_scope_v1(o.id,false);
+ else
+  actual_scope:=private.timesheet_contract_move_scope_v1(o.id,false);
+ end if;
  if p_physical is distinct from actual_scope then raise exception 'REVIEW_STALE' using errcode='40001';end if;
  for member in select value from jsonb_array_elements(actual_scope->'members') order by value->>'member_key' loop
   insert into private.timesheet_contract_move_members(operation_id,family_root_id,member_key,role,from_timesheet_id,from_version,
