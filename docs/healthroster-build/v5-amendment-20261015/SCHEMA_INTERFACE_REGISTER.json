@@ -227,6 +227,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -289,6 +301,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -351,6 +375,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -413,6 +449,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -770,6 +818,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -831,6 +891,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -931,6 +1003,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -1353,6 +1437,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -1502,6 +1598,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -1650,6 +1758,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -1709,6 +1829,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -1758,6 +1890,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -1807,6 +1951,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -1856,6 +2012,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -2150,6 +2318,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -2200,6 +2380,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -2352,6 +2544,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -2713,6 +2917,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {
@@ -2764,6 +2980,18 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "root01_schema": {
+          "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+          "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+          "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+          "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/ROOT01_SCHEMA_NATIVE_ROLLBACK.json",
+          "security": "CURRENT_USER owner; FORCE RLS; exact owner-only policy; no PUBLIC/anon/authenticated/service_role direct access",
+          "installed": false,
+          "native_business_acceptance": "REQUIRED_NOT_RUN"
+        }
       }
     },
     {

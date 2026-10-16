@@ -1,0 +1,102 @@
+{
+  "scope": "Staged root01 DDL/23 private stores/owner-only RLS and ACL/validated keys only. No business rows, guards, functions, cut, valuation, producer, native/API/full-release acceptance.",
+  "status": "PASS_DDL_CONSTRUCTOR_ONLY",
+  "account": "kier@arthur-rai.co.uk",
+  "route": "cloudtms-miget-operations-kier-codex",
+  "source": {
+    "target": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+    "source_sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+    "source_bytes": 40625,
+    "staged_blob": "e745e839b0cf2f828d65b0c9f8c60996d347f1e8",
+    "parent_commit": "d5f06aa5e9254250af45718e9b5f68807236ded1",
+    "tables": [
+      "timesheet_contract_move_operations",
+      "timesheet_contract_move_requests",
+      "timesheet_contract_move_reviews",
+      "timesheet_contract_move_members",
+      "timesheet_contract_current_placements",
+      "timesheet_contract_family_aliases",
+      "timesheet_contract_move_execution_contexts",
+      "timesheet_contract_move_capabilities",
+      "timesheet_contract_move_capability_consumptions",
+      "timesheet_contract_move_invoice_scopes",
+      "timesheet_contract_move_invoice_scope_lines",
+      "timesheet_contract_move_billing_slices",
+      "timesheet_contract_move_replacement_groups",
+      "timesheet_contract_move_replacement_members",
+      "timesheet_contract_move_scope_fences",
+      "weekly_source_pay_decisions",
+      "weekly_source_pay_decision_requests",
+      "weekly_source_pay_decision_preview_assemblies",
+      "weekly_source_pay_decision_preview_quotes",
+      "weekly_source_pay_decision_reviews",
+      "weekly_source_pay_decision_members",
+      "weekly_source_pay_decision_bindings",
+      "weekly_source_pay_decision_unprotect_preparations"
+    ],
+    "parents": [
+      "public.candidates",
+      "public.clients",
+      "public.contracts",
+      "public.invoice_document_versions",
+      "public.invoice_lines",
+      "public.invoice_operations",
+      "public.invoices",
+      "public.timesheets",
+      "public.timesheets_financials",
+      "public.tms_users",
+      "public.weekly_exceptional_orchestration_runs",
+      "public.weekly_exceptional_pay_target_families",
+      "public.weekly_source_row_resolutions",
+      "public.weekly_source_upload_rows",
+      "public.weekly_work_events"
+    ],
+    "sql_sha256": "59bebad773fee03c65b4a8c904bf9012307aa3eb46a71f279a11230297425629",
+    "sql_bytes": 45529,
+    "statements": 57,
+    "frame_sha256": "7d100b614cddd4887eb55aa4e3bfed0aca827d872a4271350b7ee44f41688baf",
+    "account": "kier@arthur-rai.co.uk",
+    "native_server": "cloudtms-miget-operations-kier-codex",
+    "scope": "Staged root01 DDL/23 private stores/owner-only RLS and ACL/validated keys only. No business rows, guards, functions, cut, valuation, producer, native/API/full-release acceptance."
+  },
+  "accepted": true,
+  "database": "cloudtms_test_clone",
+  "statementCount": 57,
+  "allStatementsPassed": true,
+  "rolledBack": true,
+  "freshConnection": true,
+  "before": {
+    "database": "cloudtms_test_clone",
+    "legacy_one": true,
+    "tables_absent": true,
+    "migration_ledger": "b73f2c673b71fbdfae7213c60e76ea67",
+    "repeatable_ledger": "2ea66efaf45a16e295a1a57e068cb295",
+    "native_parent_catalogue": "178e1a5130a5f4548815283d227acd19"
+  },
+  "after": {
+    "database": "cloudtms_test_clone",
+    "legacy_one": true,
+    "tables_absent": true,
+    "migration_ledger": "b73f2c673b71fbdfae7213c60e76ea67",
+    "repeatable_ledger": "2ea66efaf45a16e295a1a57e068cb295",
+    "native_parent_catalogue": "178e1a5130a5f4548815283d227acd19"
+  },
+  "restorationUnchanged": true,
+  "lock": {
+    "key": [
+      20261013,
+      1
+    ],
+    "backend_pid": 147446,
+    "takenAt": "2026-10-16T01:03:52.182Z",
+    "releasedAt": "2026-10-16T01:08:26.711Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true
+  },
+  "notQualified": [
+    "No business fixtures or native runtime acceptance",
+    "No Banking cut/stage/publication integration",
+    "No complete generated contract or full release rehearsal",
+    "No installation or activation"
+  ]
+}
