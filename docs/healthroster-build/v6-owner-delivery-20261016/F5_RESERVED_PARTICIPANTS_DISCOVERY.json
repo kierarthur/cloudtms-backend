@@ -1,0 +1,122 @@
+{
+  "version": "HEALTHROSTER_F5_RESERVED_PARTICIPANTS_DISCOVERY_V1",
+  "status": "READ_ONLY_VACANCY_CONFIRMED_SETUP_NOT_CREATED",
+  "sourceCommit": "2f76085432a15a357418620004a5daa5a927042f",
+  "purpose": "D9 acceptance setup preparation; no existing reserved participants may be assumed from historical rollback fixtures.",
+  "native": {
+    "accepted": true,
+    "databaseTarget": "agency_test",
+    "database": "cloudtms_test_clone",
+    "label": "HEALTHROSTER_READONLY_F5_RESERVED_SETUP_SCOPE_CORRECTED_OWNER_EPOCH",
+    "sqlSha256": "82f03f701af2ea64178ffcf589bc58e6d56dc697debe2c8602dec48ddd2f35a4",
+    "statementCount": 4,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "physical_database",
+          "postgres_version",
+          "postmaster_started_at",
+          "module_control"
+        ],
+        "rows": [
+          {
+            "physical_database": "cloudtms_test_clone",
+            "postgres_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+            "postmaster_started_at": "2026-10-14T09:07:33.240Z",
+            "module_control": "LEGACY:1"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "setup_counts"
+        ],
+        "rows": [
+          {
+            "setup_counts": {
+              "reserved_group_count": 0,
+              "reserved_client_count": 0,
+              "reserved_candidate_count": 0,
+              "reserved_group_cycle_count": 0
+            }
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "SELECT",
+        "rowCount": 0,
+        "fields": [
+          "source_group_id",
+          "code",
+          "active",
+          "source_family",
+          "cycle_count",
+          "reserved_client_memberships"
+        ],
+        "rows": [],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "physical_database",
+            "module_control"
+          ],
+          "rows": [
+            {
+              "physical_database": "cloudtms_test_clone",
+              "module_control": "LEGACY:1"
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+    ]
+  },
+  "initialAttempt": {
+    "status": "VERIFICATION_QUERY_FAILED",
+    "reason": "Used epoch instead of actual owner_epoch; corrected from canonical harness before one retry. SELECT/SET only; no mutation or fabricated pass."
+  },
+  "sharedTurn": {
+    "backendPid": 166432,
+    "processPid": 57408,
+    "toolSession": 98573,
+    "explicitRelease": true,
+    "processExitCode": 0
+  },
+  "assessment": "All four reserved namespace counts are zero: clients CLI-913013xx, Candidates CCR-913013xx, TEST WSQ_TEST groups and their cycles. No business names, recipients or credentials returned. This proves only this current discovery, not vacancy for future mutations.",
+  "next": "Before any D9 mutation record exact proposed IDs, fresh exact vacancy/native owner/before state, then genuine after-state. Base Client/Candidate/Contract/group/cycle participants must be created through actual owners; no substitution of old rollback evidence. F5 actual native OFF controls and protected setup registration remain separate gates.",
+  "fixtureCreated": false,
+  "featuresActivated": false,
+  "install2": "NOT_INSTALLED"
+}

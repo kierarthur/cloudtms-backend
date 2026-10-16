@@ -6426,5 +6426,24 @@
     "native": "NOT_RUN",
     "contractSeal": "PENDING_FINAL_SOURCE_COMPOSITION",
     "original92ObjectsPreserved": true
+  },
+  "candidate_factual_request_continuation": {
+    "source": "f8aba9d7b7a7a5ba9c67d4c5ece424d594e3bd79",
+    "manifest_sha256": "45602075d6f532bd2a48a9b112f6d73680aba4e8a69d82ac1a3f224d7f3d5e88",
+    "status": "SOURCE_CONSUMER_REVIEWED_NATIVE_SCHEMA_SUCCESSORS_PENDING",
+    "additive_request_schema_repair": true,
+    "operations": 72,
+    "move_required_keys": 17,
+    "existing_optional_field": "input_snapshot",
+    "consumers": [
+      "CandidateWorkflowCreateRequest",
+      "CandidateWorkflowCreatePayload",
+      "RejectedWorkflowResubmitRequest"
+    ],
+    "native_companions": [
+      "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+      "c03c010dfabe8280fcbb36779fa210e7e5242a02"
+    ],
+    "pending_physical_correction": "Actual native withdrawal requires narrowly audited nullable current placement, preserving genuine NATIVE_PENDING Contract binding; final source/constraints/consumer list in progress, not mounted or declared absent."
   }
 }

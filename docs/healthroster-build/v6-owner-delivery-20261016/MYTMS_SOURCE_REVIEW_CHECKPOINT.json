@@ -91,5 +91,55 @@
     "mainPushed": false,
     "testFlight": "NOT_BUILT",
     "requireFreshRecheckBeforeFutureBuild": true
+  },
+  "factualCreateResubmit": {
+    "sourceCommit": "f8aba9d7b7a7a5ba9c67d4c5ece424d594e3bd79",
+    "receiptTip": "a7a1526e697cec792db4123a5b0aa1b1deee9303",
+    "manifestSha256": "45602075d6f532bd2a48a9b112f6d73680aba4e8a69d82ac1a3f224d7f3d5e88",
+    "status": "INDEPENDENT_SOURCE_CHECKS_PASS_NATIVE_API_DEVICE_PENDING",
+    "files": 24,
+    "actualDiskAndGitPayloadHashes": "ALL24_MATCH",
+    "historicalManifests": "BOTH_UNCHANGED_EXACT_RAW_HASHES",
+    "operations": 72,
+    "methodPathOperationSecurity": "EXACT_BASE_B2FED_UNCHANGED",
+    "moveSchema": "EXACT_BASE_B2FED_UNCHANGED_17_FIELDS",
+    "reviewedBodies": [
+      "Complete submit.ts delta fromb2fed: full CREATE body persisted before POST; original replay precedes mutable edit/rebind; unknown legacy missing-body context retained rather than reconstructed; recovered native predecessor context required before supersede.",
+      "Complete resubmit.ts: exact original target/generation/key/body and accepted response retained through cleanup; ambiguous journals refused.",
+      "Complete existing action screen delta: saved restart recoverable after fresh action disappears; foreign workflow progress preserved; existing saved replacement not reset.",
+      "Broker typed validator changes plus complete generated factual builder/semantic validator generator; same existing CREATE/resubmit routes."
+    ],
+    "additiveRequestSchemaRepair": {
+      "existingOperations": [
+        "createCandidateWorkflow",
+        "resubmitRejectedCandidateWorkflow"
+      ],
+      "optionalField": "input_snapshot: CandidateWorkflowFactualSnapshot",
+      "newOperations": 0,
+      "legacy": "Posted snapshot-free body remains exact; initial blank resubmit sends no invented facts.",
+      "nativeCompanions": [
+        "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+        "c03c010dfabe8280fcbb36779fa210e7e5242a02"
+      ]
+    },
+    "independentTests": {
+      "candidateSuites": 4,
+      "candidateCases": 121,
+      "contractCases": 3,
+      "failed": 0,
+      "mockedTransportOnly": true
+    },
+    "authorTests": {
+      "candidateSuites": 83,
+      "candidateCases": 731,
+      "rootCases": 309,
+      "managerCases": 49,
+      "typecheck": "PASS",
+      "contractGuards": "PASS"
+    },
+    "native": "SCALAR_28_SEPARATE_PASS_FULL_LIFECYCLE_NOT_RUN",
+    "api": "NOT_RUN",
+    "testFlight": "NOT_BUILT",
+    "partBCriticSignoff": false
   }
 }
