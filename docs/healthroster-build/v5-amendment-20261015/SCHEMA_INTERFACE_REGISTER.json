@@ -6445,5 +6445,18 @@
       "c03c010dfabe8280fcbb36779fa210e7e5242a02"
     ],
     "pending_physical_correction": "Actual native withdrawal requires narrowly audited nullable current placement, preserving genuine NATIVE_PENDING Contract binding; final source/constraints/consumer list in progress, not mounted or declared absent."
+  },
+  "physical_contract_source_continuation_20261016": {
+    "sourceCommit": "00f25571ac7fb65f44351a52beced0710211138e",
+    "status": "SOURCE_INTEGRATED_NOT_RELEASE_READY",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/PHYSICAL_CONTRACT_SOURCE_INTEGRATION.json",
+    "root": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+    "functions": 41,
+    "newSignatures": 39,
+    "existingNativeGuardSuccessors": 2,
+    "publicAccept": "OWNER_ONLY_UNEXPOSED",
+    "native": "NOT_RUN",
+    "contractSeal": "PENDING_FINAL_COMPOSITION",
+    "original92ObjectsPreserved": true
   }
 }

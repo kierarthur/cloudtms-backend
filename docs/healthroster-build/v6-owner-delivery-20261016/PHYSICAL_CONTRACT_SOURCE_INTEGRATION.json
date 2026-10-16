@@ -1,0 +1,125 @@
+{
+  "version": "HEALTHROSTER_V6_PHYSICAL_CONTRACT_SOURCE_INTEGRATION_V1",
+  "status": "SOURCE_INTEGRATED_NOT_RELEASE_READY",
+  "sourceCommit": "00f25571ac7fb65f44351a52beced0710211138e",
+  "joinedRecipeCommit": "55437f5ced7b82f27ac6975f2e7a2da3e32fc5ab",
+  "joinedRecipeSha256": "a91e1b751436b6c17ce4764005f6e975b11ca42bf4dd93a4d0c30f009ec881cf",
+  "root": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+  "orderedPayloads": [
+    {
+      "file": "forward/sql/00_identity.sqlinc",
+      "sha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "sourceCommit": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "file": "forward/sql/01_capability.sqlinc",
+      "sha256": "71974b7bab2325a8488d46051ded503b1e27b36fccceb674fde730ab73a8bd4b",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "sourceCommit": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "file": "forward/sql/02_physical_apply.sqlinc",
+      "sha256": "916d7a0438014aa1a700878cc5ea76f97eb3138484947691801917ffe4abeea9",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "sourceCommit": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "file": "forward/sql/03_native_guards.sqlinc",
+      "sha256": "230841b9bd2a2ea6913858837640a84196af45ec36b57eafa27ab4a686ee6ec8",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_native_compatibility.sqlinc",
+      "sourceCommit": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "file": "forward/sql/04_atomic_assert.sqlinc",
+      "sha256": "c5b2f14b2150a60e3b6160c58d1eb4eeb838f56067b7d7248d09c42a3ade8113",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "sourceCommit": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "file": "forward/sql/04a_accept_composition.sqlinc",
+      "sha256": "d900ad23fbc0b4b5130b6c8138767ba9d7827b3e8506feefcac12e12cbaaae10",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "sourceCommit": "00f25571ac7fb65f44351a52beced0710211138e"
+    }
+  ],
+  "acl": {
+    "file": "forward/compat/contract_only_final_acl.sqlinc",
+    "sha256": "8a15cbfe1f4e52d6ca1a549c4000ad5e813f23684296b72c59bd287248a12e97",
+    "functionCount": 41,
+    "serviceExecute": false,
+    "target": "supabase/repeatable/includes/nhsp_v6_health_contract_final_acl.sqlinc",
+    "normalization": "Canonical LF; source raw CRLF retained in original proposal; function/grant text unchanged."
+  },
+  "mountedFiles": [
+    {
+      "file": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "sha256": "920248f7ed713c881e379ddc33a5400d9f3804a2ac3fcb7771be1bcc02002f39"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "sha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "sha256": "40945fe7761856b8296ef9a760c7168bdeeabedcbba7d619e4a5413167a0b0db"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_native_compatibility.sqlinc",
+      "sha256": "230841b9bd2a2ea6913858837640a84196af45ec36b57eafa27ab4a686ee6ec8"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "sha256": "d900ad23fbc0b4b5130b6c8138767ba9d7827b3e8506feefcac12e12cbaaae10"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_contract_final_acl.sqlinc",
+      "sha256": "01871c5ad2433ee52ffecdfcee73e696847574490bf8eb4adea1e76edcd9b944"
+    }
+  ],
+  "registry": {
+    "before": 1221,
+    "after": 1262,
+    "originalChainsByteEqual": true,
+    "newSignatures": 39,
+    "existingGuardSuccessors": 2,
+    "editorChainsUnchanged": true,
+    "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
+  },
+  "sourceValidation": {
+    "integrity": "PASS:407migrations/1075repeatables",
+    "finalDefiners": "PASS:2711signatures/1262registered/1075roots",
+    "offlinePg17": "PASS complete six definition payloads and final ACL; declared fields checked against data-free contract and guarded7d schema",
+    "focusedTests": "19/20 PASS; sole fullF23 failure is existing contact native claim replacement, not supplied physical definitions"
+  },
+  "openDefect": {
+    "signature": "public.email_outbox_claim_ready_batch(integer,text,integer)",
+    "currentPhysical": "supabase/repeatable/includes/weekly_contact_query/083_native_claim_bridge.sqlinc",
+    "kernel": "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+    "requiredParent": "supabase/repeatable/04102026_0558_banking_pay_next_legacy_email_claim_boundary_v1.sql",
+    "diagnosis": "Current bridge kernel copied old generic query without current LEGACY/NEXT gate and indexed factual branch. F23 correctly fails closed. Original Source owner is preparing exact finite parent composition and negatives; no waiver."
+  },
+  "qualification": {
+    "native": "NOT_RUN",
+    "contractSeal": "PENDING_FINAL_COMPOSITION",
+    "bankingProducers": "NOT_SUPPLIED",
+    "dailyInvoiceCandidateSuccessors": "NOT_MOUNTED_BY_THIS_CHECKPOINT",
+    "publicAccept": "OWNER_ONLY_NO_SERVICE_OR_BROWSER_EXECUTE",
+    "install2": "NOT_INSTALLED",
+    "activation": "NOT_RUN",
+    "fullRehearsal": "NOT_RUN"
+  },
+  "preservation": {
+    "existingMigrationsUnchanged": true,
+    "existing1221ChainsUnchanged": true,
+    "original92ObjectsSha256": "dd9547b6ddde9ed0316030f84b9ec6d24275c4914bd7651a0a1366e97c0baac3",
+    "earlierApprovalsPreserved": true
+  },
+  "effects": {
+    "databaseSessionHeld": false,
+    "testMutation": false,
+    "deployment": false,
+    "bankingChatMessage": false,
+    "secretsPrinted": false
+  }
+}

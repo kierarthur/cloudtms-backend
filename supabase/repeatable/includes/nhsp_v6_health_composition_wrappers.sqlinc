@@ -1,0 +1,167 @@
+-- Health-owned SQL transport admission and real atomic Accept choreography.
+-- Kept unexposed until exact native preview/cut/valuation/current-result closure is qualified.
+create or replace function private.timesheet_contract_move_reason_v1(p_note text,p_purpose text default 'CONTRACT_CORRECTION')
+returns text language plpgsql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+declare note text; prefix text;
+begin
+ if p_purpose is null or p_purpose not in('CONTRACT_CORRECTION','DAILY_RATE_CORRECTION') then raise exception 'CORRECTION_PURPOSE_INVALID' using errcode='22023';end if;
+ -- ECMAScript TrimString whitespace, matching the shared Worker decoder exactly.
+ note:=btrim(coalesce(p_note,''),U&'\0009\000a\000b\000c\000d\0020\00a0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200a\2028\2029\202f\205f\3000\feff');
+ if char_length(note)>1969 then raise exception 'CORRECTION_REASON_TOO_LONG' using errcode='22023';end if;
+ prefix:=case p_purpose when 'CONTRACT_CORRECTION' then 'Correcting the Contract' else 'Applying updated rates' end;
+ return prefix||case when note='' then '' else ' — '||note end;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_request_assert_v1(p_args jsonb,p_kind text)
+returns void language plpgsql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+declare required text[]; permitted text[]; k text; uuid_keys text[];
+begin
+ if jsonb_typeof(p_args) is distinct from 'object' or p_kind is null or p_kind not in('PREVIEW','ACCEPT','READ_RESULT')
+  or p_args->>'version' is distinct from 'TIMESHEET_CONTRACT_CORRECTION_V3' then
+  raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+ if p_kind='PREVIEW' then
+  required:=array['version','request_id','timesheet_id','to_contract_id','actor_user_id'];permitted:=required||array['reason'];
+  uuid_keys:=array['request_id','timesheet_id','to_contract_id','actor_user_id'];
+ elsif p_kind='ACCEPT' then
+  required:=array['version','request_id','operation_id','review_id','review_digest','expected_state_revision','actor_user_id'];permitted:=required;
+  uuid_keys:=array['request_id','operation_id','review_id','actor_user_id'];
+ else
+  required:=array['version','action','operation_id','request_id','actor_user_id'];permitted:=required;
+  uuid_keys:=array['request_id','operation_id','actor_user_id'];
+  if p_args->>'action' is distinct from 'READ_RESULT' then raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+ end if;
+ if not (p_args ?& required) or p_args-permitted<>'{}'::jsonb then raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+ foreach k in array uuid_keys loop
+  if jsonb_typeof(p_args->k) is distinct from 'string'
+   or p_args->>k !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+   raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+ end loop;
+ if p_kind='PREVIEW' and p_args ? 'reason' then
+  if jsonb_typeof(p_args->'reason') is distinct from 'string' then raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+  perform private.timesheet_contract_move_reason_v1(p_args->>'reason');
+ end if;
+ if p_kind='ACCEPT' then
+  if jsonb_typeof(p_args->'review_digest') is distinct from 'string' or p_args->>'review_digest' !~ '^[0-9a-f]{64}$'
+   or jsonb_typeof(p_args->'expected_state_revision') is distinct from 'string'
+   or p_args->>'expected_state_revision' !~ '^[1-9][0-9]*$' or length(p_args->>'expected_state_revision')>19 then
+   raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+  if (p_args->>'expected_state_revision')::numeric>9223372036854775807 then raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+ end if;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_request_hash_v1(p_args jsonb,p_kind text)
+returns bytea language plpgsql immutable security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare normalized jsonb:=p_args;
+begin
+ perform private.timesheet_contract_move_request_assert_v1(p_args,p_kind);
+ if p_kind='PREVIEW' then normalized:=jsonb_set(normalized,'{reason}',to_jsonb(private.timesheet_contract_move_reason_v1(p_args->>'reason')),true);end if;
+ return private.timesheet_contract_move_row_hash_v1(jsonb_build_object('kind',p_kind,'request',normalized));
+end;
+$function$;
+
+create or replace function public.timesheet_contract_move_accept_v1(p_args jsonb)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare v_request_id uuid; v_operation_id uuid; actor_id uuid; v_request_hash bytea;
+ o private.timesheet_contract_move_operations%rowtype; saved private.timesheet_contract_move_requests%rowtype;
+ r private.timesheet_contract_move_reviews%rowtype; scope jsonb; preflight jsonb; placement jsonb; preparation jsonb;
+ v_command_id uuid; result jsonb; v_reason text; now_utc timestamptz:=clock_timestamp(); accepted_receipt jsonb;
+begin
+ -- READ_RESULT is adapter-generated GET transport. It never enters fresh acceptance/journalling.
+ if p_args->>'action'='READ_RESULT' then
+  perform private.timesheet_contract_move_request_assert_v1(p_args,'READ_RESULT');
+  v_request_id:=(p_args->>'request_id')::uuid;v_operation_id:=(p_args->>'operation_id')::uuid;actor_id:=(p_args->>'actor_user_id')::uuid;
+  if not exists(select 1 from public.tms_users u where u.id=actor_id and u.is_active)
+   or not exists(select 1 from private.timesheet_contract_move_requests q where q.request_id=v_request_id and q.operation_id=v_operation_id) then
+   raise exception 'CORRECTION_RESULT_NOT_VISIBLE' using errcode='42501';end if;
+  if to_regprocedure('private.timesheet_contract_move_read_v1(uuid,uuid)') is null then
+   raise exception 'CORRECTION_NATIVE_RESULT_UNAVAILABLE' using errcode='55000';end if;
+  return private.timesheet_contract_move_read_v1(v_operation_id,actor_id);
+ end if;
+ perform private.timesheet_contract_move_request_assert_v1(p_args,'ACCEPT');
+ v_request_id:=(p_args->>'request_id')::uuid;v_operation_id:=(p_args->>'operation_id')::uuid;actor_id:=(p_args->>'actor_user_id')::uuid;
+ v_request_hash:=private.timesheet_contract_move_request_hash_v1(p_args,'ACCEPT');
+ if not exists(select 1 from public.tms_users u where u.id=actor_id and u.is_active) then
+  raise exception 'CORRECTION_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
+ -- Exact committed replay precedes all fresh actor/scope/financial/invoice work.
+ select q.* into saved from private.timesheet_contract_move_requests q where q.request_id=v_request_id;
+ if found then
+  if saved.operation_id<>v_operation_id or saved.request_kind<>'ACCEPT' or saved.request_hash<>v_request_hash or saved.receipt_json is null then
+   raise exception 'CORRECTION_REQUEST_CONFLICT' using errcode='22023';end if;
+  return private.timesheet_contract_move_read_v1(v_operation_id,actor_id);
+ end if;
+ -- Same active Office admin authority as the genuine native Contract/week allocator.
+ if not private.weekly_source_pay_actor_allowed_v1(actor_id)
+  or not exists(select 1 from public.tms_users u where u.id=actor_id and u.is_active and lower(btrim(u.role))='admin') then
+  raise exception 'CORRECTION_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
+ if to_regprocedure('private.bpay_next_contract_move_cut_v1(uuid,boolean)') is null
+  or to_regprocedure('private.bpay_next_contract_move_stage_v1(uuid,bytea)') is null
+  or to_regprocedure('private.bpay_next_contract_move_publish_v1(uuid)') is null
+  or to_regprocedure('private.bpay_next_contract_move_not_required_v1(uuid)') is null
+  or to_regprocedure('private.timesheet_contract_move_read_v1(uuid,uuid)') is null
+  or to_regprocedure('private.invoice_contract_move_preflight_v1(uuid,uuid,boolean)') is null
+  or to_regprocedure('private.invoice_contract_move_prepare_v1(uuid,bigint,uuid,timestamp with time zone)') is null then
+  raise exception 'CORRECTION_NATIVE_DEPENDENCY_UNAVAILABLE' using errcode='55000';end if;
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=v_operation_id;
+ if o.id is null or o.purpose<>'CONTRACT_CORRECTION' or o.created_by_user_id<>actor_id then
+  raise exception 'CORRECTION_OPERATION_NOT_VISIBLE' using errcode='42501';end if;
+ -- Native financial owner takes its actual module/Candidate/root/Work/Position/case/hold locks.
+ -- Its stage below owns comparison against the exact immutable reviewed hash; Health never derives a second cut.
+ perform private.bpay_next_contract_move_cut_v1(o.id,true);
+ scope:=private.timesheet_contract_move_scope_v1(o.id,true);
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=v_operation_id for update;
+ perform pg_advisory_xact_lock(hashtextextended('timesheet-contract-move-request:'||v_request_id::text,0));
+ select q.* into saved from private.timesheet_contract_move_requests q where q.request_id=v_request_id;
+ if found then
+  if saved.operation_id<>v_operation_id or saved.request_kind<>'ACCEPT' or saved.request_hash<>v_request_hash or saved.receipt_json is null then
+   raise exception 'CORRECTION_REQUEST_CONFLICT' using errcode='22023';end if;
+  return private.timesheet_contract_move_read_v1(v_operation_id,actor_id);
+ end if;
+ select v.* into r from private.timesheet_contract_move_reviews v where v.id=(p_args->>'review_id')::uuid and v.operation_id=o.id for share;
+ if o.state<>'REVIEWED' or o.state_revision<>(p_args->>'expected_state_revision')::bigint or r.id is null
+  or r.review_digest<>decode(p_args->>'review_digest','hex') or r.manifest_json->'physical' is distinct from scope
+  or exists(select 1 from private.timesheet_contract_move_reviews newer where newer.operation_id=o.id and newer.review_no>r.review_no) then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ v_reason:=r.manifest_json->>'reason';
+ if v_reason is null or char_length(v_reason)>2000 or (v_reason<>'Correcting the Contract' and left(v_reason,26)<>'Correcting the Contract — ') then
+  raise exception 'CORRECTION_REVIEW_REASON_UNBOUND' using errcode='23514';end if;
+ if o.financial_state='QUALIFIED' and o.current_financial_cut_id is null then
+  raise exception 'CORRECTION_NATIVE_CUT_UNBOUND' using errcode='55000';end if;
+ preflight:=private.invoice_contract_move_preflight_v1(r.id,actor_id,true);
+ if preflight->'ready_to_confirm' is distinct from 'true'::jsonb then raise exception 'CORRECTION_NOT_READY' using errcode='40001';end if;
+ placement:=private.timesheet_contract_move_stage_v1(o.id,r.id,r.scope_hash);
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=v_operation_id;
+ if o.financial_state='NOT_APPROVED' then perform private.bpay_next_contract_move_not_required_v1(o.id);
+ elsif o.financial_state='QUALIFIED' then v_command_id:=private.bpay_next_contract_move_publish_v1(o.id);
+ else raise exception 'CORRECTION_NATIVE_FINANCIAL_NOT_QUALIFIED' using errcode='40001';end if;
+ update private.timesheet_contract_move_operations set financial_command_id=v_command_id,state_revision=state_revision+1 where id=o.id;
+ perform private.timesheet_contract_move_capability_cleanup_v1();
+ -- Accepted native valuation is a producer result, never reconstructed from caller/browser money.
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=v_operation_id;
+ if jsonb_typeof(o.accepted_valuation_json) is distinct from 'object' then
+  raise exception 'CORRECTION_NATIVE_VALUATION_UNBOUND' using errcode='55000';end if;
+ preparation:=private.invoice_contract_move_prepare_v1(o.id,o.billing_revision,actor_id,now_utc);
+ perform private.timesheet_contract_move_capability_cleanup_v1();
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=v_operation_id;
+ if o.after_invoice_hash is null then raise exception 'CORRECTION_NATIVE_INVOICE_CERTIFICATE_UNBOUND' using errcode='55000';end if;
+ perform private.timesheet_contract_move_assert_v1(o.id,r.id);
+ accepted_receipt:=jsonb_build_object('version','CONTRACT_CORRECTION_ACCEPTED_V3','operation_id',o.id,'request_id',v_request_id,
+  'review_id',r.id,'placement_receipt_id',o.placement_receipt_json->'receipt_id','financial_command_id',o.financial_command_id,
+  'billing_revision',o.billing_revision::text,'preparation_operation_id',o.preparation_operation_id,'accepted_at_utc',now_utc);
+ insert into private.timesheet_contract_move_requests(request_id,operation_id,request_kind,request_hash,review_id,state_revision,created_at_utc)
+ values(v_request_id,o.id,'ACCEPT',v_request_hash,r.id,o.state_revision+1,now_utc);
+ update private.timesheet_contract_move_operations set accept_request_id=v_request_id,accept_request_hash=v_request_hash,reason=v_reason,
+  state='COMPLETE',state_revision=state_revision+1,completed_at_utc=now_utc,receipt_json=accepted_receipt where id=o.id;
+ result:=private.timesheet_contract_move_read_v1(o.id,actor_id);
+ update private.timesheet_contract_move_requests q set receipt_json=result where q.request_id=v_request_id and q.operation_id=o.id;
+ return result;
+ -- No exception handler turns a rollback-capable fresh failure into successful acceptance or a repair wizard.
+end;
+$function$;
+alter function public.timesheet_contract_move_accept_v1(jsonb) owner to current_user;
+revoke all on function public.timesheet_contract_move_accept_v1(jsonb) from public,anon,authenticated,service_role;
