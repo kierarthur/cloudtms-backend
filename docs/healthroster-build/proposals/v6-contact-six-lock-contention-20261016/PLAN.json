@@ -1,0 +1,1010 @@
+{
+  "version": "HEALTH_CONTACT_EXACT_SIX_LOCK_QUALIFICATION_SOURCE_V1",
+  "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "rootHead": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "sourceState": "SAVED_DISK_PINNED_NO_CLEAN_OR_NATIVE_CLAIM",
+  "producerCommit": "bdb86a015c343b685f94682e5ae644f63fab7468",
+  "historicalPeer": "7297352399dd7afe21abdf459e0b438f836e6cfb",
+  "marker": "hr_install2_6cae14b7a1024ec790a63e4e1bd91bd8",
+  "markerPolicy": "ABSENCE_SENTINEL_ONLY_NEVER_CREATED",
+  "relationNames": [
+    "public.weekly_manager_recipient_generations",
+    "public.weekly_message_dispatch_commands",
+    "public.weekly_candidate_cohorts",
+    "public.weekly_timesheet_submission_requests",
+    "public.weekly_candidate_outreach_generations",
+    "public.weekly_timesheet_submission_request_memberships"
+  ],
+  "inputs": [
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
+      "bytes": 48153
+    },
+    {
+      "file": "scripts/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "bytes": 10311
+    },
+    {
+      "file": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "sha256": "42717a80f6d60598b99790106e1d9c4e182c1137f7039b97782017da189865cc",
+      "bytes": 17500
+    },
+    {
+      "file": "scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2",
+      "bytes": 17345
+    },
+    {
+      "file": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "bytes": 18719
+    },
+    {
+      "file": "scripts/weekly-source-activation-window-binding.mjs",
+      "sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2",
+      "bytes": 3778
+    },
+    {
+      "file": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "sha256": "12a4988d8d7626edc8748092b4780cdc881482be288e496f3f464533e959e610",
+      "bytes": 5426
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "bytes": 7853
+    },
+    {
+      "file": "scripts/cloudtms-managed-execution-policy.mjs",
+      "sha256": "069e6d1d2361c6c8026b193116db565d40503b9a2e338ddb75c4b1dadb15d415",
+      "bytes": 11421
+    },
+    {
+      "file": "scripts/weekly-source-reader-release.mjs",
+      "sha256": "b35b0d8698fbddecfc2b98f9226d5ecc88a076643366533822c3e3178b72e313",
+      "bytes": 2834
+    },
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "bytes": 32174
+    },
+    {
+      "file": "scripts/cloudtms-managed-psql.mjs",
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d",
+      "bytes": 5398
+    },
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+      "bytes": 13611
+    },
+    {
+      "file": "scripts/healthroster-contact-claim-boundary.mjs",
+      "sha256": "505abc1c41cf7adc21aa16c4c7f5f42d6678a58818cd694d992d3d0271fbff0d",
+      "bytes": 8052
+    },
+    {
+      "file": "scripts/healthroster-money-predecessor-boundary.mjs",
+      "sha256": "3c49e8aa9e128dfb331d282551c17cc2e12528075ff33866347e51eb2328dbc6",
+      "bytes": 4543
+    },
+    {
+      "file": "scripts/healthroster-capability-predecessor-boundary.mjs",
+      "sha256": "e24e16cd1bd0cd8afe28b7e697a5fd7ec0c03a4edeb0e458ca81e1eecd47bbc3",
+      "bytes": 16330
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "sha256": "b7e16cdb12e8b5c6d11894e53296e4d20aeeaceb8dd968ed32936884f3ab3610",
+      "bytes": 12864
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8",
+      "bytes": 9580
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "bytes": 48190
+    },
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "sha256": "53c301664b449168b34803ca995eedcfd4cf90df1533c6d78086637df6488550",
+      "bytes": 10596
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+      "bytes": 14597
+    },
+    {
+      "file": "scripts/healthroster-install1-verifier-census.mjs",
+      "sha256": "742635a7ed15dfb190d77dda9063fd49315ec3390f573982bc461bfd8f1e862c",
+      "bytes": 11479
+    },
+    {
+      "file": "scripts/healthroster-install2-native-gate.mjs",
+      "sha256": "ec3c2eca5b648fdf2996dbeb3c116e39ef37fdc54d1e896cfb4489682cbad9be",
+      "bytes": 7883
+    },
+    {
+      "file": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "sha256": "53b92b41b522851a68126447f88d11862974e70895c829e9e79b1877ea86c19b",
+      "bytes": 6985
+    },
+    {
+      "file": "scripts/healthroster-f5-post-verified-gate.mjs",
+      "sha256": "dfd1454e057c27e6693a012aef107382f9bc0479322fd0e3ae09b35bb19e99a3",
+      "bytes": 8425
+    },
+    {
+      "file": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "sha256": "7c0342fe85df257a28b19f19158f98123bb03d4bb574f913d341fdaac80fd853",
+      "bytes": 15969
+    },
+    {
+      "file": "scripts/weekly-source-native-fixture-participants.mjs",
+      "sha256": "8a9dec4e027a1967ca07b6aa69ded0156f25a9aca126bff3c7f4bac8ee94d696",
+      "bytes": 6818
+    },
+    {
+      "file": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "sha256": "5b0392bcd30c0b9b55692c3793a444bb7591aa89a77d22cea3fbb5c0128eb5e8",
+      "bytes": 6862
+    },
+    {
+      "file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef",
+      "bytes": 3685
+    },
+    {
+      "file": "scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42",
+      "bytes": 1718
+    },
+    {
+      "file": "scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2",
+      "bytes": 5751
+    },
+    {
+      "file": "scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c",
+      "bytes": 9395
+    },
+    {
+      "file": "scripts/healthroster-f5-synthetic-fixture.mjs",
+      "sha256": "d9223bcfc5448b9d01636463d60c42312bdd2107ade9881f08d70cfcc9380a66",
+      "bytes": 9442
+    },
+    {
+      "file": "broker/src/weekly-source/index.js",
+      "sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662",
+      "bytes": 6275
+    },
+    {
+      "file": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "bytes": 20759
+    },
+    {
+      "file": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "bytes": 12480
+    },
+    {
+      "file": "broker/src/weekly-source/money.js",
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c",
+      "bytes": 7889
+    },
+    {
+      "file": "broker/src/weekly-source/coverage-warnings.mjs",
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "bytes": 3588
+    },
+    {
+      "file": "supabase/release/migration-lock.json",
+      "sha256": "d3a03b7e3a99687bfd846c533c9359f51f9c0e2034211bfa89668dad6ee33eb4",
+      "bytes": 77787
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43",
+      "bytes": 14978
+    },
+    {
+      "file": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "bytes": 229113
+    },
+    {
+      "file": "supabase/migrations/30092026_2059_weekly_source_independent_candidate_requests.sql",
+      "sha256": "2c5a135097e8a857e597aed1845deb2a6b6883fb2f4b8300980a26ed1f49c4e9",
+      "bytes": 1176
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/native-money-predecessor-contention-efd18231/build-input.mjs.source.txt",
+      "sha256": "cd16304c12843aa4c6eaae12a749c765878b2bda2635237c91aa29561f078f0e",
+      "bytes": 6370
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/native-money-predecessor-contention-efd18231/INPUT_RECEIPT.json",
+      "sha256": "19b7e1e28f5a3bd3f0e0a77b23a73e4824481ce762b0c6fe3224a2ef164c78c6",
+      "bytes": 1551
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/native-money-predecessor-contention-efd18231/SUMMARY.json",
+      "sha256": "a65755306dd6b2d7845abe4413e83256677f6d90335352539f0de736d550116a",
+      "bytes": 2212
+    },
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "sha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17",
+      "bytes": 6187
+    },
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "sha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+      "bytes": 7563
+    }
+  ],
+  "packets": [
+    {
+      "path": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "sourceSha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17",
+      "packet": "begin;\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\n-- One-time CloudTMS migration: complete frozen Contact one-time/02_automatic_followup_tranche.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_manager_recipient_generations in access exclusive mode nowait;\nlock table public.weekly_message_dispatch_commands in access exclusive mode nowait;\n\n-- Root reviewed additive tranche; all eleven original values retain meaning.\n-- A temporary NOT VALID check lets PostgreSQL compare its own canonical parsed\n-- definition against the actual prior constraint. It is removed in this same\n-- atomic migration; an unexpected owner/schema/tree aborts the whole migration.\ndo $prior$\nbegin\n if not exists(select 1 from pg_class relation join pg_namespace namespace on namespace.oid=relation.relnamespace\n  join pg_attribute attribute on attribute.attrelid=relation.oid and attribute.attname='tranche_kind'\n  join pg_constraint constraint_row on constraint_row.conrelid=relation.oid\n   and constraint_row.conname='weekly_message_dispatch_commands_tranche_kind_check'\n  where namespace.nspname='public' and relation.relname='weekly_message_dispatch_commands' and relation.relkind='r'\n   and relation.relowner=(select oid from pg_roles where rolname=CURRENT_USER) and attribute.atttypid='text'::regtype\n   and attribute.attnotnull and not attribute.attisdropped and constraint_row.contype='c' and constraint_row.convalidated\n   and constraint_row.conkey=array[attribute.attnum]::smallint[]) then\n  raise exception 'CONTACT_SOURCE_AUTOMATIC_TRANCHE_PRIOR_SCHEMA_MISMATCH' using errcode='55000';end if;\nend;\n$prior$;\nalter table public.weekly_message_dispatch_commands add constraint weekly_contact_expected_original_tranche_ck\n check(tranche_kind in('CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',\n 'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H','MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED',\n 'MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND','COMPLETED_PACK_COPY')) not valid;\ndo $exact_prior$\ndeclare actual text;expected text;\nbegin\n select pg_get_constraintdef(oid,false) into strict actual from pg_constraint\n  where conrelid='public.weekly_message_dispatch_commands'::regclass and conname='weekly_message_dispatch_commands_tranche_kind_check';\n select regexp_replace(pg_get_constraintdef(oid,false),' NOT VALID$','') into strict expected from pg_constraint\n  where conrelid='public.weekly_message_dispatch_commands'::regclass and conname='weekly_contact_expected_original_tranche_ck';\n if actual is distinct from expected then raise exception 'CONTACT_SOURCE_AUTOMATIC_TRANCHE_PRIOR_ENUM_MISMATCH' using errcode='55000';end if;\nend;\n$exact_prior$;\nalter table public.weekly_message_dispatch_commands drop constraint weekly_contact_expected_original_tranche_ck;\nalter table public.weekly_message_dispatch_commands drop constraint weekly_message_dispatch_commands_tranche_kind_check;\nalter table public.weekly_message_dispatch_commands add constraint weekly_message_dispatch_commands_tranche_kind_check\n check(tranche_kind in('CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',\n 'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H','MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED',\n 'MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND','COMPLETED_PACK_COPY','MANAGER_AUTOMATIC_FOLLOWUP'));\n\ndo $generation_prior$\nbegin\n if not exists(select 1 from pg_class relation join pg_namespace namespace on namespace.oid=relation.relnamespace\n  join pg_attribute attribute on attribute.attrelid=relation.oid and attribute.attname='trigger_kind'\n  join pg_constraint constraint_row on constraint_row.conrelid=relation.oid\n   and constraint_row.conname='weekly_manager_recipient_generations_trigger_kind_check'\n  where namespace.nspname='public' and relation.relname='weekly_manager_recipient_generations' and relation.relkind='r'\n   and relation.relowner=(select oid from pg_roles where rolname=CURRENT_USER) and attribute.atttypid='text'::regtype\n   and attribute.attnotnull and not attribute.attisdropped and constraint_row.contype='c' and constraint_row.convalidated\n   and constraint_row.conkey=array[attribute.attnum]::smallint[]) then\n  raise exception 'CONTACT_SOURCE_COMPOSITION_PRIOR_SCHEMA_MISMATCH' using errcode='55000';end if;\nend;\n$generation_prior$;\nalter table public.weekly_manager_recipient_generations add constraint weekly_contact_expected_original_generation_ck\n check(trigger_kind in('OFFICE_DIRECT','EARLY_ALL','T6_RESPONDED','T12_REMAINDER','NEW_INCIDENT','MANUAL_RESEND')) not valid;\ndo $exact_generation_prior$\ndeclare actual text;expected text;\nbegin\n select pg_get_constraintdef(oid,false) into strict actual from pg_constraint\n  where conrelid='public.weekly_manager_recipient_generations'::regclass and conname='weekly_manager_recipient_generations_trigger_kind_check';\n select regexp_replace(pg_get_constraintdef(oid,false),' NOT VALID$','') into strict expected from pg_constraint\n  where conrelid='public.weekly_manager_recipient_generations'::regclass and conname='weekly_contact_expected_original_generation_ck';\n if actual is distinct from expected then raise exception 'CONTACT_SOURCE_COMPOSITION_PRIOR_ENUM_MISMATCH' using errcode='55000';end if;\nend;\n$exact_generation_prior$;\nalter table public.weekly_manager_recipient_generations drop constraint weekly_contact_expected_original_generation_ck;\nalter table public.weekly_manager_recipient_generations drop constraint weekly_manager_recipient_generations_trigger_kind_check;\nalter table public.weekly_manager_recipient_generations add constraint weekly_manager_recipient_generations_trigger_kind_check\n check(trigger_kind in('OFFICE_DIRECT','EARLY_ALL','T6_RESPONDED','T12_REMAINDER','NEW_INCIDENT','MANUAL_RESEND','CONTACT_COMPOSITION'));\n\n\n\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\ninsert into private.cloudtms_migration_ledger(path,content_sha256,first_release_id)\n    values('supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql','e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17','healthroster-contact-six-lock-qualification-NOT-FOR-APPLY');\ncommit;",
+      "packetSha256": "99b82a273bff7112038928c4b48d224f457d60bcbbebfd93cf8654d1b64f0dee",
+      "body": "-- One-time CloudTMS migration: complete frozen Contact one-time/02_automatic_followup_tranche.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_manager_recipient_generations in access exclusive mode nowait;\nlock table public.weekly_message_dispatch_commands in access exclusive mode nowait;\n\n-- Root reviewed additive tranche; all eleven original values retain meaning.\n-- A temporary NOT VALID check lets PostgreSQL compare its own canonical parsed\n-- definition against the actual prior constraint. It is removed in this same\n-- atomic migration; an unexpected owner/schema/tree aborts the whole migration.\ndo $prior$\nbegin\n if not exists(select 1 from pg_class relation join pg_namespace namespace on namespace.oid=relation.relnamespace\n  join pg_attribute attribute on attribute.attrelid=relation.oid and attribute.attname='tranche_kind'\n  join pg_constraint constraint_row on constraint_row.conrelid=relation.oid\n   and constraint_row.conname='weekly_message_dispatch_commands_tranche_kind_check'\n  where namespace.nspname='public' and relation.relname='weekly_message_dispatch_commands' and relation.relkind='r'\n   and relation.relowner=(select oid from pg_roles where rolname=CURRENT_USER) and attribute.atttypid='text'::regtype\n   and attribute.attnotnull and not attribute.attisdropped and constraint_row.contype='c' and constraint_row.convalidated\n   and constraint_row.conkey=array[attribute.attnum]::smallint[]) then\n  raise exception 'CONTACT_SOURCE_AUTOMATIC_TRANCHE_PRIOR_SCHEMA_MISMATCH' using errcode='55000';end if;\nend;\n$prior$;\nalter table public.weekly_message_dispatch_commands add constraint weekly_contact_expected_original_tranche_ck\n check(tranche_kind in('CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',\n 'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H','MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED',\n 'MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND','COMPLETED_PACK_COPY')) not valid;\ndo $exact_prior$\ndeclare actual text;expected text;\nbegin\n select pg_get_constraintdef(oid,false) into strict actual from pg_constraint\n  where conrelid='public.weekly_message_dispatch_commands'::regclass and conname='weekly_message_dispatch_commands_tranche_kind_check';\n select regexp_replace(pg_get_constraintdef(oid,false),' NOT VALID$','') into strict expected from pg_constraint\n  where conrelid='public.weekly_message_dispatch_commands'::regclass and conname='weekly_contact_expected_original_tranche_ck';\n if actual is distinct from expected then raise exception 'CONTACT_SOURCE_AUTOMATIC_TRANCHE_PRIOR_ENUM_MISMATCH' using errcode='55000';end if;\nend;\n$exact_prior$;\nalter table public.weekly_message_dispatch_commands drop constraint weekly_contact_expected_original_tranche_ck;\nalter table public.weekly_message_dispatch_commands drop constraint weekly_message_dispatch_commands_tranche_kind_check;\nalter table public.weekly_message_dispatch_commands add constraint weekly_message_dispatch_commands_tranche_kind_check\n check(tranche_kind in('CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',\n 'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H','MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED',\n 'MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND','COMPLETED_PACK_COPY','MANAGER_AUTOMATIC_FOLLOWUP'));\n\ndo $generation_prior$\nbegin\n if not exists(select 1 from pg_class relation join pg_namespace namespace on namespace.oid=relation.relnamespace\n  join pg_attribute attribute on attribute.attrelid=relation.oid and attribute.attname='trigger_kind'\n  join pg_constraint constraint_row on constraint_row.conrelid=relation.oid\n   and constraint_row.conname='weekly_manager_recipient_generations_trigger_kind_check'\n  where namespace.nspname='public' and relation.relname='weekly_manager_recipient_generations' and relation.relkind='r'\n   and relation.relowner=(select oid from pg_roles where rolname=CURRENT_USER) and attribute.atttypid='text'::regtype\n   and attribute.attnotnull and not attribute.attisdropped and constraint_row.contype='c' and constraint_row.convalidated\n   and constraint_row.conkey=array[attribute.attnum]::smallint[]) then\n  raise exception 'CONTACT_SOURCE_COMPOSITION_PRIOR_SCHEMA_MISMATCH' using errcode='55000';end if;\nend;\n$generation_prior$;\nalter table public.weekly_manager_recipient_generations add constraint weekly_contact_expected_original_generation_ck\n check(trigger_kind in('OFFICE_DIRECT','EARLY_ALL','T6_RESPONDED','T12_REMAINDER','NEW_INCIDENT','MANUAL_RESEND')) not valid;\ndo $exact_generation_prior$\ndeclare actual text;expected text;\nbegin\n select pg_get_constraintdef(oid,false) into strict actual from pg_constraint\n  where conrelid='public.weekly_manager_recipient_generations'::regclass and conname='weekly_manager_recipient_generations_trigger_kind_check';\n select regexp_replace(pg_get_constraintdef(oid,false),' NOT VALID$','') into strict expected from pg_constraint\n  where conrelid='public.weekly_manager_recipient_generations'::regclass and conname='weekly_contact_expected_original_generation_ck';\n if actual is distinct from expected then raise exception 'CONTACT_SOURCE_COMPOSITION_PRIOR_ENUM_MISMATCH' using errcode='55000';end if;\nend;\n$exact_generation_prior$;\nalter table public.weekly_manager_recipient_generations drop constraint weekly_contact_expected_original_generation_ck;\nalter table public.weekly_manager_recipient_generations drop constraint weekly_manager_recipient_generations_trigger_kind_check;\nalter table public.weekly_manager_recipient_generations add constraint weekly_manager_recipient_generations_trigger_kind_check\n check(trigger_kind in('OFFICE_DIRECT','EARLY_ALL','T6_RESPONDED','T12_REMAINDER','NEW_INCIDENT','MANUAL_RESEND','CONTACT_COMPOSITION'));\n\n\n",
+      "bodySha256": "c80dee7003ad3ed7a9b8cb96b4687fa0d13d39c50f564771662a28e179e7ecd5",
+      "statements": [
+        {
+          "start": 0,
+          "end": 6,
+          "sql": "begin;",
+          "tokens": [
+            "BEGIN"
+          ]
+        },
+        {
+          "start": 7,
+          "end": 508,
+          "sql": "do $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;",
+          "tokens": [
+            "DO",
+            "<BODY>"
+          ]
+        },
+        {
+          "start": 1009,
+          "end": 1096,
+          "sql": "lock table public.weekly_manager_recipient_generations in access exclusive mode nowait;",
+          "tokens": [
+            "LOCK",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_MANAGER_RECIPIENT_GENERATIONS",
+            "IN",
+            "ACCESS",
+            "EXCLUSIVE",
+            "MODE",
+            "NOWAIT"
+          ]
+        },
+        {
+          "start": 1097,
+          "end": 1180,
+          "sql": "lock table public.weekly_message_dispatch_commands in access exclusive mode nowait;",
+          "tokens": [
+            "LOCK",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_MESSAGE_DISPATCH_COMMANDS",
+            "IN",
+            "ACCESS",
+            "EXCLUSIVE",
+            "MODE",
+            "NOWAIT"
+          ]
+        },
+        {
+          "start": 1499,
+          "end": 2437,
+          "sql": "do $prior$\nbegin\n if not exists(select 1 from pg_class relation join pg_namespace namespace on namespace.oid=relation.relnamespace\n  join pg_attribute attribute on attribute.attrelid=relation.oid and attribute.attname='tranche_kind'\n  join pg_constraint constraint_row on constraint_row.conrelid=relation.oid\n   and constraint_row.conname='weekly_message_dispatch_commands_tranche_kind_check'\n  where namespace.nspname='public' and relation.relname='weekly_message_dispatch_commands' and relation.relkind='r'\n   and relation.relowner=(select oid from pg_roles where rolname=CURRENT_USER) and attribute.atttypid='text'::regtype\n   and attribute.attnotnull and not attribute.attisdropped and constraint_row.contype='c' and constraint_row.convalidated\n   and constraint_row.conkey=array[attribute.attnum]::smallint[]) then\n  raise exception 'CONTACT_SOURCE_AUTOMATIC_TRANCHE_PRIOR_SCHEMA_MISMATCH' using errcode='55000';end if;\nend;\n$prior$;",
+          "tokens": [
+            "DO",
+            "<BODY>"
+          ]
+        },
+        {
+          "start": 2438,
+          "end": 2865,
+          "sql": "alter table public.weekly_message_dispatch_commands add constraint weekly_contact_expected_original_tranche_ck\n check(tranche_kind in('CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',\n 'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H','MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED',\n 'MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND','COMPLETED_PACK_COPY')) not valid;",
+          "tokens": [
+            "ALTER",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_MESSAGE_DISPATCH_COMMANDS",
+            "ADD",
+            "CONSTRAINT",
+            "WEEKLY_CONTACT_EXPECTED_ORIGINAL_TRANCHE_CK",
+            "CHECK",
+            "(",
+            "TRANCHE_KIND",
+            "IN",
+            "(",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ")",
+            ")",
+            "NOT",
+            "VALID"
+          ]
+        },
+        {
+          "start": 2866,
+          "end": 3541,
+          "sql": "do $exact_prior$\ndeclare actual text;expected text;\nbegin\n select pg_get_constraintdef(oid,false) into strict actual from pg_constraint\n  where conrelid='public.weekly_message_dispatch_commands'::regclass and conname='weekly_message_dispatch_commands_tranche_kind_check';\n select regexp_replace(pg_get_constraintdef(oid,false),' NOT VALID$','') into strict expected from pg_constraint\n  where conrelid='public.weekly_message_dispatch_commands'::regclass and conname='weekly_contact_expected_original_tranche_ck';\n if actual is distinct from expected then raise exception 'CONTACT_SOURCE_AUTOMATIC_TRANCHE_PRIOR_ENUM_MISMATCH' using errcode='55000';end if;\nend;\n$exact_prior$;",
+          "tokens": [
+            "DO",
+            "<BODY>"
+          ]
+        },
+        {
+          "start": 3542,
+          "end": 3654,
+          "sql": "alter table public.weekly_message_dispatch_commands drop constraint weekly_contact_expected_original_tranche_ck;",
+          "tokens": [
+            "ALTER",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_MESSAGE_DISPATCH_COMMANDS",
+            "DROP",
+            "CONSTRAINT",
+            "WEEKLY_CONTACT_EXPECTED_ORIGINAL_TRANCHE_CK"
+          ]
+        },
+        {
+          "start": 3655,
+          "end": 3775,
+          "sql": "alter table public.weekly_message_dispatch_commands drop constraint weekly_message_dispatch_commands_tranche_kind_check;",
+          "tokens": [
+            "ALTER",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_MESSAGE_DISPATCH_COMMANDS",
+            "DROP",
+            "CONSTRAINT",
+            "WEEKLY_MESSAGE_DISPATCH_COMMANDS_TRANCHE_KIND_CHECK"
+          ]
+        },
+        {
+          "start": 3776,
+          "end": 4230,
+          "sql": "alter table public.weekly_message_dispatch_commands add constraint weekly_message_dispatch_commands_tranche_kind_check\n check(tranche_kind in('CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',\n 'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H','MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED',\n 'MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND','COMPLETED_PACK_COPY','MANAGER_AUTOMATIC_FOLLOWUP'));",
+          "tokens": [
+            "ALTER",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_MESSAGE_DISPATCH_COMMANDS",
+            "ADD",
+            "CONSTRAINT",
+            "WEEKLY_MESSAGE_DISPATCH_COMMANDS_TRANCHE_KIND_CHECK",
+            "CHECK",
+            "(",
+            "TRANCHE_KIND",
+            "IN",
+            "(",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ")",
+            ")"
+          ]
+        },
+        {
+          "start": 4232,
+          "end": 5194,
+          "sql": "do $generation_prior$\nbegin\n if not exists(select 1 from pg_class relation join pg_namespace namespace on namespace.oid=relation.relnamespace\n  join pg_attribute attribute on attribute.attrelid=relation.oid and attribute.attname='trigger_kind'\n  join pg_constraint constraint_row on constraint_row.conrelid=relation.oid\n   and constraint_row.conname='weekly_manager_recipient_generations_trigger_kind_check'\n  where namespace.nspname='public' and relation.relname='weekly_manager_recipient_generations' and relation.relkind='r'\n   and relation.relowner=(select oid from pg_roles where rolname=CURRENT_USER) and attribute.atttypid='text'::regtype\n   and attribute.attnotnull and not attribute.attisdropped and constraint_row.contype='c' and constraint_row.convalidated\n   and constraint_row.conkey=array[attribute.attnum]::smallint[]) then\n  raise exception 'CONTACT_SOURCE_COMPOSITION_PRIOR_SCHEMA_MISMATCH' using errcode='55000';end if;\nend;\n$generation_prior$;",
+          "tokens": [
+            "DO",
+            "<BODY>"
+          ]
+        },
+        {
+          "start": 5195,
+          "end": 5438,
+          "sql": "alter table public.weekly_manager_recipient_generations add constraint weekly_contact_expected_original_generation_ck\n check(trigger_kind in('OFFICE_DIRECT','EARLY_ALL','T6_RESPONDED','T12_REMAINDER','NEW_INCIDENT','MANUAL_RESEND')) not valid;",
+          "tokens": [
+            "ALTER",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_MANAGER_RECIPIENT_GENERATIONS",
+            "ADD",
+            "CONSTRAINT",
+            "WEEKLY_CONTACT_EXPECTED_ORIGINAL_GENERATION_CK",
+            "CHECK",
+            "(",
+            "TRIGGER_KIND",
+            "IN",
+            "(",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ")",
+            ")",
+            "NOT",
+            "VALID"
+          ]
+        },
+        {
+          "start": 5439,
+          "end": 6145,
+          "sql": "do $exact_generation_prior$\ndeclare actual text;expected text;\nbegin\n select pg_get_constraintdef(oid,false) into strict actual from pg_constraint\n  where conrelid='public.weekly_manager_recipient_generations'::regclass and conname='weekly_manager_recipient_generations_trigger_kind_check';\n select regexp_replace(pg_get_constraintdef(oid,false),' NOT VALID$','') into strict expected from pg_constraint\n  where conrelid='public.weekly_manager_recipient_generations'::regclass and conname='weekly_contact_expected_original_generation_ck';\n if actual is distinct from expected then raise exception 'CONTACT_SOURCE_COMPOSITION_PRIOR_ENUM_MISMATCH' using errcode='55000';end if;\nend;\n$exact_generation_prior$;",
+          "tokens": [
+            "DO",
+            "<BODY>"
+          ]
+        },
+        {
+          "start": 6146,
+          "end": 6265,
+          "sql": "alter table public.weekly_manager_recipient_generations drop constraint weekly_contact_expected_original_generation_ck;",
+          "tokens": [
+            "ALTER",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_MANAGER_RECIPIENT_GENERATIONS",
+            "DROP",
+            "CONSTRAINT",
+            "WEEKLY_CONTACT_EXPECTED_ORIGINAL_GENERATION_CK"
+          ]
+        },
+        {
+          "start": 6266,
+          "end": 6394,
+          "sql": "alter table public.weekly_manager_recipient_generations drop constraint weekly_manager_recipient_generations_trigger_kind_check;",
+          "tokens": [
+            "ALTER",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_MANAGER_RECIPIENT_GENERATIONS",
+            "DROP",
+            "CONSTRAINT",
+            "WEEKLY_MANAGER_RECIPIENT_GENERATIONS_TRIGGER_KIND_CHECK"
+          ]
+        },
+        {
+          "start": 6395,
+          "end": 6659,
+          "sql": "alter table public.weekly_manager_recipient_generations add constraint weekly_manager_recipient_generations_trigger_kind_check\n check(trigger_kind in('OFFICE_DIRECT','EARLY_ALL','T6_RESPONDED','T12_REMAINDER','NEW_INCIDENT','MANUAL_RESEND','CONTACT_COMPOSITION'));",
+          "tokens": [
+            "ALTER",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_MANAGER_RECIPIENT_GENERATIONS",
+            "ADD",
+            "CONSTRAINT",
+            "WEEKLY_MANAGER_RECIPIENT_GENERATIONS_TRIGGER_KIND_CHECK",
+            "CHECK",
+            "(",
+            "TRIGGER_KIND",
+            "IN",
+            "(",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ")",
+            ")"
+          ]
+        },
+        {
+          "start": 6663,
+          "end": 7164,
+          "sql": "do $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;",
+          "tokens": [
+            "DO",
+            "<BODY>"
+          ]
+        },
+        {
+          "start": 7165,
+          "end": 7473,
+          "sql": "insert into private.cloudtms_migration_ledger(path,content_sha256,first_release_id)\n    values('supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql','e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17','healthroster-contact-six-lock-qualification-NOT-FOR-APPLY');",
+          "tokens": [
+            "INSERT",
+            "INTO",
+            "PRIVATE",
+            ".",
+            "CLOUDTMS_MIGRATION_LEDGER",
+            "(",
+            "PATH",
+            ",",
+            "CONTENT_SHA256",
+            ",",
+            "FIRST_RELEASE_ID",
+            ")",
+            "VALUES",
+            "(",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ")"
+          ]
+        },
+        {
+          "start": 7474,
+          "end": 7481,
+          "sql": "commit;",
+          "tokens": [
+            "COMMIT"
+          ]
+        }
+      ],
+      "firstOriginalStatement": 5,
+      "firstOriginalOffset": 1499,
+      "locks": [
+        [
+          "weekly_manager_recipient_generations",
+          "access exclusive"
+        ],
+        [
+          "weekly_message_dispatch_commands",
+          "access exclusive"
+        ]
+      ]
+    },
+    {
+      "path": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "sourceSha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+      "packet": "begin;\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\n-- One-time CloudTMS migration: complete frozen Contact one-time/03_submission_cohort_identity.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_candidate_cohorts in share mode nowait;\nlock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;\nlock table public.weekly_candidate_outreach_generations in share mode nowait;\nlock table public.weekly_timesheet_submission_request_memberships in share mode nowait;\n\n-- Guarded existing-table identity successor. No history is rewritten.\n-- Source-only: Root must review/export exact contract and qualify PostgreSQL.\ndo $block$\ndeclare relation oid:='public.weekly_timesheet_submission_requests'::regclass;\n cohort_relation oid:='public.weekly_candidate_cohorts'::regclass; prior_constraint name;prior_index oid;\n actual smallint[];expected smallint[];predicate text;\nbegin\n if(select relowner from pg_class where oid=relation)<>(select oid from pg_roles where rolname=current_user)\n  or(select relowner from pg_class where oid=cohort_relation)<>(select oid from pg_roles where rolname=current_user) then\n  raise exception 'CONTACT_SUBMISSION_OWNER_DRIFT' using errcode='55000';end if;\n if not exists(select 1 from pg_attribute where attrelid=relation and attname='candidate_cohort_id'\n   and atttypid='uuid'::regtype and attnotnull and not attisdropped)\n  or not exists(select 1 from pg_attribute where attrelid=relation and attname='request_generation'\n   and atttypid='integer'::regtype and attnotnull and not attisdropped)\n  or not exists(select 1 from pg_attribute where attrelid=cohort_relation and attname='current_submission_generation_id'\n   and atttypid='uuid'::regtype and not attisdropped) then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_SCHEMA_DRIFT' using errcode='55000';end if;\n select array_agg(attribute.attnum order by operand.ordinality) into expected\n  from unnest(array['source_cycle_id','candidate_id','request_generation'])with ordinality operand(name,ordinality)\n  join pg_attribute attribute on attribute.attrelid=relation and attribute.attname=operand.name and not attribute.attisdropped;\n select conname into strict prior_constraint from pg_constraint where conrelid=relation and contype='u' and conkey=expected\n  and convalidated and not condeferrable and not condeferred;\n if exists(select 1 from unnest(array['source_cycle_id','candidate_id','candidate_cohort_id'])operand(name)\n  where not exists(select 1 from pg_attribute attribute where attribute.attrelid=relation and attribute.attname=operand.name\n   and attribute.atttypid='uuid'::regtype and attribute.attnotnull and not attribute.attisdropped))\n  or not exists(select 1 from pg_index index_row where index_row.indexrelid='public.weekly_candidate_outreach_generations_active_uq'::regclass\n   and index_row.indrelid='public.weekly_candidate_outreach_generations'::regclass and index_row.indisunique and index_row.indisvalid\n   and index_row.indisready and index_row.indnkeyatts=2 and index_row.indnatts=2\n   and array(select unnest(index_row.indkey::smallint[]))=(select array_agg(attribute.attnum order by operand.ordinality)\n    from unnest(array['candidate_cohort_id','request_kind'])with ordinality operand(name,ordinality)\n    join pg_attribute attribute on attribute.attrelid=index_row.indrelid and attribute.attname=operand.name and not attribute.attisdropped)\n   and pg_get_expr(index_row.indpred,index_row.indrelid)='(state = ''ACTIVE''::text)') then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_GENERATION_SCHEMA_DRIFT' using errcode='55000';end if;\n prior_index:=to_regclass('public.weekly_timesheet_submission_requests_active_uq');\n select indkey::smallint[],pg_get_expr(indpred,indrelid) into actual,predicate from pg_index\n  where indexrelid=prior_index and indrelid=relation and indisunique and indisvalid and indisready and indnkeyatts=2 and indnatts=2;\n select array_agg(attribute.attnum order by operand.ordinality) into expected\n  from unnest(array['source_cycle_id','candidate_id'])with ordinality operand(name,ordinality)\n  join pg_attribute attribute on attribute.attrelid=relation and attribute.attname=operand.name and not attribute.attisdropped;\n if actual is null or array(select unnest(actual)) is distinct from expected\n  or predicate is distinct from '(state = ANY (ARRAY[''READY''::text, ''ACTIVE''::text, ''OVERDUE''::text, ''PARTLY_SUBMITTED''::text]))' then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_INDEX_DRIFT' using errcode='55000';end if;\n -- This is a one-time complete retained identity proof, never a lifetime\n -- count or repeated historical scan imposed on a business mutation.\n if exists(select 1 from public.weekly_timesheet_submission_requests request\n  left join public.weekly_candidate_cohorts cohort on cohort.id=request.candidate_cohort_id\n  left join public.weekly_candidate_outreach_generations generation\n   on generation.candidate_cohort_id=request.candidate_cohort_id and generation.generation_number=request.request_generation\n    and generation.request_kind='SUBMIT_TIMESHEET'\n  where(cohort.source_cycle_id,cohort.candidate_id) is distinct from(request.source_cycle_id,request.candidate_id)\n   or generation.id is null or(generation.source_cycle_id,generation.candidate_id,generation.membership_hash,\n    generation.started_at_utc,generation.reminder_due_at_utc,generation.deadline_at_utc) is distinct from\n    (request.source_cycle_id,request.candidate_id,request.membership_hash,request.started_at_utc,request.reminder_due_at_utc,request.deadline_at_utc)\n   or(request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED') and\n    (generation.state<>'ACTIVE' or cohort.current_submission_generation_id is distinct from generation.id)))\n  or exists(select 1 from public.weekly_timesheet_submission_requests request\n   join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id\n   join public.weekly_timesheet_submission_requests other on other.source_cycle_id=request.source_cycle_id\n    and other.candidate_id=request.candidate_id and other.id<>request.id and other.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n   join public.weekly_timesheet_submission_request_memberships overlap on overlap.submission_request_id=other.id\n    and(overlap.client_id,overlap.contract_id,overlap.week_ending)=(member.client_id,member.contract_id,member.week_ending)\n   where request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')) then\n  raise exception 'CONTACT_SUBMISSION_RETAINED_IDENTITY_UNRESOLVED' using errcode='55000';end if;\n execute format('alter table public.weekly_timesheet_submission_requests drop constraint %I',prior_constraint);\n alter table public.weekly_timesheet_submission_requests add constraint weekly_timesheet_submission_requests_cohort_generation_uq\n  unique(source_cycle_id,candidate_id,candidate_cohort_id,request_generation);\n drop index public.weekly_timesheet_submission_requests_active_uq;\n create unique index weekly_timesheet_submission_requests_active_uq on public.weekly_timesheet_submission_requests\n  (source_cycle_id,candidate_id,candidate_cohort_id) where state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED');\nend;\n$block$;\n\n\n\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\ninsert into private.cloudtms_migration_ledger(path,content_sha256,first_release_id)\n    values('supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql','4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f','healthroster-contact-six-lock-qualification-NOT-FOR-APPLY');\ncommit;",
+      "packetSha256": "911be8792c6bf627da1195fc4df800a5b168cf1b58fde155f1883cf722dc5e06",
+      "body": "-- One-time CloudTMS migration: complete frozen Contact one-time/03_submission_cohort_identity.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_candidate_cohorts in share mode nowait;\nlock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;\nlock table public.weekly_candidate_outreach_generations in share mode nowait;\nlock table public.weekly_timesheet_submission_request_memberships in share mode nowait;\n\n-- Guarded existing-table identity successor. No history is rewritten.\n-- Source-only: Root must review/export exact contract and qualify PostgreSQL.\ndo $block$\ndeclare relation oid:='public.weekly_timesheet_submission_requests'::regclass;\n cohort_relation oid:='public.weekly_candidate_cohorts'::regclass; prior_constraint name;prior_index oid;\n actual smallint[];expected smallint[];predicate text;\nbegin\n if(select relowner from pg_class where oid=relation)<>(select oid from pg_roles where rolname=current_user)\n  or(select relowner from pg_class where oid=cohort_relation)<>(select oid from pg_roles where rolname=current_user) then\n  raise exception 'CONTACT_SUBMISSION_OWNER_DRIFT' using errcode='55000';end if;\n if not exists(select 1 from pg_attribute where attrelid=relation and attname='candidate_cohort_id'\n   and atttypid='uuid'::regtype and attnotnull and not attisdropped)\n  or not exists(select 1 from pg_attribute where attrelid=relation and attname='request_generation'\n   and atttypid='integer'::regtype and attnotnull and not attisdropped)\n  or not exists(select 1 from pg_attribute where attrelid=cohort_relation and attname='current_submission_generation_id'\n   and atttypid='uuid'::regtype and not attisdropped) then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_SCHEMA_DRIFT' using errcode='55000';end if;\n select array_agg(attribute.attnum order by operand.ordinality) into expected\n  from unnest(array['source_cycle_id','candidate_id','request_generation'])with ordinality operand(name,ordinality)\n  join pg_attribute attribute on attribute.attrelid=relation and attribute.attname=operand.name and not attribute.attisdropped;\n select conname into strict prior_constraint from pg_constraint where conrelid=relation and contype='u' and conkey=expected\n  and convalidated and not condeferrable and not condeferred;\n if exists(select 1 from unnest(array['source_cycle_id','candidate_id','candidate_cohort_id'])operand(name)\n  where not exists(select 1 from pg_attribute attribute where attribute.attrelid=relation and attribute.attname=operand.name\n   and attribute.atttypid='uuid'::regtype and attribute.attnotnull and not attribute.attisdropped))\n  or not exists(select 1 from pg_index index_row where index_row.indexrelid='public.weekly_candidate_outreach_generations_active_uq'::regclass\n   and index_row.indrelid='public.weekly_candidate_outreach_generations'::regclass and index_row.indisunique and index_row.indisvalid\n   and index_row.indisready and index_row.indnkeyatts=2 and index_row.indnatts=2\n   and array(select unnest(index_row.indkey::smallint[]))=(select array_agg(attribute.attnum order by operand.ordinality)\n    from unnest(array['candidate_cohort_id','request_kind'])with ordinality operand(name,ordinality)\n    join pg_attribute attribute on attribute.attrelid=index_row.indrelid and attribute.attname=operand.name and not attribute.attisdropped)\n   and pg_get_expr(index_row.indpred,index_row.indrelid)='(state = ''ACTIVE''::text)') then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_GENERATION_SCHEMA_DRIFT' using errcode='55000';end if;\n prior_index:=to_regclass('public.weekly_timesheet_submission_requests_active_uq');\n select indkey::smallint[],pg_get_expr(indpred,indrelid) into actual,predicate from pg_index\n  where indexrelid=prior_index and indrelid=relation and indisunique and indisvalid and indisready and indnkeyatts=2 and indnatts=2;\n select array_agg(attribute.attnum order by operand.ordinality) into expected\n  from unnest(array['source_cycle_id','candidate_id'])with ordinality operand(name,ordinality)\n  join pg_attribute attribute on attribute.attrelid=relation and attribute.attname=operand.name and not attribute.attisdropped;\n if actual is null or array(select unnest(actual)) is distinct from expected\n  or predicate is distinct from '(state = ANY (ARRAY[''READY''::text, ''ACTIVE''::text, ''OVERDUE''::text, ''PARTLY_SUBMITTED''::text]))' then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_INDEX_DRIFT' using errcode='55000';end if;\n -- This is a one-time complete retained identity proof, never a lifetime\n -- count or repeated historical scan imposed on a business mutation.\n if exists(select 1 from public.weekly_timesheet_submission_requests request\n  left join public.weekly_candidate_cohorts cohort on cohort.id=request.candidate_cohort_id\n  left join public.weekly_candidate_outreach_generations generation\n   on generation.candidate_cohort_id=request.candidate_cohort_id and generation.generation_number=request.request_generation\n    and generation.request_kind='SUBMIT_TIMESHEET'\n  where(cohort.source_cycle_id,cohort.candidate_id) is distinct from(request.source_cycle_id,request.candidate_id)\n   or generation.id is null or(generation.source_cycle_id,generation.candidate_id,generation.membership_hash,\n    generation.started_at_utc,generation.reminder_due_at_utc,generation.deadline_at_utc) is distinct from\n    (request.source_cycle_id,request.candidate_id,request.membership_hash,request.started_at_utc,request.reminder_due_at_utc,request.deadline_at_utc)\n   or(request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED') and\n    (generation.state<>'ACTIVE' or cohort.current_submission_generation_id is distinct from generation.id)))\n  or exists(select 1 from public.weekly_timesheet_submission_requests request\n   join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id\n   join public.weekly_timesheet_submission_requests other on other.source_cycle_id=request.source_cycle_id\n    and other.candidate_id=request.candidate_id and other.id<>request.id and other.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n   join public.weekly_timesheet_submission_request_memberships overlap on overlap.submission_request_id=other.id\n    and(overlap.client_id,overlap.contract_id,overlap.week_ending)=(member.client_id,member.contract_id,member.week_ending)\n   where request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')) then\n  raise exception 'CONTACT_SUBMISSION_RETAINED_IDENTITY_UNRESOLVED' using errcode='55000';end if;\n execute format('alter table public.weekly_timesheet_submission_requests drop constraint %I',prior_constraint);\n alter table public.weekly_timesheet_submission_requests add constraint weekly_timesheet_submission_requests_cohort_generation_uq\n  unique(source_cycle_id,candidate_id,candidate_cohort_id,request_generation);\n drop index public.weekly_timesheet_submission_requests_active_uq;\n create unique index weekly_timesheet_submission_requests_active_uq on public.weekly_timesheet_submission_requests\n  (source_cycle_id,candidate_id,candidate_cohort_id) where state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED');\nend;\n$block$;\n\n\n",
+      "bodySha256": "174d033291c5485dea46557c6d8965092d9c6a8d36f0391eda78426599a13ab0",
+      "statements": [
+        {
+          "start": 0,
+          "end": 6,
+          "sql": "begin;",
+          "tokens": [
+            "BEGIN"
+          ]
+        },
+        {
+          "start": 7,
+          "end": 508,
+          "sql": "do $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;",
+          "tokens": [
+            "DO",
+            "<BODY>"
+          ]
+        },
+        {
+          "start": 1009,
+          "end": 1073,
+          "sql": "lock table public.weekly_candidate_cohorts in share mode nowait;",
+          "tokens": [
+            "LOCK",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_CANDIDATE_COHORTS",
+            "IN",
+            "SHARE",
+            "MODE",
+            "NOWAIT"
+          ]
+        },
+        {
+          "start": 1074,
+          "end": 1161,
+          "sql": "lock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;",
+          "tokens": [
+            "LOCK",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_TIMESHEET_SUBMISSION_REQUESTS",
+            "IN",
+            "ACCESS",
+            "EXCLUSIVE",
+            "MODE",
+            "NOWAIT"
+          ]
+        },
+        {
+          "start": 1162,
+          "end": 1239,
+          "sql": "lock table public.weekly_candidate_outreach_generations in share mode nowait;",
+          "tokens": [
+            "LOCK",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_CANDIDATE_OUTREACH_GENERATIONS",
+            "IN",
+            "SHARE",
+            "MODE",
+            "NOWAIT"
+          ]
+        },
+        {
+          "start": 1240,
+          "end": 1327,
+          "sql": "lock table public.weekly_timesheet_submission_request_memberships in share mode nowait;",
+          "tokens": [
+            "LOCK",
+            "TABLE",
+            "PUBLIC",
+            ".",
+            "WEEKLY_TIMESHEET_SUBMISSION_REQUEST_MEMBERSHIPS",
+            "IN",
+            "SHARE",
+            "MODE",
+            "NOWAIT"
+          ]
+        },
+        {
+          "start": 1479,
+          "end": 8035,
+          "sql": "do $block$\ndeclare relation oid:='public.weekly_timesheet_submission_requests'::regclass;\n cohort_relation oid:='public.weekly_candidate_cohorts'::regclass; prior_constraint name;prior_index oid;\n actual smallint[];expected smallint[];predicate text;\nbegin\n if(select relowner from pg_class where oid=relation)<>(select oid from pg_roles where rolname=current_user)\n  or(select relowner from pg_class where oid=cohort_relation)<>(select oid from pg_roles where rolname=current_user) then\n  raise exception 'CONTACT_SUBMISSION_OWNER_DRIFT' using errcode='55000';end if;\n if not exists(select 1 from pg_attribute where attrelid=relation and attname='candidate_cohort_id'\n   and atttypid='uuid'::regtype and attnotnull and not attisdropped)\n  or not exists(select 1 from pg_attribute where attrelid=relation and attname='request_generation'\n   and atttypid='integer'::regtype and attnotnull and not attisdropped)\n  or not exists(select 1 from pg_attribute where attrelid=cohort_relation and attname='current_submission_generation_id'\n   and atttypid='uuid'::regtype and not attisdropped) then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_SCHEMA_DRIFT' using errcode='55000';end if;\n select array_agg(attribute.attnum order by operand.ordinality) into expected\n  from unnest(array['source_cycle_id','candidate_id','request_generation'])with ordinality operand(name,ordinality)\n  join pg_attribute attribute on attribute.attrelid=relation and attribute.attname=operand.name and not attribute.attisdropped;\n select conname into strict prior_constraint from pg_constraint where conrelid=relation and contype='u' and conkey=expected\n  and convalidated and not condeferrable and not condeferred;\n if exists(select 1 from unnest(array['source_cycle_id','candidate_id','candidate_cohort_id'])operand(name)\n  where not exists(select 1 from pg_attribute attribute where attribute.attrelid=relation and attribute.attname=operand.name\n   and attribute.atttypid='uuid'::regtype and attribute.attnotnull and not attribute.attisdropped))\n  or not exists(select 1 from pg_index index_row where index_row.indexrelid='public.weekly_candidate_outreach_generations_active_uq'::regclass\n   and index_row.indrelid='public.weekly_candidate_outreach_generations'::regclass and index_row.indisunique and index_row.indisvalid\n   and index_row.indisready and index_row.indnkeyatts=2 and index_row.indnatts=2\n   and array(select unnest(index_row.indkey::smallint[]))=(select array_agg(attribute.attnum order by operand.ordinality)\n    from unnest(array['candidate_cohort_id','request_kind'])with ordinality operand(name,ordinality)\n    join pg_attribute attribute on attribute.attrelid=index_row.indrelid and attribute.attname=operand.name and not attribute.attisdropped)\n   and pg_get_expr(index_row.indpred,index_row.indrelid)='(state = ''ACTIVE''::text)') then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_GENERATION_SCHEMA_DRIFT' using errcode='55000';end if;\n prior_index:=to_regclass('public.weekly_timesheet_submission_requests_active_uq');\n select indkey::smallint[],pg_get_expr(indpred,indrelid) into actual,predicate from pg_index\n  where indexrelid=prior_index and indrelid=relation and indisunique and indisvalid and indisready and indnkeyatts=2 and indnatts=2;\n select array_agg(attribute.attnum order by operand.ordinality) into expected\n  from unnest(array['source_cycle_id','candidate_id'])with ordinality operand(name,ordinality)\n  join pg_attribute attribute on attribute.attrelid=relation and attribute.attname=operand.name and not attribute.attisdropped;\n if actual is null or array(select unnest(actual)) is distinct from expected\n  or predicate is distinct from '(state = ANY (ARRAY[''READY''::text, ''ACTIVE''::text, ''OVERDUE''::text, ''PARTLY_SUBMITTED''::text]))' then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_INDEX_DRIFT' using errcode='55000';end if;\n -- This is a one-time complete retained identity proof, never a lifetime\n -- count or repeated historical scan imposed on a business mutation.\n if exists(select 1 from public.weekly_timesheet_submission_requests request\n  left join public.weekly_candidate_cohorts cohort on cohort.id=request.candidate_cohort_id\n  left join public.weekly_candidate_outreach_generations generation\n   on generation.candidate_cohort_id=request.candidate_cohort_id and generation.generation_number=request.request_generation\n    and generation.request_kind='SUBMIT_TIMESHEET'\n  where(cohort.source_cycle_id,cohort.candidate_id) is distinct from(request.source_cycle_id,request.candidate_id)\n   or generation.id is null or(generation.source_cycle_id,generation.candidate_id,generation.membership_hash,\n    generation.started_at_utc,generation.reminder_due_at_utc,generation.deadline_at_utc) is distinct from\n    (request.source_cycle_id,request.candidate_id,request.membership_hash,request.started_at_utc,request.reminder_due_at_utc,request.deadline_at_utc)\n   or(request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED') and\n    (generation.state<>'ACTIVE' or cohort.current_submission_generation_id is distinct from generation.id)))\n  or exists(select 1 from public.weekly_timesheet_submission_requests request\n   join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id\n   join public.weekly_timesheet_submission_requests other on other.source_cycle_id=request.source_cycle_id\n    and other.candidate_id=request.candidate_id and other.id<>request.id and other.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n   join public.weekly_timesheet_submission_request_memberships overlap on overlap.submission_request_id=other.id\n    and(overlap.client_id,overlap.contract_id,overlap.week_ending)=(member.client_id,member.contract_id,member.week_ending)\n   where request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')) then\n  raise exception 'CONTACT_SUBMISSION_RETAINED_IDENTITY_UNRESOLVED' using errcode='55000';end if;\n execute format('alter table public.weekly_timesheet_submission_requests drop constraint %I',prior_constraint);\n alter table public.weekly_timesheet_submission_requests add constraint weekly_timesheet_submission_requests_cohort_generation_uq\n  unique(source_cycle_id,candidate_id,candidate_cohort_id,request_generation);\n drop index public.weekly_timesheet_submission_requests_active_uq;\n create unique index weekly_timesheet_submission_requests_active_uq on public.weekly_timesheet_submission_requests\n  (source_cycle_id,candidate_id,candidate_cohort_id) where state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED');\nend;\n$block$;",
+          "tokens": [
+            "DO",
+            "<BODY>"
+          ]
+        },
+        {
+          "start": 8039,
+          "end": 8540,
+          "sql": "do $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;",
+          "tokens": [
+            "DO",
+            "<BODY>"
+          ]
+        },
+        {
+          "start": 8541,
+          "end": 8849,
+          "sql": "insert into private.cloudtms_migration_ledger(path,content_sha256,first_release_id)\n    values('supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql','4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f','healthroster-contact-six-lock-qualification-NOT-FOR-APPLY');",
+          "tokens": [
+            "INSERT",
+            "INTO",
+            "PRIVATE",
+            ".",
+            "CLOUDTMS_MIGRATION_LEDGER",
+            "(",
+            "PATH",
+            ",",
+            "CONTENT_SHA256",
+            ",",
+            "FIRST_RELEASE_ID",
+            ")",
+            "VALUES",
+            "(",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ",",
+            "<QUOTED>",
+            ")"
+          ]
+        },
+        {
+          "start": 8850,
+          "end": 8857,
+          "sql": "commit;",
+          "tokens": [
+            "COMMIT"
+          ]
+        }
+      ],
+      "firstOriginalStatement": 7,
+      "firstOriginalOffset": 1479,
+      "locks": [
+        [
+          "weekly_candidate_cohorts",
+          "share"
+        ],
+        [
+          "weekly_timesheet_submission_requests",
+          "access exclusive"
+        ],
+        [
+          "weekly_candidate_outreach_generations",
+          "share"
+        ],
+        [
+          "weekly_timesheet_submission_request_memberships",
+          "share"
+        ]
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "contact20-lock1",
+      "migrationPath": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "migrationSha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17",
+      "canonicalPacketSha256": "99b82a273bff7112038928c4b48d224f457d60bcbbebfd93cf8654d1b64f0dee",
+      "targetTable": "public.weekly_manager_recipient_generations",
+      "targetMode": "access exclusive",
+      "holderMode": "access share",
+      "holderReadOnly": true,
+      "holderLockSql": "lock table public.weekly_manager_recipient_generations in access share mode nowait;",
+      "canonicalTargetOrdinal": 3,
+      "targetOffset": 1009,
+      "targetEnd": 1096,
+      "commands": [
+        "begin;",
+        "do $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;",
+        "lock table public.weekly_manager_recipient_generations in access exclusive mode nowait;"
+      ],
+      "prefix": "begin;\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\n-- One-time CloudTMS migration: complete frozen Contact one-time/02_automatic_followup_tranche.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_manager_recipient_generations in access exclusive mode nowait;",
+      "prefixSha256": "3347f529e99eb2013b96fc2719cd7a5196184e810f9c95a69a3cf5f185ab9cd9",
+      "preceding": [],
+      "expectedSqlState": "55P03",
+      "firstOriginalStatement": 5,
+      "assertionsBodyLedgerNeverTransmitted": true,
+      "expectedTargetConflict": "IMMEDIATE_NOWAIT_NOT_LOCK_TIMEOUT"
+    },
+    {
+      "id": "contact20-lock2",
+      "migrationPath": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "migrationSha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17",
+      "canonicalPacketSha256": "99b82a273bff7112038928c4b48d224f457d60bcbbebfd93cf8654d1b64f0dee",
+      "targetTable": "public.weekly_message_dispatch_commands",
+      "targetMode": "access exclusive",
+      "holderMode": "access share",
+      "holderReadOnly": true,
+      "holderLockSql": "lock table public.weekly_message_dispatch_commands in access share mode nowait;",
+      "canonicalTargetOrdinal": 4,
+      "targetOffset": 1097,
+      "targetEnd": 1180,
+      "commands": [
+        "begin;",
+        "do $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;",
+        "lock table public.weekly_manager_recipient_generations in access exclusive mode nowait;",
+        "lock table public.weekly_message_dispatch_commands in access exclusive mode nowait;"
+      ],
+      "prefix": "begin;\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\n-- One-time CloudTMS migration: complete frozen Contact one-time/02_automatic_followup_tranche.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_manager_recipient_generations in access exclusive mode nowait;\nlock table public.weekly_message_dispatch_commands in access exclusive mode nowait;",
+      "prefixSha256": "3eae0d1bc08dd4b39dad7a273120f42f0e1e122574af5bd77706c1e8a168cf8c",
+      "preceding": [
+        {
+          "table": "public.weekly_manager_recipient_generations",
+          "mode": "access exclusive"
+        }
+      ],
+      "expectedSqlState": "55P03",
+      "firstOriginalStatement": 5,
+      "assertionsBodyLedgerNeverTransmitted": true,
+      "expectedTargetConflict": "IMMEDIATE_NOWAIT_NOT_LOCK_TIMEOUT"
+    },
+    {
+      "id": "contact30-lock1",
+      "migrationPath": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "migrationSha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+      "canonicalPacketSha256": "911be8792c6bf627da1195fc4df800a5b168cf1b58fde155f1883cf722dc5e06",
+      "targetTable": "public.weekly_candidate_cohorts",
+      "targetMode": "share",
+      "holderMode": "row exclusive",
+      "holderReadOnly": false,
+      "holderLockSql": "lock table public.weekly_candidate_cohorts in row exclusive mode nowait;",
+      "canonicalTargetOrdinal": 3,
+      "targetOffset": 1009,
+      "targetEnd": 1073,
+      "commands": [
+        "begin;",
+        "do $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;",
+        "lock table public.weekly_candidate_cohorts in share mode nowait;"
+      ],
+      "prefix": "begin;\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\n-- One-time CloudTMS migration: complete frozen Contact one-time/03_submission_cohort_identity.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_candidate_cohorts in share mode nowait;",
+      "prefixSha256": "e5457b028e60e948c5224537e3fdcf0badfae55c588dd7a8851e9c3b84438eab",
+      "preceding": [],
+      "expectedSqlState": "55P03",
+      "firstOriginalStatement": 7,
+      "assertionsBodyLedgerNeverTransmitted": true,
+      "expectedTargetConflict": "IMMEDIATE_NOWAIT_NOT_LOCK_TIMEOUT"
+    },
+    {
+      "id": "contact30-lock2",
+      "migrationPath": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "migrationSha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+      "canonicalPacketSha256": "911be8792c6bf627da1195fc4df800a5b168cf1b58fde155f1883cf722dc5e06",
+      "targetTable": "public.weekly_timesheet_submission_requests",
+      "targetMode": "access exclusive",
+      "holderMode": "access share",
+      "holderReadOnly": true,
+      "holderLockSql": "lock table public.weekly_timesheet_submission_requests in access share mode nowait;",
+      "canonicalTargetOrdinal": 4,
+      "targetOffset": 1074,
+      "targetEnd": 1161,
+      "commands": [
+        "begin;",
+        "do $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;",
+        "lock table public.weekly_candidate_cohorts in share mode nowait;",
+        "lock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;"
+      ],
+      "prefix": "begin;\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\n-- One-time CloudTMS migration: complete frozen Contact one-time/03_submission_cohort_identity.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_candidate_cohorts in share mode nowait;\nlock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;",
+      "prefixSha256": "aa69152fe77f39b0a4f687e7013b1f5a904fe8e3e2546648028c8a0e046e8026",
+      "preceding": [
+        {
+          "table": "public.weekly_candidate_cohorts",
+          "mode": "share"
+        }
+      ],
+      "expectedSqlState": "55P03",
+      "firstOriginalStatement": 7,
+      "assertionsBodyLedgerNeverTransmitted": true,
+      "expectedTargetConflict": "IMMEDIATE_NOWAIT_NOT_LOCK_TIMEOUT"
+    },
+    {
+      "id": "contact30-lock3",
+      "migrationPath": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "migrationSha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+      "canonicalPacketSha256": "911be8792c6bf627da1195fc4df800a5b168cf1b58fde155f1883cf722dc5e06",
+      "targetTable": "public.weekly_candidate_outreach_generations",
+      "targetMode": "share",
+      "holderMode": "row exclusive",
+      "holderReadOnly": false,
+      "holderLockSql": "lock table public.weekly_candidate_outreach_generations in row exclusive mode nowait;",
+      "canonicalTargetOrdinal": 5,
+      "targetOffset": 1162,
+      "targetEnd": 1239,
+      "commands": [
+        "begin;",
+        "do $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;",
+        "lock table public.weekly_candidate_cohorts in share mode nowait;",
+        "lock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;",
+        "lock table public.weekly_candidate_outreach_generations in share mode nowait;"
+      ],
+      "prefix": "begin;\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\n-- One-time CloudTMS migration: complete frozen Contact one-time/03_submission_cohort_identity.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_candidate_cohorts in share mode nowait;\nlock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;\nlock table public.weekly_candidate_outreach_generations in share mode nowait;",
+      "prefixSha256": "47b703c86cabc4a7d735c6e4e9bd0cef7fc8c4002eb89b6087d4a9987a93859c",
+      "preceding": [
+        {
+          "table": "public.weekly_candidate_cohorts",
+          "mode": "share"
+        },
+        {
+          "table": "public.weekly_timesheet_submission_requests",
+          "mode": "access exclusive"
+        }
+      ],
+      "expectedSqlState": "55P03",
+      "firstOriginalStatement": 7,
+      "assertionsBodyLedgerNeverTransmitted": true,
+      "expectedTargetConflict": "IMMEDIATE_NOWAIT_NOT_LOCK_TIMEOUT"
+    },
+    {
+      "id": "contact30-lock4",
+      "migrationPath": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "migrationSha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+      "canonicalPacketSha256": "911be8792c6bf627da1195fc4df800a5b168cf1b58fde155f1883cf722dc5e06",
+      "targetTable": "public.weekly_timesheet_submission_request_memberships",
+      "targetMode": "share",
+      "holderMode": "row exclusive",
+      "holderReadOnly": false,
+      "holderLockSql": "lock table public.weekly_timesheet_submission_request_memberships in row exclusive mode nowait;",
+      "canonicalTargetOrdinal": 6,
+      "targetOffset": 1240,
+      "targetEnd": 1327,
+      "commands": [
+        "begin;",
+        "do $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;",
+        "lock table public.weekly_candidate_cohorts in share mode nowait;",
+        "lock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;",
+        "lock table public.weekly_candidate_outreach_generations in share mode nowait;",
+        "lock table public.weekly_timesheet_submission_request_memberships in share mode nowait;"
+      ],
+      "prefix": "begin;\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\n-- One-time CloudTMS migration: complete frozen Contact one-time/03_submission_cohort_identity.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_candidate_cohorts in share mode nowait;\nlock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;\nlock table public.weekly_candidate_outreach_generations in share mode nowait;\nlock table public.weekly_timesheet_submission_request_memberships in share mode nowait;",
+      "prefixSha256": "d1058bd1df659f0aba2c6b87b5cb07871411fc6eb8b5a313ce885559423155d9",
+      "preceding": [
+        {
+          "table": "public.weekly_candidate_cohorts",
+          "mode": "share"
+        },
+        {
+          "table": "public.weekly_timesheet_submission_requests",
+          "mode": "access exclusive"
+        },
+        {
+          "table": "public.weekly_candidate_outreach_generations",
+          "mode": "share"
+        }
+      ],
+      "expectedSqlState": "55P03",
+      "firstOriginalStatement": 7,
+      "assertionsBodyLedgerNeverTransmitted": true,
+      "expectedTargetConflict": "IMMEDIATE_NOWAIT_NOT_LOCK_TIMEOUT"
+    }
+  ],
+  "positive": {
+    "sql": "begin isolation level read committed;\ndo $managed_writer$ begin\n  if not exists(select 1 from pg_catalog.pg_locks where locktype='advisory'\n    and pid=pg_catalog.pg_backend_pid() and granted and mode='ExclusiveLock' and objsubid=1\n    and classid=((pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)>>32)&4294967295)::oid\n    and objid=(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)&4294967295)::oid)\n  then raise exception 'CLOUDTMS_MANAGED_WRITER_GUARD_LOST'; end if;\nend $managed_writer$;\n-- One-time CloudTMS migration: complete frozen Contact one-time/02_automatic_followup_tranche.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_manager_recipient_generations in access exclusive mode nowait;\nlock table public.weekly_message_dispatch_commands in access exclusive mode nowait;\n\n-- Root reviewed additive tranche; all eleven original values retain meaning.\n-- A temporary NOT VALID check lets PostgreSQL compare its own canonical parsed\n-- definition against the actual prior constraint. It is removed in this same\n-- atomic migration; an unexpected owner/schema/tree aborts the whole migration.\ndo $prior$\nbegin\n if not exists(select 1 from pg_class relation join pg_namespace namespace on namespace.oid=relation.relnamespace\n  join pg_attribute attribute on attribute.attrelid=relation.oid and attribute.attname='tranche_kind'\n  join pg_constraint constraint_row on constraint_row.conrelid=relation.oid\n   and constraint_row.conname='weekly_message_dispatch_commands_tranche_kind_check'\n  where namespace.nspname='public' and relation.relname='weekly_message_dispatch_commands' and relation.relkind='r'\n   and relation.relowner=(select oid from pg_roles where rolname=CURRENT_USER) and attribute.atttypid='text'::regtype\n   and attribute.attnotnull and not attribute.attisdropped and constraint_row.contype='c' and constraint_row.convalidated\n   and constraint_row.conkey=array[attribute.attnum]::smallint[]) then\n  raise exception 'CONTACT_SOURCE_AUTOMATIC_TRANCHE_PRIOR_SCHEMA_MISMATCH' using errcode='55000';end if;\nend;\n$prior$;\nalter table public.weekly_message_dispatch_commands add constraint weekly_contact_expected_original_tranche_ck\n check(tranche_kind in('CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',\n 'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H','MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED',\n 'MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND','COMPLETED_PACK_COPY')) not valid;\ndo $exact_prior$\ndeclare actual text;expected text;\nbegin\n select pg_get_constraintdef(oid,false) into strict actual from pg_constraint\n  where conrelid='public.weekly_message_dispatch_commands'::regclass and conname='weekly_message_dispatch_commands_tranche_kind_check';\n select regexp_replace(pg_get_constraintdef(oid,false),' NOT VALID$','') into strict expected from pg_constraint\n  where conrelid='public.weekly_message_dispatch_commands'::regclass and conname='weekly_contact_expected_original_tranche_ck';\n if actual is distinct from expected then raise exception 'CONTACT_SOURCE_AUTOMATIC_TRANCHE_PRIOR_ENUM_MISMATCH' using errcode='55000';end if;\nend;\n$exact_prior$;\nalter table public.weekly_message_dispatch_commands drop constraint weekly_contact_expected_original_tranche_ck;\nalter table public.weekly_message_dispatch_commands drop constraint weekly_message_dispatch_commands_tranche_kind_check;\nalter table public.weekly_message_dispatch_commands add constraint weekly_message_dispatch_commands_tranche_kind_check\n check(tranche_kind in('CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',\n 'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H','MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED',\n 'MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND','COMPLETED_PACK_COPY','MANAGER_AUTOMATIC_FOLLOWUP'));\n\ndo $generation_prior$\nbegin\n if not exists(select 1 from pg_class relation join pg_namespace namespace on namespace.oid=relation.relnamespace\n  join pg_attribute attribute on attribute.attrelid=relation.oid and attribute.attname='trigger_kind'\n  join pg_constraint constraint_row on constraint_row.conrelid=relation.oid\n   and constraint_row.conname='weekly_manager_recipient_generations_trigger_kind_check'\n  where namespace.nspname='public' and relation.relname='weekly_manager_recipient_generations' and relation.relkind='r'\n   and relation.relowner=(select oid from pg_roles where rolname=CURRENT_USER) and attribute.atttypid='text'::regtype\n   and attribute.attnotnull and not attribute.attisdropped and constraint_row.contype='c' and constraint_row.convalidated\n   and constraint_row.conkey=array[attribute.attnum]::smallint[]) then\n  raise exception 'CONTACT_SOURCE_COMPOSITION_PRIOR_SCHEMA_MISMATCH' using errcode='55000';end if;\nend;\n$generation_prior$;\nalter table public.weekly_manager_recipient_generations add constraint weekly_contact_expected_original_generation_ck\n check(trigger_kind in('OFFICE_DIRECT','EARLY_ALL','T6_RESPONDED','T12_REMAINDER','NEW_INCIDENT','MANUAL_RESEND')) not valid;\ndo $exact_generation_prior$\ndeclare actual text;expected text;\nbegin\n select pg_get_constraintdef(oid,false) into strict actual from pg_constraint\n  where conrelid='public.weekly_manager_recipient_generations'::regclass and conname='weekly_manager_recipient_generations_trigger_kind_check';\n select regexp_replace(pg_get_constraintdef(oid,false),' NOT VALID$','') into strict expected from pg_constraint\n  where conrelid='public.weekly_manager_recipient_generations'::regclass and conname='weekly_contact_expected_original_generation_ck';\n if actual is distinct from expected then raise exception 'CONTACT_SOURCE_COMPOSITION_PRIOR_ENUM_MISMATCH' using errcode='55000';end if;\nend;\n$exact_generation_prior$;\nalter table public.weekly_manager_recipient_generations drop constraint weekly_contact_expected_original_generation_ck;\nalter table public.weekly_manager_recipient_generations drop constraint weekly_manager_recipient_generations_trigger_kind_check;\nalter table public.weekly_manager_recipient_generations add constraint weekly_manager_recipient_generations_trigger_kind_check\n check(trigger_kind in('OFFICE_DIRECT','EARLY_ALL','T6_RESPONDED','T12_REMAINDER','NEW_INCIDENT','MANUAL_RESEND','CONTACT_COMPOSITION'));\n\n\n\n-- One-time CloudTMS migration: complete frozen Contact one-time/03_submission_cohort_identity.sqlinc.\n-- Source-only proposal; exact current prerequisites/native contract qualification required.\n\n\n\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_candidate_cohorts in share mode nowait;\nlock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;\nlock table public.weekly_candidate_outreach_generations in share mode nowait;\nlock table public.weekly_timesheet_submission_request_memberships in share mode nowait;\n\n-- Guarded existing-table identity successor. No history is rewritten.\n-- Source-only: Root must review/export exact contract and qualify PostgreSQL.\ndo $block$\ndeclare relation oid:='public.weekly_timesheet_submission_requests'::regclass;\n cohort_relation oid:='public.weekly_candidate_cohorts'::regclass; prior_constraint name;prior_index oid;\n actual smallint[];expected smallint[];predicate text;\nbegin\n if(select relowner from pg_class where oid=relation)<>(select oid from pg_roles where rolname=current_user)\n  or(select relowner from pg_class where oid=cohort_relation)<>(select oid from pg_roles where rolname=current_user) then\n  raise exception 'CONTACT_SUBMISSION_OWNER_DRIFT' using errcode='55000';end if;\n if not exists(select 1 from pg_attribute where attrelid=relation and attname='candidate_cohort_id'\n   and atttypid='uuid'::regtype and attnotnull and not attisdropped)\n  or not exists(select 1 from pg_attribute where attrelid=relation and attname='request_generation'\n   and atttypid='integer'::regtype and attnotnull and not attisdropped)\n  or not exists(select 1 from pg_attribute where attrelid=cohort_relation and attname='current_submission_generation_id'\n   and atttypid='uuid'::regtype and not attisdropped) then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_SCHEMA_DRIFT' using errcode='55000';end if;\n select array_agg(attribute.attnum order by operand.ordinality) into expected\n  from unnest(array['source_cycle_id','candidate_id','request_generation'])with ordinality operand(name,ordinality)\n  join pg_attribute attribute on attribute.attrelid=relation and attribute.attname=operand.name and not attribute.attisdropped;\n select conname into strict prior_constraint from pg_constraint where conrelid=relation and contype='u' and conkey=expected\n  and convalidated and not condeferrable and not condeferred;\n if exists(select 1 from unnest(array['source_cycle_id','candidate_id','candidate_cohort_id'])operand(name)\n  where not exists(select 1 from pg_attribute attribute where attribute.attrelid=relation and attribute.attname=operand.name\n   and attribute.atttypid='uuid'::regtype and attribute.attnotnull and not attribute.attisdropped))\n  or not exists(select 1 from pg_index index_row where index_row.indexrelid='public.weekly_candidate_outreach_generations_active_uq'::regclass\n   and index_row.indrelid='public.weekly_candidate_outreach_generations'::regclass and index_row.indisunique and index_row.indisvalid\n   and index_row.indisready and index_row.indnkeyatts=2 and index_row.indnatts=2\n   and array(select unnest(index_row.indkey::smallint[]))=(select array_agg(attribute.attnum order by operand.ordinality)\n    from unnest(array['candidate_cohort_id','request_kind'])with ordinality operand(name,ordinality)\n    join pg_attribute attribute on attribute.attrelid=index_row.indrelid and attribute.attname=operand.name and not attribute.attisdropped)\n   and pg_get_expr(index_row.indpred,index_row.indrelid)='(state = ''ACTIVE''::text)') then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_GENERATION_SCHEMA_DRIFT' using errcode='55000';end if;\n prior_index:=to_regclass('public.weekly_timesheet_submission_requests_active_uq');\n select indkey::smallint[],pg_get_expr(indpred,indrelid) into actual,predicate from pg_index\n  where indexrelid=prior_index and indrelid=relation and indisunique and indisvalid and indisready and indnkeyatts=2 and indnatts=2;\n select array_agg(attribute.attnum order by operand.ordinality) into expected\n  from unnest(array['source_cycle_id','candidate_id'])with ordinality operand(name,ordinality)\n  join pg_attribute attribute on attribute.attrelid=relation and attribute.attname=operand.name and not attribute.attisdropped;\n if actual is null or array(select unnest(actual)) is distinct from expected\n  or predicate is distinct from '(state = ANY (ARRAY[''READY''::text, ''ACTIVE''::text, ''OVERDUE''::text, ''PARTLY_SUBMITTED''::text]))' then\n  raise exception 'CONTACT_SUBMISSION_NATIVE_INDEX_DRIFT' using errcode='55000';end if;\n -- This is a one-time complete retained identity proof, never a lifetime\n -- count or repeated historical scan imposed on a business mutation.\n if exists(select 1 from public.weekly_timesheet_submission_requests request\n  left join public.weekly_candidate_cohorts cohort on cohort.id=request.candidate_cohort_id\n  left join public.weekly_candidate_outreach_generations generation\n   on generation.candidate_cohort_id=request.candidate_cohort_id and generation.generation_number=request.request_generation\n    and generation.request_kind='SUBMIT_TIMESHEET'\n  where(cohort.source_cycle_id,cohort.candidate_id) is distinct from(request.source_cycle_id,request.candidate_id)\n   or generation.id is null or(generation.source_cycle_id,generation.candidate_id,generation.membership_hash,\n    generation.started_at_utc,generation.reminder_due_at_utc,generation.deadline_at_utc) is distinct from\n    (request.source_cycle_id,request.candidate_id,request.membership_hash,request.started_at_utc,request.reminder_due_at_utc,request.deadline_at_utc)\n   or(request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED') and\n    (generation.state<>'ACTIVE' or cohort.current_submission_generation_id is distinct from generation.id)))\n  or exists(select 1 from public.weekly_timesheet_submission_requests request\n   join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id\n   join public.weekly_timesheet_submission_requests other on other.source_cycle_id=request.source_cycle_id\n    and other.candidate_id=request.candidate_id and other.id<>request.id and other.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')\n   join public.weekly_timesheet_submission_request_memberships overlap on overlap.submission_request_id=other.id\n    and(overlap.client_id,overlap.contract_id,overlap.week_ending)=(member.client_id,member.contract_id,member.week_ending)\n   where request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')) then\n  raise exception 'CONTACT_SUBMISSION_RETAINED_IDENTITY_UNRESOLVED' using errcode='55000';end if;\n execute format('alter table public.weekly_timesheet_submission_requests drop constraint %I',prior_constraint);\n alter table public.weekly_timesheet_submission_requests add constraint weekly_timesheet_submission_requests_cohort_generation_uq\n  unique(source_cycle_id,candidate_id,candidate_cohort_id,request_generation);\n drop index public.weekly_timesheet_submission_requests_active_uq;\n create unique index weekly_timesheet_submission_requests_active_uq on public.weekly_timesheet_submission_requests\n  (source_cycle_id,candidate_id,candidate_cohort_id) where state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED');\nend;\n$block$;\n\n\n\nrollback;",
+    "sha256": "aa8c8c90901c55a0dd5f15c2a78bc0cf9950a03d7eb654a64d6b6f5204538f01",
+    "scope": "EXACT_TWO_COMPLETE_CANONICAL_BODIES_READ_COMMITTED_ROLLBACK_NO_LEDGER_OR_RELEASE_ROWS",
+    "writerGate": "Root must own the real managed-writer advisory lock on this same execution session before sending this SQL.",
+    "native": "NOT_RUN",
+    "restorationRequired": true
+  },
+  "limits": {
+    "native": "NOT_RUN",
+    "maximumConcurrentDatabaseSessions": 2,
+    "fixtures": 0,
+    "markerDdl": 0,
+    "originalBodyExecuted": false,
+    "databaseCallsDuringPreparation": 0,
+    "outerRepeatableReadSnapshotCurrentness": "NOT_QUALIFIED_BY_LOCK_CONTENTION",
+    "fullNativeMigrationPrerequisites": "See POSITIVE_PREREQUISITES.md; no prerequisite is synthesized."
+  }
+}

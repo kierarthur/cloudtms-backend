@@ -1,0 +1,39 @@
+{
+  "scope": "OFFLINE_POSTGRES17_GRAMMAR_ONLY",
+  "cases": [
+    {
+      "case": "contact20-lock1",
+      "prefixStatements": 3,
+      "holderStatements": 2
+    },
+    {
+      "case": "contact20-lock2",
+      "prefixStatements": 4,
+      "holderStatements": 2
+    },
+    {
+      "case": "contact30-lock1",
+      "prefixStatements": 3,
+      "holderStatements": 2
+    },
+    {
+      "case": "contact30-lock2",
+      "prefixStatements": 4,
+      "holderStatements": 2
+    },
+    {
+      "case": "contact30-lock3",
+      "prefixStatements": 5,
+      "holderStatements": 2
+    },
+    {
+      "case": "contact30-lock4",
+      "prefixStatements": 6,
+      "holderStatements": 2
+    }
+  ],
+  "completeCanonicalPackets": 2,
+  "positivePairStatements": 22,
+  "positiveSqlSha256": "aa8c8c90901c55a0dd5f15c2a78bc0cf9950a03d7eb654a64d6b6f5204538f01",
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,62 @@
+{
+  "version": "HEALTH_MONEY_PREDECESSOR_CONTENTION_NATIVE_RECEIPT_V1",
+  "status": "PASS_EXPECTED_BEFORE_ASSERTION_LOCK_REFUSAL_AND_RESTORATION",
+  "candidate": "efd18231c06df14ed91c7f6b137ddb6fec7e2df2",
+  "account": "kier@arthur-rai.co.uk",
+  "database": "cloudtms_test_clone",
+  "sqlSha256": "05b9d695b7ed1e4223b13ba701a865b8e2596724c708bf4ca771f6ff74cef3b0",
+  "sqlBytes": 87327,
+  "plannedStatements": 13,
+  "accepted": false,
+  "expectedAccepted": false,
+  "expectedFailedStatement": 12,
+  "actualFailedStatement": 12,
+  "errorCode": "55P03",
+  "assertionAndBodyNotReached": true,
+  "sourceProgramSha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+  "rolledBack": true,
+  "connectedFresh": true,
+  "restorationChecks": {
+    "ledgerFingerprint": true,
+    "catalogueFingerprint": true,
+    "businessCountsFingerprint": true,
+    "businessRowsFingerprint": true,
+    "relationCensus": true
+  },
+  "markerAbsent": true,
+  "businessRowsChanged": 0,
+  "legacy": "LEGACY:1",
+  "businessFixtures": 0,
+  "backgroundJobsPaused": false,
+  "holder": {
+    "backendPid": 183170,
+    "readOnlyTransaction": true,
+    "threeExistingTables": "ACCESS SHARE",
+    "sameOwnedTurnSession": true,
+    "originalStatementTimeoutSeconds": 5,
+    "lockTimeoutSeconds": 2
+  },
+  "rollbackToolLockTimeoutMs": 2000,
+  "turn": {
+    "chat": "HealthRoster",
+    "task": "HEALTH_MONEY_PREDECESSOR_CONTENTION_EFD18231",
+    "status": "RELEASED",
+    "takenAt": "2026-10-16T10:21:02.329Z",
+    "releasedAt": "2026-10-16T10:21:40.214Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": true,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "nativeRawResultSha256": "4e66156e393cba28544c238f3dacf26f6b19a30cd8abf78819b6cd04b169dc84",
+  "rawResultCommitted": false,
+  "harness": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\money-predecessor-contention-20261016",
+  "limits": [
+    "Two owned sessions only; no other session was canceled",
+    "No1430body/migration unit ran in this contention trial",
+    "No fullcurrentclosure/lifecycle/API/security/fullrehearsal/Install2 qualification"
+  ]
+}
