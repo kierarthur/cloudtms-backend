@@ -1,0 +1,49 @@
+create or replace function private.timesheet_contract_native_allocation_publish_v1(
+ p_pending jsonb,p_new_timesheet_id uuid,p_week_id uuid,p_created_now boolean,p_actor uuid,p_now timestamptz)
+returns uuid language plpgsql volatile security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare p private.timesheet_contract_current_placements%rowtype; next_p private.timesheet_contract_current_placements%rowtype;
+ original_alias private.timesheet_contract_family_aliases%rowtype; new_alias private.timesheet_contract_family_aliases%rowtype;
+ t public.timesheets%rowtype; cw public.contract_weeks%rowtype; withdrawn public.audit_events%rowtype; receipt_id uuid;
+begin
+ select v.* into strict p from private.timesheet_contract_current_placements v
+  where v.family_root_id=(p_pending#>>'{placement,family_root_id}')::uuid and v.member_key=p_pending#>>'{placement,member_key}' for update;
+ select v.* into strict cw from public.contract_weeks v where v.id=p_week_id for update;
+ select v.* into strict t from public.timesheets v where v.timesheet_id=p_new_timesheet_id for update;
+ select v.* into strict withdrawn from public.audit_events v where v.id=(p_pending->>'withdrawal_audit_id')::uuid;
+ select v.* into strict original_alias from private.timesheet_contract_family_aliases v where v.timesheet_id=(p_pending->>'old_timesheet_id')::uuid;
+ if to_jsonb(p) is distinct from p_pending->'placement' or p.current_timesheet_id is not null or p.role<>'WORK'
+  or p_created_now is distinct from true or p_actor is null or cw.timesheet_id is distinct from t.timesheet_id
+  or cw.id::text is distinct from p_pending->>'contract_week_id' or cw.contract_id is distinct from p.current_contract_id
+  or t.contract_id is distinct from cw.contract_id or t.week_ending_date is distinct from cw.week_ending_date
+  or not t.is_current or t.archived_at_utc is not null or t.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum
+  or nullif(btrim(t.booking_id),'') is null
+  or withdrawn.action<>'CANDIDATE_SUBMISSION_WITHDRAWN_TO_CONTRACT_WEEK'
+  or withdrawn.after_json#>'{native_contract_placement,placement}' is distinct from to_jsonb(p)
+  or withdrawn.after_json->>'contract_week_id' is distinct from cw.id::text
+  or original_alias.family_root_id<>p.family_root_id or original_alias.member_key<>p.member_key then
+  raise exception 'CANDIDATE_NATIVE_ALLOCATION_PLACEMENT_CONFLICT' using errcode='40001';end if;
+ next_p:=p;next_p.current_timesheet_id:=t.timesheet_id;next_p.placement_revision:=p.placement_revision+1;
+ new_alias.timesheet_id:=t.timesheet_id;new_alias.family_root_id:=p.family_root_id;new_alias.member_key:=p.member_key;
+ new_alias.original_timesheet_id:=original_alias.original_timesheet_id;new_alias.member_role:=p.role;
+ new_alias.accepted_operation_id:=p.operation_id;new_alias.accepted_at_utc:=p_now;
+ -- This event says only that the native physical allocator really allocated.
+ -- It does not claim approval/processed/financial/Bank publication success.
+ perform private._candidate_audit_v1('timesheet',t.timesheet_id::text,'CONTRACT_WEEK_NATIVE_TIMESHEET_ALLOCATED',
+  jsonb_build_object('withdrawal_audit_id',withdrawn.id,'pending_placement',to_jsonb(p)),
+  jsonb_build_object('timesheet_id',t.timesheet_id,'timesheet_version',t.version,'booking_id',t.booking_id,
+   'contract_week_id',cw.id,'created_now',true,'native_contract_placement',jsonb_build_object(
+    'version','CANDIDATE_NATIVE_ALLOCATION_PLACEMENT_V1','placement',to_jsonb(next_p),'alias',to_jsonb(new_alias),
+    'backend_pid',pg_backend_pid(),'transaction_id',pg_current_xact_id()::text)),
+  'NATIVE_CONTRACT_WEEK_ALLOCATION',p_actor,null,p_now);
+ select a.id into strict receipt_id from public.audit_events a where a.object_type='timesheet' and a.object_id_text=t.timesheet_id::text
+  and a.action='CONTRACT_WEEK_NATIVE_TIMESHEET_ALLOCATED' and a.after_json#>'{native_contract_placement,placement}'=to_jsonb(next_p);
+ insert into private.timesheet_contract_family_aliases select(new_alias).*;
+ update private.timesheet_contract_current_placements v set current_timesheet_id=t.timesheet_id,placement_revision=next_p.placement_revision
+  where v.family_root_id=p.family_root_id and v.member_key=p.member_key and v.current_timesheet_id is null
+   and v.operation_id=p.operation_id and v.placement_revision=p.placement_revision;
+ if not found or not private.timesheet_contract_native_allocation_binding_v1(to_jsonb(next_p),true) then
+  raise exception 'CANDIDATE_NATIVE_ALLOCATION_PLACEMENT_CONFLICT' using errcode='40001';end if;
+ return receipt_id;
+end;
+$function$;

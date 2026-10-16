@@ -1,0 +1,34 @@
+-- Invoked by the actual native withdrawal owner only after its real CW-null
+-- CAS. The existing native withdrawal audit is emitted exactly once here.
+create or replace function private.timesheet_contract_native_pending_publish_v1(
+ p_old_placement jsonb,p_workflow_id uuid,p_week_id uuid,p_reason text,p_actor uuid,p_now timestamptz)
+returns void language plpgsql volatile security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare p private.timesheet_contract_current_placements%rowtype; next_p private.timesheet_contract_current_placements%rowtype;
+ t public.timesheets%rowtype; cw public.contract_weeks%rowtype; w public.candidate_submission_workflows%rowtype;
+begin
+ select v.* into p from private.timesheet_contract_current_placements v
+  where v.family_root_id=(p_old_placement->>'family_root_id')::uuid and v.member_key=p_old_placement->>'member_key' for update;
+ select v.* into strict t from public.timesheets v where v.timesheet_id=p.current_timesheet_id;
+ select v.* into strict cw from public.contract_weeks v where v.id=p_week_id;
+ select v.* into strict w from public.candidate_submission_workflows v where v.id=p_workflow_id;
+ if to_jsonb(p) is distinct from p_old_placement or p.role<>'WORK' or t.is_current or t.archived_at_utc is not null
+  or t.status<>'REVOKED' or cw.timesheet_id is not null or cw.contract_id is distinct from p.current_contract_id
+  or cw.contract_id is distinct from t.contract_id or cw.week_ending_date is distinct from t.week_ending_date
+  or w.candidate_id<>p.candidate_id or p_actor is null or nullif(btrim(p_reason),'') is null then
+  raise exception 'CANDIDATE_NATIVE_PENDING_PLACEMENT_CONFLICT' using errcode='40001';end if;
+ next_p:=p;next_p.current_timesheet_id:=null;next_p.placement_revision:=p.placement_revision+1;
+ perform private._candidate_audit_v1('timesheet',t.timesheet_id::text,'CANDIDATE_SUBMISSION_WITHDRAWN_TO_CONTRACT_WEEK',
+  jsonb_build_object('old_timesheet_id',t.timesheet_id,'old_version',t.version,'workflow_id',w.id,
+    'previous_submission_mode',t.submission_mode,'native_contract_placement',jsonb_build_object('placement',to_jsonb(p))),
+  jsonb_build_object('new_timesheet_id',null,'contract_week_id',cw.id,'draft_submission_mode',null,
+    'effective_submission_mode',cw.submission_mode_snapshot,'native_contract_placement',jsonb_build_object(
+      'version','CANDIDATE_NATIVE_PENDING_PLACEMENT_V1','placement',to_jsonb(next_p),'backend_pid',pg_backend_pid(),
+      'transaction_id',pg_current_xact_id()::text)),btrim(p_reason),p_actor,null,p_now);
+ update private.timesheet_contract_current_placements v set current_timesheet_id=null,placement_revision=next_p.placement_revision
+  where v.family_root_id=p.family_root_id and v.member_key=p.member_key and v.current_timesheet_id=p.current_timesheet_id
+   and v.operation_id=p.operation_id and v.placement_revision=p.placement_revision;
+ if not found or private.timesheet_contract_native_pending_v1(to_jsonb(next_p),false) is null then
+  raise exception 'CANDIDATE_NATIVE_PENDING_PLACEMENT_CONFLICT' using errcode='40001';end if;
+end;
+$function$;

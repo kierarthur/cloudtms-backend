@@ -1,0 +1,31 @@
+create or replace function private.timesheet_contract_move_placement_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+begin
+ if tg_op='DELETE' then raise exception 'CONTRACT_MOVE_PLACEMENT_IMMUTABLE' using errcode='55000'; end if;
+ if tg_op='UPDATE' and new.operation_id=old.operation_id then
+  if (to_jsonb(new)-array['current_timesheet_id','placement_revision']) is distinct from
+      (to_jsonb(old)-array['current_timesheet_id','placement_revision'])
+    or new.current_timesheet_id is not distinct from old.current_timesheet_id or new.placement_revision<>old.placement_revision+1
+    or (not private.timesheet_contract_native_rotation_binding_v1(to_jsonb(new),true)
+      and private.timesheet_contract_native_pending_v1(to_jsonb(new),true) is null
+      and not private.timesheet_contract_native_allocation_binding_v1(to_jsonb(new),true)) then
+   raise exception 'CONTRACT_MOVE_PLACEMENT_CAS_REQUIRED' using errcode='40001';end if;
+  return new;
+ end if;
+ if tg_op='UPDATE' and ((to_jsonb(new)-array['current_timesheet_id','current_contract_id','operation_id','placement_revision','placement_receipt_id'])
+  is distinct from (to_jsonb(old)-array['current_timesheet_id','current_contract_id','operation_id','placement_revision','placement_receipt_id'])
+  or new.placement_revision<>old.placement_revision+1 or new.operation_id=old.operation_id) then
+  raise exception 'CONTRACT_MOVE_PLACEMENT_CAS_REQUIRED' using errcode='40001';
+ end if;
+ if tg_op='INSERT' and new.placement_revision<>1 or not exists(select 1 from private.timesheet_contract_move_members m
+  join private.timesheet_contract_move_operations o on o.id=m.operation_id where m.operation_id=new.operation_id
+   and m.family_root_id=new.family_root_id and m.member_key=new.member_key and m.role=new.role
+   and m.to_timesheet_id=new.current_timesheet_id and m.to_contract_id is not distinct from new.current_contract_id
+   and o.purpose='CONTRACT_CORRECTION' and o.state='REVIEWED'
+   and (tg_op='INSERT' or m.from_timesheet_id=old.current_timesheet_id)) then
+  raise exception 'CONTRACT_MOVE_PLACEMENT_MEMBER_MISMATCH' using errcode='23514';
+ end if;
+ return new;
+end;
+$function$;

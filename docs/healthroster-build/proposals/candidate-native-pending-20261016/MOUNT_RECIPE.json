@@ -1,0 +1,586 @@
+{
+  "version": 1,
+  "status": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "predecessor": "a10f080f2272155c423991ffc81de8670d3c756b",
+  "schema7dUnchanged": true,
+  "publicMove17Unchanged": true,
+  "newOperation": false,
+  "newRequestSchemaRepair": false,
+  "sourceInputs": {
+    "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+    "observedHead": "e27765fff38eff37199dae6f77b3bda7fa778724",
+    "files": [
+      {
+        "path": "supabase/release/current-contract.json",
+        "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+      },
+      {
+        "path": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+        "sha256": "535d02bd281c0c79ced43576ff66d8a14a4d07338ddf0384e4a22da641b68174"
+      },
+      {
+        "path": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+        "sha256": "0b93bd0b0379348930ba9cff38b45e0196eb52b54690cfc29ea257252b922e06"
+      }
+    ]
+  },
+  "prerequisites": {
+    "physical": "Exact55437 FROZEN_CONTRACT_INTEGRATION_C03.json:7d +00f physical/Invoice c86+330a full015/035, stable final ACL. Root current0159 schema proof separate.",
+    "candidate": "Complete96c5+118a+c475+529+c03+a10f recipes; preserve all prior source and exact original-body/signature facts owners.",
+    "invoiceLocking": {
+      "sourceCommit": "f0172356c678695a68db80cd066ed69e80648a29",
+      "path": "docs/healthroster-build/proposals/v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc",
+      "sha256": "fd49adbd4620aee76d0ec0782658c7cca7046d80f0e2518e8689cefaf1d82034",
+      "supersedes": "Only150ac001 kernel; twelve complete native ingress bodies remain150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "abi": [
+        "private.timesheet_contract_expense_family_enter_v1(text,uuid,uuid,uuid)",
+        "private.timesheet_contract_expense_families_enter_v1(text,uuid[],uuid,uuid)"
+      ],
+      "mode": "Locking only. Native authority/immutable receipt rechecks remain original."
+    }
+  },
+  "migration": {
+    "body": "one-time/01_nullable_pending_schema.sqlinc",
+    "target": "Root allocates one exact db:new successor after actual16102026_0159; no historical relock/include.",
+    "changes": [
+      "private.timesheet_contract_current_placements.current_timesheet_id nullable; existing PK/FK/UNIQUE/ACL/FORCE-RLS unchanged",
+      "private.timesheet_contract_native_pending_commit_guard_v1() + deferred initially deferred constraint trigger timesheet_contract_native_pending_commit_guard",
+      "public.audit_events partial expression index timesheet_contract_native_pending_audit_lookup on native pending family/member/revision"
+    ],
+    "security": "New helper owner-only. No new store, policy or table grant.",
+    "mustComposeWithAllFinalDefinitions": true
+  },
+  "mount": {
+    "orderedSqlPayloads": [
+      "forward/02_allocation_binding.sqlinc",
+      "forward/03b_native_booking.sqlinc",
+      "forward/03c_rotation_bindings.sqlinc",
+      "forward/00_pending_binding.sqlinc",
+      "forward/03f_pending_workflow.sqlinc",
+      "forward/01_pending_publish.sqlinc",
+      "forward/03_allocation_publish.sqlinc",
+      "forward/03d_electronic_rotation_publish.sqlinc",
+      "forward/03e_qr_rotation_publish.sqlinc",
+      "forward/04_current_placement.sqlinc",
+      "forward/05_family_lock.sqlinc",
+      "forward/03a_pending_read_enter.sqlinc",
+      "forward/06_placement_guard.sqlinc",
+      "forward/08_candidate_context.sqlinc",
+      "forward/12_workflow_card_mapping.sqlinc",
+      "forward/15_summary_pending.sqlinc",
+      "forward/14_original_evidence_source.sqlinc",
+      "forward/07_native_withdrawal.sqlinc",
+      "forward/09_native_manual_allocation.sqlinc",
+      "forward/10_native_workflow_admission.sqlinc",
+      "forward/11_candidate_detail.sqlinc",
+      "forward/13_page_v2.sqlinc",
+      "forward/16_acl.sqlinc"
+    ],
+    "existingHealthInclude": "supabase/repeatable/includes/nhsp_v6_health_native_compatibility.sqlinc",
+    "mode": "Root reviews/mounts complete definitions in this exact order after all a10f/f017 prerequisites and all actual historical owners. Root allocates the final controlling repeatable; no standalone nullable-column release. Do not put an obsolete same-signature definition after these.",
+    "nativeOwnerAnchors": {
+      "forward/07_native_withdrawal.sqlinc": "Replace complete private._candidate_weekly_withdrawal_reset_v1 from actual27082026_2004, no other source body",
+      "forward/09_native_manual_allocation.sqlinc": "Replace complete actual10102026_0942 public.contract_week_manual_upsert_atomic(12args), native allocator/CW/TSFIN/evidence/Source/diagnostics preserved",
+      "forward/10_native_workflow_admission.sqlinc": "Replace complete a10f/05 public.candidate_workflow_transition_atomic_v1; never replace with pre-correction/pre-factual parent"
+    },
+    "registry": "Root finite final-definer chains for every existing signature; preserve all current companion roots and exact historical paths. Register new actual final root only after root allocation/review.",
+    "contracts": "Root generates exact new native schema/routine/trigger/index/ACL/current-contract diff via authorised clean contract route before release. This source inventory is not generated contract/native evidence."
+  },
+  "abi": {
+    "H103": {
+      "keys": [
+        "version",
+        "requested_timesheet_id",
+        "family_root_id",
+        "current_timesheet_id",
+        "current_contract_id",
+        "placement_revision",
+        "placement_receipt_id",
+        "legacy_origin"
+      ],
+      "delta": "current_timesheet_id JSON null only exact genuine native pending; version/key count unchanged"
+    },
+    "pendingAccessor": {
+      "for": "private.timesheet_contract_native_pending_for_v1(uuid)->jsonb|null",
+      "week": "private.timesheet_contract_native_pending_week_v1(uuid)->jsonb|null",
+      "keys": [
+        "placement",
+        "withdrawal_audit_id",
+        "contract_week_id",
+        "old_timesheet_id",
+        "old_version",
+        "booking_id",
+        "workflow_id"
+      ],
+      "semantics": "NULL only no genuine pending identity; registered invalid pending raises, no unmatched fallback. All owner-only."
+    },
+    "sameTransactionAllocation": "Exact physical audit backend/xid while native command is accepting; committed strict binding requires genuine final CREATED_PROCESSED audit referencing physical event UUID.",
+    "evidenceSource": "Same private shape; requested immutable original A may have current_timesheet_id NULL under strict pending. Current/historical B pending refuses. Changed current worked/WF facts cannot inherit original signature.",
+    "candidate": "Existing current CONTRACT_WEEK view with optional contract_move absent while pending. Public17/72 operations unchanged."
+  },
+  "functions": [
+    {
+      "signature": "private.timesheet_contract_native_pending_commit_guard_v1()",
+      "payload": "one-time/01_nullable_pending_schema.sqlinc",
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_DEFERRED_TRIGGER_FUNCTION"
+    },
+    {
+      "signature": "private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)",
+      "payload": "forward/02_allocation_binding.sqlinc",
+      "returns": "boolean",
+      "language": "sql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_NATIVE_BINDING_OR_ACCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_allocation_alias_v1(jsonb)",
+      "payload": "forward/02_allocation_binding.sqlinc",
+      "returns": "boolean",
+      "language": "sql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_NATIVE_BINDING_OR_ACCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_booking_bound_v1(uuid,text,text,uuid,date)",
+      "payload": "forward/03b_native_booking.sqlinc",
+      "returns": "boolean",
+      "language": "sql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_NATIVE_BINDING_OR_ACCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)",
+      "payload": "forward/03c_rotation_bindings.sqlinc",
+      "returns": "boolean",
+      "language": "sql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_rotation_alias_v1(jsonb)",
+      "payload": "forward/03c_rotation_bindings.sqlinc",
+      "returns": "boolean",
+      "language": "sql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_v1(jsonb,boolean)",
+      "payload": "forward/00_pending_binding.sqlinc",
+      "returns": "jsonb",
+      "language": "sql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_NATIVE_BINDING_OR_ACCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_workflow_v1(jsonb,uuid)",
+      "payload": "forward/03f_pending_workflow.sqlinc",
+      "returns": "boolean",
+      "language": "plpgsql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_NATIVE_BINDING_OR_ACCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_publish_v1(jsonb,uuid,uuid,text,uuid,timestamptz)",
+      "payload": "forward/01_pending_publish.sqlinc",
+      "returns": "void",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_NATIVE_BINDING_OR_ACCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_allocation_publish_v1(jsonb,uuid,uuid,boolean,uuid,timestamptz)",
+      "payload": "forward/03_allocation_publish.sqlinc",
+      "returns": "uuid",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_NATIVE_BINDING_OR_ACCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_rotation_publish_v1(jsonb,uuid,text,uuid,timestamptz)",
+      "payload": "forward/03d_electronic_rotation_publish.sqlinc",
+      "returns": "void",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_qr_rotation_publish_v1(jsonb,uuid,text,uuid,timestamptz)",
+      "payload": "forward/03e_qr_rotation_publish.sqlinc",
+      "returns": "void",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "payload": "forward/04_current_placement.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "'pg_catalog','public','private','pg_temp'",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_move_family_lock_v1(uuid)",
+      "payload": "forward/05_family_lock.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "'pg_catalog','public','private','pg_temp'",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_for_v1(uuid)",
+      "payload": "forward/03a_pending_read_enter.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_NATIVE_BINDING_OR_ACCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_week_v1(uuid)",
+      "payload": "forward/03a_pending_read_enter.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_NATIVE_BINDING_OR_ACCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_enter_week_v1(uuid)",
+      "payload": "forward/03a_pending_read_enter.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "NEW_NATIVE_BINDING_OR_ACCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_move_placement_guard_v1()",
+      "payload": "forward/06_placement_guard.sqlinc",
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "'pg_catalog','private','pg_temp'",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private.candidate_contract_move_context_v1(text,uuid,uuid,uuid)",
+      "payload": "forward/08_candidate_context.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private._candidate_workflow_maps_to_card_v1(uuid,uuid,uuid)",
+      "payload": "forward/12_workflow_card_mapping.sqlinc",
+      "returns": "boolean",
+      "language": "plpgsql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog, public, private, pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private._candidate_timesheet_summary_revision_touch_workflow_v1(uuid)",
+      "payload": "forward/15_summary_pending.sqlinc",
+      "returns": "void",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,extensions,pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private.timesheet_contract_move_evidence_source_v1(uuid)",
+      "payload": "forward/14_original_evidence_source.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "'pg_catalog','public','private','pg_temp'",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "private._candidate_weekly_withdrawal_reset_v1(uuid,text,timestamptz)",
+      "payload": "forward/07_native_withdrawal.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog, public, private, pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "owner-only",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)",
+      "payload": "forward/09_native_manual_allocation.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "'public'",
+      "logicalOwner": "postgres",
+      "exposure": "service_role",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)",
+      "payload": "forward/10_native_workflow_admission.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "VOLATILE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog, public, private, pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "service_role",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamptz)",
+      "payload": "forward/11_candidate_detail.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog, public, private, pg_temp",
+      "logicalOwner": "postgres",
+      "exposure": "service_role",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    },
+    {
+      "signature": "public.candidate_app_timesheet_page_v2(uuid,text,text,text,integer,timestamptz)",
+      "payload": "forward/13_page_v2.sqlinc",
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "STABLE",
+      "securityDefiner": true,
+      "searchPath": "'public','private','pg_catalog','pg_temp'",
+      "logicalOwner": "postgres",
+      "exposure": "service_role",
+      "classification": "COMPLETE_SAME_SIGNATURE_SUCCESSOR"
+    }
+  ],
+  "verification": {
+    "sourceCases": 14,
+    "grammar": "See tests/OFFLINE_RESULT.json; grammar/field checks only",
+    "native": "NOT_RUN",
+    "lifecycle": "NOT_RUN",
+    "acl": "NOT_RUN",
+    "api": "NOT_RUN",
+    "concurrency": "NOT_RUN",
+    "databaseCalls": 0
+  },
+  "dependentGates": [
+    "Source-owned every bound-origin ingress/current reader must consume exact pending accessor before unmatched fallback; not supplied by this Health package",
+    "Invoice025/028 true pending consumer remains separate; ffc rotation-only is insufficient",
+    "Actual Banking current-B finalizer/cut/physical financial producer unprovided; no fabricated native approved prefix",
+    "Separate native correction-pair and expense-carrier mutation owners",
+    "Current native contract + full-role/trigger/rollback/restore/API/device/storage/concurrency qualification"
+  ],
+  "payloads": [
+    {
+      "path": "one-time/01_nullable_pending_schema.sqlinc",
+      "sha256": "c36ecbba9bfaa2d79f362689112b996155098ceb0b81d10f32aacda55c404d04",
+      "bytes": 2335
+    },
+    {
+      "path": "forward/02_allocation_binding.sqlinc",
+      "sha256": "d7aa249b8c23750d0fe553acc90d65381aafc5793f9a31f04697b12ca7612ba5",
+      "bytes": 7127
+    },
+    {
+      "path": "forward/03b_native_booking.sqlinc",
+      "sha256": "90ac75d6e6cce4499af9460619fdae6cdc06b18e9f9fc2408208bbec6116dccf",
+      "bytes": 943
+    },
+    {
+      "path": "forward/03c_rotation_bindings.sqlinc",
+      "sha256": "af4f0edc16c4c0fd51bd91d5f2e7b2a783663a19dcf2a8eeb75fa88254cd3b6e",
+      "bytes": 5820
+    },
+    {
+      "path": "forward/00_pending_binding.sqlinc",
+      "sha256": "69f0d5d13ed732ede9a2b5a84a03c5ed0019f9c3ba079521183cf06fd3080ea0",
+      "bytes": 5318
+    },
+    {
+      "path": "forward/03f_pending_workflow.sqlinc",
+      "sha256": "508efa90dea3b70b316b137a3ff254b8d1c7654de0867c11fc6cc37b71686b6e",
+      "bytes": 2688
+    },
+    {
+      "path": "forward/01_pending_publish.sqlinc",
+      "sha256": "12b873018ba45376d6c69a3a2d9c1f392d0dedfcc9d2ac9c3fa73ba882c805ec",
+      "bytes": 3104
+    },
+    {
+      "path": "forward/03_allocation_publish.sqlinc",
+      "sha256": "ca74a40f16acfdd8a9ea415c6eb944861d22a2f9ac1324865dfc4cd0e72dc78b",
+      "bytes": 4567
+    },
+    {
+      "path": "forward/03d_electronic_rotation_publish.sqlinc",
+      "sha256": "c457d7c8059168f074d8a3e197524b76f80bf8d09aaf9bf6616ee18a0a23e241",
+      "bytes": 5759
+    },
+    {
+      "path": "forward/03e_qr_rotation_publish.sqlinc",
+      "sha256": "d878d6dc3271060f941cad9a4e36b669bab7c46d77e3976bbdd65b6a75d86405",
+      "bytes": 5755
+    },
+    {
+      "path": "forward/04_current_placement.sqlinc",
+      "sha256": "cbc671065fefa41025ce7b850b477206422221f33c186fa444a9264a33b1a7da",
+      "bytes": 6657
+    },
+    {
+      "path": "forward/05_family_lock.sqlinc",
+      "sha256": "31a6501f083e43f50b0724f4b62fefac7a545d8321ae6327aa0e69ea4eac0a66",
+      "bytes": 2225
+    },
+    {
+      "path": "forward/03a_pending_read_enter.sqlinc",
+      "sha256": "30183fe608e64d5e54570ae8581afeb639b13bbf2c6f57ad6115f3beb2e2825b",
+      "bytes": 4362
+    },
+    {
+      "path": "forward/06_placement_guard.sqlinc",
+      "sha256": "07742597bdb73d7949f7ed9692557a6d8f96161800dc840dc6b9810b0647e677",
+      "bytes": 2224
+    },
+    {
+      "path": "forward/08_candidate_context.sqlinc",
+      "sha256": "05f7bdd1245d6771970b2830235bb4ef676a10ccdab1b0f2bff57867f9c9448f",
+      "bytes": 10770
+    },
+    {
+      "path": "forward/12_workflow_card_mapping.sqlinc",
+      "sha256": "dfdfbdbcd0a9185c1d7c52dcd761fc86e1353958b60ef19685f025e728607018",
+      "bytes": 4325
+    },
+    {
+      "path": "forward/15_summary_pending.sqlinc",
+      "sha256": "2ee1f37c830006b27bba84653b9c3394e4c5c6a7edfc1168c7e069ba2ce3568d",
+      "bytes": 3416
+    },
+    {
+      "path": "forward/14_original_evidence_source.sqlinc",
+      "sha256": "4bbd6895031ef92bb32c6d63f2f8e53e7eea54b8196ff4ded40f7d5cf1535846",
+      "bytes": 3927
+    },
+    {
+      "path": "forward/07_native_withdrawal.sqlinc",
+      "sha256": "fd035309dc4f52a212fb8365726dab1b21242e1d8edea132edd94fcc4fad9672",
+      "bytes": 15227
+    },
+    {
+      "path": "forward/09_native_manual_allocation.sqlinc",
+      "sha256": "45b13a2cd2fae14b3a0cb8c1ab12e83acb9b3981daa4d13870e1b424cb6ce47b",
+      "bytes": 121663
+    },
+    {
+      "path": "forward/10_native_workflow_admission.sqlinc",
+      "sha256": "3f9f6fbde4afe49b79c52317a1b5307c0c9de47572da1d534c30b42dff12c41b",
+      "bytes": 263482
+    },
+    {
+      "path": "forward/11_candidate_detail.sqlinc",
+      "sha256": "721bdde08ef93c8659c6f62227008ea2ad0d0afbb93e225f1226607c309e8685",
+      "bytes": 32157
+    },
+    {
+      "path": "forward/13_page_v2.sqlinc",
+      "sha256": "b4b1c6ec37516848752cd6272f4ea50335c2b19046ced549605090325078f880",
+      "bytes": 2485
+    },
+    {
+      "path": "forward/16_acl.sqlinc",
+      "sha256": "2fd13d4960b252b8e6493193dcc91a96b6eda3f32cbfdf962d7c1084eb22094f",
+      "bytes": 7178
+    }
+  ]
+}

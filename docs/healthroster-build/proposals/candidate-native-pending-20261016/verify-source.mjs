@@ -1,0 +1,13 @@
+import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..');
+const tests=spawnSync(process.execPath,['--test',path.join(here,'tests/native-source.test.mjs')],{encoding:'utf8'});
+if(tests.status!==0)throw Error(tests.stdout+tests.stderr);
+const schema=path.join(repo,'docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/forward/sql/physical-schema.sqlinc');
+const checker=path.join(repo,'docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/tests/parse-source.py');
+const contract=path.resolve(repo,'../healthroster-install2-14102026/supabase/release/current-contract.json');
+const files=['one-time/01_nullable_pending_schema.sqlinc',...fs.readdirSync(path.join(here,'forward')).filter(n=>n.endsWith('.sqlinc')).map(n=>'forward/'+n),'tests/BASELINE_FRESH.sql'];
+const results=files.map(file=>{const r=spawnSync('python',[checker,'--parser-path','C:/tmp/healthroster-v6-physical-parser','--sql-file',path.join(here,file),'--schema-file',schema,'--contract-file',contract],{encoding:'utf8'});return {file,exit:r.status,output:r.stdout.trim(),error:r.stderr.trim()};});
+const failed=results.filter(r=>r.exit!==0);if(failed.length)throw Error(JSON.stringify(failed,null,2));
+const rowVariables=results.reduce((n,r)=>n+Number(/(\d+) declared native\/proposed row variables/.exec(r.output)?.[1]??0),0);
+fs.writeFileSync(path.join(here,'tests/OFFLINE_RESULT.json'),JSON.stringify({status:'PASS_SOURCE_AND_GRAMMAR_FIELD_ONLY',native:'NOT_RUN',sourceCases:14,sourceTestOutput:tests.stdout.trim(),sqlFiles:files.length,rowVariables,results},null,2)+'\n');
+console.log(`14 source tests, ${files.length} SQL grammar inputs, ${rowVariables} declared native/proposed row fields checked; no native SQL execution.`);

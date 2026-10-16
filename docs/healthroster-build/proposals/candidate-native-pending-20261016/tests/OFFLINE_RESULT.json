@@ -1,0 +1,160 @@
+{
+  "status": "PASS_SOURCE_AND_GRAMMAR_FIELD_ONLY",
+  "native": "NOT_RUN",
+  "sourceCases": 14,
+  "sourceTestOutput": "✔ actual7d schema bytes retained; nullable correction retains native PK/FK/UNIQUE and enforces deferred genuine pending (1.8119ms)\n✔ real native withdrawal retains paid/invoice guard, actual revoke and CW-null owner (0.7082ms)\n✔ manual source retains complete native financial/evidence path, physical callback after real allocation and before TSFIN (1.7019ms)\n✔ allocation publisher is truthful physical event, actual native booking and flat CAS, no early approval/processed or Move mutation (0.6408ms)\n✔ H103 remains exactly eight closed keys; current NULL only certified native pending; ordinary alias fallback stays refused (0.4634ms)\n✔ new native bookings require actual allocation alias/audit, accepted original booking remains immutable (0.8079ms)\n✔ exact pending accessor fails closed and uses exact family/member/revision native audit index predicates (0.3251ms)\n✔ Candidate pending history retains exact old row and removes actions; current pending CW has no fabricated Move17 (0.6873ms)\n✔ pending workflow association is direct member/CW/source identity; no same-week claim adoption (0.3576ms)\n✔ full workflow uses exact external locking kernel before mutable WF locks while original mutation replay remains before pending refusal (0.9041ms)\n✔ full workflow native component/signature/final document transitions preserved byte-for-byte from a10f (1.879ms)\n✔ original evidence access is separately sealed and does not lend old signatures to changed live facts (0.3697ms)\n✔ workflow trigger cache invalidation handles genuine pending without strict current-Timesheet lookup or NULL identity key (0.3604ms)\n✔ frozen delivery covers every byte and private helper ACL; only four existing public RPCs retain service execution (11.1711ms)\nℹ tests 14\nℹ suites 0\nℹ pass 14\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 149.2057",
+  "sqlFiles": 25,
+  "rowVariables": 98,
+  "results": [
+    {
+      "file": "one-time/01_nullable_pending_schema.sqlinc",
+      "exit": 0,
+      "output": "01_nullable_pending_schema.sqlinc: grammar parsed\r\n1 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/00_pending_binding.sqlinc",
+      "exit": 0,
+      "output": "00_pending_binding.sqlinc: grammar parsed\r\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/01_pending_publish.sqlinc",
+      "exit": 0,
+      "output": "01_pending_publish.sqlinc: grammar parsed\r\n5 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/02_allocation_binding.sqlinc",
+      "exit": 0,
+      "output": "02_allocation_binding.sqlinc: grammar parsed\r\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/03a_pending_read_enter.sqlinc",
+      "exit": 0,
+      "output": "03a_pending_read_enter.sqlinc: grammar parsed\r\n1 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/03b_native_booking.sqlinc",
+      "exit": 0,
+      "output": "03b_native_booking.sqlinc: grammar parsed\r\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/03c_rotation_bindings.sqlinc",
+      "exit": 0,
+      "output": "03c_rotation_bindings.sqlinc: grammar parsed\r\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/03d_electronic_rotation_publish.sqlinc",
+      "exit": 0,
+      "output": "03d_electronic_rotation_publish.sqlinc: grammar parsed\r\n8 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/03e_qr_rotation_publish.sqlinc",
+      "exit": 0,
+      "output": "03e_qr_rotation_publish.sqlinc: grammar parsed\r\n8 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/03f_pending_workflow.sqlinc",
+      "exit": 0,
+      "output": "03f_pending_workflow.sqlinc: grammar parsed\r\n3 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/03_allocation_publish.sqlinc",
+      "exit": 0,
+      "output": "03_allocation_publish.sqlinc: grammar parsed\r\n7 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/04_current_placement.sqlinc",
+      "exit": 0,
+      "output": "04_current_placement.sqlinc: grammar parsed\r\n4 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/05_family_lock.sqlinc",
+      "exit": 0,
+      "output": "05_family_lock.sqlinc: grammar parsed\r\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/06_placement_guard.sqlinc",
+      "exit": 0,
+      "output": "06_placement_guard.sqlinc: grammar parsed\r\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/07_native_withdrawal.sqlinc",
+      "exit": 0,
+      "output": "07_native_withdrawal.sqlinc: grammar parsed\r\n5 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/08_candidate_context.sqlinc",
+      "exit": 0,
+      "output": "08_candidate_context.sqlinc: grammar parsed\r\n8 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/09_native_manual_allocation.sqlinc",
+      "exit": 0,
+      "output": "09_native_manual_allocation.sqlinc: grammar parsed\r\n11 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/10_native_workflow_admission.sqlinc",
+      "exit": 0,
+      "output": "10_native_workflow_admission.sqlinc: grammar parsed\r\n21 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/11_candidate_detail.sqlinc",
+      "exit": 0,
+      "output": "11_candidate_detail.sqlinc: grammar parsed\r\n6 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/12_workflow_card_mapping.sqlinc",
+      "exit": 0,
+      "output": "12_workflow_card_mapping.sqlinc: grammar parsed\r\n5 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/13_page_v2.sqlinc",
+      "exit": 0,
+      "output": "13_page_v2.sqlinc: grammar parsed\r\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/14_original_evidence_source.sqlinc",
+      "exit": 0,
+      "output": "14_original_evidence_source.sqlinc: grammar parsed\r\n4 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/15_summary_pending.sqlinc",
+      "exit": 0,
+      "output": "15_summary_pending.sqlinc: grammar parsed\r\n1 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "forward/16_acl.sqlinc",
+      "exit": 0,
+      "output": "16_acl.sqlinc: grammar parsed\r\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "tests/BASELINE_FRESH.sql",
+      "exit": 0,
+      "output": "BASELINE_FRESH.sql: grammar parsed\r\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    }
+  ]
+}

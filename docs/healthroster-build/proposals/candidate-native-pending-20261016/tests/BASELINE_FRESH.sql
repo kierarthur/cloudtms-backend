@@ -1,0 +1,50 @@
+-- Read-only catalogue baseline/fresh capture. Compare exact JSON externally.
+with signatures(signature) as(values
+ ('private.timesheet_contract_native_pending_commit_guard_v1()'),
+ ('private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)'),
+ ('private.timesheet_contract_native_allocation_alias_v1(jsonb)'),
+ ('private.timesheet_contract_native_booking_bound_v1(uuid,text,text,uuid,date)'),
+ ('private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)'),
+ ('private.timesheet_contract_native_rotation_alias_v1(jsonb)'),
+ ('private.timesheet_contract_native_pending_v1(jsonb,boolean)'),
+ ('private.timesheet_contract_native_pending_workflow_v1(jsonb,uuid)'),
+ ('private.timesheet_contract_native_pending_publish_v1(jsonb,uuid,uuid,text,uuid,timestamptz)'),
+ ('private.timesheet_contract_native_allocation_publish_v1(jsonb,uuid,uuid,boolean,uuid,timestamptz)'),
+ ('private.timesheet_contract_native_rotation_publish_v1(jsonb,uuid,text,uuid,timestamptz)'),
+ ('private.timesheet_contract_native_qr_rotation_publish_v1(jsonb,uuid,text,uuid,timestamptz)'),
+ ('private.timesheet_contract_current_placement_v1(uuid)'),
+ ('private.timesheet_contract_move_family_lock_v1(uuid)'),
+ ('private.timesheet_contract_native_pending_for_v1(uuid)'),
+ ('private.timesheet_contract_native_pending_week_v1(uuid)'),
+ ('private.timesheet_contract_native_pending_enter_week_v1(uuid)'),
+ ('private.timesheet_contract_move_placement_guard_v1()'),
+ ('private.candidate_contract_move_context_v1(text,uuid,uuid,uuid)'),
+ ('private._candidate_workflow_maps_to_card_v1(uuid,uuid,uuid)'),
+ ('private._candidate_timesheet_summary_revision_touch_workflow_v1(uuid)'),
+ ('private.timesheet_contract_move_evidence_source_v1(uuid)'),
+ ('private._candidate_weekly_withdrawal_reset_v1(uuid,text,timestamptz)'),
+ ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)'),
+ ('public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)'),
+ ('public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamptz)'),
+ ('public.candidate_app_timesheet_page_v2(uuid,text,text,text,integer,timestamptz)')
+), routines as(select s.signature,p.oid,p.proowner,p.proacl,p.proconfig,p.prosecdef,p.provolatile
+ from signatures s left join pg_catalog.pg_proc p on p.oid=pg_catalog.to_regprocedure(s.signature)),
+ relation as(select c.* from pg_catalog.pg_class c where c.oid=pg_catalog.to_regclass('private.timesheet_contract_current_placements'))
+select pg_catalog.jsonb_build_object('database',pg_catalog.current_database(),
+ 'routines',(select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('signature',r.signature,'present',r.oid is not null,
+  'definition_md5',case when r.oid is null then null else pg_catalog.md5(pg_catalog.pg_get_functiondef(r.oid)) end,
+  'owner',pg_catalog.pg_get_userbyid(r.proowner),'acl',r.proacl::text,'config',r.proconfig,'security_definer',r.prosecdef,'volatility',r.provolatile)
+  order by r.signature) from routines r),
+ 'placement',(select pg_catalog.jsonb_build_object('present',true,'owner',pg_catalog.pg_get_userbyid(c.relowner),'acl',c.relacl::text,
+  'rls',c.relrowsecurity,'force_rls',c.relforcerowsecurity,
+  'columns',(select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('name',a.attname,'not_null',a.attnotnull,
+    'type',pg_catalog.format_type(a.atttypid,a.atttypmod)) order by a.attnum) from pg_catalog.pg_attribute a where a.attrelid=c.oid and a.attnum>0 and not a.attisdropped),
+  'constraints',(select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('name',k.conname,'definition',pg_catalog.pg_get_constraintdef(k.oid,true)) order by k.conname)
+   from pg_catalog.pg_constraint k where k.conrelid=c.oid),
+  'triggers',(select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('name',t.tgname,'definition',pg_catalog.pg_get_triggerdef(t.oid,true),'enabled',t.tgenabled) order by t.tgname)
+   from pg_catalog.pg_trigger t where t.tgrelid=c.oid and not t.tgisinternal),
+  'policies',(select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('name',p.polname,'command',p.polcmd,'roles',p.polroles,
+   'using',pg_catalog.pg_get_expr(p.polqual,p.polrelid),'check',pg_catalog.pg_get_expr(p.polwithcheck,p.polrelid)) order by p.polname)
+   from pg_catalog.pg_policy p where p.polrelid=c.oid)) from relation c),
+ 'pending_audit_index',(select pg_catalog.jsonb_build_object('present',true,'owner',pg_catalog.pg_get_userbyid(i.relowner),
+  'definition',pg_catalog.pg_get_indexdef(i.oid)) from pg_catalog.pg_class i where i.oid=pg_catalog.to_regclass('public.timesheet_contract_native_pending_audit_lookup')));

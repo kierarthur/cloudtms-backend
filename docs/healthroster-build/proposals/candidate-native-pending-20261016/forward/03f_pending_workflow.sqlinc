@@ -1,0 +1,34 @@
+-- Read-only exact member workflow association. This does not grant mutation,
+-- select an arbitrary Contract Week, or enrol another member's expense claim.
+create or replace function private.timesheet_contract_native_pending_workflow_v1(p_pending jsonb,p_workflow_id uuid)
+returns boolean language plpgsql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare w public.candidate_submission_workflows%rowtype; m private.timesheet_contract_move_members%rowtype;
+ checked jsonb; pending_week public.contract_weeks%rowtype;
+begin
+ if p_pending is null or p_workflow_id is null then return false;end if;
+ checked:=private.timesheet_contract_native_pending_v1(p_pending->'placement',false);
+ if checked is distinct from p_pending then raise exception 'CURRENT_PLACEMENT_NATIVE_PENDING_UNBOUND' using errcode='55000';end if;
+ select v.* into strict m from private.timesheet_contract_move_members v
+  where v.operation_id=(p_pending#>>'{placement,operation_id}')::uuid and v.member_key=p_pending#>>'{placement,member_key}';
+ select v.* into strict pending_week from public.contract_weeks v where v.id=(p_pending->>'contract_week_id')::uuid;
+ select v.* into w from public.candidate_submission_workflows v where v.id=p_workflow_id
+  and v.candidate_id=(p_pending#>>'{placement,candidate_id}')::uuid and v.scope='WEEKLY'
+  and v.environment=(select withdrawn.environment from public.candidate_submission_workflows withdrawn where withdrawn.id=(p_pending->>'workflow_id')::uuid)
+  and v.week_ending_date=pending_week.week_ending_date;
+ if not found then return false;end if;
+ if w.id=any(m.workflow_ids) then return true;end if;
+ if w.contract_week_id=pending_week.id and w.contract_id=pending_week.contract_id
+  and w.target_timesheet_id is null and w.anchor_timesheet_id is null then return true;end if;
+ return exists(select 1 from private.timesheet_contract_family_aliases a
+  join private.timesheet_contract_move_members member on member.operation_id=a.accepted_operation_id
+   and member.member_key=a.member_key and member.family_root_id=a.family_root_id and member.role=a.member_role
+  join private.timesheet_contract_move_operations accepted on accepted.id=member.operation_id
+   and accepted.state in('COMPLETE','SUPERSEDED') and accepted.receipt_json is not null
+  where a.family_root_id=m.family_root_id and a.member_key=m.member_key
+   and a.timesheet_id in(w.target_timesheet_id,w.anchor_timesheet_id)
+   and (a.timesheet_id in(member.from_timesheet_id,member.to_timesheet_id)
+    or private.timesheet_contract_native_rotation_alias_v1(to_jsonb(a))
+    or private.timesheet_contract_native_allocation_alias_v1(to_jsonb(a))));
+end;
+$function$;
