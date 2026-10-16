@@ -1,0 +1,221 @@
+-- A manual manager enquiry uses actual native cohorts/activations/generation
+-- and memberships. It does not invoke the initial campaign/due-clock writer.
+create or replace function private.weekly_contact_manual_manager_generation_v1(p_members jsonb,p_actor uuid,p_at timestamptz)
+returns uuid language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare member jsonb;context jsonb;route_id uuid;generation public.weekly_manager_recipient_generations%rowtype;
+ route public.weekly_manager_recipient_routes%rowtype;native_intent record;activation uuid;cohort uuid;generation_number integer;
+ membership jsonb;ordinal integer:=0;i public.weekly_discrepancy_incidents%rowtype;c public.weekly_issue_comparison_revisions%rowtype;
+ w public.weekly_work_events%rowtype;old_generation_id uuid;due_event public.weekly_manager_cohort_due_events%rowtype;
+ due_hash bytea;due_source jsonb;new_due_id uuid;
+begin
+ for member in select value from jsonb_array_elements(p_members) order by value->>'candidate_id',value->>'client_id',value->>'issue_id' loop
+  select * into strict i from public.weekly_discrepancy_incidents where id=(member->>'issue_id')::uuid;
+  select * into strict c from public.weekly_issue_comparison_revisions where id=i.current_comparison_revision_id;
+  select * into strict w from public.weekly_work_events where id=i.work_event_id;
+  context:=private.weekly_source_query_cohort_ensure_v1(i.source_cycle_id,i.candidate_id,i.client_id,c.contract_id,w.work_date);
+  if context->>'manager_route_id' is null or context->>'manager_recipient' is distinct from member->>'manager_address'
+   or(route_id is not null and route_id<>(context->>'manager_route_id')::uuid) then
+   raise exception 'CONTACT_MANUAL_ENQUIRY_REVIEW_STALE' using errcode='40001';end if;
+  route_id:=(context->>'manager_route_id')::uuid;
+  insert into public.weekly_route_activations(source_cycle_id,candidate_id,client_id,audience_route,route_mode,
+   activated_by_user_id,activated_at_utc,updated_at_utc)
+  values(i.source_cycle_id,i.candidate_id,i.client_id,'MANAGER','MANAGER_DIRECT',p_actor,p_at,p_at)
+   on conflict(source_cycle_id,candidate_id,client_id,audience_route) do nothing;
+ end loop;
+ select * into strict route from public.weekly_manager_recipient_routes where id=route_id for update;
+ select * into generation from public.weekly_manager_recipient_generations where id=route.current_generation_id and state='ACTIVE';
+ if generation.id is not null and not exists(select 1 from jsonb_array_elements(p_members)m where not exists(
+  select 1 from public.weekly_manager_recipient_memberships native where native.recipient_generation_id=generation.id
+   and native.incident_id=(m->>'issue_id')::uuid and native.comparison_revision_id=(m->>'comparison_revision_id')::uuid)) then
+  return generation.id;
+ end if;
+ if generation.id is not null then
+  old_generation_id:=generation.id;
+  if exists(select 1 from public.weekly_message_intents intent join public.weekly_message_renders render on render.message_intent_id=intent.id
+   join public.weekly_message_dispatch_commands command on command.message_render_id=render.id
+   where intent.recipient_generation_id=generation.id and command.state in('READY','LEASED','FAILED')
+    and private.weekly_contact_source_render_attempted_v1(render.id) and exists(select 1 from public.weekly_message_dispatch_targets target
+     where target.dispatch_command_id=command.id and target.state in('READY','LEASED','TRANSIENT_FAILURE'))) then
+   raise exception 'CONTACT_MANUAL_ENQUIRY_REVIEW_STALE' using errcode='40001';end if;
+  update public.weekly_manager_recipient_routes set current_generation_id=null where id=route.id;
+  update public.weekly_manager_recipient_generations set state='SUPERSEDED',superseded_at_utc=p_at where id=generation.id;
+ end if;
+ select coalesce(max(g.generation_number),0)+1 into generation_number from public.weekly_manager_recipient_generations g where recipient_route_id=route.id;
+ -- Retain the complete actual prior route membership, including paused and
+ -- previously owned rows, then overlay only the selected current comparisons.
+ -- This is not the send body; exact eligible captures remain independently
+ -- bounded. No unrelated member, original due event or clock is discarded.
+ select jsonb_agg(to_jsonb(retained)-'priority' order by retained.incident_id) into membership from(
+  select distinct on(combined.incident_id) combined.* from(
+   select 0 priority,activation_row.id activation_id,cohort_row.id candidate_cohort_id,cohort_row.current_generation_id candidate_generation_id,
+    (m->>'issue_id')::uuid incident_id,(m->>'comparison_revision_id')::uuid comparison_revision_id,'MANAGER_ACTIONABLE'::text membership_role
+   from jsonb_array_elements(p_members)m join public.weekly_route_activations activation_row
+    on activation_row.source_cycle_id=route.source_cycle_id and activation_row.candidate_id=(m->>'candidate_id')::uuid
+     and activation_row.client_id=(m->>'client_id')::uuid and activation_row.audience_route='MANAGER'
+   join public.weekly_candidate_cohorts cohort_row on cohort_row.source_cycle_id=route.source_cycle_id
+    and cohort_row.candidate_id=(m->>'candidate_id')::uuid and cohort_row.client_id=(m->>'client_id')::uuid
+    and cohort_row.manager_recipient_route_key=route.normalised_recipient_hash
+   union all
+   select 1,native.route_activation_id,native.candidate_cohort_id,native.candidate_outreach_generation_id,native.incident_id,
+    native.comparison_revision_id,native.membership_role from public.weekly_manager_recipient_memberships native
+    where native.recipient_generation_id=old_generation_id
+  )combined order by combined.incident_id,combined.priority
+ )retained;
+ insert into public.weekly_manager_recipient_generations(recipient_route_id,generation_number,trigger_kind,state,membership_hash)
+ values(route.id,generation_number,case when p_actor is null then 'CONTACT_COMPOSITION' else 'MANUAL_RESEND' end,
+  'ACTIVE',private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_MANAGER_GENERATION_V1',membership))
+ returning * into generation;
+ for member in select value from jsonb_array_elements(membership) order by value->>'incident_id' loop
+  ordinal:=ordinal+1;
+  insert into public.weekly_manager_recipient_memberships(recipient_generation_id,route_activation_id,candidate_outreach_generation_id,
+   candidate_cohort_id,incident_id,comparison_revision_id,membership_role,ordinal)
+  values(generation.id,(member->>'activation_id')::uuid,(member->>'candidate_generation_id')::uuid,(member->>'candidate_cohort_id')::uuid,
+   (member->>'incident_id')::uuid,(member->>'comparison_revision_id')::uuid,member->>'membership_role',ordinal);
+ end loop;
+ update public.weekly_manager_recipient_routes set current_generation_id=generation.id where id=route.id;
+ for due_event in select * from public.weekly_manager_cohort_due_events where recipient_generation_id=old_generation_id order by id loop
+  due_source:=jsonb_build_object('original_event_id',due_event.id,'original_trigger_hash',encode(due_event.trigger_hash,'hex'),
+   'recipient_generation_id',generation.id,'candidate_cohort_id',due_event.candidate_cohort_id,'event_kind',due_event.event_kind,
+   'cohort_started_at_utc',to_char(due_event.cohort_started_at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+   'due_at_utc',to_char(due_event.due_at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+   'requested_week_membership_id',due_event.requested_week_membership_id);
+  due_hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_RETAINED_DUE_EVENT_V1',due_source);
+  insert into public.weekly_manager_cohort_due_events(recipient_generation_id,candidate_cohort_id,event_kind,cohort_started_at_utc,
+   due_at_utc,state,trigger_hash,requested_week_membership_id)
+  values(generation.id,due_event.candidate_cohort_id,due_event.event_kind,due_event.cohort_started_at_utc,due_event.due_at_utc,
+   due_event.state,due_hash,due_event.requested_week_membership_id) returning id into new_due_id;
+  insert into public.weekly_contact_source_due_event_rebases(original_event_id,recipient_generation_id,rebased_event_id,source_sha256,source_json,recorded_at_utc)
+   values(due_event.id,generation.id,new_due_id,due_hash,due_source,p_at);
+ end loop;
+ -- Immediate exact rebase of every actual wholly-unsubmitted old body. An
+ -- accepted/started/uncertain owner stays unchanged and is never auto-retried.
+ for native_intent in select intent.id from public.weekly_message_intents intent where intent.recipient_generation_id=old_generation_id
+  and intent.state in('DUE','RENDERED') and not exists(select 1 from public.weekly_message_renders render
+   where render.message_intent_id=intent.id and private.weekly_contact_source_render_attempted_v1(render.id)) order by intent.id loop
+  perform private.weekly_contact_source_recompose_intent_v1(native_intent.id,generation.id);
+ end loop;
+ return generation.id;
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_capture_insert_v1(p_intent_id uuid,p_kind text,p_manual_request uuid,
+ p_original_intent uuid,p_members jsonb,p_group jsonb,p_routine_step integer,p_basis_accepted uuid,p_at timestamptz,p_actor uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare i public.weekly_message_intents%rowtype;original_hash bytea;captured jsonb:='[]';manager_members jsonb;
+ member jsonb;aliases uuid[];native_id uuid;basis jsonb;row_json jsonb;hash bytea;manifest jsonb;projection uuid;
+begin
+ select * into strict i from public.weekly_message_intents where id=p_intent_id;
+ if i.audience_kind='CANDIDATE' then select membership_hash into strict original_hash from public.weekly_candidate_outreach_generations where id=i.candidate_generation_id;
+ else select membership_hash into strict original_hash from public.weekly_manager_recipient_generations where id=i.recipient_generation_id;end if;
+ select current_projection_publication_id into strict projection from public.weekly_source_cycles where id=i.source_cycle_id;
+ perform private.weekly_source_query_current_publication_v1(i.source_cycle_id,projection);
+ -- A selected issue alias is retained in the receipt. One actual expected-week
+ -- membership creates one logical capture row regardless of its issue aliases.
+ for member in select distinct on(value->>'logical_contact_key') value from jsonb_array_elements(p_members)
+  order by value->>'logical_contact_key',value->>'issue_id' loop
+  if jsonb_typeof(member->'selected_issue_ids')='array' then
+   select coalesce(array_agg(value::uuid order by value::uuid),'{}') into aliases from jsonb_array_elements_text(member->'selected_issue_ids');
+  else
+   select coalesce(array_agg((m->>'issue_id')::uuid order by m->>'issue_id') filter(where m->>'issue_id' is not null),'{}') into aliases
+    from jsonb_array_elements(p_members)m where m->>'logical_contact_key'=member->>'logical_contact_key';
+  end if;
+  native_id:=(member->>'native_member_id')::uuid;basis:=member->'native_basis';
+  if i.audience_kind='MANAGER' then
+   select id into strict native_id from public.weekly_manager_recipient_memberships where recipient_generation_id=i.recipient_generation_id
+    and incident_id=(member->>'issue_id')::uuid and comparison_revision_id=(member->>'comparison_revision_id')::uuid;
+   basis:=basis||jsonb_build_object('recipient_generation_id',i.recipient_generation_id,'membership_id',native_id);
+  end if;
+  row_json:=jsonb_build_object('logical_contact_key',member->'logical_contact_key','budget_owner_key',member->'budget_owner_key',
+   'native_member_kind',member->'native_member_kind','native_member_id',native_id,'selected_issue_ids',to_jsonb(aliases),
+   'candidate_id',member->'candidate_id','client_id',member->'client_id','scope_id',member->'scope_id',
+   'scope_revision',member->'scope_revision','checking_revision',member->'checking_revision','audience',member->'audience',
+   'purpose',member->'purpose','incident_id',member->'incident_id','incident_episode',member->'incident_episode',
+   'work_event_id',member->'work_event_id','comparison_revision_id',member->'comparison_revision_id',
+   'comparison_fingerprint',member->'comparison_fingerprint','send_ordinal',member->'send_ordinal',
+   'routine_step',coalesce((member->>'routine_step')::integer,p_routine_step),
+   'basis_accepted_membership_id',coalesce((member->>'basis_accepted_membership_id')::uuid,p_basis_accepted),'native_basis',basis);
+  captured:=captured||jsonb_build_array(row_json);
+ end loop;
+ if i.audience_kind='MANAGER' then
+  select jsonb_agg(jsonb_build_object('incident_id',m->'incident_id','incident_episode',m->'incident_episode',
+   'comparison_revision_id',m->'comparison_revision_id','comparison_fingerprint',m->'comparison_fingerprint',
+   'client_order',client_order,'candidate_order',candidate_order,'shift_order',shift_order) order by client_order,candidate_order,shift_order)
+   into manager_members from(
+   select m,dense_rank() over(order by private.weekly_source_query_ascii_fold_v1(client.name) collate "C",client.id)::integer client_order,
+    dense_rank() over(partition by client.id order by private.weekly_source_query_ascii_fold_v1(coalesce(nullif(candidate.display_name,''),
+     concat_ws(' ',candidate.first_name,candidate.last_name))) collate "C",candidate.id)::integer candidate_order,
+    row_number() over(partition by client.id,candidate.id order by work.work_date,coalesce(comparison.system_start_at_local,comparison.candidate_start_at_local),
+     incident.id)::integer shift_order
+   from jsonb_array_elements(captured)m join public.weekly_discrepancy_incidents incident on incident.id=(m->>'incident_id')::uuid
+   join public.weekly_issue_comparison_revisions comparison on comparison.id=(m->>'comparison_revision_id')::uuid
+   join public.weekly_work_events work on work.id=incident.work_event_id join public.clients client on client.id=incident.client_id
+   join public.candidates candidate on candidate.id=incident.candidate_id)x;
+  hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_MANAGER_REVIEW_BATCH_MEMBERSHIP_V1',manager_members);
+ else hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_CAPTURE_MEMBERSHIP_V1',captured);end if;
+ manifest:=jsonb_build_object('version','CONTACT_SOURCE_INTENT_CAPTURE_V1','group_key',p_group->'group_key',
+  'membership_hash',encode(hash,'hex'),'original_generation_membership_hash',encode(original_hash,'hex'),
+  'recipient',p_group->'recipient','preview',p_group->'preview','canonical_content_sha256',p_group->'canonical_content_sha256',
+  'members',captured,'manager_members',manager_members,'current_facts',p_members);
+ insert into public.weekly_contact_source_intent_captures(message_intent_id,capture_kind,original_message_intent_id,manual_request_id,accepted_actor_user_id,
+  agency_id,environment,source_cycle_id,projection_publication_id,original_generation_membership_hash,membership_hash,manifest_json,created_at_utc)
+ values(i.id,p_kind,p_original_intent,p_manual_request,p_actor,i.agency_id,i.environment,i.source_cycle_id,projection,original_hash,hash,manifest,p_at);
+ for row_json in select value from jsonb_array_elements(captured) loop
+  insert into public.weekly_contact_source_intent_capture_members(message_intent_id,logical_contact_key,budget_owner_key,native_member_kind,
+   native_member_id,selected_issue_ids,candidate_id,client_id,scope_id,scope_revision,checking_revision,audience,purpose,incident_id,
+   incident_episode,work_event_id,comparison_revision_id,comparison_fingerprint,send_ordinal,routine_step,basis_accepted_membership_id,native_basis_json)
+  values(i.id,decode(row_json->>'logical_contact_key','hex'),decode(row_json->>'budget_owner_key','hex'),row_json->>'native_member_kind',
+   (row_json->>'native_member_id')::uuid,array(select value::uuid from jsonb_array_elements_text(row_json->'selected_issue_ids')),
+   (row_json->>'candidate_id')::uuid,(row_json->>'client_id')::uuid,(row_json->>'scope_id')::uuid,(row_json->>'scope_revision')::bigint,
+   (row_json->>'checking_revision')::bigint,row_json->>'audience',row_json->>'purpose',(row_json->>'incident_id')::uuid,
+   (row_json->>'incident_episode')::integer,(row_json->>'work_event_id')::uuid,(row_json->>'comparison_revision_id')::uuid,
+   decode(row_json->>'comparison_fingerprint','hex'),(row_json->>'send_ordinal')::integer,
+   (row_json->>'routine_step')::integer,(row_json->>'basis_accepted_membership_id')::uuid,row_json->'native_basis');
+  if p_kind in('ROUTINE_RECOMPOSITION','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION') then
+   update public.weekly_contact_source_ordinal_owners set message_intent_id=i.id,revision=revision+1,recorded_at_utc=p_at
+    where logical_contact_key=decode(row_json->>'logical_contact_key','hex') and send_ordinal=(row_json->>'send_ordinal')::integer
+     and message_intent_id=p_original_intent;
+  end if;
+  insert into public.weekly_contact_source_ordinal_owners(logical_contact_key,send_ordinal,message_intent_id,revision,recorded_at_utc)
+   values(decode(row_json->>'logical_contact_key','hex'),(row_json->>'send_ordinal')::integer,i.id,1,p_at)
+   on conflict(logical_contact_key,send_ordinal) do nothing;
+  if not exists(select 1 from public.weekly_contact_source_ordinal_owners owner where owner.logical_contact_key=decode(row_json->>'logical_contact_key','hex')
+   and owner.send_ordinal=(row_json->>'send_ordinal')::integer and owner.message_intent_id=i.id) then
+   raise exception 'CONTACT_MANUAL_ENQUIRY_REVIEW_STALE' using errcode='40001';end if;
+ end loop;
+ perform private.weekly_contact_source_capture_assert_v1(i.id);
+end;
+$function$;
+
+create or replace function private.weekly_contact_manual_enqueue_v1(p_request jsonb,p_group jsonb,p_members jsonb,p_at timestamptz)
+returns uuid language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare generation_id uuid;route_id uuid;cohort_id uuid;sequence integer;intent_id uuid;key bytea;
+begin
+ if p_request->>'audience'='MANAGER' then
+  generation_id:=private.weekly_contact_manual_manager_generation_v1(p_members,(p_request->>'actor_user_id')::uuid,p_at);
+  select recipient_route_id into strict route_id from public.weekly_manager_recipient_generations where id=generation_id;
+ else
+  generation_id:=(p_group->>'candidate_generation_id')::uuid;
+  select candidate_cohort_id into strict cohort_id from public.weekly_candidate_outreach_generations where id=generation_id
+   and state='ACTIVE' and deadline_at_utc>p_at;
+ end if;
+ select coalesce(max(intent.tranche_sequence),0)+1 into sequence from public.weekly_message_intents intent
+  where(case when p_request->>'audience'='MANAGER' then intent.recipient_generation_id=generation_id and intent.tranche_kind='MANAGER_MANUAL_RESEND'
+   else intent.candidate_generation_id=generation_id and intent.tranche_kind='CANDIDATE_MANUAL_REMINDER' end);
+ key:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_NATIVE_INTENT_V1',jsonb_build_object(
+  'request_id',p_request->'request_id','group_key',p_group->'group_key','agency_id',p_request->'agency_id','environment',p_request->'environment'));
+ insert into public.weekly_message_intents(environment,agency_id,source_cycle_id,audience_kind,candidate_cohort_id,candidate_generation_id,
+  recipient_route_id,recipient_generation_id,sorted_due_event_ids,tranche_kind,tranche_sequence,logical_key,state,due_at_utc)
+ values(p_request->>'environment',(p_request->>'agency_id')::uuid,(p_group->>'source_cycle_id')::uuid,
+  case when p_request->>'audience'='MANAGER' then 'MANAGER' else 'CANDIDATE' end,cohort_id,
+  case when p_request->>'audience'='WORKER' then generation_id end,route_id,
+  case when p_request->>'audience'='MANAGER' then generation_id end,'{}',
+  case when p_request->>'audience'='MANAGER' then 'MANAGER_MANUAL_RESEND' else 'CANDIDATE_MANUAL_REMINDER' end,sequence,key,'DUE',p_at)
+ returning id into intent_id;
+ perform private.weekly_contact_source_capture_insert_v1(intent_id,'EXPLICIT_MANUAL',(p_request->>'request_id')::uuid,null,
+  p_members,p_group,null,null,p_at,(p_request->>'actor_user_id')::uuid);
+ return intent_id;
+end;
+$function$;

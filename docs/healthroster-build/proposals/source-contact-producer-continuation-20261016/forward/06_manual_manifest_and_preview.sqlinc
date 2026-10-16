@@ -1,0 +1,127 @@
+create or replace function private.weekly_contact_manual_manifest_v1(p_request jsonb,p_at timestamptz)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare scope_request jsonb;issue jsonb;scope public.weekly_contact_pause_scopes%rowtype;revision jsonb;facts jsonb;
+ scopes jsonb:='[]';members jsonb:='[]';witnesses jsonb:='[]';reviews jsonb;groups jsonb:='[]';group_members jsonb;
+ grouping record;selected jsonb;model jsonb;descriptor jsonb;content_hash bytea;group_key bytea;cas_matches boolean:=true;
+begin
+ -- Caller already validates and locks the complete sorted requested scope set.
+ for scope_request in select value from jsonb_array_elements(p_request->'scopes') loop
+  select * into strict scope from public.weekly_contact_pause_scopes where agency_id=(p_request->>'agency_id')::uuid
+   and environment=p_request->>'environment' and candidate_id=(scope_request->>'candidate_id')::uuid
+   and client_id=(scope_request->>'client_id')::uuid;
+  revision:=private.weekly_contact_checking_scope_revision_v1(scope.id);
+  cas_matches:=cas_matches and scope.revision::text=scope_request->>'expected_scope_revision'
+   and revision->>'revision'=scope_request->>'expected_checking_revision';
+  witnesses:=witnesses||jsonb_build_array(jsonb_build_object('scope_id',scope.id,'candidate_id',scope.candidate_id,
+   'client_id',scope.client_id,'scope_revision',scope.revision::text,'checking_revision',revision->>'revision',
+   'checking_facts_sha256',revision->>'facts_sha256'));
+  reviews:='[]';
+  for issue in select value from jsonb_array_elements(scope_request->'selected_issue_ids') loop
+   facts:=private.weekly_contact_manual_member_facts_v1((issue#>>'{}')::uuid,p_request->>'audience',p_at);
+   if facts->>'candidate_id' is distinct from scope.candidate_id::text or facts->>'client_id' is distinct from scope.client_id::text then
+    raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+   facts:=facts||jsonb_build_object('scope_id',scope.id,'scope_revision',scope.revision::text,'checking_revision',revision->>'revision');
+   members:=members||jsonb_build_array(facts);
+   reviews:=reviews||jsonb_build_array(jsonb_build_object('issue_id',facts->'issue_id','eligible',facts->'eligible',
+    'exclusion_reason',facts->'exclusion_reason','resolution_action',facts->'resolution_action',
+    'same_purpose_reason',facts->'same_purpose_reason','last_accepted_send',facts->'last_accepted_send',
+    'next_routine_step',facts->'next_routine_step','cooldown_until_utc',facts->'cooldown_until_utc',
+    'cooldown_remaining_seconds',facts->'cooldown_remaining_seconds','cutoff',facts->'cutoff'));
+  end loop;
+  scopes:=scopes||jsonb_build_array(jsonb_build_object('candidate_id',scope.candidate_id,'client_id',scope.client_id,
+   'scope_revision',scope.revision::text,'checking_revision',revision->>'revision',
+   'permission',jsonb_build_object('allowed',true,'reason',null),'members',reviews));
+ end loop;
+ for grouping in select member->>'source_cycle_id' cycle_id,member->>'manager_address' address,
+   member->>'candidate_generation_id' generation_id,member->>'purpose' purpose
+  from jsonb_array_elements(members)member where member->'eligible'='true'::jsonb
+  group by member->>'source_cycle_id',member->>'manager_address',member->>'candidate_generation_id',member->>'purpose'
+  order by member->>'source_cycle_id',member->>'manager_address',member->>'candidate_generation_id',member->>'purpose'
+ loop
+  select jsonb_agg(member order by member->>'issue_id'),jsonb_agg(member->'issue_id' order by member->>'issue_id')
+   into group_members,selected from jsonb_array_elements(members)member
+   where member->'eligible'='true'::jsonb and member->>'source_cycle_id'=grouping.cycle_id
+    and member->>'manager_address' is not distinct from grouping.address
+    and member->>'candidate_generation_id' is not distinct from grouping.generation_id and member->>'purpose'=grouping.purpose;
+  if p_request->>'audience'='MANAGER' then
+   select jsonb_build_object('kind','MANAGER_QUERY_MODEL_V1','policy_version','1.8.0','renderer_version','1.4.0','structure_version','1.0.0',
+    'rows',jsonb_agg(member->'manager_row' order by private.weekly_source_query_ascii_fold_v1(member->'manager_row'->>'clientName') collate "C",
+     member->>'client_id',private.weekly_source_query_ascii_fold_v1(member->'manager_row'->>'displayName') collate "C",member->>'candidate_id',
+     member->'manager_row'->>'workDate',member->'manager_row'->>'sourceStartInstant',member->>'issue_id'),
+    'plain_body',null,'attachment_count',0) into model from jsonb_array_elements(group_members)member;
+   descriptor:=jsonb_build_object('audience','MANAGER','channel','EMAIL','recipient_route_id',group_members->0->'recipient_route_id',
+    'candidate_generation_id',null,'recipient',jsonb_build_object('candidate_id',null,'manager_address',grouping.address));
+  else
+   model:=jsonb_build_object('kind','WORKER_QUERY_MODEL_V1','policy_version','weekly-source-candidate-push-v1','renderer_version','1.0.0',
+    'structure_version',null,'rows','[]'::jsonb,'plain_body',case grouping.purpose when 'CHECK_HOURS'
+      then 'Open MyTMS to check your Timesheet hours.' else 'Open MyTMS to submit your Timesheet hours.' end,'attachment_count',0);
+   descriptor:=jsonb_build_object('audience','WORKER','channel','PUSH','recipient_route_id',null,'candidate_generation_id',grouping.generation_id::uuid,
+    'recipient',jsonb_build_object('candidate_id',group_members->0->'candidate_id','manager_address',null));
+  end if;
+  group_key:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_GROUP_V1',jsonb_build_object('agency_id',p_request->'agency_id',
+   'environment',p_request->'environment','source_cycle_id',grouping.cycle_id,'audience',p_request->'audience',
+   'recipient',descriptor->'recipient','candidate_generation_id',descriptor->'candidate_generation_id','purpose',grouping.purpose));
+  content_hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_REVIEW_CONTENT_V1',jsonb_build_object('group_key',encode(group_key,'hex'),
+   'selected_issue_ids',selected,'recipient',descriptor->'recipient','preview',model));
+  groups:=groups||jsonb_build_array(descriptor||jsonb_build_object('group_key',encode(group_key,'hex'),'source_cycle_id',grouping.cycle_id::uuid,
+   'selected_issue_ids',selected,'canonical_content_sha256',encode(content_hash,'hex'),'preview',model));
+ end loop;
+ return jsonb_build_object('version','CONTACT_MANUAL_MANIFEST_V1','cas_matches',cas_matches,'scope_results',scopes,
+  'scope_witnesses',witnesses,'groups',groups,'members',members);
+end;
+$function$;
+
+-- Only a new display field varies with the review clock. Its original value is
+-- retained in preview/receipt. This new seal excludes that display countdown;
+-- absolute cooldown, current eligibility and all actual native facts stay bound.
+create or replace function private.weekly_contact_manual_manifest_seal_v1(p_manifest jsonb)
+returns jsonb language sql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+ select jsonb_set(jsonb_set(p_manifest,'{scope_results}',coalesce((select jsonb_agg(
+  jsonb_set(scope,'{members}',(select jsonb_agg(member-'cooldown_remaining_seconds' order by ordinal)
+   from jsonb_array_elements(scope->'members') with ordinality m(member,ordinal))) order by ordinal)
+  from jsonb_array_elements(p_manifest->'scope_results') with ordinality s(scope,ordinal)),'[]'::jsonb)),
+  '{members}',coalesce((select jsonb_agg(member-'cooldown_remaining_seconds' order by ordinal)
+   from jsonb_array_elements(p_manifest->'members') with ordinality m(member,ordinal)),'[]'::jsonb))
+$function$;
+
+create or replace function public.weekly_source_contact_manual_enquiry_preview_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare saved public.weekly_contact_manual_reviews%rowtype;accepted public.weekly_contact_manual_acceptances%rowtype;
+ request_hash bytea;manifest jsonb;result jsonb;review_id uuid;review_hash bytea;at_utc timestamptz;expires timestamptz;
+begin
+ perform private.weekly_contact_manual_request_assert_v1(p_request,false);
+ perform private.weekly_contact_manual_scopes_lock_v1(p_request);
+ request_hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_REQUEST_V1',p_request);
+ select * into saved from public.weekly_contact_manual_reviews where request_id=(p_request->>'request_id')::uuid;
+ if found then
+  if saved.actor_user_id<>(p_request->>'actor_user_id')::uuid or saved.request_digest<>request_hash then
+   raise exception 'CONTACT_MANUAL_ENQUIRY_IDEMPOTENCY_CONFLICT' using errcode='40001';end if;
+  return saved.preview_json;
+ end if;
+ at_utc:=clock_timestamp();
+ manifest:=private.weekly_contact_manual_manifest_v1(p_request,at_utc);
+ if manifest->'cas_matches'='true'::jsonb and jsonb_array_length(manifest->'groups')>0 then
+  review_id:=gen_random_uuid();expires:=at_utc+interval '10 minutes';
+  review_hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_REVIEW_V1',jsonb_build_object('review_id',review_id,
+   'request',p_request,'manifest',private.weekly_contact_manual_manifest_seal_v1(manifest),
+   'expires_at_utc',to_char(expires at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')));
+ end if;
+ result:=jsonb_build_object('ok',true,'version','CONTACT_MANUAL_ENQUIRY_REVIEW_V1','request_id',p_request->'request_id',
+  'review_id',review_id,'review_digest',case when review_hash is null then null else encode(review_hash,'hex') end,
+  'audience',p_request->'audience','reason',p_request->'reason','can_accept',review_id is not null,
+  'scope_results',manifest->'scope_results','groups',manifest->'groups','expires_at_utc',
+  case when expires is null then null else to_char(expires at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end);
+ if review_id is not null then
+  insert into public.weekly_contact_manual_reviews(id,request_id,actor_user_id,agency_id,environment,audience,reason,
+   request_digest,review_digest,request_json,manifest_json,preview_json,created_at_utc,expires_at_utc)
+  values(review_id,(p_request->>'request_id')::uuid,(p_request->>'actor_user_id')::uuid,(p_request->>'agency_id')::uuid,
+   p_request->>'environment',p_request->>'audience',p_request->>'reason',request_hash,review_hash,p_request,manifest,result,at_utc,expires);
+ end if;
+ return result;
+exception when others then
+ perform private.weekly_contact_manual_raise_public_v1(SQLERRM,SQLSTATE);return null;
+end;
+$function$;

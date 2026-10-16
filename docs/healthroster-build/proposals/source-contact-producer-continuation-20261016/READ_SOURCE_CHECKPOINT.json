@@ -1,0 +1,202 @@
+{
+  "version": "CONTACT_COMMISSIONED_PRODUCERS_READ_CHECKPOINT_V1",
+  "base_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+  "inputs": [
+    {
+      "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+      "sha256_normalized_lf": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+    },
+    {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256_normalized_lf": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "path": "supabase/migrations/15092026_2310_weekly_source_delivery_targets.sql",
+      "sha256_normalized_lf": "4a8d11cecf697329b4cd019f7a194276476e79d2f43714a946ac8217c7f62b96"
+    },
+    {
+      "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+      "sha256_normalized_lf": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+    },
+    {
+      "path": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+      "sha256_normalized_lf": "b57dfa67b74854a67563af4c3ec14cd43250ab9c2528eee54de27a2c1370a18e"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "sha256_normalized_lf": "c00abac4e44edaf0a752fca2176ea5f6e1c75f1f676c96bf9655797cfbc264ed"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_source_memberships/010_native_logical_members.sqlinc",
+      "sha256_normalized_lf": "25fb04d1466e9f25c9e341d543cbe852c74614683f6e9c49dbc5dac21dc7e3a8"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_source_memberships/020_native_budget.sqlinc",
+      "sha256_normalized_lf": "92f349dd431dc1808e4d6a851794a3cd51dbb898e804d3495592e2f51d382a7e"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+      "sha256_normalized_lf": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be"
+    },
+    {
+      "path": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
+      "sha256_normalized_lf": "47789ebbdf899cb3045dc4164654c3eac499cf73a746bfdcb0b25c7c88beac5b"
+    },
+    {
+      "path": "broker/src/weekly-source/push-timing-office.mjs",
+      "sha256_normalized_lf": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "one-time/01_contact_producer_journals.sqlinc",
+      "sha256": "319a9f0dfb3426571d52af9917ed811cc57548324de7d13e98f2dc38cbdfb919"
+    },
+    {
+      "path": "one-time/02_automatic_followup_tranche.sqlinc",
+      "sha256": "d81e1f7a541dd38261fe661c9e692ad44245015b0184d1b49b7267565747f33e"
+    },
+    {
+      "path": "forward/00_current_logical_closure.sqlinc",
+      "sha256": "dfacbe3cbcd9be1a3d9ebff6d590ef98fde8cddf9b4760b67c0d298cf8347623"
+    },
+    {
+      "path": "forward/01_checking_revision_and_history.sqlinc",
+      "sha256": "89ec4bcbc88e488a13a7e8871cc168dfea48600a361c1a67d07130516f2cb161"
+    },
+    {
+      "path": "forward/02_cutoff_classification.sqlinc",
+      "sha256": "47583ccd2c125de4ab5da7d61c758284a814b58441a2427cfdd92256d928e2de"
+    },
+    {
+      "path": "forward/03_manual_request_validation.sqlinc",
+      "sha256": "e77de38f1b4d17570cb6ba7ef68a107452a331ce0af76bed3130a9cf8710f7db"
+    },
+    {
+      "path": "forward/04_original_logical_history.sqlinc",
+      "sha256": "5bc8bce37f0007a135544a13f8a73026a15404ced1cbb3ee8b1a995a704fd8b5"
+    },
+    {
+      "path": "forward/05_manual_member_facts.sqlinc",
+      "sha256": "844301db5f075ffee2cfa3d1ee09024565938a7574eba30361254cc87c7e3d94"
+    },
+    {
+      "path": "forward/06_manual_manifest_and_preview.sqlinc",
+      "sha256": "d8af98736b140ffc7b93671d001ec6c836b1d9a73a7b18622b386c6b881bbc51"
+    },
+    {
+      "path": "forward/07_capture_native_reads.sqlinc",
+      "sha256": "929edb19489d5ad00e735e7ce2b0113f89cc483cd8cdea9f10b908b79e729e9c"
+    },
+    {
+      "path": "forward/08_manual_native_enqueue.sqlinc",
+      "sha256": "66658b86a114ba21c0039f250585cbca29ce02002710fbfca353544a82c2cb16"
+    },
+    {
+      "path": "forward/09_manual_accept_and_errors.sqlinc",
+      "sha256": "eac16899c2a99803583cca3a6408699638e75f1c5270ebbe5369fe449f767a9e"
+    },
+    {
+      "path": "forward/10_capture_dispatch_lineage.sqlinc",
+      "sha256": "2b3465c98b5da5e2ea4cfdb4fe3b95e62c29b73508ca93e6c164b53191c18aa8"
+    },
+    {
+      "path": "forward/11_followup_state_and_enqueue.sqlinc",
+      "sha256": "03268f7caa08096187ab81b9e7a377be276ebfe4b2ebd9e3722ad14fd9570b44"
+    },
+    {
+      "path": "forward/12_current_native_subset.sqlinc",
+      "sha256": "9b15d5fba7ddc532e768f327ede80ad3ad74f1431d128409afcf76666777ae30"
+    },
+    {
+      "path": "forward/13_recompose_native_intents.sqlinc",
+      "sha256": "381869e1e81aadb2061780add1c379b60c9bf62b6c5c0228a429154c43e1e91c"
+    },
+    {
+      "path": "forward/20_native_manager_members.sqlinc",
+      "sha256": "422ba86657f3f7d6aa30e317dbbe4c7fda7c107d543b6125138731ec15f609a2"
+    },
+    {
+      "path": "forward/21_native_render_input.sqlinc",
+      "sha256": "9fc1d720c8c96c5a89c9a0381a3829cc9e5dc4a6a2d68776e9b5b9c55a4695ba"
+    },
+    {
+      "path": "forward/22_native_render_stage.sqlinc",
+      "sha256": "ad9ee0ed805e39574fa291730b5a82731686e5714cfc392b799961497f1b9426"
+    },
+    {
+      "path": "forward/23_native_logical_members.sqlinc",
+      "sha256": "9c39a2b814d74013d4aa64366ee2cc82d720ab10dd44e565751c2bac9f14ab74"
+    },
+    {
+      "path": "forward/24_native_budget.sqlinc",
+      "sha256": "7cddbe5a12062e8861ed52e61cd2d52f9bf988e79ba9596b58beaa57a9203f53"
+    },
+    {
+      "path": "forward/25_native_current_membership.sqlinc",
+      "sha256": "57cec72bbce3387b179d44da9c2e64e2cfb757cbbf9485b37f780f3362090f9f"
+    },
+    {
+      "path": "forward/26_native_push_context.sqlinc",
+      "sha256": "cf17966e9530c9fde0993186da227a1b639ea89c4c845e89ac217d9abe7e656c"
+    },
+    {
+      "path": "forward/27_native_manager_intent.sqlinc",
+      "sha256": "50e601b2651098700e6785fac1f0b537a84428ce43e56b1d8bd015641c29edc4"
+    },
+    {
+      "path": "forward/99_acl.sqlinc",
+      "sha256": "1de760382335021c411211963aa9e3379d2806741a29e9e81cb7394c93bd93c9"
+    },
+    {
+      "path": "runtime/contact-manual-enquiry.mjs",
+      "sha256": "cbec35660eab50592d3749e31a7acf7be385cdc8cb6b644aa1b72df97087db51"
+    },
+    {
+      "path": "runtime/contact-manual-enquiry.d.ts",
+      "sha256": "d946b2a2ec0b68afc0941e7bd822cff313f860c505938d089690bf09dcc7c61e"
+    },
+    {
+      "path": "MANUAL_RUNTIME_CONTRACT_RECEIPT.json",
+      "sha256": "d44c85da06303b2df16a9695a427a2422662a695bcf593a630d6bc14b1bc9d4d"
+    },
+    {
+      "path": "NATIVE_CONTINUATION_WIP.md",
+      "sha256": "30abcae4a7d1fa4de3c55127ed8170796d6d79cad9a96206463e8c257a34ef0a"
+    },
+    {
+      "path": "NATIVE_OWNER_INPUTS.json",
+      "sha256": "3c1b4b292ad099e8d660b3ea132f2d09231734b1335f42671cac4e78c9f01cfb"
+    },
+    {
+      "path": "REGISTER_DELTA_WIP.json",
+      "sha256": "c90be35265bd492c8f66b81c6fb768b06db02524d1cc911e350ee674f662e7a1"
+    },
+    {
+      "path": "build-current-owners.mjs",
+      "sha256": "2abba5291fbba821086fb9a2be5d11cec9557324aa1678179776371c3f1b8b50"
+    },
+    {
+      "path": "build-read-checkpoint.mjs",
+      "sha256": "86f9370690315ee343299a63694b2190f57a9b8a00ad940fbd55b281eb7443ed"
+    },
+    {
+      "path": "tests/manual-request.test.mjs",
+      "sha256": "abd04e11e7abe2286748b5da0346a18084a5122fd9a8e1e4fafbd6911e51f2c4"
+    }
+  ],
+  "sql_statement_count": 163,
+  "private_owner_declarations": 42,
+  "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
+  "readonly_row_owner": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
+  "native": "NOT_RUN; managed scanner treats PL/pgSQL bodies as opaque",
+  "unfinished": [
+    "Configured MANUAL-step actual SEND_MANAGER_NOW/bulk projection/CAS successor",
+    "Bounded existing recheck-task consumer/progress/cursor/future-wake + genuine legacy outbox phase",
+    "Unchanged capture replay/coalescing, due rebase integrity, aliases and actual notification fallback",
+    "Bounded actual scheduler/runtime followup/recheck invocation with existing fanout/failure semantics",
+    "Hostile native fixtures and actual root-owned PostgreSQL/ACL/concurrency/provider-free acceptance"
+  ],
+  "source_only_tests": "manual-request.test.mjs uses actual current shared JSON parser; no database/provider/native proof",
+  "database_actions": "NONE"
+}

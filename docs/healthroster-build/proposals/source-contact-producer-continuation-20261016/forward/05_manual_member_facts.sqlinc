@@ -1,0 +1,169 @@
+-- Pure native read. No request generation, question clock, route, render,
+-- ordinal, provider attempt or accepted-send timestamp is created here.
+create or replace function private.weekly_contact_source_manager_row_v1(p_incident_id uuid)
+returns jsonb language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select jsonb_build_object('clientId',i.client_id,'clientName',client.name,'candidateId',i.candidate_id,
+  'displayName',coalesce(nullif(candidate.display_name,''),concat_ws(' ',candidate.first_name,candidate.last_name)),
+  'issueId',i.id,'workDate',w.work_date,'sourceStartInstant',coalesce(c.system_start_at_local,c.candidate_start_at_local),
+  'start',to_char(c.candidate_start_at_local,'HH24:MI'),'end',to_char(c.candidate_end_at_local,'HH24:MI'),
+  'breakMinutes',c.candidate_break_minutes,
+  'systemStart',case when c.source_presence='PRESENT' then to_char(c.system_start_at_local,'HH24:MI') end,
+  'systemEnd',case when c.source_presence='PRESENT' then to_char(c.system_end_at_local,'HH24:MI') end,
+  'systemBreakMinutes',case when c.source_presence='PRESENT' then c.system_break_minutes end,
+  'systemAbsent',c.source_presence<>'PRESENT','issueFamily',case when c.issue_family='SOURCE_HOURS_DIFFER' then 'HOURS_DIFFER'
+   when c.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED' and sg.source_family='NHSP' then 'NHSP_ABSENT'
+   when c.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED' then 'SOURCE_ABSENT' else 'HEALTHROSTER_NOT_FINALISED' end,
+  'candidateRequested',i.candidate_action_state='RESPONDED')
+ from public.weekly_discrepancy_incidents i join public.weekly_issue_comparison_revisions c on c.id=i.current_comparison_revision_id
+ join public.weekly_work_events w on w.id=i.work_event_id join public.weekly_source_groups sg on sg.id=i.source_group_id
+ join public.clients client on client.id=i.client_id join public.candidates candidate on candidate.id=i.candidate_id where i.id=p_incident_id
+$function$;
+
+create or replace function private.weekly_contact_manual_member_facts_v1(p_incident_id uuid,p_audience text,p_at timestamptz)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare i public.weekly_discrepancy_incidents%rowtype;c public.weekly_issue_comparison_revisions%rowtype;
+ w public.weekly_work_events%rowtype;sg public.weekly_source_groups%rowtype;cycle public.weekly_source_cycles%rowtype;
+ settings public.weekly_source_global_settings%rowtype;g public.weekly_candidate_outreach_generations%rowtype;
+ request public.weekly_timesheet_submission_requests%rowtype;sm public.weekly_timesheet_submission_request_memberships%rowtype;
+ om public.weekly_candidate_outreach_memberships%rowtype;route public.weekly_manager_recipient_routes%rowtype;
+ cutoff jsonb;policy jsonb;guard jsonb;identity jsonb;keys jsonb;history jsonb;basis jsonb;purpose text:='CHECK_HOURS';
+ kind text;native_id uuid;recipient text;route_key bytea;reason text;cooldown timestamptz;remaining integer:=0;
+ accepted_id uuid;timing jsonb;next_step jsonb;row_model jsonb;pending boolean;expected_week date;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if p_audience is null or p_audience not in('WORKER','MANAGER') or p_at is null or not isfinite(p_at) then
+  raise exception 'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID' using errcode='22023';end if;
+ select * into strict i from public.weekly_discrepancy_incidents where id=p_incident_id;
+ select * into strict c from public.weekly_issue_comparison_revisions where id=i.current_comparison_revision_id;
+ select * into strict w from public.weekly_work_events where id=i.work_event_id;
+ select * into strict sg from public.weekly_source_groups where id=i.source_group_id;
+ select * into strict cycle from public.weekly_source_cycles where id=i.source_cycle_id;
+ select * into strict settings from public.weekly_source_global_settings where singleton;
+ perform private.weekly_source_query_current_publication_v1(cycle.id,cycle.current_projection_publication_id);
+ cutoff:=private.weekly_contact_source_cutoff_classification_v1(i.id,p_at);
+ policy:=private._weekly_source_effective_policy_v1(i.client_id,c.contract_id,w.work_date);
+ guard:=private.weekly_contact_scope_guard_v1(i.candidate_id,i.client_id,p_audience,p_at);
+ identity:=jsonb_build_object('work_event_id',i.work_event_id,'incident_id',i.id,'incident_episode',i.episode_number);
+ reason:=case when i.state<>'OPEN' then 'ISSUE_NO_LONGER_OPEN'
+  when private.weekly_source_covered_hours_incident_v1(i.id) then 'CHECKING_NO_LONGER_REQUIRED'
+  when policy->>'source_group_id' is distinct from sg.id::text or policy->>'authority_mode' is distinct from 'SOURCE_AUTHORITY'
+   or policy->>'document_mode' is distinct from 'CHECK_ONLY' then 'CURRENT_SOURCE_POLICY_NOT_APPLICABLE'
+  when guard->'allow' is distinct from 'true'::jsonb then 'CONTACT_PAUSED' end;
+ if p_audience='MANAGER' then
+  kind:='MANAGER_MEMBER';
+  recipient:=private.weekly_source_query_normalise_recipient_v1(policy->>'manager_query_recipient');
+  route_key:=private.weekly_source_sha256_jsonb_v1('WEEKLY_MANAGER_RECIPIENT_ROUTE_V1',jsonb_build_object(
+   'environment',sg.environment,'agency_id',sg.agency_id,'source_cycle_id',cycle.id,'recipient',coalesce(recipient,'NO_MANAGER_ROUTE')));
+  select * into route from public.weekly_manager_recipient_routes where environment=sg.environment and agency_id=sg.agency_id
+   and source_cycle_id=cycle.id and normalised_recipient_hash=route_key;
+  row_model:=private.weekly_contact_source_manager_row_v1(i.id);
+  reason:=coalesce(reason,case when i.manager_action_state in('RESPONDED','NOT_REQUIRED') or i.manager_potential_state<>'AVAILABLE'
+    then 'MANAGER_RESPONSE_OR_SOURCE_STILL_PENDING'
+   when policy->'manager_queries_enabled' is distinct from 'true'::jsonb or recipient is null then 'MANAGER_CONTACT_DISABLED'
+   when c.candidate_timesheet_id is null and not private.weekly_source_expected_week_question_v1(i.id)
+    and not(c.issue_family='HEALTHROSTER_NOT_FINALISED' and private.weekly_source_is_import_authoritative_v1(i.client_id,c.contract_id,w.work_date))
+    then 'WORK_EVIDENCE_REQUIRED'
+   when c.candidate_start_at_local is null or c.candidate_end_at_local is null or c.candidate_break_minutes is null
+    or c.candidate_break_minutes not between 0 and 10080 then 'WORK_EVIDENCE_REQUIRED'
+   when char_length(row_model->>'clientName') not between 1 and 500 or char_length(row_model->>'displayName') not between 1 and 500
+    then 'NATIVE_RENDER_FACTS_UNAVAILABLE'
+   when c.source_presence='PRESENT' and(c.system_start_at_local is null or c.system_end_at_local is null or c.system_break_minutes is null)
+    then 'NATIVE_RENDER_FACTS_UNAVAILABLE' end);
+  basis:=jsonb_build_object('kind','MANAGER_CURRENT_INCIDENT_V1','incident_id',i.id,'comparison_revision_id',c.id,
+   'comparison_fingerprint',encode(c.material_comparison_fingerprint,'hex'),'recipient_route_key',encode(route_key,'hex'));
+  cooldown:=route.manager_send_available_at_utc;
+ else
+  -- Prefer an actual current expected-week request where this selected issue
+  -- belongs to its exact Contract/week. Aliases share that one real member.
+  expected_week:=w.work_date+(7-extract(isodow from w.work_date)::integer);
+  select generation.* into g
+   from public.weekly_candidate_outreach_generations generation
+   join public.weekly_timesheet_submission_requests submission on submission.candidate_cohort_id=generation.candidate_cohort_id
+    and submission.request_generation=generation.generation_number and submission.membership_hash=generation.membership_hash
+    and submission.candidate_id=generation.candidate_id and submission.source_cycle_id=generation.source_cycle_id
+   join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=submission.id
+   where generation.source_cycle_id=cycle.id and generation.candidate_id=i.candidate_id and generation.request_kind='SUBMIT_TIMESHEET'
+    and generation.state='ACTIVE' and submission.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and membership.state='WAITING'
+    and membership.client_id=i.client_id and membership.contract_id=c.contract_id and membership.week_ending=expected_week;
+  if found then
+   purpose:='SUBMIT_TIMESHEET';kind:='SUBMISSION_MEMBER';
+   select * into strict request from public.weekly_timesheet_submission_requests where candidate_cohort_id=g.candidate_cohort_id
+    and request_generation=g.generation_number and membership_hash=g.membership_hash and candidate_id=g.candidate_id and source_cycle_id=g.source_cycle_id;
+   select * into strict sm from public.weekly_timesheet_submission_request_memberships where submission_request_id=request.id
+    and client_id=i.client_id and contract_id=c.contract_id and week_ending=expected_week;
+   native_id:=sm.id;identity:=jsonb_build_object('contract_id',sm.contract_id,'week_ending',sm.week_ending);
+   basis:=jsonb_build_object('kind','NATIVE_EXPECTED_WEEK_MEMBER_V1','submission_request_id',request.id,'membership_id',sm.id,
+    'candidate_generation_id',g.id,'contract_id',sm.contract_id,'week_ending',sm.week_ending,
+    'expected_source_fingerprint',encode(sm.expected_source_fingerprint,'hex'));
+   reason:=coalesce(reason,case when not private.weekly_source_missing_scope_unchanged_v1(request.current_projection_publication_id,
+      cycle.current_projection_publication_id,i.candidate_id,i.client_id,sm.contract_id,sm.week_ending)
+    or exists(select 1 from public.timesheets t where t.contract_id=sm.contract_id and t.week_ending_date=sm.week_ending and t.is_current
+     and t.revoked_at is null and t.archived_at_utc is null and t.sheet_scope='WEEKLY' and t.line_type='HOURS'
+     and t.r2_nurse_key is not null and t.img_sha256_nurse is not null) then 'SUBMISSION_NO_LONGER_REQUIRED' end);
+  else
+   kind:='OUTREACH_MEMBER';
+   select generation.* into g from public.weekly_candidate_outreach_generations generation
+    join public.weekly_candidate_outreach_memberships membership on membership.candidate_generation_id=generation.id
+    join public.weekly_candidate_cohorts cohort on cohort.id=generation.candidate_cohort_id and cohort.current_generation_id=generation.id
+    where membership.incident_id=i.id and generation.candidate_id=i.candidate_id and generation.client_id=i.client_id
+     and generation.source_cycle_id=cycle.id and generation.request_kind='CHECK_HOURS' and generation.state='ACTIVE';
+   if found then
+    select * into strict om from public.weekly_candidate_outreach_memberships where candidate_generation_id=g.id and incident_id=i.id;
+    native_id:=om.id;basis:=jsonb_build_object('kind','CANDIDATE_CHECK_HOURS_MEMBER_V1','membership_id',om.id,
+     'candidate_generation_id',g.id,'comparison_revision_id',om.comparison_revision_id,
+     'comparison_fingerprint',encode(c.material_comparison_fingerprint,'hex'));
+    reason:=coalesce(reason,case when om.state<>'ACTIONABLE' or om.comparison_revision_id<>c.id
+      or i.candidate_action_state in('RESPONDED','NOT_REQUIRED') then 'WORKER_RESPONSE_OR_SOURCE_STILL_PENDING' end);
+   else reason:=coalesce(reason,'ACTIVE_NATIVE_QUESTION_REQUIRED');end if;
+  end if;
+  reason:=coalesce(reason,case when policy->'candidate_queries_enabled' is distinct from 'true'::jsonb then 'WORKER_CONTACT_DISABLED'
+   when g.id is null or not private.weekly_source_candidate_generation_current_v1(g.id) then 'ACTIVE_NATIVE_QUESTION_REQUIRED'
+   when g.deadline_at_utc<=p_at then 'NATIVE_QUESTION_EXPIRED' end);
+  cooldown:=g.manual_reminder_available_at_utc;
+ end if;
+ keys:=private.weekly_contact_source_identity_v1(sg.agency_id,sg.environment,i.candidate_id,i.client_id,purpose,p_audience,identity);
+ history:=private.weekly_contact_source_logical_history_v1(sg.agency_id,sg.environment,i.candidate_id,i.client_id,
+  decode(keys->>'logical_contact_key','hex'));
+ if history->'last_accepted_send'<>'null'::jsonb then
+  cooldown:=greatest(cooldown,(history->'last_accepted_send'->>'accepted_at_utc')::timestamptz+
+   case when p_audience='MANAGER' then settings.manager_manual_send_cooldown else settings.candidate_manual_reminder_cooldown end);
+ end if;
+ select exists(select 1 from public.weekly_contact_source_ordinal_owners owner
+  join public.weekly_message_intents intent on intent.id=owner.message_intent_id
+  where owner.logical_contact_key=decode(keys->>'logical_contact_key','hex') and intent.state in('DUE','RENDERED')
+   and not exists(select 1 from public.weekly_contact_delivery_memberships member where member.logical_contact_key=owner.logical_contact_key
+    and member.send_ordinal=owner.send_ordinal and member.accepted_at_utc is not null)) into pending;
+ reason:=coalesce(reason,case when history->'unknown_original'='true'::jsonb then 'ORIGINAL_SUBMISSION_UNCERTAIN'
+  when history->'original_retry_pending'='true'::jsonb then 'ORIGINAL_ATTEMPT_OWNER_PENDING'
+  when pending then 'ORIGINAL_ENQUIRY_QUEUED' when cooldown>p_at then 'MANUAL_ENQUIRY_COOLDOWN' end);
+ if cooldown<=p_at then cooldown:=null;end if;
+ if cooldown is not null then remaining:=least(2147483647,ceil(extract(epoch from cooldown-p_at)))::integer;end if;
+ if p_audience='MANAGER' then
+  select id into accepted_id from public.weekly_contact_delivery_memberships where logical_contact_key=decode(keys->>'logical_contact_key','hex')
+   and accepted_at_utc is not null order by send_ordinal limit 1;
+  if accepted_id is not null then
+   timing:=private.weekly_contact_source_manager_followup_state_v1(i.id,p_at);
+   if timing->>'mode' is not null and timing->>'due_at_utc' is not null then
+    select jsonb_build_object('sequence',(step->>'sequence')::integer,'mode',timing->>'mode','due_at_utc',timing->>'due_at_utc') into next_step
+     from jsonb_array_elements(settings.manager_followups)step where (step->>'sequence')::integer=(timing->>'routine_sequence')::integer;
+   end if;
+  end if;
+ end if;
+ return jsonb_build_object('version','CONTACT_MANUAL_MEMBER_FACTS_V1','issue_id',i.id,'candidate_id',i.candidate_id,'client_id',i.client_id,
+  'source_cycle_id',cycle.id,'projection_publication_id',cycle.current_projection_publication_id,'audience',p_audience,'purpose',purpose,
+  'eligible',reason is null,'exclusion_reason',reason,'resolution_action',null,
+  'same_purpose_reason',case when purpose='SUBMIT_TIMESHEET' then 'The same original expected Contract and week still need a signed Timesheet.'
+   else 'The same original shift and incident episode still need this audience to check the hours.' end,
+  'last_accepted_send',history->'last_accepted_send','next_routine_step',next_step,
+  'cooldown_until_utc',case when cooldown is null then null else to_char(cooldown at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end,
+  'cooldown_remaining_seconds',remaining,'cutoff',cutoff,'logical_contact_key',keys->'logical_contact_key','budget_owner_key',keys->'budget_owner_key',
+  'send_ordinal',history->'next_send_ordinal','native_member_kind',kind,'native_member_id',native_id,'native_basis',basis,
+  'candidate_generation_id',g.id,'recipient_route_id',route.id,'manager_address',recipient,'manager_row',row_model,
+  'incident_id',case when purpose='CHECK_HOURS' then i.id end,'incident_episode',case when purpose='CHECK_HOURS' then i.episode_number end,
+  'work_event_id',case when purpose='CHECK_HOURS' then i.work_event_id end,'comparison_revision_id',case when purpose='CHECK_HOURS' then c.id end,
+  'comparison_fingerprint',case when purpose='CHECK_HOURS' then encode(c.material_comparison_fingerprint,'hex') end,
+  'policy_sha256',encode(private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_EFFECTIVE_SOURCE_POLICY_V1',policy),'hex'));
+end;
+$function$;

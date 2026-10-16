@@ -1,0 +1,171 @@
+-- Newly commissioned Health contact metadata. Native questions, comparisons,
+-- render/batch/command/target/attempt rows and enum meanings remain their owners.
+create table public.weekly_contact_checking_scope_versions (
+ scope_id uuid primary key references public.weekly_contact_pause_scopes(id) on delete restrict,
+ revision bigint not null check(revision>=0),
+ facts_sha256 bytea not null check(octet_length(facts_sha256)=32),
+ facts_json jsonb not null check(jsonb_typeof(facts_json)='object'),
+ recorded_at_utc timestamptz not null
+);
+
+create table public.weekly_contact_manual_reviews (
+ id uuid primary key default gen_random_uuid(),
+ request_id uuid not null unique,
+ actor_user_id uuid not null references public.tms_users(id) on delete restrict,
+ agency_id uuid not null,environment text not null check(environment in('TEST','LIVE')),
+ audience text not null check(audience in('WORKER','MANAGER')),
+ reason text not null check(char_length(btrim(reason)) between 1 and 1000),
+ request_digest bytea not null check(octet_length(request_digest)=32),
+ review_digest bytea not null check(octet_length(review_digest)=32),
+ request_json jsonb not null check(jsonb_typeof(request_json)='object'),
+ manifest_json jsonb not null check(jsonb_typeof(manifest_json)='object'),
+ preview_json jsonb not null check(jsonb_typeof(preview_json)='object'),
+ created_at_utc timestamptz not null,expires_at_utc timestamptz not null,
+ check(expires_at_utc>created_at_utc)
+);
+
+create table public.weekly_contact_manual_acceptances (
+ request_id uuid primary key references public.weekly_contact_manual_reviews(request_id) on delete restrict,
+ review_id uuid not null unique references public.weekly_contact_manual_reviews(id) on delete restrict,
+ actor_user_id uuid not null references public.tms_users(id) on delete restrict,
+ request_digest bytea not null check(octet_length(request_digest)=32),
+ receipt_json jsonb not null check(jsonb_typeof(receipt_json)='object'),
+ accepted_at_utc timestamptz not null
+);
+
+create table public.weekly_contact_source_intent_captures (
+ message_intent_id uuid primary key references public.weekly_message_intents(id) on delete restrict,
+ capture_kind text not null check(capture_kind in('ROUTINE_RECOMPOSITION','EXPLICIT_MANUAL','ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION')),
+ original_message_intent_id uuid references public.weekly_message_intents(id) on delete restrict,
+ manual_request_id uuid references public.weekly_contact_manual_acceptances(request_id) on delete restrict deferrable initially deferred,
+ accepted_actor_user_id uuid references public.tms_users(id) on delete restrict,
+ agency_id uuid not null,environment text not null check(environment in('TEST','LIVE')),
+ source_cycle_id uuid not null references public.weekly_source_cycles(id) on delete restrict,
+ projection_publication_id uuid not null references public.weekly_source_projection_publications(id) on delete restrict,
+ original_generation_membership_hash bytea not null check(octet_length(original_generation_membership_hash)=32),
+ membership_hash bytea not null check(octet_length(membership_hash)=32),
+ manifest_json jsonb not null check(jsonb_typeof(manifest_json)='object'),
+ created_at_utc timestamptz not null,
+ check((capture_kind in('EXPLICIT_MANUAL','MANUAL_RECOMPOSITION'))=(manual_request_id is not null)),
+ check(capture_kind not in('EXPLICIT_MANUAL','MANUAL_RECOMPOSITION','ROUTINE_MANUAL_FOLLOWUP') or accepted_actor_user_id is not null),
+ check(capture_kind not in('ROUTINE_RECOMPOSITION','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION') or original_message_intent_id is not null),
+ check(original_message_intent_id is distinct from message_intent_id)
+);
+
+create table public.weekly_contact_source_intent_capture_members (
+ message_intent_id uuid not null references public.weekly_contact_source_intent_captures(message_intent_id) on delete restrict,
+ logical_contact_key bytea not null check(octet_length(logical_contact_key)=32),
+ budget_owner_key bytea not null check(octet_length(budget_owner_key)=32),
+ native_member_kind text not null check(native_member_kind in('OUTREACH_MEMBER','SUBMISSION_MEMBER','MANAGER_MEMBER')),
+ native_member_id uuid not null,
+ selected_issue_ids uuid[] not null default '{}'::uuid[],
+ candidate_id uuid not null references public.candidates(id) on delete restrict,
+ client_id uuid not null references public.clients(id) on delete restrict,
+ scope_id uuid not null references public.weekly_contact_pause_scopes(id) on delete restrict,
+ scope_revision bigint not null check(scope_revision>=0),
+ checking_revision bigint not null check(checking_revision>=0),
+ audience text not null check(audience in('WORKER','MANAGER')),
+ purpose text not null check(purpose in('CHECK_HOURS','SUBMIT_TIMESHEET')),
+ incident_id uuid references public.weekly_discrepancy_incidents(id) on delete restrict,
+ incident_episode integer check(incident_episode>=1),
+ work_event_id uuid references public.weekly_work_events(id) on delete restrict,
+ comparison_revision_id uuid references public.weekly_issue_comparison_revisions(id) on delete restrict,
+ comparison_fingerprint bytea check(octet_length(comparison_fingerprint)=32),
+ send_ordinal integer not null check(send_ordinal>=1),
+ routine_step integer check(routine_step between 0 and 10),
+ basis_accepted_membership_id uuid references public.weekly_contact_delivery_memberships(id) on delete restrict,
+ native_basis_json jsonb not null check(jsonb_typeof(native_basis_json)='object'),
+ primary key(message_intent_id,logical_contact_key,send_ordinal),
+ unique(message_intent_id,native_member_kind,native_member_id),
+ check(cardinality(selected_issue_ids)<=500),
+ check((purpose='CHECK_HOURS')=(incident_id is not null and incident_episode is not null and work_event_id is not null
+   and comparison_revision_id is not null and comparison_fingerprint is not null)),
+ check(purpose<>'SUBMIT_TIMESHEET' or native_member_kind='SUBMISSION_MEMBER')
+);
+create index weekly_contact_source_capture_logical_idx on public.weekly_contact_source_intent_capture_members(logical_contact_key,send_ordinal);
+
+-- This is a current pointer, not rewritten historical capture/attempt evidence.
+-- Only a proved unsubmitted original can transfer the same original ordinal.
+create table public.weekly_contact_source_ordinal_owners (
+ logical_contact_key bytea not null check(octet_length(logical_contact_key)=32),
+ send_ordinal integer not null check(send_ordinal>=1),
+ message_intent_id uuid not null references public.weekly_contact_source_intent_captures(message_intent_id) on delete restrict,
+ revision bigint not null check(revision>=1),
+ recorded_at_utc timestamptz not null,
+ primary key(logical_contact_key,send_ordinal)
+);
+
+create table public.weekly_contact_recheck_progress (
+ task_id uuid primary key references public.weekly_contact_recheck_tasks(id) on delete restrict,
+ scope_revision bigint not null check(scope_revision>=0),
+ checking_revision bigint not null check(checking_revision>=0),
+ phase text not null check(phase in('SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE')),
+ last_native_id uuid,
+ revision bigint not null check(revision>=1),
+ recorded_at_utc timestamptz not null
+);
+create table public.weekly_contact_recheck_steps (
+ id uuid primary key default gen_random_uuid(),
+ task_id uuid not null references public.weekly_contact_recheck_tasks(id) on delete restrict,
+ progress_revision bigint not null check(progress_revision>=1),
+ phase text not null check(phase in('SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE')),
+ native_id uuid,
+ scope_revision bigint not null check(scope_revision>=0),
+ checking_revision bigint not null check(checking_revision>=0),
+ facts_sha256 bytea not null check(octet_length(facts_sha256)=32),
+ disposition_json jsonb not null check(jsonb_typeof(disposition_json)='object'),
+ recorded_at_utc timestamptz not null,
+ unique(task_id,progress_revision)
+);
+
+-- Direct indexed provenance for a copied REAL due event. This records the
+-- actual original clock, not a new campaign start or inferred ancestry chain.
+create table public.weekly_contact_source_due_event_rebases (
+ original_event_id uuid not null references public.weekly_manager_cohort_due_events(id) on delete restrict,
+ recipient_generation_id uuid not null references public.weekly_manager_recipient_generations(id) on delete restrict,
+ rebased_event_id uuid not null unique references public.weekly_manager_cohort_due_events(id) on delete restrict,
+ source_sha256 bytea not null check(octet_length(source_sha256)=32),
+ source_json jsonb not null check(jsonb_typeof(source_json)='object'),
+ recorded_at_utc timestamptz not null,
+ primary key(original_event_id,recipient_generation_id)
+);
+
+do $security$
+declare relation text;
+begin
+ foreach relation in array array['weekly_contact_checking_scope_versions','weekly_contact_manual_reviews',
+  'weekly_contact_manual_acceptances','weekly_contact_source_intent_captures','weekly_contact_source_intent_capture_members',
+  'weekly_contact_source_ordinal_owners','weekly_contact_recheck_progress','weekly_contact_recheck_steps','weekly_contact_source_due_event_rebases'] loop
+  execute format('alter table public.%I owner to %I',relation,CURRENT_USER);
+  execute format('alter table public.%I enable row level security',relation);
+  execute format('alter table public.%I force row level security',relation);
+  execute format('create policy cloudtms_miget_service_owner_all on public.%I for all to CURRENT_USER,service_role using(true) with check(true)',relation);
+  execute format('revoke all on public.%I from public,anon,authenticated,service_role',relation);
+ end loop;
+end;
+$security$;
+
+-- Installed with the tables, rather than leaving an immutable-history interval
+-- between schema and repeatable mounting. No generated Miget owner is guessed.
+create or replace function private.weekly_contact_producer_immutable_v1()
+returns trigger language plpgsql volatile security definer set search_path='pg_catalog','pg_temp'
+as $function$
+begin raise exception 'CONTACT_PRODUCER_IMMUTABLE_HISTORY' using errcode='23514';end;
+$function$;
+revoke all on function private.weekly_contact_producer_immutable_v1() from public,anon,authenticated,service_role;
+do $history_guards$
+declare relation text;
+begin
+ foreach relation in array array['weekly_contact_manual_reviews','weekly_contact_manual_acceptances',
+  'weekly_contact_source_intent_captures','weekly_contact_source_intent_capture_members','weekly_contact_recheck_steps','weekly_contact_source_due_event_rebases'] loop
+  execute format('create trigger %I before update or delete on public.%I for each row execute function private.weekly_contact_producer_immutable_v1()',
+   relation||'_immutable',relation);
+ end loop;
+ foreach relation in array array['weekly_contact_checking_scope_versions','weekly_contact_manual_reviews','weekly_contact_manual_acceptances',
+  'weekly_contact_source_intent_captures','weekly_contact_source_intent_capture_members','weekly_contact_source_ordinal_owners',
+  'weekly_contact_recheck_progress','weekly_contact_recheck_steps','weekly_contact_source_due_event_rebases'] loop
+  execute format('create trigger %I before truncate on public.%I for each statement execute function private.weekly_contact_producer_immutable_v1()',
+   relation||'_no_truncate',relation);
+ end loop;
+end;
+$history_guards$;

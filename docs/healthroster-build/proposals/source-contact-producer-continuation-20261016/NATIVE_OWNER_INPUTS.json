@@ -1,0 +1,46 @@
+{
+  "version": "CONTACT_CAPTURE_NATIVE_OWNER_INPUTS_V1",
+  "inputs": [
+    {
+      "source_commit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "path": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/01_current_native_members.sqlinc",
+      "sha256_normalized_lf": "5d176a81113d2f9e39225831b9e2e31cc94d4fc70463941c0690d405778528cd"
+    },
+    {
+      "source_commit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "path": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/02_native_render_input.sqlinc",
+      "sha256_normalized_lf": "54f33893567814de068d8dd045314c5a0d5e511d0453a9bad22999ec52d7874a"
+    },
+    {
+      "source_commit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "path": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/04_native_render_stage.sqlinc",
+      "sha256_normalized_lf": "684d4c7f81ccc16942f1598f0c9cdd8abc22b5324d71f6451cf9627357d2ff7d"
+    },
+    {
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "path": "supabase/repeatable/includes/weekly_contact_source_memberships/010_native_logical_members.sqlinc",
+      "sha256_normalized_lf": "25fb04d1466e9f25c9e341d543cbe852c74614683f6e9c49dbc5dac21dc7e3a8"
+    },
+    {
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "path": "supabase/repeatable/includes/weekly_contact_source_memberships/020_native_budget.sqlinc",
+      "sha256_normalized_lf": "92f349dd431dc1808e4d6a851794a3cd51dbb898e804d3495592e2f51d382a7e"
+    },
+    {
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "sha256_normalized_lf": "3b44a121db9bffd51351e579c251556c631ce19985d7a3b79b3c09c0f525c88f"
+    },
+    {
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "path": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
+      "sha256_normalized_lf": "47789ebbdf899cb3045dc4164654c3eac499cf73a746bfdcb0b25c7c88beac5b"
+    },
+    {
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256_normalized_lf": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    }
+  ],
+  "qualification": "Exact finite complete source successors only; native PostgreSQL/runtime acceptance NOT_RUN"
+}
