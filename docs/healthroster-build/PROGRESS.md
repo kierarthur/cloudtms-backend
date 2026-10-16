@@ -1,5 +1,11 @@
 # HealthRoster v2 TEST build progress
 
+## Source V6 native checkpoint — 16 October 2026
+
+Saved and verified a partial Source-native checkpoint under final reviewed pack `afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88`: eleven owner-only Health tables; lifecycle/deferred application guards; atomic genuine native run birth; root-authorized sealed-review member discovery for fresh confirmation; exact preparation/application support; complete component publication bridge/final receipt checks; normal native ownership fences and actual sbRpc P0001 continuation; certified direct current-placement producer and strict closed DTOs. Exact ABI/ACL/dependencies are in PUBLISHED_HELPERS.md and SOURCE_PACKAGE_RECEIPT.json, SHA256 `26ce54d7dab487a4fc57e2fd2de96d72b9006da44e3c428d2d906b6810f6dae7`.
+
+**188/188 focused JS/packaging/complete owner reverse checks PASS. PARTIAL_SOURCE_NOT_INSTALLABLE_NATIVE_REQUIRED_NOT_RUN.** Managed scanning is not PostgreSQL parsing. Real native effect producers, read-only preview context/shared economic serializer, registration, preview/seal/accept/read/resume and full canonical/receipt/current-placement integration remain implementation work, not satisfied by this metadata checkpoint. The existing Banking protected stage's original-A invariant requires its genuine moved-B producer qualification receipt; Banking bodies remain untouched. Root alone owns DB/integration/release. Continue the assigned actual Source implementation immediately after this authorized feature-branch backup; no new design/audit stage is introduced.
+
 Owner authority: SEND_5_TO_HEALTHROSTER_BUILD_STAGE_NONSTOP.md, 13 October 2026. D9 approves the continuous TEST build, reviewed non-forced promotion, protected managed TEST releases, exact documented TEST setup, gated TEST activation and TEST TestFlight submission. D10 requires ordinary query/reminders after issue without changing invoice/T0/locks. Policy X, OR-44 and remaining owner rulings apply. No LIVE, payment/provider/settlement/bank action, real external-recipient email or secret change.
 
 ## Current checkpoint

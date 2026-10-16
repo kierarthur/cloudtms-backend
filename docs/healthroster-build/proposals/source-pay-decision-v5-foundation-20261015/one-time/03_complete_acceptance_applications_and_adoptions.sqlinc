@@ -1,0 +1,67 @@
+-- After the actual Banking cut schema. Never create a surrogate cut/Work.
+create table private.weekly_source_pay_decision_acceptance_applications (
+ id uuid primary key,decision_id uuid not null,review_id uuid not null,cut_id uuid not null,
+ request_id uuid not null unique,actor_user_id uuid not null references public.tms_users(id) on delete restrict,
+ backend_pid integer not null check(backend_pid>0),transaction_id xid8 not null,
+ pre_cut_sha256 bytea not null check(octet_length(pre_cut_sha256)=32),
+ pre_witness_manifest_json jsonb not null check(jsonb_typeof(pre_witness_manifest_json)='object'),
+ pre_witness_sha256 bytea not null check(octet_length(pre_witness_sha256)=32),
+ state text not null check(state in('PREVALIDATED','STAGED','COMMITTED')),
+ application_sha256 bytea check(application_sha256 is null or octet_length(application_sha256)=32),
+ created_at_utc timestamptz not null default transaction_timestamp(),completed_at_utc timestamptz,
+ unique(decision_id,cut_id,id),unique(decision_id,review_id,id),
+ foreign key(decision_id,review_id) references private.weekly_source_pay_decision_reviews(decision_id,id) on delete restrict,
+ foreign key(decision_id,request_id) references private.weekly_source_pay_decision_requests(decision_id,request_id) on delete restrict,
+ foreign key(decision_id,cut_id) references private.bpay_next_source_pay_decision_cut(decision_id,id) on delete restrict,
+ check((state='COMMITTED')=(application_sha256 is not null)),check((state='COMMITTED')=(completed_at_utc is not null))
+);
+create unique index source_pay_one_application_per_cut on private.weekly_source_pay_decision_acceptance_applications(decision_id,cut_id)
+ where state in('STAGED','COMMITTED');
+create table private.weekly_source_pay_decision_native_adoptions (
+ application_id uuid not null,decision_id uuid not null,review_id uuid not null,member_key text not null,
+ preparation_id uuid not null references private.weekly_source_pay_decision_unprotect_preparations(id) on delete restrict,
+ route text not null check(route in('NEXT','SOURCE_LOCAL')),
+ origin text not null check(origin in('APPLIED_IN_THIS_TRANSACTION','ADOPTED_EXISTING','NOT_APPLIED_DEPENDENCY')),
+ orchestration_run_id uuid references public.weekly_exceptional_orchestration_runs(id) on delete restrict,
+ approval_id uuid references public.weekly_exceptional_payment_approvals(id) on delete restrict,
+ generation_id uuid references public.weekly_exceptional_pay_generations(id) on delete restrict,
+ next_work_id uuid references private.bpay_next_work(id) on delete restrict,next_revision_id uuid,
+ local_publication_request_id uuid references private.weekly_source_local_protected_decision_receipts(publication_request_id) on delete restrict,
+ local_financial_id uuid references public.timesheets_financials(id) on delete restrict,
+ reviewed_economic_target_sha256 bytea not null check(octet_length(reviewed_economic_target_sha256)=32),
+ pre_witness_sha256 bytea not null check(octet_length(pre_witness_sha256)=32),
+ post_witness_manifest_json jsonb not null check(jsonb_typeof(post_witness_manifest_json)='object'),
+ native_result_json jsonb check(native_result_json is null or jsonb_typeof(native_result_json)='object'),
+ native_result_sha256 bytea check(native_result_sha256 is null or octet_length(native_result_sha256)=32),
+ failure_code text check(failure_code in('DEPENDENCY_UNAVAILABLE','RESULT_UNKNOWN')),
+ cut_components_json jsonb not null check(jsonb_typeof(cut_components_json)='array' and jsonb_array_length(cut_components_json)>0),
+ cut_components_sha256 bytea not null check(octet_length(cut_components_sha256)=32),
+ local_entitlement_kind text check(local_entitlement_kind in('COMMITTED_HEAD','PENDING_BUNDLE')),
+ committed_decision_bundle_id uuid,committed_bundle_revision bigint,
+ committed_source_head_id uuid references public.weekly_source_entitlement_heads(id) on delete restrict,
+ committed_publication_receipt_id uuid references private.weekly_source_entitlement_publication_receipts(id) on delete restrict,
+ pending_bundle_id uuid references public.weekly_source_pending_entitlement_bundles(id) on delete restrict,
+ pending_decision_bundle_id uuid,pending_bundle_revision bigint,
+ primary key(application_id,member_key),
+ foreign key(decision_id,review_id,application_id) references private.weekly_source_pay_decision_acceptance_applications(decision_id,review_id,id) on delete restrict,
+ foreign key(decision_id,member_key) references private.weekly_source_pay_decision_members(decision_id,member_key) deferrable initially deferred,
+ foreign key(next_work_id,next_revision_id) references private.bpay_next_work_revision(work_id,id) on delete restrict,
+ foreign key(committed_decision_bundle_id,committed_bundle_revision) references public.weekly_source_entitlement_decision_bundles(decision_bundle_id,bundle_revision) on delete restrict,
+ check((next_work_id is null)=(next_revision_id is null)),
+ check((native_result_json is null)=(native_result_sha256 is null)),
+ check((origin='NOT_APPLIED_DEPENDENCY')=(failure_code is not null)),
+ check(origin<>'NOT_APPLIED_DEPENDENCY' or (orchestration_run_id is null and approval_id is null and generation_id is null
+  and next_work_id is null and local_publication_request_id is null and local_financial_id is null and native_result_json is null
+  and local_entitlement_kind is null)),
+ check(origin='NOT_APPLIED_DEPENDENCY' or (orchestration_run_id is not null and approval_id is not null and generation_id is not null and native_result_json is not null)),
+ check(origin='NOT_APPLIED_DEPENDENCY' or (route='NEXT' and next_work_id is not null and local_publication_request_id is null and local_financial_id is null and local_entitlement_kind is null)
+   or (route='SOURCE_LOCAL' and next_work_id is null and local_publication_request_id is not null and ((local_financial_id is not null and local_entitlement_kind is null) or (local_financial_id is null and local_entitlement_kind is not null)))),
+ check(coalesce((local_entitlement_kind='COMMITTED_HEAD' and committed_decision_bundle_id is not null and committed_bundle_revision>0
+   and committed_source_head_id is not null and committed_publication_receipt_id is not null and pending_bundle_id is null and pending_decision_bundle_id is null and pending_bundle_revision is null)
+  or (local_entitlement_kind='PENDING_BUNDLE' and pending_bundle_id is not null and pending_decision_bundle_id is not null and pending_bundle_revision>0
+   and committed_decision_bundle_id is null and committed_bundle_revision is null and committed_source_head_id is null and committed_publication_receipt_id is null)
+  or (local_entitlement_kind is null and pending_bundle_id is null and pending_decision_bundle_id is null and pending_bundle_revision is null
+   and committed_decision_bundle_id is null and committed_bundle_revision is null and committed_source_head_id is null and committed_publication_receipt_id is null),false))
+);
+-- PENDING_BUNDLE prospective bundle attributes deliberately have NO committed
+-- bundle/head FK. Their actual pending-row identity is the native FK above.

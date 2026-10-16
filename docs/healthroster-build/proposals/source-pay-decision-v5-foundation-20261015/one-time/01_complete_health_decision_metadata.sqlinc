@@ -1,0 +1,144 @@
+-- Initial Health V5 metadata, once only. No Work, financial effect, contact,
+-- native run or invoice is allocated here. Root owns NEW/UPGRADE composition.
+create table private.weekly_source_pay_decisions (
+ id uuid primary key,
+ accept_request_id uuid unique,
+ accept_request_hash bytea check(accept_request_hash is null or octet_length(accept_request_hash)=32),
+ candidate_id uuid references public.candidates(id) on delete restrict,
+ actual_client_id uuid not null references public.clients(id) on delete restrict,
+ state_revision bigint not null default 1 check(state_revision>0),
+ current_financial_cut_id uuid,
+ decision_kind text check(decision_kind in('EXCLUDE_FUTURE_WORK_PAY','ACCEPT_FINAL_SOURCE_PAY')),
+ accepted_selection_sha256 bytea check(accepted_selection_sha256 is null or octet_length(accepted_selection_sha256)=32),
+ supersedes_decision_id uuid references private.weekly_source_pay_decisions(id) on delete restrict,
+ prior_dispositions_sha256 bytea check(prior_dispositions_sha256 is null or octet_length(prior_dispositions_sha256)=32),
+ invoice_policy text not null default 'KEEP_SOURCE_INVOICE' check(invoice_policy='KEEP_SOURCE_INVOICE'),
+ contact_policy text not null default 'DO_NOT_QUERY_SELECTED_ISSUES' check(contact_policy='DO_NOT_QUERY_SELECTED_ISSUES'),
+ reason text check(reason is null or char_length(reason) between 1 and 1000),
+ evidence_refs_json jsonb not null default '[]'::jsonb check(jsonb_typeof(evidence_refs_json)='array'),
+ invoice_before_hash bytea check(invoice_before_hash is null or octet_length(invoice_before_hash)=32),
+ invoice_after_hash bytea check(invoice_after_hash is null or octet_length(invoice_after_hash)=32),
+ issue_before_hash bytea check(issue_before_hash is null or octet_length(issue_before_hash)=32),
+ created_by_user_id uuid not null references public.tms_users(id) on delete restrict,
+ created_at_utc timestamptz not null default transaction_timestamp(),
+ receipt_json jsonb check(receipt_json is null or jsonb_typeof(receipt_json)='object'),
+ check((accept_request_id is null)=(accept_request_hash is null)),
+ check((accept_request_id is null)=(decision_kind is null)),
+ check((accept_request_id is null)=(accepted_selection_sha256 is null)),
+ check(accept_request_id is null or (reason is not null and prior_dispositions_sha256 is not null
+   and invoice_before_hash is not null and invoice_after_hash is not null and issue_before_hash is not null)),
+ check(id is distinct from supersedes_decision_id),
+ check(invoice_after_hash is null or invoice_before_hash=invoice_after_hash)
+);
+create table private.weekly_source_pay_decision_requests (
+ request_id uuid primary key,
+ decision_id uuid not null references private.weekly_source_pay_decisions(id) on delete restrict,
+ request_kind text not null check(request_kind in('PREVIEW','ACCEPT','RESUME_FINANCIAL')),
+ request_hash bytea not null check(octet_length(request_hash)=32),
+ request_json jsonb not null check(jsonb_typeof(request_json)='object'),
+ actor_user_id uuid not null references public.tms_users(id) on delete restrict,
+ review_id uuid,
+ metadata_state text not null check(metadata_state in('ASSEMBLING','SEALED','CANCELLED','EXPIRED','STALE','CONFIRMED','COMMITTED')),
+ receipt_json jsonb check(receipt_json is null or jsonb_typeof(receipt_json)='object'),
+ created_at_utc timestamptz not null default transaction_timestamp(),
+ unique(decision_id,request_id),
+ check((metadata_state='COMMITTED')=(receipt_json is not null) or request_kind='PREVIEW'),
+ check(request_kind='PREVIEW' or metadata_state in('CONFIRMED','COMMITTED'))
+);
+alter table private.weekly_source_pay_decisions add constraint source_pay_decision_accept_request_fk
+ foreign key(id,accept_request_id) references private.weekly_source_pay_decision_requests(decision_id,request_id)
+ deferrable initially deferred;
+create table private.weekly_source_pay_decision_preview_assemblies (
+ id uuid primary key,
+ decision_id uuid not null references private.weekly_source_pay_decisions(id) on delete restrict,
+ preview_request_id uuid not null unique,
+ preview_request_hash bytea not null check(octet_length(preview_request_hash)=32),
+ actor_user_id uuid not null references public.tms_users(id) on delete restrict,
+ decision_kind text not null check(decision_kind in('EXCLUDE_FUTURE_WORK_PAY','ACCEPT_FINAL_SOURCE_PAY')),
+ state text not null check(state in('ASSEMBLING','READY','SEALED','CANCELLED','EXPIRED','STALE')),
+ draft_scope_json jsonb not null check(jsonb_typeof(draft_scope_json)='object'
+   and jsonb_typeof(draft_scope_json->'selection')='array'),
+ draft_scope_sha256 bytea not null check(octet_length(draft_scope_sha256)=32),
+ assembly_sha256 bytea check(assembly_sha256 is null or octet_length(assembly_sha256)=32),
+ review_id uuid,
+ created_at_utc timestamptz not null default transaction_timestamp(),
+ expires_at_utc timestamptz not null,
+ unique(decision_id,id),
+ foreign key(decision_id,preview_request_id) references private.weekly_source_pay_decision_requests(decision_id,request_id) on delete restrict,
+ check(expires_at_utc>created_at_utc and expires_at_utc<=created_at_utc+interval '15 minutes'),
+ check((state='SEALED')=(review_id is not null)),
+ check(state not in('READY','SEALED') or assembly_sha256 is not null)
+);
+create table private.weekly_source_pay_decision_preview_quotes (
+ id uuid primary key,
+ assembly_id uuid not null references private.weekly_source_pay_decision_preview_assemblies(id) on delete restrict,
+ member_key text not null check(char_length(member_key) between 1 and 512),
+ quote_json jsonb not null check(jsonb_typeof(quote_json)='object'),
+ quote_sha256 bytea not null check(octet_length(quote_sha256)=32),
+ economic_target_sha256 bytea not null check(octet_length(economic_target_sha256)=32),
+ unique(assembly_id,member_key)
+);
+create table private.weekly_source_pay_decision_reviews (
+ id uuid primary key,
+ decision_id uuid not null references private.weekly_source_pay_decisions(id) on delete restrict,
+ preview_assembly_id uuid not null unique,
+ review_no bigint not null check(review_no>0),
+ preview_request_id uuid not null unique,
+ preview_request_hash bytea not null check(octet_length(preview_request_hash)=32),
+ review_digest bytea not null check(octet_length(review_digest)=32),
+ pay_cut_hash bytea not null check(octet_length(pay_cut_hash)=32),
+ source_invoice_hash bytea not null check(octet_length(source_invoice_hash)=32),
+ issue_set_hash bytea not null check(octet_length(issue_set_hash)=32),
+ private_manifest_json jsonb not null check(jsonb_typeof(private_manifest_json)='object'
+   and jsonb_typeof(private_manifest_json->'selection')='array'),
+ financial_history_refs_json jsonb not null default '[]'::jsonb check(jsonb_typeof(financial_history_refs_json)='array'),
+ financial_history_manifest_sha256 bytea not null check(octet_length(financial_history_manifest_sha256)=32),
+ history_qualification_json jsonb not null check(jsonb_typeof(history_qualification_json)='object'),
+ created_at_utc timestamptz not null default transaction_timestamp(),
+ unique(decision_id,review_no),unique(decision_id,id),unique(decision_id,preview_assembly_id,id),
+ foreign key(decision_id,preview_assembly_id) references private.weekly_source_pay_decision_preview_assemblies(decision_id,id) on delete restrict,
+ foreign key(decision_id,preview_request_id) references private.weekly_source_pay_decision_requests(decision_id,request_id) on delete restrict
+);
+alter table private.weekly_source_pay_decision_preview_assemblies add constraint source_pay_assembly_review_triangle_fk
+ foreign key(decision_id,id,review_id) references private.weekly_source_pay_decision_reviews(decision_id,preview_assembly_id,id)
+ deferrable initially deferred;
+alter table private.weekly_source_pay_decision_requests add constraint source_pay_request_review_fk
+ foreign key(decision_id,review_id) references private.weekly_source_pay_decision_reviews(decision_id,id)
+ deferrable initially deferred;
+create table private.weekly_source_pay_decision_members (
+ decision_id uuid not null references private.weekly_source_pay_decisions(id) on delete restrict,
+ member_key text not null check(char_length(member_key) between 1 and 512),
+ scope_kind text not null check(scope_kind in('TIMESHEET_FAMILY','SOURCE_ROW')),
+ scope_mode text not null check(scope_mode in('COMPONENT_QUANTITIES','WHOLE_SHIFT')),
+ candidate_id uuid not null references public.candidates(id) on delete restrict,
+ actual_client_id uuid not null references public.clients(id) on delete restrict,
+ family_root_id uuid references public.timesheets(timesheet_id) on delete restrict,
+ source_work_event_id uuid references public.weekly_work_events(id) on delete restrict,
+ source_row_id uuid not null references public.weekly_source_upload_rows(id) on delete restrict,
+ component_keys text[] not null,
+ supported_quantity_json jsonb not null check(jsonb_typeof(supported_quantity_json)='object'),
+ excluded_quantity_json jsonb not null check(jsonb_typeof(excluded_quantity_json)='object'),
+ branch text not null check(branch in('FUTURE_UNSIGNED','SIGNED_FINANCIAL','RETAINED_FINANCIAL')),
+ source_invoice_certificate_json jsonb not null check(jsonb_typeof(source_invoice_certificate_json)='object'),
+ contact_issue_ids uuid[] not null,
+ pay_disposition_id uuid,
+ primary key(decision_id,member_key),
+ check(scope_kind<>'TIMESHEET_FAMILY' or family_root_id is not null),
+ check(scope_mode<>'COMPONENT_QUANTITIES' or cardinality(component_keys)>0)
+);
+create table private.weekly_source_pay_decision_bindings (
+ decision_id uuid not null,member_key text not null,
+ row_resolution_id uuid not null references public.weekly_source_row_resolutions(id) on delete restrict,
+ binding_no bigint not null check(binding_no>0),
+ family_root_id uuid not null references public.timesheets(timesheet_id) on delete restrict,
+ source_work_event_id uuid references public.weekly_work_events(id) on delete restrict,
+ component_keys text[] not null,
+ banking_disposition_id uuid,banking_disposition_binding_no bigint check(banking_disposition_binding_no>0),
+ binding_certificate_hash bytea not null check(octet_length(binding_certificate_hash)=32),
+ created_at_utc timestamptz not null default transaction_timestamp(),
+ primary key(decision_id,member_key,binding_no),unique(decision_id,member_key,row_resolution_id),
+ foreign key(decision_id,member_key) references private.weekly_source_pay_decision_members(decision_id,member_key) on delete restrict,
+ check((banking_disposition_id is null)=(banking_disposition_binding_no is null))
+);
+-- No FK from preaccept quote/preparation member_key to accepted members: the
+-- real member is reviewed JSON until first acceptance. Owner verifies that set.

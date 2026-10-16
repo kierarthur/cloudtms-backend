@@ -1,0 +1,319 @@
+{
+  "version": "HEALTH_SOURCE_NATIVE_SOURCE_PACKAGE_V1",
+  "reviewed_pack_content_sha256": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
+  "selected_current_native_commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "qualification": "PARTIAL_SOURCE_NOT_INSTALLABLE_NATIVE_REQUIRED_NOT_RUN",
+  "scanner": "scripts/cloudtms-managed-release-sql.mjs:scanManagedSql+exactAtomicBody",
+  "scanner_limit": "Packaging statement boundaries only; function bodies opaque. No PostgreSQL/PLpgSQL compilation claim.",
+  "stages": [
+    {
+      "id": "HEALTH_METADATA",
+      "requires": [
+        "Current genuine native schema and WP-PP actor predicate"
+      ],
+      "files": [
+        {
+          "path": "one-time/01_complete_health_decision_metadata.sqlinc",
+          "sha256": "63741add62a1d55c5d486abf9c70c622ffbff3c0462bab2dd378d922bac689f9",
+          "bytes": 10658,
+          "packaging_statements": 10,
+          "functions": []
+        },
+        {
+          "path": "one-time/02_complete_retained_native_preparations.sqlinc",
+          "sha256": "5b3d65c49cd5bcbaec306bad9ecb91fe57cfcb1c9f648ace0401b283a9a1f9b7",
+          "bytes": 3444,
+          "packaging_statements": 1,
+          "functions": []
+        }
+      ]
+    },
+    {
+      "id": "HEALTH_APPLICATION_AFTER_BANK_CUT",
+      "requires": [
+        "Banking real Source cut/cut-member schema with exact decision/assembly/review relationships"
+      ],
+      "files": [
+        {
+          "path": "one-time/03_complete_acceptance_applications_and_adoptions.sqlinc",
+          "sha256": "aa39325f7ad31221c2598b35981d1f3c8ebc1fe7a1e3e17d208f7bdec48577ed",
+          "bytes": 7073,
+          "packaging_statements": 3,
+          "functions": []
+        }
+      ]
+    },
+    {
+      "id": "HEALTH_BRIDGE_AFTER_BANK_PUBLICATION",
+      "requires": [
+        "Banking canonical Source publication parent and exact per-component publication member schema"
+      ],
+      "files": [
+        {
+          "path": "one-time/04_complete_canonical_publication_bridge.sqlinc",
+          "sha256": "6b87d777bf32cefdccd534da9735645876869e83b537ff0b00c0cf6c628888f6",
+          "bytes": 1428,
+          "packaging_statements": 4,
+          "functions": []
+        },
+        {
+          "path": "one-time/05_complete_owner_only_rls.sqlinc",
+          "sha256": "c38472b6ab2645ef3aa966d2820e7c2b950e011f6af2fc3bcc5086366a22d847",
+          "bytes": 1894,
+          "packaging_statements": 12,
+          "functions": []
+        }
+      ]
+    },
+    {
+      "id": "HEALTH_OWNERS",
+      "requires": [
+        "All eleven Health tables and real Banking cut/publication owners",
+        "Physical H103 direct alias/placement/evidence/archive-consumption owners and genuine Banking move publication schema",
+        "Invoice owner exact original-identity Source certificate/assert kernels and saved accepted move Source accessor"
+      ],
+      "files": [
+        {
+          "path": "forward/01_health_metadata_guards.sqlinc",
+          "sha256": "19739dbf51ad5f88f630e8d2644fc6e7641826ed98a3fc23ff1804705dbc7486",
+          "bytes": 10305,
+          "packaging_statements": 9,
+          "functions": [
+            "private.weekly_source_pay_decision_metadata_guard_v1()",
+            "private.weekly_source_pay_decision_application_commit_guard_v1()",
+            "private.weekly_source_pay_decision_assembly_commit_guard_v1()"
+          ]
+        },
+        {
+          "path": "forward/02_atomic_source_run_birth.sqlinc",
+          "sha256": "74b474d0bf332d1f517cb3f1afbfd589538f221d43bf86b0ea784c9dd015c771",
+          "bytes": 14826,
+          "packaging_statements": 4,
+          "functions": [
+            "public.weekly_source_pay_decision_unprotect_run_prepare_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "forward/03_normal_native_source_gate.sqlinc",
+          "sha256": "2a6d04785f20a1397e9ef3ba625a998eee74d7a5fdb13d9ecafbd88cd911faa9",
+          "bytes": 4814,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_pay_decision_native_normal_gate_v1(p_family_id uuid,p_run_id uuid,p_actor_user_id uuid,p_native_entry text)"
+          ]
+        },
+        {
+          "path": "forward/04_exact_publication_adoption_bridge.sqlinc",
+          "sha256": "0ac5e5acf48496e732781fd1d9615c16a4daef808cfe609b9188d60796f162c3",
+          "bytes": 6891,
+          "packaging_statements": 5,
+          "functions": [
+            "private.weekly_source_pay_decision_publication_adoption_guard_v1()",
+            "private.weekly_source_pay_decision_publication_adoptions_assert_v1(p_application_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/05_application_final_receipt.sqlinc",
+          "sha256": "676ceaa9c4a6918fc1a41bf172df6fa4f1c62dd114b31473116c69862244a4b8",
+          "bytes": 8441,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_pay_decision_application_finish_v1(p_application_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/06_confirmation_run_preparation.sqlinc",
+          "sha256": "f09c98c8a93dd48a15e05b25e078a07b3c83966dde39dd32cb0737ce23bb1c92",
+          "bytes": 11870,
+          "packaging_statements": 4,
+          "functions": [
+            "public.weekly_source_pay_decision_confirmation_prepare_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "forward/07_exact_preparation_application.sqlinc",
+          "sha256": "dd6baac8d07ddd42d0579a803ee6b8ea4ef07ea5c61b553b949283d399de2368",
+          "bytes": 4530,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_pay_decision_unprotect_application_v1(p_preparation_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/08_protected_current_placement.sqlinc",
+          "sha256": "4183e5f5a1b9911f23d2158d95b594e8e3e7192c3eabf9677fda9d5083eb4133",
+          "bytes": 19805,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_protected_current_placement_v1(p_family_id uuid,p_work_event_id uuid,p_lock boolean)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CURRENT_NATIVE_ENTRY_FENCES",
+      "requires": [
+        "private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)",
+        "Complete current native bodies pinned by NATIVE_ENTRY_RECEIPT.json; root final owner composition"
+      ],
+      "files": [
+        {
+          "path": "native-entry/weekly_exceptional_pay_next_publication_status_v1.sqlinc",
+          "sha256": "6b49ce2c20b91e8917778d9ed175e14f220a6478f0a56aed6c9ec3b29dce2041",
+          "bytes": 4788,
+          "packaging_statements": 1,
+          "functions": [
+            "public.weekly_exceptional_pay_next_publication_status_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "native-entry/weekly_exceptional_pay_publish_next_v1.sqlinc",
+          "sha256": "b91bcbe09aab658dacefad71df928105ea57b9a81b8e991cfbb3c9a72501437a",
+          "bytes": 39752,
+          "packaging_statements": 1,
+          "functions": [
+            "public.weekly_exceptional_pay_publish_next_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "native-entry/weekly_exceptional_pay_stage_c1_request_v1.sqlinc",
+          "sha256": "e5a62b6838024c3af98f2a436edb262e51381fa6cf4d2ae0e23753d7ef40265d",
+          "bytes": 55450,
+          "packaging_statements": 1,
+          "functions": [
+            "public.weekly_exceptional_pay_stage_c1_request_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "native-entry/weekly_exceptional_pay_complete_local_v1.sqlinc",
+          "sha256": "168feb1143ae9893b759c70b60fe83aee9fe42bffe51e1e474bcaebd466bec8e",
+          "bytes": 31817,
+          "packaging_statements": 1,
+          "functions": [
+            "public.weekly_exceptional_pay_complete_local_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "native-entry/owner_acl.sqlinc",
+          "sha256": "984f63a891a592dcffb287b0b267ae6df0dcfffee1bc9616242ebd31231dac1c",
+          "bytes": 850,
+          "packaging_statements": 8,
+          "functions": []
+        }
+      ]
+    }
+  ],
+  "runtime": [
+    {
+      "path": "broker/src/weekly-source/protected-action-orchestrator.mjs",
+      "sha256": "ba34092150eabb2a9e2a11778072ef7b553277ea18c4fc84e6899433d8fa4b64",
+      "bytes": 36492
+    },
+    {
+      "path": "broker/src/weekly-source/protected-next-preview.mjs",
+      "sha256": "49ed6b5e24c1ebf6afd9dbada7de0d9d321c8297584491610353c1ee2a2bfc4a",
+      "bytes": 10762
+    },
+    {
+      "path": "broker/src/weekly-source/source-native-contract.mjs",
+      "sha256": "33630e679e89b6c621b461bcb3a8d2c27dd9703ab84a2bde3a255b1ff230c370",
+      "bytes": 13359
+    },
+    {
+      "path": "broker/src/weekly-source/source-pay-decision-request.mjs",
+      "sha256": "2eff65ce7769da82ef42f87376245452929b582f950da2d8f21ccb6cf24d90e4",
+      "bytes": 8694
+    },
+    {
+      "path": "broker/src/weekly-source/source-pay-decision-preparation.mjs",
+      "sha256": "0d251db9d6ec83efd8c3e6537c2e96b722c59a64b305ca2445adf3aff605b7e2",
+      "bytes": 2934
+    },
+    {
+      "path": "tests/weekly-source/protected-action-orchestrator.test.mjs",
+      "sha256": "456286d6bf0b6fb04b990696ab591341d48e5463e54e6f2bb61302adb8decc8b",
+      "bytes": 24306
+    },
+    {
+      "path": "tests/weekly-source/source-native-contract.test.mjs",
+      "sha256": "f9922eec4daa01c8dafcd4e5a2a171fc791b390fa32d2e67f112247441a19912",
+      "bytes": 9332
+    },
+    {
+      "path": "tests/weekly-source/source-pay-decision-request.test.mjs",
+      "sha256": "d7fd893eba9cf63340d95f8529364d530ca4857490dcbcc0f660fc3785befdf8",
+      "bytes": 5383
+    },
+    {
+      "path": "tests/weekly-source/source-pay-decision-preparation.test.mjs",
+      "sha256": "67a474d4ca9fd7139689b98b491165abf89fe27ee7d38d21b4d60d34059b80c5",
+      "bytes": 6539
+    },
+    {
+      "path": "tests/weekly-source/source-protected-placement.test.mjs",
+      "sha256": "5d83f826458b729fc54f178e69163220b0c075a5d1411b3e6c5093aeaaeca82a",
+      "bytes": 4477
+    },
+    {
+      "path": "tests/weekly-source/source-native-package.test.mjs",
+      "sha256": "bb2781e5b3d21097190b593b5665b9d773563a22fd24b2304ee8dd49bf50d6e0",
+      "bytes": 4737
+    }
+  ],
+  "open_health_owners": [
+    "Public preview begin/quote/ready/seal/abandon and accept/read/resume implementation",
+    "Run-free native review context and one complete native economic serializer",
+    "Full-payload unprotect preparation registration and actual same-transaction unprotect dispatcher",
+    "Private publish_next/stage_c1/complete_local implementations with NULL ordinary delegates and genuine non-NULL Source effect/adoption",
+    "Current placement certificate integration into actual native archived-evidence/context/current-B financial writer owners",
+    "Actual Source receipt publication suppression, pending release and saved-status integration",
+    "Full binding/selected contact orchestration and final canonical Source receipt integration"
+  ],
+  "external_dependencies": [
+    {
+      "owner": "Banking",
+      "abi": "private.bpay_next_source_pay_decision_cut_v1(uuid,uuid,uuid,boolean)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    },
+    {
+      "owner": "Banking",
+      "abi": "private.bpay_next_source_pay_decision_acceptance_begin_v1(uuid,uuid,uuid,uuid)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    },
+    {
+      "owner": "Banking",
+      "abi": "private.bpay_next_source_pay_decision_stage_v1(uuid,uuid,uuid,uuid)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    },
+    {
+      "owner": "Banking",
+      "abi": "private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    },
+    {
+      "owner": "Banking existing protected producer",
+      "abi": "private.bpay_next_stage_protected_source_v1(uuid,uuid,uuid,jsonb)",
+      "source": "supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql",
+      "case": "Accepted A-to-B move: producer still validates original family/root Contract A; caller current-B qualification alone cannot satisfy that invariant.",
+      "state": "MOVED_B_NEXT_REQUIRES_EXISTING_PRODUCER_QUALIFICATION_RECEIPT_NO_BANK_BODY_EDIT"
+    },
+    {
+      "owner": "Invoice",
+      "abi": "private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    },
+    {
+      "owner": "Invoice",
+      "abi": "private.invoice_contract_move_source_certificate_v1(uuid,boolean)",
+      "source_commit": "d9b5b978d3909a42d22dcc0a437831aeb49d3001",
+      "state": "SOURCE_PUBLISHED_NATIVE_REQUIRED_NOT_RUN"
+    },
+    {
+      "owner": "Physical",
+      "abi": "private.timesheet_contract_current_placement_v1(uuid)",
+      "state": "REQUIRE_GENUINE_PRODUCER_RECEIPT"
+    }
+  ],
+  "native_tests": "REQUIRED_NOT_RUN",
+  "database_actions": "NONE"
+}

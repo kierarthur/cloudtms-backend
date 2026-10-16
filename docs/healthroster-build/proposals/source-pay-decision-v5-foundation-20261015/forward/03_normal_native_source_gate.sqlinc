@@ -1,0 +1,78 @@
+-- Health normal-entry adapter; canonical native status remains Banking-owned.
+create or replace function private.weekly_source_pay_decision_native_normal_gate_v1(
+ p_family_id uuid,p_run_id uuid,p_actor_user_id uuid,p_native_entry text
+) returns jsonb language plpgsql stable security definer
+set search_path=pg_catalog,private,public as $function$
+declare
+ v_source jsonb;v_status jsonb;v_detail jsonb;
+ v_decision_id uuid;v_request_id uuid;
+ v_stub private.weekly_source_pay_decision_unprotect_preparations%rowtype;
+begin
+ if p_native_entry not in('STATUS','PUBLISH_NEXT','STAGE_LOCAL','COMPLETE_LOCAL') then
+  raise exception 'SOURCE_NATIVE_ENTRY_INVALID' using errcode='22023';
+ end if;
+ v_source:=private.bpay_next_source_decision_native_status_v1(p_family_id,p_run_id,p_actor_user_id);
+ select s.* into v_stub from private.weekly_source_pay_decision_unprotect_preparations s
+  where s.orchestration_run_id=p_run_id;
+ if v_source is null then
+  if v_stub.id is not null then
+   raise exception 'SOURCE_NATIVE_OWNERSHIP_CONTRADICTION' using errcode='55000';
+  end if;
+  return null;
+ end if;
+ if v_stub.id is null and v_source->>'kind'='NATIVE_STATUS' then
+  -- A genuine normal receipt adopted from the strict prestate remains owned
+  -- by its original normal run. Its canonical reader has just proved reuse.
+  select app.decision_id,app.request_id into strict v_decision_id,v_request_id
+   from private.weekly_source_pay_decision_native_adoptions adoption
+   join private.weekly_source_pay_decision_acceptance_applications app on app.id=adoption.application_id
+   where adoption.orchestration_run_id=p_run_id and adoption.origin='ADOPTED_EXISTING' and app.state='COMMITTED';
+ elsif v_stub.id is null or v_stub.family_id is distinct from p_family_id
+  or v_stub.actor_user_id is distinct from p_actor_user_id then
+  raise exception 'SOURCE_NATIVE_OWNERSHIP_CONTRADICTION' using errcode='55000';
+ else
+  v_decision_id:=v_stub.decision_id;v_request_id:=v_stub.accept_or_resume_request_id;
+ end if;
+ if v_source->>'kind'='SOURCE_RESULT_REQUIRED' then
+  if not private.weekly_exceptional_json_keys_exact_v1(v_source,array['kind','decision_id','request_id','reason'])
+   or not(v_source ?& array['kind','decision_id','request_id','reason'])
+   or v_source->>'decision_id' is distinct from v_stub.decision_id::text
+   or v_source->>'request_id' is distinct from v_stub.accept_or_resume_request_id::text
+   or coalesce(v_source->>'reason','') not in('NOT_APPLIED_DEPENDENCY','APPLICATION_INCOMPLETE','NATIVE_RESULT_UNKNOWN') then
+   raise exception 'SOURCE_NATIVE_STATUS_INVALID' using errcode='55000';
+  end if;
+  v_detail:=jsonb_build_object('version','SOURCE_NATIVE_CONTINUATION_V1','decision_id',v_stub.decision_id,
+   'request_id',v_stub.accept_or_resume_request_id,'reason',v_source->>'reason');
+ elsif v_source->>'kind'='NATIVE_STATUS' then
+  v_status:=v_source->'status';
+  if not private.weekly_exceptional_json_keys_exact_v1(v_source,array['kind','status'])
+   or not(v_source ?& array['kind','status'])
+   or not private.weekly_exceptional_json_keys_exact_v1(v_status,array['ok','route','published','receipt'])
+   or not(v_status ?& array['ok','route','published','receipt'])
+   or v_status->'ok' is distinct from 'true'::jsonb
+   or coalesce(v_status->>'route','') not in('NEXT','SOURCE_LOCAL')
+   or jsonb_typeof(v_status->'published') is distinct from 'boolean'
+   or jsonb_typeof(v_status->'receipt') is distinct from 'object'
+   or v_status#>>'{receipt,family_id}' is distinct from p_family_id::text
+   or v_status#>>'{receipt,orchestration_run_id}' is distinct from p_run_id::text then
+   raise exception 'SOURCE_NATIVE_STATUS_INVALID' using errcode='55000';
+  end if;
+  if p_native_entry='STATUS' then return v_status;
+  elsif p_native_entry='PUBLISH_NEXT' and v_status->>'route'='NEXT' and v_status->'published'='true'::jsonb then
+   return v_status->'receipt';
+  elsif p_native_entry='COMPLETE_LOCAL' and v_status->>'route'='SOURCE_LOCAL' then
+   return v_status#>'{receipt,result}';
+  end if;
+  -- STAGE never recreates an accepted Source generation. Route mismatch also
+  -- returns this original request's deliberate saved-result continuation.
+  v_detail:=jsonb_build_object('version','SOURCE_NATIVE_CONTINUATION_V1','decision_id',v_decision_id,
+   'request_id',v_request_id,'reason','APPLICATION_INCOMPLETE');
+ else raise exception 'SOURCE_NATIVE_STATUS_INVALID' using errcode='55000';
+ end if;
+ raise exception 'SOURCE_PAY_DECISION_RESULT_REQUIRED' using errcode='P0001',detail=v_detail::text;
+exception when no_data_found or too_many_rows then
+ raise exception 'SOURCE_NATIVE_OWNERSHIP_CONTRADICTION' using errcode='55000';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)
+ from public,anon,authenticated,service_role;

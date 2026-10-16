@@ -1,0 +1,203 @@
+-- Requires the real Banking four-argument cut owner. No replacement cut/valuer.
+create or replace function public.weekly_source_pay_decision_unprotect_run_prepare_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,private,public
+set lock_timeout='2500ms' as $function$
+declare
+ v_confirm jsonb;v_actor uuid;v_decision uuid;v_review_id uuid;v_request_id uuid;v_member text;
+ v_review private.weekly_source_pay_decision_reviews%rowtype;
+ v_assembly private.weekly_source_pay_decision_preview_assemblies%rowtype;
+ v_parent private.weekly_source_pay_decisions%rowtype;
+ v_journal private.weekly_source_pay_decision_requests%rowtype;
+ v_stub private.weekly_source_pay_decision_unprotect_preparations%rowtype;
+ v_quote private.weekly_source_pay_decision_preview_quotes%rowtype;
+ v_family public.weekly_exceptional_pay_target_families%rowtype;
+ v_active public.weekly_exceptional_pending_reconciliation_targets%rowtype;
+ v_approval public.weekly_exceptional_payment_approvals%rowtype;
+ v_run public.weekly_exceptional_orchestration_runs%rowtype;
+ v_confirm_hash bytea;v_prepare_hash bytea;v_prepared jsonb;v_native_request jsonb;
+ v_child text;v_reason text;v_route text;v_count integer;v_kind text;v_keys text[];
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),
+  nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+ end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,
+   array['version','actor_user_id','confirmation_request','member_key'])
+  or not(p_request ?& array['version','actor_user_id','confirmation_request','member_key'])
+  or p_request->>'version' is distinct from 'SOURCE_UNPROTECT_RUN_PREPARE_V1' then
+  raise exception 'SOURCE_UNPROTECT_RUN_PREPARE_INVALID' using errcode='22023';
+ end if;
+ v_actor:=(p_request->>'actor_user_id')::uuid;
+ v_member:=p_request->>'member_key';v_confirm:=p_request->'confirmation_request';
+ if v_actor is null or jsonb_typeof(p_request->'member_key')<>'string' or char_length(v_member) not between 1 and 512
+   or not private.weekly_source_pay_actor_allowed_v1(v_actor) then
+  raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';
+ end if;
+ v_kind:=v_confirm->>'action';
+ if v_kind='ACCEPT' then
+  v_keys:=array['version','action','decision_id','request_id','review_id','review_digest','decision',
+   'supersedes_decision_id','expected_prior_dispositions','expected_prior_dispositions_sha256','invoice_policy',
+   'contact_policy','reason','evidence_refs','expected_pay_cut_hash','expected_source_invoice_hash','expected_issue_set_hash'];
+ elsif v_kind='RESUME_FINANCIAL' then
+  v_keys:=array['version','action','decision_id','request_id','expected_state_revision','review_id','review_digest',
+    'expected_pay_cut_hash','evidence_refs','expected_prior_dispositions','expected_prior_dispositions_sha256'];
+ else raise exception 'SOURCE_UNPROTECT_CONFIRMATION_INVALID' using errcode='22023';
+ end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(v_confirm,v_keys) or not(v_confirm ?& v_keys)
+  or v_confirm->>'version' is distinct from 'SOURCE_PAY_DECISION_V1'
+  or jsonb_typeof(v_confirm->'evidence_refs')<>'array'
+  or jsonb_typeof(v_confirm->'expected_prior_dispositions')<>'array' then
+  raise exception 'SOURCE_UNPROTECT_CONFIRMATION_INVALID' using errcode='22023';
+ end if;
+ v_decision:=(v_confirm->>'decision_id')::uuid;v_review_id:=(v_confirm->>'review_id')::uuid;
+ v_request_id:=(v_confirm->>'request_id')::uuid;
+ if v_decision is null or v_review_id is null or v_request_id is null then
+  raise exception 'SOURCE_UNPROTECT_CONFIRMATION_INVALID' using errcode='22023';
+ end if;
+ v_confirm_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_CONFIRMATION_V1',v_confirm);
+ -- Resolve only. No existing shared metadata row lock precedes native cut gates.
+ select d.* into strict v_parent from private.weekly_source_pay_decisions d where d.id=v_decision;
+ select r.* into strict v_review from private.weekly_source_pay_decision_reviews r
+  where r.id=v_review_id and r.decision_id=v_decision;
+ select a.* into strict v_assembly from private.weekly_source_pay_decision_preview_assemblies a
+  where a.id=v_review.preview_assembly_id and a.decision_id=v_decision and a.review_id=v_review.id and a.state='SEALED';
+ if v_assembly.actor_user_id<>v_actor or v_assembly.decision_kind<>'EXCLUDE_FUTURE_WORK_PAY'
+  or v_review.review_digest is distinct from private.weekly_exceptional_hex_sha256_v1(v_confirm->>'review_digest')
+  or v_review.pay_cut_hash is distinct from private.weekly_exceptional_hex_sha256_v1(v_confirm->>'expected_pay_cut_hash')
+  or v_confirm->'expected_prior_dispositions' is distinct from v_review.private_manifest_json->'prior_dispositions'
+  or v_confirm->>'expected_prior_dispositions_sha256' is distinct from v_review.private_manifest_json->>'prior_dispositions_sha256' then
+  raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';
+ end if;
+ if v_kind='ACCEPT' then
+  v_reason:=btrim(v_confirm->>'reason');
+  if v_confirm->>'decision' is distinct from 'EXCLUDE_FUTURE_WORK_PAY'
+   or v_confirm->>'invoice_policy' is distinct from 'KEEP_SOURCE_INVOICE'
+   or v_confirm->>'contact_policy' is distinct from 'DO_NOT_QUERY_SELECTED_ISSUES'
+   or v_reason is null or char_length(v_reason) not between 1 and 1000
+   or v_review.source_invoice_hash is distinct from private.weekly_exceptional_hex_sha256_v1(v_confirm->>'expected_source_invoice_hash')
+   or v_review.issue_set_hash is distinct from private.weekly_exceptional_hex_sha256_v1(v_confirm->>'expected_issue_set_hash') then
+   raise exception 'SOURCE_UNPROTECT_CONFIRMATION_INVALID' using errcode='22023';
+  end if;
+  if v_confirm->'supersedes_decision_id' is distinct from v_review.private_manifest_json->'supersedes_decision_id'
+   or (v_parent.accept_request_id is not null and v_parent.accept_request_id<>v_request_id) then
+   raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';
+  end if;
+ else
+  v_reason:=v_parent.reason;
+  if v_parent.accept_request_id is null or v_parent.decision_kind<>'EXCLUDE_FUTURE_WORK_PAY'
+    or coalesce(v_confirm->>'expected_state_revision','') !~ '^[1-9][0-9]{0,18}$' then
+   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';
+  end if;
+ end if;
+ -- An already-born run is replayed before comparison with facts changed by an
+ -- accepted result. Its immutable body/actor binding still has to match exactly.
+ select s.* into v_stub from private.weekly_source_pay_decision_unprotect_preparations s
+  where s.decision_id=v_decision and s.member_key=v_member and s.accept_or_resume_request_id=v_request_id;
+ if found then
+  if v_stub.confirmation_request_sha256<>v_confirm_hash or v_stub.actor_user_id<>v_actor or v_stub.review_id<>v_review_id then
+   raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';
+  end if;
+ else
+  -- A retained exact run must remain recoverable after its own acceptance has
+  -- advanced state_revision. Only a genuinely new birth compares mutable state.
+  if v_kind='RESUME_FINANCIAL' and
+    (v_confirm->>'expected_state_revision')::bigint is distinct from v_parent.state_revision then
+   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';
+  end if;
+  if v_assembly.expires_at_utc<=transaction_timestamp() then
+   raise exception 'SOURCE_PAY_DECISION_PREVIEW_EXPIRED' using errcode='P0001';
+  end if;
+  -- This exact owner revalidates every financial/source/invoice/issue/rate and
+  -- native witness and obtains real native gates before any metadata lock.
+  perform private.bpay_next_source_pay_decision_cut_v1(v_decision,null,v_review_id,true);
+  select a.* into strict v_assembly from private.weekly_source_pay_decision_preview_assemblies a
+    where a.id=v_review.preview_assembly_id for update;
+  select d.* into strict v_parent from private.weekly_source_pay_decisions d where d.id=v_decision for update;
+  if v_kind='RESUME_FINANCIAL' and
+    (v_confirm->>'expected_state_revision')::bigint is distinct from v_parent.state_revision then
+   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';
+  end if;
+  select q.* into strict v_quote from private.weekly_source_pay_decision_preview_quotes q
+    where q.assembly_id=v_assembly.id and q.member_key=v_member;
+  if v_quote.quote_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_PREVIEW_QUOTE_V1',v_quote.quote_json)
+   or v_quote.economic_target_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_ECONOMIC_TARGET_V1',v_quote.quote_json->'economic_target')
+   or encode(v_quote.economic_target_sha256,'hex') is distinct from v_quote.quote_json->>'economic_target_sha256' then
+   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';
+  end if;
+  select f.* into strict v_family from public.weekly_exceptional_pay_target_families f
+    where f.id=(v_quote.quote_json#>>'{economic_target,family_id}')::uuid;
+  if v_family.ownership_state<>'TARGET_MANAGED' then
+   raise exception 'SOURCE_UNPROTECT_MEMBER_INVALID' using errcode='23514';
+  end if;
+  -- Require actual still-active pending protection. No quote/positive/no-active
+  -- member silently becomes a native WITHDRAW instruction.
+  select t.* into strict v_active from public.weekly_exceptional_pending_reconciliation_targets t
+    where t.family_id=v_family.id and t.durable_work_event_id=(v_quote.quote_json#>>'{economic_target,work_event_id}')::uuid
+      and t.state='ACTIVE';
+  select a.* into strict v_approval from public.weekly_exceptional_payment_approvals a
+    where a.id=v_active.approval_id and a.pay_target_family_id=v_family.id
+      and a.work_event_id=v_active.durable_work_event_id and a.candidate_id=v_family.candidate_id
+      and a.client_id=v_parent.actual_client_id and a.contract_id=v_family.contract_id
+      and a.week_ending=v_family.week_ending_date and a.withdrawn_at_utc is null;
+  select r.* into v_journal from private.weekly_source_pay_decision_requests r where r.request_id=v_request_id for update;
+  if found then
+   if v_journal.decision_id<>v_decision or v_journal.actor_user_id<>v_actor
+    or v_journal.request_kind<>v_kind or v_journal.request_hash<>v_confirm_hash
+    or v_journal.request_json<>v_confirm or v_journal.review_id<>v_review_id then
+    raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';
+   end if;
+  else
+   insert into private.weekly_source_pay_decision_requests(request_id,decision_id,request_kind,request_hash,
+    request_json,actor_user_id,review_id,metadata_state)
+    values(v_request_id,v_decision,v_kind,v_confirm_hash,v_confirm,v_actor,v_review_id,'CONFIRMED');
+  end if;
+  -- Another member call can have completed while this call waited on native
+  -- gates. Replay its one retained stub; never call native prepare a second time.
+  select s.* into v_stub from private.weekly_source_pay_decision_unprotect_preparations s
+    where s.decision_id=v_decision and s.member_key=v_member and s.accept_or_resume_request_id=v_request_id;
+  if not found then
+   v_child:='source-pay-unprotect-v1:'||v_decision::text||':'||encode(extensions.digest(convert_to(v_member,'UTF8'),'sha256'),'hex')||':'||v_request_id::text;
+   if exists(select 1 from public.weekly_exceptional_orchestration_runs run where run.idempotency_key=v_child) then
+    raise exception 'SOURCE_UNPROTECT_RUN_OWNERSHIP_CONFLICT' using errcode='23514';
+   end if;
+   v_route:=private.bpay_next_protected_owner_route_v1(v_family.id);
+   v_native_request:=jsonb_build_object('schema_version','WEEKLY_PROTECTED_ACTION_PREPARE_V1',
+    'actor_user_id',v_actor,'family_id',v_family.id,'source_cycle_id',v_approval.source_cycle_id,
+    'work_event_id',v_quote.quote_json#>'{economic_target,work_event_id}','action','WITHDRAW',
+    'expected_family_bound_version',v_family.bound_version::text,'protected_schedule',null,
+    'reason',v_reason,'idempotency_key',v_child);
+   v_prepare_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_PREPARE_ACTION_REQUEST_V1',v_native_request);
+   v_prepared:=public.weekly_exceptional_pay_prepare_action_v1(v_native_request);
+   select run.* into strict v_run from public.weekly_exceptional_orchestration_runs run
+    where run.id=(v_prepared->>'orchestration_run_id')::uuid;
+   if v_prepared->>'outcome' is distinct from 'PREPARED' or v_prepared->'ok' is distinct from 'true'::jsonb
+    or v_run.family_id<>v_family.id or v_run.request_kind<>'WITHDRAW' or v_run.requested_by_user_id<>v_actor
+    or v_run.idempotency_key<>v_child or v_run.request_fingerprint<>v_prepare_hash then
+    raise exception 'SOURCE_UNPROTECT_RUN_OWNERSHIP_CONFLICT' using errcode='23514';
+   end if;
+   v_prepared:=v_prepared||jsonb_build_object('family_bound_version',v_family.bound_version::text);
+   insert into private.weekly_source_pay_decision_unprotect_preparations(id,decision_id,member_key,review_id,
+    accept_or_resume_request_id,actor_user_id,family_id,orchestration_run_id,child_idempotency_key,route,
+    family_bound_version,confirmation_request_sha256,native_prepare_request_json,native_prepare_request_sha256,
+    native_prepared_json,native_prepared_sha256,state,expires_at_utc)
+   values(gen_random_uuid(),v_decision,v_member,v_review_id,v_request_id,v_actor,v_family.id,v_run.id,v_child,v_route,
+    v_family.bound_version,v_confirm_hash,v_native_request,v_prepare_hash,v_prepared,
+    private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_PREPARED_ACTION_V1',v_prepared),'RUN_PREPARED',
+    transaction_timestamp()+interval '10 minutes') returning * into v_stub;
+  end if;
+ end if;
+ if v_stub.confirmation_request_sha256<>v_confirm_hash or v_stub.actor_user_id<>v_actor or v_stub.review_id<>v_review_id then
+  raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';
+ end if;
+ return jsonb_build_object('version','SOURCE_UNPROTECT_RUN_PREPARED_V1','preparation_id',v_stub.id,
+  'decision_id',v_stub.decision_id,'member_key',v_stub.member_key,'review_id',v_stub.review_id,
+  'accept_or_resume_request_id',v_stub.accept_or_resume_request_id,'route',v_stub.route,
+  'preparation_state',v_stub.state,'expires_at_utc',v_stub.expires_at_utc,'prepared',v_stub.native_prepared_json);
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+ raise exception 'SOURCE_UNPROTECT_RUN_PREPARE_SCOPE_INVALID' using errcode='22023';
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb) to service_role;
+notify pgrst,'reload schema';

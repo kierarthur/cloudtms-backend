@@ -1,0 +1,43 @@
+{
+  "input_commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN",
+  "dependency": "private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)",
+  "owners": [
+    {
+      "name": "public.weekly_exceptional_pay_next_publication_status_v1(jsonb)",
+      "input": "supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql",
+      "original_sha256": "aa204a4531af867f47823cf804ff6cf5623eb958b70a144c98f287bf74a3110f",
+      "output": "native-entry/weekly_exceptional_pay_next_publication_status_v1.sqlinc",
+      "output_sha256": "6b49ce2c20b91e8917778d9ed175e14f220a6478f0a56aed6c9ec3b29dce2041",
+      "complete_reverse_equals_input": true,
+      "ordinary_body_changes": 0
+    },
+    {
+      "name": "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+      "input": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+      "original_sha256": "658ddc464b00aee7ea98b5a5175ec6e467265b9341d0ba7f9fde45d1282cedf2",
+      "output": "native-entry/weekly_exceptional_pay_publish_next_v1.sqlinc",
+      "output_sha256": "b91bcbe09aab658dacefad71df928105ea57b9a81b8e991cfbb3c9a72501437a",
+      "complete_reverse_equals_input": true,
+      "ordinary_body_changes": 0
+    },
+    {
+      "name": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+      "input": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_exceptional_pay_stage_c1_request_v1.complete.sqlinc",
+      "original_sha256": "532146598b453a2e0e253ccf0df2c29fa66977f63e644e8003d71e77e594c6f5",
+      "output": "native-entry/weekly_exceptional_pay_stage_c1_request_v1.sqlinc",
+      "output_sha256": "e5a62b6838024c3af98f2a436edb262e51381fa6cf4d2ae0e23753d7ef40265d",
+      "complete_reverse_equals_input": true,
+      "ordinary_body_changes": 0
+    },
+    {
+      "name": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+      "input": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_exceptional_pay_complete_local_v1.complete.sqlinc",
+      "original_sha256": "39847b83448f48c414b0eb3cf04dbd581a8f4595039aeb04d1237f5ef64c653d",
+      "output": "native-entry/weekly_exceptional_pay_complete_local_v1.sqlinc",
+      "output_sha256": "168feb1143ae9893b759c70b60fe83aee9fe42bffe51e1e474bcaebd466bec8e",
+      "complete_reverse_equals_input": true,
+      "ordinary_body_changes": 0
+    }
+  ]
+}

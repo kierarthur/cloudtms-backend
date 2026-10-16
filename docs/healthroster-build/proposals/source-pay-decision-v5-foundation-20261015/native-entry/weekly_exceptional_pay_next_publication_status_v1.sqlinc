@@ -1,0 +1,80 @@
+create or replace function public.weekly_exceptional_pay_next_publication_status_v1(
+  p_request jsonb
+) returns jsonb language plpgsql stable security definer
+set search_path=pg_catalog,private,public
+as $function$
+declare
+  v_source_gate jsonb;
+  v_run public.weekly_exceptional_orchestration_runs%rowtype;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_receipt private.bpay_next_protected_source_receipt%rowtype;
+  v_actor uuid;
+  v_approval public.weekly_exceptional_payment_approvals%rowtype;
+  v_group uuid;
+  v_local jsonb;
+begin
+  if coalesce(nullif(pg_catalog.current_setting('request.jwt.claim.role',true),''),
+      nullif(pg_catalog.current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+    raise exception using errcode='42501',message='BPAY_NEXT_SERVICE_REQUIRED';
+  end if;
+  if pg_catalog.jsonb_typeof(p_request)<>'object'
+     or not private.weekly_exceptional_json_keys_exact_v1(p_request,
+       array['schema_version','actor_user_id','family_id','orchestration_run_id'])
+     or not (p_request ?& array['schema_version','actor_user_id','family_id','orchestration_run_id'])
+     or p_request->>'schema_version'<>'WEEKLY_PROTECTED_NEXT_STATUS_V1' then
+    raise exception using errcode='22023',message='BPAY_NEXT_PROTECTED_STATUS_INVALID';
+  end if;
+  v_actor:=(p_request->>'actor_user_id')::uuid;
+  select f.* into strict v_family from public.weekly_exceptional_pay_target_families f
+    where f.id=(p_request->>'family_id')::uuid;
+  select r.* into strict v_run from public.weekly_exceptional_orchestration_runs r
+    where r.id=(p_request->>'orchestration_run_id')::uuid and r.family_id=v_family.id;
+  if v_run.requested_by_user_id is distinct from v_actor or not exists(
+      select 1 from public.tms_users u where u.id=v_actor and u.is_active
+        and (u.payment_authoriser or u.payment_golden_key)) then
+    raise exception using errcode='42501',message='BPAY_NEXT_PROTECTED_ACTOR_REFUSED';
+  end if;
+  v_source_gate:=private.weekly_source_pay_decision_native_normal_gate_v1(v_family.id,v_run.id,v_actor,'STATUS');
+  if v_source_gate is not null then return v_source_gate; end if;
+  select r.* into v_receipt from private.bpay_next_protected_source_receipt r
+    where r.orchestration_run_id=v_run.id;
+  if found then
+    if v_receipt.family_id<>v_family.id or v_receipt.actor_user_id<>v_actor
+       or v_receipt.prepared_request_sha256 is distinct from v_run.request_fingerprint
+       or v_run.state<>'COMPLETE'
+       or exists(select 1 from private.weekly_source_local_protected_decision_receipts l
+         join public.weekly_exceptional_c1_publication_requests request on request.id=l.publication_request_id
+         where request.orchestration_run_id=v_run.id) then
+      raise exception using errcode='23514',message='BPAY_NEXT_PROTECTED_RECEIPT_NOT_EXACT';
+    end if;
+    select a.* into strict v_approval from public.weekly_exceptional_payment_approvals a
+      where a.id=v_receipt.approval_id;
+    select c.source_group_id into strict v_group from public.weekly_source_cycles c
+      where c.id=v_approval.source_cycle_id;
+    perform private.weekly_source_office_authority_v1(v_actor,'APPROVE_PROTECTED_PAY',
+      v_group,v_approval.client_id,v_approval.protected_work_date);
+    return pg_catalog.jsonb_build_object('ok',true,'route','NEXT','published',true,
+      'receipt',private.bpay_next_protected_receipt_json_v1(v_run.id,true));
+  end if;
+  -- Retain LEGACY fresh routing; accepted Local replay is independent of the
+  -- current module. Its real Source helper, not a C1 staging-row label, owns it.
+  if (select active_owner from private.bpay_next_module_control where id=1)<>'NEXT'
+     and not exists(select 1 from private.weekly_source_local_protected_decision_receipts l
+       join public.weekly_exceptional_c1_publication_requests request on request.id=l.publication_request_id
+       where request.orchestration_run_id=v_run.id) then
+    return pg_catalog.jsonb_build_object('ok',true,'route','C1','published',false,'receipt',null);
+  end if;
+  v_local:=private.bpay_next_protected_local_receipt_v1(v_family.id,v_run.id,v_actor);
+  if v_local is not null then
+    return pg_catalog.jsonb_build_object('ok',true,'route','SOURCE_LOCAL',
+      'published',v_local->'banking_receipt'<>'null'::jsonb,'receipt',v_local);
+  end if;
+  if v_run.state<>'RUNNING' then
+    raise exception using errcode='55000',message='BPAY_NEXT_PROTECTED_DOMAIN_UNSUPPORTED';
+  end if;
+  return pg_catalog.jsonb_build_object('ok',true,
+    'route',private.bpay_next_protected_owner_route_v1(v_family.id),'published',false,'receipt',null);
+exception when no_data_found or too_many_rows then
+  raise exception using errcode='55000',message='BPAY_NEXT_PROTECTED_STATUS_SCOPE_INVALID';
+end
+$function$;

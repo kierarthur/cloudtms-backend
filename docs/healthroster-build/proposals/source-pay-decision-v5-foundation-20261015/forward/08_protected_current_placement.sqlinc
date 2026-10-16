@@ -1,0 +1,223 @@
+-- Genuine current physical/evidence/Work certificate. No financial write or
+-- arbitrary archive flag. Requires the physical H103 and original Source
+-- invoice certificate owners plus Banking's actual move publication schema.
+create or replace function private.weekly_source_protected_current_placement_v1(
+ p_family_id uuid,p_work_event_id uuid,p_lock boolean
+) returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,private,public as $function$
+declare
+ family public.weekly_exceptional_pay_target_families%rowtype;
+ original public.timesheets%rowtype;current_ts public.timesheets%rowtype;
+ original_contract public.contracts%rowtype;current_contract public.contracts%rowtype;
+ event public.weekly_work_events%rowtype;financial public.timesheets_financials%rowtype;
+ alias private.timesheet_contract_family_aliases%rowtype;
+ placement private.timesheet_contract_current_placements%rowtype;
+ operation private.timesheet_contract_move_operations%rowtype;
+ archive_operation private.timesheet_contract_move_operations%rowtype;
+ member private.timesheet_contract_move_members%rowtype;
+ bank_member private.bpay_next_move_publication_member%rowtype;
+ original_work private.bpay_next_work%rowtype;current_work private.bpay_next_work%rowtype;
+ revision private.bpay_next_work_revision%rowtype;
+ physical jsonb;evidence jsonb;saved_invoice jsonb;current_invoice jsonb;result jsonb;
+ evidence_hash bytea;member_key text;original_work_id uuid;current_work_id uuid;operation_id uuid;
+ invoice_ts uuid[];source_rows uuid[];moved boolean;scope_root uuid;count_rows integer;
+begin
+ if p_family_id is null or p_work_event_id is null or p_lock is null then
+  raise exception 'PROTECTED_CURRENT_PLACEMENT_UNBOUND' using errcode='22023';
+ end if;
+ select f.* into strict family from public.weekly_exceptional_pay_target_families f where f.id=p_family_id;
+ select t.* into strict original from public.timesheets t where t.timesheet_id=family.root_timesheet_id;
+ select c.* into strict original_contract from public.contracts c where c.id=family.contract_id;
+ select e.* into strict event from public.weekly_work_events e where e.id=p_work_event_id;
+ if original.contract_id is distinct from family.contract_id
+  or original.booking_id is distinct from family.root_family_booking_id
+  or original.week_ending_date is distinct from family.week_ending_date
+  or original_contract.candidate_id is distinct from family.candidate_id
+  or event.candidate_id is distinct from family.candidate_id or event.client_id is distinct from original_contract.client_id
+  or event.work_date not between family.week_start_date and family.week_ending_date
+  or not(exists(select 1 from public.weekly_exceptional_payment_approvals a
+    where a.pay_target_family_id=family.id and a.work_event_id=event.id
+     and a.candidate_id=family.candidate_id and a.client_id=event.client_id and a.contract_id=family.contract_id)
+   or exists(select 1 from public.weekly_exceptional_pay_family_events e
+    where e.family_id=family.id and e.durable_work_event_id=event.id)) then
+  raise exception 'PROTECTED_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+ end if;
+ -- Resolve the certified flat physical identity, never max(version), a booking
+ -- suffix, a caller-selected B, or recursive traversal of previous moves.
+ if p_lock then physical:=private.timesheet_contract_move_family_lock_v1(original.timesheet_id);
+ else physical:=private.timesheet_contract_current_placement_v1(original.timesheet_id);end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(physical,array['version','requested_timesheet_id','family_root_id',
+   'current_timesheet_id','current_contract_id','placement_revision','placement_receipt_id','legacy_origin'])
+  or not(physical ?& array['version','requested_timesheet_id','family_root_id','current_timesheet_id',
+   'current_contract_id','placement_revision','placement_receipt_id','legacy_origin'])
+  or physical->>'version' is distinct from 'CURRENT_CONTRACT_PLACEMENT_V1'
+  or physical->>'requested_timesheet_id' is distinct from original.timesheet_id::text then
+  raise exception 'PROTECTED_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+ end if;
+ scope_root:=(physical->>'family_root_id')::uuid;
+ moved:=physical->'legacy_origin'='false'::jsonb;
+ if physical->'legacy_origin' not in('true'::jsonb,'false'::jsonb) then
+  raise exception 'PROTECTED_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';end if;
+ select t.* into strict current_ts from public.timesheets t where t.timesheet_id=(physical->>'current_timesheet_id')::uuid;
+ select c.* into strict current_contract from public.contracts c where c.id=current_ts.contract_id;
+ if current_ts.contract_id is distinct from (physical->>'current_contract_id')::uuid
+  or not current_ts.is_current or current_ts.archived_at_utc is not null or current_ts.revoked_at is not null
+  or current_ts.week_ending_date is distinct from family.week_ending_date
+  or current_contract.candidate_id is distinct from family.candidate_id or current_contract.client_id is distinct from event.client_id
+  or (current_contract.start_date is not null and event.work_date<current_contract.start_date)
+  or (current_contract.end_date is not null and event.work_date>current_contract.end_date) then
+  raise exception 'PROTECTED_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';end if;
+ evidence:=private.timesheet_contract_move_evidence_v1(original.timesheet_id);
+ if evidence is null then raise exception 'PROTECTED_CURRENT_PLACEMENT_EVIDENCE_UNBOUND' using errcode='55000';end if;
+ evidence_hash:=private.timesheet_contract_move_row_hash_v1(evidence);
+ if moved then
+  select a.* into strict alias from private.timesheet_contract_family_aliases a where a.timesheet_id=original.timesheet_id;
+  select p.* into strict placement from private.timesheet_contract_current_placements p
+   where p.family_root_id=alias.family_root_id and p.member_key=alias.member_key;
+  select o.* into strict operation from private.timesheet_contract_move_operations o where o.id=placement.operation_id;
+  select o.* into strict archive_operation from private.timesheet_contract_move_operations o where o.id=alias.accepted_operation_id;
+  select m.* into strict member from private.timesheet_contract_move_members m
+   where m.operation_id=operation.id and m.member_key=alias.member_key;
+  if alias.original_timesheet_id is distinct from original.timesheet_id
+   or alias.family_root_id is distinct from scope_root or alias.member_role is distinct from member.role
+   or placement.current_timesheet_id is distinct from current_ts.timesheet_id
+   or placement.candidate_id is distinct from family.candidate_id or placement.actual_client_id is distinct from event.client_id
+   or placement.placement_revision::text is distinct from physical->>'placement_revision'
+   or placement.placement_receipt_id::text is distinct from physical->>'placement_receipt_id'
+   or operation.state<>'COMPLETE' or operation.purpose<>'CONTRACT_CORRECTION'
+   or operation.candidate_id is distinct from family.candidate_id or operation.actual_client_id is distinct from event.client_id
+   or operation.family_root_id is distinct from scope_root or operation.accepted_review_id is null
+   or operation.placement_receipt_json->>'version' is distinct from 'CONTRACT_MOVE_PLACEMENT_RECEIPT_V1'
+   or operation.placement_receipt_json->>'receipt_id' is distinct from placement.placement_receipt_id::text
+   or operation.placement_receipt_json->>'operation_id' is distinct from operation.id::text
+   or member.to_timesheet_id is distinct from current_ts.timesheet_id or member.to_version is distinct from current_ts.version
+   or member.to_contract_id is distinct from current_ts.contract_id
+   or member.immutable_evidence_hash is distinct from evidence_hash
+   or member.approval_evidence_hash is distinct from private.timesheet_contract_move_row_hash_v1(evidence->'workflows')
+   or archive_operation.state not in('COMPLETE','SUPERSEDED') or archive_operation.purpose<>'CONTRACT_CORRECTION'
+   or original.archived_at_utc is null or original.archived_reason_code is distinct from 'CONTRACT_MOVE'
+   or original.archived_by_user_id is distinct from archive_operation.created_by_user_id
+   or not exists(select 1 from private.timesheet_contract_move_members m where m.operation_id=archive_operation.id
+      and m.member_key=alias.member_key and m.from_timesheet_id=original.timesheet_id and m.family_root_id=scope_root)
+   or not exists(select 1 from private.timesheet_contract_move_capability_consumptions c
+      where c.operation_id=archive_operation.id and c.member_key=alias.member_key and c.phase='ACCEPT_PLACEMENT'
+       and c.guard_name='public.timesheet_archive_row_guard_v1' and c.relation_oid='public.timesheets'::regclass::oid
+       and c.row_operation='UPDATE' and c.authority_receipt_id=(archive_operation.placement_receipt_json->>'receipt_id')::uuid
+       and c.row_sha256=private.timesheet_contract_move_row_hash_v1(to_jsonb(original))) then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_EVIDENCE_UNBOUND' using errcode='55000';end if;
+  select count(*) into count_rows from jsonb_array_elements(operation.placement_receipt_json->'members') m
+   where m.value->>'member_key'=alias.member_key and m.value->>'original_timesheet_id'=original.timesheet_id::text
+    and m.value->>'to_timesheet_id'=current_ts.timesheet_id::text
+    and m.value->>'to_version'=current_ts.version::text and m.value->>'immutable_evidence_hash'=encode(evidence_hash,'hex');
+  if count_rows<>1 then raise exception 'PROTECTED_CURRENT_PLACEMENT_EVIDENCE_UNBOUND' using errcode='55000';end if;
+  member_key:=alias.member_key;operation_id:=operation.id;
+  -- Saved original invoice identity proves the move's Source preservation. It
+  -- is not operation.before_invoice_hash (which may seal MIXED billing).
+  saved_invoice:=private.invoice_contract_move_source_certificate_v1(operation.id,false);
+  if saved_invoice is null or not private.weekly_exceptional_json_keys_exact_v1(saved_invoice,array['phase','hash','source_row_ids',
+    'accepted_final_member_ids','original_invoice_timesheet_ids','invoice_ids','net','vat','gross'])
+   or not(saved_invoice ?& array['phase','hash','source_row_ids','accepted_final_member_ids','original_invoice_timesheet_ids','invoice_ids','net','vat','gross'])
+   or coalesce(saved_invoice->>'hash','')!~'^[0-9a-f]{64}$'
+   or jsonb_typeof(saved_invoice->'original_invoice_timesheet_ids') is distinct from 'array'
+   or jsonb_typeof(saved_invoice->'source_row_ids') is distinct from 'array' then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_INVOICE_UNBOUND' using errcode='55000';end if;
+  select coalesce(array_agg(x::uuid order by x),'{}'::uuid[]) into invoice_ts
+   from jsonb_array_elements_text(saved_invoice->'original_invoice_timesheet_ids') x;
+  select coalesce(array_agg(x::uuid order by x),'{}'::uuid[]) into source_rows
+   from jsonb_array_elements_text(saved_invoice->'source_row_ids') x;
+  if not(original.timesheet_id=any(invoice_ts)) then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_INVOICE_UNBOUND' using errcode='55000';end if;
+  -- Exact canonical/current Work binding comes from this actual accepted move
+  -- publication member. Absent producer evidence is not certified absent Work.
+  select m.* into strict bank_member from private.bpay_next_move_publication_member m
+   join private.bpay_next_move_publication p on p.command_id=m.command_id and p.operation_id=m.operation_id and p.cut_id=m.cut_id
+   join private.bpay_next_command command on command.id=p.command_id and command.status in('SEALED','COMPLETE')
+   join private.bpay_next_command_member cm on cm.command_id=command.id and cm.candidate_id=family.candidate_id
+   where m.operation_id=operation.id and m.cut_id=operation.current_financial_cut_id
+    and m.physical_member_key=member_key and m.family_root_id=scope_root and p.candidate_id=family.candidate_id;
+  original_work_id:=bank_member.canonical_work_id;
+  if bank_member.to_revision_id is not null and not exists(select 1 from private.bpay_next_work_revision r
+    where r.id=bank_member.to_revision_id and r.work_id=bank_member.to_work_id
+     and r.physical_timesheet_id=member.to_timesheet_id and r.physical_timesheet_version=member.to_version and r.sealed_at_utc is not null) then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_WORK_UNBOUND' using errcode='55000';end if;
+  if bank_member.to_revision_id is null and bank_member.member_kind<>'PENDING_FACTUAL' then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_WORK_UNBOUND' using errcode='55000';end if;
+  -- A later genuine approval/revision at this exact accepted B is current
+  -- authority. The move's immutable original revision is retained above; it
+  -- does not freeze every future current revision to its acceptance value.
+  select w.* into current_work from private.bpay_next_work w where w.original_timesheet_id=current_ts.timesheet_id;
+  if bank_member.to_work_id is not null and current_work.id is distinct from bank_member.to_work_id then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_WORK_UNBOUND' using errcode='55000';end if;
+  if current_work.approval_state='APPROVED' then current_work_id:=current_work.id;end if;
+ else
+  if original.timesheet_id is distinct from current_ts.timesheet_id or original.contract_id is distinct from current_ts.contract_id
+   or original.archived_at_utc is not null or not original.is_current
+   or physical->>'placement_revision' is distinct from '0' or physical->'placement_receipt_id' is distinct from 'null'::jsonb then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';end if;
+  member_key:=original.timesheet_id::text;invoice_ts:=array[original.timesheet_id];
+  select coalesce(array_agg(distinct r.upload_row_id order by r.upload_row_id),'{}'::uuid[]) into source_rows
+   from public.weekly_source_row_timesheet_lineages l join public.weekly_source_row_resolutions r on r.id=l.row_resolution_id
+   where (l.timesheet_id=original.timesheet_id or l.family_booking_id=family.root_family_booking_id)
+    and l.candidate_id=family.candidate_id and l.client_id=event.client_id and l.contract_id=family.contract_id
+    and l.week_ending_date=family.week_ending_date;
+  select w.* into original_work from private.bpay_next_work w where w.original_timesheet_id=original.timesheet_id;
+  original_work_id:=original_work.id;
+  if original_work.approval_state='APPROVED' then current_work_id:=original_work.id;end if;
+  if exists(select 1 from private.bpay_next_work w where w.booking_id=original.booking_id
+     and w.original_timesheet_id<>original.timesheet_id) then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_WORK_UNBOUND' using errcode='55000';end if;
+ end if;
+ if p_lock then
+  perform 1 from public.contracts c where c.id in(original.contract_id,current_ts.contract_id) order by c.id for share;
+  perform 1 from public.timesheets_financials f where f.timesheet_id=current_ts.timesheet_id and f.is_current order by f.id for share;
+  perform 1 from private.bpay_next_work w where w.id in(original_work_id,current_work_id) order by w.id for share;
+ end if;
+ select count(*) into count_rows from public.timesheets_financials f where f.timesheet_id=current_ts.timesheet_id and f.is_current;
+ if count_rows>1 then raise exception 'PROTECTED_CURRENT_PLACEMENT_FINANCIAL_UNBOUND' using errcode='55000';end if;
+ select f.* into financial from public.timesheets_financials f where f.timesheet_id=current_ts.timesheet_id and f.is_current;
+ if financial.id is not null and (financial.timesheet_version is distinct from current_ts.version or financial.is_stale
+   or financial.candidate_id is distinct from family.candidate_id or financial.client_id is distinct from event.client_id) then
+  raise exception 'PROTECTED_CURRENT_PLACEMENT_FINANCIAL_UNBOUND' using errcode='55000';end if;
+ if original_work_id is not null then
+  select w.* into strict original_work from private.bpay_next_work w where w.id=original_work_id;
+  if original_work.original_timesheet_id is distinct from original.timesheet_id or original_work.contract_id is distinct from original.contract_id
+   or original_work.candidate_id is distinct from family.candidate_id or original_work.week_ending_date is distinct from family.week_ending_date then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_WORK_UNBOUND' using errcode='55000';end if;
+ end if;
+ if current_work_id is not null then
+  select w.* into strict current_work from private.bpay_next_work w where w.id=current_work_id;
+  select r.* into strict revision from private.bpay_next_work_revision r where r.id=current_work.current_revision_id and r.work_id=current_work.id;
+  if current_work.candidate_id is distinct from family.candidate_id or current_work.contract_id is distinct from current_ts.contract_id
+   or current_work.approval_state<>'APPROVED' or revision.sealed_at_utc is null
+   or revision.physical_timesheet_id is distinct from current_ts.timesheet_id or revision.physical_timesheet_version is distinct from current_ts.version
+   or (revision.financial_snapshot_id is not null and revision.financial_snapshot_id is distinct from financial.id) then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_WORK_UNBOUND' using errcode='55000';end if;
+ elsif exists(select 1 from private.bpay_next_work w where w.original_timesheet_id=current_ts.timesheet_id and w.approval_state='APPROVED') then
+  raise exception 'PROTECTED_CURRENT_PLACEMENT_WORK_UNBOUND' using errcode='55000';end if;
+ -- Invoice lifecycle changes after the move are legitimate. Read current
+ -- original invoice facts afresh; their changed digest invalidates an older
+ -- reviewed placement certificate without rewriting the move receipt.
+ current_invoice:=private.weekly_source_invoice_certificate_v1(invoice_ts,source_rows,p_lock);
+ if not(private.weekly_exceptional_json_keys_exact_v1(current_invoice,array['phase','hash','source_row_ids',
+    'accepted_final_member_ids','original_invoice_timesheet_ids','invoice_ids','net','vat','gross']))
+   or coalesce(current_invoice->>'hash','')!~'^[0-9a-f]{64}$' then
+  raise exception 'PROTECTED_CURRENT_PLACEMENT_INVOICE_UNBOUND' using errcode='55000';end if;
+ result:=jsonb_build_object('version','PROTECTED_CURRENT_PLACEMENT_V1','moved',moved,'family_id',family.id,
+  'family_root_id',scope_root,'member_key',member_key,'original_root_timesheet_id',original.timesheet_id,
+  'original_contract_id',original.contract_id,'current_timesheet_id',current_ts.timesheet_id,'current_contract_id',current_ts.contract_id,
+  'current_financial_id',financial.id,'current_timesheet_version',current_ts.version,'current_approval_work_id',current_work_id,
+  'original_canonical_work_id',original_work_id,'move_operation_id',operation_id,'placement_revision',physical->>'placement_revision',
+  'immutable_original_evidence_sha256',encode(evidence_hash,'hex'),'source_invoice_certificate_sha256',current_invoice->>'hash');
+ -- The closed transport omits private financial/approval rows. Their exact
+ -- current witnesses still belong in the digest so a later financial/Work
+ -- revision invalidates the reviewed certificate even if the Work ID is stable.
+ return result||jsonb_build_object('placement_certificate_sha256',encode(
+  private.weekly_source_sha256_jsonb_v1('PROTECTED_CURRENT_PLACEMENT_V1',jsonb_build_object(
+   'certificate',result,'current_financial',to_jsonb(financial),'current_approval_work',to_jsonb(current_work),
+   'current_approval_revision',to_jsonb(revision),'native_event',to_jsonb(event))),'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+ raise exception 'PROTECTED_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+end;
+$function$;
+revoke all on function private.weekly_source_protected_current_placement_v1(uuid,uuid,boolean)
+ from public,anon,authenticated,service_role;

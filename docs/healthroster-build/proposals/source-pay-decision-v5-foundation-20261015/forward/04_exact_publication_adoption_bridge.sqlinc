@@ -1,0 +1,88 @@
+-- The canonical publication/member/cut DDL and its bodies belong to Banking.
+-- This is only Health's four-column immutable adoption bridge and full-set proof.
+create or replace function private.weekly_source_pay_decision_publication_adoption_guard_v1()
+returns trigger language plpgsql security definer
+set search_path=pg_catalog,private,public as $function$
+declare
+ v_app private.weekly_source_pay_decision_acceptance_applications%rowtype;
+ v_adopt private.weekly_source_pay_decision_native_adoptions%rowtype;
+ v_components jsonb;
+begin
+ select a.* into strict v_app from private.weekly_source_pay_decision_acceptance_applications a
+  where a.id=NEW.application_id and a.state='STAGED' and a.backend_pid=pg_backend_pid() and a.transaction_id=pg_current_xact_id();
+ select n.* into strict v_adopt from private.weekly_source_pay_decision_native_adoptions n
+  where n.application_id=v_app.id and n.member_key=NEW.member_key and n.decision_id=v_app.decision_id
+   and n.review_id=v_app.review_id and n.origin<>'NOT_APPLIED_DEPENDENCY';
+ select coalesce(jsonb_agg(jsonb_build_object('cut_id',m.cut_id,'member_no',m.member_no::text,
+  'member_sha256',encode(m.member_sha256,'hex')) order by m.member_no),'[]'::jsonb) into v_components
+  from private.bpay_next_source_pay_decision_cut_member m where m.cut_id=v_app.cut_id and m.member_key=v_adopt.member_key;
+ if jsonb_array_length(v_components)=0 or v_adopt.cut_components_json is distinct from v_components
+  or not exists(select 1 from private.bpay_next_source_pay_decision_publication p
+   join private.bpay_next_source_pay_decision_publication_member pm on pm.command_id=p.command_id
+   join private.bpay_next_source_pay_decision_cut_member cm on cm.cut_id=pm.cut_id and cm.member_no=pm.cut_member_no
+   join private.bpay_next_command cmd on cmd.id=p.command_id
+   join private.bpay_next_command_member native_member on native_member.command_id=cmd.id and native_member.candidate_id=p.candidate_id
+   where p.command_id=NEW.command_id and p.decision_id=v_app.decision_id and p.cut_id=v_app.cut_id
+    and p.application_id=v_app.id and pm.member_no=NEW.publication_member_no and pm.cut_id=v_app.cut_id
+    and cm.member_key=v_adopt.member_key and cm.candidate_id=p.candidate_id
+    and cmd.command_kind='SOURCE_PAY_DECISION_APPLY' and cmd.sealed_at_utc is not null
+    and cmd.status in('SEALED','COMPLETE') and cmd.agency_sequence>0) then
+  raise exception 'SOURCE_PAY_DECISION_PUBLICATION_ADOPTION_MISMATCH' using errcode='23514';
+ end if;
+ return NEW;
+exception when no_data_found or too_many_rows then
+ raise exception 'SOURCE_PAY_DECISION_PUBLICATION_ADOPTION_MISMATCH' using errcode='23514';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_publication_adoption_guard_v1()
+ from public,anon,authenticated,service_role;
+create trigger source_pay_publication_adoption_exact
+ before insert on private.weekly_source_pay_decision_publication_adoptions
+ for each row execute function private.weekly_source_pay_decision_publication_adoption_guard_v1();
+
+create or replace function private.weekly_source_pay_decision_publication_adoptions_assert_v1(p_application_id uuid)
+returns void language plpgsql stable security definer
+set search_path=pg_catalog,private,public as $function$
+declare
+ v_app private.weekly_source_pay_decision_acceptance_applications%rowtype;
+ v_adopt private.weekly_source_pay_decision_native_adoptions%rowtype;
+ v_cut_components jsonb;v_published_components jsonb;v_count integer;v_expected integer;
+begin
+ select a.* into strict v_app from private.weekly_source_pay_decision_acceptance_applications a where a.id=p_application_id;
+ for v_adopt in select n.* from private.weekly_source_pay_decision_native_adoptions n
+  where n.application_id=v_app.id and n.origin<>'NOT_APPLIED_DEPENDENCY' order by n.member_key loop
+  select coalesce(jsonb_agg(jsonb_build_object('cut_id',cm.cut_id,'member_no',cm.member_no::text,
+   'member_sha256',encode(cm.member_sha256,'hex')) order by cm.member_no),'[]'::jsonb) into v_cut_components
+   from private.bpay_next_source_pay_decision_cut_member cm where cm.cut_id=v_app.cut_id and cm.member_key=v_adopt.member_key;
+  select coalesce(jsonb_agg(jsonb_build_object('cut_id',cm.cut_id,'member_no',cm.member_no::text,
+   'member_sha256',encode(cm.member_sha256,'hex')) order by cm.member_no),'[]'::jsonb) into v_published_components
+   from private.weekly_source_pay_decision_publication_adoptions bridge
+   join private.bpay_next_source_pay_decision_publication_member pm on pm.command_id=bridge.command_id and pm.member_no=bridge.publication_member_no
+   join private.bpay_next_source_pay_decision_publication p on p.command_id=pm.command_id and p.application_id=bridge.application_id
+   join private.bpay_next_source_pay_decision_cut_member cm on cm.cut_id=pm.cut_id and cm.member_no=pm.cut_member_no
+   where bridge.application_id=v_app.id and bridge.member_key=v_adopt.member_key and cm.member_key=v_adopt.member_key
+    and p.decision_id=v_app.decision_id and p.cut_id=v_app.cut_id and cm.cut_id=v_app.cut_id and cm.candidate_id=p.candidate_id;
+  if jsonb_array_length(v_cut_components)=0 or v_adopt.cut_components_json is distinct from v_cut_components
+    or v_published_components is distinct from v_cut_components then
+   raise exception 'SOURCE_PAY_DECISION_PUBLICATION_ADOPTION_SET_INCOMPLETE' using errcode='23514';
+  end if;
+ end loop;
+ -- Reject extras as well as omissions, including a bridge to a different cut,
+ -- Candidate, logical member or dependency rollback masquerading as publication.
+ if exists(select 1 from private.weekly_source_pay_decision_publication_adoptions bridge
+  join private.weekly_source_pay_decision_native_adoptions n on n.application_id=bridge.application_id and n.member_key=bridge.member_key
+  join private.bpay_next_source_pay_decision_publication_member pm on pm.command_id=bridge.command_id and pm.member_no=bridge.publication_member_no
+  join private.bpay_next_source_pay_decision_cut_member cm on cm.cut_id=pm.cut_id and cm.member_no=pm.cut_member_no
+  where bridge.application_id=v_app.id and (n.origin='NOT_APPLIED_DEPENDENCY' or cm.cut_id<>v_app.cut_id or cm.member_key<>n.member_key)) then
+  raise exception 'SOURCE_PAY_DECISION_PUBLICATION_ADOPTION_EXTRA_MEMBER' using errcode='23514';
+ end if;
+ for v_count,v_expected in select count(pm.*)::integer,p.member_count
+   from private.bpay_next_source_pay_decision_publication p
+   left join private.bpay_next_source_pay_decision_publication_member pm on pm.command_id=p.command_id
+   where p.application_id=v_app.id group by p.command_id,p.member_count loop
+  if v_count<>v_expected then raise exception 'SOURCE_PAY_DECISION_PUBLICATION_MANIFEST_INCOMPLETE' using errcode='23514';end if;
+ end loop;
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_publication_adoptions_assert_v1(uuid)
+ from public,anon,authenticated,service_role;

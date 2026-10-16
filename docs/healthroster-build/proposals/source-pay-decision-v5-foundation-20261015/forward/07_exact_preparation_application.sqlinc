@@ -1,0 +1,56 @@
+-- Shared by Health's non-NULL native implementations and actual unprotect
+-- dispatcher. It resolves only the UNIQUE original request binding, never a
+-- decision-wide/latest application. It neither stages nor values money.
+create or replace function private.weekly_source_pay_decision_unprotect_application_v1(p_preparation_id uuid)
+returns uuid language plpgsql stable security definer
+set search_path=pg_catalog,private,public as $function$
+declare
+ p private.weekly_source_pay_decision_unprotect_preparations%rowtype;
+ a private.weekly_source_pay_decision_acceptance_applications%rowtype;
+ r private.weekly_source_pay_decision_requests%rowtype;
+ review private.weekly_source_pay_decision_reviews%rowtype;
+ assembly private.weekly_source_pay_decision_preview_assemblies%rowtype;
+ quote private.weekly_source_pay_decision_preview_quotes%rowtype;
+ run public.weekly_exceptional_orchestration_runs%rowtype;
+begin
+ select s.* into strict p from private.weekly_source_pay_decision_unprotect_preparations s where s.id=p_preparation_id;
+ select app.* into strict a from private.weekly_source_pay_decision_acceptance_applications app
+  where app.request_id=p.accept_or_resume_request_id;
+ select request.* into strict r from private.weekly_source_pay_decision_requests request where request.request_id=a.request_id;
+ select saved.* into strict review from private.weekly_source_pay_decision_reviews saved where saved.id=a.review_id;
+ select saved.* into strict assembly from private.weekly_source_pay_decision_preview_assemblies saved where saved.id=review.preview_assembly_id;
+ select saved.* into strict quote from private.weekly_source_pay_decision_preview_quotes saved
+  where saved.assembly_id=assembly.id and saved.member_key=p.member_key;
+ select native_run.* into strict run from public.weekly_exceptional_orchestration_runs native_run where native_run.id=p.orchestration_run_id;
+ if p.state<>'PREPARED' or p.expires_at_utc<=transaction_timestamp()
+  or a.state<>'PREVALIDATED' or a.backend_pid<>pg_backend_pid() or a.transaction_id<>pg_current_xact_id()
+  or a.decision_id<>p.decision_id or a.review_id<>p.review_id or a.actor_user_id<>p.actor_user_id
+  or r.decision_id is distinct from a.decision_id or r.review_id is distinct from a.review_id or r.actor_user_id is distinct from a.actor_user_id
+  or r.metadata_state<>'CONFIRMED' or r.receipt_json is not null
+  or r.request_kind not in('ACCEPT','RESUME_FINANCIAL')
+  or r.request_hash<>p.confirmation_request_sha256
+  or r.request_hash is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_CONFIRMATION_V1',r.request_json)
+  or review.decision_id<>a.decision_id or review.pay_cut_hash<>a.pre_cut_sha256
+  or assembly.decision_id is distinct from a.decision_id or assembly.review_id is distinct from review.id or assembly.state<>'SEALED'
+  or assembly.actor_user_id<>a.actor_user_id or assembly.decision_kind<>'EXCLUDE_FUTURE_WORK_PAY'
+  or quote.economic_target_sha256 is distinct from p.reviewed_target_sha256
+  or p.payload_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_NATIVE_PAYLOAD_V1',p.payload_json)
+  or p.native_prepare_request_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_PREPARE_ACTION_REQUEST_V1',p.native_prepare_request_json)
+  or p.native_prepared_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_PREPARED_ACTION_V1',p.native_prepared_json)
+  or p.native_prepare_request_json is distinct from p.payload_json->'prepare_request'
+  or p.payload_json->>'route' is distinct from p.route
+  or run.family_id<>p.family_id or run.requested_by_user_id<>p.actor_user_id or run.request_kind<>'WITHDRAW'
+  or run.idempotency_key<>p.child_idempotency_key or run.request_fingerprint<>p.native_prepare_request_sha256
+  or run.state<>'RUNNING' or not private.weekly_source_pay_actor_allowed_v1(p.actor_user_id)
+  or not exists(select 1 from private.bpay_next_source_pay_decision_cut cut where cut.id=a.cut_id
+    and cut.decision_id=a.decision_id and cut.review_id=a.review_id and cut.preview_assembly_id=assembly.id
+    and cut.pay_cut_sha256=a.pre_cut_sha256) then
+  raise exception 'SOURCE_UNPROTECT_APPLICATION_MISMATCH' using errcode='23514';
+ end if;
+ return a.id;
+exception when no_data_found or too_many_rows then
+ raise exception 'SOURCE_UNPROTECT_APPLICATION_MISMATCH' using errcode='23514';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_unprotect_application_v1(uuid)
+ from public,anon,authenticated,service_role;

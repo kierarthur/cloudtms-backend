@@ -283,6 +283,9 @@ function dependenciesFor(kind, options = {}) {
           : schedule;
         return options.preparedResult ?? prepared(kind, protectedSchedule);
       }
+      if (name === 'weekly_exceptional_pay_next_publication_status_v1') {
+        return {ok:true,route:'SOURCE_LOCAL',published:false,receipt:null};
+      }
       if (name === 'weekly_exceptional_pay_action_publication_status_v1') {
         return options.publicationStatus ?? { ok: true, staged: false };
       }
@@ -310,7 +313,11 @@ function dependenciesFor(kind, options = {}) {
         };
       }
       if (name === 'weekly_exceptional_pay_complete_local_v1') {
-        return options.localResult ?? { ok: true, outcome: 'PUBLISHED', state: 'LIVE' };
+        const supplied = options.localResult;
+        if (supplied?.ok === false || (supplied && !['PUBLISHED','SAVED_PENDING_FREEZE'].includes(supplied.outcome))) return supplied;
+        return { ok:true,outcome:'PUBLISHED',state:'LIVE',idempotent_replay:false,
+          family_id:ID.family,generation_id:ID.run,publication_request_id:args.p_request.publication_request_id,
+          authority:'COMMON_ENTITLEMENT_HEAD',requires_first_authorisation:false,...supplied };
       }
       throw new Error(`Unexpected data RPC ${name}`);
     },
@@ -449,6 +456,7 @@ test('a completed replay with contradictory unstaged status refuses before fresh
     && error.code === 'WEEKLY_PROTECTED_PUBLICATION_STATUS_INVALID');
   assert.deepEqual(dependencies.calls.map(([name]) => name), [
     'weekly_exceptional_pay_prepare_action_v1',
+    'weekly_exceptional_pay_next_publication_status_v1',
     'weekly_exceptional_pay_action_publication_status_v1',
   ]);
 });

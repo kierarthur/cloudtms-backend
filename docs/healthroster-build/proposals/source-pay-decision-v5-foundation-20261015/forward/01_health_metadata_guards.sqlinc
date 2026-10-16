@@ -1,0 +1,164 @@
+-- Health-owned lifecycle constraints. Mount after all eleven tables and before RPCs.
+-- No mutable GUC, browser token, or service-role table grant is an owner capability.
+create or replace function private.weekly_source_pay_decision_metadata_guard_v1()
+returns trigger language plpgsql security definer
+set search_path=pg_catalog,private,public as $function$
+declare
+ old_row jsonb:=case when TG_OP<>'INSERT' then to_jsonb(OLD) end;
+ new_row jsonb:=case when TG_OP<>'DELETE' then to_jsonb(NEW) end;
+ mutable_keys text[];
+ old_state text;
+ new_state text;
+begin
+ if TG_OP='DELETE' then
+  raise exception 'SOURCE_PAY_DECISION_METADATA_RETAINED' using errcode='55000';
+ end if;
+ if TG_OP='INSERT' then
+  if TG_TABLE_NAME='weekly_source_pay_decision_acceptance_applications' then
+   if NEW.state<>'PREVALIDATED' or NEW.backend_pid<>pg_backend_pid() or NEW.transaction_id<>pg_current_xact_id() then
+    raise exception 'SOURCE_PAY_DECISION_APPLICATION_MUST_BEGIN' using errcode='55000';
+   end if;
+  elsif TG_TABLE_NAME='weekly_source_pay_decision_unprotect_preparations' then
+   if NEW.state<>'RUN_PREPARED' then
+    raise exception 'SOURCE_PAY_DECISION_PREPARATION_MUST_BEGIN' using errcode='55000';
+   end if;
+  end if;
+  return NEW;
+ end if;
+ if new_row=old_row then return NEW; end if;
+ old_state:=old_row->>'state';new_state:=new_row->>'state';
+ case TG_TABLE_NAME
+ when 'weekly_source_pay_decision_requests' then
+  mutable_keys:=array['review_id','metadata_state','receipt_json'];
+  if not ((OLD.metadata_state='ASSEMBLING' and NEW.metadata_state in('SEALED','CANCELLED','EXPIRED','STALE'))
+   or (OLD.metadata_state='CONFIRMED' and NEW.metadata_state='COMMITTED'))
+   or (OLD.review_id is not null and NEW.review_id is distinct from OLD.review_id)
+   or OLD.receipt_json is not null then
+   raise exception 'SOURCE_PAY_DECISION_REQUEST_TRANSITION_INVALID' using errcode='55000';
+  end if;
+ when 'weekly_source_pay_decision_preview_assemblies' then
+  mutable_keys:=array['state','assembly_sha256','review_id'];
+  if old_state='ASSEMBLING' and new_state='ASSEMBLING' and not(OLD.draft_scope_json ? 'cut_id')
+    and NEW.draft_scope_json ? 'cut_id'
+    and OLD.draft_scope_json is not distinct from NEW.draft_scope_json-array['cut_id','cut_no','pay_cut_hash']
+    and exists(select 1 from private.bpay_next_source_pay_decision_cut c
+      where c.id=(NEW.draft_scope_json->>'cut_id')::uuid and c.decision_id=NEW.decision_id
+       and c.preview_assembly_id=NEW.id and c.review_id is null
+       and c.cut_no::text=NEW.draft_scope_json->>'cut_no'
+       and encode(c.pay_cut_sha256,'hex')=NEW.draft_scope_json->>'pay_cut_hash') then
+   mutable_keys:=array['draft_scope_json','draft_scope_sha256'];
+  elsif not ((old_state='ASSEMBLING' and new_state in('READY','CANCELLED','EXPIRED','STALE'))
+    or (old_state='READY' and new_state in('SEALED','CANCELLED','EXPIRED','STALE')))
+    or (OLD.assembly_sha256 is not null and NEW.assembly_sha256 is distinct from OLD.assembly_sha256)
+    or (OLD.review_id is not null and NEW.review_id is distinct from OLD.review_id) then
+   raise exception 'SOURCE_PAY_DECISION_ASSEMBLY_TRANSITION_INVALID' using errcode='55000';
+  end if;
+ when 'weekly_source_pay_decision_unprotect_preparations' then
+  mutable_keys:=array['source_phase','source_revision','native_source_sha256','source_observation_sha256',
+   'placement_certificate_sha256','context_sha256','reviewed_target_sha256','payload_sha256','payload_json',
+   'state','native_receipt_json'];
+  if not ((old_state='RUN_PREPARED' and new_state in('PREPARED','STALE'))
+    or (old_state='PREPARED' and new_state in('CONSUMED','STALE')))
+    or (old_state='PREPARED' and old_row-array['state','native_receipt_json']
+      is distinct from new_row-array['state','native_receipt_json'])
+    or (new_state='STALE' and old_row-'state' is distinct from new_row-'state') then
+   raise exception 'SOURCE_PAY_DECISION_PREPARATION_TRANSITION_INVALID' using errcode='55000';
+  end if;
+ when 'weekly_source_pay_decision_acceptance_applications' then
+  mutable_keys:=array['state','application_sha256','completed_at_utc'];
+  if OLD.backend_pid<>pg_backend_pid() or OLD.transaction_id<>pg_current_xact_id()
+    or not ((old_state='PREVALIDATED' and new_state='STAGED') or (old_state='STAGED' and new_state='COMMITTED')) then
+   raise exception 'SOURCE_PAY_DECISION_APPLICATION_TRANSITION_INVALID' using errcode='55000';
+  end if;
+ when 'weekly_source_pay_decisions' then
+  mutable_keys:=array['accept_request_id','accept_request_hash','decision_kind','accepted_selection_sha256',
+   'supersedes_decision_id','prior_dispositions_sha256','reason','evidence_refs_json','invoice_before_hash',
+   'invoice_after_hash','issue_before_hash','receipt_json','current_financial_cut_id','state_revision'];
+  if NEW.state_revision<OLD.state_revision or NEW.state_revision>OLD.state_revision+1
+   or (NEW.current_financial_cut_id is distinct from OLD.current_financial_cut_id and NEW.state_revision<>OLD.state_revision+1)
+   or (OLD.accept_request_id is not null and old_row-array['state_revision','current_financial_cut_id','receipt_json']
+       is distinct from new_row-array['state_revision','current_financial_cut_id','receipt_json']) then
+   raise exception 'SOURCE_PAY_DECISION_ACCEPTED_TERMS_IMMUTABLE' using errcode='55000';
+  end if;
+ else
+  raise exception 'SOURCE_PAY_DECISION_EVIDENCE_IMMUTABLE' using errcode='55000';
+ end case;
+ if old_row-mutable_keys is distinct from new_row-mutable_keys then
+  raise exception 'SOURCE_PAY_DECISION_IDENTITY_IMMUTABLE' using errcode='55000';
+ end if;
+ return NEW;
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_metadata_guard_v1() from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_pay_decision_application_commit_guard_v1()
+returns trigger language plpgsql security definer
+set search_path=pg_catalog,private,public as $function$
+declare app private.weekly_source_pay_decision_acceptance_applications%rowtype;
+begin
+ select a.* into strict app from private.weekly_source_pay_decision_acceptance_applications a where a.id=NEW.id;
+ if app.state<>'COMMITTED' or app.backend_pid<>pg_backend_pid() or app.transaction_id<>pg_current_xact_id()
+  or app.application_sha256 is null or app.completed_at_utc is null
+  or not exists(select 1 from private.weekly_source_pay_decision_requests r
+    where r.request_id=app.request_id and r.decision_id=app.decision_id and r.review_id=app.review_id
+      and r.actor_user_id=app.actor_user_id and r.metadata_state='COMMITTED' and r.receipt_json is not null)
+  or not exists(select 1 from private.weekly_source_pay_decisions d where d.id=app.decision_id
+    and d.current_financial_cut_id=app.cut_id and d.invoice_before_hash=d.invoice_after_hash)
+  or not exists(select 1 from private.bpay_next_source_pay_decision_cut c
+    join private.weekly_source_pay_decision_reviews r on r.id=c.review_id and r.decision_id=c.decision_id
+      and r.preview_assembly_id=c.preview_assembly_id
+    join private.weekly_source_pay_decision_preview_assemblies a on a.id=c.preview_assembly_id
+      and a.decision_id=c.decision_id and a.review_id=r.id and a.state='SEALED'
+    where c.id=app.cut_id and c.decision_id=app.decision_id and c.review_id=app.review_id
+      and c.pay_cut_sha256=app.pre_cut_sha256) then
+  raise exception 'SOURCE_PAY_DECISION_HALF_APPLICATION' using errcode='23514';
+ end if;
+ perform private.weekly_source_pay_decision_publication_adoptions_assert_v1(app.id);
+ return null;
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_application_commit_guard_v1() from public,anon,authenticated,service_role;
+
+do $guards$
+declare name text;
+begin
+ foreach name in array array['weekly_source_pay_decisions','weekly_source_pay_decision_requests',
+ 'weekly_source_pay_decision_preview_assemblies','weekly_source_pay_decision_preview_quotes',
+ 'weekly_source_pay_decision_reviews','weekly_source_pay_decision_members','weekly_source_pay_decision_bindings',
+ 'weekly_source_pay_decision_unprotect_preparations','weekly_source_pay_decision_acceptance_applications',
+ 'weekly_source_pay_decision_native_adoptions','weekly_source_pay_decision_publication_adoptions'] loop
+  execute format('create trigger source_pay_metadata_immutable before insert or update or delete on private.%I for each row execute function private.weekly_source_pay_decision_metadata_guard_v1()',name);
+ end loop;
+end;
+$guards$;
+create constraint trigger source_pay_application_must_commit
+ after insert or update on private.weekly_source_pay_decision_acceptance_applications
+ deferrable initially deferred for each row
+ execute function private.weekly_source_pay_decision_application_commit_guard_v1();
+
+create or replace function private.weekly_source_pay_decision_assembly_commit_guard_v1()
+returns trigger language plpgsql security definer
+set search_path=pg_catalog,private,public as $function$
+declare a private.weekly_source_pay_decision_preview_assemblies%rowtype;
+begin
+ select current_assembly.* into strict a from private.weekly_source_pay_decision_preview_assemblies current_assembly where current_assembly.id=NEW.id;
+ if not exists(select 1 from private.bpay_next_source_pay_decision_cut c
+  where c.decision_id=a.decision_id and c.preview_assembly_id=a.id
+    and c.id::text=a.draft_scope_json->>'cut_id'
+    and c.cut_no::text=a.draft_scope_json->>'cut_no'
+    and encode(c.pay_cut_sha256,'hex')=a.draft_scope_json->>'pay_cut_hash'
+    and ((a.state='SEALED' and c.review_id=a.review_id and exists(
+      select 1 from private.weekly_source_pay_decision_reviews r where r.id=c.review_id
+       and r.decision_id=c.decision_id and r.preview_assembly_id=a.id and r.pay_cut_hash=c.pay_cut_sha256))
+      or (a.state<>'SEALED' and c.review_id is null))) then
+  raise exception 'SOURCE_PAY_DECISION_ASSEMBLY_INCOMPLETE' using errcode='23514';
+ end if;
+ return null;
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_assembly_commit_guard_v1()
+ from public,anon,authenticated,service_role;
+create constraint trigger source_pay_assembly_must_have_one_cut
+ after insert or update on private.weekly_source_pay_decision_preview_assemblies
+ deferrable initially deferred for each row
+ execute function private.weekly_source_pay_decision_assembly_commit_guard_v1();
