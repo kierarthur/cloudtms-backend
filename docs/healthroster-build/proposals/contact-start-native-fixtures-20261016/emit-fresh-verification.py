@@ -23,4 +23,15 @@ for (relation,column),identities in sorted(groups.items()):
  schema,table=relation.split('.')
  query='SELECT EXISTS(SELECT 1 FROM "'+schema+'"."'+table+'" WHERE "'+column+'"=ANY(ARRAY['+','.join("'"+i+"'::uuid" for i in sorted(identities))+']))'
  print("IF to_regclass('"+relation+"') IS NOT NULL THEN EXECUTE '"+query.replace("'","''")+"' INTO v_found; IF v_found THEN RAISE EXCEPTION 'CONTACT_FRESH_ID_REMAINS "+relation+'.'+column+"';END IF;END IF;")
+restoration=receipt.get('restoration')
+if restoration is not None:
+ if not isinstance(restoration,dict) or set(restoration)!={'settings_defaults_sha256','global_contact_settings_sha256'}:raise ValueError('Invalid restoration seal')
+ for key,value in restoration.items():
+  if not isinstance(value,str) or not re.fullmatch(r'[0-9a-f]{64}',value):raise ValueError('Invalid restoration digest')
+  relation,predicate,projection={'settings_defaults_sha256':('public.settings_defaults','id=1',
+   "jsonb_build_object('candidate_app_feature_flags_json',x.candidate_app_feature_flags_json,'updated_at',to_jsonb(x)->'updated_at')"),
+   'global_contact_settings_sha256':('public.weekly_source_global_settings','singleton',
+   "(to_jsonb(x)-ARRAY['automatic_reconcile_actor_user_id','manager_first_delay_value','manager_first_delay_unit','manager_followups','manager_recent_completed_weeks','manager_max_work_age_days'])")}[key]
+  print("IF (SELECT encode(extensions.digest(convert_to("+projection+"::text,'UTF8'),'sha256'),'hex') FROM "+relation+" x WHERE "+predicate+") IS DISTINCT FROM '"+value+"' THEN RAISE EXCEPTION 'CONTACT_FRESH_SHARED_SETTINGS_NOT_RESTORED "+key+"';END IF;")
+print("IF EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='contact_seed_insert_observer') THEN RAISE EXCEPTION 'CONTACT_FRESH_OBSERVER_REMAINS';END IF;")
 print("END;$fresh$;SELECT jsonb_build_object('fixture','CONTACT_START_ACTUAL_ID_ABSENCE','absent',true,'database',current_database());")

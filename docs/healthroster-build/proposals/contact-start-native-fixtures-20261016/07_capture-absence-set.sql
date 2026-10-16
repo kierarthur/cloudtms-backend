@@ -21,6 +21,7 @@ INSERT INTO pg_temp.contact_start_fixture_absence_ids
  ON CONFLICT DO NOTHING;
 -- No payload, recipient, credential, token or full body is returned.
 SELECT jsonb_build_object('version','CONTACT_FIXTURE_ABSENCE_SET_V1','database',current_database(),
+ 'restoration',(SELECT source_prefix_receipt->'restoration' FROM pg_temp.contact_start_fixture_input WHERE kind='PUSH'),
  'source_prefix_receipts',(SELECT jsonb_object_agg(kind,source_prefix_receipt) FROM pg_temp.contact_start_fixture_input),
  'objects',(SELECT jsonb_agg(to_jsonb(x) ORDER BY relation_name,column_name,object_id)
   FROM pg_temp.contact_start_fixture_absence_ids x)) AS fixture_absence_set;

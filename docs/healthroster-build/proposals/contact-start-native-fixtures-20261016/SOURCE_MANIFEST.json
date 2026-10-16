@@ -1,148 +1,441 @@
 {
-  "version": "CONTACT_START_NATIVE_FIXTURE_SOURCE_V1",
+  "version": "CONTACT_START_NATIVE_FIXTURE_SOURCE_V2",
   "root_contact_commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
   "root_global_timing_context_commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
   "reviewed_final_pack_sha256": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
   "contact_spec_sha256": "c49bfb3539f381c263c69e8f12e098760d366b1528eaa38435ba88186310c12b",
   "source_inputs": [
     {
+      "path": "broker/src/weekly-source/acacium-report-normalise.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88",
+      "canonical_source_sha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88"
+    },
+    {
+      "path": "broker/src/weekly-source/contract-qualification.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d",
+      "canonical_source_sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "path": "broker/src/weekly-source/coverage-warnings.mjs",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "canonical_source_sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143"
+    },
+    {
+      "path": "broker/src/weekly-source/csv-evidence.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893",
+      "canonical_source_sha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893"
+    },
+    {
+      "path": "broker/src/weekly-source/economic-snapshot.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00",
+      "canonical_source_sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "path": "broker/src/weekly-source/errors.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a",
+      "canonical_source_sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a"
+    },
+    {
+      "path": "broker/src/weekly-source/healthroster-normalise.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698",
+      "canonical_source_sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698"
+    },
+    {
+      "path": "broker/src/weekly-source/html-evidence.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928",
+      "canonical_source_sha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928"
+    },
+    {
+      "path": "broker/src/weekly-source/index.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662",
+      "canonical_source_sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662"
+    },
+    {
+      "path": "broker/src/weekly-source/magnit-contract-price-admission.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57",
+      "canonical_source_sha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57"
+    },
+    {
+      "path": "broker/src/weekly-source/manager-email.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03",
+      "canonical_source_sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03"
+    },
+    {
+      "path": "broker/src/weekly-source/money.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c",
+      "canonical_source_sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c"
+    },
+    {
+      "path": "broker/src/weekly-source/nhsp-normalise.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2",
+      "canonical_source_sha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2"
+    },
+    {
+      "path": "broker/src/weekly-source/profiles.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb",
+      "canonical_source_sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb"
+    },
+    {
+      "path": "broker/src/weekly-source/protected-target-schedule.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a",
+      "canonical_source_sha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a"
+    },
+    {
+      "path": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "canonical_source_sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816"
+    },
+    {
+      "path": "broker/src/weekly-source/roster-summary-normalise.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69",
+      "canonical_source_sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69"
+    },
+    {
+      "path": "broker/src/weekly-source/rule-set-validation.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6",
+      "canonical_source_sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6"
+    },
+    {
+      "path": "broker/src/weekly-source/shared.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204",
+      "canonical_source_sha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204"
+    },
+    {
+      "path": "broker/src/weekly-source/source-finalised-time.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa",
+      "canonical_source_sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa"
+    },
+    {
+      "path": "broker/src/weekly-source/source-invoice-money.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4",
+      "canonical_source_sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4"
+    },
+    {
+      "path": "broker/src/weekly-source/source-price-comparator.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9",
+      "canonical_source_sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+      "canonical_source_sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+    },
+    {
+      "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "canonical_source_sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3"
+    },
+    {
+      "path": "broker/src/weekly-source/weekly-rate-owner.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87",
+      "canonical_source_sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "path": "broker/src/weekly-source/xlsx-evidence.js",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a",
+      "canonical_source_sha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a"
+    },
+    {
+      "path": "scripts/cloudtms-db-release-lib.mjs",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "canonical_source_sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
       "path": "supabase/migrations/15102026_0800_candidate_push_timing_authority.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
       "git_blob_sha256": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450",
-      "unchanged_at_timing_context": true
+      "canonical_source_sha256": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450"
     },
     {
       "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
       "git_blob_sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673",
-      "unchanged_at_timing_context": true
+      "canonical_source_sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
     },
     {
       "path": "supabase/migrations/16102026_0135_weekly_contact_native_attempt_permit_unique.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
       "git_blob_sha256": "24fcf9601266f3600c37cbc30aa4a3e87dbd7fbcd3e78f9ad2acfeaa508dfde1",
-      "unchanged_at_timing_context": true
+      "canonical_source_sha256": "24fcf9601266f3600c37cbc30aa4a3e87dbd7fbcd3e78f9ad2acfeaa508dfde1"
     },
     {
       "path": "supabase/migrations/16102026_0142_weekly_contact_reuse_native_attempt_uniqueness.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
       "git_blob_sha256": "24b09382b7a99536ecdb85dcbc8a29588e1aa87106a8adeb11cc411ce71010b6",
-      "unchanged_at_timing_context": true
+      "canonical_source_sha256": "24b09382b7a99536ecdb85dcbc8a29588e1aa87106a8adeb11cc411ce71010b6"
     },
     {
-      "path": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e",
-      "unchanged_at_timing_context": true
+      "path": "supabase/migrations/21092026_1817_weekly_source_audit_event_order.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "b71629e38b3041d0b9d3040236bf6269a0cfd36db0044b611cee66dbfc9a485e",
+      "canonical_source_sha256": "b71629e38b3041d0b9d3040236bf6269a0cfd36db0044b611cee66dbfc9a485e"
     },
     {
-      "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a",
-      "unchanged_at_timing_context": true
+      "path": "supabase/release/baseline-repeatable-lock.json",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "c2779bc67cfbef0c10bbd7937f4fe571dce5daab4e8be3f93fa46bcc2cdcef5d",
+      "canonical_source_sha256": "c2779bc67cfbef0c10bbd7937f4fe571dce5daab4e8be3f93fa46bcc2cdcef5d"
     },
     {
-      "path": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "47789ebbdf899cb3045dc4164654c3eac499cf73a746bfdcb0b25c7c88beac5b",
-      "unchanged_at_timing_context": true
+      "path": "supabase/release/current-contract.json",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "canonical_source_sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
     },
     {
-      "path": "supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "01536a32084a07702fa7ed02ba61a75d7921e3b0d3ee5646b974841e18c34ac5",
-      "unchanged_at_timing_context": true
+      "path": "supabase/release/current-release.json",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "9eb294e6417d9a30671f3cf5cdad01d58c0e3734947ae63f603e11dd5f92a9cb",
+      "canonical_source_sha256": "9eb294e6417d9a30671f3cf5cdad01d58c0e3734947ae63f603e11dd5f92a9cb"
     },
     {
-      "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "0d4832a5bbed99f5e9da4430bb41d5a1691835d90cb7b472382bd2eb3b730fa2",
-      "unchanged_at_timing_context": true
+      "path": "supabase/release/migration-lock.json",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "74c19c764e81fb720b472c88a62f8c72ff97ec6b655693211d7f34be0c18cfeb",
+      "canonical_source_sha256": "74c19c764e81fb720b472c88a62f8c72ff97ec6b655693211d7f34be0c18cfeb"
     },
     {
-      "path": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "a8b3f8343faf3ec6a2f290e875a2b9cde60caea75ce115fc0608b6732c430c6b",
-      "unchanged_at_timing_context": true
+      "path": "supabase/release/protected-boundary-lock.json",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "60d2d3d8a74535cf52c5213803d19b0654af48955b6096726e2b7a882545f30c",
+      "canonical_source_sha256": "60d2d3d8a74535cf52c5213803d19b0654af48955b6096726e2b7a882545f30c"
     },
     {
-      "path": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152",
-      "unchanged_at_timing_context": true
+      "path": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b",
+      "canonical_source_sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b"
+    },
+    {
+      "path": "supabase/repeatable/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "35da5d2c48d4c3aafa959d7bc5def789d21c5df50b49be57a3d815280c97c12a",
+      "canonical_source_sha256": "35da5d2c48d4c3aafa959d7bc5def789d21c5df50b49be57a3d815280c97c12a"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "abc874b2d4ed90529ad591ea08a0a5131a6bc32c86109911631c8516e18b2e94",
+      "canonical_source_sha256": "abc874b2d4ed90529ad591ea08a0a5131a6bc32c86109911631c8516e18b2e94"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+      "canonical_source_sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c"
     },
     {
       "path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
       "git_blob_sha256": "7203e1229a43f4545bcc85b3ce280ffadc2968dceb5f80aa8a7b54d01328978b",
-      "unchanged_at_timing_context": true
-    },
-    {
-      "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
-      "unchanged_at_timing_context": true
-    },
-    {
-      "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
-      "unchanged_at_timing_context": true
-    },
-    {
-      "path": "supabase/verification/15092026_2312_weekly_source_delivery_targets_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "5a97fc8588ff265008a4f41a4dcd80bbeafc4f193c3d5d14845a277af9d28f0f",
-      "unchanged_at_timing_context": true
-    },
-    {
-      "path": "supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "3d7f6788885a23a95f02c7c108ae345e9dd289b8a74c9adb91dd59585f42d091",
-      "unchanged_at_timing_context": true
-    },
-    {
-      "path": "tests/weekly-source/push-timing-admin-native.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "cde7bef4dd986e396c1820d531e0c45690240deab1cdc2c14454142536de9809",
-      "unchanged_at_timing_context": true
-    },
-    {
-      "path": "tests/weekly-source/push-timing-calendar-native.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "ad08ae079e41f050a610f29b941f78fe6037f20faf5a0d846e5dee7c8d786cef",
-      "unchanged_at_timing_context": true
-    },
-    {
-      "path": "tests/weekly-source/contact-pause-native.sql",
-      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
-      "git_blob_sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf",
-      "unchanged_at_timing_context": true
+      "canonical_source_sha256": "7203e1229a43f4545bcc85b3ce280ffadc2968dceb5f80aa8a7b54d01328978b"
     },
     {
       "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc",
-      "commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
-      "git_blob_sha256": "bb3609e8c194b95e933f90ea91fd81b42540174e6d9ca578610d21e318144ef4"
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "bb3609e8c194b95e933f90ea91fd81b42540174e6d9ca578610d21e318144ef4",
+      "canonical_source_sha256": "bb3609e8c194b95e933f90ea91fd81b42540174e6d9ca578610d21e318144ef4"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08_comparison_audit.sqlinc",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "317e970b59f7f7a806e2916277d30b7d1c5404ae24b56481c7de30d4082589ac",
+      "canonical_source_sha256": "317e970b59f7f7a806e2916277d30b7d1c5404ae24b56481c7de30d4082589ac"
     },
     {
       "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/11_manager_due_scope.sqlinc",
-      "commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
-      "git_blob_sha256": "107549cdc9e9e2606992465e386b40872b3d507d0140ad623a4109dc6ed93fc0"
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "107549cdc9e9e2606992465e386b40872b3d507d0140ad623a4109dc6ed93fc0",
+      "canonical_source_sha256": "107549cdc9e9e2606992465e386b40872b3d507d0140ad623a4109dc6ed93fc0"
     },
     {
       "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
-      "commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
-      "git_blob_sha256": "6684d0eda2a12f502e896f46844e0dd10a658831fb298a51f95afcd8e748ab5e"
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "6684d0eda2a12f502e896f46844e0dd10a658831fb298a51f95afcd8e748ab5e",
+      "canonical_source_sha256": "6684d0eda2a12f502e896f46844e0dd10a658831fb298a51f95afcd8e748ab5e"
     },
     {
       "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/14_not_finalised_dispatch.sqlinc",
-      "commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
-      "git_blob_sha256": "a50ccbf231397fd968945ce6acc8c5fb96b9d3baa575caf523d68682c9f46832"
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "a50ccbf231397fd968945ce6acc8c5fb96b9d3baa575caf523d68682c9f46832",
+      "canonical_source_sha256": "a50ccbf231397fd968945ce6acc8c5fb96b9d3baa575caf523d68682c9f46832"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "7c20563bda1e32cf808688ed441da0a4e8a96cc9b6c9091900180ec730ee4b77",
+      "canonical_source_sha256": "7c20563bda1e32cf808688ed441da0a4e8a96cc9b6c9091900180ec730ee4b77"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "74ccc92c4370e92181ea29abb7ddc6546fd00abea0bc5ba212b464488503b061",
+      "canonical_source_sha256": "74ccc92c4370e92181ea29abb7ddc6546fd00abea0bc5ba212b464488503b061"
+    },
+    {
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "a02bb2c4a5e75502c3206c5d71af2452a6354aac9a77868fa43ca6f6a1385561",
+      "canonical_source_sha256": "712ed4bc6b9e8dd367d45da298ef2c83312564ff197f63f04292b875f4d38220"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "canonical_source_sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_projection_build_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "b61ae1f1ed98fb1e8ec53bd30fe1a999cf3222d91b4c499e26f45d70d4dc1281",
+      "canonical_source_sha256": "b61ae1f1ed98fb1e8ec53bd30fe1a999cf3222d91b4c499e26f45d70d4dc1281"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "canonical_source_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c",
+      "canonical_source_sha256": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b",
+      "canonical_source_sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b"
+    },
+    {
+      "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+      "canonical_source_sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+    },
+    {
+      "path": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e",
+      "canonical_source_sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e"
+    },
+    {
+      "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "d83c11d3eae6ee290b545e714738e45f22c70a12de5d0a1188717b065f8bceff",
+      "canonical_source_sha256": "d83c11d3eae6ee290b545e714738e45f22c70a12de5d0a1188717b065f8bceff"
+    },
+    {
+      "path": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "47789ebbdf899cb3045dc4164654c3eac499cf73a746bfdcb0b25c7c88beac5b",
+      "canonical_source_sha256": "47789ebbdf899cb3045dc4164654c3eac499cf73a746bfdcb0b25c7c88beac5b"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "01536a32084a07702fa7ed02ba61a75d7921e3b0d3ee5646b974841e18c34ac5",
+      "canonical_source_sha256": "01536a32084a07702fa7ed02ba61a75d7921e3b0d3ee5646b974841e18c34ac5"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "0d4832a5bbed99f5e9da4430bb41d5a1691835d90cb7b472382bd2eb3b730fa2",
+      "canonical_source_sha256": "0d4832a5bbed99f5e9da4430bb41d5a1691835d90cb7b472382bd2eb3b730fa2"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "a8b3f8343faf3ec6a2f290e875a2b9cde60caea75ce115fc0608b6732c430c6b",
+      "canonical_source_sha256": "a8b3f8343faf3ec6a2f290e875a2b9cde60caea75ce115fc0608b6732c430c6b"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0319_weekly_contact_office_projection_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "d94522d3ae20fa2c4e2a0ee0d0918dbdd9ccc33e345995ae921cf8e19a07e597",
+      "canonical_source_sha256": "d94522d3ae20fa2c4e2a0ee0d0918dbdd9ccc33e345995ae921cf8e19a07e597"
+    },
+    {
+      "path": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+      "canonical_source_sha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b"
+    },
+    {
+      "path": "supabase/repeatable/27082026_0740_candidate_component_prepare_fast_path_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "be11550a2e08b2538b254dc6f26255fe55cb040243139f162830c01dbff8ffaa",
+      "canonical_source_sha256": "be11550a2e08b2538b254dc6f26255fe55cb040243139f162830c01dbff8ffaa"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152",
+      "canonical_source_sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152"
     },
     {
       "path": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
-      "commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
-      "git_blob_sha256": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be"
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be",
+      "canonical_source_sha256": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be"
+    },
+    {
+      "path": "supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "3d7f6788885a23a95f02c7c108ae345e9dd289b8a74c9adb91dd59585f42d091",
+      "canonical_source_sha256": "3d7f6788885a23a95f02c7c108ae345e9dd289b8a74c9adb91dd59585f42d091"
+    },
+    {
+      "path": "supabase/verification/15092026_2312_weekly_source_delivery_targets_v1.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "5a97fc8588ff265008a4f41a4dcd80bbeafc4f193c3d5d14845a277af9d28f0f",
+      "canonical_source_sha256": "5a97fc8588ff265008a4f41a4dcd80bbeafc4f193c3d5d14845a277af9d28f0f"
+    },
+    {
+      "path": "tests/weekly-source/contact-pause-native.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "1fa6f277c515cd52e76b6650aea75ba1785a1635fef95d79c6068f8fb89a9a9e",
+      "canonical_source_sha256": "1fa6f277c515cd52e76b6650aea75ba1785a1635fef95d79c6068f8fb89a9a9e"
+    },
+    {
+      "path": "tests/weekly-source/push-timing-admin-native.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "cde7bef4dd986e396c1820d531e0c45690240deab1cdc2c14454142536de9809",
+      "canonical_source_sha256": "cde7bef4dd986e396c1820d531e0c45690240deab1cdc2c14454142536de9809"
+    },
+    {
+      "path": "tests/weekly-source/push-timing-calendar-native.sql",
+      "commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+      "git_blob_sha256": "ad08ae079e41f050a610f29b941f78fe6037f20faf5a0d846e5dee7c8d786cef",
+      "canonical_source_sha256": "ad08ae079e41f050a610f29b941f78fe6037f20faf5a0d846e5dee7c8d786cef"
     }
   ],
   "payloads": [
@@ -176,15 +469,15 @@
     },
     {
       "path": "07_capture-absence-set.sql",
-      "sha256": "c9fccbaf20f3a94d5189b5713c56ee588f5f4ea0158cf926e80e0d7ed43ee22d"
+      "sha256": "95ef20c2d8fd6e6ac504d52db91b9a4c810246cef64a8cbcbaf4d3af5d712f35"
     },
     {
       "path": "08_before-and-fresh-absence.sql",
-      "sha256": "c46d15751898f676b62b6680f86696307905eea17a05bb61b4dc4d3c504b7845"
+      "sha256": "f88e94ba58d1d5779889780cc56b95f70cca4200e4a8f1d3dda4882510cab90e"
     },
     {
       "path": "check-source.py",
-      "sha256": "4ba3cba8ac7fb9b14cf1bc5ed27a8c55a0fc262af67a1596d74dac752c9a545a"
+      "sha256": "405ca0ef025c9b7a550411c96f1e42a919a78a076e13d315bbad5608ba8efb7b"
     },
     {
       "path": "CONCURRENCY.md",
@@ -192,11 +485,63 @@
     },
     {
       "path": "emit-fresh-verification.py",
-      "sha256": "601314cfb79757a60b93fefc3da7f7d80b3c5abe3aaaa09d24573c7e3d9382ea"
+      "sha256": "852214861edceedf2c2b720f98590229bc11e6f05ee5b7d9f3ab0e9e80b0b7e9"
     },
     {
       "path": "RUNBOOK.md",
-      "sha256": "c12b26e868c4ae1829b83f145fdc8f33f2255a6714b987181702b75d7fd09417"
+      "sha256": "fcf820b6ba214431dba978cf2cd1fcf8308d9bb1650db1f9588dee33ebe54f20"
+    },
+    {
+      "path": "seed/10_generated-artifact.sql",
+      "sha256": "0ad08db607fb8065132855541905093673e5b15d6bd3ca05d76c3c3faed06d2b"
+    },
+    {
+      "path": "seed/11_observe-native-inserts.sql",
+      "sha256": "ef3ff4733b678527766c1c7c0b4b176eae6aae181f2dc37180b0fa6c8f645df5"
+    },
+    {
+      "path": "seed/12_declare-native-weeks.sql",
+      "sha256": "6aba02d59f175d42f5d79ad533e37a3f7f058b7c8dd058ee74b3f16fe5a0f85f"
+    },
+    {
+      "path": "seed/13_native-publication.sql",
+      "sha256": "0b1f2a4a1a2ab9cb3f36692aa7cf9edb1eb1eee3c379525498800224407d4df0"
+    },
+    {
+      "path": "seed/14_native-generations.sql",
+      "sha256": "478eb7252d9c1d6b8c4d7eda0d2c844c510877d3bc3677cb475cd302ce5393d6"
+    },
+    {
+      "path": "seed/ARTIFACT.json",
+      "sha256": "ef401d2695b00c45851d2a2c7bc2d81069590e99d1c5649650051078a49673df"
+    },
+    {
+      "path": "seed/pin-root-prerequisites.mjs",
+      "sha256": "49543172774eb24084f4f0e7c0ac26f63a8b19f1a5889265fcd306bb6920b441"
+    },
+    {
+      "path": "seed/prepare-seed.mjs",
+      "sha256": "c4b45cf0ae6b210d85717f6aaf04350eb919df6ed34c38d38bd23e12d7a99917"
+    },
+    {
+      "path": "seed/README.md",
+      "sha256": "f315fcecdc6384b74c30a3ce72ff1c3e01321a2a953874b280bf6dff4b66a5ab"
+    },
+    {
+      "path": "seed/ROOT_PREREQUISITES.json",
+      "sha256": "1a5ef480e3d3b407f7f3ff60d61e0dbc0c128a2748762dcd0f4cc55172015aff"
+    },
+    {
+      "path": "seed/test-declaration.png",
+      "sha256": "834de3ec90e69a100b1c10c36dd2289938613365600ffdaf3d27c774907a6a60"
+    },
+    {
+      "path": "seed/test-producer.mjs",
+      "sha256": "cae14f75007c0ce314848ed9d9873689ae6fdca8a9ead69c0800f794c4e6df23"
+    },
+    {
+      "path": "seed/zero-report.csv",
+      "sha256": "d57f8453ba968e147f686c8c416b9fbb2f67a41133bcd793e467737f7288b345"
     }
   ],
   "mount": {
@@ -207,7 +552,11 @@
     ],
     "native_order": [
       "01_fixture-input.sql",
-      "ROOT_GENUINE_NATIVE_SOURCE_PREFIX_REQUIRED_NOT_SUPPLIED",
+      "seed/10_generated-artifact.sql",
+      "seed/11_observe-native-inserts.sql",
+      "seed/12_declare-native-weeks.sql",
+      "seed/13_native-publication.sql",
+      "seed/14_native-generations.sql",
       "02_construct-native-targets.sql",
       "03_assertion-helpers.sql",
       "04_native-cases.sql",
@@ -220,18 +569,29 @@
   "qualification": {
     "offline_pg17_grammar": "PASS",
     "declared_row_variables": 7,
-    "emitter_units": 7,
+    "emitter_units": 10,
     "native_case_count": 25,
     "native_assertions": "NOT_RUN",
-    "native_prefix": "DEPENDENCY_HELD_SOURCE_REPORT_BUILD_OWNER_AND_ROOT",
+    "native_prefix": "AUTHORED_COMPLETE_CONSTRUCTORS_NATIVE_NOT_RUN",
     "installed_acl": "NOT_RUN",
     "concurrency": "NOT_RUN",
     "provider_calls": 0,
-    "database_calls_by_this_lane": 0
+    "database_calls_by_this_lane": 0,
+    "source_projection": "NOT_RUN",
+    "production_export_cases": 12,
+    "offline_native_alias_and_insert_columns": "PASS",
+    "root_prerequisite_migrations": 406,
+    "root_prerequisite_repeatable_closures": 1072,
+    "current_saved_root_drift_held": [
+      "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql"
+    ],
+    "current_owner_reconciliation": "ROOT_0339_AND_0226_SUCCESSOR_PENDING_PUBLICATION"
   },
   "preserved": {
     "daily_source_commit": "00f25571ac7fb65f44351a52beced0710211138e",
     "contract_schema_checkpoint": "7d1be386431f5a88b7206d24c9af37b504c36f4e",
     "physical_schema_sha256": "5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115"
-  }
+  },
+  "root_seed_commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+  "root_pause_expiry_commit": "a6d9d1e13d9e2aa3d9e9c191b5f1c3c428565297"
 }

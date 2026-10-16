@@ -1,0 +1,1793 @@
+{
+  "version": "CONTACT_NATIVE_SOURCE_SEED_ARTIFACT_V1",
+  "as_of": "2026-10-16",
+  "week_start": "2026-10-05",
+  "week_ending": "2026-10-11",
+  "work_date": "2026-10-06",
+  "contract_start": "2026-08-12",
+  "contract_end": "2026-12-10",
+  "root_commit": "b192e0433cd24c4e7027ec1ca91470a715e57584",
+  "synthetic_facts": true,
+  "native_execution": "NOT_RUN",
+  "report": {
+    "sha256": "d57f8453ba968e147f686c8c416b9fbb2f67a41133bcd793e467737f7288b345",
+    "byte_count": 1685,
+    "profile_id": "ROSTER_WEEKLY_SUMMARY_ACTUAL_V1"
+  },
+  "signature": {
+    "sha256": "834de3ec90e69a100b1c10c36dd2289938613365600ffdaf3d27c774907a6a60",
+    "byte_count": 125,
+    "width": 24,
+    "height": 8,
+    "storage_key": "contact-native-fixture/TEST-declaration.png",
+    "object_uploaded": false
+  },
+  "begin_request": {
+    "actor_user_id": "f716c000-0000-4000-8000-000000000003",
+    "environment": "TEST",
+    "agency_id": "f7160000-0000-4000-8000-000000000019",
+    "source_group_id": "f716c000-0000-4000-8000-000000000001",
+    "source_cycle_id": null,
+    "report_scope_id": null,
+    "client_id": "f716c000-0000-4000-8000-000000000020",
+    "original_filename": "contact-native-zero.csv",
+    "content_sha256": "d57f8453ba968e147f686c8c416b9fbb2f67a41133bcd793e467737f7288b345",
+    "byte_count": 1685,
+    "profile_code": "ROSTER_WEEKLY_SUMMARY_ACTUAL_V1",
+    "profile_version": "1",
+    "parser_version": "WEEKLY_SOURCE_STRICT_V1",
+    "normaliser_version": "ROSTER_WEEKLY_SUMMARY_ACTUAL_V1:1:WEEKLY_SOURCE_UPLOAD_ADAPTER_V1",
+    "workbook_part_and_sheet_fingerprint": null,
+    "header_coordinate_map_json": {
+      "grandParentBusinessUnitName": {
+        "column_index": 1,
+        "column": "A",
+        "coordinate": "A1"
+      },
+      "parentBusinessUnitName": {
+        "column_index": 2,
+        "column": "B",
+        "coordinate": "B1"
+      },
+      "businessUnitName": {
+        "column_index": 3,
+        "column": "C",
+        "coordinate": "C1"
+      },
+      "clientWeekendDate": {
+        "column_index": 5,
+        "column": "E",
+        "coordinate": "E1"
+      },
+      "weekendDate": {
+        "column_index": 6,
+        "column": "F",
+        "coordinate": "F1"
+      },
+      "candidate": {
+        "column_index": 13,
+        "column": "M",
+        "coordinate": "M1"
+      },
+      "payrollNumber": {
+        "column_index": 14,
+        "column": "N",
+        "coordinate": "N1"
+      },
+      "bookingId": {
+        "column_index": 16,
+        "column": "P",
+        "coordinate": "P1"
+      },
+      "timesheetId": {
+        "column_index": 17,
+        "column": "Q",
+        "coordinate": "Q1"
+      },
+      "candidateUid": {
+        "column_index": 20,
+        "column": "T",
+        "coordinate": "T1"
+      },
+      "candidateId": {
+        "column_index": 21,
+        "column": "U",
+        "coordinate": "U1"
+      },
+      "expenses": {
+        "column_index": 34,
+        "column": "AH",
+        "coordinate": "AH1"
+      },
+      "totalHours": {
+        "column_index": 35,
+        "column": "AI",
+        "coordinate": "AI1"
+      },
+      "lineId": {
+        "column_index": 37,
+        "column": "AK",
+        "coordinate": "AK1"
+      },
+      "bookingReference": {
+        "column_index": 56,
+        "column": "BD",
+        "coordinate": "BD1"
+      },
+      "supplyType": {
+        "column_index": 58,
+        "column": "BF",
+        "coordinate": "BF1"
+      },
+      "businessUnitId": {
+        "column_index": 60,
+        "column": "BH",
+        "coordinate": "BH1"
+      },
+      "jobId": {
+        "column_index": 61,
+        "column": "BI",
+        "coordinate": "BI1"
+      },
+      "jobType": {
+        "column_index": 62,
+        "column": "BJ",
+        "coordinate": "BJ1"
+      },
+      "bookingStart": {
+        "column_index": 63,
+        "column": "BK",
+        "coordinate": "BK1"
+      },
+      "bookingEnd": {
+        "column_index": 64,
+        "column": "BL",
+        "coordinate": "BL1"
+      }
+    },
+    "money_lexical_authority_version": null,
+    "purpose": "ORDINARY",
+    "correction_session_id": null,
+    "suggested_coverage_start_local_date": "2026-10-06",
+    "suggested_coverage_end_local_date": "2026-10-06",
+    "confirmed_coverage_start_local_date": "2026-10-05",
+    "confirmed_coverage_end_local_date": "2026-10-11",
+    "coverage_timezone": "Europe/London",
+    "coverage_confirmation_version": "WEEKLY_SOURCE_OFFICE_COVERAGE_CONFIRMATION_V1",
+    "coverage_confirmed_at_utc": "2026-10-16T02:33:58.452Z",
+    "coverage_shrink_acknowledged": false,
+    "coverage_state": "COMPLETE",
+    "coverage_proof_kind": "OFFICE_COMPLETE_EXPORT_ATTESTATION",
+    "physical_row_count": 3,
+    "header_count": 1,
+    "trailer_count": 0,
+    "continuation_count": 0,
+    "accepted_count": 2,
+    "blocking_economic_duplicate_count": 0,
+    "malformed_count": 0,
+    "blocked_count": 0,
+    "file_metadata_json": {
+      "client_id": "f716c000-0000-4000-8000-000000000020",
+      "import_use": "CHECKING",
+      "source_file_r2_key": null
+    },
+    "parser_summary_json": {
+      "parser_version": "WEEKLY_SOURCE_STRICT_V1",
+      "adapter_version": "WEEKLY_SOURCE_UPLOAD_ADAPTER_V1",
+      "source_kind": "CSV",
+      "selected_worksheet": {
+        "name": "CSV",
+        "index": 0,
+        "partPath": null,
+        "physicalRowCount": 3,
+        "physicalOrdinalSpan": 3,
+        "physicalCellCount": 195,
+        "firstPhysicalRow": 1,
+        "lastPhysicalRow": 3,
+        "workbookPartAndSheetFingerprint": null
+      },
+      "row_counts": {
+        "total": 2,
+        "sourceShifts": 0,
+        "sourceZero": 2,
+        "sourceExpensePresent": 0,
+        "sourceExpenseOmittedZero": 2
+      },
+      "warning_count": 0
+    }
+  },
+  "stage_request": {
+    "physical_rows": [
+      {
+        "source_row_ordinal": 1,
+        "bounded_raw_cells_json": {
+          "1": {
+            "coordinate": "R1C1",
+            "kind": "STRING",
+            "originalToken": "grand_parent_business_unit_name",
+            "decodedToken": "grand_parent_business_unit_name",
+            "tokenTruncated": false
+          },
+          "2": {
+            "coordinate": "R1C2",
+            "kind": "STRING",
+            "originalToken": "parent_business_unit_name",
+            "decodedToken": "parent_business_unit_name",
+            "tokenTruncated": false
+          },
+          "3": {
+            "coordinate": "R1C3",
+            "kind": "STRING",
+            "originalToken": "business_unit_name",
+            "decodedToken": "business_unit_name",
+            "tokenTruncated": false
+          },
+          "4": {
+            "coordinate": "R1C4",
+            "kind": "STRING",
+            "originalToken": "Billing Group Name",
+            "decodedToken": "Billing Group Name",
+            "tokenTruncated": false
+          },
+          "5": {
+            "coordinate": "R1C5",
+            "kind": "STRING",
+            "originalToken": "Client Weekend Date",
+            "decodedToken": "Client Weekend Date",
+            "tokenTruncated": false
+          },
+          "6": {
+            "coordinate": "R1C6",
+            "kind": "STRING",
+            "originalToken": "Weekend Date",
+            "decodedToken": "Weekend Date",
+            "tokenTruncated": false
+          },
+          "7": {
+            "coordinate": "R1C7",
+            "kind": "STRING",
+            "originalToken": "Custom Code 1",
+            "decodedToken": "Custom Code 1",
+            "tokenTruncated": false
+          },
+          "8": {
+            "coordinate": "R1C8",
+            "kind": "STRING",
+            "originalToken": "Custom Code 2",
+            "decodedToken": "Custom Code 2",
+            "tokenTruncated": false
+          },
+          "9": {
+            "coordinate": "R1C9",
+            "kind": "STRING",
+            "originalToken": "Custom Code 3",
+            "decodedToken": "Custom Code 3",
+            "tokenTruncated": false
+          },
+          "10": {
+            "coordinate": "R1C10",
+            "kind": "STRING",
+            "originalToken": "Job Category",
+            "decodedToken": "Job Category",
+            "tokenTruncated": false
+          },
+          "11": {
+            "coordinate": "R1C11",
+            "kind": "STRING",
+            "originalToken": "Vat Option",
+            "decodedToken": "Vat Option",
+            "tokenTruncated": false
+          },
+          "12": {
+            "coordinate": "R1C12",
+            "kind": "STRING",
+            "originalToken": "Permanent Equivalent Rates",
+            "decodedToken": "Permanent Equivalent Rates",
+            "tokenTruncated": false
+          },
+          "13": {
+            "coordinate": "R1C13",
+            "kind": "STRING",
+            "originalToken": "Candidate",
+            "decodedToken": "Candidate",
+            "tokenTruncated": false
+          },
+          "14": {
+            "coordinate": "R1C14",
+            "kind": "STRING",
+            "originalToken": "Payroll Number",
+            "decodedToken": "Payroll Number",
+            "tokenTruncated": false
+          },
+          "15": {
+            "coordinate": "R1C15",
+            "kind": "STRING",
+            "originalToken": "Vacancy Id",
+            "decodedToken": "Vacancy Id",
+            "tokenTruncated": false
+          },
+          "16": {
+            "coordinate": "R1C16",
+            "kind": "STRING",
+            "originalToken": "Booking Id",
+            "decodedToken": "Booking Id",
+            "tokenTruncated": false
+          },
+          "17": {
+            "coordinate": "R1C17",
+            "kind": "STRING",
+            "originalToken": "Timesheet Id",
+            "decodedToken": "Timesheet Id",
+            "tokenTruncated": false
+          },
+          "18": {
+            "coordinate": "R1C18",
+            "kind": "STRING",
+            "originalToken": "Agency",
+            "decodedToken": "Agency",
+            "tokenTruncated": false
+          },
+          "19": {
+            "coordinate": "R1C19",
+            "kind": "STRING",
+            "originalToken": "Agency Location",
+            "decodedToken": "Agency Location",
+            "tokenTruncated": false
+          },
+          "20": {
+            "coordinate": "R1C20",
+            "kind": "STRING",
+            "originalToken": "Candidate Uid",
+            "decodedToken": "Candidate Uid",
+            "tokenTruncated": false
+          },
+          "21": {
+            "coordinate": "R1C21",
+            "kind": "STRING",
+            "originalToken": "Candidate Id",
+            "decodedToken": "Candidate Id",
+            "tokenTruncated": false
+          },
+          "22": {
+            "coordinate": "R1C22",
+            "kind": "STRING",
+            "originalToken": "TNA Reference",
+            "decodedToken": "TNA Reference",
+            "tokenTruncated": false
+          },
+          "23": {
+            "coordinate": "R1C23",
+            "kind": "STRING",
+            "originalToken": "Approved By",
+            "decodedToken": "Approved By",
+            "tokenTruncated": false
+          },
+          "24": {
+            "coordinate": "R1C24",
+            "kind": "STRING",
+            "originalToken": "Approved Date",
+            "decodedToken": "Approved Date",
+            "tokenTruncated": false
+          },
+          "25": {
+            "coordinate": "R1C25",
+            "kind": "STRING",
+            "originalToken": "monday",
+            "decodedToken": "monday",
+            "tokenTruncated": false
+          },
+          "26": {
+            "coordinate": "R1C26",
+            "kind": "STRING",
+            "originalToken": "tuesday",
+            "decodedToken": "tuesday",
+            "tokenTruncated": false
+          },
+          "27": {
+            "coordinate": "R1C27",
+            "kind": "STRING",
+            "originalToken": "wednesday",
+            "decodedToken": "wednesday",
+            "tokenTruncated": false
+          },
+          "28": {
+            "coordinate": "R1C28",
+            "kind": "STRING",
+            "originalToken": "thursday",
+            "decodedToken": "thursday",
+            "tokenTruncated": false
+          },
+          "29": {
+            "coordinate": "R1C29",
+            "kind": "STRING",
+            "originalToken": "friday",
+            "decodedToken": "friday",
+            "tokenTruncated": false
+          },
+          "30": {
+            "coordinate": "R1C30",
+            "kind": "STRING",
+            "originalToken": "saturday",
+            "decodedToken": "saturday",
+            "tokenTruncated": false
+          },
+          "31": {
+            "coordinate": "R1C31",
+            "kind": "STRING",
+            "originalToken": "sunday",
+            "decodedToken": "sunday",
+            "tokenTruncated": false
+          },
+          "32": {
+            "coordinate": "R1C32",
+            "kind": "STRING",
+            "originalToken": "Bonus",
+            "decodedToken": "Bonus",
+            "tokenTruncated": false
+          },
+          "33": {
+            "coordinate": "R1C33",
+            "kind": "STRING",
+            "originalToken": "Bonus NI",
+            "decodedToken": "Bonus NI",
+            "tokenTruncated": false
+          },
+          "34": {
+            "coordinate": "R1C34",
+            "kind": "STRING",
+            "originalToken": "Expenses",
+            "decodedToken": "Expenses",
+            "tokenTruncated": false
+          },
+          "35": {
+            "coordinate": "R1C35",
+            "kind": "STRING",
+            "originalToken": "Total Hours",
+            "decodedToken": "Total Hours",
+            "tokenTruncated": false
+          },
+          "36": {
+            "coordinate": "R1C36",
+            "kind": "STRING",
+            "originalToken": "Total Cost",
+            "decodedToken": "Total Cost",
+            "tokenTruncated": false
+          },
+          "37": {
+            "coordinate": "R1C37",
+            "kind": "STRING",
+            "originalToken": "Line ID",
+            "decodedToken": "Line ID",
+            "tokenTruncated": false
+          },
+          "38": {
+            "coordinate": "R1C38",
+            "kind": "STRING",
+            "originalToken": "STD Hours",
+            "decodedToken": "STD Hours",
+            "tokenTruncated": false
+          },
+          "39": {
+            "coordinate": "R1C39",
+            "kind": "STRING",
+            "originalToken": "STD Unit Cost",
+            "decodedToken": "STD Unit Cost",
+            "tokenTruncated": false
+          },
+          "40": {
+            "coordinate": "R1C40",
+            "kind": "STRING",
+            "originalToken": "STD Sub Cost",
+            "decodedToken": "STD Sub Cost",
+            "tokenTruncated": false
+          },
+          "41": {
+            "coordinate": "R1C41",
+            "kind": "STRING",
+            "originalToken": "OT Hours",
+            "decodedToken": "OT Hours",
+            "tokenTruncated": false
+          },
+          "42": {
+            "coordinate": "R1C42",
+            "kind": "STRING",
+            "originalToken": "OT Unit Cost",
+            "decodedToken": "OT Unit Cost",
+            "tokenTruncated": false
+          },
+          "43": {
+            "coordinate": "R1C43",
+            "kind": "STRING",
+            "originalToken": "OT Sub Cost",
+            "decodedToken": "OT Sub Cost",
+            "tokenTruncated": false
+          },
+          "44": {
+            "coordinate": "R1C44",
+            "kind": "STRING",
+            "originalToken": "SAT Hours",
+            "decodedToken": "SAT Hours",
+            "tokenTruncated": false
+          },
+          "45": {
+            "coordinate": "R1C45",
+            "kind": "STRING",
+            "originalToken": "SAT Unit Cost",
+            "decodedToken": "SAT Unit Cost",
+            "tokenTruncated": false
+          },
+          "46": {
+            "coordinate": "R1C46",
+            "kind": "STRING",
+            "originalToken": "SAT Sub Cost",
+            "decodedToken": "SAT Sub Cost",
+            "tokenTruncated": false
+          },
+          "47": {
+            "coordinate": "R1C47",
+            "kind": "STRING",
+            "originalToken": "SUN Hours",
+            "decodedToken": "SUN Hours",
+            "tokenTruncated": false
+          },
+          "48": {
+            "coordinate": "R1C48",
+            "kind": "STRING",
+            "originalToken": "SUN Unit Cost",
+            "decodedToken": "SUN Unit Cost",
+            "tokenTruncated": false
+          },
+          "49": {
+            "coordinate": "R1C49",
+            "kind": "STRING",
+            "originalToken": "SUN Sub Cost",
+            "decodedToken": "SUN Sub Cost",
+            "tokenTruncated": false
+          },
+          "50": {
+            "coordinate": "R1C50",
+            "kind": "STRING",
+            "originalToken": "BH Hours",
+            "decodedToken": "BH Hours",
+            "tokenTruncated": false
+          },
+          "51": {
+            "coordinate": "R1C51",
+            "kind": "STRING",
+            "originalToken": "BH Unit Cost",
+            "decodedToken": "BH Unit Cost",
+            "tokenTruncated": false
+          },
+          "52": {
+            "coordinate": "R1C52",
+            "kind": "STRING",
+            "originalToken": "BH Sub Cost",
+            "decodedToken": "BH Sub Cost",
+            "tokenTruncated": false
+          },
+          "53": {
+            "coordinate": "R1C53",
+            "kind": "STRING",
+            "originalToken": "Nmw-Midweek-Adj/sat Hours",
+            "decodedToken": "Nmw-Midweek-Adj/sat Hours",
+            "tokenTruncated": false
+          },
+          "54": {
+            "coordinate": "R1C54",
+            "kind": "STRING",
+            "originalToken": "Nmw-Midweek-Adj/sat Unit Cost",
+            "decodedToken": "Nmw-Midweek-Adj/sat Unit Cost",
+            "tokenTruncated": false
+          },
+          "55": {
+            "coordinate": "R1C55",
+            "kind": "STRING",
+            "originalToken": "Nmw-Midweek-Adj/sat Sub Cost",
+            "decodedToken": "Nmw-Midweek-Adj/sat Sub Cost",
+            "tokenTruncated": false
+          },
+          "56": {
+            "coordinate": "R1C56",
+            "kind": "STRING",
+            "originalToken": "Booking Reference",
+            "decodedToken": "Booking Reference",
+            "tokenTruncated": false
+          },
+          "57": {
+            "coordinate": "R1C57",
+            "kind": "STRING",
+            "originalToken": "Booking Reason",
+            "decodedToken": "Booking Reason",
+            "tokenTruncated": false
+          },
+          "58": {
+            "coordinate": "R1C58",
+            "kind": "STRING",
+            "originalToken": "Supply Type",
+            "decodedToken": "Supply Type",
+            "tokenTruncated": false
+          },
+          "59": {
+            "coordinate": "R1C59",
+            "kind": "STRING",
+            "originalToken": "Type",
+            "decodedToken": "Type",
+            "tokenTruncated": false
+          },
+          "60": {
+            "coordinate": "R1C60",
+            "kind": "STRING",
+            "originalToken": "Business Unit ID",
+            "decodedToken": "Business Unit ID",
+            "tokenTruncated": false
+          },
+          "61": {
+            "coordinate": "R1C61",
+            "kind": "STRING",
+            "originalToken": "Job ID",
+            "decodedToken": "Job ID",
+            "tokenTruncated": false
+          },
+          "62": {
+            "coordinate": "R1C62",
+            "kind": "STRING",
+            "originalToken": "Job Type",
+            "decodedToken": "Job Type",
+            "tokenTruncated": false
+          },
+          "63": {
+            "coordinate": "R1C63",
+            "kind": "STRING",
+            "originalToken": "Booking Start",
+            "decodedToken": "Booking Start",
+            "tokenTruncated": false
+          },
+          "64": {
+            "coordinate": "R1C64",
+            "kind": "STRING",
+            "originalToken": "Booking End",
+            "decodedToken": "Booking End",
+            "tokenTruncated": false
+          },
+          "65": {
+            "coordinate": "R1C65",
+            "kind": "STRING",
+            "originalToken": "Invoice ID",
+            "decodedToken": "Invoice ID",
+            "tokenTruncated": false
+          }
+        },
+        "classification": "HEADER"
+      },
+      {
+        "source_row_ordinal": 2,
+        "bounded_raw_cells_json": {
+          "1": {
+            "coordinate": "R2C1",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "2": {
+            "coordinate": "R2C2",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "3": {
+            "coordinate": "R2C3",
+            "kind": "STRING",
+            "originalToken": "Contact Native Fixture Trust",
+            "decodedToken": "Contact Native Fixture Trust",
+            "tokenTruncated": false
+          },
+          "4": {
+            "coordinate": "R2C4",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "5": {
+            "coordinate": "R2C5",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "6": {
+            "coordinate": "R2C6",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "7": {
+            "coordinate": "R2C7",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "8": {
+            "coordinate": "R2C8",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "9": {
+            "coordinate": "R2C9",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "10": {
+            "coordinate": "R2C10",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "11": {
+            "coordinate": "R2C11",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "12": {
+            "coordinate": "R2C12",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "13": {
+            "coordinate": "R2C13",
+            "kind": "STRING",
+            "originalToken": "Contact Worker B",
+            "decodedToken": "Contact Worker B",
+            "tokenTruncated": false
+          },
+          "14": {
+            "coordinate": "R2C14",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "15": {
+            "coordinate": "R2C15",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "16": {
+            "coordinate": "R2C16",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "17": {
+            "coordinate": "R2C17",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "18": {
+            "coordinate": "R2C18",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "19": {
+            "coordinate": "R2C19",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "20": {
+            "coordinate": "R2C20",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "21": {
+            "coordinate": "R2C21",
+            "kind": "STRING",
+            "originalToken": "CONTACT-TEST-B",
+            "decodedToken": "CONTACT-TEST-B",
+            "tokenTruncated": false
+          },
+          "22": {
+            "coordinate": "R2C22",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "23": {
+            "coordinate": "R2C23",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "24": {
+            "coordinate": "R2C24",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "25": {
+            "coordinate": "R2C25",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "26": {
+            "coordinate": "R2C26",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "27": {
+            "coordinate": "R2C27",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "28": {
+            "coordinate": "R2C28",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "29": {
+            "coordinate": "R2C29",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "30": {
+            "coordinate": "R2C30",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "31": {
+            "coordinate": "R2C31",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "32": {
+            "coordinate": "R2C32",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "33": {
+            "coordinate": "R2C33",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "34": {
+            "coordinate": "R2C34",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "35": {
+            "coordinate": "R2C35",
+            "kind": "STRING",
+            "originalToken": "0",
+            "decodedToken": "0",
+            "tokenTruncated": false
+          },
+          "36": {
+            "coordinate": "R2C36",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "37": {
+            "coordinate": "R2C37",
+            "kind": "STRING",
+            "originalToken": "CONTACT-ZERO-B",
+            "decodedToken": "CONTACT-ZERO-B",
+            "tokenTruncated": false
+          },
+          "38": {
+            "coordinate": "R2C38",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "39": {
+            "coordinate": "R2C39",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "40": {
+            "coordinate": "R2C40",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "41": {
+            "coordinate": "R2C41",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "42": {
+            "coordinate": "R2C42",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "43": {
+            "coordinate": "R2C43",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "44": {
+            "coordinate": "R2C44",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "45": {
+            "coordinate": "R2C45",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "46": {
+            "coordinate": "R2C46",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "47": {
+            "coordinate": "R2C47",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "48": {
+            "coordinate": "R2C48",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "49": {
+            "coordinate": "R2C49",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "50": {
+            "coordinate": "R2C50",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "51": {
+            "coordinate": "R2C51",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "52": {
+            "coordinate": "R2C52",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "53": {
+            "coordinate": "R2C53",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "54": {
+            "coordinate": "R2C54",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "55": {
+            "coordinate": "R2C55",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "56": {
+            "coordinate": "R2C56",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "57": {
+            "coordinate": "R2C57",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "58": {
+            "coordinate": "R2C58",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "59": {
+            "coordinate": "R2C59",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "60": {
+            "coordinate": "R2C60",
+            "kind": "STRING",
+            "originalToken": "f716c000-0000-4000-8000-000000000020",
+            "decodedToken": "f716c000-0000-4000-8000-000000000020",
+            "tokenTruncated": false
+          },
+          "61": {
+            "coordinate": "R2C61",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "62": {
+            "coordinate": "R2C62",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "63": {
+            "coordinate": "R2C63",
+            "kind": "STRING",
+            "originalToken": "2026-10-06 09:00:00",
+            "decodedToken": "2026-10-06 09:00:00",
+            "tokenTruncated": false
+          },
+          "64": {
+            "coordinate": "R2C64",
+            "kind": "STRING",
+            "originalToken": "2026-10-06 17:00:00",
+            "decodedToken": "2026-10-06 17:00:00",
+            "tokenTruncated": false
+          },
+          "65": {
+            "coordinate": "R2C65",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          }
+        },
+        "classification": "ACCEPTED_SHIFT"
+      },
+      {
+        "source_row_ordinal": 3,
+        "bounded_raw_cells_json": {
+          "1": {
+            "coordinate": "R3C1",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "2": {
+            "coordinate": "R3C2",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "3": {
+            "coordinate": "R3C3",
+            "kind": "STRING",
+            "originalToken": "Contact Native Fixture Trust",
+            "decodedToken": "Contact Native Fixture Trust",
+            "tokenTruncated": false
+          },
+          "4": {
+            "coordinate": "R3C4",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "5": {
+            "coordinate": "R3C5",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "6": {
+            "coordinate": "R3C6",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "7": {
+            "coordinate": "R3C7",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "8": {
+            "coordinate": "R3C8",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "9": {
+            "coordinate": "R3C9",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "10": {
+            "coordinate": "R3C10",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "11": {
+            "coordinate": "R3C11",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "12": {
+            "coordinate": "R3C12",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "13": {
+            "coordinate": "R3C13",
+            "kind": "STRING",
+            "originalToken": "Contact Worker C",
+            "decodedToken": "Contact Worker C",
+            "tokenTruncated": false
+          },
+          "14": {
+            "coordinate": "R3C14",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "15": {
+            "coordinate": "R3C15",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "16": {
+            "coordinate": "R3C16",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "17": {
+            "coordinate": "R3C17",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "18": {
+            "coordinate": "R3C18",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "19": {
+            "coordinate": "R3C19",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "20": {
+            "coordinate": "R3C20",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "21": {
+            "coordinate": "R3C21",
+            "kind": "STRING",
+            "originalToken": "CONTACT-TEST-C",
+            "decodedToken": "CONTACT-TEST-C",
+            "tokenTruncated": false
+          },
+          "22": {
+            "coordinate": "R3C22",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "23": {
+            "coordinate": "R3C23",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "24": {
+            "coordinate": "R3C24",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "25": {
+            "coordinate": "R3C25",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "26": {
+            "coordinate": "R3C26",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "27": {
+            "coordinate": "R3C27",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "28": {
+            "coordinate": "R3C28",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "29": {
+            "coordinate": "R3C29",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "30": {
+            "coordinate": "R3C30",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "31": {
+            "coordinate": "R3C31",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "32": {
+            "coordinate": "R3C32",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "33": {
+            "coordinate": "R3C33",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "34": {
+            "coordinate": "R3C34",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "35": {
+            "coordinate": "R3C35",
+            "kind": "STRING",
+            "originalToken": "0",
+            "decodedToken": "0",
+            "tokenTruncated": false
+          },
+          "36": {
+            "coordinate": "R3C36",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "37": {
+            "coordinate": "R3C37",
+            "kind": "STRING",
+            "originalToken": "CONTACT-ZERO-C",
+            "decodedToken": "CONTACT-ZERO-C",
+            "tokenTruncated": false
+          },
+          "38": {
+            "coordinate": "R3C38",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "39": {
+            "coordinate": "R3C39",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "40": {
+            "coordinate": "R3C40",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "41": {
+            "coordinate": "R3C41",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "42": {
+            "coordinate": "R3C42",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "43": {
+            "coordinate": "R3C43",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "44": {
+            "coordinate": "R3C44",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "45": {
+            "coordinate": "R3C45",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "46": {
+            "coordinate": "R3C46",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "47": {
+            "coordinate": "R3C47",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "48": {
+            "coordinate": "R3C48",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "49": {
+            "coordinate": "R3C49",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "50": {
+            "coordinate": "R3C50",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "51": {
+            "coordinate": "R3C51",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "52": {
+            "coordinate": "R3C52",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "53": {
+            "coordinate": "R3C53",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "54": {
+            "coordinate": "R3C54",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "55": {
+            "coordinate": "R3C55",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "56": {
+            "coordinate": "R3C56",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "57": {
+            "coordinate": "R3C57",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "58": {
+            "coordinate": "R3C58",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "59": {
+            "coordinate": "R3C59",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "60": {
+            "coordinate": "R3C60",
+            "kind": "STRING",
+            "originalToken": "f716c000-0000-4000-8000-000000000020",
+            "decodedToken": "f716c000-0000-4000-8000-000000000020",
+            "tokenTruncated": false
+          },
+          "61": {
+            "coordinate": "R3C61",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "62": {
+            "coordinate": "R3C62",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          },
+          "63": {
+            "coordinate": "R3C63",
+            "kind": "STRING",
+            "originalToken": "2026-10-06 09:00:00",
+            "decodedToken": "2026-10-06 09:00:00",
+            "tokenTruncated": false
+          },
+          "64": {
+            "coordinate": "R3C64",
+            "kind": "STRING",
+            "originalToken": "2026-10-06 17:00:00",
+            "decodedToken": "2026-10-06 17:00:00",
+            "tokenTruncated": false
+          },
+          "65": {
+            "coordinate": "R3C65",
+            "kind": "BLANK",
+            "originalToken": "",
+            "decodedToken": "",
+            "tokenTruncated": false
+          }
+        },
+        "classification": "ACCEPTED_SHIFT"
+      }
+    ],
+    "normalised_rows": [
+      {
+        "source_row_ordinal": 2,
+        "external_source_key": "CONTACT-ZERO-B",
+        "source_candidate_identity": "CONTACT-TEST-B",
+        "source_client_identity": "f716c000-0000-4000-8000-000000000020",
+        "work_date": "2026-10-06",
+        "start_at_local": "2026-10-06T09:00:00",
+        "end_at_local": "2026-10-06T17:00:00",
+        "break_minutes": 480,
+        "actual_net_minutes": 0,
+        "row_finalisation_state": "SOURCE_ABSENT_ZERO",
+        "finalised_by": null,
+        "role_band_source": null,
+        "source_commission_pence": null,
+        "source_total_cost_pence": null,
+        "source_shift_charge_pence": null,
+        "source_money_parse_state": "NOT_APPLICABLE",
+        "source_qualification_profile_version": null,
+        "source_expense_pence": "0",
+        "source_expense_parse_state": "OMITTED_ZERO",
+        "bounded_raw_columns_json": {
+          "candidate": "Contact Worker B",
+          "candidate_uid": null,
+          "candidate_id": "CONTACT-TEST-B",
+          "payroll_number": null,
+          "business_unit_id": "f716c000-0000-4000-8000-000000000020",
+          "business_unit_name": "Contact Native Fixture Trust",
+          "booking_id": null,
+          "timesheet_id": null,
+          "booking_reference": null,
+          "job_id": null,
+          "job_type": null,
+          "supply_type": null
+        }
+      },
+      {
+        "source_row_ordinal": 3,
+        "external_source_key": "CONTACT-ZERO-C",
+        "source_candidate_identity": "CONTACT-TEST-C",
+        "source_client_identity": "f716c000-0000-4000-8000-000000000020",
+        "work_date": "2026-10-06",
+        "start_at_local": "2026-10-06T09:00:00",
+        "end_at_local": "2026-10-06T17:00:00",
+        "break_minutes": 480,
+        "actual_net_minutes": 0,
+        "row_finalisation_state": "SOURCE_ABSENT_ZERO",
+        "finalised_by": null,
+        "role_band_source": null,
+        "source_commission_pence": null,
+        "source_total_cost_pence": null,
+        "source_shift_charge_pence": null,
+        "source_money_parse_state": "NOT_APPLICABLE",
+        "source_qualification_profile_version": null,
+        "source_expense_pence": "0",
+        "source_expense_parse_state": "OMITTED_ZERO",
+        "bounded_raw_columns_json": {
+          "candidate": "Contact Worker C",
+          "candidate_uid": null,
+          "candidate_id": "CONTACT-TEST-C",
+          "payroll_number": null,
+          "business_unit_id": "f716c000-0000-4000-8000-000000000020",
+          "business_unit_name": "Contact Native Fixture Trust",
+          "booking_id": null,
+          "timesheet_id": null,
+          "booking_reference": null,
+          "job_id": null,
+          "job_type": null,
+          "supply_type": null
+        }
+      }
+    ],
+    "money_evidence": [],
+    "expense_evidence": [
+      {
+        "source_row_ordinal": 2,
+        "source_column_index": 34,
+        "cell_coordinate": "R2C34",
+        "source_kind": "CSV_DECODED_TEXT",
+        "original_token": "",
+        "decoded_token": "",
+        "cell_type_marker": "BLANK",
+        "formula_present": false,
+        "parse_state": "OMITTED_ZERO",
+        "parsed_pence": "0",
+        "source_file_sha256": "d57f8453ba968e147f686c8c416b9fbb2f67a41133bcd793e467737f7288b345",
+        "lexical_profile_version": "SOURCE_FIXED_EXPENSE_PENCE_V1"
+      },
+      {
+        "source_row_ordinal": 3,
+        "source_column_index": 34,
+        "cell_coordinate": "R3C34",
+        "source_kind": "CSV_DECODED_TEXT",
+        "original_token": "",
+        "decoded_token": "",
+        "cell_type_marker": "BLANK",
+        "formula_present": false,
+        "parse_state": "OMITTED_ZERO",
+        "parsed_pence": "0",
+        "source_file_sha256": "d57f8453ba968e147f686c8c416b9fbb2f67a41133bcd793e467737f7288b345",
+        "lexical_profile_version": "SOURCE_FIXED_EXPENSE_PENCE_V1"
+      }
+    ]
+  },
+  "expected_context": {
+    "profile_id": "ROSTER_WEEKLY_SUMMARY_ACTUAL_V1",
+    "authority_scope_kind": "CYCLE",
+    "rows": [
+      {
+        "source_row_ordinal": 2,
+        "external_source_key": "CONTACT-ZERO-B",
+        "work_date": "2026-10-06",
+        "start_at_local": "2026-10-06T09:00:00",
+        "end_at_local": "2026-10-06T17:00:00",
+        "break_minutes": 480,
+        "actual_net_minutes": 0,
+        "row_finalisation_state": "SOURCE_ABSENT_ZERO",
+        "candidate_match_count": 1,
+        "candidate_id": "f716c000-0000-4000-8000-000000000011",
+        "client_id": "f716c000-0000-4000-8000-000000000020",
+        "prior_work_event_id": null,
+        "prior_accepted_contract_id": null,
+        "protected_matches": [],
+        "contracts": [
+          {
+            "contract_id": "f716c000-0000-4000-8000-000000000031",
+            "candidate_id": "f716c000-0000-4000-8000-000000000011",
+            "client_id": "f716c000-0000-4000-8000-000000000020",
+            "valid_from": "2026-08-12",
+            "valid_to": "2026-12-10",
+            "weekly_source_applicable": true,
+            "schedule_compatible": true,
+            "verified_role_band_match": false,
+            "effective_policy": {
+              "authority_mode": "SOURCE_AUTHORITY",
+              "c1_source_mode": "HEALTHROSTER_WEEKLY"
+            }
+          }
+        ]
+      },
+      {
+        "source_row_ordinal": 3,
+        "external_source_key": "CONTACT-ZERO-C",
+        "work_date": "2026-10-06",
+        "start_at_local": "2026-10-06T09:00:00",
+        "end_at_local": "2026-10-06T17:00:00",
+        "break_minutes": 480,
+        "actual_net_minutes": 0,
+        "row_finalisation_state": "SOURCE_ABSENT_ZERO",
+        "candidate_match_count": 1,
+        "candidate_id": "f716c000-0000-4000-8000-000000000012",
+        "client_id": "f716c000-0000-4000-8000-000000000020",
+        "prior_work_event_id": null,
+        "prior_accepted_contract_id": null,
+        "protected_matches": [],
+        "contracts": [
+          {
+            "contract_id": "f716c000-0000-4000-8000-000000000032",
+            "candidate_id": "f716c000-0000-4000-8000-000000000012",
+            "client_id": "f716c000-0000-4000-8000-000000000020",
+            "valid_from": "2026-08-12",
+            "valid_to": "2026-12-10",
+            "weekly_source_applicable": true,
+            "schedule_compatible": true,
+            "verified_role_band_match": false,
+            "effective_policy": {
+              "authority_mode": "SOURCE_AUTHORITY",
+              "c1_source_mode": "HEALTHROSTER_WEEKLY"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "projection_templates": [
+    {
+      "candidate_id": "f716c000-0000-4000-8000-000000000011",
+      "client_id": "f716c000-0000-4000-8000-000000000020",
+      "prior_work_event_id": null,
+      "qualifying_contract_ids": [
+        "f716c000-0000-4000-8000-000000000031"
+      ],
+      "qualification_observations": [],
+      "mapping_state": "RESOLVED",
+      "contract_id": "f716c000-0000-4000-8000-000000000031",
+      "contract_selection_method": "AUTO_UNIQUE",
+      "identity_kind": "PROFILE_EXTERNAL_KEY",
+      "profile_external_key": "CONTACT-ZERO-B",
+      "link_kind": "ZERO_SOURCE",
+      "source_row_ordinal": 2
+    },
+    {
+      "candidate_id": "f716c000-0000-4000-8000-000000000012",
+      "client_id": "f716c000-0000-4000-8000-000000000020",
+      "prior_work_event_id": null,
+      "qualifying_contract_ids": [
+        "f716c000-0000-4000-8000-000000000032"
+      ],
+      "qualification_observations": [],
+      "mapping_state": "RESOLVED",
+      "contract_id": "f716c000-0000-4000-8000-000000000032",
+      "contract_selection_method": "AUTO_UNIQUE",
+      "identity_kind": "PROFILE_EXTERNAL_KEY",
+      "profile_external_key": "CONTACT-ZERO-C",
+      "link_kind": "ZERO_SOURCE",
+      "source_row_ordinal": 3
+    }
+  ]
+}

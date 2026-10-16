@@ -10,6 +10,13 @@ BEGIN
   ('clients','id'),
   ('client_settings','client_id'),
   ('candidates','id'),
+  ('candidate_app_accounts','id'),
+  ('candidate_app_sessions','id'),
+  ('candidate_app_global_membership_links','membership_id'),
+  ('candidate_submission_workflows','id'),
+  ('candidate_submission_components','workflow_id'),
+  ('contract_weeks','contract_id'),
+  ('audit_events','actor_user_id'),
   ('contracts','id'),
   ('contracts','candidate_id'),
   ('timesheets','timesheet_id'),
@@ -43,6 +50,8 @@ BEGIN
    IF v_found THEN RAISE EXCEPTION 'CONTACT_FIXTURE_DEPLOYMENT_REMAINS %',v_item.table_name;END IF;
   END IF;
  END LOOP;
+ IF EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='contact_seed_insert_observer') THEN
+  RAISE EXCEPTION 'CONTACT_FIXTURE_OBSERVER_REMAINS';END IF;
  IF EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('public.candidate_push_timing_policy')
   AND attname='contact_fixture_unavailable_policy_json' AND NOT attisdropped) THEN
   RAISE EXCEPTION 'CONTACT_FIXTURE_DEPENDENCY_FAULT_REMAINS';END IF;
