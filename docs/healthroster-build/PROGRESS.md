@@ -619,3 +619,15 @@ SEND_7 turn: {"chat":"HealthRoster","task":"V6_QT_ADMIN_NATIVE_20261016","status
 SEND_7 turn: {"chat":"HealthRoster","task":"V6_QT_CALENDAR_NATIVE_20261016","status":"TAKEN","takenAt":"2026-10-15T23:53:26.427Z","key":[20261013,1]}
 
 SEND_7 turn: {"chat":"HealthRoster","task":"V6_QT_CALENDAR_NATIVE_20261016","status":"RELEASED","takenAt":"2026-10-15T23:53:26.427Z","releasedAt":"2026-10-15T23:53:56.259Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"V6_CONTACT_PAUSE_NATIVE_20261016","status":"TAKEN","takenAt":"2026-10-16T00:14:34.745Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"V6_CONTACT_PAUSE_NATIVE_20261016","status":"RELEASED","takenAt":"2026-10-16T00:14:34.745Z","releasedAt":"2026-10-16T00:15:05.300Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+
+## Native contact-control checkpoint — 16 October 2026
+
+
+Checking controls at58260260977c73ebf2eae91470670adf1c17c953 passed103error-free native statements/90229bytes, SHA256a25b8a8152f23c159a5d13be7cdb7e84d20abd7d687662193eedfea983624adc. New6stores/12contactroutines plus QT/calendar prerequisites compiled and actual GET/PAUSE/RESUME executed: absentGETdidnotinsert, firstWORKER0→1, managerindependence, partialresume, exact old acknowledgement afternewstate, unchangedrevision no-op withreal bounded recheck task, roleloss/stale/changedkey/strictscalars/history/ACL, Monday/DST/lazy expiry.5commands/4events/5recheck tasks; deferred FKs checked immediate. Complete CONTACT_PAUSE_NATIVE_ROLLBACK.json records identical before/fresh ledger+LEGACY1 frames and all8table/23routine/fixture absence. Turn144431 held00:14:34.745–00:15:05.300UTC16October, explicitunlock/connectionclosed. Database integrity402migrations/1066repeatables; all401old hashes unchanged, one appended. Offline pglast7.20 parsed all3new files/14procedures/172inner expressions with no DB; an initial one-line parser command had a Python parenthesis syntax error before any file/SQL action and was replaced by the reusable read-only grammar checker.
+
+Private transaction-local deployment context is argument transport for the exact four-argument scope guard, set only by trusted service entries after native service/deployment validation. It is not authentication or durable agency configuration; EMAIL/pause never read QT policy. The new recheck task table is bounded metadata, not a second provider queue. Actual scheduler, existing pre-install in-flight projections, current producer admission/render/recomposition, native START/consume/result/accepted-budget and race/real API/Office/phone integration remain open. No source receipt here qualifies those gates.

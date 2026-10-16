@@ -3710,6 +3710,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "NATIVE_DDL_ACL_ONLY_NO_SEND_PROTOCOL_QUALIFICATION",
+        "native_source_commit": "58260260977c73ebf2eae91470670adf1c17c953",
+        "source_files": [
+          {
+            "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+            "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+            "sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a"
+          },
+          {
+            "path": "tests/weekly-source/contact-pause-native.sql",
+            "sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_PAUSE_NATIVE_ROLLBACK.json",
+        "native_scope": "103error-free statements including existing QT/calendar prerequisites. Actual first pause0→1, independent audiences/partial resume, replay/conflict/stale/permission/strict scalars, immutable event/receipt, actual bounded wake metadata and Monday/DST/lazy expiry. Fresh8table/23routine/fixture absence; identical ledgers/LEGACY1.",
+        "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
+        "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
+        "installed": false
       }
     },
     {
@@ -4559,6 +4582,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_CONTROL_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "native_source_commit": "58260260977c73ebf2eae91470670adf1c17c953",
+        "source_files": [
+          {
+            "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+            "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+            "sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a"
+          },
+          {
+            "path": "tests/weekly-source/contact-pause-native.sql",
+            "sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_PAUSE_NATIVE_ROLLBACK.json",
+        "native_scope": "103error-free statements including existing QT/calendar prerequisites. Actual first pause0→1, independent audiences/partial resume, replay/conflict/stale/permission/strict scalars, immutable event/receipt, actual bounded wake metadata and Monday/DST/lazy expiry. Fresh8table/23routine/fixture absence; identical ledgers/LEGACY1.",
+        "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
+        "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
+        "installed": false
       }
     },
     {
@@ -4624,6 +4670,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_CONTROL_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "native_source_commit": "58260260977c73ebf2eae91470670adf1c17c953",
+        "source_files": [
+          {
+            "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+            "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+            "sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a"
+          },
+          {
+            "path": "tests/weekly-source/contact-pause-native.sql",
+            "sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_PAUSE_NATIVE_ROLLBACK.json",
+        "native_scope": "103error-free statements including existing QT/calendar prerequisites. Actual first pause0→1, independent audiences/partial resume, replay/conflict/stale/permission/strict scalars, immutable event/receipt, actual bounded wake metadata and Monday/DST/lazy expiry. Fresh8table/23routine/fixture absence; identical ledgers/LEGACY1.",
+        "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
+        "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
+        "installed": false
       }
     },
     {
@@ -4689,6 +4758,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_CONTROL_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "native_source_commit": "58260260977c73ebf2eae91470670adf1c17c953",
+        "source_files": [
+          {
+            "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+            "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+            "sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a"
+          },
+          {
+            "path": "tests/weekly-source/contact-pause-native.sql",
+            "sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_PAUSE_NATIVE_ROLLBACK.json",
+        "native_scope": "103error-free statements including existing QT/calendar prerequisites. Actual first pause0→1, independent audiences/partial resume, replay/conflict/stale/permission/strict scalars, immutable event/receipt, actual bounded wake metadata and Monday/DST/lazy expiry. Fresh8table/23routine/fixture absence; identical ledgers/LEGACY1.",
+        "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
+        "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
+        "installed": false
       }
     },
     {
@@ -4754,6 +4846,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "NATIVE_DDL_ACL_ONLY_NO_SEND_PROTOCOL_QUALIFICATION",
+        "native_source_commit": "58260260977c73ebf2eae91470670adf1c17c953",
+        "source_files": [
+          {
+            "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+            "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+            "sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a"
+          },
+          {
+            "path": "tests/weekly-source/contact-pause-native.sql",
+            "sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_PAUSE_NATIVE_ROLLBACK.json",
+        "native_scope": "103error-free statements including existing QT/calendar prerequisites. Actual first pause0→1, independent audiences/partial resume, replay/conflict/stale/permission/strict scalars, immutable event/receipt, actual bounded wake metadata and Monday/DST/lazy expiry. Fresh8table/23routine/fixture absence; identical ledgers/LEGACY1.",
+        "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
+        "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
+        "installed": false
       }
     },
     {
@@ -4819,6 +4934,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_CONTROL_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "native_source_commit": "58260260977c73ebf2eae91470670adf1c17c953",
+        "source_files": [
+          {
+            "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+            "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+            "sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a"
+          },
+          {
+            "path": "tests/weekly-source/contact-pause-native.sql",
+            "sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_PAUSE_NATIVE_ROLLBACK.json",
+        "native_scope": "103error-free statements including existing QT/calendar prerequisites. Actual first pause0→1, independent audiences/partial resume, replay/conflict/stale/permission/strict scalars, immutable event/receipt, actual bounded wake metadata and Monday/DST/lazy expiry. Fresh8table/23routine/fixture absence; identical ledgers/LEGACY1.",
+        "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
+        "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
+        "installed": false
       }
     },
     {
@@ -4884,6 +5022,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_CONTROL_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "native_source_commit": "58260260977c73ebf2eae91470670adf1c17c953",
+        "source_files": [
+          {
+            "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+            "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+            "sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a"
+          },
+          {
+            "path": "tests/weekly-source/contact-pause-native.sql",
+            "sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_PAUSE_NATIVE_ROLLBACK.json",
+        "native_scope": "103error-free statements including existing QT/calendar prerequisites. Actual first pause0→1, independent audiences/partial resume, replay/conflict/stale/permission/strict scalars, immutable event/receipt, actual bounded wake metadata and Monday/DST/lazy expiry. Fresh8table/23routine/fixture absence; identical ledgers/LEGACY1.",
+        "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
+        "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
+        "installed": false
       }
     },
     {
@@ -4949,6 +5110,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_CONTROL_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "native_source_commit": "58260260977c73ebf2eae91470670adf1c17c953",
+        "source_files": [
+          {
+            "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+            "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+            "sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a"
+          },
+          {
+            "path": "tests/weekly-source/contact-pause-native.sql",
+            "sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_PAUSE_NATIVE_ROLLBACK.json",
+        "native_scope": "103error-free statements including existing QT/calendar prerequisites. Actual first pause0→1, independent audiences/partial resume, replay/conflict/stale/permission/strict scalars, immutable event/receipt, actual bounded wake metadata and Monday/DST/lazy expiry. Fresh8table/23routine/fixture absence; identical ledgers/LEGACY1.",
+        "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
+        "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
+        "installed": false
       }
     },
     {
@@ -5079,6 +5263,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_CONTROL_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "native_source_commit": "58260260977c73ebf2eae91470670adf1c17c953",
+        "source_files": [
+          {
+            "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+            "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+            "sha256": "8ccae93424d2c676261677e827d3bf954503ddb49d5508d0c40072cc29b9b80a"
+          },
+          {
+            "path": "tests/weekly-source/contact-pause-native.sql",
+            "sha256": "afcad80d2ccab18700088825f6030151601fca29e3e26d321cc3617949da4ebf"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_PAUSE_NATIVE_ROLLBACK.json",
+        "native_scope": "103error-free statements including existing QT/calendar prerequisites. Actual first pause0→1, independent audiences/partial resume, replay/conflict/stale/permission/strict scalars, immutable event/receipt, actual bounded wake metadata and Monday/DST/lazy expiry. Fresh8table/23routine/fixture absence; identical ledgers/LEGACY1.",
+        "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
+        "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
+        "installed": false
       }
     },
     {
