@@ -1,5 +1,10 @@
 # Current HealthRoster TEST install plan
 
+## Current V6 continuation — 16 October 2026
+
+Final reviewed V6 delivery/adoption at4bbfb82ed65c29e848d86b93693606b1e03f97b9 controls the retained historical V5 preparation below. Account kier@arthur-rai.co.uk uses its own direct Kier Operations rollback route. Install1 remains COMPLETE; one remaining normal Install2 is NOT_INSTALLED. Daily/Source runtime source checkpoints90ffcf3f/76d97be8 and final-owner/policy fixes1ca5f5d6/5feaeae3 are backed up. Four reviewed managed envelopes now compile through the original full harness with native bodies/guards intact; current full verifier effects review, PostgreSQL17 candidate contract seal, actual Banking contributions and native/UI/API/document/security acceptance remain open. Complete150-unit source preparation exceeds the direct rollback-tool envelope and cannot be split or trimmed to fit; only the separately owner-authorised SEND5B full install-milestone psql rehearsal can execute the full candidate when all existing gates pass. This source preparation creates no extra install or new execution authority. Remaining native/acceptance/TestFlight work still needs further active hours after source composition and genuine dependency delivery; no reliable completion time is proved.
+
+
 ## V5 owner amendment — active 15 October 2026
 
 **Prepared continuation — WORKING_DRAFT / NOT_FOR_BUILDERS.** The approved integration-repair PLAN (SHA-25631b4a8373749f23e63186534315f2f82331590c0bf08ce9cca7f2c90394bca04) governs this output-only preparation. The withdrawn V5 handover's ambiguous coordination and unapproved broad V6 Health allocation are superseded only by the final reviewed replacement when released. Current UI placement/copy follows exact R2 policy and supplied Banking §7; matching final same-candidate release record supplies implementation authority, with final Sol6.1 extra-high review and native qualification tracked separately. This section is not authority to resume builders or install anything.

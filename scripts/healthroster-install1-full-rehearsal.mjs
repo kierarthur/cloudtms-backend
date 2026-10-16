@@ -8,11 +8,12 @@ import {pendingInventory,compileManagedUnit} from './cloudtms-managed-release.mj
 import {closeFinalDefinerSelection} from './bpay-next-final-definers.mjs';
 import {readerReleasePhases,READER_PREPARATION,readerActivationSql} from './weekly-source-reader-release.mjs';
 import {canonical,digest,scanManagedSql,exactAtomicBody,literal} from './cloudtms-managed-release-sql.mjs';
-import {neutraliseReviewedVerifierEnvelope,renderFullRehearsalUnits,closedRehearsalDiagnostic} from './healthroster-full-rehearsal-protocol.mjs';
+import {neutraliseReviewedVerifierEnvelope,renderFullRehearsalUnits,closedRehearsalDiagnostic,scanRehearsalSql} from './healthroster-full-rehearsal-protocol.mjs';
 import {assertTurnIdentity,ownTurnActivityExclusionSql} from './healthroster-turn-control.mjs';
 import {verifierClosure} from './healthroster-install1-verifier-census.mjs';
 import {backgroundSnapshotFieldsSql,fixtureObservationSql,transactionIdentitySql,validateFixtureObservations,assertQualifiedLiveRestoration} from './healthroster-live-test-restoration.mjs';
 import {assertFreshInstall2NativeGate} from './healthroster-install2-native-gate.mjs';
+import {compileReviewedManagedEnvelope,managedEnvelopeReviewPath,managedCalleeAuditPath} from './healthroster-reviewed-managed-envelope.mjs';
 
 export const REHEARSAL_VERSION='HEALTHROSTER_INSTALL1_FULL_REHEARSAL_V1';
 export const INSTALL2_REHEARSAL_VERSION='HEALTHROSTER_INSTALL2_FULL_REHEARSAL_V1';
@@ -30,7 +31,9 @@ const releaseInputFiles=['scripts/cloudtms-db-release-lib.mjs','scripts/cloudtms
  'supabase/release/protected-boundary-lock.json','supabase/release/export_contract.sql','docs/bpay-next/final-definer-closures.json',
  'scripts/healthroster-rehearsal-stream-observer.mjs','scripts/healthroster-rehearsal-resource-guard.mjs',
  'scripts/healthroster-install1-full-rehearsal.mjs','scripts/healthroster-install2-native-gate.mjs',
- 'scripts/healthroster-install2-source-relationship.mjs','scripts/healthroster-install2-installed-source.mjs'];
+ 'scripts/healthroster-install2-source-relationship.mjs','scripts/healthroster-install2-installed-source.mjs',
+ 'scripts/healthroster-full-rehearsal-protocol.mjs','scripts/healthroster-reviewed-managed-envelope.mjs',
+ managedEnvelopeReviewPath,managedCalleeAuditPath];
 
 // Root runs this exact source literal as a separate fresh read-only probe under
 // the already-held turn. PostgreSQL itself supplies jsonb formatting; no client
@@ -186,6 +189,8 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
  const phases=readerPhases(pending.repeatables,current.repeatables),units=[];
  const options={root,mapSource:mapExecutableSqlSource};
  for(const [kind,rows] of [['migration',pending.migrations],['repeatable',phases.ordinary]])for(const item of rows){
+  const reviewedManaged=compileReviewedManagedEnvelope(item,kind,options);
+  if(reviewedManaged){units.push(reviewedManaged);continue;}
   const compiled=compileUnit(item,kind,options);
   // A protected release's exception may contain transaction commits or gexec.
   // It cannot be silently flattened into this rollback-only outer transaction.
@@ -264,7 +269,7 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
  for(const [unitIndex,entry] of units.entries()){
   const begin=starts[unitIndex]?.index;requireThat(begin!==undefined,'REHEARSAL_STATEMENT_MAP_REFUSED');
   const sqlStart=body.indexOf(entry.sql,begin);requireThat(sqlStart>=0,'REHEARSAL_STATEMENT_MAP_REFUSED');
-  for(const [statement,row] of scanManagedSql(entry.sql).statements.entries()){
+  for(const [statement,row] of scanRehearsalSql(entry.sql).statements.entries()){
    const startLine=lineOffset+body.slice(0,sqlStart+row.start).split('\n').length;
    const endLine=lineOffset+body.slice(0,sqlStart+row.end).split('\n').length;
    lineMap.push({file:entry.file,kind:entry.kind,phase:entry.phase,statement:statement+1,object:statementObject(row),

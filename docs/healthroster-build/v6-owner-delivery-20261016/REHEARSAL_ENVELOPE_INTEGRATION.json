@@ -1,0 +1,830 @@
+{
+  "version": "HEALTHROSTER_REVIEWED_MANAGED_ENVELOPE_INTEGRATION_V1",
+  "status": "SOURCE_IMPLEMENTED_NATIVE_NOT_RUN",
+  "parentRootCommit": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
+  "producer": {
+    "worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+    "sourceCommit": "2e9afed94a618ab6648f5d8d0e1cec13ecbefbf3",
+    "remoteReceiptCommit": "d70ba25c56b80e75c0bae00a0924a15338580a4a",
+    "reviewPath": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json",
+    "reviewSha256": "b43101eb42c2ec52a97f9925ff2b066985e44ae2ea1ad109dce2f106ebae39e1",
+    "calleeAuditPath": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_CALLEE_AUDIT.json",
+    "calleeAuditSha256": "8f8fdc98d361b5054e3b6cceb2b9d12097616b0df7ae3293280f75a774dfef28"
+  },
+  "scope": "Four exact hash-pinned existing repeatable closures only. Shared managed release implementation/policy and all SQL sources unchanged.",
+  "wholePendingSourceCompile": {
+    "status": "SOURCE_ONLY_NOT_NATIVE",
+    "unitCount": 150,
+    "migrations": 18,
+    "repeatables": 132,
+    "bytes": 20345654,
+    "sha256": "fc5bf6dfc6c86065509e4afc5660bed8dac6a2e258700d7d81f571bf963e1ee3",
+    "statements": 6538,
+    "specials": [
+      {
+        "file": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+        "sqlHash": "1f37467e36b87485b083c49dfd08422945424b3f79d104c2482838bd4059d428",
+        "statements": 29,
+        "review": {
+          "reason": "INVOICE_GATE",
+          "reviewSha256": "b43101eb42c2ec52a97f9925ff2b066985e44ae2ea1ad109dce2f106ebae39e1",
+          "calleeAuditSha256": "8f8fdc98d361b5054e3b6cceb2b9d12097616b0df7ae3293280f75a774dfef28",
+          "rawExpandedSha256": "c31ac9b9d36a0dae50fa623291d0a0d7cb2171d2c56378c51d651102c5cb7b08",
+          "mappedSpans": [
+            {
+              "file": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+              "sourceSha256": "343776bd40c097fd6aeb1328f0f93deb52727edce78c6dc094dd6c8c319a92d3",
+              "mappedSourceSha256": "343776bd40c097fd6aeb1328f0f93deb52727edce78c6dc094dd6c8c319a92d3",
+              "removals": [
+                {
+                  "start": 0,
+                  "end": 21,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 0,
+                  "byteEnd": 21,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 23,
+                  "end": 29,
+                  "command": "BEGIN",
+                  "byteStart": 23,
+                  "byteEnd": 29,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 936,
+                  "end": 943,
+                  "command": "COMMIT",
+                  "byteStart": 936,
+                  "byteEnd": 943,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+              "sourceSha256": "b9657bf480a01ded860e38a345917fdbc86a69c80b1831eeff96e272758ea073",
+              "mappedSourceSha256": "b9657bf480a01ded860e38a345917fdbc86a69c80b1831eeff96e272758ea073",
+              "removals": [
+                {
+                  "start": 0,
+                  "end": 21,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 0,
+                  "byteEnd": 21,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_detail_get.sql",
+              "sourceSha256": "8833b9d788bb04dbec300c3c1f17715d7ddefc2c59f395b869cd25629721010d",
+              "mappedSourceSha256": "201f6d0731aa0076de15dec7c11bea0a5219a4d196218c6ec78b617a02864520",
+              "removals": []
+            },
+            {
+              "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql",
+              "sourceSha256": "4a198923913dc362b056772344d607ca9685b195b961a33b8d05542fdf03b45c",
+              "mappedSourceSha256": "d2b4de2cf61d2fdfcf5da1d43cec632813568703b415197e6eda09418e003d8f",
+              "removals": []
+            },
+            {
+              "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql",
+              "sourceSha256": "0c527cab3a5989918719dc8b192c2cf6f8c2162fb150710fe1121891f5da152e",
+              "mappedSourceSha256": "0c527cab3a5989918719dc8b192c2cf6f8c2162fb150710fe1121891f5da152e",
+              "removals": []
+            },
+            {
+              "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_context_batch.sql",
+              "sourceSha256": "385e4e7b3b36c51c1fe32afffc61117e092748c42fd68a8aeaf4c18e2d8c67b3",
+              "mappedSourceSha256": "385e4e7b3b36c51c1fe32afffc61117e092748c42fd68a8aeaf4c18e2d8c67b3",
+              "removals": []
+            },
+            {
+              "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql",
+              "sourceSha256": "b618abc8bc8e5ce44a05c54209db88bc0c08d1e11a81ad39e5507209868b64b0",
+              "mappedSourceSha256": "b618abc8bc8e5ce44a05c54209db88bc0c08d1e11a81ad39e5507209868b64b0",
+              "removals": []
+            },
+            {
+              "file": "supabase/repeatable/03092026_1644_invoice_apply_edits_frozen_authority_acl_v1.sql",
+              "sourceSha256": "16b8a349a684cdc9cdb5e9ecee446d57ef5a8ef9fbf131630163317987b5a6e4",
+              "mappedSourceSha256": "d4fca154c529aefbca558b634b6a4ae7fe636df83d0a1d0f83ce755bfdf04369",
+              "removals": []
+            }
+          ],
+          "nativeProof": "NOT_RUN"
+        }
+      },
+      {
+        "file": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+        "sqlHash": "61d1edff064c75b4021dce7f1e793be53cca49cf4934dc0226d6a3946b215800",
+        "statements": 160,
+        "review": {
+          "reason": "INVOICE_SETTINGS",
+          "reviewSha256": "b43101eb42c2ec52a97f9925ff2b066985e44ae2ea1ad109dce2f106ebae39e1",
+          "calleeAuditSha256": "8f8fdc98d361b5054e3b6cceb2b9d12097616b0df7ae3293280f75a774dfef28",
+          "rawExpandedSha256": "780c14afd8d2b5584e7cc4b9662f9fda0d127312c135cc2724128aa2711e4510",
+          "mappedSpans": [
+            {
+              "file": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+              "sourceSha256": "a9b639df6471cb2873a7239f6da6d78152d387144cd2a5364c675cce52aa47a4",
+              "mappedSourceSha256": "a9b639df6471cb2873a7239f6da6d78152d387144cd2a5364c675cce52aa47a4",
+              "removals": [
+                {
+                  "start": 0,
+                  "end": 21,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 0,
+                  "byteEnd": 21,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 388,
+                  "end": 394,
+                  "command": "BEGIN",
+                  "byteStart": 388,
+                  "byteEnd": 394,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 575,
+                  "end": 582,
+                  "command": "COMMIT",
+                  "byteStart": 575,
+                  "byteEnd": 582,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql",
+              "sourceSha256": "fcaa3b21d8da86ef6c4553ec637e203c4af673e78358339cd4f880f558ab788a",
+              "mappedSourceSha256": "fcaa3b21d8da86ef6c4553ec637e203c4af673e78358339cd4f880f558ab788a",
+              "removals": [
+                {
+                  "start": 618,
+                  "end": 639,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 618,
+                  "byteEnd": 639,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+              "sourceSha256": "3531e980fd4e3c1a10f7f967a55c639b7be02c069724be946fb2e22c53626065",
+              "mappedSourceSha256": "3531e980fd4e3c1a10f7f967a55c639b7be02c069724be946fb2e22c53626065",
+              "removals": []
+            },
+            {
+              "file": "supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql",
+              "sourceSha256": "9093e8f09ffea82bf383503357b6a5509be2436a053a1566fa99040a5961fcb0",
+              "mappedSourceSha256": "7b2e36c5540a552957432609a24212ddeb17fbff9991b9091b2bef48db50119e",
+              "removals": [
+                {
+                  "start": 184,
+                  "end": 205,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 184,
+                  "byteEnd": 205,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 207,
+                  "end": 213,
+                  "command": "BEGIN",
+                  "byteStart": 207,
+                  "byteEnd": 213,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 230246,
+                  "end": 230253,
+                  "command": "COMMIT",
+                  "byteStart": 234886,
+                  "byteEnd": 234893,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+              "sourceSha256": "40460c7c5778c3c5d5f772917688ce96a18c11cd1bcc0f1b1da85d43e1d71b04",
+              "mappedSourceSha256": "41607e881a05534b002567823808fd367fcb1640db0aaec48f2444ab8d951a69",
+              "removals": [
+                {
+                  "start": 450,
+                  "end": 471,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 450,
+                  "byteEnd": 471,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 473,
+                  "end": 479,
+                  "command": "BEGIN",
+                  "byteStart": 473,
+                  "byteEnd": 479,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 179770,
+                  "end": 179777,
+                  "command": "COMMIT",
+                  "byteStart": 179772,
+                  "byteEnd": 179779,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+              "sourceSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18",
+              "mappedSourceSha256": "5ae569ceed35bdf23950643a88696a715dd8bf18c23d60b2aa2340092388ba29",
+              "removals": [
+                {
+                  "start": 0,
+                  "end": 21,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 0,
+                  "byteEnd": 21,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 23,
+                  "end": 29,
+                  "command": "BEGIN",
+                  "byteStart": 23,
+                  "byteEnd": 29,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 23730,
+                  "end": 23737,
+                  "command": "COMMIT",
+                  "byteStart": 23730,
+                  "byteEnd": 23737,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                },
+                {
+                  "start": 23739,
+                  "end": 23745,
+                  "command": "BEGIN",
+                  "byteStart": 23739,
+                  "byteEnd": 23745,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 30907,
+                  "end": 30914,
+                  "command": "COMMIT",
+                  "byteStart": 30907,
+                  "byteEnd": 30914,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                },
+                {
+                  "start": 30916,
+                  "end": 30922,
+                  "command": "BEGIN",
+                  "byteStart": 30916,
+                  "byteEnd": 30922,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 47775,
+                  "end": 47782,
+                  "command": "COMMIT",
+                  "byteStart": 47775,
+                  "byteEnd": 47782,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                },
+                {
+                  "start": 47784,
+                  "end": 47790,
+                  "command": "BEGIN",
+                  "byteStart": 47784,
+                  "byteEnd": 47790,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 70510,
+                  "end": 70517,
+                  "command": "COMMIT",
+                  "byteStart": 70510,
+                  "byteEnd": 70517,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql",
+              "sourceSha256": "0e0e2d64770b265e2dd221629896f1ccf57a87251c65d099fd82794b90ac0691",
+              "mappedSourceSha256": "a1e49b330f8cd1515e93bde4f2e49f8b40b65791c28196bcb707aa1f6dc112b5",
+              "removals": [
+                {
+                  "start": 271,
+                  "end": 292,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 271,
+                  "byteEnd": 292,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 294,
+                  "end": 300,
+                  "command": "BEGIN",
+                  "byteStart": 294,
+                  "byteEnd": 300,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 112785,
+                  "end": 112792,
+                  "command": "COMMIT",
+                  "byteStart": 112787,
+                  "byteEnd": 112794,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql",
+              "sourceSha256": "b7b2266a582d70c17a438fc19df6d5af1ecc4557b04bb13412a9b0c50b2e7b24",
+              "mappedSourceSha256": "b81cdbd8b83c5c46fa1ab44ed86076329772696b51dfd16619878488b085fc4d",
+              "removals": [
+                {
+                  "start": 290,
+                  "end": 311,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 290,
+                  "byteEnd": 311,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 313,
+                  "end": 319,
+                  "command": "BEGIN",
+                  "byteStart": 313,
+                  "byteEnd": 319,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 885,
+                  "end": 892,
+                  "command": "COMMIT",
+                  "byteStart": 885,
+                  "byteEnd": 892,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql",
+              "sourceSha256": "f283c6011f70e4bf2534a7499d40ae797053f5d5e4cf115c3169ecb01d3f228c",
+              "mappedSourceSha256": "356832e4b13c39ed68e57d2e75ef135f2ce23e639c297c148b45945fdc6d6b37",
+              "removals": [
+                {
+                  "start": 409,
+                  "end": 430,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 409,
+                  "byteEnd": 430,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 432,
+                  "end": 438,
+                  "command": "BEGIN",
+                  "byteStart": 432,
+                  "byteEnd": 438,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 32097,
+                  "end": 32104,
+                  "command": "COMMIT",
+                  "byteStart": 32097,
+                  "byteEnd": 32104,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql",
+              "sourceSha256": "7cedd4190392d8f6ca0c660897bb5914c9a542a1ef1a4732827d0f6d0ecdbe7f",
+              "mappedSourceSha256": "d5779d82d272d9461f92b6f4df91eb004895e6154f036c3a40e8aab8bbc45e05",
+              "removals": [
+                {
+                  "start": 293,
+                  "end": 314,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 293,
+                  "byteEnd": 314,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 316,
+                  "end": 322,
+                  "command": "BEGIN",
+                  "byteStart": 316,
+                  "byteEnd": 322,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 2088,
+                  "end": 2095,
+                  "command": "COMMIT",
+                  "byteStart": 2088,
+                  "byteEnd": 2095,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/04092026_1901_client_planned_override_refresh_v1.sql",
+              "sourceSha256": "c3fe064c19895587ca09156372f35849a7fc17df1b3253e4bf4c3538237a58de",
+              "mappedSourceSha256": "8b5de64ed1df2399a9dcb0cdc9405e1b292cfe1f2c28c5ef2aaa2e9938a1f6a4",
+              "removals": [
+                {
+                  "start": 171,
+                  "end": 192,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 171,
+                  "byteEnd": 192,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 194,
+                  "end": 200,
+                  "command": "BEGIN",
+                  "byteStart": 194,
+                  "byteEnd": 200,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 1450,
+                  "end": 1457,
+                  "command": "COMMIT",
+                  "byteStart": 1450,
+                  "byteEnd": 1457,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql",
+              "sourceSha256": "f03871a1c0ff89d519b3650577691bc633c25c2018c4b7ab1c03e1a88b435dfb",
+              "mappedSourceSha256": "f03871a1c0ff89d519b3650577691bc633c25c2018c4b7ab1c03e1a88b435dfb",
+              "removals": []
+            }
+          ],
+          "nativeProof": "NOT_RUN"
+        }
+      },
+      {
+        "file": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "sqlHash": "0bbf58dd146df85ca34e302a5480eaf26eb695cc8d3bb1f4211137eb489cd505",
+        "statements": 159,
+        "review": {
+          "reason": "SOURCE_REASSERT",
+          "reviewSha256": "b43101eb42c2ec52a97f9925ff2b066985e44ae2ea1ad109dce2f106ebae39e1",
+          "calleeAuditSha256": "8f8fdc98d361b5054e3b6cceb2b9d12097616b0df7ae3293280f75a774dfef28",
+          "rawExpandedSha256": "303cd3fa80c5080831d1ae16b3ebf612898f3c764f141cb974a3302ad98e6215",
+          "mappedSpans": [
+            {
+              "file": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+              "sourceSha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c",
+              "mappedSourceSha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c",
+              "removals": [
+                {
+                  "start": 1307,
+                  "end": 1328,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 1307,
+                  "byteEnd": 1328,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1.sql",
+              "sourceSha256": "fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e",
+              "mappedSourceSha256": "fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e",
+              "removals": [
+                {
+                  "start": 184,
+                  "end": 205,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 184,
+                  "byteEnd": 205,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 207,
+                  "end": 213,
+                  "command": "BEGIN",
+                  "byteStart": 207,
+                  "byteEnd": 213,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 8704,
+                  "end": 8711,
+                  "command": "COMMIT",
+                  "byteStart": 8704,
+                  "byteEnd": 8711,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+              "sourceSha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+              "mappedSourceSha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+              "removals": []
+            },
+            {
+              "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+              "sourceSha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff",
+              "mappedSourceSha256": "d2e3c9bcae4f6a24b5a9b33ccdc73429083b7f2b98598001257adf58f4bae7d4",
+              "removals": [
+                {
+                  "start": 0,
+                  "end": 21,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 0,
+                  "byteEnd": 21,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 23,
+                  "end": 29,
+                  "command": "BEGIN",
+                  "byteStart": 23,
+                  "byteEnd": 29,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 29489,
+                  "end": 29496,
+                  "command": "COMMIT",
+                  "byteStart": 29489,
+                  "byteEnd": 29496,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+              "sourceSha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+              "mappedSourceSha256": "cfa63d77a803e7f23d9a6cd5a2e12c1641895adb08497043a1240856f849665b",
+              "removals": [
+                {
+                  "start": 420,
+                  "end": 441,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 420,
+                  "byteEnd": 441,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 443,
+                  "end": 449,
+                  "command": "BEGIN",
+                  "byteStart": 443,
+                  "byteEnd": 449,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 170694,
+                  "end": 170701,
+                  "command": "COMMIT",
+                  "byteStart": 170694,
+                  "byteEnd": 170701,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+              "sourceSha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d",
+              "mappedSourceSha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d",
+              "removals": [
+                {
+                  "start": 774,
+                  "end": 795,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 774,
+                  "byteEnd": 795,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 797,
+                  "end": 803,
+                  "command": "BEGIN",
+                  "byteStart": 797,
+                  "byteEnd": 803,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 164156,
+                  "end": 164163,
+                  "command": "COMMIT",
+                  "byteStart": 164156,
+                  "byteEnd": 164163,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            }
+          ],
+          "nativeProof": "NOT_RUN"
+        }
+      },
+      {
+        "file": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+        "sqlHash": "4392c78ce8457d68c2bafc98f129f5a0b9742a14baa51fa4957bb3d24c0afdb8",
+        "statements": 36,
+        "review": {
+          "reason": "CANDIDATE_RUNTIME_RELOAD",
+          "reviewSha256": "b43101eb42c2ec52a97f9925ff2b066985e44ae2ea1ad109dce2f106ebae39e1",
+          "calleeAuditSha256": "8f8fdc98d361b5054e3b6cceb2b9d12097616b0df7ae3293280f75a774dfef28",
+          "rawExpandedSha256": "f70517567eaded0a84e8e8c766b6362c19c691cbd627a5bcba219e219dd17d70",
+          "mappedSpans": [
+            {
+              "file": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+              "sourceSha256": "61f0f9fc8e7a1ea8bc041d9b9c4faf67a0633d0f1600923c5d09ea2bba1094b5",
+              "mappedSourceSha256": "61f0f9fc8e7a1ea8bc041d9b9c4faf67a0633d0f1600923c5d09ea2bba1094b5",
+              "removals": [
+                {
+                  "start": 157,
+                  "end": 178,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 157,
+                  "byteEnd": 178,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+              "sourceSha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b",
+              "mappedSourceSha256": "c41223f8aa5d3b3a18ba043b7c8ed99a480af263a40cb5e5982c4dcb19a3cc63",
+              "removals": []
+            },
+            {
+              "file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+              "sourceSha256": "7203e1229a43f4545bcc85b3ce280ffadc2968dceb5f80aa8a7b54d01328978b",
+              "mappedSourceSha256": "f8cd2d2d61d0d12b261771a371bf1ad167852944df33013553e5b6b7ae2ad578",
+              "removals": []
+            },
+            {
+              "file": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+              "sourceSha256": "523f5faf9d05c4151d2615438030470beae937c9cf794c5fb4c8c205c73fd2b5",
+              "mappedSourceSha256": "523f5faf9d05c4151d2615438030470beae937c9cf794c5fb4c8c205c73fd2b5",
+              "removals": [
+                {
+                  "start": 183,
+                  "end": 204,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 183,
+                  "byteEnd": 204,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 206,
+                  "end": 212,
+                  "command": "BEGIN",
+                  "byteStart": 206,
+                  "byteEnd": 212,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 10375,
+                  "end": 10382,
+                  "command": "COMMIT",
+                  "byteStart": 10375,
+                  "byteEnd": 10382,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+              "sourceSha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338",
+              "mappedSourceSha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338",
+              "removals": [
+                {
+                  "start": 192,
+                  "end": 213,
+                  "command": "\\set ON_ERROR_STOP on",
+                  "byteStart": 192,
+                  "byteEnd": 213,
+                  "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+                },
+                {
+                  "start": 215,
+                  "end": 221,
+                  "command": "BEGIN",
+                  "byteStart": 215,
+                  "byteEnd": 221,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 22286,
+                  "end": 22293,
+                  "command": "COMMIT",
+                  "byteStart": 22286,
+                  "byteEnd": 22293,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            },
+            {
+              "file": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+              "sourceSha256": "7335affaf41db16171e882d03174c7e3547bd48fd1b1cec903f81523088b979b",
+              "mappedSourceSha256": "fe37c67d05fc34b44803a49c84a5d210d37342af5537d74643d4b5ebfcdfdeb6",
+              "removals": [
+                {
+                  "start": 261,
+                  "end": 267,
+                  "command": "BEGIN",
+                  "byteStart": 261,
+                  "byteEnd": 267,
+                  "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+                },
+                {
+                  "start": 15251,
+                  "end": 15258,
+                  "command": "COMMIT",
+                  "byteStart": 15251,
+                  "byteEnd": 15258,
+                  "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+                }
+              ]
+            }
+          ],
+          "nativeProof": "NOT_RUN"
+        }
+      }
+    ],
+    "mandatoryVerifierReview": "CURRENT_REVIEW_REQUIRED",
+    "contract": "CURRENT_CANDIDATE_SEAL_REQUIRED",
+    "native": "NOT_RUN",
+    "databaseCalls": 0
+  },
+  "tests": {
+    "passed": 87,
+    "failed": 0,
+    "files": [
+      "tests/healthroster-reviewed-managed-envelope.test.mjs",
+      "tests/healthroster-full-rehearsal-protocol.test.mjs",
+      "tests/healthroster-install1-full-rehearsal.test.mjs",
+      "tests/healthroster-rehearsal-resource-guard.test.mjs",
+      "tests/healthroster-rehearsal-stream-observer.test.mjs",
+      "tests/healthroster-rehearsal-turn.test.mjs"
+    ],
+    "sourceIntegrity": {
+      "migrations": 407,
+      "repeatables": 1074,
+      "status": "PASS"
+    },
+    "diffWhitespace": "PASS"
+  },
+  "review": {
+    "reviewer": "/root/v6_physical",
+    "concreteFinding": "CRLF source was sliced with canonical LF offsets after native gset, potentially concealing COMMIT.",
+    "fix": "Reject noncanonical source before all rehearsal masking/slicing; exact CRLF gset/commit and LF escaped commit regression passes.",
+    "finalVerdict": "PASS_SOURCE_ONLY_AFTER_CRLF_FIX",
+    "confirmation": "Independent current-source invocation confirms CRLF refuses CANONICAL_SQL_REQUIRED; LF same outer COMMIT refuses OUTER_TRANSACTION_ESCAPE. No further concrete escape in bounded review; current176 verifier/native/contract qualification separate."
+  },
+  "retainedChecks": [
+    "all seven original top-level DO bodies and ten audited callee source definitions",
+    "actual settings/planned-ContractWeek backfill and triggers retained inside outer rollback",
+    "native unitCheckpointSql invoice active/missing guard with client variable reset before and after repeatable",
+    "original full mandatory and final browser verifier gates",
+    "exact current contract seal and fresh restoration",
+    "shared turn, resource bounds, no own deadline, background attribution"
+  ],
+  "historicalTestCorrection": "Install1 source test wrongly called its 158-verifier approval current against the changed176-verifier release. Replaced false current-plan claim with actual compile refusal regression; no historical approval or verifier rewritten.",
+  "holds": [
+    "Exact current complete verifier effects/callee safety review required",
+    "Exact current candidate PostgreSQL17 contract seal required",
+    "Fresh installed baseline/full rollback/restoration not run",
+    "Install2 not installed"
+  ],
+  "scratch": [
+    {
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/rehearsal-envelope-source-20261016",
+      "purpose": "Data-free source-only150-unit check/selection/result retained for reproducibility",
+      "secrets": false,
+      "deletionRefused": false
+    }
+  ],
+  "databaseCalls": 0,
+  "deployments": 0,
+  "bankingMessages": 0
+}

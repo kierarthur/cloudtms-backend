@@ -88,49 +88,19 @@ test('snapshot compiles exact repository exporter and fresh relation names witho
  assert.throws(()=>restorationSnapshotSql({identity,marker,relations:[{schema:'public',name:'timesheets',kind:'r'}],exportContractSql:exporter+' select 1;'}),/DRIFT/);
 });
 
-test('source-only actual current Install1 plan retains full 142 verifier bodies, 16 exclusions and final browser isolation',()=>{
+test('historical Install1 verifier approval cannot authorise a changed Install2 census',()=>{
  const old=process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER='CURRENT_USER';
  try{
   const current=inventory();
   const review=JSON.parse(fs.readFileSync(new URL('../docs/healthroster-build/install1-rehearsal/VERIFIER_SAFETY_REVIEW.json',import.meta.url),'utf8'));
-  // Pure source model, deliberately not represented as an observed TEST ledger.
-  const installed={migrations:current.migrations,repeatables:current.repeatables.filter(x=>!x.path.includes('14102026_0044'))
-   .map(x=>x.path.includes('15092026_1534_weekly_source_acl_contract_v1')?{...x,sha256:'0'.repeat(64)}:x)};
-  const expectedContractHash=digest(JSON.stringify(JSON.parse(fs.readFileSync(new URL('../supabase/release/current-contract.json',import.meta.url),'utf8'))));
-  const contractDigest={connectedFresh:true,checkedAt:new Date().toISOString(),physicalDatabase:'cloudtms_test_clone',identityTest:true,
-   customerKeyNull:true,expectedContractHash,expectedJsonbHash:hash};
-  const plan=compileFullRehearsal({candidatePin,currentRemoteTestPin:base,expectedContractHash,contractDigest,installed,review,marker});
-  assert.equal(plan.nativeFull,'NOT_RUN');assert.equal(plan.exclusionCount,16);
-  assert.equal(plan.units.filter(x=>x.kind==='verifier').length,142);
-  assert.equal(plan.units.at(-1).kind,'final_browser_verifier');assert.equal(plan.outerIsolation,'REPEATABLE READ');
-  const tx=scanManagedSql(plan.sql).statements.filter(x=>['BEGIN','COMMIT','ROLLBACK'].includes(x.tokens[0])&&x.tokens[1]!=='TO');
-  assert.deepEqual(tx.map(x=>x.tokens.join(' ')),['BEGIN ISOLATION LEVEL REPEATABLE READ','ROLLBACK']);
-  assert.equal(plan.lineMap.length,2271);assert.equal(plan.sqlHash,digest(plan.sql));
-  // Real psql reports a failing DO at its closing delimiter/semicolon line.
-  // These are the exact three locations observed in the held native retry.
-  for (const [closing,file,statement,code] of [
-    ['end $released_review$;','supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql',60,'WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID'],
-    ['$verify_one_head$;','supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql',19,'WEEKLY_SOURCE_HEAD_INVENTORY_MISMATCH'],
-    ['$verify_fingerprint$;','supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql',20,'ASSERTION_FAILED']
-  ]) {
-    const line=plan.sql.split('\n').findIndex(value=>value.trim()===closing)+1;
-    assert.ok(line>0);
-    const location=plan.lineMap.find(row=>line>=row.startLine&&line<=row.endLine);
-    assert.equal(location.file,file);assert.equal(location.statement,statement);
-    const diagnostic=closedRehearsalDiagnostic('psql:<stdin>:'+line+': ERROR: 55000: '+code,plan.lineMap,new Set(plan.diagnosticCodes));
-    assert.equal(diagnostic.file,file);assert.equal(diagnostic.statement,statement);
-  }
-
-  assert.ok(plan.sql.includes('do $hr_contract_compare$'));
-  assert.ok(plan.sql.indexOf('do $hr_contract_compare$')<plan.sql.lastIndexOf('rollback;'));
-  assert.ok(plan.diagnosticCodes.includes('WP_PP_FIXTURE_ID_COLLISION'));
-  const live=compileFullRehearsal({candidatePin,currentRemoteTestPin:base,expectedContractHash,contractDigest,installed,review,marker,observeLiveBusiness:true});
-  assert.equal(live.fixtureObservationUnits.length,143);
-  assert.deepEqual(live.units.map(r=>({file:r.file,sqlHash:r.sqlHash})),plan.units.map(r=>({file:r.file,sqlHash:r.sqlHash})));
-  assert.equal(live.lineMap.filter(r=>r.phase==='fixture_observation').length,429);
-  assert.equal(live.sql.split('HR_REHEARSAL_TRANSACTION_JSON ').length,2);
-  assert.equal(live.sql.split('HR_FIXTURE_OBSERVATION_JSON ').length,144);
-  assert.deepEqual(scanManagedSql(live.sql).statements.filter(x=>['BEGIN','COMMIT','ROLLBACK'].includes(x.tokens[0])&&x.tokens[1]!=='TO').map(x=>x.tokens.join(' ')),['BEGIN ISOLATION LEVEL REPEATABLE READ','ROLLBACK']);
+  const release=JSON.parse(fs.readFileSync(new URL('../supabase/release/current-release.json',import.meta.url),'utf8'));
+  assert.equal(review.verifiers.length,158);
+  assert.notEqual(release.verificationFiles.length,review.verifiers.length);
+  // Do not rewrite old approvals or bless new verifier effects from old hashes.
+  // The exact current complete safety review remains mandatory before SQL.
+  assert.throws(()=>compileFullRehearsal({candidatePin,currentRemoteTestPin:base,
+   installed:{migrations:current.migrations,repeatables:current.repeatables},review,marker}),
+   /REHEARSAL_REVIEW_CENSUS_REFUSED/);
  }finally{if(old===undefined)delete process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;else process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER=old;}
 });
 

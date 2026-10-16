@@ -1,12 +1,35 @@
-import {scanManagedSql, digest} from './cloudtms-managed-release-sql.mjs';
+import {scanManagedSql, digest, canonical} from './cloudtms-managed-release-sql.mjs';
 import {fixtureObservationSql} from './healthroster-live-test-restoration.mjs';
+
+// psql's gset terminates its pending SQL command without a semicolon. The
+// managed packaging lexer intentionally leaves that client command opaque;
+// the rehearsal census must still locate a following conditional DO exactly.
+// Mask only lexer-proved top-level gset, preserving every character offset.
+export function scanRehearsalSql(sql){
+  // The shared lexer returns canonical-LF offsets. Refuse another rendering
+  // rather than apply those offsets to different bytes and hide a command.
+  if(typeof sql!=='string'||canonical(sql)!==sql)throw Error('REHEARSAL_CANONICAL_SQL_REQUIRED');
+  const parsed=scanManagedSql(sql);
+  const terminators=parsed.meta.filter(row=>/^\\gset(?:\s+[A-Za-z_][A-Za-z0-9_]*)?\s*$/i.test(row.text));
+  if(!terminators.length)return parsed;
+  let masked=sql;
+  for(const row of [...terminators].reverse()){
+    const token=sql.slice(row.start,row.end);
+    masked=masked.slice(0,row.start)+';'+token.slice(1).replace(/[^\r\n]/g,' ')+masked.slice(row.end);
+  }
+  const statements=scanManagedSql(masked).statements.map(row=>{
+    const terminator=terminators.find(meta=>row.end===meta.start+1);
+    return terminator?{...row,end:terminator.end}:row;
+  });
+  return {...parsed,statements};
+}
 
 // A source safety reviewer authorises exact envelope removals before rendering.
 // Hash-bound full SQL remains retained; this never opens a connection or grants
 // permission to execute a verifier, or substitutes for its effect review.
 export function neutraliseReviewedVerifierEnvelope(unit, review) {
   if (!['verifier','final_browser_verifier'].includes(unit?.kind)
-    || typeof unit.sql !== 'string' || digest(unit.sql) !== unit.sqlHash
+    || typeof unit.sql !== 'string' || canonical(unit.sql)!==unit.sql || digest(unit.sql) !== unit.sqlHash
     || review?.sourceSqlHash !== unit.sqlHash || !Array.isArray(review.removedCommands)) {
     throw Error('REHEARSAL_ENVELOPE_REVIEW_REFUSED');
   }
@@ -62,6 +85,7 @@ export function renderFullRehearsalUnits(units, {outerIsolation,observeLiveBusin
   const rendered = [], census = [];
   for (const [index, unit] of units.entries()) {
     const verifier = ['verifier','final_browser_verifier'].includes(unit.kind);
+    const isolateClientVariables=verifier||unit.isolateClientVariables===true;
     const pathAllowed = typeof unit.file === 'string' &&
       (/^supabase\/(?:migrations|repeatable|verification)\/[A-Za-z0-9_./-]+\.sql$/.test(unit.file)
         || verifier && /^tests\/[A-Za-z0-9_./-]+\.sql$/.test(unit.file));
@@ -69,7 +93,7 @@ export function renderFullRehearsalUnits(units, {outerIsolation,observeLiveBusin
       || !pathAllowed
       || unit.file.split('/').includes('..') || typeof unit.sql !== 'string'
       || digest(unit.sql) !== unit.sqlHash) throw Error('REHEARSAL_UNIT_IDENTITY_REFUSED');
-    const parsed = scanManagedSql(unit.sql);
+    const parsed = scanRehearsalSql(unit.sql);
     if (parsed.statements.some(s => ['BEGIN','COMMIT','END','START','ABORT','PREPARE'].includes(s.tokens[0])
       || s.tokens[0] === 'ROLLBACK' && s.tokens[1] !== 'TO')) {
       throw Error('REHEARSAL_OUTER_TRANSACTION_ESCAPE_REFUSED');
@@ -105,16 +129,18 @@ export function renderFullRehearsalUnits(units, {outerIsolation,observeLiveBusin
         return [...assigned?[assigned[1]]:[],...referenced];
       })])].filter(name=>!['ON_ERROR_STOP','ON_ERROR_ROLLBACK'].includes(name)).sort();
     if (clientVariables.some(name=>!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) throw Error('REHEARSAL_CLIENT_VARIABLE_REFUSED');
-    if (verifier) parts.push(...clientVariables.map(name=>'\\unset '+name), `savepoint hr_verifier_${index};`);
+    if (isolateClientVariables) parts.push(...clientVariables.map(name=>'\\unset '+name));
+    if (verifier) parts.push(`savepoint hr_verifier_${index};`);
     parts.push(unit.sql);
     if (verifier&&observeLiveBusiness) parts.push(fixtureObservationSql(index));
-    if (verifier) parts.push(`rollback to savepoint hr_verifier_${index};`, `release savepoint hr_verifier_${index};`,
-      ...clientVariables.map(name=>'\\unset '+name));
+    if (verifier) parts.push(`rollback to savepoint hr_verifier_${index};`, `release savepoint hr_verifier_${index};`);
+    if (isolateClientVariables) parts.push(...clientVariables.map(name=>'\\unset '+name));
     parts.push(`\\echo HR_FILE_END ${index}`);
     rendered.push(parts.join('\n'));
     census.push({index, file:unit.file, kind:unit.kind, sqlHash:unit.sqlHash, statements:parsed.statements.length,
-      clientVariableIsolation:verifier, sourceSqlHash:unit.sourceSqlHash??unit.sqlHash,
-      reviewedEnvelope:unit.envelope??[],clientVariables:verifier?clientVariables:[]});
+      clientVariableIsolation:isolateClientVariables, sourceSqlHash:unit.sourceSqlHash??unit.sqlHash,
+      reviewedEnvelope:unit.envelope??[],clientVariables:isolateClientVariables?clientVariables:[],
+      ...(unit.reviewedManagedEnvelope?{reviewedManagedEnvelope:unit.reviewedManagedEnvelope}:{})});
   }
   const sql = rendered.join('\n')+'\n';
   return {sql, sha256:digest(sql), bytes:Buffer.byteLength(sql), units:census,
