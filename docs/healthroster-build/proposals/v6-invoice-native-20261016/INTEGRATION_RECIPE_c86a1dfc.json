@@ -1,0 +1,705 @@
+{
+  "source_commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+  "manifest_sha256": "adcd92adcef738644791cae671310ad0ec67d9d29403fe89f324957841d39e49",
+  "native": "REQUIRED_NOT_RUN",
+  "source_regressions": 21,
+  "offline_projection_operands": {
+    "legacy": 28,
+    "synchronous_source": 27
+  },
+  "install_order": "Newest complete physical schema/helpers including Daily normalized/accepting and evidence_source; unchanged six billing stores once; listed full invoice definitions in order; final new private ACL; root final security",
+  "physical_dependencies": [
+    "private.timesheet_contract_move_financial_row_guard_v1()",
+    "private.timesheet_contract_move_accepting_v1(uuid)",
+    "private.timesheet_contract_move_evidence_source_v1(uuid)",
+    "private.timesheet_contract_move_financial_economics_v1(jsonb)",
+    "private.daily_rate_correction_scope_v1(uuid,boolean)",
+    "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+    "private.daily_rate_correction_normalized_snapshot_v1(jsonb,jsonb,jsonb,uuid)",
+    "private.daily_rate_correction_financial_id_v1(uuid,text)",
+    "private.daily_rate_correction_accepting_v1(uuid)"
+  ],
+  "shared_guard_owner": "Physical lane alone defines the financial row guard/capability predicates. Invoice lane registers exact events and alone defines public.invoice_line_archived_timesheet_guard_v1 + private.weekly_source_invoice_line_owner_guard_v1. Source/native lane consumes invoice certificate; do not duplicate definitions.",
+  "files": [
+    {
+      "file": "forward/001_billing_schema.sqlinc",
+      "sha256": "7cf768b713f421248e62dbc23178efbf24adf6096eafe63d284eb316a4d81545",
+      "kind": "NEW_SCHEMA_BODY",
+      "targets": []
+    },
+    {
+      "file": "forward/010_source_invoice_facts.sqlinc",
+      "sha256": "9078a3008fb77d0f5cb3d5c9c9a7667adf3fbd623ae266ec85d892c7b205fad8",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.weekly_source_invoice_preservation_facts_v1",
+          "arguments": "p_timesheet_ids uuid[],p_source_row_ids uuid[],p_lock boolean"
+        }
+      ]
+    },
+    {
+      "file": "forward/015_source_certificate.sqlinc",
+      "sha256": "554463c9b554c3c16171255ab069faac4885b80f2b7ebd96e27700520336cda7",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.weekly_source_invoice_certificate_v1",
+          "arguments": "p_timesheet_ids uuid[],p_source_row_ids uuid[],p_lock boolean"
+        },
+        {
+          "name": "private.weekly_source_invoice_certificate_assert_v1",
+          "arguments": "p_expected jsonb,p_lock boolean"
+        }
+      ]
+    },
+    {
+      "file": "forward/017_evidence_subject.sqlinc",
+      "sha256": "f1c45a5c395d679364b6a407e2d0c7c0996f7077fc8a33ce31a3f6bbb225868e",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_original_evidence_eligible_v1",
+          "arguments": "p_timesheet_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/018_source_original.sqlinc",
+      "sha256": "46d7cb7d66b03e64f9f4bb10e8024fd191b63a5b511518b65cca4bc1e78f1854",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.timesheet_contract_source_original_eligible_v1",
+          "arguments": "p_original_timesheet_id uuid"
+        },
+        {
+          "name": "private.timesheet_contract_source_pay_only_v1",
+          "arguments": "p_timesheet_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/019_source_generation_witness.sqlinc",
+      "sha256": "74f06fce83bb96c5a3d851b66d66d38918f976574c4e2044c227e35268f86603",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_source_original_claim_enter_v1",
+          "arguments": "p_claims jsonb,p_now_utc timestamptz"
+        },
+        {
+          "name": "private.invoice_source_original_claim_v1",
+          "arguments": "p_chunk_id uuid"
+        },
+        {
+          "name": "private.invoice_source_original_line_plan_v1",
+          "arguments": "p_chunk_id uuid,p_lines jsonb"
+        },
+        {
+          "name": "private.invoice_source_original_line_allowed_v1",
+          "arguments": "p_new jsonb"
+        }
+      ]
+    },
+    {
+      "file": "forward/019a_source_admission_witness.sqlinc",
+      "sha256": "f0ebe9fb057ccee1a10f58dfd8a154a31de63e4b54a8fb37665d6fe876228351",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_source_admission_origin_v1",
+          "arguments": "p_timesheet_id uuid"
+        },
+        {
+          "name": "private.invoice_source_admission_line_claim_v1",
+          "arguments": "p_invoice_id uuid"
+        },
+        {
+          "name": "private.invoice_source_admission_line_enter_v1",
+          "arguments": "p_invoice_id uuid,p_actor_user_id uuid,p_manifest_id uuid,p_line jsonb"
+        },
+        {
+          "name": "private.invoice_source_admission_line_allowed_v1",
+          "arguments": "p_new jsonb"
+        },
+        {
+          "name": "private.invoice_source_admission_line_finish_v1",
+          "arguments": "p_invoice_id uuid,p_invoice_line_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/019b_source_allocation_witness.sqlinc",
+      "sha256": "e9540570a286428daad3264c460cf67dbb1a60d82ce180d71118719f4940e603",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_source_allocation_claim_v1",
+          "arguments": "p_destination_invoice_id uuid"
+        },
+        {
+          "name": "private.invoice_source_allocation_enter_v1",
+          "arguments": "p_source uuid,p_destination uuid,p_actor uuid,p_line_ids uuid[]"
+        },
+        {
+          "name": "private.invoice_source_allocation_line_allowed_v1",
+          "arguments": "p_new jsonb"
+        },
+        {
+          "name": "private.invoice_source_allocation_finish_v1",
+          "arguments": "p_destination uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/020_source_family.sqlinc",
+      "sha256": "142e3216e23a5b41fb4f089bc67401a525b220ac1a85620947cf198cb2778598",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.weekly_source_invoice_family_timesheet_ids_v1",
+          "arguments": "p_timesheet_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/021_source_lineage.sqlinc",
+      "sha256": "e7a52c3d953356663f7eea2eb4bcde3f6a70182da9602144e2f828a5578ad66a",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.weekly_source_finalisation_lineage_assert_v1",
+          "arguments": "p_row_resolution_id uuid, p_source_cycle_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/021a_source_duty.sqlinc",
+      "sha256": "0e74042257973b6ee0507f7f2168b5bad6f5f3f11a73f0c48673b70aaebecc99",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.weekly_source_invoice_duty_v1",
+          "arguments": "p_root_timesheet_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/022_source_presentation.sqlinc",
+      "sha256": "052a8b6d0451160c510aa378d8a4759d077a80e4f171e49caf7b8d8b1e769ac0",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_presentation_snapshot_batch",
+          "arguments": "p_requests jsonb, p_now_utc timestamptz default null"
+        }
+      ]
+    },
+    {
+      "file": "forward/023_source_archive.sqlinc",
+      "sha256": "208d4c1dbf004f5803e2888dfa16fa634bf8ed1e951159885f49f4c79c404df9",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "public.invoice_line_archived_timesheet_guard_v1",
+          "arguments": ""
+        }
+      ]
+    },
+    {
+      "file": "forward/023a_native_document_source.sqlinc",
+      "sha256": "b0621a41ea1b188846dcb1f951c5b6f82d43001a95e9f68e9c3fad2f6753cdb8",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_document_advance_batch",
+          "arguments": "p_claims jsonb, p_now_utc timestamptz"
+        }
+      ]
+    },
+    {
+      "file": "forward/024_line_admission.sqlinc",
+      "sha256": "bc6d5e889c54e3803bc20d52fbc95a8497cce6768b446de43529fb28b019624e",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_line_allowed_v1",
+          "arguments": "p_new jsonb"
+        },
+        {
+          "name": "private.invoice_contract_move_verified_unissue_v1",
+          "arguments": "p_invoice_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/024a_source_native_admission.sqlinc",
+      "sha256": "bc1ce152c05c7ab726503f67bdb8e84f7af8046ad767b34de9c334f70135ab60",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "public.weekly_source_invoice_admit_atomic_v1",
+          "arguments": "p_request jsonb"
+        }
+      ]
+    },
+    {
+      "file": "forward/024b_source_native_allocation.sqlinc",
+      "sha256": "f980846c742b528aaf862d59a2de0f20d1b24b30e1f36efbff9cf3a3c06cab09",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "public.weekly_source_invoice_move_atomic_v1",
+          "arguments": "p_request jsonb"
+        }
+      ]
+    },
+    {
+      "file": "forward/025_claim_placement.sqlinc",
+      "sha256": "a23f2a30eae352a9903449adbfbd5d1761db96ceac61f883aa4ecbbe72f6ce78",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.timesheet_contract_claim_placement_v1",
+          "arguments": "p_workflow_id uuid,p_stored_timesheet_id uuid,p_expense_component_id uuid default null"
+        }
+      ]
+    },
+    {
+      "file": "forward/026_claim_current.sqlinc",
+      "sha256": "bf5098454a3dbe32feaa230d460ebc796181d093b068fcaa20c82cb25a7cc942",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._candidate_expense_current_timesheet_id_v1",
+          "arguments": "p_workflow_id uuid, p_stored_timesheet_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/027_claim_owned.sqlinc",
+      "sha256": "20f9a2394fbe9fee7e29fcc91ab321c8ed13c2b29c7960628d6d27cd0e74d455",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._candidate_expense_owned_timesheet_id_v1",
+          "arguments": "p_workflow_id uuid, p_stored_timesheet_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/028_claim_lock.sqlinc",
+      "sha256": "de2a58a673e9ca657a203874635f7916b9833ef1a15904636d325344c141b268",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._candidate_expense_owner_context_lock_v1",
+          "arguments": "p_expense_component_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/029_claim_financial.sqlinc",
+      "sha256": "267c5817ca565f0ccecc4bc8b54c5b15189841aae710faddd7f59d656d1171cb",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._candidate_expense_components_sync_financial_v1",
+          "arguments": "p_timesheet_id uuid, p_now_utc timestamp with time zone DEFAULT now()"
+        }
+      ]
+    },
+    {
+      "file": "forward/030_claim_sync.sqlinc",
+      "sha256": "3ba92317e968970c17be22fa89d097a3d66da80b2a9cf316965b2f2cff4ab999",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._candidate_expense_components_sync_v1",
+          "arguments": "p_workflow_id uuid, p_now_utc timestamptz default now()"
+        }
+      ]
+    },
+    {
+      "file": "forward/031_source_line_owner.sqlinc",
+      "sha256": "ac0d0da1833e7b5b31180c029e835bcb05ca2671c009dd37a7acf60307bffb67",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.weekly_source_invoice_line_owner_guard_v1",
+          "arguments": ""
+        }
+      ]
+    },
+    {
+      "file": "forward/032_prospective_group.sqlinc",
+      "sha256": "8e380f1f30176524f9a7d07b1dd9b0ed37e84e4cf0ea981e8820c7ccdff1c184",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_prospective_source_v1",
+          "arguments": "p_operation_id uuid,p_timesheet_id uuid,p_actor_user_id uuid"
+        },
+        {
+          "name": "private.invoice_contract_move_group_facts_v1",
+          "arguments": "p_operation_id uuid,p_groups jsonb,p_preview boolean"
+        }
+      ]
+    },
+    {
+      "file": "forward/032a_daily_native_basis.sqlinc",
+      "sha256": "ae71613414162b317cb3de0b21492e92cf7fc7c529cd554b5340d96142d85bda",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_correction_scope_v1",
+          "arguments": "p_operation_id uuid,p_lock boolean"
+        },
+        {
+          "name": "private.invoice_contract_correction_prospective_source_v1",
+          "arguments": "p_operation_id uuid,p_timesheet_id uuid,p_actor_user_id uuid,p_daily jsonb"
+        },
+        {
+          "name": "private.invoice_daily_rate_actual_revision_assert_v1",
+          "arguments": "p_operation_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/033_native_grouping.sqlinc",
+      "sha256": "8427f61568b3a5fa978134b424fbbd04b2adae1f3c3d224e91ec2db85c49d6e6",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_generation_resolve_command_groups",
+          "arguments": "p_commands jsonb, p_actor_user_id uuid, p_effective_at_utc timestamptz"
+        }
+      ]
+    },
+    {
+      "file": "forward/033a_native_collection.sqlinc",
+      "sha256": "12662ec29d0fe31ce338f8a40c4cbe6a27883fe15e398ff8a66d70e0ff104c19",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_batch_generate_classification_v2",
+          "arguments": "p_allow_early boolean default false, p_scope_keys text[] default null, p_now_utc timestamptz default now()"
+        }
+      ]
+    },
+    {
+      "file": "forward/033b_native_references.sqlinc",
+      "sha256": "71698ead9aa3a773c857ba9551424f80323804601753895445d23a1a4dfb29ba",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_source_reference_validate_batch",
+          "arguments": "p_source_members jsonb"
+        }
+      ]
+    },
+    {
+      "file": "forward/033c_native_vat_policy.sqlinc",
+      "sha256": "44c63c951b368d167131266a8220a64d5b3adee8c218844fc8c7ded7e759b217",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": []
+    },
+    {
+      "file": "forward/033d_native_invoice_references.sqlinc",
+      "sha256": "c792009404507fb8a0719ee62accd9a0b55ec893bb75eaa4b003dc59d2a392e3",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_reference_rows_batch",
+          "arguments": "p_invoice_ids uuid[]"
+        }
+      ]
+    },
+    {
+      "file": "forward/034_contract_certificates.sqlinc",
+      "sha256": "e0dc74daca0c61a5e397e8cc6c3e8be2e197231fa39fc6d8a939933a75d1a648",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.timesheet_contract_source_coverage_v1",
+          "arguments": "p_timesheet_id uuid"
+        },
+        {
+          "name": "private.timesheet_contract_move_invoice_certificate_v1",
+          "arguments": "p_operation_id uuid,p_lock boolean"
+        }
+      ]
+    },
+    {
+      "file": "forward/034a_document_preflight.sqlinc",
+      "sha256": "38557a757d802b9b0bd5741f6d65c089639c40000e82998ac4932a7f96d5fe8d",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_correction_document_preflight_v1",
+          "arguments": "p_physical jsonb,p_daily jsonb,p_actor_user_id uuid,p_slices jsonb"
+        }
+      ]
+    },
+    {
+      "file": "forward/035_preflight.sqlinc",
+      "sha256": "a0d1a5439277e145f58314d0abc821e247a3aa8c52bbf56ca1a9cebf35ad6485",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_inspect_v1",
+          "arguments": "p_physical jsonb,p_daily jsonb,p_actor_user_id uuid,p_lock boolean"
+        },
+        {
+          "name": "private.invoice_contract_move_inspect_v1",
+          "arguments": "p_physical jsonb,p_actor_user_id uuid,p_lock boolean"
+        },
+        {
+          "name": "private.invoice_contract_move_preflight_v1",
+          "arguments": "p_review_id uuid,p_actor_user_id uuid,p_lock boolean"
+        }
+      ]
+    },
+    {
+      "file": "forward/036_native_selected_edit.sqlinc",
+      "sha256": "04135f211f90e991a6c2976e3ad77ced587c3dae374285a2ecb277464e86ae5b",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "public.invoice_apply_edits",
+          "arguments": "p_invoice_id uuid, p_payload jsonb, p_actor_user_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/036a_native_selected_unlock.sqlinc",
+      "sha256": "25af72528e6393f0f742c3c4ecf9674fff5869fc687842ef52fce090b5bff558",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "public._inv_unlock_segments_for_invoice",
+          "arguments": "p_invoice_id uuid, p_timesheet_ids uuid[]"
+        }
+      ]
+    },
+    {
+      "file": "forward/037_selected_draft.sqlinc",
+      "sha256": "015fd6ede7064aa39f015fef0f423a76d574317a40c335845810c18286620ec9",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_selected_financial_authorise_v1",
+          "arguments": "p_old jsonb,p_new jsonb,p_invoice_id uuid"
+        },
+        {
+          "name": "private.invoice_contract_move_selected_drafts_prepare_v1",
+          "arguments": "p_operation_id uuid,p_actor_user_id uuid,p_now_utc timestamptz"
+        }
+      ]
+    },
+    {
+      "file": "forward/038_billing_read.sqlinc",
+      "sha256": "6b547368acb9359c40a490ea931a7d367fbe15391dde4429bf1954146b04cea8",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_source_certificate_v1",
+          "arguments": "p_operation_id uuid,p_lock boolean"
+        },
+        {
+          "name": "private.invoice_contract_move_invoice_after_seal_v1",
+          "arguments": "p_operation_id uuid,p_billing_revision bigint"
+        },
+        {
+          "name": "private.invoice_contract_move_billing_read_v1",
+          "arguments": "p_operation_id uuid,p_actor_user_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/040_prepare.sqlinc",
+      "sha256": "956ddc1dec521eb4f721987f35ac52035e47e8312a973795c2185568433f7457",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_prepare_v1",
+          "arguments": "p_move_operation_id uuid,p_expected_billing_revision bigint,p_actor_user_id uuid,p_now_utc timestamptz default now()"
+        }
+      ]
+    },
+    {
+      "file": "forward/045_preparation_native.sqlinc",
+      "sha256": "551bc083c9862e2e9b7a0b57ba14ad86bbaf91ba40a7801516c8d2c99e4b1a57",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_obligation_assert_v1",
+          "arguments": "p_operation_id uuid,p_billing_revision bigint"
+        },
+        {
+          "name": "private.invoice_contract_move_prepare_advance_v1",
+          "arguments": "p_claims jsonb,p_now_utc timestamptz"
+        },
+        {
+          "name": "private.invoice_contract_move_line_reservation_assert_v1",
+          "arguments": "p_new jsonb"
+        }
+      ]
+    },
+    {
+      "file": "forward/050_credit_owner.sqlinc",
+      "sha256": "9600e697a2580bc89165087623129da9f126322b1d385a239ded5a5d049edce6",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_draft_only_v1",
+          "arguments": "p_chunk_id uuid"
+        },
+        {
+          "name": "private.invoice_credit_contract_move_context_v1",
+          "arguments": "p_chunk_id uuid,p_lock boolean"
+        },
+        {
+          "name": "private.invoice_contract_move_credit_advance_v1",
+          "arguments": "p_claim jsonb,p_now_utc timestamptz"
+        }
+      ]
+    },
+    {
+      "file": "forward/055_credit_scope_projection.sqlinc",
+      "sha256": "d220d1a9d783aadecc7561f90428c510fb63ad2d52fbdea58c50987a7d80687b",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_credit_contract_move_scope_context_v1",
+          "arguments": "p_scope_id uuid,p_lock_rows boolean"
+        }
+      ]
+    },
+    {
+      "file": "forward/060_scoped_native.sqlinc",
+      "sha256": "ca9cc70f684a1f22eb61006c4ed9c83d09b013d3bb5ca1337c6f4b3a4f4257f5",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_credit_scoped_advance_v1",
+          "arguments": "p_claim jsonb,p_now_utc timestamptz"
+        }
+      ]
+    },
+    {
+      "file": "forward/070_generation_native.sqlinc",
+      "sha256": "c8524ad717b322439f767c70ec46e038645878580157d1037c89f4f93400563f",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_generation_advance_core_v8",
+          "arguments": "p_claims jsonb, p_now_utc timestamptz"
+        }
+      ]
+    },
+    {
+      "file": "forward/071_generation_dispatch.sqlinc",
+      "sha256": "83c8a0a6143cd9e8feec788903869fb0e0ec2cad4aa97d2674b5654140e9a202",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_generation_advance_batch",
+          "arguments": "p_claims jsonb, p_now_utc timestamptz"
+        }
+      ]
+    },
+    {
+      "file": "forward/074_current_billing.sqlinc",
+      "sha256": "7688307a5e215615275c98d00cdd548577315993f819be9a4ac46aabd42bfcfd",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_current_billing_operations_v1",
+          "arguments": "p_invoice_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/075_issue_owner.sqlinc",
+      "sha256": "4fb7492bae833baeb767e0df5799b79ff60371533a25ec3d2304a8dddc5f4921",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_credit_ready_v1",
+          "arguments": "p_invoice_id uuid,p_lock boolean"
+        },
+        {
+          "name": "private.invoice_contract_move_issue_context_v1",
+          "arguments": "p_invoice_id uuid,p_actor_user_id uuid,p_lock boolean"
+        },
+        {
+          "name": "private.invoice_contract_move_issue_commands_v1",
+          "arguments": "p_commands jsonb,p_actor_user_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/076_credit_issue_admission.sqlinc",
+      "sha256": "9dc224c09c1ac3399fd922a067f8aa01bc8b600e9a39fff838c7362f153bb994",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private.invoice_contract_move_credit_invoice_valid_v1",
+          "arguments": "p_invoice_id uuid,p_lock boolean"
+        }
+      ]
+    },
+    {
+      "file": "forward/079_native_issue_admission.sqlinc",
+      "sha256": "2c533098962f92a962b5261e5837cb3232eb8500bee69d213fbe0445755fc9ff",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_issue_validate_batch",
+          "arguments": "p_requests jsonb, p_evaluation_date date"
+        }
+      ]
+    },
+    {
+      "file": "forward/080_issue_native.sqlinc",
+      "sha256": "8557905c65d47509291cecb5cf4395d8da8f6b9e09777e02d405dda4147b5cbc",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_issue_advance_core_v8",
+          "arguments": "p_claims jsonb, p_now_utc timestamptz"
+        }
+      ]
+    },
+    {
+      "file": "forward/081_issue_registration.sqlinc",
+      "sha256": "ebb82d0c41f252b999e1cda0b03e6a26822bad4dee417d9fab0c1ae785565209",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "private._invoice_operation_start_core_v8",
+          "arguments": "p_commands jsonb, p_actor_user_id uuid, p_now_utc timestamptz default now()"
+        }
+      ]
+    },
+    {
+      "file": "forward/082_issue_one.sqlinc",
+      "sha256": "f4b321f9e696fd117ef350d8982d899b6de984e5ea5320d463eeb8bc974486e9",
+      "kind": "FULL_FUNCTION_DEFINITIONS",
+      "targets": [
+        {
+          "name": "public.invoice_issue_one",
+          "arguments": "p_invoice_id uuid, p_actor_user_id uuid"
+        }
+      ]
+    },
+    {
+      "file": "forward/099_new_private_acl.sqlinc",
+      "sha256": "4c9c50cae2047b31182ae2c29c7927d76aea0aa17ac773f9526c89815207e8a9",
+      "kind": "NEW_PRIVATE_ACL",
+      "targets": []
+    }
+  ]
+}
