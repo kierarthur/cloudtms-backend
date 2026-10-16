@@ -1,0 +1,10 @@
+{
+  "version": "CONTACT_LOCK_GROUPING_SOURCE_TESTS_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "tests": 12,
+  "passed": 12,
+  "failed": 0,
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "rootEdits": 0
+}

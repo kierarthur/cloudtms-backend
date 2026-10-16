@@ -1,0 +1,152 @@
+{
+  "version": "CONTACT_MAPPED_LOCK_AND_GROUPING_SUCCESSOR_SOURCE_V1",
+  "sourceAssemblyCommit": "bf7a321429969f2c43345ce05ad2679ce3dbe83c",
+  "actualMappingSha256": "e14c7cc7546146ca6bea2c3cc0ad4d516a542bdb2a03e0db7da170eef4e864bb",
+  "files": [
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "beforeSha256": "f721b4ef62f7066b9224843d6c46cd88531b66ef7d7fb503723c661757e0ab59",
+      "afterSha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17",
+      "edits": [
+        {
+          "from": "begin;\n\n",
+          "to": "begin;\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_manager_recipient_generations in access exclusive mode nowait;\nlock table public.weekly_message_dispatch_commands in access exclusive mode nowait;\n\n",
+          "count": 1
+        }
+      ],
+      "fullFileReverseEquality": true,
+      "lockSet": [
+        {
+          "relation": "public.weekly_manager_recipient_generations",
+          "mode": "ACCESS EXCLUSIVE",
+          "nowait": true
+        },
+        {
+          "relation": "public.weekly_message_dispatch_commands",
+          "mode": "ACCESS EXCLUSIVE",
+          "nowait": true
+        }
+      ],
+      "placement": "AFTER_EXISTING_BEGIN_BEFORE_ALL_ORIGINAL_CHECKS"
+    },
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "beforeSha256": "e756703a139a9e2087d124fb09fba6b08d903481e6d76fd029a8bdf743b50fd5",
+      "afterSha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+      "edits": [
+        {
+          "from": "begin;\n\n",
+          "to": "begin;\n\n-- Hold the exact prerequisite objects before every original assertion.\n-- Existing native owners acquire these relations in differing paths; NOWAIT\n-- refuses an active incompatible owner before checks instead of waiting with\n-- a partial witness set. All locks remain in this existing atomic unit.\nlock table public.weekly_candidate_cohorts in share mode nowait;\nlock table public.weekly_timesheet_submission_requests in access exclusive mode nowait;\nlock table public.weekly_candidate_outreach_generations in share mode nowait;\nlock table public.weekly_timesheet_submission_request_memberships in share mode nowait;\n\n",
+          "count": 1
+        }
+      ],
+      "fullFileReverseEquality": true,
+      "lockSet": [
+        {
+          "relation": "public.weekly_candidate_cohorts",
+          "mode": "SHARE",
+          "nowait": true
+        },
+        {
+          "relation": "public.weekly_timesheet_submission_requests",
+          "mode": "ACCESS EXCLUSIVE",
+          "nowait": true
+        },
+        {
+          "relation": "public.weekly_candidate_outreach_generations",
+          "mode": "SHARE",
+          "nowait": true
+        },
+        {
+          "relation": "public.weekly_timesheet_submission_request_memberships",
+          "mode": "SHARE",
+          "nowait": true
+        }
+      ],
+      "placement": "AFTER_EXISTING_BEGIN_BEFORE_ALL_ORIGINAL_CHECKS"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "beforeSha256": "9d69e2f9fcaf43754855b58741682e7ec8e396d03a7a15f1c8671c55fcaf2289",
+      "afterSha256": "3de091d35163e0b7a1fb7b98d4b4685e70792d0a257a1315a04d4aa268b0b301",
+      "edits": [
+        {
+          "from": "facts->'pairs'||p_extra_pairs",
+          "to": "(facts->'pairs')||p_extra_pairs",
+          "count": 1
+        }
+      ],
+      "fullFileReverseEquality": true,
+      "groupingOnly": true,
+      "function": {
+        "signature": "private.weekly_contact_source_manager_selection_lock_v1(uuid[],jsonb)",
+        "beforeSha256": "c2f43e8805143df2dc21bb54307f176569a46969f2cadf22fa9c49377a8a1ed4",
+        "afterSha256": "d28372e7e4550cce1fb1b5fdcd6e3efa0cc0645d36ae43cc2b1fb4be7f50d565",
+        "completeFunctionReverseEquality": true
+      }
+    }
+  ],
+  "ownerEvidence": [
+    {
+      "label": "PRE_CONTACT_START",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sourceSha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "signature": "private.weekly_source_submission_request_start_v1(jsonb,boolean)",
+      "completeStatementSha256": "186ec8f5eabbefcd11fb0db2051f1b99abf3a6a9698a337776f67d36b51dd896",
+      "preserved": "inputs/owners/PRE_CONTACT_START.sql"
+    },
+    {
+      "label": "PRE_CONTACT_COMPLETE",
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sourceSha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "signature": "public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
+      "completeStatementSha256": "1af77213fc5b04c89df295a4712740569393674133ff42cba4b6c0cad23bb508",
+      "preserved": "inputs/owners/PRE_CONTACT_COMPLETE.sql"
+    },
+    {
+      "label": "START",
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/33_native_submission_pause.sqlinc",
+      "sourceSha256": "ff8d76ddada432abaa5537a36b3e260e395e76fb437e8f9ea2990c84334677a2",
+      "signature": "private.weekly_source_submission_request_start_v1(jsonb,boolean)",
+      "completeStatementSha256": "68f9bb40b4dc00b29f5ca2194264cf83b6b9a88cfeec8939fd51dc267135be7b",
+      "preserved": "inputs/owners/START.sql"
+    },
+    {
+      "label": "COMPLETE",
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "sourceSha256": "71e27752fc91e9177992fdad51c131a7d71626da43d5067ab8b0de30c7d7db47",
+      "signature": "public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
+      "completeStatementSha256": "1be32b056ca5e7c76de4926598872fea9e1c3a750272eca2f2d2cbea36399b25",
+      "preserved": "inputs/owners/COMPLETE.sql"
+    },
+    {
+      "label": "MANAGER_GENERATION",
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "sourceSha256": "057c359c98c9c2df733237b2bf1a93704df6751937919c07436e0966e478d5b4",
+      "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+      "completeStatementSha256": "952a7feb8f999cfd52de87aa056f89dd156ff47aa06c3a842723e763d5b34270",
+      "preserved": "inputs/owners/MANAGER_GENERATION.sql"
+    },
+    {
+      "label": "MANAGER_MANUAL_GENERATION",
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/08_manual_native_enqueue.sqlinc",
+      "sourceSha256": "fd5e001fed0d5967708fb5e69a3e7aede7ce30ed454a6b2d1069408fce621b16",
+      "signature": "private.weekly_contact_manual_manager_generation_v1(jsonb,uuid,timestamp with time zone)",
+      "completeStatementSha256": "7610f1f8aea2710549ecb1a03b5c34f2987cbf13ae95ea442c3d209ad912080f",
+      "preserved": "inputs/owners/MANAGER_MANUAL_GENERATION.sql"
+    },
+    {
+      "label": "RENDER",
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/22_native_render_stage.sqlinc",
+      "sourceSha256": "70ea1582a5a882dc7df492a856959e426bc0d2222cfa3321fbe64c5017a0bea4",
+      "signature": "public.weekly_source_message_render_stage_atomic_v1(jsonb)",
+      "completeStatementSha256": "770279ef007d387f7c4507a9fb204ced97762fd8ee801d4556280caf12974731",
+      "preserved": "inputs/owners/RENDER.sql"
+    }
+  ],
+  "sqlScope": "Two upfront same-transaction LOCK prefixes and one explicit-parenthesis occurrence only. Every original assertion, complete function/effect/ACL and transaction boundary otherwise unchanged.",
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "bankEdits": 0
+}

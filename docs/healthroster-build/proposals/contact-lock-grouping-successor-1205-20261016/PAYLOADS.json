@@ -1,0 +1,170 @@
+{
+  "version": "CONTACT_LOCK_GROUPING_SOURCE_MOUNT_V1",
+  "files": [
+    {
+      "file": "build-proposal.mjs",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/build-proposal.mjs",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "5b39f2298d6fff99d2a08585d0ab8ed377d81058ebce73d233cca1b60336a934"
+    },
+    {
+      "file": "check-grammar.py",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/check-grammar.py",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "c5c71342aa1e451dbb5b77002da6836dba89afaf1018b0b821246e4033c79c75"
+    },
+    {
+      "file": "forward/supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "target": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "kind": "FORWARD_EXACT_SOURCE",
+      "sha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17"
+    },
+    {
+      "file": "forward/supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "target": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "kind": "FORWARD_EXACT_SOURCE",
+      "sha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f"
+    },
+    {
+      "file": "forward/supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "target": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "kind": "FORWARD_EXACT_SOURCE",
+      "sha256": "3de091d35163e0b7a1fb7b98d4b4685e70792d0a257a1315a04d4aa268b0b301"
+    },
+    {
+      "file": "GRAMMAR_RESULT.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/GRAMMAR_RESULT.json",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "1a3234fb16706e63619753d7009c5ed9581232edf998eb946c48b260f5ab830e"
+    },
+    {
+      "file": "inputs/ACTUAL_PATH_MAP.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/ACTUAL_PATH_MAP.json",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "e14c7cc7546146ca6bea2c3cc0ad4d516a542bdb2a03e0db7da170eef4e864bb"
+    },
+    {
+      "file": "inputs/before/supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/before/supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "f721b4ef62f7066b9224843d6c46cd88531b66ef7d7fb503723c661757e0ab59"
+    },
+    {
+      "file": "inputs/before/supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/before/supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "e756703a139a9e2087d124fb09fba6b08d903481e6d76fd029a8bdf743b50fd5"
+    },
+    {
+      "file": "inputs/before/supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/before/supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "9d69e2f9fcaf43754855b58741682e7ec8e396d03a7a15f1c8671c55fcaf2289"
+    },
+    {
+      "file": "inputs/GROUPING_FUNCTION_AFTER.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/GROUPING_FUNCTION_AFTER.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "d28372e7e4550cce1fb1b5fdcd6e3efa0cc0645d36ae43cc2b1fb4be7f50d565"
+    },
+    {
+      "file": "inputs/GROUPING_FUNCTION_BEFORE.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/GROUPING_FUNCTION_BEFORE.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "c2f43e8805143df2dc21bb54307f176569a46969f2cadf22fa9c49377a8a1ed4"
+    },
+    {
+      "file": "inputs/owners/COMPLETE.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/owners/COMPLETE.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "1be32b056ca5e7c76de4926598872fea9e1c3a750272eca2f2d2cbea36399b25"
+    },
+    {
+      "file": "inputs/owners/MANAGER_GENERATION.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/owners/MANAGER_GENERATION.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "952a7feb8f999cfd52de87aa056f89dd156ff47aa06c3a842723e763d5b34270"
+    },
+    {
+      "file": "inputs/owners/MANAGER_MANUAL_GENERATION.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/owners/MANAGER_MANUAL_GENERATION.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "7610f1f8aea2710549ecb1a03b5c34f2987cbf13ae95ea442c3d209ad912080f"
+    },
+    {
+      "file": "inputs/owners/PRE_CONTACT_COMPLETE.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/owners/PRE_CONTACT_COMPLETE.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "1af77213fc5b04c89df295a4712740569393674133ff42cba4b6c0cad23bb508"
+    },
+    {
+      "file": "inputs/owners/PRE_CONTACT_START.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/owners/PRE_CONTACT_START.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "186ec8f5eabbefcd11fb0db2051f1b99abf3a6a9698a337776f67d36b51dd896"
+    },
+    {
+      "file": "inputs/owners/RENDER.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/owners/RENDER.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "770279ef007d387f7c4507a9fb204ced97762fd8ee801d4556280caf12974731"
+    },
+    {
+      "file": "inputs/owners/START.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/inputs/owners/START.sql",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "68f9bb40b4dc00b29f5ca2194264cf83b6b9a88cfeec8939fd51dc267135be7b"
+    },
+    {
+      "file": "LOCK_REVIEW.md",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/LOCK_REVIEW.md",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "7801fff0ca95e96e00aca0ca7228ba2a4d0d8da1169496fa46930ab0e72a03ee"
+    },
+    {
+      "file": "MOUNT.md",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/MOUNT.md",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "93783298fe62f46118d2cbcf0c36a08b2398a112bf41e0f8f969a04bacb774d5"
+    },
+    {
+      "file": "PREBODY_GRAPH_REVIEW.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/PREBODY_GRAPH_REVIEW.json",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "4340e4e125532086d9af5623a1a82675d2585478396ef80577d0c265bec5a0e6"
+    },
+    {
+      "file": "PROPOSAL.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/PROPOSAL.json",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "06da6de8e47842bdf3b52c855ebc11526431fc07812a22d5351c7a142d465756"
+    },
+    {
+      "file": "seal-proposal.mjs",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/seal-proposal.mjs",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "9e3e0d7dc11bed1692e0965bbd84cab956fd7646485004d9dd795e750a9e0d42"
+    },
+    {
+      "file": "test-proposal.mjs",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/test-proposal.mjs",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "7da6f969161b380adc17ca1f191ef91246c9df870f0e3b546f3f531837127018"
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/TEST_RESULTS.json",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "5c5dff5605a83edfffa44435c59cece6f054087d2908a49c1e28e405ce2a0303"
+    },
+    {
+      "file": "verify-prebody-graph.mjs",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_LOCK_GROUPING_SOURCE_20261016/verify-prebody-graph.mjs",
+      "kind": "PRESERVATION_ONLY",
+      "sha256": "f8d56b1ecda701d952d27e20fd3f912528147d035d9edf6c377ca606268a10dd"
+    }
+  ],
+  "native": "NOT_RUN",
+  "rootEdits": 0,
+  "databaseCalls": 0
+}
