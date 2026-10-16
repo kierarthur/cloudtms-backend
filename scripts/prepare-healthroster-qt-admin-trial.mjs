@@ -9,13 +9,16 @@ import { exactAtomicBody, scanManagedSql } from './cloudtms-managed-release-sql.
 // This prepares source only. The account-appropriate native MCP owns execution
 // and rollback; the separate existing shared-turn helper owns the lock session.
 const root = process.cwd();
+const roundArgs = process.argv.slice(2).filter(value => value.startsWith('--round='));
+assert(roundArgs.length <= 1 && roundArgs.every(value => /^--round=[1-3]$/.test(value)), 'invalid trial round');
+const round = Number(roundArgs[0]?.slice('--round='.length) || '1');
 const dispatch = process.argv.includes('--dispatch');
 const contact = dispatch || process.argv.includes('--contact');
 const calendar = contact || process.argv.includes('--calendar');
-assert(process.argv.slice(2).every(value => ['--calendar','--contact','--dispatch'].includes(value)), 'unknown trial option');
+assert(process.argv.slice(2).every(value => ['--calendar','--contact','--dispatch'].includes(value) || /^--round=[1-3]$/.test(value)), 'unknown trial option');
 const output = path.resolve(root, dispatch ? '.codex-tmp/push-dispatch-consume-native-20261016'
   : contact ? '.codex-tmp/contact-pause-native-20261016'
-  : calendar ? '.codex-tmp/qt-calendar-native-20261016' : '.codex-tmp/qt-admin-native-20261016');
+  : calendar ? '.codex-tmp/qt-calendar-native-20261016' : '.codex-tmp/qt-admin-native-20261016') + (round > 1 ? `-r${round}` : '');
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const sources = [
   'supabase/migrations/15102026_0800_candidate_push_timing_authority.sql',
@@ -27,6 +30,7 @@ if (calendar) sources.push('supabase/repeatable/15102026_0801_candidate_push_cal
 if (contact) sources.push('supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql',
   'supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql','tests/weekly-source/contact-pause-native.sql');
 if (dispatch) sources.push('supabase/migrations/16102026_0135_weekly_contact_native_attempt_permit_unique.sql',
+  'supabase/migrations/16102026_0142_weekly_contact_reuse_native_attempt_uniqueness.sql',
   'supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql',
   'supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql',
   'tests/weekly-source/push-dispatch-consume-native.sql');
@@ -96,7 +100,7 @@ try {
 }
 const sql = 'set local jit=off;\nset local pg_show_plans.is_enabled=off;\n' + absenceGuard + fragments.join('\n');
 const manifest = {
-  source_commit: sourceCommit, sources: pins, sql_bytes: Buffer.byteLength(sql), sql_sha256: sha(sql),
+  source_commit: sourceCommit, round, sources: pins, sql_bytes: Buffer.byteLength(sql), sql_sha256: sha(sql),
   statements: scanManagedSql(sql).statements.length, fingerprint_sha256: sha(frame),
   account: 'kier@arthur-rai.co.uk', native_server: 'cloudtms-miget-operations-kier-codex', database: 'agency_test',
   scope: dispatch

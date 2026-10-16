@@ -107,7 +107,7 @@ begin
   raise exception 'DUPLICATE_NATIVE_ATTEMPT_PERMIT_ALLOWED';
  exception when unique_violation then
   get stacked diagnostics v_constraint=CONSTRAINT_NAME;
-  if v_constraint<>'weekly_contact_submission_permits_native_attempt_uq' then raise;end if;
+  if v_constraint<>'weekly_contact_submission_permits_provider_attempt_id_key' then raise;end if;
  end;
  begin
   perform private.weekly_contact_source_result_v1((v_base||'000000000311')::uuid,'ACCEPTED',null,'{}','{}');
