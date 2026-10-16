@@ -476,6 +476,581 @@
         "Trigger enablement/order, all earlier BEFORE owners that could mutate protected fields, READ COMMITTED versus older snapshot contention and complete origin/signature/clock/native family callees remain required independent qualification. No full graph or TEST execution approval inferred."
       ],
       "executionApproval": false
+    },
+    {
+      "status": "TWENTY_ONE_COMPLETE_SCALAR_AND_ACTOR_GATED_READ_BODIES_REVIEWED_NOT_FULL_REHEARSAL_APPROVAL",
+      "verifierIndices": [
+        161,
+        162,
+        166,
+        167,
+        168,
+        169
+      ],
+      "functions": [
+        {
+          "key": "private.weekly_source_authority_subset_v1(jsonb)@1a4d30f88c8a5253cc027e19b23ddfdd0efacf8352fc66c0ff6f4deb9a810548",
+          "signature": "private.weekly_source_authority_subset_v1(jsonb)",
+          "root": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+          "statementSha256": "1a4d30f88c8a5253cc027e19b23ddfdd0efacf8352fc66c0ff6f4deb9a810548"
+        },
+        {
+          "key": "private.weekly_source_final_state_fingerprint_v1(jsonb)@63cf999c5994d0eb2bc8c099ed8a359994ff7ec4d9421ecb1027113554a133da",
+          "signature": "private.weekly_source_final_state_fingerprint_v1(jsonb)",
+          "root": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+          "statementSha256": "63cf999c5994d0eb2bc8c099ed8a359994ff7ec4d9421ecb1027113554a133da"
+        },
+        {
+          "key": "private.weekly_source_invoice_economics_fingerprint_v1(jsonb,text,numeric)@d1f4b1a2f8a25cae2cfdd3bebd3f1a72125804071ddcef65f110ec586fcb7c3f",
+          "signature": "private.weekly_source_invoice_economics_fingerprint_v1(jsonb,text,numeric)",
+          "root": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+          "statementSha256": "d1f4b1a2f8a25cae2cfdd3bebd3f1a72125804071ddcef65f110ec586fcb7c3f"
+        },
+        {
+          "key": "private.weekly_source_final_value_vector_v1(jsonb)@b0010f90a8d0da2eeb12e720eb7141522d46ee12105e20f6a1b43488109125c3",
+          "signature": "private.weekly_source_final_value_vector_v1(jsonb)",
+          "root": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+          "statementSha256": "b0010f90a8d0da2eeb12e720eb7141522d46ee12105e20f6a1b43488109125c3"
+        },
+        {
+          "key": "private.weekly_source_sha256_jsonb_v1(text,jsonb)@980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3",
+          "signature": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+          "root": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+          "statementSha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+        },
+        {
+          "key": "private.weekly_source_sha256_text_v1(text,text)@36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb",
+          "signature": "private.weekly_source_sha256_text_v1(text,text)",
+          "root": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+          "statementSha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+        },
+        {
+          "key": "private.weekly_source_final_upload_facts_v1(text,date,timestamp with time zone,timestamp with time zone,text,date,date,jsonb,date)@eb685841780f239c595a65ca928f878a848578564cf7c16d646ba3fa90fd9270",
+          "signature": "private.weekly_source_final_upload_facts_v1(text,date,timestamp with time zone,timestamp with time zone,text,date,date,jsonb,date)",
+          "root": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+          "statementSha256": "eb685841780f239c595a65ca928f878a848578564cf7c16d646ba3fa90fd9270"
+        },
+        {
+          "key": "private.weekly_source_self_bill_report_manifest_v1(jsonb)@4b398b05e2cd39ebc8d607a411d084cd382b8bd04d5ff1e77a4ebc736961c69a",
+          "signature": "private.weekly_source_self_bill_report_manifest_v1(jsonb)",
+          "root": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+          "statementSha256": "4b398b05e2cd39ebc8d607a411d084cd382b8bd04d5ff1e77a4ebc736961c69a"
+        },
+        {
+          "key": "private.weekly_source_self_bill_report_row_dto_v1(jsonb)@5ca39fcbac2d6615198a0efa720b8489554a2bcdef4b926073a159a455ecd6f4",
+          "signature": "private.weekly_source_self_bill_report_row_dto_v1(jsonb)",
+          "root": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+          "statementSha256": "5ca39fcbac2d6615198a0efa720b8489554a2bcdef4b926073a159a455ecd6f4"
+        },
+        {
+          "key": "private.weekly_source_self_bill_report_row_hash_v1(jsonb)@c60e198733d50e2967905359142608a1b38121f88a5cfcae21f2487290f2e7ae",
+          "signature": "private.weekly_source_self_bill_report_row_hash_v1(jsonb)",
+          "root": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+          "statementSha256": "c60e198733d50e2967905359142608a1b38121f88a5cfcae21f2487290f2e7ae"
+        },
+        {
+          "key": "private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)@a8a2553ff40a4093ad15e92c5341978cc2538398331986d791f98a2b51f86cdb",
+          "signature": "private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)",
+          "root": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+          "statementSha256": "a8a2553ff40a4093ad15e92c5341978cc2538398331986d791f98a2b51f86cdb"
+        },
+        {
+          "key": "private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)@77d4387e5eafd1595794c4c91234f0f3a75fef4a76f25b2dc0aceb543f11d55b",
+          "signature": "private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)",
+          "root": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+          "statementSha256": "77d4387e5eafd1595794c4c91234f0f3a75fef4a76f25b2dc0aceb543f11d55b"
+        },
+        {
+          "key": "private.timesheet_correction_native_original_reversal_v1(jsonb,uuid)@742707242e3461c6bec8907189be9e8962213247180a59bb3a2d0ebc1d354fdb",
+          "signature": "private.timesheet_correction_native_original_reversal_v1(jsonb,uuid)",
+          "root": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+          "statementSha256": "742707242e3461c6bec8907189be9e8962213247180a59bb3a2d0ebc1d354fdb"
+        },
+        {
+          "key": "private.timesheet_correction_reversal_assert_v1(jsonb,jsonb)@3b78069ced74f885c8a25d4b62aacb8f278622cfbd5b95ae9cc57a5b12bbc273",
+          "signature": "private.timesheet_correction_reversal_assert_v1(jsonb,jsonb)",
+          "root": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+          "statementSha256": "3b78069ced74f885c8a25d4b62aacb8f278622cfbd5b95ae9cc57a5b12bbc273"
+        },
+        {
+          "key": "public.timesheet_correction_request_authority_v1(uuid,uuid)@2863e9458ba186c496fb39bdacd02e0c99240175f6463c5080c86ac18bfd86e5",
+          "signature": "public.timesheet_correction_request_authority_v1(uuid,uuid)",
+          "root": "supabase/repeatable/13102026_1649_healthroster_correction_request_read_authority_v1.sql",
+          "statementSha256": "2863e9458ba186c496fb39bdacd02e0c99240175f6463c5080c86ac18bfd86e5"
+        },
+        {
+          "key": "private.timesheet_correction_component_negate_v1(jsonb,text[])@6236c659d6aa3e49c1788461629512df2f8ba6f8501e8a129451db8af591bd26",
+          "signature": "private.timesheet_correction_component_negate_v1(jsonb,text[])",
+          "root": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+          "statementSha256": "6236c659d6aa3e49c1788461629512df2f8ba6f8501e8a129451db8af591bd26"
+        },
+        {
+          "key": "private.timesheet_correction_reversal_component_assert_v1(jsonb,jsonb,text[])@628cdc33b1c43b26437225f25f702f9e374182aa3f504ad958242c37516bf890",
+          "signature": "private.timesheet_correction_reversal_component_assert_v1(jsonb,jsonb,text[])",
+          "root": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+          "statementSha256": "628cdc33b1c43b26437225f25f702f9e374182aa3f504ad958242c37516bf890"
+        },
+        {
+          "key": "private.timesheet_correction_actor_allowed_v1(uuid)@a785818d83a6e9c897e5b5ff74ff4edb9f00b3ee88c7c0e8b7d1408debfd7e3a",
+          "signature": "private.timesheet_correction_actor_allowed_v1(uuid)",
+          "root": "supabase/repeatable/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+          "statementSha256": "a785818d83a6e9c897e5b5ff74ff4edb9f00b3ee88c7c0e8b7d1408debfd7e3a"
+        },
+        {
+          "key": "private.weekly_source_pay_actor_allowed_v1(uuid)@51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab",
+          "signature": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+          "root": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+          "statementSha256": "51ead9e3566b636c4a0f3baba81c4363ed1eae686272796094c487438f72ebab"
+        },
+        {
+          "key": "private.weekly_source_invoice_only_vector_v1(text,bigint)@787c693a9e08b659890fc66c307ab2fd574df8c3d5f57d75058624162cb78f88",
+          "signature": "private.weekly_source_invoice_only_vector_v1(text,bigint)",
+          "root": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+          "statementSha256": "787c693a9e08b659890fc66c307ab2fd574df8c3d5f57d75058624162cb78f88"
+        },
+        {
+          "key": "private.weekly_source_invoice_vat_target_pence_v1(numeric,numeric,text,numeric)@bf1673b07f4563a5c0b87d28b13bd0b9349da77282c1a2d4ff669c6e4aec4f69",
+          "signature": "private.weekly_source_invoice_vat_target_pence_v1(numeric,numeric,text,numeric)",
+          "root": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql",
+          "statementSha256": "bf1673b07f4563a5c0b87d28b13bd0b9349da77282c1a2d4ff669c6e4aec4f69"
+        }
+      ],
+      "sourceFileHashes": [
+        {
+          "file": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+          "sha256": "dc2de45c684fd3856e9147cc7724c39e07390242e1c22d5a3bedf7ac76c9548b",
+          "bytes": 88774
+        },
+        {
+          "file": "supabase/repeatable/support/13102026_1210_weekly_source_final_value_helpers_v1.sql",
+          "sha256": "cb441a2dbf78ba3246c02c3f33af1cbb46b94c006d76748e5ae0cf65dac518c1",
+          "bytes": 15819
+        },
+        {
+          "file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+          "sha256": "116b4cab99eddf64663a84865f40bbad18fa486101a93e02d14d23a84cd62bf0",
+          "bytes": 9589
+        },
+        {
+          "file": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+          "sha256": "e8dc35a0bd6d510b4517a07a3e1665ceec97d181b37b8d6e5daf8b36a6d92291",
+          "bytes": 2928
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_profile.sqlinc",
+          "sha256": "d4fa441b951b57f64bc31065edb3e431d3a63c7c32998e13c253d0145f4bd8df",
+          "bytes": 2494
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_guards.sqlinc",
+          "sha256": "91fe0fc277c9e5e726e6c8c1ab365740d0eec26190d5da33f7288c9ed2a0d403",
+          "bytes": 4988
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_nhsp_scope.sqlinc",
+          "sha256": "a1c88c4919d12519c53f43550db98d4f942581ef01b714136a7a5d885e4c2b92",
+          "bytes": 5169
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+          "sha256": "783d138fbc36dd3ecf795a981743bab40a7e5333b44de098b6e17059bd28a3f4",
+          "bytes": 8835
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+          "sha256": "2174a13f828c927e7a7a739e10acbd0e1ce52ff35af8a40dbafd2f88684fc8b7",
+          "bytes": 9252
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_seal_assert.sqlinc",
+          "sha256": "8a9a11a8ef02fbbfa2abb4edd6ed478e58144e5aa32c970745475582287d2b08",
+          "bytes": 4541
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_timing.sqlinc",
+          "sha256": "59ad3bb4eaae371a72e5bd34bbca17dc26912ef1df8cdfed4e85c6a4123e28f2",
+          "bytes": 6774
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_prior_binding.sqlinc",
+          "sha256": "03e5426be6df9f735dfad97c7227105e28c2f07bd19a9cf1b0a9a7d0df43061d",
+          "bytes": 3008
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_pay_witness.sqlinc",
+          "sha256": "fe00fbecb9a79d3f13c089f9c755912cd74cccb3164e7f7adda6345b9d2a02bf",
+          "bytes": 2957
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+          "sha256": "8a2021a4c239899bcf87ca9c1b910e57ba5ea326d1ee1f65fd258dd8b926887e",
+          "bytes": 13073
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_context.sqlinc",
+          "sha256": "77f861c5aadaba61053f5e918ff36066f576f4d77e996fe9a09f45a30a0c714f",
+          "bytes": 26366
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_begin.sqlinc",
+          "sha256": "24de1b440445156b10cde31869580f741863dd60c5644d0386e92a6c6339eff6",
+          "bytes": 47690
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_rows.sqlinc",
+          "sha256": "4bc293b97b63652a5c4e0e39dd9f5e70b56f6fbd21ccb1c25eb1301543113f8d",
+          "bytes": 26698
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_seal.sqlinc",
+          "sha256": "bed08f7a5919fc535977077432d0d8590e6282b224c4624a5fea16ff36af97fa",
+          "bytes": 37943
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_begin.sqlinc",
+          "sha256": "018283e5c5a06594dbf39e91793c9b86c02f3b609e0c36db1906b94e2d5e640a",
+          "bytes": 19382
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+          "sha256": "7c5c499d7c13d8974842fa932101c6c0fad71b1f746ea20cd96980ebaf219f2d",
+          "bytes": 67348
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_publish.sqlinc",
+          "sha256": "2340ac5eaae3c2dfd0824a8fd2463afb351766e0698068d894f63f8ebd678175",
+          "bytes": 20146
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_import_prepare.sqlinc",
+          "sha256": "770f8f09834284ca53706f398bd055edc992f6f3769ecbe5ef21b37e3e0b95a3",
+          "bytes": 5000
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_duplicate_hold.sqlinc",
+          "sha256": "f881ad41948121ec2ef13b34d4f6bcaca4bcb71dc2002ba20be278d892914243",
+          "bytes": 2046
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+          "sha256": "4a0937f2608551801733ec3fbd2ec8c2ddf800344233b4f53340386bcd53ebe8",
+          "bytes": 20419
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+          "sha256": "be9f1e7dd5b3351510b027044dd00bca32b54c58a0c9e6fc6bf47f94dd79c40f",
+          "bytes": 136375
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_publication_guard.sqlinc",
+          "sha256": "b251ea88a9ea66bf1b7afaddc329653c545018bd632a6b9bfb709635a6daaf59",
+          "bytes": 5445
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_workspace_scopes.sqlinc",
+          "sha256": "9ec33620f3e240e87d4160dc86df894d2b6a1d15b6f66af354ac2daf1e2f15cf",
+          "bytes": 11717
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_completed_rows.sqlinc",
+          "sha256": "19e4a480cc63e1bb33166557504d31248c9dcca0931ab04d640c7c5730c51f61",
+          "bytes": 3947
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_workspace.sqlinc",
+          "sha256": "0f1b080ca21de14d911bb0233db6648fca3fb8c0af77a5236ae4a422c76ee7a3",
+          "bytes": 13636
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+          "sha256": "243b2d97b782c60498bdad0a35f09457c157f072e6a9dbd3dc85feaaf99e0c68",
+          "bytes": 119952
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_invoice_duty.sqlinc",
+          "sha256": "6dcaf79339c8ed3139b9d4bc0ca6641bf803fdb402af3b87e118c1b71ca3f36e",
+          "bytes": 35793
+        },
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_acl.sqlinc",
+          "sha256": "e6eeb974e509df1fdb782179f87a50b3cf99fa3263e6302d79394b46120d2a9a",
+          "bytes": 13504
+        },
+        {
+          "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+          "sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+          "bytes": 93531
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+          "sha256": "6199a03d706976e2166eddaaa230e87326568c6a0cce2de876067bd8afad17bc",
+          "bytes": 7368
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/01_canonical_input_assert.sqlinc",
+          "sha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39",
+          "bytes": 1528
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/02_complete_clock_scope.sqlinc",
+          "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa",
+          "bytes": 9527
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/03_native_input_witness.sqlinc",
+          "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638",
+          "bytes": 4526
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+          "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315",
+          "bytes": 12314
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+          "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1",
+          "bytes": 19166
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+          "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae",
+          "bytes": 5935
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/07_complete_current_approval.sqlinc",
+          "sha256": "c85a08afc113c5a871bfada9a469a70c4a639278f92d30cab21916d0d4da165a",
+          "bytes": 35853
+        },
+        {
+          "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+          "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe",
+          "bytes": 23160
+        },
+        {
+          "file": "supabase/repeatable/13102026_1649_healthroster_correction_request_read_authority_v1.sql",
+          "sha256": "2be4a45ff4a16c7171fd7dea91ffea5ec3860645a3fbf93a71d1756cce615c94",
+          "bytes": 1668
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+          "sha256": "2c780a1aea2beac859f95633a41ebccf5844de1852242ac43d2dd0409ec20bcf",
+          "bytes": 2067
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+          "sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2",
+          "bytes": 10590
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invariants.sqlinc",
+          "sha256": "af57e7e707915f43813e6f708b0680ba784eecfc41e3e59f219d998a676446ab",
+          "bytes": 4807
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+          "sha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675",
+          "bytes": 22931
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+          "sha256": "9f8751a398ed483e2599520748483e76a4bb1399db1c7917360b0a41caefc6e4",
+          "bytes": 12671
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+          "sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc",
+          "bytes": 8829
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_scope.sqlinc",
+          "sha256": "120ccfd2b77e85d2af9ee135e9fb40322c36c2d10b2dec0e2b31901c70db8a1e",
+          "bytes": 30742
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+          "sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1",
+          "bytes": 34402
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_finance_guard.sqlinc",
+          "sha256": "397a996c943d906105a35d6f1324c2e25f9f742d871fdde641a2235bdca445e1",
+          "bytes": 5553
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_manager.sqlinc",
+          "sha256": "b866dec3ce248f2bfe0c34c07645c3765b7e583622b49710e0b011621990461f",
+          "bytes": 3783
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_whole.sqlinc",
+          "sha256": "2cb0c835a251726bd5fb5d61d06096e57d1412cd30f8628661bf9167a8c1049f",
+          "bytes": 6955
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_chain.sqlinc",
+          "sha256": "d75971649d2bf35e2bb4aea8a645aa9eec1fd17977172681662ff81144e87a62",
+          "bytes": 13531
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_transition.sqlinc",
+          "sha256": "8a5547ea381fd11ef6fca4f3fe4deab050ef65eebb894a087e52d7f5e48e4a9e",
+          "bytes": 10882
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_preview.sqlinc",
+          "sha256": "bdc5fa7d1f82582d3252f5e8d275b5cf7374102916a19124f44f1cf32c0b5b9c",
+          "bytes": 7954
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_expand.sqlinc",
+          "sha256": "94343940c7c2ede695b620ca499f5cae8dd120f821ddbe8558052c06fed606e5",
+          "bytes": 5822
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_overlap.sqlinc",
+          "sha256": "0485a8cc5fc63da8587194b313793b46214682a2aeaefbb57572ca335812d0af",
+          "bytes": 9795
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+          "sha256": "ca4ac3b9f88f9b86906d52c47e3477cc388deec112164d2bf451d85901127ff3",
+          "bytes": 15408
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_delete_guard.sqlinc",
+          "sha256": "004b05626594e9c0d078020453cbe7a66ce69903f7d3e1183a959d3d43d5a744",
+          "bytes": 4119
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_retire.sqlinc",
+          "sha256": "536095f99b49901c1e8a4be4aeaa2945145435cda07ec405ed025573ad954423",
+          "bytes": 11072
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_weekly_delete_preview.sqlinc",
+          "sha256": "4df7467f617bb5c610b9612c19ff1ffa16a0d01eb05b9a9bc5c0446df081b50d",
+          "bytes": 11234
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_standard_delete_preview.sqlinc",
+          "sha256": "4334172f7cadf479e99816c34c162f96e6ecb6a719e13143ec80cb5531276043",
+          "bytes": 16332
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_pending_delete.sqlinc",
+          "sha256": "fe2af727bfcbed953c8087a62b30d113944cb24ff0fae08f440d67b586db2ac0",
+          "bytes": 14723
+        },
+        {
+          "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_acl.sqlinc",
+          "sha256": "c082c64392a26268a0a344f6c101a7fc62a2e537d1cbe6582fdb613c72ad8a93",
+          "bytes": 13022
+        },
+        {
+          "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+          "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+          "bytes": 311541
+        },
+        {
+          "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+          "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+          "bytes": 83915
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql",
+          "sha256": "d26063ed33e464716d6e42ae739541d589b9d9ebf44c0d02693b71ff98a2dc57",
+          "bytes": 1621
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+          "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f",
+          "bytes": 19716
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/03_receipt_and_window_owners.sqlinc",
+          "sha256": "dd9d5ceb119867a6a07a768b86cc6f06c07d4949d4376207b13cd9ebe91bb2e9",
+          "bytes": 38923
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
+          "sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d",
+          "bytes": 102228
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+          "sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d",
+          "bytes": 40040
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/06_complete_allocation_issue.sqlinc",
+          "sha256": "d23855453b7b6f8f2db9d96aa2b46d8f83e8af6dd18967e7599a9d7cdb57830a",
+          "bytes": 47513
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/07_complete_header_move.sqlinc",
+          "sha256": "7a1f6eddd8cdc60bd52b10309bfab5107700ddab39aad3164df89afed7aa716d",
+          "bytes": 30544
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+          "sha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff",
+          "bytes": 37250
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+          "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+          "bytes": 161809
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10_complete_source_readers_correction.sqlinc",
+          "sha256": "420139cda0467dfa61d9fb28240f6c8843317610313c8f736fe6278b00520f0c",
+          "bytes": 154453
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10b_complete_remaining_manifest_consumers.sqlinc",
+          "sha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8",
+          "bytes": 141761
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+          "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+          "bytes": 184614
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10d_retained_report_and_date_boundaries.sqlinc",
+          "sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5",
+          "bytes": 38619
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/11_complete_native_snapshot_assembler.sqlinc",
+          "sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+          "bytes": 113770
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc",
+          "sha256": "50ecf38150cfdfcb5d197fd43bd6684a7a8c7ad510841c53178621a2c6b54f55",
+          "bytes": 118329
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/13_private_acl.sqlinc",
+          "sha256": "c7de0f44918eca3a8985ba6e89650fedb7d15218e99da8907f87b88b0af7e6da",
+          "bytes": 3826
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/14_complete_legacy_render_manifest.sqlinc",
+          "sha256": "e95ba0bf3dcb72b3f9952422e839f20e9a2c40a03ec6c4735493f6017aa496b5",
+          "bytes": 24851
+        }
+      ],
+      "assessment": [
+        "Authority subset/final-value/invoice economics hashes select bounded JSON facts and use domain-separated SHA-256; final value normalization excludes volatile lock/archive metadata by its actual explicit projection.",
+        "Final upload timing/coverage, Magnit preset/bucket, invoice-only vector/VAT and report-line proof helpers perform only scalar/JSON/date validation. Native report DTO uses upload_rows composite type but never reads/writes a business row.",
+        "Report manifest sorts validated rows, rejects duplicate source keys/ordinals and overflow; report row evidence strictly checks source tokens/components and genuine date/time/overnight facts.",
+        "Original financial reversal helpers operate on supplied immutable JSON only: explicit historic identity/rate preservation, signed numeric negation, recursive shape/depth and original pence assertions; no live repricing or durable financial write occurs.",
+        "Request authority read checks active actor then existing pay-authoriser predicate using fixed parameterized SQL, then exact private request lookup. No caller-controlled dynamic identifier or network/payment/provider/email action in this slice.",
+        "Census unknown extensions.digest remains an explicit pgcrypto dependency requiring actual catalogue/native environment verification; this source review alone does not approve unrelated changed verifier graphs or full rehearsal."
+      ],
+      "executionApproval": false
     }
   ]
 }

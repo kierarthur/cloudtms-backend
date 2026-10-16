@@ -55,7 +55,18 @@
       "Native immutable accepted-body SHA and real WORKER_SUBMIT render/request receipt must independently certify submitted generation.",
       "Cache invalidation during AFTER workflow update must use strict current-placement/CW identity without invoking an outward accepted-body proof before that receipt exists.",
       "Actual current-B lifecycle/mutation/finalizer/reset/PREPARING and real device journeys remain pending; Banking current-B financial producer must be genuine."
-    ]
+    ],
+    "pureFactsSubset": {
+      "sourceCommit": "118a28ca5c702f629f977d2ac0dead4325c5fdb2",
+      "rootEvidenceCommit": "14b1c856",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/native-pure-facts-118a28ca/NATIVE_RECEIPT.json",
+      "status": "PASS_25_PURE_JSON_SCALAR_VECTORS",
+      "physicalDatabase": "cloudtms_test_clone",
+      "rolledBack": true,
+      "connectedFresh": true,
+      "originalDefinitionsOwnerAclExactlyRestored": true,
+      "fullLifecycleNative": "NOT_RUN"
+    }
   },
   "testEvidence": "Producer manifest records719 Candidate cases,80owner cases and type/network/contract/storage guards. Root verified exact source and tuple evidence here; no additional full app test run claimed.",
   "native": "NOT_RUN",
