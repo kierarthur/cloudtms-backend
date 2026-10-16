@@ -1,0 +1,27 @@
+{
+  "version": "HEALTHROSTER_KIER_ACCOUNT_ROUTE_PREFLIGHT_V1",
+  "account": "kier@arthur-rai.co.uk",
+  "confirmedBy": "Current owner message",
+  "operationsServer": "cloudtms-miget-operations-kier-codex",
+  "authenticated": true,
+  "rollbackOnlyTransactionTool": true,
+  "durableDatabaseWritesAllowed": false,
+  "secretsReturned": false,
+  "anonymousMcpHttpStatus": 401,
+  "agency": {
+    "service": "cloudtms-codex-poc-pg17",
+    "database": "cloudtms_test_clone",
+    "version": "17.11",
+    "health": "healthy",
+    "source": "docs/healthroster-build/v6-owner-delivery-20261016/native-pure-facts-118a28ca/NATIVE_RECEIPT.json"
+  },
+  "mytms": {
+    "service": "mytms-control-plane-pg17",
+    "database": "uofvkfi5",
+    "version": "17.11",
+    "health": "healthy",
+    "observedAt": "2026-10-16T04:55:37.578Z",
+    "source": "Fixed read-only Miget capacity observation; no business rows/caller SQL"
+  },
+  "pluginOrCredentialsChanged": false
+}

@@ -1,0 +1,128 @@
+{
+  "version": "HEALTHROSTER_F2_MAGNIT_FINITE_SCALAR_RECIPE_V1",
+  "sourceCommit": "0ae0713fc40c698f9b9f1c7aed79d305b5173651",
+  "sourceUnit": "Eight complete current pure helper definitions with their complete original owner/revokes, followed by both entire original F2 and Magnit verifier DO statements.",
+  "helperKeys": [
+    "private.weekly_source_sha256_text_v1(text,text)@36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb",
+    "private.weekly_source_sha256_jsonb_v1(text,jsonb)@980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3",
+    "private.weekly_source_final_value_vector_v1(jsonb)@b0010f90a8d0da2eeb12e720eb7141522d46ee12105e20f6a1b43488109125c3",
+    "private.weekly_source_authority_subset_v1(jsonb)@1a4d30f88c8a5253cc027e19b23ddfdd0efacf8352fc66c0ff6f4deb9a810548",
+    "private.weekly_source_final_state_fingerprint_v1(jsonb)@63cf999c5994d0eb2bc8c099ed8a359994ff7ec4d9421ecb1027113554a133da",
+    "private.weekly_source_invoice_economics_fingerprint_v1(jsonb,text,numeric)@d1f4b1a2f8a25cae2cfdd3bebd3f1a72125804071ddcef65f110ec586fcb7c3f",
+    "private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)@a8a2553ff40a4093ad15e92c5341978cc2538398331986d791f98a2b51f86cdb",
+    "private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)@77d4387e5eafd1595794c4c91234f0f3a75fef4a76f25b2dc0aceb543f11d55b"
+  ],
+  "helperDefinitions": [
+    {
+      "key": "private.weekly_source_sha256_text_v1(text,text)@36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb",
+      "definitionSha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb",
+      "aclStatementHashes": [
+        "c8e8a69f108eb89e30862ecb3d7b1ee77f92fd5992ebf951eaba63d53d089b4a",
+        "f60729fb8528c4d643e3192daa7c916d834acad166447bd8b44e79292d73b3e8"
+      ]
+    },
+    {
+      "key": "private.weekly_source_sha256_jsonb_v1(text,jsonb)@980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3",
+      "definitionSha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3",
+      "aclStatementHashes": [
+        "1e50b0375f940e96cb36b95370ff7fbd4b736240cf1d99f26457544ee1190bd8",
+        "8893b0a0628a22ea1508d8004617c88c807a228d0475f2cc731a1b7ca55014fb"
+      ]
+    },
+    {
+      "key": "private.weekly_source_final_value_vector_v1(jsonb)@b0010f90a8d0da2eeb12e720eb7141522d46ee12105e20f6a1b43488109125c3",
+      "definitionSha256": "b0010f90a8d0da2eeb12e720eb7141522d46ee12105e20f6a1b43488109125c3",
+      "aclStatementHashes": [
+        "07c01716faeee0184f263a192b970056ff8d7b0e6cf551e6f7991275aa354fe6",
+        "bd5bcd45c6e8425153d6983c4b71e048e0c0d8d92baa3295181e3895325419cf"
+      ]
+    },
+    {
+      "key": "private.weekly_source_authority_subset_v1(jsonb)@1a4d30f88c8a5253cc027e19b23ddfdd0efacf8352fc66c0ff6f4deb9a810548",
+      "definitionSha256": "1a4d30f88c8a5253cc027e19b23ddfdd0efacf8352fc66c0ff6f4deb9a810548",
+      "aclStatementHashes": [
+        "710f2ace0ce43669bede39a36979cb973ce85e890461ffcaf48678b0de2b1ee3",
+        "f4d295f352eda50b6bc249f4fe66ec471e8a3eb0821cf827354ab108536ee301"
+      ]
+    },
+    {
+      "key": "private.weekly_source_final_state_fingerprint_v1(jsonb)@63cf999c5994d0eb2bc8c099ed8a359994ff7ec4d9421ecb1027113554a133da",
+      "definitionSha256": "63cf999c5994d0eb2bc8c099ed8a359994ff7ec4d9421ecb1027113554a133da",
+      "aclStatementHashes": [
+        "e8178de008456fbabeeb086935355670f40fde9945f1c97e8eaff66c1023f8c6",
+        "5b77d05fd95870a2a5574800d88f7fae685229b1dbced45564db2000d2f1c88a"
+      ]
+    },
+    {
+      "key": "private.weekly_source_invoice_economics_fingerprint_v1(jsonb,text,numeric)@d1f4b1a2f8a25cae2cfdd3bebd3f1a72125804071ddcef65f110ec586fcb7c3f",
+      "definitionSha256": "d1f4b1a2f8a25cae2cfdd3bebd3f1a72125804071ddcef65f110ec586fcb7c3f",
+      "aclStatementHashes": [
+        "361717e8583162c4cb8e2b5e226f3ba191e2363970fb3f242977f4b395629c99",
+        "0a36773e67821037f6b99ca49877c5e7e5d84dc41b6129562196b89da2ed53d7"
+      ]
+    },
+    {
+      "key": "private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)@a8a2553ff40a4093ad15e92c5341978cc2538398331986d791f98a2b51f86cdb",
+      "definitionSha256": "a8a2553ff40a4093ad15e92c5341978cc2538398331986d791f98a2b51f86cdb",
+      "aclStatementHashes": [
+        "3d287510fa42b308b5023f79fa0508e4a7a1fbae41e243829e2bed3f60a9884f",
+        "3652897073fb673ce79f551c78b66ea1217787f869cf08879a9cab000f709f2c"
+      ]
+    },
+    {
+      "key": "private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)@77d4387e5eafd1595794c4c91234f0f3a75fef4a76f25b2dc0aceb543f11d55b",
+      "definitionSha256": "77d4387e5eafd1595794c4c91234f0f3a75fef4a76f25b2dc0aceb543f11d55b",
+      "aclStatementHashes": [
+        "7bdba8b7a4adbf2210992b715edbef05a96fed323a1d09f0d7fc1a054a9ca52c",
+        "3aa87fd1ed981382907ff7e2aed075372c8cf7e8d8be3201786e181d3e6f84ef"
+      ]
+    }
+  ],
+  "verifiers": [
+    {
+      "index": 161,
+      "file": "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+      "sha256": "3677aec9cf1c9ed279788361de8c8b1ab517ff9390295799747c5f5a8fe53325",
+      "doStatementSha256": "5d38362f1ab563739844dd2adb2177ac965a00b20e5bee389aacbfeaab69b87e"
+    },
+    {
+      "index": 167,
+      "file": "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+      "sha256": "9831b5fb431e8f7078d2b7aad3d898fc68b7b51b3fdac40449299e7aa9e2112b",
+      "doStatementSha256": "50adf68e223a2e4c56ae27ece71961051734cc911f4331b58bd5040d832d3cf9"
+    }
+  ],
+  "removedPackaging": "Only each exact source BEGIN, ROLLBACK and ON_ERROR_STOP; server owns rollback. No source DO/assertion removed or edited.",
+  "rawSqlSha256": "f85b330d144219a92472e17ee5dabb06bb207da2f04d37c9b51186d56d88eaf5",
+  "submittedSqlSha256": "7d638672dd7f8f1ebd816c358ec987999825a5b866655969d91b2f68d3fe0c1d",
+  "baselineSha256": "3c1ecf43b867b55ffbc6e97f0fedf2a2856f3746635f56f08e46cfd071a43198",
+  "sqlBytes": 18863,
+  "statementCount": 28,
+  "native": "NOT_RUN",
+  "businessFixtures": 0,
+  "externalEffects": 0,
+  "fullRehearsalApproval": false,
+  "sourceFiles": [
+    {
+      "file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "sha256": "116b4cab99eddf64663a84865f40bbad18fa486101a93e02d14d23a84cd62bf0",
+      "bytes": 9589
+    },
+    {
+      "file": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+      "sha256": "dc2de45c684fd3856e9147cc7724c39e07390242e1c22d5a3bedf7ac76c9548b",
+      "bytes": 88774
+    },
+    {
+      "file": "supabase/repeatable/support/13102026_1210_weekly_source_final_value_helpers_v1.sql",
+      "sha256": "cb441a2dbf78ba3246c02c3f33af1cbb46b94c006d76748e5ae0cf65dac518c1",
+      "bytes": 15819
+    },
+    {
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "bytes": 93531
+    }
+  ],
+  "ownerMapping": "Original mapExecutableSqlSource with task-scoped CLOUDTMS_LOGICAL_POSTGRES_OWNER=CURRENT_USER; only audited logical owner."
+}
