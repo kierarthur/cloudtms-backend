@@ -1,0 +1,50 @@
+{
+  "version": "CONTACT_INITIAL_FRESH_POOL_REUSE_HOLD_V1",
+  "caseId": "contact20-lock2",
+  "attempt": 2,
+  "sourceAdapterCommit": "feb5252f14f830e61d1339bfb171ed7219a39b9b",
+  "status": "HOLD_NOT_QUALIFIED",
+  "diagnosis": "FIRST_TOOL_CLIENT_FRESH_VERIFICATION_REUSED_ORIGINAL_PHYSICAL_B_PID",
+  "expectedError": {
+    "statement": 14,
+    "code": "55P03",
+    "accepted": false,
+    "rolledBack": true,
+    "toolClientFresh": true
+  },
+  "observed": {
+    "nativeB": 193437,
+    "verificationPhysicalPid": 193437,
+    "holder": 194233,
+    "holderGranted": true,
+    "precedingCount": 0,
+    "precedingGranted": true
+  },
+  "holder": {
+    "caseId": "contact20-lock2",
+    "backendPid": 194233,
+    "physicalDatabase": "cloudtms_test_clone",
+    "witnessLocksGone": true,
+    "status": "HOLD_ABORTED",
+    "turnReleasedAt": "2026-10-16T13:13:08.621Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true
+  },
+  "hold": {
+    "status": "HOLD",
+    "caseId": "contact20-lock2",
+    "code": "MCP_FRESH_HELD_HOLDER_REQUIRED",
+    "witnessCleanupProved": true,
+    "sharedTurnCompletion": "SEE_CANONICAL_OWNER_PROGRESS_LOG_NO_SYNTHETIC_CLOSE_PROOF",
+    "nativeResultRequiredBeforeAnyNextTrial": true,
+    "elapsedMilliseconds": 45124,
+    "completeMapsPersisted": false
+  },
+  "fullRestorationClaim": "NOT_QUALIFIED",
+  "secondAfterMetadata": "NOT_RUN",
+  "secondMcp": "NOT_RUN",
+  "mapsPersisted": false,
+  "externalMcpCallsCollected": true,
+  "nextAction": "SOURCE_REVIEW_OF_UNCHANGED_CANONICAL_FIXTURE_PROOF_ON_GENUINELY_DISTINCT_FIXED_READ_ONLY_C_AFTER; NO_BLIND_POOL_RETRY_OR_FRESHNESS_WAIVER",
+  "connectorChanges": 0
+}

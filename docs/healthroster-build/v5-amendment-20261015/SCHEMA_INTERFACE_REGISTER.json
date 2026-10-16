@@ -6965,9 +6965,10 @@
     "fullInstallRehearsal": "NOT_RUN",
     "finalPartB": "NOT_RUN",
     "heldAttempts": [
-      "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_SIX_LOCK_NATIVE_20261016/contact20-lock2-attempt1-HOLD.json"
+      "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_SIX_LOCK_NATIVE_20261016/contact20-lock2-attempt1-HOLD.json",
+      "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_SIX_LOCK_NATIVE_20261016/contact20-lock2-attempt2-HOLD.json"
     ],
-    "nextProofCorrection": "UNCHANGED_CANONICAL_FIXTURE_PROOF_IN_SECOND_TOOL_FRESH_READ_ONLY_VERIFICATION_SQL; NO_PID_WAIVER"
+    "nextProofCorrection": "REVIEW_EXACT_UNCHANGED_CANONICAL_FIXTURE_SELECT_ON_FIXED_DISTINCT_READ_ONLY_C_AFTER; KEEP_B_ONLY_KIER_MCP; NO_POOL_PID_GAMBLE"
   },
   "source_http_independent_peer_continuation_20261016": {
     "peerCommit": "aee7612ea50e2132fd0e7b5d196fb74c0783e701",
