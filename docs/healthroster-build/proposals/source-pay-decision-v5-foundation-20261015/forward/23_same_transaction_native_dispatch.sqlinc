@@ -1,0 +1,54 @@
+-- Actual nested dispatcher: no network, alternate price calculation or native
+-- standalone financial command. Unexpected errors roll back the outer ACCEPT.
+create or replace function private.weekly_source_pay_decision_unprotect_apply_v1(
+ p_preparation_id uuid,p_decision_id uuid,p_member_key text,p_request_id uuid
+) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public as $function$
+declare prep private.weekly_source_pay_decision_unprotect_preparations%rowtype;
+ app private.weekly_source_pay_decision_acceptance_applications%rowtype;
+ adoption private.weekly_source_pay_decision_native_adoptions%rowtype;
+ application_id uuid;result jsonb;
+begin
+ select p.* into strict prep from private.weekly_source_pay_decision_unprotect_preparations p where p.id=p_preparation_id;
+ select a.* into strict app from private.weekly_source_pay_decision_acceptance_applications a where a.request_id=p_request_id;
+ if prep.decision_id is distinct from p_decision_id or prep.member_key is distinct from p_member_key
+  or prep.accept_or_resume_request_id is distinct from p_request_id or app.decision_id is distinct from prep.decision_id
+  or app.review_id is distinct from prep.review_id or app.actor_user_id is distinct from prep.actor_user_id
+  or not private.weekly_source_pay_actor_allowed_v1(prep.actor_user_id) then
+  raise exception 'SOURCE_UNPROTECT_APPLICATION_MISMATCH' using errcode='23514';end if;
+ if prep.state='CONSUMED' then
+  select a.* into strict adoption from private.weekly_source_pay_decision_native_adoptions a
+   where a.application_id=app.id and a.member_key=prep.member_key and a.preparation_id=prep.id;
+  if app.state<>'COMMITTED' and (app.backend_pid<>pg_backend_pid() or app.transaction_id<>pg_current_xact_id() or app.state<>'PREVALIDATED')
+   or adoption.origin<>'APPLIED_IN_THIS_TRANSACTION' or adoption.native_result_json is distinct from prep.native_receipt_json
+   or adoption.native_result_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_COMPOSED_RESULT_V1',adoption.native_result_json) then
+   raise exception 'SOURCE_UNPROTECT_APPLICATION_MISMATCH' using errcode='23514';end if;
+  return adoption.native_result_json;
+ end if;
+ application_id:=private.weekly_source_pay_decision_unprotect_application_v1(prep.id);
+ if application_id is distinct from app.id then raise exception 'SOURCE_UNPROTECT_APPLICATION_MISMATCH' using errcode='23514';end if;
+ if prep.route='NEXT' then
+  result:=private.weekly_exceptional_pay_publish_next_impl_v1(prep.payload_json->'publish_request',prep.id);
+ elsif prep.route='SOURCE_LOCAL' then
+  -- This real private stage owner also invokes the real complete owner before
+  -- returning. A successful STAGED-only label cannot escape this transaction.
+  result:=private.weekly_exceptional_pay_stage_c1_request_impl_v1(prep.payload_json->'stage_request',prep.id);
+ else raise exception 'SOURCE_UNPROTECT_ROUTE_INVALID' using errcode='23514';end if;
+ select a.* into strict adoption from private.weekly_source_pay_decision_native_adoptions a
+  where a.application_id=app.id and a.member_key=prep.member_key and a.preparation_id=prep.id;
+ select p.* into strict prep from private.weekly_source_pay_decision_unprotect_preparations p where p.id=prep.id;
+ if prep.state<>'CONSUMED' or result is distinct from prep.native_receipt_json or result is distinct from adoption.native_result_json
+  or result->>'version' is distinct from 'SOURCE_NATIVE_COMPOSED_RESULT_V1' or result->>'application_id' is distinct from app.id::text
+  or result->>'decision_id' is distinct from app.decision_id::text or result->>'request_id' is distinct from app.request_id::text
+  or result->>'review_id' is distinct from app.review_id::text or result->>'member_key' is distinct from prep.member_key
+  or result->>'preparation_id' is distinct from prep.id::text or result->>'route' is distinct from prep.route
+  or result->>'origin' is distinct from 'APPLIED_IN_THIS_TRANSACTION' or result->>'control_status' is distinct from 'WITHDRAWN'
+  or result->'failure_code' is distinct from 'null'::jsonb
+  or adoption.native_result_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_COMPOSED_RESULT_V1',result) then
+  raise exception 'SOURCE_UNPROTECT_NATIVE_RESULT_INVALID' using errcode='23514';end if;
+ return result;
+exception when no_data_found or too_many_rows then
+ raise exception 'SOURCE_UNPROTECT_APPLICATION_MISMATCH' using errcode='23514';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_unprotect_apply_v1(uuid,uuid,text,uuid)
+ from public,anon,authenticated,service_role;

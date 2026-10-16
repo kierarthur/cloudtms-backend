@@ -1,0 +1,73 @@
+create or replace function public.weekly_source_pay_decision_unprotect_review_context_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,private,public
+set lock_timeout='2500ms' as $function$
+declare actor uuid;v_assembly_id uuid;v_decision_id uuid;v_member_key text;
+ assembly private.weekly_source_pay_decision_preview_assemblies%rowtype;
+ parent private.weekly_source_pay_decisions%rowtype;
+ cut private.bpay_next_source_pay_decision_cut%rowtype;
+ selected record;facts jsonb;observation jsonb;request jsonb;context_hash bytea;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),
+  nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','assembly_id','decision_id','member_key','actor_user_id'])
+  or not(p_request ?& array['version','assembly_id','decision_id','member_key','actor_user_id'])
+  or p_request->>'version' is distinct from 'SOURCE_UNPROTECT_REVIEW_CONTEXT_V1'
+  or jsonb_typeof(p_request->'member_key') is distinct from 'string' then
+  raise exception 'SOURCE_UNPROTECT_REVIEW_CONTEXT_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;v_assembly_id:=(p_request->>'assembly_id')::uuid;
+ v_decision_id:=(p_request->>'decision_id')::uuid;v_member_key:=p_request->>'member_key';
+ if actor is null or not private.weekly_source_pay_actor_allowed_v1(actor) then
+  raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';end if;
+ select a.* into strict assembly from private.weekly_source_pay_decision_preview_assemblies a
+  where a.id=v_assembly_id and a.decision_id=v_decision_id and a.actor_user_id=actor
+   and a.decision_kind='EXCLUDE_FUTURE_WORK_PAY' and a.state in('ASSEMBLING','READY');
+ select d.* into strict parent from private.weekly_source_pay_decisions d where d.id=assembly.decision_id;
+ if assembly.expires_at_utc<=transaction_timestamp() then
+  raise exception 'SOURCE_PAY_DECISION_PREVIEW_EXPIRED' using errcode='P0001';end if;
+ -- Complete native gates precede shared metadata locks; no Worker/network call
+ -- is made while this SQL transaction retains them.
+ perform private.bpay_next_source_pay_decision_cut_v1(parent.id,assembly.id,null,true);
+ select a.* into strict assembly from private.weekly_source_pay_decision_preview_assemblies a
+  where a.id=assembly.id and a.decision_id=parent.id and a.actor_user_id=actor
+   and a.state in('ASSEMBLING','READY') for share;
+ select c.* into strict cut from private.bpay_next_source_pay_decision_cut c
+  where c.preview_assembly_id=assembly.id and c.decision_id=parent.id and c.review_id is null
+   and c.id::text=assembly.draft_scope_json->>'cut_id' and c.cut_no::text=assembly.draft_scope_json->>'cut_no'
+   and encode(c.pay_cut_sha256,'hex')=assembly.draft_scope_json->>'pay_cut_hash';
+ -- Duplicate cut components collapse only when their genuine native owner
+ -- tuple is identical. Ambiguous family/event/approval is refused by STRICT.
+ select distinct f.id as family_id,a.source_cycle_id,a.work_event_id,a.evidence_timesheet_id,
+  a.protected_work_date,a.protected_start_at_local,a.protected_end_at_local,a.protected_break_minutes
+ into strict selected from private.bpay_next_source_pay_decision_cut_member m
+ join public.weekly_exceptional_pending_reconciliation_targets t on t.durable_work_event_id=m.source_work_event_id and t.state='ACTIVE'
+ join public.weekly_exceptional_payment_approvals a on a.id=t.approval_id and a.pay_target_family_id=t.family_id
+  and a.work_event_id=t.durable_work_event_id and a.withdrawn_at_utc is null
+ join public.weekly_exceptional_pay_target_families f on f.id=t.family_id and f.candidate_id=m.candidate_id
+  and f.contract_id=a.contract_id and f.ownership_state='TARGET_MANAGED'
+ where m.cut_id=cut.id and m.member_key=v_member_key and m.actual_client_id=parent.actual_client_id
+  and a.candidate_id=m.candidate_id and a.client_id=m.actual_client_id
+  and (m.family_root_id is null or m.family_root_id=f.root_timesheet_id or exists(
+    select 1 from private.timesheet_contract_family_aliases alias where alias.timesheet_id=f.root_timesheet_id and alias.family_root_id=m.family_root_id));
+ request:=jsonb_build_object('schema_version','WEEKLY_PROTECTED_ACTION_FACTS_V1','actor_user_id',actor,
+  'family_id',selected.family_id,'source_cycle_id',selected.source_cycle_id,'work_event_id',selected.work_event_id,
+  'evidence_timesheet_id',selected.evidence_timesheet_id,'protected_schedule',jsonb_build_object(
+   'work_date',selected.protected_work_date,'start_at_local',selected.protected_start_at_local,
+   'end_at_local',selected.protected_end_at_local,'break_minutes',selected.protected_break_minutes));
+ facts:=private.weekly_source_protected_action_facts_v1(request,'WITHDRAW');
+ if facts->'requires_zero_financial' is distinct from 'false'::jsonb
+  or jsonb_typeof(facts#>'{current_entitlement,current_financial}') is distinct from 'object' then
+  raise exception 'SOURCE_NATIVE_PREREQUISITE_NOT_PREPARED' using errcode='55000';end if;
+ observation:=private.weekly_source_unprotect_source_observation_v1(selected.family_id,selected.source_cycle_id,selected.work_event_id,facts);
+ context_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_NATIVE_CONTEXT_V1',facts);
+ return jsonb_build_object('version','SOURCE_UNPROTECT_REVIEW_CONTEXT_RESULT_V1','assembly_id',assembly.id,
+  'decision_id',parent.id,'member_key',v_member_key,'source_phase',observation->>'source_phase',
+  'source_observation_sha256',observation->>'source_observation_sha256','context_sha256',encode(context_hash,'hex'),'context',facts);
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'SOURCE_UNPROTECT_REVIEW_CONTEXT_INVALID' using errcode='22023';
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb) to service_role;
+notify pgrst,'reload schema';

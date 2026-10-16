@@ -1,0 +1,105 @@
+-- Read-only derivation of the final contract's exact release proof. NULL means
+-- the same genuine native result has not evolved; it never means no ownership.
+create or replace function private.weekly_source_pay_decision_local_release_proof_v1(p_preparation_id uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+declare prep private.weekly_source_pay_decision_unprotect_preparations%rowtype;
+ app private.weekly_source_pay_decision_acceptance_applications%rowtype;
+ adoption private.weekly_source_pay_decision_native_adoptions%rowtype;
+ local_row private.weekly_source_local_protected_decision_receipts%rowtype;
+ request public.weekly_exceptional_c1_publication_requests%rowtype;
+ run public.weekly_exceptional_orchestration_runs%rowtype;
+ generation public.weekly_exceptional_pay_generations%rowtype;
+ step public.weekly_exceptional_orchestration_steps%rowtype;
+ pending public.weekly_source_pending_entitlement_bundles%rowtype;
+ receipt private.weekly_source_entitlement_publication_receipts%rowtype;
+ control jsonb;original_row jsonb;current_hash bytea;
+begin
+ select p.* into strict prep from private.weekly_source_pay_decision_unprotect_preparations p where p.id=p_preparation_id;
+ select a.* into strict app from private.weekly_source_pay_decision_acceptance_applications a where a.request_id=prep.accept_or_resume_request_id;
+ select a.* into strict adoption from private.weekly_source_pay_decision_native_adoptions a
+  where a.application_id=app.id and a.member_key=prep.member_key and a.preparation_id=prep.id;
+ select l.* into strict local_row from private.weekly_source_local_protected_decision_receipts l where l.publication_request_id=adoption.local_publication_request_id;
+ select r.* into strict request from public.weekly_exceptional_c1_publication_requests r where r.id=local_row.publication_request_id;
+ select r.* into strict run from public.weekly_exceptional_orchestration_runs r where r.id=prep.orchestration_run_id;
+ select g.* into strict generation from public.weekly_exceptional_pay_generations g where g.id=local_row.generation_id and g.family_id=prep.family_id;
+ select s.* into strict step from public.weekly_exceptional_orchestration_steps s
+  where s.orchestration_run_id=run.id and s.step_kind='COMPLETE_LOCAL_PROTECTED_DECISION';
+ control:=adoption.native_result_json->'native_receipt';
+ if prep.state<>'CONSUMED' or prep.route<>'SOURCE_LOCAL' or adoption.origin<>'APPLIED_IN_THIS_TRANSACTION'
+  or adoption.route<>'SOURCE_LOCAL' or adoption.native_result_json is distinct from prep.native_receipt_json
+  or adoption.native_result_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_COMPOSED_RESULT_V1',adoption.native_result_json)
+  or app.decision_id is distinct from prep.decision_id or app.review_id is distinct from prep.review_id or app.actor_user_id is distinct from prep.actor_user_id
+  or app.state<>'COMMITTED' and (app.state not in('PREVALIDATED','STAGED') or app.backend_pid<>pg_backend_pid() or app.transaction_id<>pg_current_xact_id())
+  or local_row.family_id is distinct from prep.family_id or local_row.actor_user_id is distinct from prep.actor_user_id
+  or request.family_id is distinct from prep.family_id or request.orchestration_run_id is distinct from run.id
+  or request.generation_id is distinct from local_row.generation_id or request.request_sha256 is distinct from local_row.request_sha256
+  or request.state<>'RETIRED' or request.typed_result_json is distinct from local_row.result_json
+  or run.state<>'COMPLETE' or run.family_id is distinct from prep.family_id or run.requested_by_user_id is distinct from prep.actor_user_id
+  or run.request_kind<>'WITHDRAW' or run.request_fingerprint is distinct from prep.native_prepare_request_sha256
+  or step.idempotency_key is distinct from local_row.idempotency_key or step.idempotency_key is distinct from prep.child_idempotency_key||':local-complete'
+  or step.allowlisted_owner_name<>'CloudTMS.weekly_exceptional_pay_complete_local_v1' or step.allowlisted_owner_signature<>'jsonb'
+  or step.bounded_request_hash is distinct from local_row.request_sha256 or step.before_state_fingerprint is distinct from run.before_state_fingerprint
+  or step.completed_at_utc is null or not isfinite(step.completed_at_utc)
+  or step.owner_response_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_LOCAL_RESULT_V1',step.bounded_owner_response_json)
+  or step.owner_response_hash is distinct from private.weekly_exceptional_hex_sha256_v1(control->>'native_result_sha256')
+  or step.after_state_fingerprint is distinct from step.owner_response_hash then
+  raise exception 'SOURCE_NATIVE_LOCAL_RECEIPT_PROOF_INVALID' using errcode='23514';end if;
+ if local_row.result_json is not distinct from step.bounded_owner_response_json then
+  if local_row.state is distinct from control->>'local_state'
+   or run.after_state_fingerprint is distinct from step.owner_response_hash
+   or private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_LOCAL_RECEIPT_ROW_V1',to_jsonb(local_row))
+    is distinct from private.weekly_exceptional_hex_sha256_v1(control->>'local_receipt_sha256') then
+   raise exception 'SOURCE_NATIVE_LOCAL_RECEIPT_PROOF_INVALID' using errcode='23514';end if;
+  return null;
+ end if;
+ select p.* into strict pending from public.weekly_source_pending_entitlement_bundles p where p.id=adoption.pending_bundle_id;
+ select r.* into strict receipt from private.weekly_source_entitlement_publication_receipts r where r.id=pending.released_receipt_id;
+ original_row:=to_jsonb(local_row)||jsonb_build_object('state','PENDING_FREEZE','result_json',step.bounded_owner_response_json);
+ current_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_LOCAL_RESULT_V1',local_row.result_json);
+ if app.state<>'COMMITTED' or adoption.local_entitlement_kind<>'PENDING_BUNDLE' or control->>'local_state'<>'PENDING_FREEZE'
+  or step.outcome<>'PENDING' or step.bounded_owner_response_json->>'outcome'<>'SAVED_PENDING_FREEZE'
+  or step.bounded_owner_response_json->>'state'<>'PENDING' or step.bounded_owner_response_json->'idempotent_replay' is distinct from 'false'::jsonb
+  or step.bounded_owner_response_json#>>'{publication,pending_bundle_verified}' is distinct from pending.id::text
+  or pending.state<>'RELEASED' or pending.decision_bundle_id is distinct from adoption.pending_decision_bundle_id
+  or pending.bundle_revision is distinct from adoption.pending_bundle_revision
+  or pending.decision_bundle_id is distinct from local_row.common_decision_bundle_id or pending.bundle_revision is distinct from local_row.common_bundle_revision
+  or pending.candidate_id is distinct from request.candidate_id or pending.decided_by_user_id is distinct from local_row.actor_user_id
+  or pending.request_digest is distinct from private.weekly_source_publication_request_digest_v1(
+    private.weekly_source_publication_request_canonical_v1(pending.request_json,'DEFERRED',pending.id))
+  or receipt.pending_bundle_id is distinct from pending.id or receipt.publication_mode<>'DEFERRED'
+  or receipt.decision_bundle_id is distinct from pending.decision_bundle_id or receipt.bundle_revision is distinct from pending.bundle_revision
+  or receipt.request_digest is distinct from pending.released_receipt_digest or receipt.request_digest is distinct from pending.request_digest
+  or receipt.member_root_ids is distinct from pending.member_root_ids or receipt.member_family_booking_ids is distinct from pending.member_family_booking_ids
+  or receipt.member_root_versions is distinct from pending.member_root_versions or receipt.head_ids is distinct from pending.proposed_head_ids
+  or cardinality(receipt.member_root_ids)<>1 or receipt.member_root_ids[1] is distinct from local_row.root_timesheet_id
+  or receipt.candidate_id is distinct from request.candidate_id or receipt.decided_by_user_id is distinct from local_row.actor_user_id
+  or local_row.state<>'COMPLETE' or local_row.result_json->>'deferred_release_receipt_id' is distinct from receipt.id::text
+  or local_row.result_json is distinct from (step.bounded_owner_response_json||jsonb_build_object('outcome','PUBLISHED','state','LIVE',
+    'deferred_release_receipt_id',receipt.id,'publication',jsonb_build_object('ok',true,'published',true,'replayed',false,
+      'receipt',private.weekly_source_publication_receipt_json_v1(receipt.id)),
+    'family_bound_version',local_row.result_json->'family_bound_version'))
+  or coalesce(local_row.result_json->>'family_bound_version','')!~'^[1-9][0-9]{0,18}$'
+  or (local_row.result_json->>'family_bound_version')::numeric<= (step.bounded_owner_response_json->>'family_bound_version')::numeric
+  or run.after_state_fingerprint is distinct from current_hash or generation.result_hash is distinct from current_hash
+  or generation.lifecycle_state not in('PUBLISHED','SUPERSEDED') or generation.published_at_utc is null
+  or private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_LOCAL_RECEIPT_ROW_V1',original_row)
+    is distinct from private.weekly_exceptional_hex_sha256_v1(control->>'local_receipt_sha256')
+  or not exists(select 1 from public.weekly_source_entitlement_heads h where h.id=receipt.head_ids[1]
+   and h.root_timesheet_id=local_row.root_timesheet_id and h.root_timesheet_version=receipt.member_root_versions[1]
+   and h.root_family_booking_id=receipt.member_family_booking_ids[1] and h.contract_id=request.contract_id
+   and h.candidate_id=request.candidate_id and h.week_ending_date=request.week_ending_date and h.authority_kind='PROTECTED'
+   and h.state in('COMMITTED_CURRENT','SUPERSEDED') and h.decision_bundle_id=receipt.decision_bundle_id and h.bundle_revision=receipt.bundle_revision
+   and h.source_origin_json=local_row.approved_snapshot_json->'local_publication_origin') then
+  raise exception 'SOURCE_NATIVE_LOCAL_RECEIPT_PROOF_INVALID' using errcode='23514';end if;
+ perform private.weekly_source_pay_decision_publication_adoptions_assert_v1(app.id);
+ return jsonb_build_object('version','SOURCE_NATIVE_DEFERRED_RELEASE_PROOF_V1','application_id',app.id,'member_key',prep.member_key,
+  'local_publication_request_id',request.id,'orchestration_run_id',run.id,'generation_id',generation.id,'pending_bundle_id',pending.id,
+  'decision_bundle_id',pending.decision_bundle_id,'bundle_revision',pending.bundle_revision::text,'original_pending_step_id',step.id,
+  'released_receipt_id',receipt.id,'released_receipt_digest',encode(receipt.request_digest,'hex'),'head_ids',to_jsonb(receipt.head_ids),
+  'current_local_receipt_sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_LOCAL_RECEIPT_ROW_V1',to_jsonb(local_row)),'hex'),
+  'current_native_result_sha256',encode(current_hash,'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+ raise exception 'SOURCE_NATIVE_LOCAL_RECEIPT_PROOF_INVALID' using errcode='23514';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_local_release_proof_v1(uuid) from public,anon,authenticated,service_role;

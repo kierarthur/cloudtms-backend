@@ -1,0 +1,245 @@
+-- This predicate runs at the actual native receipt INSERT, before adoption can
+-- exist. It grants no financial authority and never stages/publishes/binds.
+create or replace function private.weekly_source_pay_decision_local_head_owned_v1(p_receipt_id uuid)
+returns boolean language plpgsql stable security definer
+set search_path=pg_catalog,private,public as $function$
+declare receipt private.weekly_source_entitlement_publication_receipts%rowtype;
+ head public.weekly_source_entitlement_heads%rowtype;
+ local_row private.weekly_source_local_protected_decision_receipts%rowtype;
+ request public.weekly_exceptional_c1_publication_requests%rowtype;
+ run public.weekly_exceptional_orchestration_runs%rowtype;
+ family public.weekly_exceptional_pay_target_families%rowtype;
+ prep private.weekly_source_pay_decision_unprotect_preparations%rowtype;
+ app private.weekly_source_pay_decision_acceptance_applications%rowtype;
+ adoption private.weekly_source_pay_decision_native_adoptions%rowtype;
+ pending public.weekly_source_pending_entitlement_bundles%rowtype;
+ step public.weekly_exceptional_orchestration_steps%rowtype;
+ physical public.timesheets%rowtype;placement jsonb;origin jsonb;components jsonb;
+ original_local jsonb;expected_control jsonb;count_rows integer;
+begin
+ select x.* into strict receipt from private.weekly_source_entitlement_publication_receipts x where x.id=p_receipt_id;
+ -- Inspect the ENTIRE actual head set. A Source-owned head cannot hide inside
+ -- an unrelated or two-root receipt and fall through to POSITION_APPLY.
+ select count(*) into count_rows from public.weekly_source_entitlement_heads h
+  join public.weekly_exceptional_c1_publication_requests r
+   on r.id::text=h.source_origin_json->>'publication_request_id'
+  join private.weekly_source_pay_decision_unprotect_preparations p on p.orchestration_run_id=r.orchestration_run_id
+  where h.id=any(receipt.head_ids);
+ if count_rows=0 then
+  if exists(select 1 from private.weekly_source_local_protected_decision_receipts l
+   join public.weekly_exceptional_c1_publication_requests r on r.id=l.publication_request_id
+   join private.weekly_source_pay_decision_unprotect_preparations p on p.orchestration_run_id=r.orchestration_run_id
+   where l.common_decision_bundle_id=receipt.decision_bundle_id and l.common_bundle_revision=receipt.bundle_revision) then
+   raise exception 'SOURCE_LOCAL_HEAD_CAPTURE_INVALID' using errcode='23514';end if;
+  return false;
+ end if;
+ if count_rows<>1 or cardinality(receipt.member_root_ids)<>1 or cardinality(receipt.head_ids)<>1
+  or cardinality(receipt.member_family_booking_ids)<>1 or cardinality(receipt.member_root_versions)<>1 then
+  raise exception 'SOURCE_LOCAL_HEAD_CAPTURE_INVALID' using errcode='23514';end if;
+ select h.* into strict head from public.weekly_source_entitlement_heads h where h.id=receipt.head_ids[1];
+ origin:=head.source_origin_json;
+ select r.* into strict request from public.weekly_exceptional_c1_publication_requests r where r.id::text=origin->>'publication_request_id';
+ select l.* into strict local_row from private.weekly_source_local_protected_decision_receipts l where l.publication_request_id=request.id;
+ select p.* into strict prep from private.weekly_source_pay_decision_unprotect_preparations p where p.orchestration_run_id=request.orchestration_run_id;
+ select a.* into strict app from private.weekly_source_pay_decision_acceptance_applications a where a.request_id=prep.accept_or_resume_request_id;
+ select r.* into strict run from public.weekly_exceptional_orchestration_runs r where r.id=request.orchestration_run_id;
+ select f.* into strict family from public.weekly_exceptional_pay_target_families f where f.id=prep.family_id;
+ select t.* into strict physical from public.timesheets t where t.timesheet_id=local_row.root_timesheet_id;
+ -- The same reviewed original family A remains immutable. The genuine current
+ -- native financial placement B is separately certified by the direct H103.
+ placement:=private.timesheet_contract_current_placement_v1(family.root_timesheet_id);
+ if prep.route<>'SOURCE_LOCAL' or prep.family_id is distinct from request.family_id
+  or prep.actor_user_id is distinct from local_row.actor_user_id or prep.actor_user_id is distinct from run.requested_by_user_id
+  or prep.orchestration_run_id is distinct from run.id or request.generation_id is distinct from local_row.generation_id
+  or local_row.family_id is distinct from family.id or run.family_id is distinct from family.id or run.request_kind<>'WITHDRAW'
+  or run.idempotency_key is distinct from prep.child_idempotency_key or run.request_fingerprint is distinct from prep.native_prepare_request_sha256
+  or app.decision_id is distinct from prep.decision_id or app.review_id is distinct from prep.review_id or app.actor_user_id is distinct from prep.actor_user_id
+  or prep.payload_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_NATIVE_PAYLOAD_V1',prep.payload_json)
+  or request.request_sha256 is distinct from private.weekly_exceptional_hex_sha256_v1(prep.payload_json#>>'{complete_request,expected_request_sha256}')
+  or request.id::text is distinct from prep.payload_json#>>'{complete_request,publication_request_id}'
+  or local_row.request_sha256 is distinct from request.request_sha256
+  or local_row.idempotency_key is distinct from prep.child_idempotency_key||':local-complete'
+  or physical.timesheet_id::text is distinct from placement->>'current_timesheet_id'
+  or physical.contract_id::text is distinct from placement->>'current_contract_id'
+  or physical.timesheet_id is distinct from receipt.member_root_ids[1]
+  or physical.booking_id is distinct from receipt.member_family_booking_ids[1]
+  or physical.version is distinct from receipt.member_root_versions[1]
+  or request.root_timesheet_id is distinct from physical.timesheet_id or request.contract_id is distinct from physical.contract_id
+  or receipt.candidate_id is distinct from family.candidate_id or request.candidate_id is distinct from family.candidate_id
+  or head.candidate_id is distinct from family.candidate_id or head.contract_id is distinct from physical.contract_id
+  or head.root_timesheet_id is distinct from physical.timesheet_id or head.root_family_booking_id is distinct from physical.booking_id
+  or head.root_timesheet_version is distinct from physical.version or head.week_ending_date is distinct from family.week_ending_date
+  or head.authority_kind<>'PROTECTED' or head.state not in('COMMITTED_CURRENT','SUPERSEDED')
+  or head.decision_bundle_id is distinct from receipt.decision_bundle_id or head.bundle_revision is distinct from receipt.bundle_revision
+  or local_row.common_decision_bundle_id is distinct from receipt.decision_bundle_id or local_row.common_bundle_revision is distinct from receipt.bundle_revision
+  or local_row.publication_origin_kind<>'PROTECTED_LOCAL_DECISION_V1'
+  or origin is distinct from private.weekly_source_local_origin_canonical_v2(local_row.approved_snapshot_json->'local_publication_origin')
+  or origin->>'generation_id' is distinct from request.generation_id::text
+  or origin->>'request_sha256' is distinct from encode(request.request_sha256,'hex')
+  or origin->>'source_qualification_digest' is distinct from encode(local_row.source_qualification_digest,'hex')
+  or head.source_generation_digest is distinct from local_row.publication_origin_digest
+  or local_row.publication_origin_digest is distinct from private.weekly_source_publication_request_digest_v1(origin)
+  or local_row.source_qualification_digest is distinct from private.weekly_source_sha256_jsonb_v1(
+    'PROTECTED_LOCAL_SOURCE_QUALIFICATION_V2',local_row.approved_snapshot_json->'local_source_qualification')
+  or local_row.approved_snapshot_json#>>'{local_source_qualification,publication_request_id}' is distinct from request.id::text
+  or local_row.approved_snapshot_json#>>'{local_source_qualification,generation_id}' is distinct from request.generation_id::text
+  or not exists(select 1 from public.weekly_exceptional_pay_generations g where g.id=request.generation_id and g.family_id=family.id
+   and g.complete_next_vector_hash=private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',g.complete_next_vector_json)
+   and g.complete_next_vector_json#>'{target_snapshot,tsfin_snapshot_json}'=prep.payload_json#>'{stage_request,target_snapshot,tsfin_snapshot_json}') then
+  raise exception 'SOURCE_LOCAL_HEAD_CAPTURE_INVALID' using errcode='23514';end if;
+ select coalesce(jsonb_agg(private.weekly_source_publication_component_canonical_v1(
+   (to_jsonb(c)-array['id','head_id','decision_bundle_id','bundle_revision','component_sha256','created_at_utc'])
+   ||jsonb_build_object('work_date',to_char(c.work_date,'YYYY-MM-DD'),'hours_day',c.hours_day::text,'hours_night',c.hours_night::text,
+    'hours_sat',c.hours_sat::text,'hours_sun',c.hours_sun::text,'hours_bh',c.hours_bh::text,'unit_count',c.unit_count::text,
+    'unit_pay_rate',c.unit_pay_rate::text,'unit_charge_rate',c.unit_charge_rate::text,'pay_ex_vat',c.pay_ex_vat::text,
+    'charge_ex_vat',c.charge_ex_vat::text),'source.local.capture.component') order by c.component_ordinal),'[]'::jsonb)
+  into components from public.weekly_source_entitlement_head_components c where c.head_id=head.id;
+ if jsonb_array_length(components)<>head.component_count or local_row.approved_snapshot_json->>'common_components_digest'
+  is distinct from encode(private.weekly_source_publication_request_digest_v1(components),'hex') then
+  raise exception 'SOURCE_LOCAL_HEAD_CAPTURE_INVALID' using errcode='23514';end if;
+ if local_row.state='PREPARING' then
+  if prep.state<>'PREPARED' or receipt.publication_mode<>'IMMEDIATE' or receipt.pending_bundle_id is not null
+   or local_row.preparing_transaction_id is distinct from pg_current_xact_id()
+   or request.state<>'READY' or run.state<>'RUNNING'
+   or private.weekly_source_pay_decision_native_request_scope_v1(prep.id,prep.payload_json->'complete_request','COMPLETE_LOCAL',true)
+      is distinct from app.id then raise exception 'SOURCE_LOCAL_HEAD_CAPTURE_INVALID' using errcode='23514';end if;
+ else
+  -- The native coordinator inserts the real receipt while its leased pending
+  -- row is RELEASING. Its own later RELEASED callback proves/completes the same
+  -- receipt in this outer transaction; no fresh Office decision is invented.
+  select a.* into strict adoption from private.weekly_source_pay_decision_native_adoptions a
+   where a.application_id=app.id and a.member_key=prep.member_key;
+  select p.* into strict pending from public.weekly_source_pending_entitlement_bundles p where p.id=adoption.pending_bundle_id;
+  select s.* into strict step from public.weekly_exceptional_orchestration_steps s
+   where s.orchestration_run_id=run.id and s.step_kind='COMPLETE_LOCAL_PROTECTED_DECISION';
+  expected_control:=adoption.native_result_json->'native_receipt';
+  original_local:=to_jsonb(local_row)||jsonb_build_object('state','PENDING_FREEZE','result_json',step.bounded_owner_response_json);
+  if app.state<>'COMMITTED' or prep.state<>'CONSUMED' or adoption.origin<>'APPLIED_IN_THIS_TRANSACTION'
+   or adoption.route<>'SOURCE_LOCAL' or adoption.local_entitlement_kind<>'PENDING_BUNDLE'
+   or adoption.preparation_id is distinct from prep.id or adoption.local_publication_request_id is distinct from request.id
+   or local_row.state<>'PENDING_FREEZE' or request.state<>'RETIRED' or run.state<>'COMPLETE'
+   or receipt.publication_mode<>'DEFERRED' or receipt.pending_bundle_id is distinct from pending.id
+   or pending.state<>'RELEASING' or pending.lease_owner is distinct from receipt.released_by_worker_id
+   or pending.lease_worker_run_id is distinct from receipt.released_by_worker_run_id or pending.lease_expires_at_utc<=statement_timestamp()
+   or pending.decision_bundle_id is distinct from receipt.decision_bundle_id or pending.bundle_revision is distinct from receipt.bundle_revision
+   or pending.request_digest is distinct from receipt.request_digest or pending.candidate_id is distinct from receipt.candidate_id
+   or pending.member_root_ids is distinct from receipt.member_root_ids or pending.member_family_booking_ids is distinct from receipt.member_family_booking_ids
+   or pending.member_root_versions is distinct from receipt.member_root_versions or pending.proposed_head_ids is distinct from receipt.head_ids
+   or step.outcome<>'PENDING' or step.idempotency_key is distinct from local_row.idempotency_key
+   or step.allowlisted_owner_name<>'CloudTMS.weekly_exceptional_pay_complete_local_v1' or step.allowlisted_owner_signature<>'jsonb'
+   or step.bounded_request_hash is distinct from request.request_sha256 or step.before_state_fingerprint is distinct from run.before_state_fingerprint
+   or step.completed_at_utc is null or step.bounded_owner_response_json is distinct from local_row.result_json
+   or step.bounded_owner_response_json#>>'{publication,pending_bundle_verified}' is distinct from pending.id::text
+   or step.owner_response_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_LOCAL_RESULT_V1',step.bounded_owner_response_json)
+   or step.owner_response_hash is distinct from private.weekly_exceptional_hex_sha256_v1(expected_control->>'native_result_sha256')
+   or step.after_state_fingerprint is distinct from step.owner_response_hash or run.after_state_fingerprint is distinct from step.owner_response_hash
+   or private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_COMPOSED_RESULT_V1',adoption.native_result_json) is distinct from adoption.native_result_sha256
+   or private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_LOCAL_RECEIPT_ROW_V1',original_local)
+      is distinct from private.weekly_exceptional_hex_sha256_v1(expected_control->>'local_receipt_sha256') then
+   raise exception 'SOURCE_LOCAL_HEAD_CAPTURE_INVALID' using errcode='23514';end if;
+ end if;
+ return true;
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+ raise exception 'SOURCE_LOCAL_HEAD_CAPTURE_INVALID' using errcode='23514';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_local_head_owned_v1(uuid) from public,anon,authenticated,service_role;
+
+-- Actual current native hook; generated by build-native-head-capture.mjs.
+create or replace function private.bpay_next_source_receipt_publish_v1()
+returns trigger
+language plpgsql security definer
+set search_path = pg_catalog, private, public
+as $function$
+declare
+  v_n integer;
+  v_member record;
+  v_stage record;
+  v_work_ids uuid[]:=array[]::uuid[];
+  v_revision_ids uuid[]:=array[]::uuid[];
+  v_event_ids uuid[]:=array[]::uuid[];
+  v_component record;
+  v_binding record;
+begin
+  if (select active_owner from private.bpay_next_module_control
+      where id=1 for share)<>'NEXT' then
+    return new;
+  end if;
+  v_n:=pg_catalog.cardinality(new.member_root_ids);
+  if v_n not between 1 and 2
+     or v_n<>pg_catalog.cardinality(new.head_ids)
+     or v_n<>pg_catalog.cardinality(new.member_family_booking_ids) then
+    raise exception using errcode='23514',
+      message='BPAY_NEXT_SOURCE_RECEIPT_SCOPE_INVALID';
+  end if;
+  -- Whole-scope Source Local proof comes BEFORE any Banking stage, agency
+  -- clock, publish or binding. Malformed Source ownership raises; only a real
+  -- unrelated native receipt falls through to the unchanged ordinary body.
+  if private.weekly_source_pay_decision_local_head_owned_v1(new.id) then return new;end if;
+  -- Every Source owner reaches this insertion after its source locks.  Sort
+  -- the exact receipt members before touching any Banking Pay work row so
+  -- opposite request-array order cannot reverse the two-root lock order.
+  for v_member in
+    select new.member_root_ids[i] as root_id,
+           new.head_ids[i] as head_id,
+           new.member_family_booking_ids[i] as booking_id
+      from pg_catalog.generate_subscripts(new.member_root_ids,1) as i
+      order by new.member_family_booking_ids[i],new.member_root_ids[i]
+  loop
+    select * into strict v_stage
+      from private.bpay_next_stage_source_current_v1(
+        v_member.root_id,v_member.head_id,v_member.head_id);
+    if (select w.candidate_id from private.bpay_next_work w
+        where w.id=v_stage.work_id) is distinct from new.candidate_id then
+      raise exception using errcode='23514',
+        message='BPAY_NEXT_SOURCE_RECEIPT_CANDIDATE_MISMATCH';
+    end if;
+    v_work_ids:=pg_catalog.array_append(v_work_ids,v_stage.work_id);
+    v_revision_ids:=pg_catalog.array_append(v_revision_ids,v_stage.revision_id);
+    v_event_ids:=pg_catalog.array_append(v_event_ids,v_member.head_id);
+  end loop;
+  -- Staging already serialises this Candidate on worker_control. Discover and
+  -- acquire the direct original A plus exact current member union BEFORE any
+  -- agency clock receipt, including a repeated A -> B -> C move. No ancestry
+  -- traversal, payment SUM, position creation or history rebuild is permitted.
+  perform * from private.bpay_next_source_binding_lockset_v1(new.id);
+  perform * from private.bpay_next_publish_source_staged_pair_v1(
+    v_work_ids,v_revision_ids,v_event_ids);
+  -- Publication tuples now exist. Bind every affected actual current/prior
+  -- component, including an immediate initial-base removal, to its immutable
+  -- original identity. The same transaction owns receipt/activation/job writes;
+  -- an incomplete registration cannot leave a successful half-published Save.
+  for v_component in
+    select c.source_component_id
+      from private.bpay_next_source_binding_components_v1(new.id) c
+      order by c.source_component_id
+  loop
+    select * into strict v_binding
+      from private.bpay_next_source_component_bind_v1(
+        new.id,v_component.source_component_id);
+    if v_binding.qualification_state is distinct from 'REGISTERED'
+       or v_binding.binding_version_id is null
+       or v_binding.canonical_work_id is null
+       or v_binding.canonical_component_key is distinct from
+            'SOURCE:'||v_component.source_component_id::text then
+      raise exception using errcode='55000',
+        message='BPAY_NEXT_SOURCE_RECEIPT_BINDING_NOT_REGISTERED';
+    end if;
+  end loop;
+  -- REGISTERED does not mean POSITION_APPLY has finished, the book has been
+  -- seeded, a quote has been accepted, or candidate pay is ready to capture.
+  return new;
+end
+$function$;
+
+alter function private.bpay_next_source_receipt_publish_v1() owner to postgres;
+revoke all on function private.bpay_next_source_receipt_publish_v1()
+  from public,anon,authenticated,service_role;
+
+-- Retain the same real attachment. A changed UPGRADE closure must reassert it,
+-- not rely on replaying an unchanged historical trigger definition.
+drop trigger if exists bpay_next_source_receipt_publish_v1
+  on private.weekly_source_entitlement_publication_receipts;
+create trigger bpay_next_source_receipt_publish_v1
+after insert on private.weekly_source_entitlement_publication_receipts
+for each row execute function private.bpay_next_source_receipt_publish_v1();

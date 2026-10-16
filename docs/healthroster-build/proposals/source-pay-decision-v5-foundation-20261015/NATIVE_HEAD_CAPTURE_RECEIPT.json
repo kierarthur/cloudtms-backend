@@ -1,0 +1,12 @@
+{
+  "input_commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "input": "supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql",
+  "input_sha256": "24cf44354735d4a452eb3334847294e486ee17905bdc085f402e77b7ed1d75d9",
+  "input_complete_hook_sha256": "771277220c7a51f229d6aca4efabbe43d6455eef47268d0a2e865c0958d950b7",
+  "output": "forward/19_exact_local_head_capture.sqlinc",
+  "output_sha256": "32e2c76e9cce58d6e41f96a1aafdca325c36d3ecc37f9bd57e66fa5e910032c6",
+  "complete_reverse_equals_input": true,
+  "ordinary_body_changes": 0,
+  "source_scope": "Exact SINGLE_ROOT whole native head/component scope; PREPARING+PREVALIDATED same transaction or original COMMITTED pending lineage+actual native release lease.",
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN"
+}

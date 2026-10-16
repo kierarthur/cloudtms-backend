@@ -26,7 +26,9 @@ test('Source package byte pins and atomic packaging classification match every s
       assert.equal(parsed.statements.length, file.packaging_statements);
       for (const row of parsed.statements) assert.notEqual(row.unterminated, true);
       tables += [...sql.matchAll(/create table private\.weekly_source_pay_decision[a-z_]*\s*\(/g)].length;
-      assert.doesNotMatch(sql, /create(?: or replace)? function private\.bpay_next_/i);
+      if (!['forward/18_current_native_owner_route.sqlinc','forward/19_exact_local_head_capture.sqlinc'].includes(file.path)) {
+        assert.doesNotMatch(sql, /create(?: or replace)? function private\.bpay_next_/i);
+      }
     }
   }
   assert.equal(tables, 11);
@@ -36,7 +38,7 @@ test('Source package byte pins and atomic packaging classification match every s
   }
   assert.equal(manifest.qualification, 'PARTIAL_SOURCE_NOT_INSTALLABLE_NATIVE_REQUIRED_NOT_RUN');
   assert.equal(manifest.native_tests, 'REQUIRED_NOT_RUN');
-  assert.ok(manifest.open_health_owners.length >= 7);
+  assert.ok(manifest.open_health_owners.length >= 5);
 });
 
 for (const row of receipt.owners) test(`Complete ordinary native owner reverses exactly: ${row.name}`, () => {

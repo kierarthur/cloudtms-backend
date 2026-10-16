@@ -1,0 +1,76 @@
+{
+  "input_commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "input": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/44_q45_actor_event_closed_dto_cross_session_12_complete_actor_19_action_context.sqlinc",
+  "input_sha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14",
+  "output": "forward/10_shared_native_context.sqlinc",
+  "output_sha256": "3524ea8538226474375ca8927a411185e343e238e9ae01cdaa0ba9d35f082902",
+  "edits": [
+    {
+      "before": "public.weekly_exceptional_pay_action_context_v1(\n  p_request jsonb\n)",
+      "after": "private.weekly_source_protected_action_facts_v1(\n  p_request jsonb,p_request_kind text\n)"
+    },
+    {
+      "before": "    'schema_version','actor_user_id','family_id','orchestration_run_id',",
+      "after": "    'schema_version','actor_user_id','family_id',"
+    },
+    {
+      "before": "  v_run_id uuid;\n",
+      "after": ""
+    },
+    {
+      "before": "  v_run public.weekly_exceptional_orchestration_runs%rowtype;\n",
+      "after": "  v_placement jsonb;v_checked_placement jsonb;v_current_entitlement jsonb;\n"
+    },
+    {
+      "before": "p_request->>'schema_version'<>'WEEKLY_PROTECTED_ACTION_CONTEXT_V1'",
+      "after": "p_request->>'schema_version'<>'WEEKLY_PROTECTED_ACTION_FACTS_V1'"
+    },
+    {
+      "before": "    v_run_id:=(p_request->>'orchestration_run_id')::uuid;\n",
+      "after": ""
+    },
+    {
+      "before": "  v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);",
+      "after": "  v_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);\n  if v_placement->'moved'='true'::jsonb then\n    perform private.timesheet_contract_move_family_lock_v1((v_placement->>'original_root_timesheet_id')::uuid);\n    select jsonb_build_object('root_timesheet_id',f.root_timesheet_id,'candidate_id',f.candidate_id,\n      'contract_id',f.contract_id,'week_ending_date',f.week_ending_date) into strict v_lock_family\n      from public.weekly_exceptional_pay_target_families f where f.id=v_family_id;\n  else\n    v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);\n  end if;\n  v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);\n  if v_checked_placement is distinct from v_placement then\n    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;"
+    },
+    {
+      "before": "  select run.* into strict v_run\n  from public.weekly_exceptional_orchestration_runs run\n  where run.id=v_run_id and run.family_id=v_family.id for share;\n",
+      "after": ""
+    },
+    {
+      "before": "  if v_run.requested_by_user_id is distinct from v_actor\n     or v_run.state not in ('RUNNING','COMPLETE')\n     or v_run.request_kind not in",
+      "after": "  if p_request_kind not in"
+    },
+    {
+      "before": "     or not v_root.is_current or v_root.is_adjustment\n     or v_root.revoked_at is not null or v_root.archived_at_utc is not null",
+      "after": "     or (not v_root.is_current and v_placement->'moved'<>'true'::jsonb) or v_root.is_adjustment\n     or v_root.revoked_at is not null or (v_root.archived_at_utc is not null and v_placement->'moved'<>'true'::jsonb)"
+    },
+    {
+      "before": "    v_signed:=private.weekly_exceptional_candidate_signed_evidence_v1(v_evidence_id);",
+      "after": "    v_signed:=private.weekly_source_protected_signed_evidence_v1(v_evidence_id,v_family.id,v_event.id);"
+    },
+    {
+      "before": "  return pg_catalog.jsonb_build_object(\n    'ok',true,'contract','WEEKLY_PROTECTED_ACTION_CONTEXT_V1',",
+      "after": "  select jsonb_build_object('timesheet',to_jsonb(t),'contract_record',to_jsonb(c),\n    'current_financial',(select to_jsonb(f) from public.timesheets_financials f\n      where f.id=(v_placement->>'current_financial_id')::uuid),\n    'current_approval_work_id',v_placement->'current_approval_work_id') into strict v_current_entitlement\n    from public.timesheets t join public.contracts c on c.id=t.contract_id\n    where t.timesheet_id=(v_placement->>'current_timesheet_id')::uuid;\n  return pg_catalog.jsonb_build_object("
+    },
+    {
+      "before": "    'orchestration_run_id',v_run.id,'family_bound_version',v_family.bound_version,",
+      "after": "    'family_bound_version',v_family.bound_version::text,"
+    },
+    {
+      "before": "      'target_pay_method',v_contract.pay_method_snapshot,\n      'target_umbrella_id',nullif(pg_catalog.to_jsonb(v_contract)->>'umbrella_id','')::uuid,",
+      "after": "      'target_pay_method',v_current_entitlement#>>'{contract_record,pay_method_snapshot}',\n      'target_umbrella_id',nullif(v_current_entitlement#>>'{contract_record,umbrella_id}','')::uuid,"
+    },
+    {
+      "before": "    'zero_rate_source_refs',v_rate_refs\n  )||case when v_final_source ? 'next_source_segments'\n    then pg_catalog.jsonb_build_object('next_source_segments',v_final_source->'next_source_segments',\n      'family_bound_version',v_family.bound_version::text) else '{}'::jsonb end;",
+      "after": "    'zero_rate_source_refs',v_rate_refs,'next_source_segments',v_final_source->'next_source_segments',\n    'protected_current_placement',v_placement,'current_entitlement',v_current_entitlement\n  );"
+    },
+    {
+      "before": "v_run.request_kind",
+      "after": "p_request_kind",
+      "occurrences": 8
+    }
+  ],
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN",
+  "run_free_projection_has_no_run_table_or_run_id": true
+}

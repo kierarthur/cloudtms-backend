@@ -14,8 +14,8 @@
       "files": [
         {
           "path": "one-time/01_complete_health_decision_metadata.sqlinc",
-          "sha256": "63741add62a1d55c5d486abf9c70c622ffbff3c0462bab2dd378d922bac689f9",
-          "bytes": 10658,
+          "sha256": "bbe67b861a084764df21e05b530b94a4e5ec422afa23ea1ed2a30da275a862ea",
+          "bytes": 10656,
           "packaging_statements": 10,
           "functions": []
         },
@@ -123,8 +123,8 @@
         },
         {
           "path": "forward/06_confirmation_run_preparation.sqlinc",
-          "sha256": "f09c98c8a93dd48a15e05b25e078a07b3c83966dde39dd32cb0737ce23bb1c92",
-          "bytes": 11870,
+          "sha256": "0ae49f640787e56c522903900f60256b111a4fa5c95b83d74fd5cfbe55d1ce5d",
+          "bytes": 12319,
           "packaging_statements": 4,
           "functions": [
             "public.weekly_source_pay_decision_confirmation_prepare_v1(p_request jsonb)"
@@ -141,11 +141,184 @@
         },
         {
           "path": "forward/08_protected_current_placement.sqlinc",
-          "sha256": "4183e5f5a1b9911f23d2158d95b594e8e3e7192c3eabf9677fda9d5083eb4133",
-          "bytes": 19805,
+          "sha256": "dd80fc6eedd3bff7bf05aff371103ff80e4119f718a6131f1fbe54e059767420",
+          "bytes": 20135,
           "packaging_statements": 2,
           "functions": [
             "private.weekly_source_protected_current_placement_v1(p_family_id uuid,p_work_event_id uuid,p_lock boolean)"
+          ]
+        },
+        {
+          "path": "forward/09_certified_native_signed_evidence.sqlinc",
+          "sha256": "486a6b42704d45543c8b075bddf8246ffde3741118c5dd3598c12c6566b32d1e",
+          "bytes": 6646,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_protected_signed_evidence_v1(p_timesheet_id uuid,p_family_id uuid,p_work_event_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/10_shared_native_context.sqlinc",
+          "sha256": "3524ea8538226474375ca8927a411185e343e238e9ae01cdaa0ba9d35f082902",
+          "bytes": 29554,
+          "packaging_statements": 6,
+          "functions": [
+            "private.weekly_source_protected_action_facts_v1(p_request jsonb,p_request_kind text)",
+            "public.weekly_exceptional_pay_action_context_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "forward/11_native_source_observation.sqlinc",
+          "sha256": "f9e9f4777d424bbab869c8b68ddbc600522f92abcbd77107520c1674137ea188",
+          "bytes": 3894,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_unprotect_source_observation_v1(p_family_id uuid,p_source_cycle_id uuid,p_work_event_id uuid,p_context jsonb)"
+          ]
+        },
+        {
+          "path": "forward/12_run_free_review_context.sqlinc",
+          "sha256": "013115ad91da671de4ee6c83c827880aaeb422987d6256b9345c2056359e2211",
+          "bytes": 6212,
+          "packaging_statements": 4,
+          "functions": [
+            "public.weekly_source_pay_decision_unprotect_review_context_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "forward/13_preview_quote_operands.sqlinc",
+          "sha256": "c9ef2e5e6fee0f99c031080a9e02f8daaca8b22c0ead91e56e313e92dd06d3a4",
+          "bytes": 3511,
+          "packaging_statements": 4,
+          "functions": [
+            "public.weekly_source_pay_decision_preview_quote_context_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "forward/14_native_preparation_request_scope.sqlinc",
+          "sha256": "8a5e07fd4125c32b17ecdc2b8d3ea53a1609280dd88a8b7bab40f5df66ce88a6",
+          "bytes": 4297,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_pay_decision_native_request_scope_v1(p_preparation_id uuid,p_request jsonb,p_kind text,p_effect boolean)"
+          ]
+        },
+        {
+          "path": "forward/15_record_owned_native_adoption.sqlinc",
+          "sha256": "36ca1a60942fac7807963e08243d574c942b87bbdb5380d82cb902c547bc0d9d",
+          "bytes": 18969,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_pay_decision_record_native_adoption_v1(p_preparation_id uuid,p_application_id uuid,p_control jsonb)"
+          ]
+        },
+        {
+          "path": "forward/16_native_next_implementation.sqlinc",
+          "sha256": "59f37c42299fa60ab68393d114d99dc094ae6054fe61e1c98112871850b4b297",
+          "bytes": 44527,
+          "packaging_statements": 10,
+          "functions": [
+            "private.weekly_source_protected_next_engine_v1(p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean)",
+            "private.weekly_source_pay_decision_native_next_payload_validate_v1(p_request jsonb,p_preparation_id uuid)",
+            "private.weekly_exceptional_pay_publish_next_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid)",
+            "public.weekly_exceptional_pay_publish_next_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "forward/17_source_composed_owner_route.sqlinc",
+          "sha256": "c0d5edfde0c7ba787236233d13b9873fef623b6a6a8915d18afc553b4e0c7ddb",
+          "bytes": 6383,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_pay_decision_family_native_route_v1(p_family_id uuid,p_generation_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/18_current_native_owner_route.sqlinc",
+          "sha256": "ae5cbe2f8660103e6bce24eb61c4b604d05c36dddaa267e5686a2c723c9a939e",
+          "bytes": 4543,
+          "packaging_statements": 3,
+          "functions": [
+            "private.bpay_next_protected_owner_route_v1(p_family_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/19_exact_local_head_capture.sqlinc",
+          "sha256": "32e2c76e9cce58d6e41f96a1aafdca325c36d3ecc37f9bd57e66fa5e910032c6",
+          "bytes": 18988,
+          "packaging_statements": 7,
+          "functions": [
+            "private.weekly_source_pay_decision_local_head_owned_v1(p_receipt_id uuid)",
+            "private.bpay_next_source_receipt_publish_v1()"
+          ]
+        },
+        {
+          "path": "forward/20_native_local_stage_implementation.sqlinc",
+          "sha256": "0955265c4ef20813917e23defa83bbea04340b9c0701236522dfe1830aea4890",
+          "bytes": 59840,
+          "packaging_statements": 10,
+          "functions": [
+            "private.weekly_source_protected_local_stage_engine_v1(p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean)",
+            "private.weekly_source_pay_decision_native_local_payload_validate_v1(p_request jsonb,p_preparation_id uuid)",
+            "private.weekly_exceptional_pay_stage_c1_request_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid)",
+            "public.weekly_exceptional_pay_stage_c1_request_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "forward/21_native_local_complete_implementation.sqlinc",
+          "sha256": "fd3215a5bb196ed061c4fde41422a751f7926eb26c3cd4cd81a95911983b90dd",
+          "bytes": 35668,
+          "packaging_statements": 6,
+          "functions": [
+            "private.weekly_exceptional_pay_complete_local_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid)",
+            "public.weekly_exceptional_pay_complete_local_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "forward/22_full_native_payload_preparation.sqlinc",
+          "sha256": "56b11e9497b7940867a852ae72b2ea2221a5a4245689eb3d8dc40f8549ae11f4",
+          "bytes": 14135,
+          "packaging_statements": 4,
+          "functions": [
+            "public.weekly_source_pay_decision_unprotect_prepare_v1(p_request jsonb)"
+          ]
+        },
+        {
+          "path": "forward/23_same_transaction_native_dispatch.sqlinc",
+          "sha256": "977980cc42b83dbeb5134d4540469ccdb9967a48b44cc4583cc88b1da426bae6",
+          "bytes": 4628,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_pay_decision_unprotect_apply_v1(p_preparation_id uuid,p_decision_id uuid,p_member_key text,p_request_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/24_genuine_local_deferred_release_proof.sqlinc",
+          "sha256": "6aed27242d8f22d7daaccd297757a81987d469ccb1107c76b3f9537ba14f19f7",
+          "bytes": 11056,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_pay_decision_local_release_proof_v1(p_preparation_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/25_actual_local_release_and_saved_status.sqlinc",
+          "sha256": "94bd0e4fb004925970a080b419dce7239e1d7de698c7630fb80405bfd2719977",
+          "bytes": 46515,
+          "packaging_statements": 6,
+          "functions": [
+            "private.weekly_source_local_protected_pending_released_v1()",
+            "private.weekly_source_local_saved_status_native_v1(p_family_id uuid,p_orchestration_run_id uuid,p_actor_user_id uuid)",
+            "private.weekly_source_local_saved_status_v1(p_family_id uuid,p_orchestration_run_id uuid,p_actor_user_id uuid)"
+          ]
+        },
+        {
+          "path": "forward/26_confirmed_quote_operands.sqlinc",
+          "sha256": "b5e9b0d303d516e30f575da0a8bb43809ce9efc31e78fb2a3c262ec5eb2cffca",
+          "bytes": 5702,
+          "packaging_statements": 4,
+          "functions": [
+            "public.weekly_source_pay_decision_unprotect_quote_context_v1(p_request jsonb)"
           ]
         }
       ]
@@ -167,33 +340,6 @@
           ]
         },
         {
-          "path": "native-entry/weekly_exceptional_pay_publish_next_v1.sqlinc",
-          "sha256": "b91bcbe09aab658dacefad71df928105ea57b9a81b8e991cfbb3c9a72501437a",
-          "bytes": 39752,
-          "packaging_statements": 1,
-          "functions": [
-            "public.weekly_exceptional_pay_publish_next_v1(p_request jsonb)"
-          ]
-        },
-        {
-          "path": "native-entry/weekly_exceptional_pay_stage_c1_request_v1.sqlinc",
-          "sha256": "e5a62b6838024c3af98f2a436edb262e51381fa6cf4d2ae0e23753d7ef40265d",
-          "bytes": 55450,
-          "packaging_statements": 1,
-          "functions": [
-            "public.weekly_exceptional_pay_stage_c1_request_v1(p_request jsonb)"
-          ]
-        },
-        {
-          "path": "native-entry/weekly_exceptional_pay_complete_local_v1.sqlinc",
-          "sha256": "168feb1143ae9893b759c70b60fe83aee9fe42bffe51e1e474bcaebd466bec8e",
-          "bytes": 31817,
-          "packaging_statements": 1,
-          "functions": [
-            "public.weekly_exceptional_pay_complete_local_v1(p_request jsonb)"
-          ]
-        },
-        {
           "path": "native-entry/owner_acl.sqlinc",
           "sha256": "984f63a891a592dcffb287b0b267ae6df0dcfffee1bc9616242ebd31231dac1c",
           "bytes": 850,
@@ -206,8 +352,8 @@
   "runtime": [
     {
       "path": "broker/src/weekly-source/protected-action-orchestrator.mjs",
-      "sha256": "ba34092150eabb2a9e2a11778072ef7b553277ea18c4fc84e6899433d8fa4b64",
-      "bytes": 36492
+      "sha256": "f6061e1f84293549e552ce057e51e78eeea7b9a3ae2eab7ac33b3c789e30bb41",
+      "bytes": 38066
     },
     {
       "path": "broker/src/weekly-source/protected-next-preview.mjs",
@@ -216,8 +362,8 @@
     },
     {
       "path": "broker/src/weekly-source/source-native-contract.mjs",
-      "sha256": "33630e679e89b6c621b461bcb3a8d2c27dd9703ab84a2bde3a255b1ff230c370",
-      "bytes": 13359
+      "sha256": "aeb3078dd7a9d5a6473a59e908be079c214cff875c27b9267e95722d71d9ec0d",
+      "bytes": 21457
     },
     {
       "path": "broker/src/weekly-source/source-pay-decision-request.mjs",
@@ -226,13 +372,28 @@
     },
     {
       "path": "broker/src/weekly-source/source-pay-decision-preparation.mjs",
-      "sha256": "0d251db9d6ec83efd8c3e6537c2e96b722c59a64b305ca2445adf3aff605b7e2",
-      "bytes": 2934
+      "sha256": "d21be9e4553d04b6cec4132114648fecedacb26f64380046174713d2397a4e94",
+      "bytes": 3225
+    },
+    {
+      "path": "broker/src/weekly-source/source-native-economic.mjs",
+      "sha256": "0a4f573f5ff20024b8c64822a6fbad54ebada369f701ad8b9a13c33788027d35",
+      "bytes": 8498
+    },
+    {
+      "path": "broker/src/weekly-source/source-unprotect-worker.mjs",
+      "sha256": "26cb00fa7ecb4e7c4eeb45191d6794d54dcff2cb2c44e38a383887fcd9debceb",
+      "bytes": 9388
+    },
+    {
+      "path": "broker/src/banking-pay/weekly-source-c1-components.mjs",
+      "sha256": "0c2643976f92a6d3ad63508f452b011a8880b7b35133c32b470f0af94d2bf674",
+      "bytes": 14689
     },
     {
       "path": "tests/weekly-source/protected-action-orchestrator.test.mjs",
-      "sha256": "456286d6bf0b6fb04b990696ab591341d48e5463e54e6f2bb61302adb8decc8b",
-      "bytes": 24306
+      "sha256": "6f6104eb88553c082983a508db3805c0617e92233fca3e1c56b6f21903b72eff",
+      "bytes": 26233
     },
     {
       "path": "tests/weekly-source/source-native-contract.test.mjs",
@@ -246,8 +407,8 @@
     },
     {
       "path": "tests/weekly-source/source-pay-decision-preparation.test.mjs",
-      "sha256": "67a474d4ca9fd7139689b98b491165abf89fe27ee7d38d21b4d60d34059b80c5",
-      "bytes": 6539
+      "sha256": "d470e5062d7bf1afee1ab3e1bf1338769240d76d10a24e5e2b3d3989b7b99abb",
+      "bytes": 8062
     },
     {
       "path": "tests/weekly-source/source-protected-placement.test.mjs",
@@ -256,17 +417,31 @@
     },
     {
       "path": "tests/weekly-source/source-native-package.test.mjs",
-      "sha256": "bb2781e5b3d21097190b593b5665b9d773563a22fd24b2304ee8dd49bf50d6e0",
-      "bytes": 4737
+      "sha256": "db24f6aef31143f247ed47d0daf57092adf67d08eca3ce4c2982394bbc24c3c3",
+      "bytes": 4875
+    },
+    {
+      "path": "tests/weekly-source/source-native-economic.test.mjs",
+      "sha256": "0df1b7d731ab124b1d40a7dd90c6911b8303c131572f69a3603679047c0e77b0",
+      "bytes": 11837
+    },
+    {
+      "path": "tests/weekly-source/source-unprotect-worker.test.mjs",
+      "sha256": "f3257eea090214ff48a895ab40199140e637c899ce55532d2fd74910e25ea3da",
+      "bytes": 14437
+    },
+    {
+      "path": "tests/weekly-source/source-native-generators.test.mjs",
+      "sha256": "ff100b2060d01d8a50f62c84dad5a22c9f85379fbece1588349260541602be53",
+      "bytes": 5457
     }
   ],
   "open_health_owners": [
     "Public preview begin/quote/ready/seal/abandon and accept/read/resume implementation",
-    "Run-free native review context and one complete native economic serializer",
-    "Full-payload unprotect preparation registration and actual same-transaction unprotect dispatcher",
-    "Private publish_next/stage_c1/complete_local implementations with NULL ordinary delegates and genuine non-NULL Source effect/adoption",
+    "Actual preexisting immutable native receipt adoption and whitelisted native dependency rollback composition",
+    "Current-B native stage/complete/qualified NEXT producer integration",
     "Current placement certificate integration into actual native archived-evidence/context/current-B financial writer owners",
-    "Actual Source receipt publication suppression, pending release and saved-status integration",
+    "Moved-B native Local source qualification/current financial identity integration in retained full owners",
     "Full binding/selected contact orchestration and final canonical Source receipt integration"
   ],
   "external_dependencies": [

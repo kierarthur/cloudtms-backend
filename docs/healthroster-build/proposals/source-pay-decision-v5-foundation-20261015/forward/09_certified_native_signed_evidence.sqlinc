@@ -1,0 +1,123 @@
+create or replace function private.weekly_source_protected_signed_evidence_v1(
+  p_timesheet_id uuid,p_family_id uuid,p_work_event_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','extensions','pg_temp'
+as $function$
+declare
+  v_timesheet public.timesheets%rowtype;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_hash bytea;
+  v_signed_at timestamptz;
+  v_kind text;
+  v_certificate jsonb;v_certified_evidence boolean:=false;
+  v_alias private.timesheet_contract_family_aliases%rowtype;
+  v_placement private.timesheet_contract_current_placements%rowtype;
+  v_member private.timesheet_contract_move_members%rowtype;
+  v_operation private.timesheet_contract_move_operations%rowtype;
+begin
+  select t.* into strict v_timesheet from public.timesheets t where t.timesheet_id=p_timesheet_id;
+  if v_timesheet.archived_at_utc is null then
+    return private.weekly_exceptional_candidate_signed_evidence_v1(p_timesheet_id);
+  end if;
+  v_certificate:=private.weekly_source_protected_current_placement_v1(p_family_id,p_work_event_id,false);
+  select a.* into strict v_alias from private.timesheet_contract_family_aliases a where a.timesheet_id=p_timesheet_id;
+  select p.* into strict v_placement from private.timesheet_contract_current_placements p
+    where p.family_root_id=v_alias.family_root_id and p.member_key=v_alias.member_key;
+  select m.* into strict v_member from private.timesheet_contract_move_members m
+    where m.operation_id=v_placement.operation_id and m.member_key=v_alias.member_key;
+  select o.* into strict v_operation from private.timesheet_contract_move_operations o where o.id=v_alias.accepted_operation_id;
+  if v_certificate->'moved' is distinct from 'true'::jsonb
+    or v_alias.family_root_id::text is distinct from v_certificate->>'family_root_id'
+    or v_alias.original_timesheet_id is distinct from p_timesheet_id
+    or v_operation.state not in('COMPLETE','SUPERSEDED') or v_operation.purpose<>'CONTRACT_CORRECTION'
+    or v_timesheet.archived_reason_code is distinct from 'CONTRACT_MOVE'
+    or v_timesheet.archived_by_user_id is distinct from v_operation.created_by_user_id
+    or v_member.immutable_evidence_hash is distinct from private.timesheet_contract_move_row_hash_v1(
+      private.timesheet_contract_move_evidence_v1(p_timesheet_id))
+    or not exists(select 1 from public.weekly_exceptional_payment_approvals a
+      join public.weekly_exceptional_pay_target_families f on f.id=a.pay_target_family_id
+      where a.pay_target_family_id=p_family_id and a.work_event_id=p_work_event_id and a.evidence_timesheet_id=p_timesheet_id
+       and a.candidate_id=f.candidate_id and a.contract_id=f.contract_id and a.client_id=v_operation.actual_client_id)
+    or not exists(select 1 from private.timesheet_contract_move_members m where m.operation_id=v_operation.id
+      and m.member_key=v_alias.member_key and m.from_timesheet_id=p_timesheet_id)
+    or not exists(select 1 from private.timesheet_contract_move_capability_consumptions c
+      where c.operation_id=v_operation.id and c.member_key=v_alias.member_key and c.phase='ACCEPT_PLACEMENT'
+       and c.guard_name='public.timesheet_archive_row_guard_v1' and c.relation_oid='public.timesheets'::regclass::oid
+       and c.row_operation='UPDATE' and c.authority_receipt_id=(v_operation.placement_receipt_json->>'receipt_id')::uuid
+       and c.row_sha256=private.timesheet_contract_move_row_hash_v1(to_jsonb(v_timesheet))) then
+    raise exception 'WEEKLY_PROTECTED_EVIDENCE_INVALID' using errcode='55000';end if;
+  v_certified_evidence:=true;
+  select timesheet.* into strict v_timesheet
+  from public.timesheets timesheet
+  where timesheet.timesheet_id=p_timesheet_id
+    and timesheet.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+    and (timesheet.is_current or v_certified_evidence)
+    and timesheet.revoked_at is null
+    and (timesheet.archived_at_utc is null or v_certified_evidence);
+
+  if v_timesheet.candidate_workflow_id is not null then
+    select workflow.* into v_workflow
+    from public.candidate_submission_workflows workflow
+    where workflow.id=v_timesheet.candidate_workflow_id
+      and workflow.generation=v_timesheet.candidate_workflow_generation
+      and workflow.scope='WEEKLY'
+      and workflow.contract_id=v_timesheet.contract_id
+      and workflow.week_ending_date=v_timesheet.week_ending_date
+      and workflow.candidate_signature_component_id is not null
+      and workflow.candidate_signature_sha256 is not null
+      and workflow.candidate_signed_at_utc is not null
+      and workflow.worker_submitted_at_utc is not null
+      and workflow.state not in (
+        'CREATED','WORKER_DRAFT','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
+      )
+      and (
+        workflow.target_timesheet_id=v_timesheet.timesheet_id
+        or workflow.anchor_timesheet_id=v_timesheet.timesheet_id
+      );
+    if found then
+      v_hash:=v_workflow.candidate_signature_sha256;
+      v_signed_at:=v_workflow.candidate_signed_at_utc;
+      v_kind:='CANDIDATE_WORKFLOW';
+    end if;
+  end if;
+
+  if v_hash is null
+     and v_timesheet.qr_status='USED'::public.timesheet_qr_status_enum
+     and v_timesheet.qr_scanned_at is not null
+     and v_timesheet.qr_signed_at_utc is not null
+     and coalesce(v_timesheet.qr_signed_hash,'')~'^[0-9a-fA-F]{64}$' then
+    v_hash:=pg_catalog.decode(pg_catalog.lower(v_timesheet.qr_signed_hash),'hex');
+    v_signed_at:=v_timesheet.qr_signed_at_utc;
+    v_kind:='SIGNED_QR';
+  end if;
+
+  if v_hash is null
+     and nullif(pg_catalog.btrim(coalesce(v_timesheet.r2_nurse_key,'')),'') is not null
+     and coalesce(v_timesheet.img_sha256_nurse,'')~'^[0-9a-fA-F]{64}$' then
+    v_hash:=pg_catalog.decode(pg_catalog.lower(v_timesheet.img_sha256_nurse),'hex');
+    v_signed_at:=v_timesheet.created_at;
+    v_kind:='CANDIDATE_SIGNATURE_ASSET';
+  end if;
+
+  if v_hash is null or v_signed_at is null then
+    raise exception 'WEEKLY_PROTECTED_EVIDENCE_UNSIGNED' using errcode='55000';
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'timesheet_id',v_timesheet.timesheet_id,
+    'contract_id',v_timesheet.contract_id,
+    'week_ending_date',v_timesheet.week_ending_date,
+    'timesheet_version',v_timesheet.version,
+    'signature_kind',v_kind,
+    'signature_sha256',pg_catalog.encode(v_hash,'hex'),
+    'signed_at_utc',v_signed_at
+  );
+exception
+  when no_data_found or too_many_rows then
+    raise exception 'WEEKLY_PROTECTED_EVIDENCE_INVALID' using errcode='55000';
+end;
+$function$;
+
+revoke all on function private.weekly_source_protected_signed_evidence_v1(uuid,uuid,uuid)
+ from public,anon,authenticated,service_role;

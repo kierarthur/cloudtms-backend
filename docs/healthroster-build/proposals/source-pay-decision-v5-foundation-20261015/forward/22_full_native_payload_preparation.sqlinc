@@ -1,0 +1,140 @@
+create or replace function public.weekly_source_pay_decision_unprotect_prepare_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public as $function$
+declare prep private.weekly_source_pay_decision_unprotect_preparations%rowtype;
+ review private.weekly_source_pay_decision_reviews%rowtype;assembly private.weekly_source_pay_decision_preview_assemblies%rowtype;
+ quote private.weekly_source_pay_decision_preview_quotes%rowtype;cut private.bpay_next_source_pay_decision_cut%rowtype;
+ confirmation private.weekly_source_pay_decision_requests%rowtype;
+ payload jsonb;facts jsonb;observation jsonb;validated jsonb;economic jsonb;quantities jsonb;components jsonb;
+ context_hash bytea;payload_hash bytea;target_hash bytea;placement_hash bytea;actor uuid;native_request jsonb;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','decision_id','member_key','review_id','review_digest',
+  'accept_or_resume_request_id','actor_user_id','native_payload']) or not(p_request ?& array['version','decision_id','member_key','review_id',
+  'review_digest','accept_or_resume_request_id','actor_user_id','native_payload'])
+  or p_request->>'version' is distinct from 'SOURCE_UNPROTECT_PREPARATION_V1' then
+  raise exception 'SOURCE_UNPROTECT_PREPARATION_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;
+ if actor is null or not private.weekly_source_pay_actor_allowed_v1(actor) then
+  raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';end if;
+ select p.* into strict prep from private.weekly_source_pay_decision_unprotect_preparations p
+  where p.decision_id=(p_request->>'decision_id')::uuid and p.member_key=p_request->>'member_key'
+   and p.accept_or_resume_request_id=(p_request->>'accept_or_resume_request_id')::uuid;
+ select r.* into strict review from private.weekly_source_pay_decision_reviews r where r.id=prep.review_id;
+ select a.* into strict assembly from private.weekly_source_pay_decision_preview_assemblies a where a.id=review.preview_assembly_id;
+ select q.* into strict quote from private.weekly_source_pay_decision_preview_quotes q where q.assembly_id=assembly.id and q.member_key=prep.member_key;
+ select r.* into strict confirmation from private.weekly_source_pay_decision_requests r where r.request_id=prep.accept_or_resume_request_id;
+ payload:=p_request->'native_payload';payload_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_NATIVE_PAYLOAD_V1',payload);
+ if prep.actor_user_id is distinct from actor or prep.review_id::text is distinct from p_request->>'review_id'
+  or review.decision_id is distinct from prep.decision_id or review.review_digest is distinct from private.weekly_exceptional_hex_sha256_v1(p_request->>'review_digest')
+  or assembly.actor_user_id is distinct from actor or assembly.state<>'SEALED' or assembly.decision_kind<>'EXCLUDE_FUTURE_WORK_PAY'
+  or confirmation.review_id is distinct from review.id or confirmation.actor_user_id is distinct from actor
+  or confirmation.request_hash is distinct from prep.confirmation_request_sha256
+  or payload->>'route' is distinct from prep.route or payload->'prepare_request' is distinct from prep.native_prepare_request_json
+  or not private.weekly_exceptional_json_keys_exact_v1(payload,case when prep.route='NEXT'
+   then array['route','prepare_request','publish_request'] else array['route','prepare_request','stage_request','complete_request'] end)
+  or not(payload ?& case when prep.route='NEXT' then array['route','prepare_request','publish_request']
+   else array['route','prepare_request','stage_request','complete_request'] end) then
+  raise exception 'SOURCE_UNPROTECT_PREPARATION_INVALID' using errcode='23514';end if;
+ -- Exact registration replay checks the whole immutable authored bundle. It
+ -- never allocates another run, extends expiry, recalculates or consumes it.
+ if prep.state in('PREPARED','CONSUMED') then
+  if prep.payload_json is distinct from payload or prep.payload_sha256 is distinct from payload_hash then
+   raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';end if;
+ else
+  if prep.state<>'RUN_PREPARED' or prep.expires_at_utc<=transaction_timestamp() or confirmation.metadata_state<>'CONFIRMED'
+   or confirmation.receipt_json is not null or assembly.expires_at_utc<=transaction_timestamp() then
+   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';end if;
+  perform private.bpay_next_source_pay_decision_cut_v1(prep.decision_id,null,review.id,true);
+  select c.* into strict cut from private.bpay_next_source_pay_decision_cut c
+   where c.decision_id=prep.decision_id and c.review_id=review.id and c.preview_assembly_id=assembly.id and c.pay_cut_sha256=review.pay_cut_hash;
+  facts:=private.weekly_source_protected_action_facts_v1(jsonb_build_object('schema_version','WEEKLY_PROTECTED_ACTION_FACTS_V1',
+   'actor_user_id',actor,'family_id',prep.family_id,'source_cycle_id',prep.native_prepared_json->'source_cycle_id',
+   'work_event_id',prep.native_prepared_json->'work_event_id','protected_schedule',prep.native_prepared_json->'protected_schedule',
+   'evidence_timesheet_id',null),'WITHDRAW');
+  if facts->'requires_zero_financial' is distinct from 'false'::jsonb or jsonb_typeof(facts#>'{current_entitlement,current_financial}') is distinct from 'object' then
+   raise exception 'SOURCE_NATIVE_PREREQUISITE_NOT_PREPARED' using errcode='55000';end if;
+  observation:=private.weekly_source_unprotect_source_observation_v1(prep.family_id,(facts->>'source_cycle_id')::uuid,(facts->>'work_event_id')::uuid,facts);
+  context_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_NATIVE_CONTEXT_V1',facts);
+  placement_hash:=private.weekly_exceptional_hex_sha256_v1(facts#>>'{protected_current_placement,placement_certificate_sha256}');
+  if context_hash is distinct from private.weekly_exceptional_hex_sha256_v1(quote.quote_json->>'context_sha256')
+   or observation->>'source_observation_sha256' is distinct from quote.quote_json->>'source_observation_sha256'
+   or facts->>'family_bound_version' is distinct from prep.family_bound_version::text then
+   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';end if;
+  -- Run-bearing validation invokes the complete actual native preflight and
+  -- returns before its first financial/control INSERT. No ensure fallback.
+  if prep.route='NEXT' then
+   native_request:=payload->'publish_request';
+   validated:=private.weekly_source_pay_decision_native_next_payload_validate_v1(native_request,prep.id);
+   components:=native_request#>'{target_snapshot,components}';
+  else
+   native_request:=payload->'stage_request';
+   validated:=private.weekly_source_pay_decision_native_local_payload_validate_v1(native_request,prep.id);
+   if not private.weekly_exceptional_json_keys_exact_v1(payload->'complete_request',array['schema_version','actor_user_id','publication_request_id','expected_request_sha256','idempotency_key'])
+    or not(payload->'complete_request' ?& array['schema_version','actor_user_id','publication_request_id','expected_request_sha256','idempotency_key'])
+    or payload#>>'{complete_request,schema_version}' is distinct from 'WEEKLY_PROTECTED_LOCAL_COMPLETE_V1'
+    or payload#>>'{complete_request,actor_user_id}' is distinct from actor::text
+    or payload#>>'{complete_request,publication_request_id}' is distinct from native_request#>>'{c1_request,request_id}'
+    or payload#>>'{complete_request,expected_request_sha256}' is distinct from native_request#>>'{c1_request,request_sha256}'
+    or payload#>>'{complete_request,idempotency_key}' is distinct from prep.child_idempotency_key||':local-complete' then
+    raise exception 'SOURCE_UNPROTECT_PREPARATION_INVALID' using errcode='23514';end if;
+   select coalesce(jsonb_agg(jsonb_build_object('component',item.value-array['record_type','component_id','component_ordinal','source_ordinal','component_sha256'],
+     'authority',case when native_request->'c1_sources'->((item.value->>'source_ordinal')::integer-1)->>'authority_kind'
+       =quote.quote_json#>'{economic_target,component_economics}'->(item.ordinality::integer-1)#>>'{authority,kind}'
+      then quote.quote_json#>'{economic_target,component_economics}'->(item.ordinality::integer-1)->'authority' else 'null'::jsonb end)
+     order by item.ordinality),'[]'::jsonb)
+    into components from jsonb_array_elements(native_request->'c1_components') with ordinality item(value,ordinality);
+  end if;
+  if validated->>'version' is distinct from 'SOURCE_NATIVE_VALIDATED_REQUEST_V1' or validated->>'route' is distinct from prep.route
+   or validated->>'family_id' is distinct from prep.family_id::text or validated->>'orchestration_run_id' is distinct from prep.orchestration_run_id::text then
+   raise exception 'SOURCE_UNPROTECT_PREPARATION_INVALID' using errcode='23514';end if;
+  select coalesce(jsonb_agg(jsonb_build_object('cut_id',m.cut_id,'cut_member_no',m.member_no::text,'member_sha256',encode(m.member_sha256,'hex'),
+   'family_root_id',m.family_root_id,'source_row_id',m.original_source_row_id,'source_work_event_id',m.source_work_event_id,
+   'canonical_work_id',m.canonical_work_id,'canonical_component_key',m.canonical_component_key,'scope_kind',m.scope_kind,'scope_mode',m.scope_mode,
+   'work_dates',to_jsonb(m.work_dates),'supported_quantity_json',m.supported_quantity_json,'excluded_quantity_json',m.excluded_quantity_json)
+   order by m.member_no),'[]'::jsonb) into quantities from private.bpay_next_source_pay_decision_cut_member m
+   where m.cut_id=cut.id and m.member_key=prep.member_key;
+  if jsonb_array_length(quantities)=0 then raise exception 'SOURCE_UNPROTECT_PREPARATION_INVALID' using errcode='23514';end if;
+  -- The saved quote came from the same native calculator. Reconstruct ALL its
+  -- economic fields from the admitted complete bundle + unchanged native facts,
+  -- retaining its reviewed policy hash bound by the exact current context hash.
+  economic:=jsonb_build_object('version','SOURCE_UNPROTECT_ECONOMIC_TARGET_V1','family_id',prep.family_id,
+   'root_timesheet_id',facts->'root_timesheet_id','work_event_id',facts->'work_event_id',
+   'accepted_placement_sha256',case when facts#>'{protected_current_placement,moved}'='true'::jsonb
+    then facts#>'{protected_current_placement,placement_certificate_sha256}' else 'null'::jsonb end,
+   'actual_schedule_json',case when prep.route='NEXT' then quote.quote_json#>'{economic_target,actual_schedule_json}'
+     else validated#>'{target_snapshot,actual_schedule_json}' end,
+   'tsfin_snapshot_json',case when prep.route='NEXT' then quote.quote_json#>'{economic_target,tsfin_snapshot_json}'
+     else validated#>'{target_snapshot,tsfin_snapshot_json}' end,'component_economics',components,
+   'quantity_partition',quantities,'provider',facts->'provider','policy_sha256',quote.quote_json->'calculation_policy_sha256',
+   'source_observation_sha256',observation->'source_observation_sha256',
+   'approval_evidence_sha256',facts#>'{protected_current_placement,immutable_original_evidence_sha256}',
+   'prior_commitment_cut_sha256',encode(cut.pay_cut_sha256,'hex'));
+  -- Numeric JSONB scale is not a selection/economic difference. Hash the exact
+  -- saved Worker-authored quote after full native semantic equality; native
+  -- receipt domains below continue to hash actual server rows verbatim.
+  target_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_ECONOMIC_TARGET_V1',quote.quote_json->'economic_target');
+  if economic is distinct from quote.quote_json->'economic_target' or target_hash is distinct from quote.economic_target_sha256
+   or encode(target_hash,'hex') is distinct from quote.quote_json->>'economic_target_sha256'
+   or quote.quote_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_PREVIEW_QUOTE_V1',quote.quote_json) then
+   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';end if;
+  select p.* into strict prep from private.weekly_source_pay_decision_unprotect_preparations p where p.id=prep.id for update;
+  if prep.state='RUN_PREPARED' then
+   update private.weekly_source_pay_decision_unprotect_preparations p set state='PREPARED',source_phase=observation->>'source_phase',
+    source_revision=(observation->>'source_revision')::uuid,native_source_sha256=decode(observation->>'native_source_sha256','hex'),
+    source_observation_sha256=decode(observation->>'source_observation_sha256','hex'),placement_certificate_sha256=placement_hash,
+    context_sha256=context_hash,reviewed_target_sha256=target_hash,payload_sha256=payload_hash,payload_json=payload
+    where p.id=prep.id and p.state='RUN_PREPARED' and p.expires_at_utc>transaction_timestamp() returning p.* into strict prep;
+  elsif prep.state not in('PREPARED','CONSUMED') or prep.payload_json is distinct from payload or prep.payload_sha256 is distinct from payload_hash then
+   raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';end if;
+ end if;
+ return jsonb_build_object('version','SOURCE_UNPROTECT_PREPARATION_RESULT_V1','preparation_id',prep.id,'decision_id',prep.decision_id,
+  'member_key',prep.member_key,'review_id',prep.review_id,'accept_or_resume_request_id',prep.accept_or_resume_request_id,
+  'orchestration_run_id',prep.orchestration_run_id,'payload_sha256',encode(prep.payload_sha256,'hex'),'expires_at_utc',prep.expires_at_utc);
+exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
+ raise exception 'SOURCE_UNPROTECT_PREPARATION_INVALID' using errcode='23514';
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb) to service_role;
+notify pgrst,'reload schema';

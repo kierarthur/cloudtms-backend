@@ -1,0 +1,55 @@
+-- Private native engine admission. Read-only validation has no application and
+-- cannot reach a write. Actual Source effect requires the one exact live app.
+create or replace function private.weekly_source_pay_decision_native_request_scope_v1(
+ p_preparation_id uuid,p_request jsonb,p_kind text,p_effect boolean
+) returns uuid language plpgsql stable security definer
+set search_path=pg_catalog,private,public as $function$
+declare p private.weekly_source_pay_decision_unprotect_preparations%rowtype;
+ r private.weekly_source_pay_decision_requests%rowtype;
+ run public.weekly_exceptional_orchestration_runs%rowtype;
+ request public.weekly_exceptional_c1_publication_requests%rowtype;
+ payload_key text;suffix text;
+begin
+ if p_kind='NEXT' then payload_key:='publish_request';suffix:=':next';
+ elsif p_kind='STAGE_LOCAL' then payload_key:='stage_request';suffix:=':stage';
+ elsif p_kind='COMPLETE_LOCAL' then payload_key:='complete_request';suffix:=':local-complete';
+ else raise exception 'SOURCE_NATIVE_REQUEST_SCOPE_INVALID' using errcode='22023';end if;
+ if p_preparation_id is null or p_effect is null or (not p_effect and p_kind='COMPLETE_LOCAL') then
+  raise exception 'SOURCE_NATIVE_REQUEST_SCOPE_INVALID' using errcode='22023';end if;
+ select x.* into strict p from private.weekly_source_pay_decision_unprotect_preparations x where x.id=p_preparation_id;
+ select x.* into strict r from private.weekly_source_pay_decision_requests x where x.request_id=p.accept_or_resume_request_id;
+ select x.* into strict run from public.weekly_exceptional_orchestration_runs x where x.id=p.orchestration_run_id;
+ if p.state not in('RUN_PREPARED','PREPARED') or p.expires_at_utc<=transaction_timestamp()
+  or p_request->>'actor_user_id' is distinct from p.actor_user_id::text
+  or p_request->>'idempotency_key' is distinct from p.child_idempotency_key||suffix
+  or not private.weekly_source_pay_actor_allowed_v1(p.actor_user_id)
+  or (p_kind='NEXT') is distinct from (p.route='NEXT')
+  or r.decision_id is distinct from p.decision_id or r.review_id is distinct from p.review_id
+  or r.actor_user_id is distinct from p.actor_user_id or r.metadata_state<>'CONFIRMED'
+  or r.request_hash is distinct from p.confirmation_request_sha256 or r.receipt_json is not null
+  or run.family_id is distinct from p.family_id or run.request_kind<>'WITHDRAW' or run.state<>'RUNNING'
+  or run.requested_by_user_id is distinct from p.actor_user_id or run.idempotency_key is distinct from p.child_idempotency_key
+  or run.request_fingerprint is distinct from p.native_prepare_request_sha256 then
+  raise exception 'SOURCE_NATIVE_REQUEST_SCOPE_INVALID' using errcode='23514';end if;
+ if p_kind='COMPLETE_LOCAL' then
+  select x.* into strict request from public.weekly_exceptional_c1_publication_requests x
+   where x.id=(p_request->>'publication_request_id')::uuid;
+  if request.family_id is distinct from p.family_id or request.orchestration_run_id is distinct from p.orchestration_run_id
+   or encode(request.request_sha256,'hex') is distinct from p_request->>'expected_request_sha256' then
+   raise exception 'SOURCE_NATIVE_REQUEST_SCOPE_INVALID' using errcode='23514';end if;
+ elsif p_request->>'family_id' is distinct from p.family_id::text
+  or p_request->>'orchestration_run_id' is distinct from p.orchestration_run_id::text
+  or p_request->>'source_cycle_id' is distinct from p.native_prepare_request_json->>'source_cycle_id'
+  or p_request->>'work_event_id' is distinct from p.native_prepare_request_json->>'work_event_id'
+  or p_request->>'reason' is distinct from p.native_prepare_request_json->>'reason' then
+  raise exception 'SOURCE_NATIVE_REQUEST_SCOPE_INVALID' using errcode='23514';end if;
+ if p.state='PREPARED' and p.payload_json->payload_key is distinct from p_request then
+  raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';end if;
+ if p_effect then return private.weekly_source_pay_decision_unprotect_application_v1(p.id);end if;
+ return p.id;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'SOURCE_NATIVE_REQUEST_SCOPE_INVALID' using errcode='23514';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_native_request_scope_v1(uuid,jsonb,text,boolean)
+ from public,anon,authenticated,service_role;

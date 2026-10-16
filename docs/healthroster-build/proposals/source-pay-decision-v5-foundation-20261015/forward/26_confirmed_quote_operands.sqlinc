@@ -1,0 +1,56 @@
+-- Internal completion of the saved-review read seam. The genuine NEXT native
+-- request has component authority, not a TSFIN calculator snapshot. The trusted
+-- Worker compares the complete recalculated economics before registration;
+-- SQL separately validates current native facts and the actual native bundle.
+create or replace function public.weekly_source_pay_decision_unprotect_quote_context_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public as $function$
+declare prep private.weekly_source_pay_decision_unprotect_preparations%rowtype;
+ review private.weekly_source_pay_decision_reviews%rowtype;quote private.weekly_source_pay_decision_preview_quotes%rowtype;
+ cut private.bpay_next_source_pay_decision_cut%rowtype;quantities jsonb;actor uuid;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','actor_user_id','decision_id','review_id','member_key','accept_or_resume_request_id'])
+  or not(p_request ?& array['version','actor_user_id','decision_id','review_id','member_key','accept_or_resume_request_id'])
+  or p_request->>'version' is distinct from 'SOURCE_UNPROTECT_QUOTE_CONTEXT_V1' then
+  raise exception 'SOURCE_UNPROTECT_QUOTE_CONTEXT_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;
+ if actor is null or not private.weekly_source_pay_actor_allowed_v1(actor) then
+  raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';end if;
+ select p.* into strict prep from private.weekly_source_pay_decision_unprotect_preparations p
+  join private.weekly_source_pay_decision_requests r on r.request_id=p.accept_or_resume_request_id and r.decision_id=p.decision_id
+  where p.decision_id=(p_request->>'decision_id')::uuid and p.review_id=(p_request->>'review_id')::uuid
+   and p.member_key=p_request->>'member_key' and p.accept_or_resume_request_id=(p_request->>'accept_or_resume_request_id')::uuid
+   and p.actor_user_id=actor and r.actor_user_id=actor and r.review_id=p.review_id and r.metadata_state='CONFIRMED'
+   and r.request_hash=p.confirmation_request_sha256 and p.state in('RUN_PREPARED','PREPARED') and p.expires_at_utc>transaction_timestamp();
+ perform private.bpay_next_source_pay_decision_cut_v1(prep.decision_id,null,prep.review_id,true);
+ select r.* into strict review from private.weekly_source_pay_decision_reviews r
+  join private.weekly_source_pay_decision_preview_assemblies a on a.id=r.preview_assembly_id and a.review_id=r.id
+  where r.id=prep.review_id and r.decision_id=prep.decision_id and a.state='SEALED' and a.actor_user_id=actor;
+ select q.* into strict quote from private.weekly_source_pay_decision_preview_quotes q where q.assembly_id=review.preview_assembly_id and q.member_key=prep.member_key;
+ select c.* into strict cut from private.bpay_next_source_pay_decision_cut c
+  where c.decision_id=prep.decision_id and c.review_id=review.id and c.preview_assembly_id=review.preview_assembly_id and c.pay_cut_sha256=review.pay_cut_hash;
+ select coalesce(jsonb_agg(jsonb_build_object('cut_id',m.cut_id,'cut_member_no',m.member_no::text,'member_sha256',encode(m.member_sha256,'hex'),
+  'family_root_id',m.family_root_id,'source_row_id',m.original_source_row_id,'source_work_event_id',m.source_work_event_id,
+  'canonical_work_id',m.canonical_work_id,'canonical_component_key',m.canonical_component_key,'scope_kind',m.scope_kind,'scope_mode',m.scope_mode,
+  'work_dates',to_jsonb(m.work_dates),'supported_quantity_json',m.supported_quantity_json,'excluded_quantity_json',m.excluded_quantity_json)
+  order by m.member_no),'[]'::jsonb) into quantities from private.bpay_next_source_pay_decision_cut_member m
+  where m.cut_id=cut.id and m.member_key=prep.member_key;
+ if jsonb_array_length(quantities) not between 1 and 1000
+  or quote.quote_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_PREVIEW_QUOTE_V1',quote.quote_json)
+  or quote.economic_target_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_ECONOMIC_TARGET_V1',quote.quote_json->'economic_target')
+  or quote.quote_json#>'{economic_target,quantity_partition}' is distinct from quantities
+  or quote.quote_json#>>'{economic_target,prior_commitment_cut_sha256}' is distinct from encode(cut.pay_cut_sha256,'hex') then
+  raise exception 'SOURCE_UNPROTECT_QUOTE_CONTEXT_INVALID' using errcode='23514';end if;
+ return jsonb_build_object('version','SOURCE_UNPROTECT_QUOTE_CONTEXT_RESULT_V1','preparation_id',prep.id,'decision_id',prep.decision_id,
+  'review_id',prep.review_id,'member_key',prep.member_key,'accept_or_resume_request_id',prep.accept_or_resume_request_id,
+  'orchestration_run_id',prep.orchestration_run_id,'context_sha256',quote.quote_json->'context_sha256',
+  'source_observation_sha256',quote.quote_json->'source_observation_sha256','economic_target_sha256',encode(quote.economic_target_sha256,'hex'),
+  'quantity_partition',quantities,'prior_commitment_cut_sha256',encode(cut.pay_cut_sha256,'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'SOURCE_UNPROTECT_QUOTE_CONTEXT_INVALID' using errcode='23514';
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb) to service_role;
+notify pgrst,'reload schema';

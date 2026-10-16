@@ -1,0 +1,37 @@
+{
+  "input": "native-entry/weekly_exceptional_pay_stage_c1_request_v1.sqlinc",
+  "input_sha256": "e5a62b6838024c3af98f2a436edb262e51381fa6cf4d2ae0e23753d7ef40265d",
+  "output": "forward/20_native_local_stage_implementation.sqlinc",
+  "output_sha256": "0955265c4ef20813917e23defa83bbea04340b9c0701236522dfe1830aea4890",
+  "complete_reverse_equals_input": true,
+  "ordinary_body_changes": 0,
+  "source_effect": "Real complete native stage then commissioned private complete_local in the same outer transaction.",
+  "validation_mode": "Private owner-only; complete actual native preflight returns before first approval INSERT.",
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN",
+  "edits": [
+    {
+      "before": "public.weekly_exceptional_pay_stage_c1_request_v1(\n  p_request jsonb\n)",
+      "after": "private.weekly_source_protected_local_stage_engine_v1(\n  p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean\n)"
+    },
+    {
+      "before": "  v_source_gate jsonb;",
+      "after": "  v_source_gate jsonb;v_source_application_id uuid;"
+    },
+    {
+      "before": "\nbegin\n",
+      "after": "\nbegin\n  if p_validate_only is null or (p_validate_only and p_source_decision_preparation_id is null) then\n    raise exception 'SOURCE_NATIVE_VALIDATION_SCOPE_REQUIRED' using errcode='22023';end if;\n"
+    },
+    {
+      "before": "  perform private.weekly_source_pay_decision_native_normal_gate_v1(v_family.id,v_run.id,v_actor_user_id,'STAGE_LOCAL');",
+      "after": "  if p_source_decision_preparation_id is null then\n    perform private.weekly_source_pay_decision_native_normal_gate_v1(v_family.id,v_run.id,v_actor_user_id,'STAGE_LOCAL');\n  else\n    v_source_application_id:=private.weekly_source_pay_decision_native_request_scope_v1(\n      p_source_decision_preparation_id,p_request,'STAGE_LOCAL',not p_validate_only);\n  end if;"
+    },
+    {
+      "before": "  -- SP-12: existing admission only; no producer/version evidence.",
+      "after": "  -- Source ownership is checked before BOTH native staged-request replay\n  -- branches. Their original ordinary behavior remains byte-for-byte below.\n  if p_source_decision_preparation_id is not null then\n    v_source_application_id:=private.weekly_source_pay_decision_native_request_scope_v1(\n      p_source_decision_preparation_id,p_request,'STAGE_LOCAL',not p_validate_only);\n  elsif exists(select 1 from private.weekly_source_pay_decision_unprotect_preparations p where p.orchestration_run_id=v_run_id)\n    or exists(select 1 from private.weekly_source_pay_decision_native_adoptions a where a.orchestration_run_id=v_run_id) then\n    perform private.weekly_source_pay_decision_native_normal_gate_v1(v_family_id,v_run_id,v_actor_user_id,'STAGE_LOCAL');\n  end if;\n  -- SP-12: existing admission only; no producer/version evidence."
+    },
+    {
+      "before": "  insert into public.weekly_exceptional_payment_approvals(\n",
+      "after": "  if p_validate_only then\n    return jsonb_build_object('version','SOURCE_NATIVE_VALIDATED_REQUEST_V1','route','SOURCE_LOCAL',\n      'family_id',v_family.id,'orchestration_run_id',v_run.id,\n      'native_request_sha256',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_C1_STAGE_REQUEST_BODY_V1',p_request),'hex'),\n      'target_snapshot',v_target_snapshot,'component_identity_basis',v_component_identity_basis);\n  end if;\n  insert into public.weekly_exceptional_payment_approvals(\n"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "input": "native-entry/weekly_exceptional_pay_publish_next_v1.sqlinc",
+  "input_sha256": "b91bcbe09aab658dacefad71df928105ea57b9a81b8e991cfbb3c9a72501437a",
+  "output": "forward/16_native_next_implementation.sqlinc",
+  "output_sha256": "59f37c42299fa60ab68393d114d99dc094ae6054fe61e1c98112871850b4b297",
+  "complete_reverse_equals_input": true,
+  "ordinary_body_changes": "Shared active actor predicate; otherwise every ordinary native statement retained under NULL preparation.",
+  "source_control": "Actual native writes and Banking protected stage; suppress standalone publication + old receipt only. Genuine application/adoption required.",
+  "moved_next_dependency": "Existing Banking stage_protected current-B producer qualification remains required; no Banking body changed.",
+  "validation_mode": "Private owner-only; same complete native preflight; returns before first financial write.",
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN",
+  "edits": [
+    {
+      "before": "public.weekly_exceptional_pay_publish_next_v1(p_request jsonb)",
+      "after": "private.weekly_source_protected_next_engine_v1(p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean)"
+    },
+    {
+      "before": "  v_source_gate jsonb;",
+      "after": "  v_source_gate jsonb;v_source_application_id uuid;v_source_result jsonb;v_source_control jsonb;"
+    },
+    {
+      "before": "begin\n  if coalesce",
+      "after": "begin\n  if p_validate_only is null or (p_validate_only and p_source_decision_preparation_id is null) then\n    raise exception 'SOURCE_NATIVE_VALIDATION_SCOPE_REQUIRED' using errcode='22023';end if;\n  if coalesce"
+    },
+    {
+      "before": "     or not exists(select 1 from public.tms_users u where u.id=v_actor and u.is_active\n       and (u.payment_authoriser or u.payment_golden_key)) then",
+      "after": "     or not private.weekly_source_pay_actor_allowed_v1(v_actor) then"
+    },
+    {
+      "before": "  v_source_gate:=private.weekly_source_pay_decision_native_normal_gate_v1(v_family.id,v_run.id,v_actor,'PUBLISH_NEXT');\n  if v_source_gate is not null then return v_source_gate; end if;",
+      "after": "  if p_source_decision_preparation_id is null then\n    v_source_gate:=private.weekly_source_pay_decision_native_normal_gate_v1(v_family.id,v_run.id,v_actor,'PUBLISH_NEXT');\n    if v_source_gate is not null then return v_source_gate; end if;\n  else\n    v_source_application_id:=private.weekly_source_pay_decision_native_request_scope_v1(\n      p_source_decision_preparation_id,p_request,'NEXT',not p_validate_only);\n  end if;"
+    },
+    {
+      "before": "  insert into public.weekly_exceptional_payment_approvals(pay_target_family_id,work_event_id,evidence_timesheet_id,",
+      "after": "  if p_validate_only then\n    return jsonb_build_object('version','SOURCE_NATIVE_VALIDATED_REQUEST_V1','route','NEXT',\n      'family_id',v_family.id,'orchestration_run_id',v_run.id,'native_request_sha256',encode(v_request_hash,'hex'),\n      'target_snapshot',p_request->'target_snapshot');\n  end if;\n  insert into public.weekly_exceptional_payment_approvals(pay_target_family_id,work_event_id,evidence_timesheet_id,"
+    },
+    {
+      "before": "  select p.* into strict v_publication from private.bpay_next_publish_source_staged_pair_v1(\n    array[v_stage.work_id],array[v_stage.revision_id],array[v_approval.id]) p;",
+      "after": "  if p_source_decision_preparation_id is null then\n    select p.* into strict v_publication from private.bpay_next_publish_source_staged_pair_v1(\n      array[v_stage.work_id],array[v_stage.revision_id],array[v_approval.id]) p;\n  end if;"
+    },
+    {
+      "before": "  insert into private.bpay_next_protected_source_receipt(orchestration_run_id,family_id,actor_user_id,approval_id,generation_id,\n    work_id,revision_id,command_id,agency_sequence,accepted_family_bound_version,prepared_request_sha256,\n    publication_request_sha256,source_manifest_sha256)\n  values(v_run.id,v_family.id,v_actor,v_approval.id,v_generation.id,v_stage.work_id,v_stage.revision_id,v_publication.command_id,\n    v_publication.agency_sequence,v_family.bound_version+1,v_run.request_fingerprint,v_request_hash,v_source_hash);",
+      "after": "  if p_source_decision_preparation_id is null then\n  insert into private.bpay_next_protected_source_receipt(orchestration_run_id,family_id,actor_user_id,approval_id,generation_id,\n    work_id,revision_id,command_id,agency_sequence,accepted_family_bound_version,prepared_request_sha256,\n    publication_request_sha256,source_manifest_sha256)\n  values(v_run.id,v_family.id,v_actor,v_approval.id,v_generation.id,v_stage.work_id,v_stage.revision_id,v_publication.command_id,\n    v_publication.agency_sequence,v_family.bound_version+1,v_run.request_fingerprint,v_request_hash,v_source_hash);\n  else\n    v_source_control:=jsonb_build_object('family_id',v_family.id,'orchestration_run_id',v_run.id,\n      'approval_id',v_approval.id,'generation_id',v_generation.id,'work_id',v_stage.work_id,'revision_id',v_stage.revision_id,\n      'new_family_bound_version',(v_family.bound_version+1)::text,\n      'approved_pay_ex_vat',to_char(v_total,'FM9999999999999990.00'),'source_manifest_sha256',encode(v_source_hash,'hex'));\n    select jsonb_build_object('version','SOURCE_NATIVE_COMPOSED_RESULT_V1','application_id',v_source_application_id,\n      'decision_id',p.decision_id,'request_id',p.accept_or_resume_request_id,'review_id',p.review_id,\n      'member_key',p.member_key,'preparation_id',p.id,'route','NEXT','origin','APPLIED_IN_THIS_TRANSACTION',\n      'control_status','WITHDRAWN','native_receipt',v_source_control,'failure_code',null)\n      into strict v_source_result from private.weekly_source_pay_decision_unprotect_preparations p where p.id=p_source_decision_preparation_id;\n    insert into public.weekly_exceptional_payment_events(family_id,approval_id,event_kind,lifecycle_view,bounded_payload_json,idempotency_key)\n      values(v_family.id,v_approval.id,'PROTECTED_STATE_OBSERVED','LIVE',v_source_result,v_key||':payment-event');\n    select coalesce(max(s.sequence),0)+1 into v_step from public.weekly_exceptional_orchestration_steps s where s.orchestration_run_id=v_run.id;\n    insert into public.weekly_exceptional_orchestration_steps(orchestration_run_id,sequence,step_kind,idempotency_key,\n      allowlisted_owner_name,allowlisted_owner_signature,bounded_request_hash,before_state_fingerprint,bounded_owner_response_json,\n      owner_response_hash,after_state_fingerprint,outcome,completed_at_utc)\n      values(v_run.id,v_step,'PUBLISH_NEXT',v_key,'private.weekly_exceptional_pay_publish_next_impl_v1','jsonb,uuid->jsonb',\n        v_request_hash,v_run.before_state_fingerprint,v_source_result,\n        private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_COMPOSED_RESULT_V1',v_source_result),v_request_hash,'COMPLETE',transaction_timestamp());\n    return private.weekly_source_pay_decision_record_native_adoption_v1(\n      p_source_decision_preparation_id,v_source_application_id,v_source_control);\n  end if;"
+    }
+  ]
+}

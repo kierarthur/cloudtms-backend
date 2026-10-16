@@ -12,7 +12,7 @@ declare
  v_assembly private.weekly_source_pay_decision_preview_assemblies%rowtype;
  v_journal private.weekly_source_pay_decision_requests%rowtype;
  v_quote record;v_required jsonb;v_manifest_required jsonb;v_results jsonb:='[]'::jsonb;
- v_result jsonb;v_detail jsonb;v_hash bytea;
+ v_result jsonb;v_detail jsonb;v_hash bytea;v_reason text;
 begin
  if coalesce(current_setting('request.jwt.claim.role',true),
   nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
@@ -28,6 +28,7 @@ begin
   raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';
  end if;
  if v_kind='ACCEPT' then
+  v_reason:=btrim(v_body->>'reason');
   v_keys:=array['version','action','decision_id','request_id','review_id','review_digest','decision','supersedes_decision_id',
    'expected_prior_dispositions','expected_prior_dispositions_sha256','invoice_policy','contact_policy','reason','evidence_refs',
    'expected_pay_cut_hash','expected_source_invoice_hash','expected_issue_set_hash'];
@@ -72,7 +73,11 @@ begin
   end if;
  elsif v_parent.accept_request_id is null or v_parent.decision_kind is distinct from v_assembly.decision_kind then
   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';
+ else
+  v_reason:=v_parent.reason;
  end if;
+ if v_reason is null or char_length(v_reason) not between 1 and 1000 then
+  raise exception 'SOURCE_PAY_DECISION_CONFIRMATION_INVALID' using errcode='22023';end if;
  v_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_CONFIRMATION_V1',v_body);
  select r.* into v_journal from private.weekly_source_pay_decision_requests r where r.request_id=v_request_id;
  if found then
@@ -101,6 +106,8 @@ begin
  select a.* into strict v_assembly from private.weekly_source_pay_decision_preview_assemblies a
   where a.id=v_review.preview_assembly_id and a.review_id=v_review.id and a.state='SEALED' for update;
  select d.* into strict v_parent from private.weekly_source_pay_decisions d where d.id=v_decision for update;
+ if v_kind='RESUME_FINANCIAL' and v_reason is distinct from v_parent.reason then
+  raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';end if;
  select r.* into v_journal from private.weekly_source_pay_decision_requests r where r.request_id=v_request_id for update;
  if v_journal.request_id is not null then
   if v_journal.decision_id<>v_decision or v_journal.actor_user_id<>v_actor or v_journal.request_kind<>v_kind
@@ -153,7 +160,7 @@ begin
   raise exception 'SOURCE_PAY_DECISION_QUOTE_MANIFEST_INVALID' using errcode='23514';
  end if;
  return jsonb_build_object('version','SOURCE_PAY_DECISION_CONFIRMATION_PREPARED_V1','decision_id',v_decision,
-  'review_id',v_review_id,'request_id',v_request_id,'members',v_results);
+  'review_id',v_review_id,'request_id',v_request_id,'confirmation_reason',v_reason,'members',v_results);
 exception when no_data_found or too_many_rows or invalid_text_representation or numeric_value_out_of_range then
  raise exception 'SOURCE_PAY_DECISION_CONFIRMATION_SCOPE_INVALID' using errcode='22023';
 end;

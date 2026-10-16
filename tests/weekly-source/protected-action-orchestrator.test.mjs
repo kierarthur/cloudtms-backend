@@ -3,8 +3,11 @@ import test from 'node:test';
 
 import {
   orchestrateWeeklyProtectedAction,
+  buildWeeklyProtectedNativePayload,
   WeeklyProtectedActionError,
 } from '../../broker/src/weekly-source/protected-action-orchestrator.mjs';
+import { projectWeeklySourceC1ComponentEconomics } from '../../broker/src/banking-pay/weekly-source-c1-components.mjs';
+import { composeWeeklyProtectedTargetSchedule } from '../../broker/src/weekly-source/protected-target-schedule.js';
 
 const ID = Object.freeze({
   actor: '91000000-0000-4000-8000-000000000001',
@@ -265,6 +268,24 @@ function financialSnapshot(targetSchedule, { sourceExpense = true } = {}) {
     },
   };
 }
+
+test('Actual pure Local native bundle retains every reviewed component after removing transport-only stream fields', async () => {
+  const facts = context('WITHDRAW');const target = composeWeeklyProtectedTargetSchedule({ sourceSegments: facts.source_segments,
+    decisions: facts.protected_decisions });const snapshot = financialSnapshot(target.segments);
+  const reviewed = projectWeeklySourceC1ComponentEconomics({ root_timesheet_id: ID.root, financial_snapshot: snapshot, expenses: facts.source_expenses });
+  const native = await buildWeeklyProtectedNativePayload({ context: facts, target, calculation: { ok: true, snapshot }, nextRoute: false,
+    actorUserId: ID.actor, reason: 'Reviewed exact Source exclusion', idempotencyKey: 'source-pay-unprotect-test-immutable' });
+  assert.equal(native.route, 'SOURCE_LOCAL');assert.equal(native.stage_request.target_snapshot.tsfin_snapshot_json.timesheet_id, ID.root);
+  const physical = native.stage_request.c1_components.map((row, index) => {
+    const { record_type, component_id, component_ordinal, source_ordinal, component_sha256, ...component } = row;
+    void record_type;void component_id;void component_ordinal;void component_sha256;
+    assert.equal(native.stage_request.c1_sources[Number(source_ordinal) - 1].authority_kind, reviewed[index].authority.kind);
+    return { component, authority: reviewed[index].authority };
+  });
+  assert.deepEqual(physical, reviewed);
+  assert.equal(native.complete_request.publication_request_id, native.stage_request.c1_request.request_id);
+  assert.equal(native.complete_request.expected_request_sha256, native.stage_request.c1_request.request_sha256);
+});
 
 function dependenciesFor(kind, options = {}) {
   const calls = [];

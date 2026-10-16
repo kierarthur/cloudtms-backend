@@ -1,0 +1,10 @@
+{
+  "input_commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "input": "supabase/repeatable/includes/05102026_0659_bpay_next_protected_owner_route_v1.sqlinc",
+  "input_sha256": "f20a9a5dbfe2254a4909627454af15643f965ece2b75ff4f48c4077a4aa07908",
+  "output": "forward/18_current_native_owner_route.sqlinc",
+  "output_sha256": "ae5cbe2f8660103e6bce24eb61c4b604d05c36dddaa267e5686a2c723c9a939e",
+  "complete_reverse_equals_input": true,
+  "ordinary_body_changes": 0,
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN"
+}

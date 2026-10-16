@@ -1,0 +1,71 @@
+-- Pure owner discrimination for a real Source-composed current generation.
+-- This is not normal native status and does not assert published money before
+-- the canonical Source application/publication has committed.
+create or replace function private.weekly_source_pay_decision_family_native_route_v1(p_family_id uuid,p_generation_id uuid)
+returns text language plpgsql stable security definer
+set search_path=pg_catalog,private,public as $function$
+declare adoption private.weekly_source_pay_decision_native_adoptions%rowtype;
+ app private.weekly_source_pay_decision_acceptance_applications%rowtype;
+ prep private.weekly_source_pay_decision_unprotect_preparations%rowtype;
+ family public.weekly_exceptional_pay_target_families%rowtype;
+ run public.weekly_exceptional_orchestration_runs%rowtype;
+ approval public.weekly_exceptional_payment_approvals%rowtype;
+ generation public.weekly_exceptional_pay_generations%rowtype;
+ revision private.bpay_next_work_revision%rowtype;work private.bpay_next_work%rowtype;placement jsonb;
+begin
+ if not exists(select 1 from private.weekly_source_pay_decision_native_adoptions a
+   join private.weekly_source_pay_decision_unprotect_preparations p on p.id=a.preparation_id
+   where a.generation_id=p_generation_id and p.family_id=p_family_id and a.origin='APPLIED_IN_THIS_TRANSACTION') then return null;end if;
+ select a.* into strict adoption from private.weekly_source_pay_decision_native_adoptions a
+  join private.weekly_source_pay_decision_unprotect_preparations p on p.id=a.preparation_id
+  where a.generation_id=p_generation_id and p.family_id=p_family_id and a.origin='APPLIED_IN_THIS_TRANSACTION';
+ select x.* into strict app from private.weekly_source_pay_decision_acceptance_applications x where x.id=adoption.application_id;
+ select x.* into strict prep from private.weekly_source_pay_decision_unprotect_preparations x where x.id=adoption.preparation_id;
+ select x.* into strict family from public.weekly_exceptional_pay_target_families x where x.id=p_family_id;
+ select x.* into strict run from public.weekly_exceptional_orchestration_runs x where x.id=adoption.orchestration_run_id;
+ select x.* into strict approval from public.weekly_exceptional_payment_approvals x where x.id=adoption.approval_id;
+ select x.* into strict generation from public.weekly_exceptional_pay_generations x where x.id=p_generation_id;
+ select x.* into strict revision from private.bpay_next_work_revision x where x.id=adoption.next_revision_id and x.work_id=adoption.next_work_id;
+ select x.* into strict work from private.bpay_next_work x where x.id=revision.work_id;
+ if adoption.route<>'NEXT' or prep.route<>'NEXT' or prep.state<>'CONSUMED'
+  or prep.native_receipt_json is distinct from adoption.native_result_json
+  or adoption.native_result_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_COMPOSED_RESULT_V1',adoption.native_result_json)
+  or adoption.native_result_json->>'application_id' is distinct from app.id::text
+  or adoption.native_result_json->>'preparation_id' is distinct from prep.id::text
+  or adoption.native_result_json->>'control_status' is distinct from 'WITHDRAWN'
+  or app.request_id is distinct from prep.accept_or_resume_request_id or app.decision_id is distinct from prep.decision_id
+  or app.review_id is distinct from prep.review_id or app.actor_user_id is distinct from prep.actor_user_id
+  or (app.state<>'COMMITTED' and (app.state not in('PREVALIDATED','STAGED')
+    or app.backend_pid<>pg_backend_pid() or app.transaction_id is distinct from pg_current_xact_id_if_assigned()))
+  or family.current_generation_id is distinct from generation.id or family.target_domain_version<>'NEXT_V1'
+  or generation.family_id is distinct from family.id or generation.lifecycle_state<>'PUBLISHED'
+  or generation.published_at_utc is null or generation.result_hash is distinct from run.after_state_fingerprint
+  or generation.result_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_NEXT_PUBLISH_V1',prep.payload_json->'publish_request')
+  or run.id is distinct from prep.orchestration_run_id or run.family_id is distinct from family.id or run.state<>'COMPLETE'
+  or run.requested_by_user_id is distinct from prep.actor_user_id or run.request_fingerprint is distinct from prep.native_prepare_request_sha256
+  or approval.creation_orchestration_run_id is distinct from run.id or approval.pay_target_family_id is distinct from family.id
+  or revision.source_kind<>'PROTECTED' or revision.source_event_id is distinct from approval.id or revision.source_head_id is not null
+  or revision.financial_snapshot_id is not null or work.candidate_id is distinct from family.candidate_id
+  or exists(select 1 from private.bpay_next_protected_source_receipt r where r.generation_id=generation.id)
+  or exists(select 1 from private.weekly_source_local_protected_decision_receipts r where r.generation_id=generation.id) then
+  raise exception 'SOURCE_NATIVE_OWNER_CONFLICT' using errcode='23514';end if;
+ placement:=private.weekly_source_protected_current_placement_v1(family.id,approval.work_event_id,false);
+ if work.contract_id::text is distinct from placement->>'current_contract_id'
+  or revision.physical_timesheet_id::text is distinct from placement->>'current_timesheet_id' then
+  raise exception 'SOURCE_NATIVE_OWNER_CONFLICT' using errcode='23514';end if;
+ if app.state='COMMITTED' then
+  perform private.weekly_source_pay_decision_publication_adoptions_assert_v1(app.id);
+  if not exists(select 1 from private.bpay_next_source_pay_decision_publication p
+    join private.bpay_next_command c on c.id=p.command_id
+    join private.bpay_next_command_member cm on cm.command_id=c.id and cm.candidate_id=p.candidate_id
+    where p.application_id=app.id and p.decision_id=app.decision_id and p.cut_id=app.cut_id and p.candidate_id=family.candidate_id
+     and c.command_kind='SOURCE_PAY_DECISION_APPLY' and c.status in('SEALED','COMPLETE') and c.sealed_at_utc is not null) then
+   raise exception 'SOURCE_NATIVE_OWNER_CONFLICT' using errcode='23514';end if;
+ end if;
+ return 'NEXT';
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'SOURCE_NATIVE_OWNER_CONFLICT' using errcode='23514';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_family_native_route_v1(uuid,uuid)
+ from public,anon,authenticated,service_role;

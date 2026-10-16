@@ -28,6 +28,10 @@ export async function prepareSourcePayDecisionConfirmation({ request, actorUserI
     throw savedResultRequired(continuation.decision_id, continuation.request_id);
   }
   const prepared = decodeSourcePayDecisionConfirmationPrepared(value, confirmation);
+  if (confirmation.action === 'ACCEPT' && prepared.confirmation_reason !== confirmation.reason.replace(/^ +| +$/g, '')) {
+    const error = new Error('The saved Source confirmation reason does not match.');
+    error.code = 'SOURCE_NATIVE_RESULT_INVALID';error.status = 502;throw error;
+  }
   if (confirmation.decision === 'ACCEPT_FINAL_SOURCE_PAY' && prepared.members.length) {
     const error = new Error('A positive Source pay decision cannot prepare Unprotect.');
     error.code = 'SOURCE_NATIVE_RESULT_INVALID';error.status = 502;throw error;

@@ -54,6 +54,94 @@ export function decodeSourceProtectedCurrentPlacement(value, expected = {}) {
   return value;
 }
 
+const SOURCE_CALCULATION_CONTEXT_KEYS = Object.freeze(['action', 'family_id', 'family_bound_version',
+  'current_target_vector_sha256', 'source_cycle_id', 'source_group_id', 'agency_id', 'candidate_id', 'client_id',
+  'contract_id', 'contract_week_id', 'root_timesheet_id', 'work_event_id', 'week_ending_date', 'source_mode', 'policy',
+  'timesheet', 'contract_week', 'contract_record', 'current_financial', 'approved_component_identity_components',
+  'requires_zero_financial', 'protected_schedule', 'source_segments', 'protected_decisions', 'source_proposal',
+  'client_sources', 'source_expenses', 'candidate_submission', 'current_comparison_revision_id', 'current_final_revision_id',
+  'root_financial', 'provider', 'expected_head_revision', 'request_sequence', 'zero_rate_source_refs', 'next_source_segments',
+  'protected_current_placement', 'current_entitlement']);
+function sourceCalculationContext(value, expected = {}) {
+  if (!sourceNativeClosed(value, SOURCE_CALCULATION_CONTEXT_KEYS) || value.action !== 'WITHDRAW'
+      || !identities(value, ['family_id', 'source_cycle_id', 'source_group_id', 'agency_id', 'candidate_id', 'client_id',
+        'contract_id', 'contract_week_id', 'root_timesheet_id', 'work_event_id'])
+      || !sourceNativePositiveBigint(value.family_bound_version)
+      || !(value.next_source_segments === null || Array.isArray(value.next_source_segments))
+      || !['NHSP_WEEKLY', 'HEALTHROSTER_WEEKLY'].includes(value.source_mode)
+      || !equalExpected(value, expected, ['family_id', 'work_event_id', 'root_timesheet_id'])) invalid('calculation context');
+  decodeSourceProtectedCurrentPlacement(value.protected_current_placement, { family_id: value.family_id,
+    original_root_timesheet_id: value.root_timesheet_id });
+  return value;
+}
+export function decodeSourceUnprotectReviewContext(value, expected = {}) {
+  if (!sourceNativeClosed(value, ['version', 'assembly_id', 'decision_id', 'member_key', 'source_phase',
+    'source_observation_sha256', 'context_sha256', 'context']) || value.version !== 'SOURCE_UNPROTECT_REVIEW_CONTEXT_RESULT_V1'
+      || !identities(value, ['assembly_id', 'decision_id']) || !member(value.member_key)
+      || !['NO_FINAL_REPORT_YET', 'FINAL_SOURCE_OBSERVED'].includes(value.source_phase)
+      || !isHash(value.source_observation_sha256) || !isHash(value.context_sha256)
+      || !equalExpected(value, expected, ['assembly_id', 'decision_id', 'member_key'])) invalid('review context');
+  sourceCalculationContext(value.context, expected);
+  const proposal = value.context.source_proposal;
+  if (!proposal || typeof proposal !== 'object'
+      || (value.source_phase === 'NO_FINAL_REPORT_YET' && (proposal.source_revision !== null || proposal.source_hash !== null))
+      || (value.source_phase === 'FINAL_SOURCE_OBSERVED' && (!isUuid(proposal.source_revision) || !isHash(proposal.source_hash)))) {
+    invalid('source observation');
+  }
+  return value;
+}
+export function normalizeSourceNativeCalculationContext(value, expected = {}) {
+  if (!sourceNativeClosed(value, [...SOURCE_CALCULATION_CONTEXT_KEYS, 'ok', 'contract', 'orchestration_run_id'])
+      || value.ok !== true || value.contract !== 'WEEKLY_PROTECTED_ACTION_CONTEXT_V1'
+      || !isUuid(value.orchestration_run_id)
+      || !equalExpected(value, expected, ['orchestration_run_id'])) invalid('native run context');
+  const { ok, contract, orchestration_run_id, ...facts } = value;
+  void ok; void contract; void orchestration_run_id;
+  return sourceCalculationContext(facts, expected);
+}
+
+export function decodeSourcePreviewQuoteContext(value, expected = {}) {
+  if (!sourceNativeClosed(value, ['version', 'review_context', 'quantity_partition', 'prior_commitment_cut_sha256'])
+      || value.version !== 'SOURCE_PAY_DECISION_PREVIEW_QUOTE_CONTEXT_RESULT_V1' || !isHash(value.prior_commitment_cut_sha256)
+      || !Array.isArray(value.quantity_partition) || !value.quantity_partition.length || value.quantity_partition.length > 1000) invalid('quote operands');
+  decodeSourceUnprotectReviewContext(value.review_context, expected);
+  sourceCutQuantityPartition(value.quantity_partition, expected);
+  if (expected.prior_commitment_cut_sha256 !== undefined && value.prior_commitment_cut_sha256 !== expected.prior_commitment_cut_sha256) {
+    invalid('quote cut digest');
+  }
+  return value;
+}
+function sourceCutQuantityPartition(quantities, expected) {
+  if (!Array.isArray(quantities) || !quantities.length || quantities.length > 1000) invalid('cut quantity partition');
+  const seen = new Set();let cutId;
+  for (const row of quantities) {
+    if (!sourceNativeClosed(row, ['cut_id', 'cut_member_no', 'member_sha256', 'family_root_id', 'source_row_id', 'source_work_event_id',
+      'canonical_work_id', 'canonical_component_key', 'scope_kind', 'scope_mode', 'work_dates', 'supported_quantity_json', 'excluded_quantity_json'])
+        || !identities(row, ['cut_id', 'source_row_id']) || !sourceNativePositiveBigint(row.cut_member_no)
+        || BigInt(row.cut_member_no) > 2147483647n || !isHash(row.member_sha256)
+        || !['family_root_id', 'source_work_event_id', 'canonical_work_id'].every(key => row[key] === null || isUuid(row[key]))
+        || !(row.canonical_component_key === null || (typeof row.canonical_component_key === 'string' && row.canonical_component_key.length > 0))
+        || !['TIMESHEET_FAMILY', 'SOURCE_ROW'].includes(row.scope_kind) || !['WHOLE_SHIFT', 'COMPONENT_QUANTITIES'].includes(row.scope_mode)
+        || (row.scope_kind === 'TIMESHEET_FAMILY' && row.family_root_id === null)
+        || !Array.isArray(row.work_dates) || !row.work_dates.every(date => typeof date === 'string' && DATE.test(date))
+        || !['supported_quantity_json', 'excluded_quantity_json'].every(key => row[key] === null || typeof row[key] === 'object')
+        || seen.has(row.cut_member_no) || (cutId !== undefined && cutId !== row.cut_id)) invalid('cut quantity partition');
+    if (expected.cut_id !== undefined && row.cut_id !== expected.cut_id) invalid('quote cut identity');
+    cutId = row.cut_id;seen.add(row.cut_member_no);
+  }
+}
+export function decodeSourceUnprotectQuoteContext(value, expected = {}) {
+  const keys = ['version','preparation_id','decision_id','review_id','member_key','accept_or_resume_request_id','orchestration_run_id',
+    'context_sha256','source_observation_sha256','economic_target_sha256','quantity_partition','prior_commitment_cut_sha256'];
+  if (!sourceNativeClosed(value, keys) || value.version !== 'SOURCE_UNPROTECT_QUOTE_CONTEXT_RESULT_V1'
+      || !identities(value, ['preparation_id','decision_id','review_id','accept_or_resume_request_id','orchestration_run_id'])
+      || !member(value.member_key) || !keys.slice(7, 10).every(key => isHash(value[key])) || !isHash(value.prior_commitment_cut_sha256)
+      || !equalExpected(value, expected, ['preparation_id','decision_id','review_id','member_key','accept_or_resume_request_id','orchestration_run_id',
+        'prior_commitment_cut_sha256'])) invalid('confirmed quote context');
+  sourceCutQuantityPartition(value.quantity_partition, expected);
+  return value;
+}
+
 export function decodeSourceNativePrepared(value, expected = {}) {
   const keys = ['ok', 'outcome', 'family_id', 'orchestration_run_id', 'source_cycle_id', 'source_group_id',
     'agency_id', 'candidate_id', 'client_id', 'contract_id', 'root_timesheet_id', 'work_event_id',
@@ -89,10 +177,23 @@ export function decodeSourceUnprotectRunPrepared(value, expected = {}) {
   return value;
 }
 
+export function decodeSourceUnprotectPreparationResult(value, expected = {}) {
+  const keys = ['version', 'preparation_id', 'decision_id', 'member_key', 'review_id', 'accept_or_resume_request_id',
+    'orchestration_run_id', 'payload_sha256', 'expires_at_utc'];
+  if (!sourceNativeClosed(value, keys) || value.version !== 'SOURCE_UNPROTECT_PREPARATION_RESULT_V1'
+      || !identities(value, ['preparation_id', 'decision_id', 'review_id', 'accept_or_resume_request_id', 'orchestration_run_id'])
+      || !member(value.member_key) || !isHash(value.payload_sha256)
+      || typeof value.expires_at_utc !== 'string' || !Number.isFinite(Date.parse(value.expires_at_utc))
+      || !equalExpected(value, expected, keys.filter(key => !['version', 'expires_at_utc'].includes(key)))) invalid('registered preparation');
+  return value;
+}
+
 export function decodeSourcePayDecisionConfirmationPrepared(value, expected = {}) {
-  const keys = ['version', 'decision_id', 'review_id', 'request_id', 'members'];
+  const keys = ['version', 'decision_id', 'review_id', 'request_id', 'confirmation_reason', 'members'];
   if (!sourceNativeClosed(value, keys) || value.version !== 'SOURCE_PAY_DECISION_CONFIRMATION_PREPARED_V1'
       || !identities(value, ['decision_id', 'review_id', 'request_id']) || !Array.isArray(value.members)
+      || typeof value.confirmation_reason !== 'string' || !value.confirmation_reason.trim()
+      || [...value.confirmation_reason].length > 1000
       || !equalExpected(value, expected, ['decision_id', 'review_id', 'request_id'])) invalid('confirmation preparation');
   const seenMembers = new Set(); const seenRuns = new Set(); const seenPreparations = new Set();
   for (const result of value.members) {

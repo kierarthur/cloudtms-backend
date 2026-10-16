@@ -1,0 +1,21 @@
+{
+  "input_commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "inputs": [
+    {
+      "path": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+      "sha256": "2a4f0d619ec2800f3d5a880459d0c0421f41c890bb6706750eb0464cab24fb03",
+      "selected_native_body_sha256": "20a6cc5e8f4e21614770ae25179443eacb9fd56a571c8073a06b1b435a99da21"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0624_weekly_source_local_saved_status_v1.sql",
+      "sha256": "bd41da3a4f9fdb97d0deaa52b03d635e3101de44fffc2c02ca10e9724ac5c4fa",
+      "selected_native_body_sha256": "1ff5fcfcfb1a9af2014a6cf4f130ae735a46315f2d231f68add210575f5b1b89"
+    }
+  ],
+  "output": "forward/25_actual_local_release_and_saved_status.sqlinc",
+  "output_sha256": "94bd0e4fb004925970a080b419dce7239e1d7de698c7630fb80405bfd2719977",
+  "complete_reverse_equals_input": true,
+  "ordinary_body_changes": 0,
+  "source_effect": "Read-only exact original pending step / actual RELEASED row / full reconstructed original Local row proof; no automatic Source acceptance or Banking mapping.",
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN"
+}

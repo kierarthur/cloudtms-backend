@@ -1,0 +1,40 @@
+-- Health-only internal read completion. Existing browser, BEGIN and native
+-- review_context DTOs remain unchanged. No Banking owner or cut is rewritten.
+create or replace function public.weekly_source_pay_decision_preview_quote_context_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,private,public as $function$
+declare context jsonb;cut private.bpay_next_source_pay_decision_cut%rowtype;quantities jsonb;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),
+  nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','assembly_id','decision_id','member_key','actor_user_id'])
+  or not(p_request ?& array['version','assembly_id','decision_id','member_key','actor_user_id'])
+  or p_request->>'version' is distinct from 'SOURCE_PAY_DECISION_PREVIEW_QUOTE_CONTEXT_V1' then
+  raise exception 'SOURCE_PAY_DECISION_QUOTE_CONTEXT_INVALID' using errcode='22023';end if;
+ context:=public.weekly_source_pay_decision_unprotect_review_context_v1(p_request
+  ||jsonb_build_object('version','SOURCE_UNPROTECT_REVIEW_CONTEXT_V1'));
+ select c.* into strict cut from private.bpay_next_source_pay_decision_cut c
+  join private.weekly_source_pay_decision_preview_assemblies a on a.id=c.preview_assembly_id and a.decision_id=c.decision_id
+  join private.weekly_source_pay_decision_requests r on r.request_id=a.preview_request_id and r.decision_id=a.decision_id
+  where c.preview_assembly_id=(context->>'assembly_id')::uuid and c.decision_id=(context->>'decision_id')::uuid
+   and a.actor_user_id=(p_request->>'actor_user_id')::uuid and r.actor_user_id=a.actor_user_id and r.request_kind='PREVIEW'
+   and r.request_hash=a.preview_request_hash and a.state in('ASSEMBLING','READY') and c.review_id is null;
+ select coalesce(jsonb_agg(jsonb_build_object('cut_id',m.cut_id,'cut_member_no',m.member_no::text,
+   'member_sha256',encode(m.member_sha256,'hex'),'family_root_id',m.family_root_id,'source_row_id',m.original_source_row_id,
+   'source_work_event_id',m.source_work_event_id,'canonical_work_id',m.canonical_work_id,'canonical_component_key',m.canonical_component_key,
+   'scope_kind',m.scope_kind,'scope_mode',m.scope_mode,'work_dates',to_jsonb(m.work_dates),
+   'supported_quantity_json',m.supported_quantity_json,'excluded_quantity_json',m.excluded_quantity_json) order by m.member_no),'[]'::jsonb)
+ into quantities from private.bpay_next_source_pay_decision_cut_member m
+ where m.cut_id=cut.id and m.member_key=context->>'member_key';
+ if jsonb_array_length(quantities) not between 1 and 1000 then
+  raise exception 'SOURCE_PAY_DECISION_QUOTE_CONTEXT_INVALID' using errcode='55000';end if;
+ return jsonb_build_object('version','SOURCE_PAY_DECISION_PREVIEW_QUOTE_CONTEXT_RESULT_V1','review_context',context,
+  'quantity_partition',quantities,'prior_commitment_cut_sha256',encode(cut.pay_cut_sha256,'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'SOURCE_PAY_DECISION_QUOTE_CONTEXT_INVALID' using errcode='55000';
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_preview_quote_context_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_preview_quote_context_v1(jsonb) to service_role;
+notify pgrst,'reload schema';

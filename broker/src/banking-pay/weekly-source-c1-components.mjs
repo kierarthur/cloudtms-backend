@@ -292,6 +292,18 @@ export function listWeeklySourceC1ComponentKeys(input = {}) {
   return Object.freeze(keys);
 }
 
+// Source review uses the identical native component copier before any
+// publication identity is allocated. No temporary/fake component UUID is
+// needed; all stable native economic and authority fields are retained.
+export function projectWeeklySourceC1ComponentEconomics(input = {}) {
+  const { rows } = normalizedComponentRows(input);
+  return Object.freeze(rows.map(({ component, authority }) => {
+    const { component_id: ignoredId, source_ordinal: ignoredOrdinal, ...economics } = component;
+    void ignoredId; void ignoredOrdinal;
+    return Object.freeze({ component: Object.freeze(economics), authority: Object.freeze({ ...authority }) });
+  }));
+}
+
 /**
  * Convert one complete server-calculated Weekly financial snapshot into the
  * exact physical component population consumed by C1.  It copies established

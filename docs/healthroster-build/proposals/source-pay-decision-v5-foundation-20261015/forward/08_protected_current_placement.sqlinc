@@ -34,12 +34,7 @@ begin
   or original.week_ending_date is distinct from family.week_ending_date
   or original_contract.candidate_id is distinct from family.candidate_id
   or event.candidate_id is distinct from family.candidate_id or event.client_id is distinct from original_contract.client_id
-  or event.work_date not between family.week_start_date and family.week_ending_date
-  or not(exists(select 1 from public.weekly_exceptional_payment_approvals a
-    where a.pay_target_family_id=family.id and a.work_event_id=event.id
-     and a.candidate_id=family.candidate_id and a.client_id=event.client_id and a.contract_id=family.contract_id)
-   or exists(select 1 from public.weekly_exceptional_pay_family_events e
-    where e.family_id=family.id and e.durable_work_event_id=event.id)) then
+  or event.work_date not between family.week_start_date and family.week_ending_date then
   raise exception 'PROTECTED_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
  end if;
  -- Resolve the certified flat physical identity, never max(version), a booking
@@ -71,6 +66,15 @@ begin
  if evidence is null then raise exception 'PROTECTED_CURRENT_PLACEMENT_EVIDENCE_UNBOUND' using errcode='55000';end if;
  evidence_hash:=private.timesheet_contract_move_row_hash_v1(evidence);
  if moved then
+  -- Existing moved protection must retain its exact genuine event association.
+  -- An unmoved first native APPROVE has no approval/family-event row yet and
+  -- retains the original native event/actor authority at its wrapper.
+  if not(exists(select 1 from public.weekly_exceptional_payment_approvals a
+    where a.pay_target_family_id=family.id and a.work_event_id=event.id
+     and a.candidate_id=family.candidate_id and a.client_id=event.client_id and a.contract_id=family.contract_id)
+   or exists(select 1 from public.weekly_exceptional_pay_family_events e
+    where e.family_id=family.id and e.durable_work_event_id=event.id)) then
+   raise exception 'PROTECTED_CURRENT_PLACEMENT_EVIDENCE_UNBOUND' using errcode='55000';end if;
   select a.* into strict alias from private.timesheet_contract_family_aliases a where a.timesheet_id=original.timesheet_id;
   select p.* into strict placement from private.timesheet_contract_current_placements p
    where p.family_root_id=alias.family_root_id and p.member_key=alias.member_key;

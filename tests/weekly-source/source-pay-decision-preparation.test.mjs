@@ -19,7 +19,7 @@ function member(n) { return { version: 'SOURCE_UNPROTECT_RUN_PREPARED_V1', prepa
     request_kind: 'WITHDRAW', protected_schedule: { work_date: '2026-10-16', start_at_local: '2026-10-16 09:00:00',
       end_at_local: '2026-10-16 17:00:00', break_minutes: 30 }, run_state: 'RUNNING', idempotent_replay: false } }; }
 const result = () => ({ version: 'SOURCE_PAY_DECISION_CONFIRMATION_PREPARED_V1', decision_id: id(1), review_id: id(3),
-  request_id: id(2), members: [member(1), member(2)] });
+  request_id: id(2), confirmation_reason: 'Office confirmation', members: [member(1), member(2)] });
 test('fresh confirmation calls one server composition with unchanged nested browser body', async () => {
   const body = request();const calls = [];
   const saved = await prepareSourcePayDecisionConfirmation({ request: body, actorUserId: id(99), dataRpc: async (...args) => {
@@ -30,6 +30,25 @@ test('fresh confirmation calls one server composition with unchanged nested brow
     version: 'SOURCE_PAY_DECISION_CONFIRMATION_PREPARE_V1', actor_user_id: id(99), confirmation_request: body } }]);
   assert.deepEqual(saved.members.map((m) => m.member_key), ['real-source-member:1', 'real-source-member:2']);
   assert.equal(saved.members[0].prepared.family_bound_version, '9007199254740993');
+  assert.equal(saved.confirmation_reason, body.reason);
+});
+test('internal reason is mandatory, bounded, and matches the actual confirmed ACCEPT', async () => {
+  for (const reason of [undefined, null, '', '   ', 7, 'x'.repeat(1001), 'Another reason']) {
+    const value = result();value.confirmation_reason = reason;
+    await assert.rejects(prepareSourcePayDecisionConfirmation({ request: request(), actorUserId: id(99), dataRpc: async () => value }));
+  }
+});
+test('RESUME takes only the server-owned immutable accepted reason', async () => {
+  const original = request();
+  const body = { version: original.version, action: 'RESUME_FINANCIAL', decision_id: original.decision_id, request_id: original.request_id,
+    expected_state_revision: '5', review_id: original.review_id, review_digest: hash, expected_pay_cut_hash: hash,
+    evidence_refs: [], expected_prior_dispositions: [], expected_prior_dispositions_sha256: hash };
+  const value = result();value.confirmation_reason = 'Original accepted reason';
+  const saved = await prepareSourcePayDecisionConfirmation({ request: body, actorUserId: id(99), dataRpc: async (fn, args) => {
+    assert.equal(Object.hasOwn(args.p_request.confirmation_request, 'reason'), false);return value;
+  } });
+  assert.equal(saved.confirmation_reason, 'Original accepted reason');
+  await assert.rejects(prepareSourcePayDecisionConfirmation({ request: { ...body, reason: 'replacement' }, actorUserId: id(99), dataRpc: async () => value }));
 });
 test('source-only/no-protection/positive composition can return the exact empty set', async () => {
   const body = request();body.decision = 'ACCEPT_FINAL_SOURCE_PAY';const empty = result();empty.members = [];

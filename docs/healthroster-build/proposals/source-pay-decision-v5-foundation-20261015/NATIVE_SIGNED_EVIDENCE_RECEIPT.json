@@ -1,0 +1,23 @@
+{
+  "input_commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "input": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+  "original_owner_sha256": "0bd27782333f8dc0f568ea451e19f6de83e2bebe7a71c7f27f5746f78ab6662d",
+  "output": "forward/09_certified_native_signed_evidence.sqlinc",
+  "output_sha256": "486a6b42704d45543c8b075bddf8246ffde3741118c5dd3598c12c6566b32d1e",
+  "complete_reverse_equals_original": true,
+  "edits": [
+    {
+      "before": "private.weekly_exceptional_candidate_signed_evidence_v1(\n  p_timesheet_id uuid\n)",
+      "after": "private.weekly_source_protected_signed_evidence_v1(\n  p_timesheet_id uuid,p_family_id uuid,p_work_event_id uuid\n)"
+    },
+    {
+      "before": "  v_kind text;\nbegin\n",
+      "after": "  v_kind text;\n  v_certificate jsonb;v_certified_evidence boolean:=false;\n  v_alias private.timesheet_contract_family_aliases%rowtype;\n  v_placement private.timesheet_contract_current_placements%rowtype;\n  v_member private.timesheet_contract_move_members%rowtype;\n  v_operation private.timesheet_contract_move_operations%rowtype;\nbegin\n  select t.* into strict v_timesheet from public.timesheets t where t.timesheet_id=p_timesheet_id;\n  if v_timesheet.archived_at_utc is null then\n    return private.weekly_exceptional_candidate_signed_evidence_v1(p_timesheet_id);\n  end if;\n  v_certificate:=private.weekly_source_protected_current_placement_v1(p_family_id,p_work_event_id,false);\n  select a.* into strict v_alias from private.timesheet_contract_family_aliases a where a.timesheet_id=p_timesheet_id;\n  select p.* into strict v_placement from private.timesheet_contract_current_placements p\n    where p.family_root_id=v_alias.family_root_id and p.member_key=v_alias.member_key;\n  select m.* into strict v_member from private.timesheet_contract_move_members m\n    where m.operation_id=v_placement.operation_id and m.member_key=v_alias.member_key;\n  select o.* into strict v_operation from private.timesheet_contract_move_operations o where o.id=v_alias.accepted_operation_id;\n  if v_certificate->'moved' is distinct from 'true'::jsonb\n    or v_alias.family_root_id::text is distinct from v_certificate->>'family_root_id'\n    or v_alias.original_timesheet_id is distinct from p_timesheet_id\n    or v_operation.state not in('COMPLETE','SUPERSEDED') or v_operation.purpose<>'CONTRACT_CORRECTION'\n    or v_timesheet.archived_reason_code is distinct from 'CONTRACT_MOVE'\n    or v_timesheet.archived_by_user_id is distinct from v_operation.created_by_user_id\n    or v_member.immutable_evidence_hash is distinct from private.timesheet_contract_move_row_hash_v1(\n      private.timesheet_contract_move_evidence_v1(p_timesheet_id))\n    or not exists(select 1 from public.weekly_exceptional_payment_approvals a\n      join public.weekly_exceptional_pay_target_families f on f.id=a.pay_target_family_id\n      where a.pay_target_family_id=p_family_id and a.work_event_id=p_work_event_id and a.evidence_timesheet_id=p_timesheet_id\n       and a.candidate_id=f.candidate_id and a.contract_id=f.contract_id and a.client_id=v_operation.actual_client_id)\n    or not exists(select 1 from private.timesheet_contract_move_members m where m.operation_id=v_operation.id\n      and m.member_key=v_alias.member_key and m.from_timesheet_id=p_timesheet_id)\n    or not exists(select 1 from private.timesheet_contract_move_capability_consumptions c\n      where c.operation_id=v_operation.id and c.member_key=v_alias.member_key and c.phase='ACCEPT_PLACEMENT'\n       and c.guard_name='public.timesheet_archive_row_guard_v1' and c.relation_oid='public.timesheets'::regclass::oid\n       and c.row_operation='UPDATE' and c.authority_receipt_id=(v_operation.placement_receipt_json->>'receipt_id')::uuid\n       and c.row_sha256=private.timesheet_contract_move_row_hash_v1(to_jsonb(v_timesheet))) then\n    raise exception 'WEEKLY_PROTECTED_EVIDENCE_INVALID' using errcode='55000';end if;\n  v_certified_evidence:=true;\n"
+    },
+    {
+      "before": "    and timesheet.is_current\n    and timesheet.revoked_at is null\n    and timesheet.archived_at_utc is null;",
+      "after": "    and (timesheet.is_current or v_certified_evidence)\n    and timesheet.revoked_at is null\n    and (timesheet.archived_at_utc is null or v_certified_evidence);"
+    }
+  ],
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN"
+}

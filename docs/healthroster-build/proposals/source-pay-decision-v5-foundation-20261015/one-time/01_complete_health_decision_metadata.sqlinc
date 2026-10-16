@@ -1,4 +1,4 @@
--- Initial Health V5 metadata, once only. No Work, financial effect, contact,
+-- Final V6 Health metadata, once only. No Work, financial effect, contact,
 -- native run or invoice is allocated here. Root owns NEW/UPGRADE composition.
 create table private.weekly_source_pay_decisions (
  id uuid primary key,
