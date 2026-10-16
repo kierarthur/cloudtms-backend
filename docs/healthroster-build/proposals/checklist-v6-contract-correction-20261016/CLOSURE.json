@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "reviewedFinalContentSha256": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
-  "canonicalInputCommit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "canonicalInputCommit": "7f5a5a876a9b485beee2b040409233eef70448c7",
   "purpose": "Health physical Contract correction and shared V3/Daily DTO source checkpoint",
   "files": [
     {
@@ -11,23 +11,28 @@
     },
     {
       "file": "forward/sql/01_capability.sqlinc",
-      "sha256": "0944ff799c46ff024aced4f1de5e01087c2db2f98cee4e3d20161e1a15fc7b07",
-      "bytes": 20694
+      "sha256": "1463373e5727d894902779cebdcaec15614f4aed97307d804a70fe1aea6d9659",
+      "bytes": 23868
     },
     {
       "file": "forward/sql/02_physical_apply.sqlinc",
-      "sha256": "802b0e5b78038a6171d197704f903b5c3f74f7cdab1885e67cb2a623028dbd59",
-      "bytes": 30089
+      "sha256": "6e92ad372d32f4148e0cc48a79b8e87fab7df384379accd272c73a1d5727753a",
+      "bytes": 32742
     },
     {
       "file": "forward/sql/03_native_guards.sqlinc",
-      "sha256": "cb6862e2e7fcd616ec0e861945c4b91a798bf694212741d4c0f2aaf16bece99c",
-      "bytes": 7592
+      "sha256": "690d4e8c597c400b88b910b93e5861ef995d4be6dc5733adfa3cc1720c521f0f",
+      "bytes": 7715
     },
     {
       "file": "forward/sql/04_atomic_assert.sqlinc",
-      "sha256": "6db9b269a0e36faa3de1991816ecad29c7a64d91368b3eb7ca5186ae87bee789",
-      "bytes": 4745
+      "sha256": "0eddc3adc1229ae4f46302615339f9705a36bc73e791fa3244fde40e260d4717",
+      "bytes": 8521
+    },
+    {
+      "file": "forward/sql/04a_accept_composition.sqlinc",
+      "sha256": "d900ad23fbc0b4b5130b6c8138767ba9d7827b3e8506feefcac12e12cbaaae10",
+      "bytes": 13430
     },
     {
       "file": "forward/sql/physical-schema.sqlinc",
@@ -36,8 +41,8 @@
     },
     {
       "file": "forward/sql/05_acl.sqlinc",
-      "sha256": "0f8cdecb5924e6afda89d5a04b5e4ef199c34c7a8cf24044725f79a0d4d59a67",
-      "bytes": 2292
+      "sha256": "46343794ce53cfa37f226a3fced412af9f490d709610d567ca7b3c0543d85bce",
+      "bytes": 2781
     },
     {
       "file": "forward/contracts/contract-correction-v3.mjs",
@@ -51,18 +56,33 @@
     },
     {
       "file": "tests/parse-source.py",
-      "sha256": "fa52d3178c7a4a4a8e97017dbccac618284d6645c02d688b50120f336f9dd2a9",
-      "bytes": 2050
+      "sha256": "939f55a7d6bdf856938157412530e8064c303f3db583d5dda83fef4e0d399fb8",
+      "bytes": 2299
+    },
+    {
+      "file": "tests/native-scalars.sql",
+      "sha256": "b4a905d0cbaff39b22b7d74ae0005119b37a2c0fbdc8bcdc60ebc83e27d44b64",
+      "bytes": 5462
     },
     {
       "file": "verification/catalogue.sql",
-      "sha256": "831ab2c18afc11b513d1e23fca0112ec324467200cf214796683cd48529c757f",
-      "bytes": 3936
+      "sha256": "60862cdea419118678fcdc653628ee63741d0b046bb4f917f56dc4593440b1cd",
+      "bytes": 4486
     },
     {
       "file": "build-native-guards.py",
-      "sha256": "5300ba8947c2e375d3beb5757cfe83797718b3a70bb17837771377e17758f86a",
-      "bytes": 2604
+      "sha256": "356ceb9b4f8e1284d42a9b727761ce7c1e5ada0415ff77f3772461549c882f8d",
+      "bytes": 2910
+    },
+    {
+      "file": "build-closure.mjs",
+      "sha256": "f0f1011e8c165441ea17a0a0172ab5ffd014ddd052b724e162c41b23780f2c75",
+      "bytes": 8596
+    },
+    {
+      "file": "NATIVE_GUARD_INPUTS.json",
+      "sha256": "ad74b2f80a087e7d59bb18091fae67595ac4855004e83564542793b78085fd76",
+      "bytes": 1452
     }
   ],
   "functions": [
@@ -164,6 +184,24 @@
       "searchPathControlled": true,
       "executeRoles": [],
       "sourceDeclarationSha256": "c319cbb94fe146a5ca46ee8318c4d9cfa867bf981cfd554b8e4bd3f0860f5ed4"
+    },
+    {
+      "signature": "private.timesheet_contract_move_context_actor_allowed_v1(uuid,text,uuid)",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "2119317c91e5ba8ce656d50883ef1d759d87959273a2b2969f64e04f44f5b0ef"
+    },
+    {
+      "signature": "private.timesheet_contract_move_financial_economics_v1(jsonb)",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "831600548ddcb7a3b12783e0cb029871852147ab8f2a12605adaf45774b5b436"
     },
     {
       "signature": "private.timesheet_contract_move_context_v1()",
@@ -274,6 +312,15 @@
       "sourceDeclarationSha256": "eb85c56790f4e103662bc21f51de8965d83281a823690d1e873c2cad12838515"
     },
     {
+      "signature": "private.timesheet_contract_move_review_members_v1(uuid,jsonb)",
+      "source": "forward/sql/02_physical_apply.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "4e6043e90892224ca56bbd43c0cea76aa6244fc983fd71369bcaba85ff2d95e9"
+    },
+    {
       "signature": "private.timesheet_contract_move_booking_part_v1(text)",
       "source": "forward/sql/02_physical_apply.sqlinc",
       "owner": "CURRENT_USER (audited release owner)",
@@ -328,6 +375,15 @@
       "sourceDeclarationSha256": "e301f06de7c7fede65d4cb526ac09217a9930eb26b3cf27a9bb0a81374e913ef"
     },
     {
+      "signature": "private.timesheet_contract_move_original_finance_assert_v1(uuid,text,bytea,bytea)",
+      "source": "forward/sql/04_atomic_assert.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "2ea94287008ee14b269e2ebaf6f071778128ca369bb99c3c129bb313a9f3c80d"
+    },
+    {
       "signature": "private.timesheet_contract_move_assert_v1(uuid,uuid)",
       "source": "forward/sql/04_atomic_assert.sqlinc",
       "owner": "CURRENT_USER (audited release owner)",
@@ -335,6 +391,42 @@
       "searchPathControlled": true,
       "executeRoles": [],
       "sourceDeclarationSha256": "754a2710624146aa25ad6fa0d817c0cf9f74d6ffdfe542e8d1b3f2f95d480a4b"
+    },
+    {
+      "signature": "private.timesheet_contract_move_reason_v1(text,text)",
+      "source": "forward/sql/04a_accept_composition.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "6155c55e10536557cb152ab84cb7655550215d2626eeabf12437f3a00753ba21"
+    },
+    {
+      "signature": "private.timesheet_contract_move_request_assert_v1(jsonb,text)",
+      "source": "forward/sql/04a_accept_composition.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "5936e4464cb6ded205d2081f29eefd4ca1999f8bf7e049c3674dc8f3109eaade"
+    },
+    {
+      "signature": "private.timesheet_contract_move_request_hash_v1(jsonb,text)",
+      "source": "forward/sql/04a_accept_composition.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "52ed6ca00aeed7640458b30c8230f345526a6a33b44e4043bd77bc4b486e42e8"
+    },
+    {
+      "signature": "public.timesheet_contract_move_accept_v1(jsonb)",
+      "source": "forward/sql/04a_accept_composition.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "b11c1117515d4df6bf6fe677147d5915c8ab120df86df47e7317cabcfa128bc0"
     }
   ],
   "integration": {
@@ -345,6 +437,7 @@
       "02_physical_apply.sqlinc",
       "03_native_guards.sqlinc",
       "04_atomic_assert.sqlinc",
+      "04a_accept_composition.sqlinc",
       "05_acl.sqlinc"
     ],
     "mount": "Finite Health owned fragments only. Root applies selected seven-module composition; no stale parent transplant.",
@@ -352,6 +445,21 @@
     "daily": "Shared metadata/DTO only. No Contract-Daily allocator, aliases, chooser or retired Daily booking-origin tables."
   },
   "dependencies": [
+    {
+      "signature": "private.bpay_next_contract_move_cut_v1(uuid,boolean)",
+      "author": "BANKING",
+      "required": "Actual native current comparison/locks and reviewed cut/valuation producer; Health does not invent returned hash/valuation schema."
+    },
+    {
+      "signature": "private.timesheet_contract_move_read_v1(uuid,uuid)",
+      "author": "HEALTH physical projection",
+      "required": "Actual native financial current-result/Summary projection needed before shared Result can be produced; no generic job status substituted."
+    },
+    {
+      "signature": "private.invoice_contract_move_verified_unissue_v1(uuid)",
+      "author": "HEALTH invoice lane",
+      "required": "Actual original unpaid Draft/current verified-unissue qualification for exact selected native lock update."
+    },
     {
       "signature": "private.bpay_next_contract_move_stage_v1(uuid,bytea)",
       "author": "BANKING",
@@ -390,7 +498,8 @@
     "nativeFinancialAcceptance": "NOT_RUN",
     "apiAcceptance": "NOT_RUN",
     "installed": false,
-    "publicPreviewAcceptResultWrappers": "DEPENDENCY_HELD: exact nested native cut/valuation/current-result ABI not supplied; none fabricated or exposed.",
+    "nativeScalarAssertions": "NOT_RUN: executable tests/native-scalars.sql supplied for root rollback rehearsal; no stubs/business fixtures.",
+    "publicPreviewAcceptResultWrappers": "Actual Accept/GET SQL composition supplied, explicitly ungranted. Preview and private current Result remain DEPENDENCY_HELD on exact native cut hash/valuation/current financial presentation ABI; none fabricated or exposed.",
     "sourceGate": "Run npm run db:check again before handoff; proposal files are not selected release roots."
   }
 }

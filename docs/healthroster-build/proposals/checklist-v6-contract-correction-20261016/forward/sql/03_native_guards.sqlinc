@@ -155,7 +155,7 @@ DECLARE
   v_move_capability uuid;
 BEGIN
   -- V6 exact one-use acceptance arm. All original ordinary refusal logic follows unchanged.
-  IF TG_OP IN ('INSERT','UPDATE') THEN
+  IF TG_OP IN ('INSERT','UPDATE') AND EXISTS (SELECT 1 FROM public.timesheets t WHERE t.timesheet_id=ANY(v_timesheet_ids) AND t.archived_at_utc IS NOT NULL) THEN
     v_move_capability:=private.timesheet_contract_move_capability_resolve_v1(
       'public.timesheet_archived_evidence_guard_v1',TG_RELID,TG_OP,CASE WHEN TG_OP='UPDATE' THEN to_jsonb(OLD) ELSE NULL END,to_jsonb(NEW));
     IF v_move_capability IS NOT NULL THEN

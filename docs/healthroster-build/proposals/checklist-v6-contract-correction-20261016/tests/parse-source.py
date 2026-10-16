@@ -28,3 +28,6 @@ for file in sorted((base/'forward/sql').glob('*.sqlinc')):
    count+=1
  print(file.name+': grammar parsed')
 print(f'{count} declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.')
+scalar_tests=(base/'tests/native-scalars.sql').read_text(encoding='utf-8')
+parser.parse_sql(scalar_tests);parser.parse_plpgsql_json(scalar_tests)
+print('native-scalars.sql: SQL/DO grammar parsed; assertions NOT_RUN (root rollback rehearsal only).')

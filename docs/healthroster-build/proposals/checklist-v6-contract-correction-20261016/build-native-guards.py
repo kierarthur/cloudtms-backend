@@ -17,11 +17,14 @@ for name in ['timesheet_archive_row_guard_v1','timesheet_archived_evidence_guard
  if signature in prior and hashlib.sha256(original.encode()).hexdigest()!=prior[signature]:
   raise RuntimeError('Native owner changed; focused reconciliation required: '+signature)
  if original.count('\nBEGIN\n')!=1:raise RuntimeError('Native guard anchor ambiguous: '+name)
+ condition="TG_OP IN ('INSERT','UPDATE')"
+ if name=='timesheet_archived_evidence_guard_v1':
+  condition+=" AND EXISTS (SELECT 1 FROM public.timesheets t WHERE t.timesheet_id=ANY(v_timesheet_ids) AND t.archived_at_utc IS NOT NULL)"
  body=original.replace('\nBEGIN\n','''
   v_move_capability uuid;
 BEGIN
   -- V6 exact one-use acceptance arm. All original ordinary refusal logic follows unchanged.
-  IF TG_OP IN ('INSERT','UPDATE') THEN
+  IF '''+condition+''' THEN
     v_move_capability:=private.timesheet_contract_move_capability_resolve_v1(
       'public.'''+name+'''',TG_RELID,TG_OP,CASE WHEN TG_OP='UPDATE' THEN to_jsonb(OLD) ELSE NULL END,to_jsonb(NEW));
     IF v_move_capability IS NOT NULL THEN
@@ -34,7 +37,7 @@ BEGIN
  blocks.append(body+'\nREVOKE ALL ON FUNCTION public.'+name+'() FROM PUBLIC,anon,authenticated,service_role;\n')
  receipts.append({'signature':'public.'+name+'()','inputPath':str(source).removeprefix('\\\\?\\'),
   'inputSha256':hashlib.sha256(original.encode()).hexdigest(),'outputSha256':hashlib.sha256(body.encode()).hexdigest(),
-  'exactChange':'One DECLARE variable and exact resolver/consume arm before original BEGIN body; all original body bytes retained.'})
+  'exactChange':'One DECLARE variable and exact resolver/consume arm before original BEGIN body; evidence arm applies only to native archived rows, leaving normal B admission intact; all original body bytes retained.'})
 (base/'forward/sql/03_native_guards.sqlinc').write_text('\n'.join(blocks),encoding='utf-8',newline='\n')
-(base/'NATIVE_GUARD_INPUTS.json').write_text(json.dumps({'canonicalI2':'a934ee1d460b444939234e812babccb90dc3ddff','functions':receipts},indent=2)+'\n',encoding='utf-8')
+(base/'NATIVE_GUARD_INPUTS.json').write_text(json.dumps({'canonicalI2':'7f5a5a876a9b485beee2b040409233eef70448c7','functions':receipts},indent=2)+'\n',encoding='utf-8')
 print('Native guard bodies generated: '+str(len(blocks)))

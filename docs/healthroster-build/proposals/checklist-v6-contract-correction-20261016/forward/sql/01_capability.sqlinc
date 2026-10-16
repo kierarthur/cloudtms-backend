@@ -1,4 +1,26 @@
 -- Shared single-use transaction authority. GUC is a locator, never a permission.
+create or replace function private.timesheet_contract_move_context_actor_allowed_v1(p_operation_id uuid,p_phase text,p_actor_user_id uuid)
+returns boolean language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select exists(select 1 from private.timesheet_contract_move_operations o join public.tms_users u on u.id=p_actor_user_id
+  where o.id=p_operation_id and u.is_active and
+   ((p_phase in('ACCEPT_PLACEMENT','DAILY_RATE_REVISION') and o.created_by_user_id=u.id
+     and private.weekly_source_pay_actor_allowed_v1(u.id))
+    or (p_phase in('INVOICE_SELECTED_EDIT','INVOICE_SELECTED_RELOCATE') and upper(u.role::text)='ADMIN')))
+$function$;
+
+-- Retain every original finance field except the exact native invoice lock metadata.
+-- Segment order, identity, rates, amounts and every other breakdown key remain sealed.
+create or replace function private.timesheet_contract_move_financial_economics_v1(p_row jsonb)
+returns jsonb language sql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+ select case when jsonb_typeof(p_row#>'{invoice_breakdown_json,segments}')='array' then
+  jsonb_set(p_row-array['updated_at','locked_at_utc','locked_by_invoice_id'],'{invoice_breakdown_json,segments}',
+   coalesce((select jsonb_agg(case when jsonb_typeof(s)='object' then s-'invoice_locked_invoice_id' else s end order by ord)
+    from jsonb_array_elements(p_row#>'{invoice_breakdown_json,segments}') with ordinality v(s,ord)),'[]'::jsonb),false)
+ else p_row-array['updated_at','locked_at_utc','locked_by_invoice_id'] end
+$function$;
+
 create or replace function private.timesheet_contract_move_context_v1()
 returns private.timesheet_contract_move_execution_contexts language plpgsql volatile security definer
 set search_path='pg_catalog','public','private','pg_temp'
@@ -12,11 +34,12 @@ begin
  end if;
  select v.* into c from private.timesheet_contract_move_execution_contexts v where v.id=locator::uuid for update;
  if c.id is null or c.backend_pid<>pg_backend_pid() or c.transaction_id<>pg_current_xact_id()
-  or c.expires_at_utc<=clock_timestamp() or not private.weekly_source_pay_actor_allowed_v1(c.actor_user_id)
+  or c.expires_at_utc<=clock_timestamp()
+  or not private.timesheet_contract_move_context_actor_allowed_v1(c.operation_id,c.phase,c.actor_user_id)
   or c.manifest_sha256<>private.timesheet_contract_move_row_hash_v1(c.native_manifest_json)
   or not exists(select 1 from private.timesheet_contract_move_operations o
    join private.timesheet_contract_move_reviews r on r.id=c.review_id and r.operation_id=o.id
-   where o.id=c.operation_id and o.created_by_user_id=c.actor_user_id
+   where o.id=c.operation_id
     and ((c.phase in('ACCEPT_PLACEMENT','DAILY_RATE_REVISION') and o.state='REVIEWED')
       or (c.phase in('INVOICE_SELECTED_EDIT','INVOICE_SELECTED_RELOCATE')
        and (o.state='COMPLETE' or (o.state='REVIEWED' and o.accepted_review_id=c.review_id and o.placement_receipt_json is not null))))
@@ -52,10 +75,10 @@ begin
  if new.backend_pid<>pg_backend_pid() or new.transaction_id<>pg_current_xact_id()
   or new.expires_at_utc<>new.created_at_utc+interval '120 seconds' or new.expires_at_utc<=clock_timestamp()
   or new.manifest_sha256<>private.timesheet_contract_move_row_hash_v1(new.native_manifest_json)
-  or not private.weekly_source_pay_actor_allowed_v1(new.actor_user_id)
+  or not private.timesheet_contract_move_context_actor_allowed_v1(new.operation_id,new.phase,new.actor_user_id)
   or not exists(select 1 from private.timesheet_contract_move_operations o
    join private.timesheet_contract_move_reviews r on r.operation_id=o.id and r.id=new.review_id
-   where o.id=new.operation_id and o.created_by_user_id=new.actor_user_id and o.billing_revision=new.billing_revision)
+   where o.id=new.operation_id and o.billing_revision=new.billing_revision)
   or new.native_manifest_json->>'version'<>'CORRECTION_NATIVE_EVENTS_V1'
   or jsonb_typeof(new.native_manifest_json->'events') is distinct from 'array' then
   raise exception 'CONTRACT_MOVE_CONTEXT_IDENTITY_INVALID' using errcode='42501';
@@ -169,9 +192,28 @@ begin
     and guard in('public.timesheet_archived_evidence_guard_v1','private.bpay_next_ordinary_authorisation_trigger_v1')
     and (new_row->>'timesheet_id')::uuid=o.from_timesheet_id and new_row->>'paid_at_utc' is null;
  elsif c.phase in('INVOICE_SELECTED_EDIT','INVOICE_SELECTED_RELOCATE') then
-  allowed:=rel='public.invoice_lines'::regclass and op in('INSERT','UPDATE')
-   and guard in('public.invoice_line_archived_timesheet_guard_v1','private.weekly_source_invoice_line_owner_guard_v1')
-   and p_event->>'scope_receipt_id' is not null;
+  -- Native selected edit removes old lines and inserts current B lines through
+  -- their normal native owner. It needs no archived invoice-line INSERT/UPDATE
+  -- exemption. Only the retained original finance lock UPDATE is authorised here.
+  if rel='public.timesheets_financials'::regclass and op='UPDATE'
+   and guard='public.timesheet_archived_evidence_guard_v1' then
+   changed:=private.timesheet_contract_move_changed_columns_v1(old_row,new_row);
+   allowed:=(old_row->>'id')::uuid=(m->>'from_financial_id')::uuid
+    and (old_row->>'timesheet_id')::uuid=(m->>'from_timesheet_id')::uuid
+    and private.timesheet_contract_move_financial_economics_v1(old_row)
+      is not distinct from private.timesheet_contract_move_financial_economics_v1(new_row)
+    and changed<@array['updated_at','locked_at_utc','locked_by_invoice_id','invoice_breakdown_json']::text[]
+    and p_event->>'authority_receipt_id'=o.placement_receipt_json->>'receipt_id'
+    and exists(select 1 from private.timesheet_contract_move_billing_slices s join public.invoices i on i.id=s.original_invoice_id
+     where s.operation_id=o.id and s.billing_revision=c.billing_revision and s.member_key=p_event->>'member_key'
+      and s.authority='CONTRACT_PRICED' and s.original_financial_id=(old_row->>'id')::uuid
+      and s.original_invoice_id=(p_event->>'scope_receipt_id')::uuid
+      and s.disposition=case c.phase when 'INVOICE_SELECTED_EDIT' then 'EDIT_DRAFT' else 'RELOCATE_DRAFT' end
+      and i.status::text in('DRAFT','ON_HOLD') and i.issued_at_utc is null and i.paid_at_utc is null
+      and i.issued_document_version_id is null
+      and (private.invoice_contract_move_verified_unissue_v1(i.id)
+       or not exists(select 1 from public.audit_events a where a.object_id_text=i.id::text and a.action='INVOICE_ISSUED')));
+  end if;
  end if;
  if allowed is distinct from true then raise exception 'CONTRACT_MOVE_GUARD_PHASE_REFUSED' using errcode='42501'; end if;
 end;
