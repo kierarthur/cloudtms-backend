@@ -44,7 +44,7 @@ for file in files:
  print(file.name+': grammar parsed')
 print(f'{count} declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.')
 if not options.sql_file:
- for scalar_file in sorted((base/'tests').glob('*native-scalars.sql')):
+ for scalar_file in sorted([*(base/'tests').glob('*native-scalars.sql'),base/'tests/evidence-compatibility.sql']):
   scalar_tests=scalar_file.read_text(encoding='utf-8')
   parser.parse_sql(scalar_tests);parser.parse_plpgsql_json(scalar_tests)
   print(scalar_file.name+': SQL/DO grammar parsed; assertions NOT_RUN (root rollback rehearsal only).')

@@ -230,10 +230,12 @@ as $function$
 declare a private.timesheet_contract_family_aliases%rowtype; m private.timesheet_contract_move_members%rowtype;
  original_t public.timesheets%rowtype; current_t public.timesheets%rowtype; placement jsonb; evidence jsonb;
 begin
+ if p_timesheet_id is null or not exists(select 1 from private.timesheet_contract_family_aliases v where v.timesheet_id=p_timesheet_id) then
+  return null;
+ end if;
  placement:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
  select t.* into strict current_t from public.timesheets t where t.timesheet_id=(placement->>'current_timesheet_id')::uuid;
- select v.* into a from private.timesheet_contract_family_aliases v where v.timesheet_id=current_t.timesheet_id;
- if a.timesheet_id is null then return null;end if;
+ select v.* into strict a from private.timesheet_contract_family_aliases v where v.timesheet_id=current_t.timesheet_id;
  select v.* into strict m from private.timesheet_contract_move_members v where v.operation_id=a.accepted_operation_id and v.member_key=a.member_key;
  select t.* into strict original_t from public.timesheets t where t.timesheet_id=a.original_timesheet_id;
  evidence:=private.timesheet_contract_move_evidence_v1(original_t.timesheet_id);

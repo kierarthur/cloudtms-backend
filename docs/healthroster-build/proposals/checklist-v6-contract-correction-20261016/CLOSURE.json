@@ -16,8 +16,8 @@
     },
     {
       "file": "forward/sql/02_physical_apply.sqlinc",
-      "sha256": "57e9fc7d33a859afefcbf75f60ecbeaec3bc9bffb18bbd91b1d11e2440376b40",
-      "bytes": 37896
+      "sha256": "916d7a0438014aa1a700878cc5ea76f97eb3138484947691801917ffe4abeea9",
+      "bytes": 38016
     },
     {
       "file": "forward/sql/03_native_guards.sqlinc",
@@ -66,8 +66,8 @@
     },
     {
       "file": "tests/parse-source.py",
-      "sha256": "37d075631d4ec878f5ed1b21ec9fa63cfb9c7afa3078e2cb7e7ff78a9b75c346",
-      "bytes": 3577
+      "sha256": "a71af9d9a2bbad01bbf228d8df0a53eff616b83446e293d51b5468091cd95d3d",
+      "bytes": 3620
     },
     {
       "file": "tests/native-scalars.sql",
@@ -86,13 +86,23 @@
     },
     {
       "file": "build-closure.mjs",
-      "sha256": "72a57b99a121904efbb7bc5b4884f0a89c221c3ea6b2b4670f9e30b99dc4760d",
-      "bytes": 13459
+      "sha256": "18eec997967ae51e8d9ae90afe5f3a08ecde19cfecb2edf5fae626f2ccaa2abf",
+      "bytes": 14222
     },
     {
       "file": "NATIVE_GUARD_INPUTS.json",
       "sha256": "ad74b2f80a087e7d59bb18091fae67595ac4855004e83564542793b78085fd76",
       "bytes": 1452
+    },
+    {
+      "file": "forward/compat/timesheet_contract_move_evidence_source_v1.sqlinc",
+      "sha256": "eddb7995b817dae7015520e6c2dd312ee0cd0695583ea31cd15fffac63b4498d",
+      "bytes": 3046
+    },
+    {
+      "file": "tests/evidence-compatibility.sql",
+      "sha256": "62be6f063c551f4c72b8f1d09e3a43b38a06c2d2b594171a1942044127a53040",
+      "bytes": 723
     },
     {
       "file": "tests/daily-rate-calculator.test.mjs",
@@ -723,7 +733,8 @@
     ],
     "mount": "Finite Health owned fragments only. Root applies selected seven-module composition; no stale parent transplant.",
     "sourceIngressConsumer": "private.timesheet_contract_current_placement_v1(uuid) exact CURRENT_CONTRACT_PLACEMENT_V1",
-    "daily": "04b context belongs to health_review_context; 04c admission/assertion belongs to health_native_apply. Shared 00_identity adds a deferred member/operation completion guard; 02 review enrollment delegates genuine Daily scope. No Daily aliases/Contract allocator. Calculator is an exact bounded extension of sole existing owner, baseline SHA256 64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b; root source-carries only its reviewed diff."
+    "daily": "04b context belongs to health_review_context; 04c admission/assertion belongs to health_native_apply. Shared 00_identity adds a deferred member/operation completion guard; 02 review enrollment delegates genuine Daily scope. No Daily aliases/Contract allocator. Calculator is an exact bounded extension of sole existing owner, baseline SHA256 64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b; root source-carries only its reviewed diff.",
+    "evidenceCompatibility": "Existing Contract-only 7d1be386 closure receives only exact replacement body forward/compat/timesheet_contract_move_evidence_source_v1.sqlinc. It is byte-identical to the function in 02_physical_apply, and is an alternative finite replacement, not a second definition to include alongside 02. Physical schema is unchanged."
   },
   "dependencies": [
     {
@@ -800,6 +811,7 @@
     "nativeScalarAssertions": "NOT_RUN: executable tests/native-scalars.sql supplied for root rollback rehearsal; no stubs/business fixtures.",
     "publicPreviewAcceptResultWrappers": "Actual Accept/GET SQL composition supplied, explicitly ungranted. Preview and private current Result remain DEPENDENCY_HELD on exact native cut hash/valuation/current financial presentation ABI; none fabricated or exposed.",
     "sourceGate": "Run npm run db:check again before handoff; proposal files are not selected release roots.",
+    "evidenceCompatibilityAssertions": "tests/evidence-compatibility.sql invokes real NULL/unregistered alias paths, supplied for root rollback rehearsal; parsed only here, NOT_RUN. Genuine registered aliases still enter strict H103/current-alias resolution.",
     "dailyCalculatorTests": "20 tests passed (9 correction cases plus 11 existing Daily regressions); existing baseline economic golden unchanged.",
     "dailyWrappers": "Genuine service-only context wrapper supplied; Preview/Accept/Result remain dependency-held on exact native paid/frozen/Summary/freeze-preview seam. Same-record admission/assertion implemented without a fake publisher or new queue. Full REGISTERED native publication asserted; no unprovided NOT_REQUIRED certificate inferred.",
     "dailyNativeScalarAssertions": "NOT_RUN: executable tests/daily-native-scalars.sql invokes real rounding helper with missing/zero/binary boundary assertions; no stubs or business fixtures."
