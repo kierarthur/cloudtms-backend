@@ -6483,5 +6483,16 @@
     "newPublicOperations": 0,
     "native": "NOT_RUN",
     "original92ObjectsUnchanged": true
+  },
+  "daily_native_sql_source_continuation_20261016": {
+    "status": "SOURCE_INTEGRATED_NATIVE_DEPENDENCY_HELD",
+    "producerCommit": "00f25571ac7fb65f44351a52beced0710211138e",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_SQL_SOURCE_INTEGRATION.json",
+    "root": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+    "closureSha256": "0a52848ab07332397c7efc00d7fe6a2cf815e819ff477cd3b47afc8327822646",
+    "functions": 15,
+    "sourceOnly": true,
+    "native": "NOT_RUN",
+    "bankingInterface": "DEPENDENCY_HELD"
   }
 }

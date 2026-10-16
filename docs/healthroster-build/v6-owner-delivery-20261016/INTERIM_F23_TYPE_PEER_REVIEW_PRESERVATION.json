@@ -1,0 +1,34 @@
+{
+  "version": "HEALTHROSTER_INTERIM_F23_PEER_REVIEW_PRESERVATION_V1",
+  "sourceCommit": "0716b661530c6147e778231db8663a8abefb56f3",
+  "sourceWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+  "sourceFolder": "docs/healthroster-build/proposals/f23-finite-type-peer-review-20261016",
+  "outputFolder": "docs/healthroster-build/v6-owner-delivery-20261016/INTERIM_F23_TYPE_PEER_REVIEW_20261016",
+  "files": [
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/INTERIM_F23_TYPE_PEER_REVIEW_20261016/REPORT.md",
+      "sha256": "8cdb30376e27cf0b35adc601ec9c84541f33aa43756f8511b4457062ac1db419",
+      "bytes": 5057
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/INTERIM_F23_TYPE_PEER_REVIEW_20261016/REVIEW.json",
+      "sha256": "e7e9c6c72cdc7367cf079d9a0832d89cd19028d00f0904529a32530d0da60336",
+      "bytes": 6268
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/INTERIM_F23_TYPE_PEER_REVIEW_20261016/SOURCE_CHECKS.json",
+      "sha256": "a9494589da746b8718c9188fe9710fb4d7f9742151674b5e45d46513b6f4baa1",
+      "bytes": 1030
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/INTERIM_F23_TYPE_PEER_REVIEW_20261016/verify-source.py",
+      "sha256": "37b647350e589f49c697488daa6f0845ffb3f65fa7bb81859a416977ec71cc10",
+      "bytes": 6870
+    }
+  ],
+  "verdict": "No blocking source finding in exact reviewed tuple/cardinality commits; independent interim source review only",
+  "finalPartBCritic": false,
+  "scope": "ef5468b5288e2d4ffef61edb20b703583fe2b66c,c29b4a6b7cfaf60deb888a740c3015a77aedc3b0,24a2cabb9aaf31b91f8b9c671ba4a8dda3f9605f",
+  "native": "NOT_RUN",
+  "preservationNote": "Peer reported automatic Git maintenance permission-denied attempts pruning old worktree metadata. No cleanup or configuration change performed; preserve for final handback temporary-folder/refusal audit."
+}

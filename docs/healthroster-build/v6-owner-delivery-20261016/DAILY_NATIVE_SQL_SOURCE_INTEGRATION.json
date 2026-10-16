@@ -1,0 +1,119 @@
+{
+  "version": "HEALTHROSTER_V6_DAILY_NATIVE_SQL_SOURCE_INTEGRATION_V1",
+  "status": "SOURCE_INTEGRATED_NATIVE_DEPENDENCY_HELD",
+  "sourceParent": "3b2f6f385052b51df4004be6b68766ad62c6c17e",
+  "producerCommit": "00f25571ac7fb65f44351a52beced0710211138e",
+  "producerWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+  "root": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+  "closureSha256": "0a52848ab07332397c7efc00d7fe6a2cf815e819ff477cd3b47afc8327822646",
+  "payloads": [
+    {
+      "source": "docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/forward/sql/04b_daily_context.sqlinc",
+      "target": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "bytes": 15693
+    },
+    {
+      "source": "docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/forward/sql/04c_daily_admission.sqlinc",
+      "target": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "sha256": "6c419edd7a1fe95cb5dfd7a501a3d1a4c8cd105917664eb3563d60e495695025",
+      "bytes": 38061
+    },
+    {
+      "source": "docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/forward/sql/04d_daily_requests.sqlinc",
+      "target": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "bytes": 4862
+    },
+    {
+      "source": "docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/forward/sql/05_acl.sqlinc",
+      "target": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/04_final_acl.sqlinc",
+      "sha256": "a092da99c35e7e42989155e6a08b7a42694105212c2bdb785d6ab6aa157bdac8",
+      "bytes": 3852
+    }
+  ],
+  "definitions": {
+    "completeFunctions": 15,
+    "newPrivate": 14,
+    "newPublicServiceOnlyContext": 1,
+    "privateFinalAclExactSignatures": 52,
+    "nativeRateMutexTriggers": 2
+  },
+  "registry": {
+    "before": 1273,
+    "after": 1288,
+    "allEarlierChainsUnchanged": true,
+    "editorChainsUnchanged": true,
+    "newExactSignatures": [
+      "private.daily_rate_authority_lock_v1()",
+      "private.daily_rate_correction_authority_v1(jsonb,boolean)",
+      "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+      "public.timesheet_daily_rate_correction_context_v1(jsonb)",
+      "private.daily_rate_correction_scope_v1(uuid,boolean)",
+      "private.daily_rate_calculator_round_assert_v1(double precision,numeric)",
+      "private.daily_rate_correction_snapshot_assert_v1(jsonb,jsonb,jsonb,uuid)",
+      "private.daily_rate_correction_normalized_snapshot_v1(jsonb,jsonb,jsonb,uuid)",
+      "private.daily_rate_correction_financial_id_v1(uuid,text)",
+      "private.daily_rate_correction_revision_admit_v1(uuid,text)",
+      "private.daily_rate_correction_accepting_v1(uuid)",
+      "private.daily_rate_correction_assert_v1(uuid,uuid)",
+      "private.daily_rate_correction_request_assert_v1(jsonb,text)",
+      "private.daily_rate_correction_request_hash_v1(jsonb,text)",
+      "private.daily_rate_correction_preview_replay_v1(jsonb)"
+    ]
+  },
+  "schemaRegister": {
+    "originalObjects": 92,
+    "originalObjectsSha256": "dd9547b6ddde9ed0316030f84b9ec6d24275c4914bd7651a0a1366e97c0baac3",
+    "originalObjectsUnchanged": true
+  },
+  "validation": {
+    "sourceIntegrity": "PASS407migrations1077repeatables",
+    "finalDefiners": {
+      "status": "PASS",
+      "signatures": 2733,
+      "registered": 1288,
+      "roots": 1077,
+      "pendingRoots": 306
+    },
+    "offlinePg17": {
+      "parser": "pglast7.20/PostgreSQL17",
+      "statements": 21,
+      "proceduralBodies": 16,
+      "innerExpressions": 338,
+      "status": "PASS",
+      "rowtypeAlias": "Offline parser only; native type binding NOT_RUN"
+    },
+    "focusedSourceTests": {
+      "command": "node --test --test-concurrency=1 tests/daily-canonical-authority.test.mjs tests/daily-rate-calculator.test.mjs tests/daily-rate-http.test.mjs tests/contract-correction-v3.test.mjs tests/bpay-next-final-definers.test.js tests/healthroster-final-definer-daterange.test.js",
+      "passed": 50,
+      "failed": 0
+    },
+    "restartRecovery": "Prior Windows VirtualAlloc/OOM runs retained as environmental failures; fresh same-source checks passed after owner restart."
+  },
+  "qualification": {
+    "native": "NOT_RUN",
+    "generatedFinalContract": "PENDING_FINAL_COMPOSITION",
+    "financialPublisher": "ACTUAL_BANKING_INTERFACE_DEPENDENCY_HELD",
+    "freshDailyPreviewAcceptResult": "NOT_COMPOSED_NOT_EXPOSED",
+    "runtimeFetchMount": "DEPENDENCY_HELD",
+    "officeActions": "DEPENDENCY_HELD",
+    "fullRehearsal": "NOT_RUN",
+    "install2": "NOT_INSTALLED",
+    "activation": "NOT_RUN",
+    "finalCritics": "NOT_COMPLETE"
+  },
+  "changes": [
+    "Complete current native context and role/rate authority locks, same-ID financial revision admission and completion assertions, and immutable request/replay helpers mounted as exact frozen source.",
+    "Same recursive closure includes exact owner-only private ACL after every definition; original public context owner/revokes/service grant retained verbatim.",
+    "Actual financial publisher and Invoice composition remain required; no nominal financial ABI, fake Summary, money fallback or Ready receipt supplied."
+  ],
+  "effects": {
+    "databaseSessionHeld": false,
+    "sharedLockHeld": false,
+    "testMutation": false,
+    "deployment": false,
+    "bankingChatMessage": false,
+    "secretsPrinted": false
+  }
+}
