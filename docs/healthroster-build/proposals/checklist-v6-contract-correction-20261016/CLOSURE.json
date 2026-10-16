@@ -36,8 +36,8 @@
     },
     {
       "file": "forward/sql/04b_daily_context.sqlinc",
-      "sha256": "80badf4eec2f15034cd9d550646f9afc8b5090619b9aa9cdfe9018d75630147f",
-      "bytes": 15137
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "bytes": 15693
     },
     {
       "file": "forward/sql/04c_daily_admission.sqlinc",
@@ -86,8 +86,8 @@
     },
     {
       "file": "build-closure.mjs",
-      "sha256": "464074684016995f009ed0f3430f647c39be63438cf90a97d0fc6d425ea23676",
-      "bytes": 13180
+      "sha256": "72a57b99a121904efbb7bc5b4884f0a89c221c3ea6b2b4670f9e30b99dc4760d",
+      "bytes": 13459
     },
     {
       "file": "NATIVE_GUARD_INPUTS.json",
@@ -775,7 +775,7 @@
       "signature": "private.bpay_next_daily_rate_correction_publish_v1(uuid,uuid)",
       "author": "BANKING",
       "original": "DAILY-RATE-ADMISSION-01 / DY02/04/05/06/10",
-      "required": "Actual once-only existing ordinary publication plus named INSERT deferral in real ordinary authorisation trigger. Health admission fails before writes when publisher is absent. No direct ordinary publisher shortcut or auth toggle."
+      "required": "Actual once-only existing ordinary publication plus named INSERT deferral in real ordinary authorisation trigger and exact correction-purpose approval-evidence overlay. Current bpay_next_daily_approval_evidence_v1 preserves original hours-only baseline and rejects nonzero reimbursements/mileage; Health does not weaken that owner. Health context requires genuine existing frozen Timesheet settings. Admission fails before writes when publisher is absent. No direct ordinary publisher shortcut or auth toggle."
     },
     {
       "signature": null,

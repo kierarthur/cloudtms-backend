@@ -75,7 +75,7 @@ returns jsonb language plpgsql volatile security definer set search_path='pg_cat
 as $function$
 declare t public.timesheets%rowtype; f public.timesheets_financials%rowtype; w private.bpay_next_work%rowtype;
  control private.bpay_next_worker_control%rowtype; native_context record; checked record; v_candidate_id uuid; v_client_id uuid;
- selection jsonb; authority jsonb; result jsonb; original_facts jsonb; context_hash text; v_rate_type text;
+ selection jsonb; authority jsonb; result jsonb; original_facts jsonb; frozen_settings jsonb; context_hash text; v_rate_type text;
 begin
  if p_timesheet_id is null or p_actor_user_id is null or p_lock is null
   or not private.weekly_source_pay_actor_allowed_v1(p_actor_user_id)
@@ -83,6 +83,8 @@ begin
   raise exception 'DAILY_RATE_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
  select v.* into t from public.timesheets v where v.timesheet_id=p_timesheet_id;
  if t.timesheet_id is null or t.sheet_scope::text is distinct from 'DAILY' or t.contract_id is not null
+  or t.line_type::text is distinct from 'HOURS' or t.is_adjustment is true or t.parent_timesheet_id is not null
+  or t.correction_id is not null or nullif(btrim(t.adjustment_origin),'') is not null or nullif(btrim(t.correction_kind),'') is not null
   or not t.is_current or t.archived_at_utc is not null or t.revoked_at is not null then
   raise exception 'DAILY_RATE_CURRENT_CONTRACTLESS_TARGET_REQUIRED' using errcode='22023';end if;
  if (select count(*) from public.timesheets v where v.booking_id=t.booking_id and v.is_current and v.archived_at_utc is null)<>1
@@ -124,6 +126,9 @@ begin
   raise exception 'DAILY_RATE_NATIVE_FACTS_REVIEW_REQUIRED' using errcode='23514';end if;
  v_rate_type:=upper(native_context.out_candidate->>'pay_method');
  if v_rate_type is null or v_rate_type not in('PAYE','UMBRELLA') then raise exception 'DAILY_RATE_CURRENT_CHANNEL_MISSING' using errcode='23514';end if;
+ -- Existing native Daily publication already requires this immutable authority.
+ -- Missing history is a preflight blocker; never seed new physical settings here.
+ frozen_settings:=private._timesheet_settings_authority_frozen_v1(t.timesheet_id);
  select v.* into w from private.bpay_next_work v where v.booking_id=t.booking_id;
  if w.id is not null and (w.contract_id is not null or w.candidate_id is distinct from v_candidate_id or w.original_timesheet_id is distinct from t.timesheet_id
   or w.origin_kind is distinct from 'DAILY' or w.origin_work_date is distinct from (t.worked_start_iso at time zone 'Europe/London')::date
@@ -147,7 +152,7 @@ begin
   'native_financial_basis',jsonb_build_object('work',case when w.id is null then null else to_jsonb(w) end,
    'worker_control',case when control.candidate_id is null then null else to_jsonb(control) end,
    'current_channel',v_rate_type,'current_umbrella_id',native_context.out_candidate->'umbrella_id',
-   'current_umbrella_vat_chargeable',native_context.out_umbrella->'vat_chargeable'),
+   'current_umbrella_vat_chargeable',native_context.out_umbrella->'vat_chargeable','settings_authority',frozen_settings),
   'context_reader_sha256',encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(pg_get_functiondef('public.tsfin_load_context_batch(uuid[])'::regprocedure))),'hex'));
  context_hash:=encode(private.timesheet_contract_move_row_hash_v1(result),'hex');
  return result||jsonb_build_object('context_digest',context_hash);
