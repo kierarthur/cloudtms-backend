@@ -143,7 +143,9 @@ export function assertManagedPrerequisiteEvidence(context,evidence,root){
  const rows=evidence?.weekly_source_protected_prerequisite_qualifications;if(rows===undefined)return;
  if(!Array.isArray(rows)||rows.length>100)fail('PREREQUISITE_MANAGED_SCOPE_INVALID');
  const legacy=rows.filter(q=>q.schema_version==='WEEKLY_SOURCE_PROTECTED_CAPABILITY_QUALIFICATION_V1');
- assertLegacy(context,{weekly_source_protected_capability_qualifications:legacy});
+ // Validate the legacy scope only when a genuine legacy qualification exists.
+ // A release without Source qualifications grants no Source capability.
+ if(legacy.length)assertLegacy(context,{weekly_source_protected_capability_qualifications:legacy});
  const seen=new Set();
  for(const q of rows.filter(q=>q.schema_version!=='WEEKLY_SOURCE_PROTECTED_CAPABILITY_QUALIFICATION_V1')){
   exact(q,['schema_version','phase','release_id','git_commit','contract_sha256','agency_id','environment','source_group_id',

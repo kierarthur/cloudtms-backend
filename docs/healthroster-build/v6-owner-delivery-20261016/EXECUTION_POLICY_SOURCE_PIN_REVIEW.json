@@ -1,0 +1,122 @@
+{
+  "version": "HEALTH_EXACT_EXECUTION_POLICY_PIN_REVIEW_V1",
+  "source_parent": "1ca5f5d631ef5d7adc39da277f55ce97fd86c883",
+  "changed_paths": [
+    {
+      "path": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "reason": "SOURCE_REASSERT",
+      "before_sha256": "e95320c23ee1236d4ff469412c157f334233bd1b4fe90877fdf5cbb24a6561db",
+      "after_sha256": "4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53",
+      "expanded_bytes": 442316,
+      "packaging_statements": 167,
+      "transaction_boundaries": [
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT"
+      ],
+      "source_files": [
+        {
+          "path": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+          "sha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c"
+        },
+        {
+          "path": "supabase/repeatable/08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1.sql",
+          "sha256": "fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e"
+        },
+        {
+          "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+        },
+        {
+          "path": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+          "sha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff"
+        },
+        {
+          "path": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+          "sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21"
+        },
+        {
+          "path": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+          "sha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d"
+        }
+      ],
+      "source_changes": [
+        "15092026_2311 result permits proved_no_network receipt key and invokes exact private contact-result guard before original native completion. Only routine body changed; no result caller executes during definition."
+      ],
+      "rationale_unchanged": true,
+      "SQL_or_transaction_stage_changes_by_this_pin_update": false
+    },
+    {
+      "path": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "reason": "CANDIDATE_RUNTIME_RELOAD",
+      "before_sha256": "06ee379760f437ae18dc8f965acd4920775d0571e7da74e160f2592ec67a8a72",
+      "after_sha256": "eece10432b4080b90cee9a1077336b0accbeb08c08f6d3649d4b4fa754e9de1b",
+      "expanded_bytes": 94463,
+      "packaging_statements": 42,
+      "transaction_boundaries": [
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT"
+      ],
+      "source_files": [
+        {
+          "path": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+          "sha256": "61f0f9fc8e7a1ea8bc041d9b9c4faf67a0633d0f1600923c5d09ea2bba1094b5"
+        },
+        {
+          "path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+          "sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b"
+        },
+        {
+          "path": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+          "sha256": "7203e1229a43f4545bcc85b3ce280ffadc2968dceb5f80aa8a7b54d01328978b"
+        },
+        {
+          "path": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+          "sha256": "523f5faf9d05c4151d2615438030470beae937c9cf794c5fb4c8c205c73fd2b5"
+        },
+        {
+          "path": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+          "sha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338"
+        },
+        {
+          "path": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+          "sha256": "7335affaf41db16171e882d03174c7e3547bd48fd1b1cec903f81523088b979b"
+        }
+      ],
+      "source_changes": [
+        "10102026_1624 claim response adds actual command.tranche_kind; only routine body changed."
+      ],
+      "rationale_unchanged": true,
+      "SQL_or_transaction_stage_changes_by_this_pin_update": false
+    }
+  ],
+  "scope": "Refresh only two existing reviewed recursive-closure hashes after exact Health child-routine changes;39existing exception classes/rationales and every execution/transaction guard retained.",
+  "source_grammar": "Both remain definition/ACL stages;4and3retained BEGIN/COMMITpairs respectively. No routine or external-effect caller is introduced at top level.",
+  "full_rehearsal": "Special managed exception still requires exact independently reviewed transaction-envelope handling; no automatic flatten or outer transaction escape.",
+  "native_qualification": "REQUIRED_NOT_RUN",
+  "installed": false,
+  "source_tests": {
+    "command": "node --test tests/managed-database-release.test.mjs",
+    "passed": 27,
+    "failed": 0,
+    "scope": "All39exact exception pins; complete current NEW inventory packaging plus guarded transport/restart/admission model. No database connection."
+  },
+  "test_fixture_correction": {
+    "file": "tests/managed-database-release.test.mjs",
+    "reason": "Five existing transport-control models returned nominal verify hash but omitted actual catalogue required by the current evidence builder. Models now return an explicit data-free catalogue and matching digest; production contract digest checks unchanged."
+  },
+  "empty_qualification_correction": {
+    "file": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+    "reason": "Empty actual legacy subset was passed to legacy clone-only scope validator, incorrectly refusing a release without Source qualifications. Invoke legacy validator only when actual legacy rows exist; V2, malformed, foreign scope and genuine receipt checks retained.",
+    "regressions": "Empty/noSource accepted; nonarray/malformedV2/foreignlegacy still refuse."
+  }
+}

@@ -12,6 +12,7 @@ import { acquireWriterSql, applyManagedRelease, assertBootstrapPrefix, assertCon
   compileBootstrap, compileManagedUnit, managedAdmissionSql, managedReleaseContext,
   OWNER_RLS_ENVELOPE, IMMUTABLE_GUARD_DEPENDENCY, pendingInventory, prepareManagedSourceReaders, resetWriterSql, unitCheckpointSql } from '../scripts/cloudtms-managed-release.mjs';
 import { inventory, readJson, repoRoot, executableSqlFile, mapExecutableSqlSource } from '../scripts/cloudtms-db-release-lib.mjs';
+import { assertManagedPrerequisiteEvidence } from '../scripts/weekly-source-protected-prerequisite-evidence.mjs';
 
 test('packaging lexer treats quoted/dollar bodies as opaque, not transaction boundaries',()=>{
   const source=`-- BEGIN;\n\\set ON_ERROR_STOP on\nbegin;\ncreate or replace function private.x() returns void language plpgsql as $fn$begin commit; end$fn$;\nselect 'COMMIT; \\connect other';\ncommit;`;
@@ -320,8 +321,15 @@ function modelWriter(state,failAt) {
   }};return writer;
 }
 function modelState(){return {control:false,receipt:false,lock:false,migrations:[],repeatables:[],calls:[],bootstrap:0,next:0};}
-function modelApply(repository,state,{failAt,verify=()=>({sha256:'b'.repeat(64)})}={}){
-  return applyManagedRelease({...repository,context:context('NEW'),openSession:()=>modelWriter(state,failAt),
+// Data-free transport model catalogue. The production verifier returns actual
+// catalogue metadata and its matching digest; this mock must satisfy that same
+// evidence boundary instead of returning an unbacked nominal hash.
+const modelCatalogue = Object.freeze({relations: [], functions: [], triggers: [], policies: [], default_acls: []});
+const modelContractHash = digest(JSON.stringify(modelCatalogue));
+const modelContext = mode => ({...context(mode), expectedHash: modelContractHash});
+const modelVerification = () => ({sha256: modelContractHash, actual: modelCatalogue});
+function modelApply(repository,state,{failAt,verify=modelVerification}={}){
+  return applyManagedRelease({...repository,context:modelContext('NEW'),openSession:()=>modelWriter(state,failAt),
     preapply:()=>{assert.equal(state.lock,true);},verify:()=>{assert.equal(state.lock,true);return verify();}});
 }
 test('connected NEW restarts after lost bootstrap/file replies without a second nonidempotent DDL',async()=>{
@@ -347,7 +355,7 @@ test('definitions complete plus failed verifier is not VERIFIED; fresh restart r
   try{
     await assert.rejects(()=>modelApply(repository,state,{verify:()=>{attempts++;throw Error('Verifier failed');}}),/Verifier failed/);
     assert.equal(state.failed,true);assert.equal(state.verified,undefined);assert.equal(state.next,1);
-    await modelApply(repository,state,{verify:()=>{attempts++;return {sha256:'b'.repeat(64)};}});
+    await modelApply(repository,state,{verify:()=>{attempts++;return modelVerification();}});
     assert.equal(attempts,2);assert.equal(state.next,1);assert.equal(state.verified,true);
   }finally{fs.rmSync(repository.root,{recursive:true});}
 });
@@ -366,9 +374,9 @@ test('unclassified execution refuses BEFORE a new bootstrap; arbitrary nonempty 
 test('connected UPGRADE uses the same guarded atomic/checkpoint path, no bootstrap or ledger census',async()=>{
   const repository=smallRepository(),state=modelState();state.control=true;
   state.migrations=[repository.current.migrations[0]];let verifications=0;
-  const apply=failAt=>applyManagedRelease({...repository,context:context('UPGRADE'),
+  const apply=failAt=>applyManagedRelease({...repository,context:modelContext('UPGRADE'),
     openSession:()=>modelWriter(state,failAt),preapply:()=>assert.equal(state.lock,true),
-    verify:()=>{verifications++;assert.equal(state.lock,true);return {sha256:'b'.repeat(64)};}});
+    verify:()=>{verifications++;assert.equal(state.lock,true);return modelVerification();}});
   try{
     await assert.rejects(()=>apply('after'),/CONNECTION_CLOSED/);
     assert.equal(verifications,0);assert.equal(state.bootstrap,0);assert.equal(state.next,1);
@@ -397,8 +405,8 @@ test('only approved exact 40P01 unit may reconnect/reacquire; unknown failures n
     };}return writer;
   };
   try{
-    await applyManagedRelease({...repository,context:context('UPGRADE'),openSession:create,
-      deadlockRetries:file=>file.endsWith('/next.sql')?1:0,delay:async()=>{retries++;},preapply:()=>{},verify:()=>({sha256:'b'.repeat(64)})});
+    await applyManagedRelease({...repository,context:modelContext('UPGRADE'),openSession:create,
+      deadlockRetries:file=>file.endsWith('/next.sql')?1:0,delay:async()=>{retries++;},preapply:()=>{},verify:modelVerification});
     assert.equal(starts,2);assert.equal(retries,1);assert.equal(state.next,1);
     assert.equal(state.calls.filter(sql=>sql===acquireWriterSql).length,2);
     assert.equal(state.calls.filter(sql=>sql.includes('$managed_admission$')).length,2);
@@ -416,4 +424,11 @@ test('exact manifest binds verifier bytes and canonical LF, not just file paths'
     fs.writeFileSync(path.join(repository.root,file),'select 2;\n');
     assert.notEqual(managedReleaseContext({...repository,context:context()}).manifestHash,first);
   }finally{fs.rmSync(repository.root,{recursive:true});}
+});
+
+test('release with no Source qualification does not invent a legacy clone-only scope', () => {
+  assert.doesNotThrow(() => assertManagedPrerequisiteEvidence(context(), {weekly_source_protected_prerequisite_qualifications: []}, repoRoot));
+  assert.throws(() => assertManagedPrerequisiteEvidence(context(), {weekly_source_protected_prerequisite_qualifications: null}, repoRoot), /PREREQUISITE_MANAGED_SCOPE_INVALID/);
+  assert.throws(() => assertManagedPrerequisiteEvidence(context(), {weekly_source_protected_prerequisite_qualifications: [{schema_version: 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_QUALIFICATION_V1'}]}, repoRoot), /QUALIFICATION_MANAGED_SCOPE_INVALID/);
+  assert.throws(() => assertManagedPrerequisiteEvidence(context(), {weekly_source_protected_prerequisite_qualifications: [{schema_version: 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_PREREQUISITE_QUALIFICATION_V2'}]}, repoRoot), /PREREQUISITE_MANAGED_RECEIPT_INVALID/);
 });
