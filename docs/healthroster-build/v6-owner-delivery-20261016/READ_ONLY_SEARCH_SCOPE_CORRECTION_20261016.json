@@ -1,0 +1,18 @@
+{
+  "version": "HEALTH_READ_ONLY_SEARCH_SCOPE_CORRECTION_V1",
+  "status": "SCOPE_CORRECTED_NO_CODE_ADOPTED",
+  "scope": "One internal Daily symbol search reached Banking worktree beyond the permitted two install records",
+  "searchPattern": "daily_rate_correction_publish_v1|daily_rate_correction.*(cut|review|preflight)|DAILY_RATE_PUBLICATION_V1",
+  "searchedRelativeDirectories": [
+    "supabase",
+    "broker",
+    "docs/bpay-next"
+  ],
+  "searchMode": "read-only rg filename/line matches",
+  "observedOutput": "One plan JSON signature match; no matched file opened",
+  "bankingFilesChanged": 0,
+  "bankingBytesCopiedOrCommitted": 0,
+  "bankingAbiOrImplementationAdopted": false,
+  "remediation": "Stop further Banking worktree searches. Use only reviewed pack/current authorised Health baseline and the two explicitly permitted Banking install records. Any contract use requires independent authorised source provenance.",
+  "ownerPermissionRequested": false
+}

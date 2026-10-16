@@ -1,0 +1,33 @@
+{
+  "version": "HEALTH_CONTACT_CLOSED_COMPONENT_PREFLIGHT_V1",
+  "sourceCommit": "4c46ea7f9f51a2632746485d4ba1d458a7e8fa1e",
+  "status": "READ_ONLY_PREFLIGHT_PASS_OPERATIONAL_COMPONENT_NOT_RUN",
+  "physicalDatabase": "cloudtms_test_clone",
+  "accepted": true,
+  "rolledBack": true,
+  "freshVerificationConnected": true,
+  "currentAndSessionUserEqual": true,
+  "serviceHelperPresent": true,
+  "serviceHelperBodyMatches": true,
+  "legacyPublicStartAndResultPresent": true,
+  "threeExistingFunctionOwnersMatchSession": true,
+  "expectedPrivateAndPublicServiceAclsObserved": true,
+  "protectedReleaseOwnerHelperPresent": false,
+  "existingServiceClaimContext": false,
+  "operationalOverlayExecuted": false,
+  "reason": "Existing packet requires an absent protected-release helper; that is a harness prerequisite not required by the three actual closed-command application declarations",
+  "followup": "Review finite actual native service-owner/TEST/LEGACY modeled component dialect; no manufactured protected-release helper or genuine JWT/API claim",
+  "initialToolInputRefusal": {
+    "reason": "Missing required label in generated request; request rejected before SQL",
+    "preflightRuntimeLabelAdded": true,
+    "sourceSuccessorRequired": true
+  },
+  "sharedTurnHolderPid": 191143,
+  "sharedTurnCompletion": "ROOT_COMPONENT_SEQUENCE_FINISHED",
+  "releaseConfirmed": true,
+  "businessDataRead": false,
+  "businessDml": false,
+  "providerCalled": false,
+  "apiRoleProof": "NOT_RUN",
+  "nativeClosedCommandProof": "NOT_RUN"
+}

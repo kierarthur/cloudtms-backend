@@ -1,0 +1,175 @@
+{
+  "version": "HEALTH_CONTACT_CLOSED_COMMAND_NATIVE_V1",
+  "status": "NATIVE_CLOSED_COMMAND_COMPONENT_AND_FRESH_RESTORATION_VALIDATED",
+  "sourceProposalCommit": "31eebb460a992e74d28c772782eac7d23b606e77",
+  "executableSuccessorCommit": "651cf5ee40280cb979e7a8403f4b3a3d48479a4f",
+  "sourceManifestSha256": "087270d2b4a75d1bef20f406189be95ee498e204cfce90952357f7b0329346a6",
+  "actualBackendSourceCommit": "39aa5b30042711956b83a7bf899f416d2f3b4771",
+  "mode": "service-owner-request",
+  "scope": "CLOSED_COMMAND_COMPONENT_ONLY",
+  "databaseTarget": "agency_test",
+  "physicalDatabase": "cloudtms_test_clone",
+  "sqlSha256": "a6221de9f53e734938a48379598dfa214f789234020c9a2f6e45234cd13d4fd0",
+  "verificationSqlSha256": "6e6bc28438ab9af450eb434d42252e329eec844662fb033e24eeb20a9879243d",
+  "accepted": true,
+  "rolledBack": true,
+  "connectedFresh": true,
+  "statements": 18,
+  "errors": 0,
+  "completeApplicationDeclarations": 3,
+  "closedCommands": 2,
+  "nativeAclChecked": true,
+  "modeledClaimTransactionLocal": true,
+  "genuineNativeServiceOwnerPrecheck": true,
+  "protectedHelperCreatedOrCalled": false,
+  "beforeSnapshot": {
+    "roles": {
+      "anon": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "service_role": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "authenticated": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    "module": "LEGACY:1",
+    "schemas": {
+      "public": "0c42f7c05141150838cef82fe61cd725",
+      "private": "82e0de85a8f707d0d303f89b39a883ea"
+    },
+    "database": "cloudtms_test_clone",
+    "functions": {
+      "private.weekly_source_query_require_service_v1()": "69449fd40027eec2645d4b1fc106754e",
+      "private.weekly_source_protected_qualification_owner_v1()": null,
+      "public.weekly_source_message_dispatch_result_atomic_v1(jsonb)": "b47c14d48ff409ccaea39996ed64a0f0",
+      "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)": "36d208cfedecba0351d8835fabb562c9"
+    },
+    "default_acl": "68e60f24f3becfe085cae5433d7fe513",
+    "identity_test": true,
+    "marker_absent": true,
+    "migration_ledger": {
+      "md5": "622a4f8c689a70a069c9a54c5cf778d1",
+      "count": 389
+    },
+    "postmaster_epoch": "1791968853.240096",
+    "repeatable_ledger": {
+      "md5": "44bfec9fc45509586997ba0579cfe921",
+      "count": 1019
+    },
+    "server_version_num": "170011",
+    "identity_relation_present": true
+  },
+  "freshSnapshot": {
+    "roles": {
+      "anon": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "service_role": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "authenticated": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    "module": "LEGACY:1",
+    "schemas": {
+      "public": "0c42f7c05141150838cef82fe61cd725",
+      "private": "82e0de85a8f707d0d303f89b39a883ea"
+    },
+    "database": "cloudtms_test_clone",
+    "functions": {
+      "private.weekly_source_query_require_service_v1()": "69449fd40027eec2645d4b1fc106754e",
+      "private.weekly_source_protected_qualification_owner_v1()": null,
+      "public.weekly_source_message_dispatch_result_atomic_v1(jsonb)": "b47c14d48ff409ccaea39996ed64a0f0",
+      "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)": "36d208cfedecba0351d8835fabb562c9"
+    },
+    "default_acl": "68e60f24f3becfe085cae5433d7fe513",
+    "identity_test": true,
+    "marker_absent": true,
+    "migration_ledger": {
+      "md5": "622a4f8c689a70a069c9a54c5cf778d1",
+      "count": 389
+    },
+    "postmaster_epoch": "1791968853.240096",
+    "repeatable_ledger": {
+      "md5": "44bfec9fc45509586997ba0579cfe921",
+      "count": 1019
+    },
+    "server_version_num": "170011",
+    "identity_relation_present": true
+  },
+  "nativeAssertion": {
+    "mode": "service-owner-request",
+    "scope": "CLOSED_COMMAND_COMPONENT_ONLY",
+    "marker": "hr_contact_closed_1d439c487bd9c960de6b174379e2a6a6",
+    "closed_count": 2,
+    "api_role_proof": "NOT_RUN",
+    "provider_called": false,
+    "native_acl_checked": true,
+    "service_helper_first_use": true,
+    "protected_owner_first_use": false
+  },
+  "sharedTurn": {
+    "chat": "HealthRoster",
+    "task": "HEALTH_CONTACT_CLOSED_COMPONENT_OWNER_REQUEST",
+    "status": "RELEASED",
+    "takenAt": "2026-10-16T12:32:23.329Z",
+    "releasedAt": "2026-10-16T12:32:51.922Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": true,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "holderPid": 191564,
+  "temporaryHarnessAbsent": true,
+  "sourceChecksPass": 153,
+  "grammarFilesPass": 22,
+  "rootIndependentlyReranChecks": true,
+  "apiRoleProof": "NOT_RUN",
+  "providerCalled": false,
+  "perTargetAdmissionAndRaceAndFullRehearsal": "NOT_RUN",
+  "install2": "NOT_RUN",
+  "partB": "NOT_RUN",
+  "rawNativeResponseCommitted": false
+}

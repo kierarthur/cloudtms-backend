@@ -1,0 +1,18 @@
+{
+  "version": "HEALTH_CONTACT_CLOSED_COMPONENT_SOURCE_REVIEW_V1",
+  "source": "docs/healthroster-build/proposals/v6-contact-closed-command-component-20261016",
+  "sourceWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
+  "historicalCommit": "4c46ea7f9f51a2632746485d4ba1d458a7e8fa1e",
+  "executableSuccessor": "651cf5ee40280cb979e7a8403f4b3a3d48479a4f",
+  "documentationSuccessor": "31eebb460a992e74d28c772782eac7d23b606e77",
+  "all56SuccessorFilesSavedAndGitVerified": true,
+  "allFourActualI2PhysicalSourceHashesMatch": true,
+  "applicationDefinitionsUnchanged": true,
+  "rootSourceChecksPass": 153,
+  "scope": "Native owner-modeled component request; no protected-release/JWT/API qualification",
+  "rootHelper": "docs/healthroster-build/proposals/contact-closed-native-root-turn-20261016/hold-shared-turn.mjs",
+  "rootHelperSha256": "67634bb5e11740846eedaee075ade8bdea9eaab23f3306e6a9405755a1358787",
+  "nativeReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_CLOSED_COMMAND_NATIVE_20261016.json",
+  "followingComponentTransportWork": "Separate complete fixed read-only canonical metadata recipe; not yet integrated or run",
+  "executedIgnoredHelper": ".codex-tmp/hold-contact-component-turn-20261016.mjs"
+}
