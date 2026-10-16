@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mapExecutableSqlSource } from './cloudtms-db-release-lib.mjs';
-import { exactAtomicBody, scanManagedSql } from './cloudtms-managed-release-sql.mjs';
+import { exactAtomicBody, scanManagedSql, readManagedClosure } from './cloudtms-managed-release-sql.mjs';
 
 // This prepares source only. The account-appropriate native MCP owns execution
 // and rollback; the separate existing shared-turn helper owns the lock session.
@@ -136,6 +136,15 @@ try {
     const published = execFileSync('git', ['cat-file', 'blob', `${sourceCommit}:${file}`]);
     assert.deepEqual(saved, published, `${file}: publish exact source before trial`);
     pins.push({ path: file, sha256: sha(saved), bytes: saved.length });
+    if (/^\s*\\ir\s/m.test(saved.toString('utf8'))) {
+      const closure=readManagedClosure(file,root,[],(text,included)=>{
+        const bytes=fs.readFileSync(included),publishedInclude=execFileSync('git',['cat-file','blob',sourceCommit+':'+included]);
+        assert.deepEqual(bytes,publishedInclude,included+': publish exact include before trial');
+        if(included!==file)pins.push({path:included,sha256:sha(bytes),bytes:bytes.length,included_by:file});
+        return mapExecutableSqlSource(text,included);
+      });
+      return exactAtomicBody(closure.expanded);
+    }
     return mapExecutableSqlSource(exactAtomicBody(saved.toString('utf8')), file);
   });
 } finally {
