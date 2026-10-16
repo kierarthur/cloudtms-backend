@@ -1,0 +1,73 @@
+{
+  "version": "CONTACT_MCP_ROUTE_LIVE_AUTHORITY_SUCCESSOR_MANIFEST_V1",
+  "historicalUnrun": "63c0f6f073f5188a969cd6b7c59d899d391b6dd8",
+  "files": [
+    {
+      "path": "AUTHORITY.json",
+      "sha256": "832055c9bc87adb9cb60ad25d2c778404348b83316614a5b3b5f9a5aa16e83b9",
+      "bytes": 4142
+    },
+    {
+      "path": "GRAMMAR_RESULT.json",
+      "sha256": "988b718043c65a43969fe0cdcc77ec40eb156c4a6e3e85f255af98769bca2c8d",
+      "bytes": 1014
+    },
+    {
+      "path": "hold-case.mjs",
+      "sha256": "c2e0dbcb77a23a70d72e7b6b46be2bc27770241c957d34a3e63142faddc10cc3",
+      "bytes": 6155
+    },
+    {
+      "path": "input-builder.mjs",
+      "sha256": "15ab65b9e1253b207b393d696de77dd4cf4c2fbe9e1847b282991bf2d00e31cf",
+      "bytes": 8025
+    },
+    {
+      "path": "inputs/root/scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "bytes": 48190
+    },
+    {
+      "path": "inputs/root/scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+      "bytes": 14597
+    },
+    {
+      "path": "inputs/root/scripts/healthroster-rehearsal-turn.mjs",
+      "sha256": "b7e16cdb12e8b5c6d11894e53296e4d20aeeaceb8dd968ed32936884f3ab3610",
+      "bytes": 12864
+    },
+    {
+      "path": "inputs/root/scripts/healthroster-turn-control.mjs",
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8",
+      "bytes": 9580
+    },
+    {
+      "path": "OFFLINE_GRAMMAR_INPUTS.json",
+      "sha256": "e416b9485368a3bf3c5ec4d3daa736d211b26e9134623b79ad87ed96466118ba",
+      "bytes": 333228
+    },
+    {
+      "path": "README.md",
+      "sha256": "eaceba467424ad55e56d389b7b2a126fae9f187b9abca12419937002ee19eeb6",
+      "bytes": 8205
+    },
+    {
+      "path": "result-validator.mjs",
+      "sha256": "256556a2735a5123eefe52a29422b67036bb42d53188612290b2da01da59a168",
+      "bytes": 7362
+    },
+    {
+      "path": "source.test.mjs",
+      "sha256": "acb84aedd4299dc48f932e438ae7a0a022f5a2ebb4fb7da6432184d0bc968a23",
+      "bytes": 7305
+    }
+  ],
+  "offlineTests": 13,
+  "offlinePg17Cases": 6,
+  "databaseCalls": 0,
+  "native": "NOT_RUN",
+  "I2Edits": 0,
+  "BankingEdits": 0,
+  "backgroundJobsPaused": false
+}

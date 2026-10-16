@@ -1,0 +1,134 @@
+{
+  "version": "CONTACT_MCP_BOUNDED_ROUTE_AND_LIVE_AUTHORITY_SUCCESSOR_V1",
+  "historicalUnrunCommit": "63c0f6f073f5188a969cd6b7c59d899d391b6dd8",
+  "historicalPlanSha256": "156718044e8bb5b4fdeb19eb1ad650dcfbb391f9fe42e429c7ba0306cb182e13",
+  "helperInputs": [
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "sha256": "b7e16cdb12e8b5c6d11894e53296e4d20aeeaceb8dd968ed32936884f3ab3610"
+    }
+  ],
+  "expectedWriters": [
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "_candidate_daily_json_sha256_v1(p_value jsonb)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "91bb08b79571e0e9937e8d82f4388959eea6dadf9981e259e537e7cb7fc199fd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_daily_projection_claim_v1(p_internal_context jsonb, p_claim_request_id uuid, p_idempotency_key text, p_target text, p_claimant text, p_max_items integer, p_lease_seconds integer, p_correlation_id text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "f9323cdcb4f2163f97c8b0c31bf1f0f92c3e2766041f0e0571c3dc22698eae3d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [],
+      "schema": "public",
+      "identity": "tsfin_dequeue_batch_ids(p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "3daeab18828c11b4b18a42cd07842f1c5fcc672e4940aa5824830a201a26e82d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [],
+      "schema": "public",
+      "identity": "tsfin_work_fail(p_id uuid, p_error text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "02f9b0d49608eeb7525a848c25eed3196f02dc24cf7493d2ec45060fa8701ace"
+    }
+  ],
+  "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+  "native": "NOT_RUN",
+  "backgroundJobsPaused": false,
+  "authorizationSource": {
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/AGENTS.md",
+    "sha256": "93e9c3f3cf707756139cdc67a3a87e8fd3bb9376816d5be71c568e9a2445c86a",
+    "lines": [
+      214,
+      216
+    ],
+    "rule": "Kier proposed SQL only through server-owned rollback MCP; parent separately authorizes direct shared turn/holder A only."
+  }
+}
