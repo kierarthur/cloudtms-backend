@@ -1,5 +1,12 @@
 # HealthRoster TEST setup manifest
 
+## CONTACT-PAUSE-RB-16102026 — bounded checking-control proof
+
+Manifested before mutation. Current kier@arthur-rai.co.uk Operations rollback on agency_test/cloudtms_test_clone, separate existing shared turn for before/SQL/rollback/fresh absence. Exact prerequisite QT administration/calendar fixtures retain their existing f716...001/010/011/019 IDs; no additional candidate/client/user is introduced. The new six stores and twelve contact routines must all be absent before construction. New fixture request IDs f7160000-0000-4000-8000-000000000020 through024, scope/event/task UUIDs generated only inside the rollback; no public user can log in or be contacted. New metadata is owner-only/RLS-protected with no direct service/browser table access.
+
+Exercise real GET without row creation, first WORKER PAUSE0→1, independent MANAGER1→2, partial WORKER RESUME2→3 retaining MANAGER, BOTH3→4, effective no-op revision retention with real recheck task, exact and altered replay, stale CAS, lost permission, strict scalars, immutable events/receipts, exact Monday/DST and lazy expiry. Required expected counts:5commands/4events/5bounded recheck tasks; no provider/clock activation, Source generation, body render, mail/drain, payment or settlement function. Existing global clock settings unchanged. A new recheck task records metadata only; its actual bounded scheduler integration, all native START/permit/result/race and grouped recomposition remain REQUIRED_NOT_RUN. Require no statement error, rollback/fresh true, all8new tables/23routines and every prerequisite fixture absent, identical ledger fingerprints and LEGACY1.
+
+
 ## QT-CALENDAR-RB-16102026 — bounded timing/calendar proof
 
 Manifested before mutation. Current kier@arthur-rai.co.uk native Operations rollback, agency_test only, under the existing shared turn. Reuses the exact QT-ADMIN fixture below and adds four complete timing/calendar routines. Adds one temporary candidate f7160000-0000-4000-8000-000000000010 (healthroster-qt-calendar@example.invalid, key HR_QT_CALENDAR_ROLLBACK), client f7160000-0000-4000-8000-000000000011 and its native client_settings row. Assert all identifiers/email/key absent before insert. No contact addresses, sends, financial rows, signatures or activation. Read the actual existing settings_defaults holiday list and compare the genuine effective owner; never edit it. All existing guards/constraints stay enabled.
