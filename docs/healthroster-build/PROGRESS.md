@@ -10,6 +10,8 @@ Actual adjacent GET/PUT /api/mytms/push-timing now uses existing requireMyTmsOff
 
 Office Push timing is mounted in the actual saved host, with its own exact request/revision and original-body uncertain-save retry. Nine new controller tests plus eight existing settings/MyTMS regressions pass. Local real-browser desktop1366x900/mobile390x844 both pass day/holiday edits, retained unfinished tab state, exact9007199254740993 revision and successful save without changing the control-plane payload or using external network. Corrected the fixture's insecure about:blank origin using locally fulfilled HTTPS; production crypto/UUID checks were retained. Deployed real-admin/API/phone/full-modal acceptance is still pending.
 
+The subsequent53statement49048byte calendar trial at source7f5a5a876a9b485beee2b040409233eef70448c7 passed actual native constructor/use, London spring-gap/later-autumn-end, wraparound/day/holiday/expiry/28date cases and actual existing configured calendar with null and genuine fixture client. Exact trial SHA25677a8bb09e9cc605a45c0429d1c5bfb5918f24d48693f817f3fb8ded6f7814b1d; complete safe receipt QT_CALENDAR_NATIVE_ROLLBACK.json. All eleven new routines/two tables/admin/candidate/client/settings fixtures absent fresh afterwards; identical ledgers/LEGACY1. Turn143104 explicitly unlocked/closed23:53:56.259UTC15October. Shared helper also checked no active protected workflow and no APPLYING database release before taking this turn. No required quiet calendar completeness gate or second holiday store was introduced.
+
 The physical/invoice/Source-native lanes are implementing exact V6 owners and recording genuine Banking dependency boundaries. Independent contact/QT/Office work continues. Daily has no Contract; its separate same-record rate correction and native publication remain required. One Install2, TEST activation, full native/financial/document/API/security acceptance, TestFlight/phone and final PartB Sol reviews remain unfinished. No database installation, deployment, external send/payment/provider/settlement, secret change, background-job pause, Banking message or cleanup occurred.
 
 ## V5 owner amendment — active 15 October 2026
@@ -613,3 +615,7 @@ SEND_7 turn: {"chat":"HealthRoster","task":"checklist-schema-53-constructors-202
 SEND_7 turn: {"chat":"HealthRoster","task":"V6_QT_ADMIN_NATIVE_20261016","status":"TAKEN","takenAt":"2026-10-15T23:32:05.084Z","key":[20261013,1]}
 
 SEND_7 turn: {"chat":"HealthRoster","task":"V6_QT_ADMIN_NATIVE_20261016","status":"RELEASED","takenAt":"2026-10-15T23:32:05.084Z","releasedAt":"2026-10-15T23:32:39.650Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"V6_QT_CALENDAR_NATIVE_20261016","status":"TAKEN","takenAt":"2026-10-15T23:53:26.427Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"V6_QT_CALENDAR_NATIVE_20261016","status":"RELEASED","takenAt":"2026-10-15T23:53:26.427Z","releasedAt":"2026-10-15T23:53:56.259Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}

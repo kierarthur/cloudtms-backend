@@ -5,6 +5,7 @@ import {
 import { renderWeeklyManagerQueryEmail } from './manager-email.js';
 import { runPendingEntitlementRelease } from './pending-entitlement-release-worker.mjs';
 import { runWeeklySourceCompletedPackCopies } from './completed-pack-copy.mjs';
+import { weeklySourceDeploymentContext } from './routes.js';
 
 const encoder = new TextEncoder();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -558,11 +559,13 @@ async function deliverManagerTarget(dependencies, target) {
   };
 }
 
-async function deliverCandidateTarget(env, dependencies, target, providerAttemptId) {
+async function deliverCandidateTarget(env, dependencies, target, start) {
   try {
     return await candidatePushRequest(env, dependencies, {
       operation: 'DELIVER',
-      provider_attempt_id: providerAttemptId,
+      provider_attempt_id: start.provider_attempt_id,
+      permit_id: start.permit_id,
+      consume_before_utc: start.consume_before_utc,
       target: {
         dispatch_target_id: target.dispatch_target_id,
         dispatch_command_id: target.dispatch_command_id,
@@ -572,6 +575,7 @@ async function deliverCandidateTarget(env, dependencies, target, providerAttempt
         safe_target_snapshot: target.safe_target_snapshot,
         target_snapshot_hash: target.target_snapshot_hash,
         provider_idempotency_key: target.provider_idempotency_key,
+        content_hash: target.rendered_content_hash,
       },
     });
   } catch (error) {
@@ -608,6 +612,7 @@ async function deliverTargets(env, dependencies, workerId, limit) {
         dispatch_target_id: target.dispatch_target_id,
         lease_token: target.lease_token,
         worker_id: workerId,
+        ...weeklySourceDeploymentContext(env),
       });
     } catch (error) {
       // WP-44 F1.  A start that RAISES began no submission.  Nothing is sent,
@@ -637,9 +642,24 @@ async function deliverTargets(env, dependencies, workerId, limit) {
       });
       continue;
     }
+    // A native replay checks the original attempt; it never submits again or
+    // records a new provider result against an already admitted operation.
+    if (start.replay === true || (upper(target.channel) === 'EMAIL' && start.call_once !== true)) {
+      unstarted += 1;
+      continue;
+    }
+    if (upper(target.channel) === 'PUSH' && (start.call_once !== false || !safeUuid(start.permit_id)
+      || typeof start.consume_before_utc !== 'string' || !Number.isFinite(Date.parse(start.consume_before_utc)))) {
+      unrecorded += 1;
+      continue;
+    }
     const outcome = upper(target.channel) === 'PUSH'
-      ? await deliverCandidateTarget(env, dependencies, target, start.provider_attempt_id)
+      ? await deliverCandidateTarget(env, dependencies, target, start)
       : await deliverManagerTarget(dependencies, target);
+    if (!['ACCEPTED','DEFINITELY_REJECTED','TRANSIENT_FAILURE','AMBIGUOUS'].includes(outcome?.outcome)) {
+      unrecorded += 1;
+      continue;
+    }
     try {
       await rpc(dependencies, 'weekly_source_message_dispatch_target_result_atomic_v1', {
         provider_attempt_id: start.provider_attempt_id,

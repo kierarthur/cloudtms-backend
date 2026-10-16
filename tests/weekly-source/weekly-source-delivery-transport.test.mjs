@@ -16,9 +16,12 @@ import {
 import {
   weeklySourceDeliveryWorkerInternals,
 } from '../../weekly-source-delivery-worker/src/index.js';
+import { createPushTimingInternalHandler } from '../../broker/src/weekly-source/push-timing-internal.mjs';
 
 const AUTH_ENV = Object.freeze({
   WEEKLY_SOURCE_ENVIRONMENT: 'TEST',
+  CANDIDATE_APP_ENVIRONMENT: 'TEST',
+  MYTMS_OFFICE_AGENCY_ID: '33333333-3333-4333-8333-333333333333',
   WEEKLY_SOURCE_DELIVERY_SERVICE_SECRET: 'weekly-source-test-secret-that-is-long-enough',
 });
 const IDS = Object.freeze({
@@ -34,6 +37,23 @@ const IDS = Object.freeze({
 });
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
+const PERMIT = 'a7160000-0000-4000-8000-000000000001';
+const consumeBefore = () => new Date(Date.now()+30000).toISOString().replace('.000Z','.000000Z').replace(/\.(\d{3})Z$/,'.$1000Z');
+function providerAdmissionFixture() {
+  const handler=createPushTimingInternalHandler({
+    deploymentContext:()=>({agency_id:IDS.agency,environment:'TEST'}),
+    rpc:async(_env,name,args)=>{
+      assert.equal(name,'weekly_contact_submission_consume_v1');
+      assert.equal(args.p_request.permit_id,PERMIT);
+      return {ok:true,version:'CONTACT_CONSUMED_V1',permit_id:PERMIT,
+        provider_attempt_id:IDS.attempt,call_once:true,
+        consumed_at_utc:new Date().toISOString().replace(/\.(\d{3})Z$/,'.$1000Z')};
+    }
+  });
+  return {...AUTH_ENV,MYTMS_IDENTITY_DELIVERY:{fetch:request=>handler(request,AUTH_ENV)}};
+}
+const targetAdmission = () => ({dispatch_target_id:IDS.target1,dispatch_command_id:IDS.command,
+  target_snapshot_hash:HASH_A,content_hash:HASH_B});
 
 function pem(label, bytes) {
   const base64 = Buffer.from(bytes).toString('base64').match(/.{1,64}/g).join('\n');
@@ -81,18 +101,21 @@ test('APNS invalid token is definite and retires only that target upstream', asy
   let calls = 0;
   const result = await sendWeeklySourcePush({
     env: {
+      ...providerAdmissionFixture(),
       APNS_KEY_ID: 'KEY', APNS_TEAM_ID: 'TEAM', APNS_PRIVATE_KEY_P8: key,
       APNS_TOPIC: 'net.cloudtms.mytms.test', APNS_ENVIRONMENT: 'sandbox',
     },
     target: {
+      ...targetAdmission(),
       provider: 'APNS', tranche_kind: 'CANDIDATE_INITIAL',
       deep_link: { destination: 'WEEKLY_SOURCE_REQUEST', request_id: IDS.generation },
     },
-    token: 'device-token', attemptId: IDS.attempt,
+    token: 'device-token', attemptId: IDS.attempt,permitId:PERMIT,consumeBeforeUtc:consumeBefore(),
     fetchImpl: async (url, init) => {
       calls += 1;
       assert.match(String(url), /^https:\/\/api\.sandbox\.push\.apple\.com\/3\/device\//);
       assert.equal(init.headers['apns-id'], IDS.attempt);
+      assert.equal(init.headers['apns-expiration'],'0');
       return new Response(JSON.stringify({ reason: 'Unregistered' }), {
         status: 410, headers: { 'content-type': 'application/json', 'apns-id': IDS.attempt },
       });
@@ -109,14 +132,15 @@ test('FCM accepted, transient, invalid and ambiguous outcomes use mocked provide
     publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' });
   const env = { FCM_PROJECT_ID: 'test-project', FCM_CLIENT_EMAIL: 'test@example.invalid',
     FCM_PRIVATE_KEY: key };
-  const target = { provider: 'FCM', tranche_kind: 'CANDIDATE_INITIAL',
+  const target = { ...targetAdmission(),provider: 'FCM', tranche_kind: 'CANDIDATE_INITIAL',
     deep_link: { destination: 'WEEKLY_SOURCE_REQUEST', request_id: IDS.generation } };
   const run = (providerReply) => sendWeeklySourcePush({
-    env, target, token: 'token', attemptId: IDS.attempt,
-    fetchImpl: async (url) => String(url).includes('oauth2.googleapis.com')
+    env:{...env,...providerAdmissionFixture()}, target, token: 'token', attemptId: IDS.attempt,
+    permitId:PERMIT,consumeBeforeUtc:consumeBefore(),
+    fetchImpl: async (url,init) => String(url).includes('oauth2.googleapis.com')
       ? new Response(JSON.stringify({ access_token: 'mock-access-token' }), { status: 200 })
-      : typeof providerReply === 'function' ? providerReply()
-        : new Response(JSON.stringify(providerReply.body), { status: providerReply.status }),
+      : (assert.equal(JSON.parse(init.body).message.android.ttl,'0s'),typeof providerReply === 'function' ? providerReply()
+        : new Response(JSON.stringify(providerReply.body), { status: providerReply.status })),
   });
   assert.equal((await run({ status: 200, body: { name: 'projects/test/messages/1' } })).outcome, 'ACCEPTED');
   assert.equal((await run({ status: 503, body: { error: { status: 'UNAVAILABLE' } } })).outcome,
@@ -380,7 +404,7 @@ test('a retired target never starves the healthy target behind it', async () => 
           startedTargets.push(args.p_request.dispatch_target_id);
           return args.p_request.dispatch_target_id === IDS.target1
             ? RETIRED_START
-            : { ok: true, replay: false, provider_attempt_id: IDS.attempt };
+            : { ok: true, replay: false, provider_attempt_id: IDS.attempt, contact_permit_id: PERMIT, call_once: true };
         }
         if (name === 'weekly_source_message_dispatch_target_result_atomic_v1') {
           assert.equal(args.p_request.provider_attempt_id, IDS.attempt);
@@ -479,7 +503,7 @@ test('a start that raises sends nothing and the rest of the page still runs', as
           if (args.p_request.dispatch_target_id === IDS.target1) {
             throw new Error('WEEKLY_SOURCE_TARGET_LEASE_STALE');
           }
-          return { ok: true, replay: false, provider_attempt_id: IDS.attempt };
+          return { ok: true, replay: false, provider_attempt_id: IDS.attempt, contact_permit_id: PERMIT, call_once: true };
         }
         if (name === 'weekly_source_message_dispatch_target_result_atomic_v1') return { ok: true };
         throw new Error('unexpected RPC ' + name);
@@ -513,7 +537,7 @@ test('a result that cannot be recorded does not abort the remaining targets', as
           };
         }
         if (name === 'weekly_source_message_dispatch_target_start_atomic_v1') {
-          return { ok: true, replay: false, provider_attempt_id: IDS.attempt };
+          return { ok: true, replay: false, provider_attempt_id: IDS.attempt, contact_permit_id: PERMIT, call_once: true };
         }
         if (name === 'weekly_source_message_dispatch_target_result_atomic_v1') {
           if (sends.length === 1) throw new Error('WEEKLY_SOURCE_TARGET_RESULT_STALE');

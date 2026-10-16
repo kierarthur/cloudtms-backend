@@ -77,7 +77,7 @@ export function parsePushTimingJson(text) {
   }
   try { return JSON.parse(text); } catch { invalid(); }
 }
-async function readRequest(req) {
+export async function readPushTimingRequest(req) {
   if (!req.body) invalid();
   const reader = req.body.getReader();
   const chunks = [];
@@ -139,7 +139,7 @@ export function createPushTimingOfficeHandler({ requireAdmin, rpc, deploymentCon
       const save = req.method === 'PUT';
       let body = { version: 'PUSH_TIMING_GET_V1' };
       if (save) {
-        body = await readRequest(req);
+        body = await readPushTimingRequest(req);
         if (!exact(body, ['version', 'request_id', 'expected_revision', 'policy'])
           || body.version !== 'PUSH_TIMING_SAVE_V1' || !uuid(body.request_id)
           || !isPushTimingRevision(body.expected_revision)) invalid();

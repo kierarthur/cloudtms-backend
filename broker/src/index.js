@@ -68,6 +68,8 @@ import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-r
 import { parseWeeklySourceFile } from './weekly-source/index.js';
 import { dispatchWeeklySourceRequest, weeklySourceDeploymentContext } from './weekly-source/routes.js';
 import { createPushTimingOfficeHandler } from './weekly-source/push-timing-office.mjs';
+import { createPushTimingInternalHandler, PUSH_TIMING_INTERNAL_PATH } from './weekly-source/push-timing-internal.mjs';
+const handlePushTimingInternal = createPushTimingInternalHandler({ rpc: sbRpc, deploymentContext: weeklySourceDeploymentContext });
 const handlePushTimingOffice = createPushTimingOfficeHandler({ requireAdmin: requireMyTmsOfficeAdmin, rpc: sbRpc, deploymentContext: weeklySourceDeploymentContext });
 import { weeklySourceUnauthoriseRouting, weeklySourceUnauthoriseResultFields, weeklySourceUnauthorisePairPreflight } from './weekly-source/unauthorise-routing.mjs';
 // WP-23 / Gate 13 hostile finance review F2: the Weekly Source first-authorisation
@@ -199040,6 +199042,8 @@ export default {
           })
       });
     }
+
+    if (p === PUSH_TIMING_INTERNAL_PATH) return handlePushTimingInternal(req, env);
 
     if (req.method === 'POST' && p === '/internal/weekly-source-delivery/v1/run') {
       return handleWeeklySourceDeliveryRuntime(req, env, {

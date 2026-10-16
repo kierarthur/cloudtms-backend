@@ -3033,6 +3033,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_SOURCE_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "current_sources": [
+          {
+            "path": "supabase/migrations/15102026_0800_candidate_push_timing_authority.sql",
+            "sha256": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
+            "sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e"
+          },
+          {
+            "path": "broker/src/weekly-source/push-timing-office.mjs",
+            "sha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/QT_ADMIN_NATIVE_ROLLBACK.json",
+        "native_scope": "40 error-free statements: real GET/SAVE/CAS/exact replay/conflict/role/deployment/policy/scalars/ACL. No configured bootstrap, actual API or full dispatch acceptance.",
+        "full_required_native_cases": "REMAIN_OPEN_UNTIL_JOINED_INSTALLED_ACCEPTANCE",
+        "installed": false,
+        "native_source_commit": "bb8f129d61d4b6549773bdf3baa6598564e14192",
+        "current_source_hashes_are_saved_work": "Exact current saved hashes; runtime includes subsequent service/read-helper export changes, not claimed as part of the native source commit."
       }
     },
     {
@@ -3098,6 +3121,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_SOURCE_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "current_sources": [
+          {
+            "path": "supabase/migrations/15102026_0800_candidate_push_timing_authority.sql",
+            "sha256": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
+            "sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e"
+          },
+          {
+            "path": "broker/src/weekly-source/push-timing-office.mjs",
+            "sha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/QT_ADMIN_NATIVE_ROLLBACK.json",
+        "native_scope": "40 error-free statements: real GET/SAVE/CAS/exact replay/conflict/role/deployment/policy/scalars/ACL. No configured bootstrap, actual API or full dispatch acceptance.",
+        "full_required_native_cases": "REMAIN_OPEN_UNTIL_JOINED_INSTALLED_ACCEPTANCE",
+        "installed": false,
+        "native_source_commit": "bb8f129d61d4b6549773bdf3baa6598564e14192",
+        "current_source_hashes_are_saved_work": "Exact current saved hashes; runtime includes subsequent service/read-helper export changes, not claimed as part of the native source commit."
       }
     },
     {
@@ -3163,6 +3209,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_SOURCE_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "current_sources": [
+          {
+            "path": "supabase/migrations/15102026_0800_candidate_push_timing_authority.sql",
+            "sha256": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
+            "sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e"
+          },
+          {
+            "path": "broker/src/weekly-source/push-timing-office.mjs",
+            "sha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/QT_ADMIN_NATIVE_ROLLBACK.json",
+        "native_scope": "40 error-free statements: real GET/SAVE/CAS/exact replay/conflict/role/deployment/policy/scalars/ACL. No configured bootstrap, actual API or full dispatch acceptance.",
+        "full_required_native_cases": "REMAIN_OPEN_UNTIL_JOINED_INSTALLED_ACCEPTANCE",
+        "installed": false,
+        "native_source_commit": "bb8f129d61d4b6549773bdf3baa6598564e14192",
+        "current_source_hashes_are_saved_work": "Exact current saved hashes; runtime includes subsequent service/read-helper export changes, not claimed as part of the native source commit."
       }
     },
     {
@@ -3228,6 +3297,29 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_SOURCE_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "current_sources": [
+          {
+            "path": "supabase/migrations/15102026_0800_candidate_push_timing_authority.sql",
+            "sha256": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450"
+          },
+          {
+            "path": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
+            "sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e"
+          },
+          {
+            "path": "broker/src/weekly-source/push-timing-office.mjs",
+            "sha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/QT_ADMIN_NATIVE_ROLLBACK.json",
+        "native_scope": "40 error-free statements: real GET/SAVE/CAS/exact replay/conflict/role/deployment/policy/scalars/ACL. No configured bootstrap, actual API or full dispatch acceptance.",
+        "full_required_native_cases": "REMAIN_OPEN_UNTIL_JOINED_INSTALLED_ACCEPTANCE",
+        "installed": false,
+        "native_source_commit": "bb8f129d61d4b6549773bdf3baa6598564e14192",
+        "current_source_hashes_are_saved_work": "Exact current saved hashes; runtime includes subsequent service/read-helper export changes, not claimed as part of the native source commit."
       }
     },
     {
@@ -5117,6 +5209,25 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "status": "BOUNDED_NATIVE_SOURCE_PASS_NOT_INSTALLED_NOT_FULL_ACCEPTANCE",
+        "current_sources": [
+          {
+            "path": "supabase/repeatable/15102026_0801_candidate_push_calendar_v1.sql",
+            "sha256": "c0ba94b1bb6c6859ef4acd09f7866c6efd9891a6baee54c143857de4072f3315"
+          },
+          {
+            "path": "tests/weekly-source/push-timing-calendar-native.sql",
+            "sha256": "ad08ae079e41f050a610f29b941f78fe6037f20faf5a0d846e5dee7c8d786cef"
+          }
+        ],
+        "exact_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/QT_CALENDAR_NATIVE_ROLLBACK.json",
+        "native_scope": "53 error-free statements: actual administration, pure London/DST/expiry/windows, actual existing calendar/null-client and native fixture-client, closed request/deployment/role/ACL. All new objects/fixtures absent afterwards; ledger equality/LEGACY1. No START/race/provider or full acceptance.",
+        "full_required_native_cases": "REMAIN_OPEN_UNTIL_JOINED_INSTALLED_ACCEPTANCE",
+        "installed": false,
+        "native_source_commit": "7f5a5a876a9b485beee2b040409233eef70448c7",
+        "current_source_hashes_are_saved_work": "Exact current saved hashes; runtime includes subsequent service/read-helper export changes, not claimed as part of the native source commit."
       }
     },
     {

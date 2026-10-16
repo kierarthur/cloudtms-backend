@@ -1,5 +1,10 @@
 # Published HealthRoster helpers on TEST
 
+## V6 source checkpoints — not installed
+
+Agency QT administration migration/repeatable and exact native fixture: bb8f129d61d4b6549773bdf3baa6598564e14192. Worker Office API and native receipt cbb32121cf25b2a1a755b0a6065b78dc0c9faa41; Office actual host/controller efd6f4dd6b2f8974bbc24dd6f2c324424cc60f8b. Bounded calendar/timing successor7f5a5a876a9b485beee2b040409233eef70448c7. Source files, signatures, ACLs, exact native pins/restoration and limits are in v6-owner-delivery-20261016/QT_ADMIN_IMPLEMENTATION.md, QT_ADMIN_NATIVE_ROLLBACK.json and QT_CALENDAR_NATIVE_ROLLBACK.json. Existing five schema rows carry current source hashes; no original approval is replaced. Consumers must integrate the current reader/START/permit/pause/provider union and final registry/security/contract checks before actual installation; these receipts do not imply readiness, activation or full acceptance. No Banking message was sent.
+
+
 ## V5 owner amendment — active 15 October 2026
 
 **Prepared continuation — WORKING_DRAFT / NOT_FOR_BUILDERS.** The approved integration-repair PLAN (SHA-25631b4a8373749f23e63186534315f2f82331590c0bf08ce9cca7f2c90394bca04) governs this output-only preparation. The withdrawn V5 handover's ambiguous coordination and unapproved broad V6 Health allocation are superseded only by the final reviewed replacement when released. Current UI placement/copy follows exact R2 policy and supplied Banking §7; matching final same-candidate release record supplies implementation authority, with final Sol6.1 extra-high review and native qualification tracked separately. This section is not authority to resume builders or install anything.

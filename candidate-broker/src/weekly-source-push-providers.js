@@ -1,3 +1,5 @@
+import { consumeWeeklyPushAdmission } from './weekly-source-push-timing.js';
+
 const encoder = new TextEncoder();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -75,6 +77,10 @@ function safeStatus(response) {
 
 export function weeklyCandidatePushContent(target) {
   const tranche=text(target?.tranche_kind).toUpperCase();
+  if (!['CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',
+    'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H'].includes(tranche)) {
+    throw new Error('WEEKLY_PUSH_CONTENT_INVALID');
+  }
   const deepLink=target?.deep_link;
   if (!deepLink || deepLink.destination!=='WEEKLY_SOURCE_REQUEST'
       || !UUID_RE.test(text(deepLink.request_id))) throw new Error('WEEKLY_PUSH_CONTENT_INVALID');
@@ -108,7 +114,33 @@ export function weeklyPushProviderReadiness(env,provider) {
   return {ok:missing.length===0,provider:kind,missing:[...new Set(missing)]};
 }
 
-async function sendApns({env,token,content,attemptId,fetchImpl}) {
+async function admitProviderCall({env,target,attemptId,permitId,consumeBeforeUtc}) {
+  let admitted;
+  try {
+    admitted=await consumeWeeklyPushAdmission(env,{
+      permit_id:permitId,provider_attempt_id:attemptId,
+      dispatch_target_id:target.dispatch_target_id,dispatch_command_id:target.dispatch_command_id,
+      target_snapshot_hash:target.target_snapshot_hash,provider:target.provider,content_hash:target.content_hash
+    });
+  } catch {
+    // The consume transaction may have committed. Its original native attempt
+    // retains uncertainty; a transport failure cannot authorise another alert.
+    return {outcome:'AMBIGUOUS',bounded_provider_receipt:{},
+      bounded_error:{error_code:'CONTACT_PERMIT_CONSUME_OUTCOME_UNKNOWN'}};
+  }
+  if (admitted.ok!==true) return {
+    ok:false,reason:'CHECK_ORIGINAL_ATTEMPT',provider_attempt_id:attemptId,call_once:false
+  };
+  const now=Date.now();
+  if (now>=Date.parse(consumeBeforeUtc) || Date.parse(admitted.consumed_at_utc)>Date.parse(consumeBeforeUtc)
+    || Date.parse(admitted.consumed_at_utc)>now+5000) return {
+    outcome:'TRANSIENT_FAILURE',bounded_provider_receipt:{proved_no_network:true},
+    bounded_error:{error_code:'CONTACT_PERMIT_EXPIRED_NO_SUBMISSION'}
+  };
+  return null;
+}
+
+async function sendApns({env,target,token,content,attemptId,permitId,consumeBeforeUtc,fetchImpl}) {
   const ready=weeklyPushProviderReadiness(env,'APNS');
   if (!ready.ok) return {
     outcome:'DEFINITELY_REJECTED',bounded_provider_receipt:{},
@@ -127,13 +159,15 @@ async function sendApns({env,token,content,attemptId,fetchImpl}) {
   }
   const host=text(env.APNS_ENVIRONMENT).toLowerCase()==='production'
     ? 'https://api.push.apple.com' : 'https://api.sandbox.push.apple.com';
+  const admission=await admitProviderCall({env,target,attemptId,permitId,consumeBeforeUtc});
+  if (admission) return admission;
   let response;
   try {
     response=await fetchImpl(`${host}/3/device/${encodeURIComponent(token)}`,{
       method:'POST',headers:{
         authorization:`bearer ${jwt}`,'content-type':'application/json',
         'apns-topic':text(env.APNS_TOPIC),'apns-push-type':'alert','apns-priority':'10',
-        'apns-id':attemptId
+        'apns-id':attemptId,'apns-expiration':'0'
       },body:JSON.stringify({aps:{alert:{title:content.title,body:content.body},sound:'default'},...content.data})
     });
   } catch {
@@ -179,7 +213,7 @@ async function fcmAccessToken(env,fetchImpl) {
   return text(payload.access_token);
 }
 
-async function sendFcm({env,token,content,fetchImpl}) {
+async function sendFcm({env,target,token,content,attemptId,permitId,consumeBeforeUtc,fetchImpl}) {
   const ready=weeklyPushProviderReadiness(env,'FCM');
   if (!ready.ok) return {outcome:'DEFINITELY_REJECTED',bounded_provider_receipt:{},
     bounded_error:{error_code:'PROVIDER_NOT_READY'}};
@@ -187,12 +221,14 @@ async function sendFcm({env,token,content,fetchImpl}) {
   try { accessToken=await fcmAccessToken(env,fetchImpl); }
   catch { return {outcome:'TRANSIENT_FAILURE',bounded_provider_receipt:{},
     bounded_error:{error_code:'PROVIDER_AUTH_TEMPORARY'}}; }
+  const admission=await admitProviderCall({env,target,attemptId,permitId,consumeBeforeUtc});
+  if (admission) return admission;
   let response;
   try {
     response=await fetchImpl(
       `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(text(env.FCM_PROJECT_ID))}/messages:send`,
       {method:'POST',headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json'},
-        body:JSON.stringify({message:{token,notification:{title:content.title,body:content.body},data:content.data}})}
+        body:JSON.stringify({message:{token,notification:{title:content.title,body:content.body},data:content.data,android:{ttl:'0s'}}})}
     );
   } catch {
     return {outcome:'AMBIGUOUS',bounded_provider_receipt:{},
@@ -219,14 +255,17 @@ async function sendFcm({env,token,content,fetchImpl}) {
     bounded_error:{error_code:'PROVIDER_REJECTED',provider_status:response.status}};
 }
 
-export async function sendWeeklySourcePush({env,target,token,attemptId,fetchImpl=fetch}) {
-  if (!UUID_RE.test(text(attemptId)) || !text(token) || text(token).length>8192) {
+export async function sendWeeklySourcePush({env,target,token,attemptId,permitId,consumeBeforeUtc,fetchImpl=fetch}) {
+  if (!UUID_RE.test(text(attemptId)) || !text(token) || text(token).length>8192
+    || typeof permitId!=='string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(permitId)
+    || typeof consumeBeforeUtc!=='string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/.test(consumeBeforeUtc)
+    || !Number.isFinite(Date.parse(consumeBeforeUtc))) {
     throw new Error('WEEKLY_PUSH_DELIVERY_INVALID');
   }
   const content=weeklyCandidatePushContent(target);
   const provider=text(target?.provider).toUpperCase();
-  if (provider==='APNS') return sendApns({env,token,content,attemptId,fetchImpl});
-  if (provider==='FCM') return sendFcm({env,token,content,fetchImpl});
+  if (provider==='APNS') return sendApns({env,target,token,content,attemptId,permitId,consumeBeforeUtc,fetchImpl});
+  if (provider==='FCM') return sendFcm({env,target,token,content,attemptId,permitId,consumeBeforeUtc,fetchImpl});
   return {outcome:'DEFINITELY_REJECTED',bounded_provider_receipt:{},
     bounded_error:{error_code:'PROVIDER_NOT_READY'}};
 }

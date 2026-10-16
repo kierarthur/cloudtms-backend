@@ -69,11 +69,12 @@ function exactKeys(value,allowed) {
 }
 
 async function deliver(env,body,deps) {
-  if (!exactKeys(body,['operation','provider_attempt_id','target'])
+  if (!exactKeys(body,['operation','provider_attempt_id','permit_id','consume_before_utc','target'])
+      || Object.keys(body).length!==5
       || !UUID_RE.test(text(body.provider_attempt_id))
       || !exactKeys(body.target,[
         'dispatch_target_id','dispatch_command_id','provider','tranche_kind',
-        'deep_link','safe_target_snapshot','target_snapshot_hash','provider_idempotency_key'
+        'deep_link','safe_target_snapshot','target_snapshot_hash','provider_idempotency_key','content_hash'
       ])) throw new Error('WEEKLY_PUSH_REQUEST_INVALID');
   const target=body.target;
   const safe=target.safe_target_snapshot;
@@ -99,7 +100,8 @@ async function deliver(env,body,deps) {
     throw new Error('WEEKLY_PUSH_MATERIAL_INVALID');
   }
   const result=await sendWeeklySourcePush({
-    env,target,token,attemptId:body.provider_attempt_id,fetchImpl:deps.fetchImpl||fetch
+    env,target,token,attemptId:body.provider_attempt_id,permitId:body.permit_id,
+    consumeBeforeUtc:body.consume_before_utc,fetchImpl:deps.fetchImpl||fetch
   });
   if (result.invalid_target===true) {
     let retired=false;
