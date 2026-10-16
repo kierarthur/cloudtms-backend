@@ -1,0 +1,1710 @@
+-- First-install current Candidate runtime final reload authority (BD178).
+-- Preserve complete native physical definitions/ACLs; invoke no business owner.
+
+
+
+-- One lifecycle predicate for inbox, badge, bulk actions, Undo and queued push.
+-- Never use week age alone as proof that an outstanding action is resolved.
+create or replace function private.candidate_notification_visible_v1(
+  p_notification public.candidate_notifications, p_now_utc timestamptz,
+  p_restored_state text default null
+) returns boolean language plpgsql stable security definer set search_path = ''
+as $function$
+declare
+  v_state text:=coalesce(p_restored_state,p_notification.state);
+  v_generation uuid;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_component public.candidate_expense_components%rowtype;
+  v_component_generation integer;
+begin
+  if v_state not in ('READ','UNREAD') then return false; end if;
+  -- Apply retention and explicit retirement even when evaluating a deleted
+  -- notification's prior state for Undo. Lifecycle branches cannot bypass them.
+  if p_notification.created_at_utc <= p_now_utc
+    - (case when v_state='READ' then interval '30 days' else interval '90 days' end)
+    or p_notification.deep_link_json->'obsolete'='true'::jsonb then return false; end if;
+  if p_notification.deep_link_json->>'destination'='WEEKLY_SOURCE_REQUEST' then
+    begin v_generation:=(p_notification.deep_link_json->>'request_id')::uuid;
+    exception when invalid_text_representation then return false; end;
+    return exists(
+      select 1 from public.weekly_candidate_outreach_generations generation
+      where generation.id=v_generation and generation.candidate_id=p_notification.candidate_id
+        and generation.state='ACTIVE'
+        and private.weekly_source_candidate_generation_current_v1(generation.id)
+        and (
+          (generation.request_kind='SUBMIT_TIMESHEET' and exists(
+            select 1 from public.weekly_timesheet_submission_requests request
+            join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id
+            where request.candidate_cohort_id=generation.candidate_cohort_id
+              and request.source_cycle_id=generation.source_cycle_id
+              and request.candidate_id=generation.candidate_id
+              and request.request_generation=generation.generation_number
+              and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and membership.state='WAITING'
+          )) or
+          (generation.request_kind='CHECK_HOURS' and p_now_utc<=generation.deadline_at_utc and exists(
+            select 1 from public.weekly_candidate_outreach_memberships membership
+            join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+            where membership.candidate_generation_id=generation.id and membership.state='ACTIONABLE'
+              and incident.state='OPEN' and not private.weekly_source_covered_hours_incident_v1(incident.id)
+          ))
+        )
+    );
+  end if;
+  -- Category rejection remains actionable even when its now-empty parent was
+  -- finalised/cancelled. Exact component lineage takes precedence over parent state.
+  if p_notification.event_type='OFFICE_REJECTED'
+     and p_notification.template_params->>'resubmission_scope'='EXPENSE_CATEGORY' then
+    begin
+      select * into v_component from public.candidate_expense_components component
+      where component.expense_component_id=(p_notification.template_params->>'expense_component_id')::uuid
+        and component.workflow_id=p_notification.workflow_id;
+    exception when invalid_text_representation then return false; end;
+    if not found then return false; end if;
+    select event.component_generation into v_component_generation
+    from public.candidate_expense_component_events event
+    where event.expense_component_id=v_component.expense_component_id
+      and event.event_type='OFFICE_REJECTED' and event.occurred_at_utc=p_notification.created_at_utc
+    order by event.component_generation desc limit 1;
+    -- Missing historical metadata is not permission to discard an unresolved rejection.
+    if v_component_generation is not null and v_component.component_generation<>v_component_generation then return false; end if;
+    if v_component.lifecycle_state<>'OFFICE_REJECTED' then return false; end if;
+    if exists(select 1 from public.candidate_expense_operations operation
+      where operation.action_code='RESUBMIT_EXPENSE_CATEGORY' and operation.state='COMMITTED'
+        and operation.candidate_id=p_notification.candidate_id
+        and operation.result_json->>'source_expense_component_id'=v_component.expense_component_id::text
+        and operation.result_json->>'source_component_generation'=v_component_generation::text
+    ) then return false; end if;
+    return true;
+  end if;
+  if p_notification.workflow_id is not null then
+    select * into v_workflow from public.candidate_submission_workflows workflow
+    where workflow.id=p_notification.workflow_id and workflow.account_id=p_notification.account_id
+      and workflow.candidate_id=p_notification.candidate_id;
+    if not found then return false; end if;
+    if p_notification.event_type='PAPER_PACK_READY' then
+      return v_workflow.route='PAPER' and v_workflow.state='AWAITING_PAPER_RETURN'
+        and p_notification.template_params->>'workflow_generation'=v_workflow.generation::text
+        and v_workflow.paper_return_manifest_sha256 is not null
+        and p_notification.dedupe_key like '%:'||pg_catalog.encode(v_workflow.paper_return_manifest_sha256,'hex');
+    end if;
+    if p_notification.event_type in ('OFFICE_REJECTED','MANAGER_REFUSED') then
+      return v_workflow.state in ('REJECTED','REFUSED')
+        and not private._candidate_rejection_replaced_v1(v_workflow.id);
+    end if;
+    if v_workflow.state in ('CANCELLED','EXPIRED','SUPERSEDED')
+      and p_notification.event_type not in ('CLAIM_CANCELLED','EXPENSE_CLAIM_CANCELLED','CLAIM_WITHDRAWN','EXPENSE_WITHDRAWN')
+      then return false; end if;
+  end if;
+  return true;
+end;
+$function$;
+
+create or replace function public.candidate_app_notifications_page_v1(
+  p_session_id uuid, p_environment text, p_expected_rotation integer,
+  p_limit integer default 14, p_cursor_created_at_utc timestamptz default null,
+  p_cursor_id uuid default null, p_now_utc timestamptz default pg_catalog.now()
+) returns jsonb language plpgsql stable security definer set search_path = ''
+as $function$
+declare v_context jsonb; v_rows jsonb; v_tail jsonb; v_more boolean;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  v_context:=private._candidate_session_context_v1(p_session_id,p_environment,p_expected_rotation,p_now_utc,false);
+  if nullif(v_context->>'selected_candidate_id','') is null then raise exception 'CANDIDATE_SELECTION_REQUIRED' using errcode='42501'; end if;
+  if p_limit is null or p_limit<1 or p_limit>100 then raise exception 'CANDIDATE_PAGE_LIMIT_INVALID' using errcode='22023'; end if;
+  if (p_cursor_created_at_utc is null)<>(p_cursor_id is null) then raise exception 'CANDIDATE_NOTIFICATION_CURSOR_INVALID' using errcode='22023'; end if;
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.to_jsonb(page) order by page.created_at_utc desc,page.id desc),'[]'::jsonb) into v_rows
+  from (
+    select notification.* from public.candidate_notifications notification
+    where notification.account_id=(v_context->>'account_id')::uuid
+      and notification.candidate_id=(v_context->>'selected_candidate_id')::uuid
+      and private.candidate_notification_visible_v1(notification,p_now_utc)
+      and (p_cursor_id is null or (notification.created_at_utc,notification.id)<(p_cursor_created_at_utc,p_cursor_id))
+    order by notification.created_at_utc desc,notification.id desc limit p_limit+1
+  ) page;
+  v_more:=pg_catalog.jsonb_array_length(v_rows)>p_limit;
+  if v_more then v_rows:=v_rows-p_limit; end if;
+  v_tail:=v_rows->(pg_catalog.jsonb_array_length(v_rows)-1);
+  return pg_catalog.jsonb_build_object('ok',true,'notifications',v_rows,'next_cursor',
+    case when v_more then (v_tail->>'created_at_utc')||'|'||(v_tail->>'id') end);
+end;
+$function$;
+
+create or replace function public.candidate_app_notifications_manage_v1(
+  p_session_id uuid,p_environment text,p_expected_rotation integer,
+  p_action text,p_request jsonb,p_now_utc timestamptz default pg_catalog.now()
+) returns jsonb language plpgsql volatile security definer set search_path = ''
+as $function$
+declare
+  v_context jsonb; v_account uuid; v_candidate uuid; v_key text;
+  v_operation private.candidate_notification_operations%rowtype;
+  v_snapshot private.candidate_notification_operations%rowtype;
+  v_source private.candidate_notification_operations%rowtype;
+  v_ids uuid[]:='{}'; v_id uuid:=pg_catalog.gen_random_uuid(); v_count integer:=0;
+  v_skipped integer:=0; v_unread integer; v_result jsonb; v_item record;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  v_context:=private._candidate_session_context_v1(p_session_id,p_environment,p_expected_rotation,p_now_utc,true);
+  v_account:=(v_context->>'account_id')::uuid; v_candidate:=(v_context->>'selected_candidate_id')::uuid;
+  if v_candidate is null then raise exception 'CANDIDATE_SELECTION_REQUIRED' using errcode='42501'; end if;
+  if p_action is null or p_action not in ('SNAPSHOT','MARK_READ','DELETE','UNDO') or p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+    then raise exception 'CANDIDATE_REQUEST_INVALID' using errcode='22023'; end if;
+  v_key:=pg_catalog.btrim(p_request->>'idempotency_key');
+  if v_key is null or pg_catalog.length(v_key) not between 1 and 200 then raise exception 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED' using errcode='22023'; end if;
+  -- Serialize only this candidate inbox; independent candidate inboxes do not block.
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_account::text||':'||v_candidate::text,0));
+  select * into v_operation from private.candidate_notification_operations operation
+  where operation.account_id=v_account and operation.candidate_id=v_candidate and operation.idempotency_key=v_key;
+  if found then
+    if v_operation.action<>p_action or v_operation.request_json<>p_request then raise exception 'CANDIDATE_NOTIFICATION_IDEMPOTENCY_CONFLICT' using errcode='40001'; end if;
+    return v_operation.result_json;
+  end if;
+  if p_action='SNAPSHOT' then
+    if p_request->>'action' is null or p_request->>'action' not in ('MARK_READ','DELETE') or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key where key not in ('action','idempotency_key'))
+      then raise exception 'CANDIDATE_REQUEST_INVALID' using errcode='22023'; end if;
+    select coalesce(pg_catalog.array_agg(notification.id order by notification.id),'{}'::uuid[]) into v_ids
+    from public.candidate_notifications notification where notification.account_id=v_account and notification.candidate_id=v_candidate
+      and private.candidate_notification_visible_v1(notification,p_now_utc)
+      and (p_request->>'action'='DELETE' or notification.state='UNREAD');
+    v_result:=pg_catalog.jsonb_build_object('ok',true,'snapshot_id',v_id,'affected_count',pg_catalog.cardinality(v_ids),'expires_at_utc',p_now_utc+interval '5 minutes');
+  elsif p_action in ('MARK_READ','DELETE') then
+    if exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key where key not in ('snapshot_id','notification_id','idempotency_key'))
+      or ((p_request ? 'snapshot_id')=(p_request ? 'notification_id')) or (p_action='MARK_READ' and p_request ? 'notification_id')
+      then raise exception 'CANDIDATE_REQUEST_INVALID' using errcode='22023'; end if;
+    if p_request ? 'snapshot_id' then
+      select * into v_snapshot from private.candidate_notification_operations operation
+      where operation.id=(p_request->>'snapshot_id')::uuid and operation.account_id=v_account and operation.candidate_id=v_candidate
+        and operation.action='SNAPSHOT' and operation.request_json->>'action'=case when p_action='DELETE' then 'DELETE' else 'MARK_READ' end;
+      if not found then raise exception 'CANDIDATE_NOTIFICATION_NOT_FOUND' using errcode='P0002'; end if;
+      if v_snapshot.expires_at_utc<=p_now_utc then raise exception 'CANDIDATE_NOTIFICATION_SNAPSHOT_EXPIRED' using errcode='22023'; end if;
+      v_ids:=v_snapshot.notification_ids;
+    else
+      v_ids:=array[(p_request->>'notification_id')::uuid];
+      if not exists(select 1 from public.candidate_notifications notification where notification.id=v_ids[1] and notification.account_id=v_account and notification.candidate_id=v_candidate)
+        then raise exception 'CANDIDATE_NOTIFICATION_NOT_FOUND' using errcode='P0002'; end if;
+    end if;
+    -- Freeze the deletion receipt before storing its children; everything commits atomically.
+    if p_action='DELETE' then
+      insert into private.candidate_notification_operations(id,account_id,candidate_id,idempotency_key,action,request_json,notification_ids,result_json,created_at_utc,expires_at_utc)
+      values(v_id,v_account,v_candidate,v_key,p_action,p_request,v_ids,'{}',p_now_utc,p_now_utc+interval '10 minutes');
+    end if;
+    for v_item in select notification.* from public.candidate_notifications notification
+      where notification.id=any(v_ids) and notification.account_id=v_account and notification.candidate_id=v_candidate
+      order by notification.id for update
+    loop
+      if not private.candidate_notification_visible_v1((select notification from public.candidate_notifications notification where notification.id=v_item.id),p_now_utc) then continue; end if;
+      if p_action='MARK_READ' then
+        if v_item.state<>'UNREAD' then continue; end if;
+        update public.candidate_notifications set state='READ',read_at_utc=p_now_utc where id=v_item.id;
+      else
+        insert into private.candidate_notification_deleted_items values(v_id,v_item.id,v_item.state,v_item.read_at_utc);
+        insert into private.candidate_notification_dismissal_owners values(v_item.id,v_id,p_now_utc)
+        on conflict(notification_id) do update set operation_id=excluded.operation_id,dismissed_at_utc=excluded.dismissed_at_utc;
+        update public.candidate_notifications set state='DISMISSED',dismissed_at_utc=p_now_utc where id=v_item.id;
+      end if;
+      v_count:=v_count+1;
+    end loop;
+  else
+    if exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key where key not in ('deletion_id','idempotency_key')) then raise exception 'CANDIDATE_REQUEST_INVALID' using errcode='22023'; end if;
+    select * into v_source from private.candidate_notification_operations operation
+    where operation.id=(p_request->>'deletion_id')::uuid and operation.account_id=v_account and operation.candidate_id=v_candidate and operation.action='DELETE';
+    if not found then raise exception 'CANDIDATE_NOTIFICATION_NOT_FOUND' using errcode='P0002'; end if;
+    if v_source.expires_at_utc<=p_now_utc then raise exception 'CANDIDATE_NOTIFICATION_UNDO_EXPIRED' using errcode='22023'; end if;
+    for v_item in select notification.*,deleted.prior_state,deleted.prior_read_at_utc,
+      dismissal.operation_id as current_deletion_id,dismissal.dismissed_at_utc as owner_dismissed_at
+      from private.candidate_notification_deleted_items deleted
+      join public.candidate_notifications notification on notification.id=deleted.notification_id
+      left join private.candidate_notification_dismissal_owners dismissal on dismissal.notification_id=notification.id
+      where deleted.operation_id=v_source.id and notification.account_id=v_account and notification.candidate_id=v_candidate
+      order by notification.id for update of notification
+    loop
+      if v_item.state='DISMISSED' and v_item.current_deletion_id=v_source.id and v_item.dismissed_at_utc=v_item.owner_dismissed_at
+        and private.candidate_notification_visible_v1((select notification from public.candidate_notifications notification where notification.id=v_item.id),p_now_utc,v_item.prior_state) then
+        update public.candidate_notifications set state=v_item.prior_state,read_at_utc=v_item.prior_read_at_utc,dismissed_at_utc=null where id=v_item.id;
+        v_count:=v_count+1;
+      else v_skipped:=v_skipped+1; end if;
+    end loop;
+  end if;
+  if p_action<>'SNAPSHOT' then
+    select pg_catalog.count(*)::integer into v_unread from public.candidate_notifications notification
+    where notification.account_id=v_account and notification.candidate_id=v_candidate and notification.state='UNREAD'
+      and private.candidate_notification_visible_v1(notification,p_now_utc);
+    v_result:=case p_action when 'MARK_READ' then pg_catalog.jsonb_build_object('ok',true,'affected_count',v_count,'unread_count',v_unread)
+      when 'DELETE' then pg_catalog.jsonb_build_object('ok',true,'deletion_id',v_id,'affected_count',v_count,'undo_until_utc',p_now_utc+interval '10 minutes','unread_count',v_unread)
+      else pg_catalog.jsonb_build_object('ok',true,'restored_count',v_count,'skipped_count',v_skipped,'unread_count',v_unread) end;
+  end if;
+  if p_action='DELETE' then update private.candidate_notification_operations set result_json=v_result where id=v_id;
+  else insert into private.candidate_notification_operations(id,account_id,candidate_id,idempotency_key,action,request_json,notification_ids,result_json,created_at_utc,expires_at_utc)
+    values(v_id,v_account,v_candidate,v_key,p_action,p_request,v_ids,v_result,p_now_utc,p_now_utc+case when p_action='SNAPSHOT' then interval '5 minutes' else interval '10 minutes' end);
+  end if;
+  return v_result;
+end;
+$function$;
+
+alter function private.candidate_notification_visible_v1(public.candidate_notifications,timestamptz,text) owner to postgres;
+alter function public.candidate_app_notifications_page_v1(uuid,text,integer,integer,timestamptz,uuid,timestamptz) owner to postgres;
+alter function public.candidate_app_notifications_manage_v1(uuid,text,integer,text,jsonb,timestamptz) owner to postgres;
+revoke all on function private.candidate_notification_visible_v1(public.candidate_notifications,timestamptz,text) from public,anon,authenticated,service_role;
+revoke all on function public.candidate_app_notifications_page_v1(uuid,text,integer,integer,timestamptz,uuid,timestamptz) from public,anon,authenticated;
+revoke all on function public.candidate_app_notifications_manage_v1(uuid,text,integer,text,jsonb,timestamptz) from public,anon,authenticated;
+grant execute on function public.candidate_app_notifications_page_v1(uuid,text,integer,integer,timestamptz,uuid,timestamptz) to service_role;
+grant execute on function public.candidate_app_notifications_manage_v1(uuid,text,integer,text,jsonb,timestamptz) to service_role;
+
+-- Complete current definitions, mechanically derived from their reviewed owners.
+create or replace function private._candidate_home_summary_v1(
+  p_environment text,
+  p_account_id uuid,
+  p_candidate_id uuid,
+  p_daily_capability jsonb,
+  p_now_utc timestamptz
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=''
+as $function$
+declare
+  v_settings public.settings_defaults%rowtype;
+  v_unread_count integer:=0;
+  v_timesheet_attention_count integer:=0;
+  v_draft_timesheet_count integer:=0;
+  v_draft_expense_count integer:=0;
+  v_draft_timesheet_record_ids jsonb:='[]'::jsonb;
+  v_draft_expense_record_ids jsonb:='[]'::jsonb;
+  v_next_shift jsonb:=null;
+begin
+  select * into strict v_settings from public.settings_defaults s where s.id=1;
+  if p_account_id is not null then
+    select pg_catalog.count(*)::integer into v_unread_count
+    from public.candidate_notifications n
+    where n.account_id=p_account_id and n.candidate_id=p_candidate_id and n.state='UNREAD'
+      and private.candidate_notification_visible_v1(n,p_now_utc);
+  end if;
+
+  if p_candidate_id is not null then
+    select
+      pg_catalog.count(distinct workflow.id) filter (
+        where workflow.workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED','DAILY')
+      )::integer,
+      pg_catalog.count(distinct workflow.id) filter (
+        where workflow.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
+      )::integer,
+      coalesce(
+        pg_catalog.jsonb_agg(distinct draft_record.record_id_text order by draft_record.record_id_text)
+          filter (
+            where workflow.workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED','DAILY')
+              and draft_record.record_id_text is not null
+          ),
+        '[]'::jsonb
+      ),
+      coalesce(
+        pg_catalog.jsonb_agg(distinct draft_record.record_id_text order by draft_record.record_id_text)
+          filter (
+            where workflow.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
+              and draft_record.record_id_text is not null
+          ),
+        '[]'::jsonb
+      )
+    into
+      v_draft_timesheet_count,
+      v_draft_expense_count,
+      v_draft_timesheet_record_ids,
+      v_draft_expense_record_ids
+    from public.candidate_submission_workflows workflow
+    left join lateral (
+      values
+        (workflow.contract_week_id::text),
+        (workflow.anchor_timesheet_id::text),
+        (workflow.target_timesheet_id::text)
+    ) as draft_record(record_id_text) on true
+    where workflow.candidate_id=p_candidate_id
+      and workflow.state in ('CREATED','WORKER_DRAFT')
+      and exists(
+        select 1
+        from public.candidate_submission_components component
+        where component.workflow_id=workflow.id
+          and component.workflow_generation=workflow.generation
+          and component.superseded_at_utc is null
+          and component.component_kind in (
+            'HOURS_TIMESHEET','CANDIDATE_SIGNATURE','MILEAGE_FORM','EXPENSE_EVIDENCE'
+          )
+      );
+
+    select pg_catalog.count(*)::integer into v_timesheet_attention_count
+    from public.contract_weeks cw
+    join public.contracts c on c.id=cw.contract_id and c.candidate_id=p_candidate_id
+    left join public.timesheets t on t.timesheet_id=cw.timesheet_id
+      and t.is_current=true and t.archived_at_utc is null
+    left join lateral (
+      select f.* from public.timesheets_financials f
+      where f.timesheet_id=t.timesheet_id and f.is_current=true
+      order by f.computed_at_utc desc nulls last,f.updated_at desc,f.id desc limit 1
+    ) tf on true
+    left join lateral (
+      select cs.week_ending_weekday
+      from public.client_settings cs
+      where cs.client_id=c.client_id
+        and cs.effective_from<=(p_now_utc at time zone 'Europe/London')::date
+      order by cs.effective_from desc,cs.updated_at desc nulls last,cs.id desc limit 1
+    ) effective_client on true
+    cross join lateral (
+      select (
+        (p_now_utc at time zone 'Europe/London')::date
+        +pg_catalog.mod(
+          coalesce(c.week_ending_weekday_snapshot,effective_client.week_ending_weekday,0)
+          -pg_catalog.date_part('dow',(p_now_utc at time zone 'Europe/London')::date)::integer+7,
+          7
+        )
+      )::date as current_week_ending_date
+    ) current_window
+    cross join lateral (
+      select private._candidate_record_capabilities_v1(t.timesheet_id,cw.id,'{}'::jsonb) as value
+    ) capability
+    cross join lateral (
+      select
+        exists (
+          select 1
+          from public.candidate_submission_workflows workflow
+          where workflow.candidate_id=p_candidate_id
+            and workflow.state='REJECTED'
+            and private._candidate_workflow_maps_to_card_v1(workflow.id,t.timesheet_id,cw.id)
+            and not private._candidate_rejection_replaced_v1(workflow.id)
+        ) as has_actionable_rejection,
+        exists (
+          select 1
+          from public.candidate_submission_workflows workflow
+          where workflow.candidate_id=p_candidate_id
+            and workflow.state in ('CREATED','WORKER_DRAFT','AWAITING_PAPER_RETURN','REFUSED')
+            and private._candidate_workflow_maps_to_card_v1(workflow.id,t.timesheet_id,cw.id)
+        ) as has_candidate_action,
+        exists (
+          select 1
+          from public.candidate_submission_workflows workflow
+          where workflow.candidate_id=p_candidate_id
+            and workflow.state in (
+              'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+              'READY_FOR_MANAGER_APPROVAL','AWAITING_MANAGER_APPROVAL',
+              'MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+              'READY_TO_FINALISE','RECEIVED','FINALISED'
+            )
+            and private._candidate_workflow_maps_to_card_v1(workflow.id,t.timesheet_id,cw.id)
+        ) as has_submitted_or_processed_workflow
+    ) workflow_state
+    where cw.week_ending_date<=current_window.current_week_ending_date
+      and tf.paid_at_utc is null
+      and coalesce(capability.value->>'record_role','')<>'EXPENSE_ONLY'
+      and (
+        workflow_state.has_actionable_rejection
+        or workflow_state.has_candidate_action
+        or (
+          not workflow_state.has_submitted_or_processed_workflow
+          and (
+            coalesce((capability.value->>'can_edit_hours')::boolean,false)
+            or coalesce((capability.value->>'can_edit_expenses')::boolean,false)
+          )
+        )
+      );
+
+    if coalesce((p_daily_capability->>'enabled')::boolean,false) then
+      select pg_catalog.jsonb_build_object(
+        'date',d.rota_date,
+        'starts_at',d.shift_starts_at,
+        'ends_at',d.shift_ends_at,
+        'hospital',d.hospital,
+        'ward',d.ward,
+        'job_title',d.job_title,
+        'booking_ref',d.booking_ref
+      ) into v_next_shift
+      from private.candidate_daily_authority_scopes s
+      join public.candidate_daily_rota_generations g
+        on g.generation_id=s.active_generation_id and g.state='ACTIVE'
+      join public.candidate_daily_rota_days d on d.generation_id=g.generation_id
+      where s.environment=pg_catalog.upper(p_environment)
+        and s.candidate_id=p_candidate_id
+        and d.booked and d.shift_starts_at is not null and d.shift_ends_at>p_now_utc
+      order by d.shift_starts_at,d.rota_date,d.booking_id
+      limit 1;
+    end if;
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'announcement',pg_catalog.jsonb_build_object(
+      'text',v_settings.candidate_home_announcement_text,
+      'version',v_settings.candidate_home_announcement_version,
+      'updated_at_utc',v_settings.candidate_home_announcement_updated_at_utc
+    ),
+    'timesheets',pg_catalog.jsonb_build_object(
+      'attention_count',v_timesheet_attention_count,
+      'draft_timesheet_count',v_draft_timesheet_count,
+      'draft_expense_count',v_draft_expense_count,
+      'draft_timesheet_record_ids',v_draft_timesheet_record_ids,
+      'draft_expense_record_ids',v_draft_expense_record_ids
+    ),
+    'notifications',pg_catalog.jsonb_build_object('unread_count',v_unread_count),
+    'next_shift',v_next_shift
+  );
+end;
+$function$;
+
+create or replace function public.weekly_source_message_dispatch_target_claim_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_worker text;
+  v_limit integer;
+  v_lease_seconds integer;
+  v_token uuid:=pg_catalog.gen_random_uuid();
+  v_targets jsonb;
+  v_stale record;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in ('worker_id','limit','lease_seconds')) then
+    raise exception 'WEEKLY_SOURCE_TARGET_CLAIM_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_worker:=pg_catalog.btrim(p_request->>'worker_id');
+    v_limit:=coalesce(nullif(p_request->>'limit','')::integer,50);
+    v_lease_seconds:=coalesce(nullif(p_request->>'lease_seconds','')::integer,60);
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_TARGET_CLAIM_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_worker is null or v_worker!~'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+     or v_limit<1 or v_limit>200 or v_lease_seconds<15 or v_lease_seconds>300 then
+    raise exception 'WEEKLY_SOURCE_TARGET_CLAIM_REQUEST_INVALID' using errcode='22023';
+  end if;
+
+  -- Once submission started, an expired lease is an unknown provider outcome.
+  -- It is never guessed and never resubmitted automatically.
+  for v_stale in
+    update public.weekly_message_dispatch_targets target
+    set state='AMBIGUOUS',terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason='SUBMISSION_LEASE_EXPIRED',
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where target.state='SUBMISSION_STARTED'
+      and target.lease_expires_at_utc<=pg_catalog.transaction_timestamp()
+    returning target.id,target.dispatch_command_id
+  loop
+    insert into public.weekly_message_delivery_failures(
+      dispatch_command_id,dispatch_target_id,failure_class,safe_failure_code,safe_context_json
+    ) values (
+      v_stale.dispatch_command_id,v_stale.id,'PROVIDER_AMBIGUOUS',
+      'SUBMISSION_LEASE_EXPIRED',pg_catalog.jsonb_build_object('target_id',v_stale.id)
+    ) on conflict do nothing;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_stale.dispatch_command_id);
+  end loop;
+
+  for v_stale in
+    update public.weekly_message_dispatch_targets target
+    set state=case when target.state='SUBMISSION_STARTED' then 'AMBIGUOUS' else 'RETIRED' end,
+        terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason=case when target.state='SUBMISSION_STARTED'
+          then 'REQUEST_RETIRED_AFTER_SUBMISSION' else 'REQUEST_RETIRED' end,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    from public.weekly_message_dispatch_commands command,
+         public.weekly_message_intents intent,
+         public.weekly_message_renders render
+    where target.dispatch_command_id=command.id
+      and intent.id=command.message_intent_id
+      and render.id=command.message_render_id
+      and target.state not in (
+        'ACCEPTED','DEFINITELY_REJECTED','AMBIGUOUS','RETIRED','SKIPPED'
+      )
+      and (intent.state='RETIRED' or render.state='STALE')
+    returning target.id,target.dispatch_command_id,target.state
+  loop
+    if v_stale.state='AMBIGUOUS' then
+      insert into public.weekly_message_delivery_failures(
+        dispatch_command_id,dispatch_target_id,failure_class,safe_failure_code,safe_context_json
+      ) values (
+        v_stale.dispatch_command_id,v_stale.id,'PROVIDER_AMBIGUOUS',
+        'REQUEST_RETIRED_AFTER_SUBMISSION',pg_catalog.jsonb_build_object('target_id',v_stale.id)
+      ) on conflict do nothing;
+    end if;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_stale.dispatch_command_id);
+  end loop;
+
+  with eligible as (
+    select target.id
+    from public.weekly_message_dispatch_targets target
+    where (
+      (target.state in ('READY','TRANSIENT_FAILURE')
+        and coalesce(target.next_attempt_at_utc,'-infinity'::timestamptz)
+          <=pg_catalog.transaction_timestamp())
+      or
+      (target.state='LEASED'
+        and target.lease_expires_at_utc<=pg_catalog.transaction_timestamp())
+    )
+    and (target.channel<>'PUSH' or exists(
+      select 1 from public.weekly_message_dispatch_commands command
+      join public.weekly_candidate_message_notifications message_notification on message_notification.message_intent_id=command.message_intent_id
+      join public.candidate_notifications notification on notification.id=message_notification.notification_id
+      where command.id=target.dispatch_command_id and notification.state='UNREAD'
+        and private.candidate_notification_visible_v1(notification,pg_catalog.transaction_timestamp())
+    ))
+    order by target.next_attempt_at_utc nulls first,target.id
+    limit v_limit
+    for update skip locked
+  ), claimed as (
+    update public.weekly_message_dispatch_targets target
+    set state='LEASED',lease_owner=v_worker,lease_token=v_token,
+        lease_expires_at_utc=pg_catalog.transaction_timestamp()
+          +pg_catalog.make_interval(secs=>v_lease_seconds)
+    from eligible where target.id=eligible.id
+    returning target.*
+  )
+  select coalesce(pg_catalog.jsonb_agg(
+    pg_catalog.jsonb_build_object(
+      'dispatch_target_id',claimed.id,'dispatch_command_id',command.id,
+      'lease_token',claimed.lease_token,'lease_expires_at_utc',claimed.lease_expires_at_utc,
+      'channel',claimed.channel,'target_kind',claimed.target_kind,'provider',claimed.provider,
+      'tranche_kind',command.tranche_kind,
+      'external_target_id',claimed.external_target_id,
+      'target_fingerprint',pg_catalog.encode(claimed.keyed_target_fingerprint,'hex'),
+      'target_snapshot_hash',pg_catalog.encode(claimed.target_snapshot_hash,'hex'),
+      'target_version',claimed.target_version,
+      'safe_target_snapshot',claimed.safe_target_snapshot_json,
+      'provider_idempotency_key',claimed.provider_idempotency_key,
+      'rendered_content_hash',pg_catalog.encode(claimed.rendered_content_hash,'hex'),
+      'subject_text',render.subject_text,'html_body',render.html_body,
+      'plain_body',render.plain_body,
+      'push_title',case
+        when command.tranche_kind like 'TIMESHEET_SUBMISSION%' then 'Please submit your Timesheet'
+        when command.tranche_kind like '%REMINDER%' then 'Reminder: check your Timesheet hours'
+        else 'Check your Timesheet hours' end,
+      'deep_link',notification.deep_link_json,
+      'manager_recipient',case when claimed.channel='EMAIL'
+        then route.protected_recipient_address else null end
+    ) order by claimed.id
+  ),'[]'::jsonb) into v_targets
+  from claimed
+  join public.weekly_message_dispatch_commands command on command.id=claimed.dispatch_command_id
+  join public.weekly_message_renders render on render.id=command.message_render_id
+  join public.weekly_message_intents intent on intent.id=command.message_intent_id
+  left join public.weekly_manager_recipient_routes route on route.id=command.recipient_route_id
+  left join public.weekly_candidate_message_notifications message_notification
+    on message_notification.message_intent_id=intent.id
+  left join public.candidate_notifications notification
+    on notification.id=message_notification.notification_id;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'worker_id',v_worker,'lease_token',v_token,
+    'claimed_count',pg_catalog.jsonb_array_length(v_targets),'targets',v_targets
+  );
+end;
+$function$;
+
+create or replace function public.weekly_source_message_dispatch_target_start_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_target_id uuid;
+  v_lease_token uuid;
+  v_worker text;
+  v_target public.weekly_message_dispatch_targets%rowtype;
+  v_command public.weekly_message_dispatch_commands%rowtype;
+  v_intent public.weekly_message_intents%rowtype;
+  v_render public.weekly_message_renders%rowtype;
+  v_attempt public.weekly_message_target_attempts%rowtype;
+  v_attempt_number integer;
+  v_reason text;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in ('dispatch_target_id','lease_token','worker_id')) then
+    raise exception 'WEEKLY_SOURCE_TARGET_START_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_target_id:=(p_request->>'dispatch_target_id')::uuid;
+    v_lease_token:=(p_request->>'lease_token')::uuid;
+    v_worker:=p_request->>'worker_id';
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_TARGET_START_REQUEST_INVALID' using errcode='22023';
+  end;
+  select * into strict v_target from public.weekly_message_dispatch_targets
+  where id=v_target_id for update;
+  select * into strict v_command from public.weekly_message_dispatch_commands
+  where id=v_target.dispatch_command_id for update;
+  select * into strict v_intent from public.weekly_message_intents
+  where id=v_command.message_intent_id;
+  select * into strict v_render from public.weekly_message_renders
+  where id=v_command.message_render_id;
+  select * into v_attempt from public.weekly_message_target_attempts
+  where dispatch_target_id=v_target.id and completed_at_utc is null
+  order by attempt_number desc limit 1;
+  if found and v_target.state='SUBMISSION_STARTED' then
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'replay',true,'provider_attempt_id',v_attempt.id,
+      'provider_idempotency_key',v_attempt.provider_idempotency_key
+    );
+  end if;
+  if v_target.state<>'LEASED' or v_target.lease_token<>v_lease_token
+     or v_target.lease_owner<>v_worker
+     or v_target.lease_expires_at_utc<=pg_catalog.transaction_timestamp()
+     or v_intent.state<>'RENDERED' or v_render.state<>'CURRENT' then
+    raise exception 'WEEKLY_SOURCE_TARGET_LEASE_STALE' using errcode='40001';
+  end if;
+  begin
+    perform private.weekly_source_query_current_publication_v1(
+      v_command.source_cycle_id,v_command.projection_publication_id
+    );
+  exception when others then
+    update public.weekly_message_dispatch_targets
+    set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason='CURRENT_HOURS_CHANGED',next_attempt_at_utc=null,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason','CURRENT_HOURS_CHANGED',
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id
+    );
+  end;
+  if v_target.channel='PUSH' and not exists(
+    select 1 from public.weekly_candidate_message_notifications message_notification
+    join public.candidate_notifications notification on notification.id=message_notification.notification_id
+    where message_notification.message_intent_id=v_intent.id and notification.state='UNREAD'
+      and private.candidate_notification_visible_v1(notification,pg_catalog.transaction_timestamp())
+  ) then
+    update public.weekly_message_dispatch_targets
+    set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),terminal_reason='NOTIFICATION_NO_LONGER_ACTIONABLE',
+      next_attempt_at_utc=null,lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return pg_catalog.jsonb_build_object('ok',false,'reason','NOTIFICATION_NO_LONGER_ACTIONABLE',
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id);
+  end if;
+  if v_intent.audience_kind='CANDIDATE' and not exists(
+    select 1 from public.weekly_candidate_outreach_generations generation
+    join public.weekly_candidate_cohorts cohort on cohort.id=generation.candidate_cohort_id
+    where generation.id=v_command.candidate_generation_id and generation.state='ACTIVE'
+      and private.weekly_source_candidate_generation_current_v1(generation.id)
+  ) then
+    update public.weekly_message_dispatch_targets
+    set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason='CANDIDATE_GENERATION_CHANGED',next_attempt_at_utc=null,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason','CANDIDATE_GENERATION_CHANGED',
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id
+    );
+  elsif v_intent.audience_kind='CANDIDATE' and not exists(
+    select 1
+    from public.weekly_candidate_outreach_memberships membership
+    join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+    where membership.candidate_generation_id=v_command.candidate_generation_id
+      and membership.state='ACTIONABLE' and incident.state='OPEN'
+  ) and not exists(
+    select 1
+    from public.weekly_candidate_outreach_generations generation
+    join public.weekly_timesheet_submission_requests submission
+      on submission.candidate_cohort_id=generation.candidate_cohort_id
+     and submission.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+    join public.weekly_timesheet_submission_request_memberships membership
+      on membership.submission_request_id=submission.id and membership.state='WAITING'
+    where generation.id=v_command.candidate_generation_id
+      and generation.request_kind='SUBMIT_TIMESHEET'
+  ) then
+    update public.weekly_message_dispatch_targets
+    set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason='REQUEST_RESOLVED',next_attempt_at_utc=null,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason','REQUEST_RESOLVED',
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id
+    );
+  elsif v_intent.audience_kind='MANAGER' and not exists(
+    select 1
+    from public.weekly_manager_recipient_generations generation
+    join public.weekly_manager_recipient_routes route on route.id=generation.recipient_route_id
+    join public.weekly_manager_review_batches batch
+      on batch.recipient_generation_id=generation.id
+     and batch.message_render_id=v_render.id and batch.state='ACTIVE'
+    where generation.id=v_intent.recipient_generation_id and generation.state='ACTIVE'
+      and route.current_generation_id=generation.id
+  ) then
+    v_reason:='REVIEW_REPLACED';
+  elsif v_intent.audience_kind='MANAGER' and (
+    exists(
+      select 1
+      from public.weekly_manager_review_batches batch
+      join public.weekly_manager_review_items item on item.review_batch_id=batch.id
+      join public.weekly_discrepancy_incidents incident on incident.id=item.incident_id
+      join public.weekly_issue_comparison_revisions comparison
+        on comparison.id=incident.current_comparison_revision_id
+      where batch.message_render_id=v_render.id
+        and (
+          item.response_state<>'UNANSWERED' or incident.state<>'OPEN'
+          or item.incident_episode<>incident.episode_number
+          or item.sent_comparison_revision_id<>incident.current_comparison_revision_id
+          or item.sent_comparison_fingerprint<>comparison.material_comparison_fingerprint
+        )
+    ) or not exists(
+      select 1
+      from public.weekly_manager_review_batches batch
+      join public.weekly_manager_review_items item on item.review_batch_id=batch.id
+      join public.weekly_discrepancy_incidents incident on incident.id=item.incident_id
+      where batch.message_render_id=v_render.id
+        and item.response_state='UNANSWERED' and incident.state='OPEN'
+    )
+  ) then
+    v_reason:='REVIEW_CHANGED';
+  end if;
+  if v_reason is not null then
+    update public.weekly_message_dispatch_targets
+    set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason=v_reason,next_attempt_at_utc=null,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    update public.weekly_manager_review_batches
+    set state='REVOKED'
+    where message_render_id=v_render.id and state='ACTIVE';
+    update public.weekly_manager_route_receipts receipt
+    set state='REVOKED',revoked_at_utc=pg_catalog.transaction_timestamp()
+    from public.weekly_manager_review_batches batch
+    where receipt.review_batch_id=batch.id and batch.message_render_id=v_render.id
+      and receipt.state='ACTIVE';
+    update public.weekly_manager_review_items item
+    set response_state='OBSOLETE'
+    from public.weekly_manager_review_batches batch
+    where item.review_batch_id=batch.id and batch.message_render_id=v_render.id
+      and item.response_state='UNANSWERED';
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason',v_reason,
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id
+    );
+  end if;
+  select coalesce(pg_catalog.max(attempt_number),0)+1 into v_attempt_number
+  from public.weekly_message_target_attempts where dispatch_target_id=v_target.id;
+  if v_attempt_number>v_target.maximum_attempts then
+    raise exception 'WEEKLY_SOURCE_TARGET_RETRIES_EXHAUSTED' using errcode='55000';
+  end if;
+  insert into public.weekly_message_target_attempts(
+    dispatch_target_id,attempt_number,provider_idempotency_key,
+    lease_owner,lease_token,submission_started_at_utc
+  ) values (
+    v_target.id,v_attempt_number,
+    v_target.provider_idempotency_key||'/attempt-'||v_attempt_number::text,
+    v_worker,v_lease_token,pg_catalog.transaction_timestamp()
+  ) returning * into v_attempt;
+  update public.weekly_message_dispatch_targets
+  set state='SUBMISSION_STARTED',attempt_count=v_attempt_number
+  where id=v_target.id;
+  update public.weekly_message_dispatch_commands set state='SUBMISSION_STARTED'
+  where id=v_command.id;
+  update public.weekly_message_renders set state='SUBMISSION_STARTED'
+  where id=v_render.id;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'replay',false,'provider_attempt_id',v_attempt.id,
+    'provider_idempotency_key',v_attempt.provider_idempotency_key,
+    'submission_started_at_utc',v_attempt.submission_started_at_utc
+  );
+end;
+$function$;
+
+alter function private._candidate_home_summary_v1(text,uuid,uuid,jsonb,timestamptz) owner to postgres;
+revoke all on function private._candidate_home_summary_v1(text,uuid,uuid,jsonb,timestamptz) from public,anon,authenticated,service_role;
+alter function public.weekly_source_message_dispatch_target_claim_v1(jsonb) owner to postgres;
+alter function public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_message_dispatch_target_claim_v1(jsonb) from public,anon,authenticated;
+revoke all on function public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_message_dispatch_target_claim_v1(jsonb) to service_role;
+grant execute on function public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb) to service_role;
+
+-- Repeatable CloudTMS function/view authority: candidate_daily_legacy_two_way_availability_v1
+-- Use CREATE OR REPLACE and preserve owner, security, search_path, and ACL contracts.
+
+
+
+
+
+create or replace function public.candidate_daily_legacy_availability_apply_atomic_v1(
+  p_internal_context jsonb,
+  p_candidate_source_hmac text,
+  p_request_id uuid,
+  p_idempotency_key text,
+  p_changes jsonb,
+  p_correlation_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $function$
+declare
+  v_context jsonb;
+  v_environment text;
+  v_candidate_id uuid;
+  v_scope private.candidate_daily_authority_scopes%rowtype;
+  v_receipt public.candidate_daily_command_receipts%rowtype;
+  v_request_hash text;
+  v_change jsonb;
+  v_preference text;
+  v_outcomes jsonb := '[]'::jsonb;
+  v_accepted jsonb := '[]'::jsonb;
+  v_seen text[] := '{}';
+  v_reason text;
+  v_row public.candidate_daily_rota_days%rowtype;
+  v_new_version bigint;
+  v_terminal jsonb;
+begin
+  v_context := private._candidate_daily_context_v1(p_internal_context,'LEGACY_COMPAT',false);
+  v_environment := v_context->>'environment';
+  v_candidate_id := private._candidate_daily_source_candidate_v1(v_environment,p_candidate_source_hmac);
+
+  if p_request_id is null
+     or p_idempotency_key !~ '^[A-Za-z0-9._~:+/-]{16,128}$'
+     or jsonb_typeof(p_changes) <> 'array'
+     or jsonb_array_length(p_changes) not between 1 and 14
+     or p_correlation_id !~ '^[0-7][0-9A-HJKMNP-TV-Z]{25}$' then
+    raise exception using errcode='22023',message='VALIDATION_FAILED';
+  end if;
+
+  v_request_hash := private._candidate_daily_json_sha256_v1(jsonb_build_object(
+    'operation','LEGACY_AVAILABILITY_APPLY',
+    'candidate_source_hmac',p_candidate_source_hmac,
+    'request_id',p_request_id,
+    'changes',p_changes
+  ));
+
+  insert into public.candidate_daily_command_receipts(
+    command_id,environment,candidate_id,actor_class,command_class,idempotency_key,
+    request_sha256,canonical_version_before,state,correlation_id
+  )
+  select
+    p_request_id,v_environment,v_candidate_id,'LEGACY_ADAPTER','LEGACY_AVAILABILITY_APPLY',
+    p_idempotency_key,v_request_hash,s.canonical_version,'IN_PROGRESS',p_correlation_id
+  from private.candidate_daily_authority_scopes s
+  where s.environment=v_environment and s.candidate_id=v_candidate_id
+  on conflict do nothing;
+
+  select * into v_receipt
+  from public.candidate_daily_command_receipts
+  where command_id=p_request_id
+     or (environment=v_environment and candidate_id=v_candidate_id
+       and actor_class='LEGACY_ADAPTER' and idempotency_key=p_idempotency_key)
+  order by (command_id=p_request_id) desc
+  limit 1
+  for update;
+
+  if v_receipt.command_id is null then
+    raise exception using errcode='55000',message='CANDIDATE_DAILY_NOT_READY';
+  end if;
+  if v_receipt.candidate_id<>v_candidate_id or v_receipt.request_sha256<>v_request_hash then
+    raise exception using errcode='23505',message='IDEMPOTENCY_KEY_REUSED';
+  end if;
+  if v_receipt.state<>'IN_PROGRESS' then
+    return v_receipt.terminal_body_json||jsonb_build_object('_idempotent_replay',true);
+  end if;
+
+  select * into v_scope
+  from private.candidate_daily_authority_scopes
+  where environment=v_environment and candidate_id=v_candidate_id
+  for update;
+
+  for v_change in select value from jsonb_array_elements(p_changes) loop
+    v_reason := null;
+    v_preference := private._candidate_daily_preference_v1(v_change->>'availability');
+
+    if (select count(*) from jsonb_object_keys(v_change))<>2
+       or not(v_change ? 'date' and v_change ? 'availability')
+       or v_preference is null
+       or v_change->>'date' !~ '^\d{4}-\d{2}-\d{2}$' then
+      v_reason := 'INVALID_VALUE';
+    elsif (v_change->>'date')=any(v_seen) then
+      v_reason := 'DUPLICATE_DATE';
+    else
+      v_seen := array_append(v_seen,v_change->>'date');
+      select * into v_row
+      from public.candidate_daily_rota_days
+      where generation_id=v_scope.active_generation_id
+        and rota_date=(v_change->>'date')::date;
+
+      if v_row.generation_id is null then
+        v_reason := 'OUTSIDE_WINDOW';
+      elsif v_row.booked then
+        v_reason := 'BOOKED';
+      elsif v_row.system_blocked then
+        v_reason := 'BLOCKED';
+      elsif v_scope.transition_in_progress then
+        v_reason := 'NOT_EDITABLE';
+      elsif v_scope.authority_mode not in ('GOOGLE_PRIMARY','ROLLBACK_PENDING','SUPABASE_PRIMARY') then
+        v_reason := 'NOT_EDITABLE';
+      end if;
+    end if;
+
+    if v_reason is null then
+      v_accepted := v_accepted||jsonb_build_array(jsonb_build_object(
+        'date',v_change->>'date','preference',v_preference
+      ));
+      v_outcomes := v_outcomes||jsonb_build_array(jsonb_build_object(
+        'date',v_change->>'date','applied',true
+      ));
+    else
+      v_outcomes := v_outcomes||jsonb_build_array(jsonb_build_object(
+        'date',coalesce(v_change->>'date','1970-01-01'),
+        'applied',false,
+        'reason',v_reason
+      ));
+    end if;
+  end loop;
+
+  if jsonb_array_length(v_accepted)>0 then
+    v_new_version := v_scope.canonical_version+1;
+    update private.candidate_daily_authority_scopes
+    set canonical_version=v_new_version,updated_at_utc=now()
+    where environment=v_environment and candidate_id=v_candidate_id;
+
+    for v_change in select value from jsonb_array_elements(v_accepted) loop
+      insert into public.candidate_daily_availability_days(
+        environment,candidate_id,availability_date,preference,availability_version,
+        source_class,source_command_id,changed_by_class,row_hash
+      )
+      values(
+        v_environment,v_candidate_id,(v_change->>'date')::date,v_change->>'preference',v_new_version,
+        'LEGACY_ADAPTER',v_receipt.command_id,'LEGACY_ADAPTER',
+        private._candidate_daily_json_sha256_v1(v_change)
+      )
+      on conflict(environment,candidate_id,availability_date) do update set
+        preference=excluded.preference,
+        availability_version=excluded.availability_version,
+        source_class=excluded.source_class,
+        source_command_id=excluded.source_command_id,
+        changed_at_utc=now(),
+        changed_by_class=excluded.changed_by_class,
+        row_hash=excluded.row_hash;
+    end loop;
+
+    if v_scope.authority_mode='SUPABASE_PRIMARY' then
+      -- Both apps submit intent to the locked canonical scope. Reproject this
+      -- version even though Google wrote first: an older in-flight projection
+      -- must not leave the Sheet behind the newly accepted DB choice.
+      for v_change in select value from jsonb_array_elements(v_accepted) loop
+        insert into public.candidate_daily_sheet_projection_outbox(
+          environment,candidate_id,availability_date,availability_version,preference,
+          command_id,correlation_id
+        ) values(
+          v_environment,v_candidate_id,(v_change->>'date')::date,v_new_version,
+          v_change->>'preference',v_receipt.command_id,p_correlation_id
+        ) on conflict do nothing;
+      end loop;
+      insert into private.candidate_daily_sync_state(
+        environment,candidate_id,target,accepted_canonical_cursor,required_visible_cursor,
+        delivered_visible_cursor,effective_visible_cursor,state
+      ) values(
+        v_environment,v_candidate_id,'MASTER_AVAILABILITY_SHEET',v_new_version,v_new_version,0,0,'LAGGING'
+      ) on conflict(environment,candidate_id,target) do update set
+        accepted_canonical_cursor=greatest(private.candidate_daily_sync_state.accepted_canonical_cursor,v_new_version),
+        required_visible_cursor=greatest(private.candidate_daily_sync_state.required_visible_cursor,v_new_version),
+        state='LAGGING',updated_at_utc=now();
+      perform private._candidate_daily_refresh_sync_state_v1(
+        v_environment,v_candidate_id,'MASTER_AVAILABILITY_SHEET',now()
+      );
+    else
+    insert into private.candidate_daily_sync_state(
+      environment,candidate_id,target,accepted_canonical_cursor,required_visible_cursor,
+      delivered_visible_cursor,effective_visible_cursor,state,last_acknowledged_at_utc
+    )
+    values(
+      v_environment,v_candidate_id,'MASTER_AVAILABILITY_SHEET',v_new_version,v_new_version,
+      v_new_version,v_new_version,'READY',now()
+    )
+    on conflict(environment,candidate_id,target) do update set
+      accepted_canonical_cursor=greatest(private.candidate_daily_sync_state.accepted_canonical_cursor,v_new_version),
+      required_visible_cursor=greatest(private.candidate_daily_sync_state.required_visible_cursor,v_new_version),
+      delivered_visible_cursor=greatest(private.candidate_daily_sync_state.delivered_visible_cursor,v_new_version),
+      effective_visible_cursor=greatest(private.candidate_daily_sync_state.effective_visible_cursor,v_new_version),
+      state='READY',
+      last_acknowledged_at_utc=now(),
+      updated_at_utc=now();
+    end if;
+  else
+    v_new_version := null;
+  end if;
+
+  v_terminal := jsonb_strip_nulls(jsonb_build_object(
+    'request_receipt_id',v_receipt.command_id,
+    'committed_version',v_new_version,
+    'outcomes',v_outcomes
+  ));
+
+  update public.candidate_daily_command_receipts
+  set canonical_version_after=coalesce(v_new_version,v_scope.canonical_version,canonical_version_before),
+    state='COMPLETED',
+    terminal_http_status=200,
+    terminal_body_json=v_terminal,
+    terminal_body_sha256=private._candidate_daily_json_sha256_v1(v_terminal),
+    completed_at_utc=now(),
+    updated_at_utc=now()
+  where command_id=v_receipt.command_id;
+
+  return v_terminal;
+end;
+$function$;
+
+revoke all on function public.candidate_daily_legacy_availability_apply_atomic_v1(
+  jsonb,text,uuid,text,jsonb,text
+) from public;
+
+do $grants$
+begin
+  if exists(select 1 from pg_roles where rolname='anon') then
+    revoke all on function public.candidate_daily_legacy_availability_apply_atomic_v1(
+      jsonb,text,uuid,text,jsonb,text
+    ) from anon;
+  end if;
+  if exists(select 1 from pg_roles where rolname='authenticated') then
+    revoke all on function public.candidate_daily_legacy_availability_apply_atomic_v1(
+      jsonb,text,uuid,text,jsonb,text
+    ) from authenticated;
+  end if;
+  if exists(select 1 from pg_roles where rolname='service_role') then
+    grant execute on function public.candidate_daily_legacy_availability_apply_atomic_v1(
+      jsonb,text,uuid,text,jsonb,text
+    ) to service_role;
+  end if;
+end;
+$grants$;
+
+
+
+-- Repeatable CloudTMS function/view authority: candidate_daily_missing_legacy_choice_reconciliation_v1
+-- Use CREATE OR REPLACE and preserve owner, security, search_path, and ACL contracts.
+
+
+
+
+
+create or replace function public.candidate_daily_reconciliation_apply_atomic_v1(
+  p_internal_context jsonb,
+  p_batch_request_id uuid,
+  p_idempotency_key text,
+  p_observations jsonb,
+  p_correlation_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $function$
+declare
+  v_context jsonb;
+  v_environment text;
+  v_route_operation text;
+  v_operation_class text;
+  v_request_hash text;
+  v_batch private.candidate_daily_batch_receipts%rowtype;
+  v_batch_id uuid:=gen_random_uuid();
+  v_item_keys jsonb;
+  v_item jsonb;
+  v_index integer:=0;
+  v_candidate_id uuid;
+  v_scope private.candidate_daily_authority_scopes%rowtype;
+  v_day public.candidate_daily_rota_days%rowtype;
+  v_availability public.candidate_daily_availability_days%rowtype;
+  v_preference text;
+  v_command_id uuid;
+  v_command public.candidate_daily_command_receipts%rowtype;
+  v_item_hash text;
+  v_item_key text;
+  v_outcomes jsonb:='[]'::jsonb;
+  v_terminal jsonb;
+  v_classification text;
+  v_error text;
+  v_probe_only boolean;
+  v_reconciled_candidates uuid[]:='{}'::uuid[];
+  v_reconciled_revisions jsonb:='{}'::jsonb;
+  v_refresh_candidate_id uuid;
+begin
+  v_context:=private._candidate_daily_context_v1(p_internal_context,'SIGNED_SYSTEM_SYNC',false);
+  v_environment:=v_context->>'environment';
+  v_route_operation:=upper(coalesce(nullif(p_internal_context->>'route_operation',''),'RECONCILIATION'));
+  if v_route_operation not in ('RECONCILIATION','SHEET_EDIT_INGEST') then
+    raise exception using errcode='22023',message='VALIDATION_FAILED';
+  end if;
+  v_operation_class:=case when v_route_operation='SHEET_EDIT_INGEST' then 'SHEET_EDIT_INGEST' else 'RECONCILIATION' end;
+  if p_batch_request_id is null or p_idempotency_key !~ '^[A-Za-z0-9._~:+/-]{16,128}$'
+     or jsonb_typeof(p_observations)<>'array' or jsonb_array_length(p_observations) not between 1 and 100
+     or p_correlation_id !~ '^[0-7][0-9A-HJKMNP-TV-Z]{25}$' then
+    raise exception using errcode='22023',message='VALIDATION_FAILED';
+  end if;
+  select jsonb_agg(i->>'item_key' order by ord) into v_item_keys
+    from jsonb_array_elements(p_observations) with ordinality x(i,ord);
+  if exists(select 1 from jsonb_array_elements(p_observations)i where i->>'item_key' !~ '^[A-Za-z0-9._~-]{8,160}$')
+     or jsonb_array_length(v_item_keys)<>(select count(distinct x) from jsonb_array_elements_text(v_item_keys)x) then
+    raise exception using errcode='22023',message='VALIDATION_FAILED';
+  end if;
+  v_request_hash:=private._candidate_daily_json_sha256_v1(jsonb_build_object('operation',v_route_operation,
+    'batch_request_id',p_batch_request_id,'items',p_observations));
+  insert into private.candidate_daily_batch_receipts(batch_receipt_id,environment,actor_class,operation_class,
+    idempotency_key,request_hash,item_keys_json,item_count,state,correlation_id)
+  values(v_batch_id,v_environment,'SIGNED_SYSTEM',v_operation_class,p_idempotency_key,v_request_hash,
+    v_item_keys,jsonb_array_length(p_observations),'IN_PROGRESS',p_correlation_id)
+  on conflict(environment,actor_class,operation_class,idempotency_key) do nothing;
+  select * into v_batch from private.candidate_daily_batch_receipts where environment=v_environment
+    and actor_class='SIGNED_SYSTEM' and operation_class=v_operation_class and idempotency_key=p_idempotency_key for update;
+  if v_batch.request_hash<>v_request_hash then
+    raise exception using errcode='23505',message='IDEMPOTENCY_KEY_REUSED';
+  end if;
+  if v_batch.state<>'IN_PROGRESS' then
+    return v_batch.terminal_response_body||jsonb_build_object('_idempotent_replay',true);
+  end if;
+
+  for v_item in select value from jsonb_array_elements(p_observations) loop
+    v_error:=null;
+    v_classification:=null;
+    v_probe_only:=v_route_operation='RECONCILIATION' and v_item->'probe_only'='true'::jsonb;
+    begin
+      if v_probe_only and (
+        not(v_item ?& array['candidate_source_hmac','probe_only','source_revision',
+          'source_event_time','source_hash','item_key'])
+        or (select count(*) from jsonb_object_keys(v_item))<>6
+        or jsonb_typeof(v_item->'probe_only')<>'boolean'
+        or not (v_item->>'probe_only')::boolean
+        or v_item->>'candidate_source_hmac' !~ '^[a-f0-9]{64}$'
+        or v_item->>'source_revision' !~ '^[A-Za-z0-9._~:+/-]{1,160}$'
+        or v_item->>'source_hash' !~ '^[a-f0-9]{64}$'
+        or v_item->>'source_event_time' !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$'
+      ) then
+        raise exception using errcode='22023',message='VALIDATION_FAILED';
+      end if;
+      v_candidate_id:=private._candidate_daily_source_candidate_v1(v_environment,v_item->>'candidate_source_hmac');
+      if v_route_operation='SHEET_EDIT_INGEST' then
+        if not(v_item ?& array['source_event_id','source_revision','editor_hmac','sheet','cell','date',
+          'availability','source_event_time','source_hash','item_key'])
+          or v_item->>'sheet'<>'Availability' or v_item->>'cell' !~ '^[A-Z]{1,3}[1-9][0-9]{0,5}$'
+          or v_item->>'editor_hmac' !~ '^[a-f0-9]{64}$' or v_item->>'source_hash' !~ '^[a-f0-9]{64}$' then
+          raise exception using errcode='22023',message='VALIDATION_FAILED';
+        end if;
+        v_preference:=private._candidate_daily_preference_v1(v_item->>'availability');
+        if v_preference is null then
+          raise exception using errcode='22023',message='VALIDATION_FAILED';
+        end if;
+        v_item_hash:=private._candidate_daily_json_sha256_v1(v_item);
+        v_item_key:=left(p_idempotency_key||':item:'||(v_item->>'item_key'),160);
+        v_command_id:=gen_random_uuid();
+        select * into v_scope from private.candidate_daily_authority_scopes
+          where environment=v_environment and candidate_id=v_candidate_id for update;
+        insert into public.candidate_daily_command_receipts(command_id,environment,candidate_id,actor_class,
+          command_class,idempotency_key,request_sha256,source_system,source_event_id,source_revision,
+          source_event_time,item_key,canonical_version_before,state,correlation_id)
+        values(v_command_id,v_environment,v_candidate_id,'SIGNED_SYSTEM','SHEET_EDIT_INGEST',v_item_key,
+          v_item_hash,'MASTER_AVAILABILITY_SHEET',v_item->>'source_event_id',v_item->>'source_revision',
+          (v_item->>'source_event_time')::timestamptz,v_item->>'item_key',v_scope.canonical_version,
+          'IN_PROGRESS',p_correlation_id)
+        on conflict do nothing;
+        select * into v_command from public.candidate_daily_command_receipts where
+          (environment=v_environment and source_system='MASTER_AVAILABILITY_SHEET'
+            and source_event_id=v_item->>'source_event_id' and item_key=v_item->>'item_key')
+          or (environment=v_environment and candidate_id=v_candidate_id and actor_class='SIGNED_SYSTEM'
+            and idempotency_key=v_item_key)
+          order by (source_event_id=v_item->>'source_event_id') desc limit 1 for update;
+        if v_command.request_sha256<>v_item_hash then
+          raise exception using errcode='23505',message='SOURCE_EVENT_CONFLICT';
+        end if;
+        if v_command.state='COMPLETED' then
+          v_outcomes:=v_outcomes||jsonb_build_array(jsonb_build_object('index',v_index,'status','REPLAYED',
+            'availability_version',v_command.canonical_version_after));
+        else
+          select * into v_day from public.candidate_daily_rota_days
+            where generation_id=v_scope.active_generation_id and rota_date=(v_item->>'date')::date;
+          if v_day.generation_id is null or v_day.booked or v_day.system_blocked then
+            raise exception using errcode='22023',message='AVAILABILITY_DATE_NOT_EDITABLE';
+          end if;
+          update private.candidate_daily_authority_scopes set canonical_version=canonical_version+1,updated_at_utc=now()
+            where environment=v_environment and candidate_id=v_candidate_id returning canonical_version into v_scope.canonical_version;
+          insert into public.candidate_daily_availability_days(environment,candidate_id,availability_date,preference,
+            availability_version,source_class,source_command_id,changed_by_class,row_hash)
+          values(v_environment,v_candidate_id,(v_item->>'date')::date,v_preference,v_scope.canonical_version,
+            'SIGNED_SYSTEM',v_command.command_id,'SIGNED_SYSTEM',v_item_hash)
+          on conflict(environment,candidate_id,availability_date) do update set preference=excluded.preference,
+            availability_version=excluded.availability_version,source_class=excluded.source_class,
+            source_command_id=excluded.source_command_id,changed_by_class=excluded.changed_by_class,
+            row_hash=excluded.row_hash,changed_at_utc=now();
+          insert into private.candidate_daily_sync_state(environment,candidate_id,target,accepted_canonical_cursor,
+            required_visible_cursor,delivered_visible_cursor,overlay_proof_cursor,effective_visible_cursor,
+            observed_source_revision,state,last_acknowledged_at_utc)
+          values(v_environment,v_candidate_id,'MASTER_AVAILABILITY_SHEET',v_scope.canonical_version,
+            v_scope.canonical_version,v_scope.canonical_version,v_scope.canonical_version,v_scope.canonical_version,
+            v_item->>'source_revision','READY',now())
+          on conflict(environment,candidate_id,target) do update set
+            accepted_canonical_cursor=greatest(private.candidate_daily_sync_state.accepted_canonical_cursor,v_scope.canonical_version),
+            required_visible_cursor=greatest(private.candidate_daily_sync_state.required_visible_cursor,v_scope.canonical_version),
+            delivered_visible_cursor=greatest(private.candidate_daily_sync_state.delivered_visible_cursor,v_scope.canonical_version),
+            effective_visible_cursor=greatest(private.candidate_daily_sync_state.effective_visible_cursor,v_scope.canonical_version),
+            observed_source_revision=excluded.observed_source_revision,state='READY',last_acknowledged_at_utc=now(),updated_at_utc=now();
+          update public.candidate_daily_command_receipts set canonical_version_after=v_scope.canonical_version,
+            state='COMPLETED',terminal_http_status=200,
+            terminal_body_json=jsonb_build_object('availability_version',v_scope.canonical_version),
+            terminal_body_sha256=private._candidate_daily_json_sha256_v1(jsonb_build_object('availability_version',v_scope.canonical_version)),
+            completed_at_utc=now(),updated_at_utc=now() where command_id=v_command.command_id;
+          v_outcomes:=v_outcomes||jsonb_build_array(jsonb_build_object('index',v_index,'status','COMMITTED',
+            'availability_version',v_scope.canonical_version));
+        end if;
+      elsif v_probe_only then
+        v_outcomes:=v_outcomes||jsonb_build_array(jsonb_build_object(
+          'index',v_index,'classification','LINKED'));
+      else
+        if not(v_item ?& array['date','observed_value','observed_sheet_revision','source_event_id',
+          'source_revision','source_event_time','source_hash','item_key'])
+          or v_item->>'source_hash' !~ '^[a-f0-9]{64}$' then
+          raise exception using errcode='22023',message='VALIDATION_FAILED';
+        end if;
+        v_preference:=private._candidate_daily_preference_v1(v_item->>'observed_value');
+        -- Serialize the missing-row check with every canonical availability writer.
+        -- Identity-only probes above remain strictly read-only.
+        select * into v_scope from private.candidate_daily_authority_scopes
+          where environment=v_environment and candidate_id=v_candidate_id for update;
+        select * into v_availability from public.candidate_daily_availability_days
+          where environment=v_environment and candidate_id=v_candidate_id and availability_date=(v_item->>'date')::date;
+        if v_preference is null then
+          v_classification:='AMBIGUOUS';
+        elsif v_availability.candidate_id is null then
+          v_classification:='CANONICAL_COMMAND_REQUIRED';
+          select * into v_day from public.candidate_daily_rota_days
+            where generation_id=v_scope.active_generation_id
+              and environment=v_environment and candidate_id=v_candidate_id
+              and rota_date=(v_item->>'date')::date;
+          -- Backfill only an absent choice in a stable, DB-authoritative active
+          -- window. Never replace an existing row, even an explicit PENDING.
+          -- GOOGLE_PRIMARY readiness/transition semantics are unchanged.
+          if v_scope.authority_mode='SUPABASE_PRIMARY'
+             and not v_scope.transition_in_progress
+             and v_day.generation_id is not null
+             and not v_day.booked and not v_day.system_blocked then
+            if v_preference='PENDING' then
+              -- Absence already means PENDING to both canonical readers.
+              v_classification:='MATCH';
+            else
+              v_item_hash:=private._candidate_daily_json_sha256_v1(v_item);
+              v_item_key:=left(p_idempotency_key||':item:'||(v_item->>'item_key'),160);
+              v_command_id:=gen_random_uuid();
+              insert into public.candidate_daily_command_receipts(command_id,environment,candidate_id,
+                actor_class,command_class,idempotency_key,request_sha256,source_system,source_event_id,
+                source_revision,source_event_time,item_key,canonical_version_before,state,correlation_id)
+              values(v_command_id,v_environment,v_candidate_id,'SIGNED_SYSTEM','RECONCILIATION',
+                v_item_key,v_item_hash,'MASTER_AVAILABILITY_SHEET',v_item->>'source_event_id',
+                v_item->>'source_revision',(v_item->>'source_event_time')::timestamptz,
+                v_item->>'item_key',v_scope.canonical_version,'IN_PROGRESS',p_correlation_id)
+              on conflict do nothing;
+              select * into v_command from public.candidate_daily_command_receipts where
+                (environment=v_environment and source_system='MASTER_AVAILABILITY_SHEET'
+                  and source_event_id=v_item->>'source_event_id' and item_key=v_item->>'item_key')
+                or (environment=v_environment and candidate_id=v_candidate_id and actor_class='SIGNED_SYSTEM'
+                  and idempotency_key=v_item_key)
+                order by (source_event_id=v_item->>'source_event_id') desc limit 1 for update;
+              if v_command.request_sha256<>v_item_hash then
+                raise exception using errcode='23505',message='SOURCE_EVENT_CONFLICT';
+              end if;
+              if v_command.state<>'IN_PROGRESS' then
+                -- A receipt with no corresponding row is not permission to
+                -- resurrect a deleted choice. Leave it for operator review.
+                v_classification:='CANONICAL_COMMAND_REQUIRED';
+              else
+                update private.candidate_daily_authority_scopes
+                  set canonical_version=canonical_version+1,updated_at_utc=now()
+                  where environment=v_environment and candidate_id=v_candidate_id
+                  returning canonical_version into v_scope.canonical_version;
+                insert into public.candidate_daily_availability_days(environment,candidate_id,
+                  availability_date,preference,availability_version,source_class,source_command_id,
+                  changed_by_class,row_hash)
+                values(v_environment,v_candidate_id,(v_item->>'date')::date,v_preference,
+                  v_scope.canonical_version,'SIGNED_SYSTEM',v_command.command_id,'SIGNED_SYSTEM',v_item_hash);
+                -- The signed observation already proves this exact choice in
+                -- Google; record its versioned delivery instead of rewriting it.
+                insert into public.candidate_daily_sheet_projection_outbox(environment,candidate_id,
+                  availability_date,availability_version,preference,command_id,correlation_id,state,
+                  observed_sheet_revision,completed_at_utc)
+                values(v_environment,v_candidate_id,(v_item->>'date')::date,v_scope.canonical_version,
+                  v_preference,v_command.command_id,p_correlation_id,'DELIVERED',
+                  v_item->>'observed_sheet_revision',now());
+                v_terminal:=jsonb_build_object('reason','MISSING_AVAILABILITY_BACKFILLED',
+                  'date',v_item->>'date','preference',v_preference,
+                  'availability_version',v_scope.canonical_version);
+                update public.candidate_daily_command_receipts
+                  set canonical_version_after=v_scope.canonical_version,state='COMPLETED',
+                    terminal_http_status=200,terminal_body_json=v_terminal,
+                    terminal_body_sha256=private._candidate_daily_json_sha256_v1(v_terminal),
+                    completed_at_utc=now(),updated_at_utc=now()
+                  where command_id=v_command.command_id;
+                v_classification:='MATCH';
+              end if;
+            end if;
+          end if;
+        elsif v_availability.preference=v_preference then
+          v_classification:='MATCH';
+          update public.candidate_daily_sheet_projection_outbox
+          set state='DELIVERED',observed_sheet_revision=v_item->>'observed_sheet_revision',
+            overlay_generation_id=null,overlay_generation_version=null,overlay_source_row_hash=null,
+            completed_at_utc=now(),lease_owner=null,lease_token=null,lease_expires_at_utc=null,
+            updated_at_utc=now()
+          where environment=v_environment and candidate_id=v_candidate_id
+            and target='MASTER_AVAILABILITY_SHEET'
+            and availability_date=v_availability.availability_date
+            and availability_version=v_availability.availability_version
+            and preference=v_availability.preference and state<>'TERMINAL';
+        else
+          insert into public.candidate_daily_sheet_projection_outbox(environment,candidate_id,availability_date,
+            availability_version,preference,command_id,correlation_id)
+          values(v_environment,v_candidate_id,v_availability.availability_date,v_availability.availability_version,
+            v_availability.preference,v_availability.source_command_id,p_correlation_id)
+          on conflict(environment,target,candidate_id,availability_date,availability_version,operation)
+          do update set state=case when public.candidate_daily_sheet_projection_outbox.state='TERMINAL'
+            then 'TERMINAL' else 'PENDING' end,next_available_at_utc=now(),
+            overlay_generation_id=null,overlay_generation_version=null,overlay_source_row_hash=null,
+            completed_at_utc=null,updated_at_utc=now();
+          v_classification:='REPAIR_PROJECTION';
+        end if;
+        if not v_candidate_id=any(v_reconciled_candidates) then
+          v_reconciled_candidates:=array_append(v_reconciled_candidates,v_candidate_id);
+        end if;
+        v_reconciled_revisions:=jsonb_set(v_reconciled_revisions,array[v_candidate_id::text],
+          to_jsonb(v_item->>'observed_sheet_revision'),true);
+        v_outcomes:=v_outcomes||jsonb_build_array(jsonb_build_object('index',v_index,'classification',v_classification));
+      end if;
+    exception when others then
+      v_error:=sqlerrm;
+      if v_route_operation='SHEET_EDIT_INGEST' and v_error in ('SOURCE_EVENT_CONFLICT','AVAILABILITY_DATE_NOT_EDITABLE',
+        'IDENTITY_LINK_MISSING','IDENTITY_LINK_AMBIGUOUS','VALIDATION_FAILED') then
+        v_outcomes:=v_outcomes||jsonb_build_array(jsonb_build_object('index',v_index,'status','REJECTED','error_code',v_error));
+      elsif v_route_operation='RECONCILIATION' and v_error='IDENTITY_LINK_MISSING' then
+        v_outcomes:=v_outcomes||jsonb_build_array(jsonb_build_object('index',v_index,'classification','NOT_ENROLLED'));
+      elsif v_route_operation='RECONCILIATION' and v_error in ('IDENTITY_LINK_AMBIGUOUS','VALIDATION_FAILED') then
+        v_outcomes:=v_outcomes||jsonb_build_array(jsonb_build_object('index',v_index,'classification','TERMINAL_CONFLICT','error_code',v_error));
+      else
+        raise;
+      end if;
+    end;
+    v_index:=v_index+1;
+  end loop;
+
+  if v_route_operation='RECONCILIATION' then
+    for v_refresh_candidate_id in
+      select candidate_id from unnest(v_reconciled_candidates) candidate_id order by candidate_id
+    loop
+      perform private._candidate_daily_refresh_sync_state_v1(
+        v_environment,v_refresh_candidate_id,'MASTER_AVAILABILITY_SHEET',now());
+      update private.candidate_daily_sync_state set last_reconciled_at_utc=now(),
+        observed_source_revision=v_reconciled_revisions->>v_refresh_candidate_id::text,updated_at_utc=now()
+      where environment=v_environment and candidate_id=v_refresh_candidate_id
+        and target='MASTER_AVAILABILITY_SHEET';
+    end loop;
+  end if;
+
+  v_terminal:=jsonb_build_object('batch_receipt_id',v_batch.batch_receipt_id,'outcomes',v_outcomes);
+  update private.candidate_daily_batch_receipts set state='COMPLETED',terminal_http_status=200,
+    terminal_response_body=v_terminal,terminal_response_sha256=private._candidate_daily_json_sha256_v1(v_terminal),
+    completed_at_utc=now(),updated_at_utc=now() where batch_receipt_id=v_batch.batch_receipt_id;
+  return v_terminal;
+end;
+$function$;
+
+revoke all on function public.candidate_daily_reconciliation_apply_atomic_v1(jsonb,uuid,text,jsonb,text) from public;
+
+do $grants$
+begin
+  if exists(select 1 from pg_roles where rolname='anon') then
+    revoke all on function public.candidate_daily_reconciliation_apply_atomic_v1(jsonb,uuid,text,jsonb,text) from anon;
+  end if;
+  if exists(select 1 from pg_roles where rolname='authenticated') then
+    revoke all on function public.candidate_daily_reconciliation_apply_atomic_v1(jsonb,uuid,text,jsonb,text) from authenticated;
+  end if;
+  if exists(select 1 from pg_roles where rolname='service_role') then
+    grant execute on function public.candidate_daily_reconciliation_apply_atomic_v1(jsonb,uuid,text,jsonb,text) to service_role;
+  end if;
+end;
+$grants$;
+
+
+
+-- Separate canonical availability readiness from a committed Candidate's queued Sheet copy.
+-- The unchanged current tiles reader is pinned here to repair the earlier upgrade
+-- overlap: its complete definition is from the qualified clean PostgreSQL 17 build.
+
+
+create or replace function private._candidate_daily_freshness_v1(
+  p_environment text,p_candidate_id uuid,p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=''
+as $function$
+declare
+  v_scope private.candidate_daily_authority_scopes%rowtype;
+  v_generation public.candidate_daily_rota_generations%rowtype;
+  v_sync private.candidate_daily_sync_state%rowtype;
+  v_oldest integer:=0; v_reasons jsonb:='[]'::jsonb; v_age integer:=0;
+  v_today date:=(p_now_utc at time zone 'Europe/London')::date;
+  v_deadline timestamptz; v_max_age integer:=1; v_days integer;
+  v_first date; v_last date;
+  v_background_copy_only boolean:=false;
+begin
+  select * into v_scope from private.candidate_daily_authority_scopes
+    where environment=p_environment and candidate_id=p_candidate_id;
+  if v_scope.active_generation_id is not null then
+    select * into v_generation from public.candidate_daily_rota_generations
+      where generation_id=v_scope.active_generation_id
+        and environment=p_environment and candidate_id=p_candidate_id;
+  end if;
+  select * into v_sync from private.candidate_daily_sync_state
+    where environment=p_environment and candidate_id=p_candidate_id and target='MASTER_AVAILABILITY_SHEET';
+  select coalesce(greatest(0,extract(epoch from p_now_utc-min(o.created_at_utc))::integer),0)
+    into v_oldest from public.candidate_daily_sheet_projection_outbox o
+    where o.environment=p_environment and o.candidate_id=p_candidate_id
+      and o.state in ('PENDING','RETRY','CLAIMED');
+  if v_generation.generation_id is null then
+    v_reasons:=v_reasons||'"GENERATION_MISSING"'::jsonb;
+  else
+    v_age:=greatest(0,extract(epoch from p_now_utc-v_generation.published_at_utc)::integer);
+    select count(*),min(rota_date),max(rota_date) into v_days,v_first,v_last
+      from public.candidate_daily_rota_days
+      where generation_id=v_generation.generation_id
+        and environment=p_environment and candidate_id=p_candidate_id;
+    if v_generation.state<>'ACTIVE' or v_generation.expected_day_count<>14
+       or v_generation.actual_day_count<>14 or v_days<>14
+       or v_first is distinct from v_generation.window_start
+       or v_last is distinct from v_generation.window_end
+       or v_generation.window_end is distinct from v_generation.window_start+13 then
+      v_reasons:=v_reasons||'"GENERATION_INCOMPLETE"'::jsonb;
+    end if;
+    -- No artificial re-dating or two-minute republishing of unchanged shifts.
+    -- The expected refresh age remains diagnostic, not a visibility deadline.
+    -- Retain the last complete window until its replacement is atomically published.
+    v_deadline:=(v_generation.window_start+1)::timestamp at time zone 'Europe/London';
+    v_max_age:=greatest(1,ceil(extract(epoch from v_deadline-v_generation.published_at_utc))::integer);
+    if p_now_utc is null or v_generation.published_at_utc is null
+       or v_generation.window_start>v_today then
+      v_reasons:=v_reasons||'"GENERATION_STALE"'::jsonb;
+    end if;
+  end if;
+  if coalesce(v_sync.effective_visible_cursor,0)<coalesce(v_sync.required_visible_cursor,0) then
+    -- MyTMS is the availability authority. A completed Candidate command's
+    -- queued Sheet copy is not a stale Rota and must not block the next edit.
+    -- Retain the strict barrier for transitions, unknown/missing work, failed
+    -- overlays, source reconciliation and every non-Candidate command.
+    v_background_copy_only:=v_scope.authority_mode='SUPABASE_PRIMARY'
+      and not v_scope.transition_in_progress
+      and v_sync.accepted_canonical_cursor=v_scope.canonical_version
+      and v_sync.required_visible_cursor=v_scope.canonical_version
+      and coalesce(v_sync.terminal_count,0)=0
+      and (select count(distinct o.availability_version)
+        from public.candidate_daily_sheet_projection_outbox o
+        where o.environment=p_environment and o.candidate_id=p_candidate_id
+          and o.target='MASTER_AVAILABILITY_SHEET'
+          and o.availability_version>v_sync.effective_visible_cursor
+          and o.availability_version<=v_sync.required_visible_cursor)
+        =v_sync.required_visible_cursor-v_sync.effective_visible_cursor
+      and not exists(
+        select 1 from public.candidate_daily_sheet_projection_outbox o
+        left join public.candidate_daily_command_receipts c on c.command_id=o.command_id
+          and c.environment=o.environment and c.candidate_id=o.candidate_id
+        where o.environment=p_environment and o.candidate_id=p_candidate_id
+          and o.target='MASTER_AVAILABILITY_SHEET'
+          and o.availability_version>v_sync.effective_visible_cursor
+          and (o.availability_version>v_sync.required_visible_cursor
+            or o.state not in ('PENDING','CLAIMED','RETRY','DELIVERED')
+            or c.actor_class is distinct from 'CANDIDATE'
+            or c.command_class is distinct from 'AVAILABILITY_APPLY'
+            or c.state is distinct from 'COMPLETED'
+            or c.terminal_http_status is distinct from 200
+            or c.canonical_version_after is distinct from o.availability_version));
+    if v_background_copy_only is distinct from true then
+      v_reasons:=v_reasons||'"PROJECTION_LAG"'::jsonb;
+    end if;
+  end if;
+  if coalesce(v_sync.terminal_count,0)>0 then v_reasons:=v_reasons||'"TERMINAL_OUTBOX"'::jsonb; end if;
+  if not exists(select 1 from private.candidate_daily_source_links l where l.environment=p_environment
+    and l.candidate_id=p_candidate_id and l.state in ('PRIMARY','OVERLAP')) then
+    v_reasons:=v_reasons||'"IDENTITY_NOT_READY"'::jsonb;
+  end if;
+  return jsonb_build_object(
+    'generation_version',coalesce(v_generation.generation_version,1),
+    'generation_published_at',coalesce(v_generation.published_at_utc,p_now_utc),
+    'generation_age_seconds',v_age,
+    'canonical_version',coalesce(v_scope.canonical_version,0),
+    'accepted_canonical_cursor',coalesce(v_sync.accepted_canonical_cursor,0),
+    'required_visible_cursor',coalesce(v_sync.required_visible_cursor,0),
+    'delivered_visible_cursor',coalesce(v_sync.delivered_visible_cursor,0),
+    'overlay_proof_cursor',coalesce(v_sync.overlay_proof_cursor,0),
+    'effective_visible_cursor',coalesce(v_sync.effective_visible_cursor,0),
+    'projection_oldest_pending_seconds',v_oldest,
+    'generation_max_age_seconds',v_max_age,'projection_warning_seconds',120,
+    'ready',jsonb_array_length(v_reasons)=0,'reasons',v_reasons
+  );
+end;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.candidate_daily_tiles_get_v1(p_internal_context jsonb, p_from date DEFAULT NULL::date, p_days integer DEFAULT 14)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_context jsonb;
+  v_environment text;
+  v_candidate_id uuid;
+  v_policy text;
+  v_scope private.candidate_daily_authority_scopes%rowtype;
+  v_generation public.candidate_daily_rota_generations%rowtype;
+  v_tiles jsonb;
+  v_from date;
+  v_freshness jsonb;
+  v_today date:=(pg_catalog.now() at time zone 'Europe/London')::date;
+begin
+  v_policy:=pg_catalog.upper(coalesce(
+    nullif(p_internal_context->>'policy',''),'CANDIDATE_SURFACE'
+  ));
+  if v_policy='LEGACY_COMPAT' then
+    v_context:=private._candidate_daily_context_v1(p_internal_context,'LEGACY_COMPAT',false);
+    v_environment:=v_context->>'environment';
+    v_candidate_id:=private._candidate_daily_source_candidate_v1(
+      v_environment,p_internal_context->>'candidate_source_hmac'
+    );
+  elsif v_policy='CANDIDATE_SURFACE' then
+    v_context:=private._candidate_daily_context_v1(p_internal_context,'CANDIDATE_SURFACE',true);
+    v_environment:=v_context->>'environment';
+    v_candidate_id:=(v_context->>'candidate_id')::uuid;
+  else
+    raise exception using errcode='22023',message='FORBIDDEN';
+  end if;
+  if p_days<>14 then
+    raise exception using errcode='22023',message='VALIDATION_FAILED';
+  end if;
+  select * into v_scope from private.candidate_daily_authority_scopes s
+  where s.environment=v_environment and s.candidate_id=v_candidate_id;
+  select * into v_generation from public.candidate_daily_rota_generations g
+  where g.generation_id=v_scope.active_generation_id and g.state='ACTIVE';
+  if v_generation.generation_id is null then
+    raise exception using errcode='55000',message='DAILY_GENERATION_UNAVAILABLE';
+  end if;
+  v_from:=coalesce(p_from,v_generation.window_start);
+  -- A request for today may retain the last complete published window.
+  -- Never shift its date labels or invent an unpublished fourteenth day.
+  if v_from<>v_generation.window_start
+     and not(v_policy='CANDIDATE_SURFACE' and v_from=v_today
+       and v_generation.window_start<v_today) then
+    raise exception using errcode='22023',message='VALIDATION_FAILED';
+  end if;
+  select pg_catalog.jsonb_agg(pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+    'date',d.rota_date,'display_day',pg_catalog.to_char(d.rota_date,'Dy'),
+    'display_date',pg_catalog.to_char(d.rota_date,'DD/MM/YYYY'),
+    'booked',d.booked,'system_blocked',d.system_blocked,
+    'editable',not(d.booked or d.system_blocked)
+      and (v_policy<>'CANDIDATE_SURFACE' or d.rota_date>=v_today),
+    'status',case when d.booked then 'BOOKED' when d.system_blocked then 'BLOCKED'
+      else coalesce(a.preference,'PENDING') end,
+    'availability',coalesce(a.preference,'PENDING'),
+    'shift_starts_at',d.shift_starts_at,'shift_ends_at',d.shift_ends_at,
+    'shift_info',d.shift_info,'hospital',d.hospital,'ward',d.ward,
+    'job_title',d.job_title,'booking_ref',d.booking_ref,'shift_type',d.shift_type,
+    'booking_id',d.booking_id,'timesheet_authorised',d.timesheet_authorised,
+    'timesheet_eligible',case when v_policy='CANDIDATE_SURFACE'
+      then candidate_entry.eligible else d.timesheet_eligible end,
+    'week_ending_date',case when d.booked then
+      d.rota_date+mod(7-extract(dow from d.rota_date)::integer,7) else null end,
+    'break_entry',case when v_policy='CANDIDATE_SURFACE' and d.booked
+      and nullif(btrim(d.booking_id),'') is not null then
+      case when current_daily.timesheet_id is not null then
+        private._candidate_daily_read_projection_v1(v_environment,v_candidate_id,
+          current_daily.timesheet_id,now())->'break_entry'
+      else private._candidate_daily_break_entry_v1(d.booking_id,d.rota_date,null,null,
+        candidate_entry.eligible) end else null end,
+    'action_target',case
+      when v_policy='CANDIDATE_SURFACE' and d.booked then
+        case when current_daily.timesheet_id is not null then
+          pg_catalog.jsonb_build_object('target_kind','TIMESHEET_DETAIL',
+            'timesheet_id',current_daily.timesheet_id,
+            'row_signature',public.timesheet_lifecycle_signature_v1(
+              current_daily.timesheet_id,null,false)->>'row_signature')
+        when candidate_entry.eligible
+          and not exists(select 1 from public.timesheets previous where previous.booking_id=d.booking_id)
+        then pg_catalog.jsonb_build_object('target_kind','BOOKED_DAILY_SHIFT',
+          'source',pg_catalog.jsonb_build_object('generation_id',d.generation_id,
+            'work_date',d.rota_date,'source_row_hash',d.source_row_hash,'booking_id',d.booking_id))
+        else null end
+      else case d.action_target_kind
+      when 'TIMESHEET_DETAIL' then pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+        'target_kind',d.action_target_kind,'timesheet_id',d.action_timesheet_id,
+        'workflow_id',d.action_workflow_id,'row_signature',d.action_row_signature))
+      when 'CONTRACT_WEEK_DETAIL' then pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+        'target_kind',d.action_target_kind,'contract_week_id',d.action_contract_week_id,
+        'timesheet_id',d.action_timesheet_id,'workflow_id',d.action_workflow_id,
+        'row_signature',d.action_row_signature))
+      when 'WORKFLOW_DETAIL' then pg_catalog.jsonb_build_object(
+        'target_kind',d.action_target_kind,'workflow_id',d.action_workflow_id,
+        'workflow_generation',d.action_workflow_generation,'row_signature',d.action_row_signature)
+      else null end end
+  )) order by d.rota_date) into v_tiles
+  from public.candidate_daily_rota_days d
+  cross join lateral (
+    -- Do not inherit the legacy four-hour flag. A source-only entry is usable
+    -- once started, until this exact complete generation is replaced.
+    select coalesce(d.booked and not coalesce(d.timesheet_authorised,false)
+      and d.shift_starts_at is not null and d.shift_ends_at>d.shift_starts_at
+      and d.shift_starts_at<=pg_catalog.now()
+      and (d.shift_starts_at at time zone 'Europe/London')::date=d.rota_date
+      and nullif(btrim(d.booking_id),'') is not null
+      and d.source_row_hash~'^[a-f0-9]{64}$',false) as eligible
+  ) candidate_entry
+  left join public.candidate_daily_availability_days a
+    on a.environment=d.environment and a.candidate_id=d.candidate_id
+    and a.availability_date=d.rota_date
+  left join lateral (
+    select t.timesheet_id from public.timesheets t
+    join public.candidates c on c.id=v_candidate_id
+      and upper(btrim(c.key_norm))=upper(btrim(t.occupant_key_norm))
+    where v_policy='CANDIDATE_SURFACE' and d.booked and t.booking_id=d.booking_id
+      and t.sheet_scope='DAILY' and t.is_current and t.archived_at_utc is null
+      and not exists(select 1 from public.timesheets_financials f
+        where f.timesheet_id=t.timesheet_id and f.is_current
+          and f.candidate_id is not null and f.candidate_id<>v_candidate_id)
+    limit 1
+  ) current_daily on true
+  where d.generation_id=v_generation.generation_id;
+  if pg_catalog.jsonb_array_length(coalesce(v_tiles,'[]'::jsonb))<>14 then
+    raise exception using errcode='55000',message='GENERATION_INCOMPLETE';
+  end if;
+  v_freshness:=private._candidate_daily_freshness_v1(v_environment,v_candidate_id,pg_catalog.now());
+  if v_policy='CANDIDATE_SURFACE'
+     and coalesce((v_freshness->>'ready')::boolean,false) is not true then
+    raise exception using errcode='55000',message='CANDIDATE_DAILY_NOT_READY';
+  end if;
+  return pg_catalog.jsonb_build_object(
+    'candidate_id',v_candidate_id,'window_start',v_generation.window_start,
+    'window_end',v_generation.window_end,'generation_id',v_generation.generation_id,
+    'generation_version',v_generation.generation_version,
+    'availability_version',v_scope.canonical_version,'freshness',v_freshness,
+    'cohorts','[]'::jsonb,'tiles',v_tiles
+  );
+end;
+$function$;
+
+alter function private._candidate_daily_freshness_v1(text,uuid,timestamptz) owner to postgres;
+revoke all on function private._candidate_daily_freshness_v1(text,uuid,timestamptz) from public,anon,authenticated,service_role;
+alter function public.candidate_daily_tiles_get_v1(jsonb,date,integer) owner to postgres;
+revoke all on function public.candidate_daily_tiles_get_v1(jsonb,date,integer) from public,anon,authenticated;
+grant execute on function public.candidate_daily_tiles_get_v1(jsonb,date,integer) to service_role;
+
+
+
+notify pgrst, 'reload schema';

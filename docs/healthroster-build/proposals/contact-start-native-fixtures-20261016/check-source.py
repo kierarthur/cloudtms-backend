@@ -22,7 +22,7 @@ for name in ['15102026_0800_candidate_push_timing_authority.sql','15102026_0802_
   n=stmt.stmt
   if type(n).__name__=='CreateStmt':columns[n.relation.schemaname+'.'+n.relation.relname]={c.colname for c in n.tableElts if type(c).__name__=='ColumnDef'}
 rowvars=0
-for file in sorted(base.rglob('*.sql')):
+for file in sorted(p for p in base.rglob('*.sql') if 'preparer' not in p.relative_to(base).parts):
  source=file.read_text(encoding='utf-8')
  for relation,listed in re.findall(r'insert\s+into\s+((?:public|private)\.\w+)\s*\(([^)]+)\)',source,re.I):
   for field in listed.split(','):

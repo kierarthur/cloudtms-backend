@@ -1,0 +1,231 @@
+{
+  "version": "CONTACT_NATIVE_ALL_SELECTED_MANAGED_EXCEPTIONS_V1",
+  "rootCommit": "1ca5f5d631ef5d7adc39da277f55ce97fd86c883",
+  "currentCounts": {
+    "migrations": 407,
+    "repeatables": 1074
+  },
+  "pendingCounts": {
+    "migrations": 18,
+    "repeatables": 60
+  },
+  "selectedCounts": {
+    "migrations": 18,
+    "repeatables": 132
+  },
+  "rows": [
+    {
+      "path": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+      "reason": "INVOICE_GATE",
+      "pinnedClosureHash": "306489585aec541a38700bb7a9bca96b178fc291a644716a7079d45cf4a79747",
+      "actualClosureHash": "306489585aec541a38700bb7a9bca96b178fc291a644716a7079d45cf4a79747",
+      "hashMatches": true,
+      "transactions": [
+        "BEGIN",
+        "COMMIT"
+      ],
+      "transactionCount": 2,
+      "statements": 27,
+      "metaCommands": [
+        "\\set",
+        "\\gset",
+        "\\if",
+        "\\else",
+        "\\endif"
+      ],
+      "auditedExistingRationale": "Exact original active-work gset/if gate retained. Included CROR definitions and ACL only. Checkpoint requires the captured invoice_presentation_active_work variable false, including the original successful NOTICE-only skipped-DDL branch. Busy cutover refuses instead of claiming applied.",
+      "topLevelDoCall": [],
+      "executionQualification": "NOT_REVIEWED_FOR_FULL_SINGLE_TRANSACTION_HARNESS",
+      "effectCaveat": "Indicators are conservative lexical source facts, not effect proof; existing rationale plus every actual selected DO/CALL and complete callee body needs root review."
+    },
+    {
+      "path": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "reason": "INVOICE_SETTINGS",
+      "pinnedClosureHash": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+      "actualClosureHash": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+      "hashMatches": true,
+      "transactions": [
+        "BEGIN",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "COMMIT"
+      ],
+      "transactionCount": 24,
+      "statements": 184,
+      "metaCommands": [
+        "\\set"
+      ],
+      "auditedExistingRationale": "Retained settings repair as SETTINGS; invoice CREATE-without-OR routines have preceding matching DROP IF EXISTS in their original committed stage. Other stages replace definitions/ACL and readonly privilege guards; no invoice issue/delivery owner invoked.",
+      "topLevelDoCall": [
+        {
+          "head": "DO",
+          "tag": "$backfill$",
+          "calls": [
+            "private._contract_settings_refresh_all_planned_v1",
+            "private._contract_settings_effective_core_v1"
+          ],
+          "bodyEffectIndicators": {
+            "insert": false,
+            "update": true,
+            "delete": false,
+            "truncate": false,
+            "ddl": false,
+            "dynamicExecute": false
+          }
+        },
+        {
+          "head": "DO",
+          "tag": "$acl$",
+          "calls": [
+            "public.timesheet_qr_refuse_and_reset"
+          ],
+          "bodyEffectIndicators": {
+            "insert": false,
+            "update": false,
+            "delete": false,
+            "truncate": false,
+            "ddl": false,
+            "dynamicExecute": true
+          }
+        },
+        {
+          "head": "DO",
+          "tag": "$verify_acl$",
+          "calls": [
+            "public.timesheet_qr_refuse_and_reset"
+          ],
+          "bodyEffectIndicators": {
+            "insert": false,
+            "update": false,
+            "delete": false,
+            "truncate": false,
+            "ddl": false,
+            "dynamicExecute": true
+          }
+        }
+      ],
+      "executionQualification": "NOT_REVIEWED_FOR_FULL_SINGLE_TRANSACTION_HARNESS",
+      "effectCaveat": "Indicators are conservative lexical source facts, not effect proof; existing rationale plus every actual selected DO/CALL and complete callee body needs root review."
+    },
+    {
+      "path": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "reason": "SOURCE_REASSERT",
+      "pinnedClosureHash": "4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53",
+      "actualClosureHash": "4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53",
+      "hashMatches": true,
+      "transactions": [
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT"
+      ],
+      "transactionCount": 8,
+      "statements": 167,
+      "metaCommands": [
+        "\\set"
+      ],
+      "auditedExistingRationale": "Definition/ACL stages, exact notification trigger DROP IF EXISTS then CREATE and role ACL guards. No Source financial or notification caller executes.",
+      "topLevelDoCall": [
+        {
+          "head": "DO",
+          "tag": "$do$",
+          "calls": [
+            "public.contract_week_delete_planned"
+          ],
+          "bodyEffectIndicators": {
+            "insert": false,
+            "update": false,
+            "delete": false,
+            "truncate": false,
+            "ddl": false,
+            "dynamicExecute": true
+          }
+        }
+      ],
+      "executionQualification": "NOT_REVIEWED_FOR_FULL_SINGLE_TRANSACTION_HARNESS",
+      "effectCaveat": "Indicators are conservative lexical source facts, not effect proof; existing rationale plus every actual selected DO/CALL and complete callee body needs root review."
+    },
+    {
+      "path": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "reason": "CANDIDATE_RUNTIME_RELOAD",
+      "pinnedClosureHash": "eece10432b4080b90cee9a1077336b0accbeb08c08f6d3649d4b4fa754e9de1b",
+      "actualClosureHash": "eece10432b4080b90cee9a1077336b0accbeb08c08f6d3649d4b4fa754e9de1b",
+      "hashMatches": true,
+      "transactions": [
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT"
+      ],
+      "transactionCount": 6,
+      "statements": 42,
+      "metaCommands": [
+        "\\set"
+      ],
+      "auditedExistingRationale": "Five exact current native files replace complete routine definitions and ACLs, retaining their original physical sources and BEGIN/COMMIT stages; two DO blocks only inspect role existence and reapply grants. Final NOTIFY reloads schema before the wrapper receipt. Replaying interrupted stages reapplies identical CREATE OR REPLACE/ACL declarations. No Candidate, Daily, notification, Source or payment caller is invoked; no business rows, tables or triggers are changed.",
+      "topLevelDoCall": [
+        {
+          "head": "DO",
+          "tag": "$grants$",
+          "calls": [
+            "public.candidate_daily_legacy_availability_apply_atomic_v1"
+          ],
+          "bodyEffectIndicators": {
+            "insert": false,
+            "update": false,
+            "delete": false,
+            "truncate": false,
+            "ddl": false,
+            "dynamicExecute": true
+          }
+        },
+        {
+          "head": "DO",
+          "tag": "$grants$",
+          "calls": [
+            "public.candidate_daily_reconciliation_apply_atomic_v1"
+          ],
+          "bodyEffectIndicators": {
+            "insert": false,
+            "update": false,
+            "delete": false,
+            "truncate": false,
+            "ddl": false,
+            "dynamicExecute": true
+          }
+        }
+      ],
+      "executionQualification": "NOT_REVIEWED_FOR_FULL_SINGLE_TRANSACTION_HARNESS",
+      "effectCaveat": "Indicators are conservative lexical source facts, not effect proof; existing rationale plus every actual selected DO/CALL and complete callee body needs root review."
+    }
+  ],
+  "databaseCalls": 0,
+  "removedEnvelopeCommands": 0,
+  "native": "NOT_RUN"
+}

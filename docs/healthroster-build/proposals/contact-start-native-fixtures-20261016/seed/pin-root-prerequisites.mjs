@@ -3,7 +3,8 @@ import fs from 'node:fs';import path from 'node:path';import crypto from 'node:c
 import {pathToFileURL,fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 const root=process.argv.find(x=>x.startsWith('--root='))?.slice(7);if(!root)throw Error('--root=PATH required');
 const absolute=path.resolve(root),git=(...a)=>execFileSync('git',a,{cwd:absolute,encoding:'utf8'}).trim();
-if(git('status','--porcelain','--','supabase','broker/src/weekly-source','scripts/cloudtms-db-release-lib.mjs'))throw Error('Root selected source is changing; wait for its source publication');
+const pinnedInputs=JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)),'../SOURCE_MANIFEST.json'),'utf8')).source_inputs.filter(x=>x.path.startsWith('broker/')).map(x=>x.path);
+if(git('status','--porcelain','--','supabase',...pinnedInputs,'scripts/cloudtms-db-release-lib.mjs'))throw Error('Root selected source is changing; wait for its source publication');
 const commit=git('rev-parse','HEAD');
 const {inventory}=await import(pathToFileURL(path.join(absolute,'scripts/cloudtms-db-release-lib.mjs')).href);
 const {migrations,repeatables}=inventory();const release=JSON.parse(fs.readFileSync(path.join(absolute,'supabase/release/current-release.json'),'utf8'));
@@ -21,6 +22,6 @@ const result={version:'CONTACT_NATIVE_SEED_ROOT_PREREQUISITES_V1',root_commit:co
  'supabase/verification/15092026_2203_weekly_source_candidate_app_contract_v1.sql',
  'supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql',
  'supabase/verification/15092026_2312_weekly_source_delivery_targets_v1.sql'].map(p=>({path:p,sha256:digest(p)}))};
-if(git('rev-parse','HEAD')!==commit||git('status','--porcelain','--','supabase','broker/src/weekly-source','scripts/cloudtms-db-release-lib.mjs'))throw Error('Root source changed during read');
+if(git('rev-parse','HEAD')!==commit||git('status','--porcelain','--','supabase',...pinnedInputs,'scripts/cloudtms-db-release-lib.mjs'))throw Error('Root source changed during read');
 fs.writeFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)),'ROOT_PREREQUISITES.json'),JSON.stringify(result,null,2)+'\n');
 console.log(JSON.stringify({root_commit:commit,migrations:migrations.length,repeatables:repeatables.length,native:'NOT_RUN'}));

@@ -1,6 +1,6 @@
 {
   "version": "CONTACT_NATIVE_SEED_ROOT_PREREQUISITES_V1",
-  "root_commit": "cae8715b349a4b78c34846bd46ecf967990058f5",
+  "root_commit": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
   "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
   "recipe": "Existing protected NEW/UPGRADE source inventory and order, not a new installer. Root alone stages the genuine current union under its rollback lock. Never execute the old verifier fake audit/CURRENT seed blocks.",
   "controls": [
@@ -9854,14 +9854,14 @@
       "paths": [
         "supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql"
       ],
-      "sha256": "cf0a89355007ecd35ef4d10bc9f00aa5cfd1a57e3f20b5624a9c9c26a1646c94"
+      "sha256": "5a770d7c6c3008e1000eb168ef7a91967fa531c6c106883197f47efcef331641"
     },
     {
       "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
       "paths": [
         "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql"
       ],
-      "sha256": "e93bee572faa73d377dc05b6258cb51dc7838a5529b62df7adbbbacb9a7a9467"
+      "sha256": "2739f369dd30bc976081df28bbed5d52ebfcfedf8933f7cf469dc1adfeb6a003"
     },
     {
       "path": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
@@ -9914,6 +9914,18 @@
         "supabase/repeatable/includes/weekly_contact_query/091_claim_acl.sqlinc"
       ],
       "sha256": "531115bc7efdd0fae3e1482a4a4cc50b830b7487f88f7db2154d4880dfcc6611"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0403_weekly_contact_source_memberships_v1.sql",
+      "paths": [
+        "supabase/repeatable/16102026_0403_weekly_contact_source_memberships_v1.sql",
+        "supabase/repeatable/includes/weekly_contact_source_memberships/010_native_logical_members.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_source_memberships/020_native_budget.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_source_memberships/030_native_enrol_assert.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_source_memberships/040_native_accept.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_source_memberships/090_acl.sqlinc"
+      ],
+      "sha256": "0dd1b154cef912a0408feea783e28bb282a07a2532893c7ec63576c0f193e76d"
     },
     {
       "path": "supabase/repeatable/rpc_smoke_test.sql",

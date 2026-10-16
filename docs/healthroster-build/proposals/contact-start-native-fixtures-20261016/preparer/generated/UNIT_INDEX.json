@@ -1,0 +1,4466 @@
+[
+  {
+    "index": 0,
+    "file": "supabase/migrations/13102026_1112_healthroster_invoice_support_members_v1.sql",
+    "kind": "migration",
+    "sourceSqlHash": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b",
+    "sqlHash": "663d93125c4cf121b9960481d0f6a11c4e2cd2271e3bbf54f30ab529f453a1d8",
+    "bytes": 754,
+    "statements": 3,
+    "byteStart": 187,
+    "byteEnd": 941,
+    "startLine": 2,
+    "endLine": 20,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/13102026_1112_healthroster_invoice_support_members_v1.sql",
+        "sha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 1,
+    "file": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+    "kind": "migration",
+    "sourceSqlHash": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+    "sqlHash": "79f8591b808879f2bae46ba93967f12ac96a71751e8a44b858b38cee5d051c0f",
+    "bytes": 4455,
+    "statements": 10,
+    "byteStart": 1135,
+    "byteEnd": 5590,
+    "startLine": 22,
+    "endLine": 97,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+        "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 2,
+    "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+    "kind": "migration",
+    "sourceSqlHash": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+    "sqlHash": "0884899495bea783cad34abeb82610b954e3fc6c0940f1e2fd19994b89455af0",
+    "bytes": 14929,
+    "statements": 11,
+    "byteStart": 5769,
+    "byteEnd": 20698,
+    "startLine": 99,
+    "endLine": 253,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+        "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 3,
+    "file": "supabase/migrations/13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+    "kind": "migration",
+    "sourceSqlHash": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6",
+    "sqlHash": "526e2b99328eaaa4bbbac27d98988c3a6526eb30c2ab0cd06272197af7e71aee",
+    "bytes": 2649,
+    "statements": 4,
+    "byteStart": 20891,
+    "byteEnd": 23540,
+    "startLine": 255,
+    "endLine": 305,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+        "sha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 4,
+    "file": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+    "kind": "migration",
+    "sourceSqlHash": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+    "sqlHash": "2892c587e484ee05b289a575a81f6fff117d01cd4c8d928bf821d10e88cc17e8",
+    "bytes": 8374,
+    "statements": 18,
+    "byteStart": 23726,
+    "byteEnd": 32100,
+    "startLine": 307,
+    "endLine": 421,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+        "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 5,
+    "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+    "kind": "migration",
+    "sourceSqlHash": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+    "sqlHash": "a30e64be80a1381daab403c1bd2c52b0f7d4bc4cd076bee66a1949b8385f6a20",
+    "bytes": 16082,
+    "statements": 18,
+    "byteStart": 32284,
+    "byteEnd": 48366,
+    "startLine": 423,
+    "endLine": 607,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+        "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 6,
+    "file": "supabase/migrations/13102026_1456_weekly_source_protection_query_support_v1.sql",
+    "kind": "migration",
+    "sourceSqlHash": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17",
+    "sqlHash": "738f59118143bf5be8fcddc6a3b13c28f79041e14f4fd59d7eb7c5ff6ad95d4e",
+    "bytes": 972,
+    "statements": 3,
+    "byteStart": 48556,
+    "byteEnd": 49528,
+    "startLine": 609,
+    "endLine": 632,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/13102026_1456_weekly_source_protection_query_support_v1.sql",
+        "sha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 7,
+    "file": "supabase/migrations/13102026_1519_healthroster_correction_reason_bound_v1.sql",
+    "kind": "migration",
+    "sourceSqlHash": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2",
+    "sqlHash": "44ec25b68ea6b1c40bfbadba3db5a8406c01e00f387d4397e02e7f28dff8cd1c",
+    "bytes": 394,
+    "statements": 1,
+    "byteStart": 49716,
+    "byteEnd": 50110,
+    "startLine": 634,
+    "endLine": 646,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/13102026_1519_healthroster_correction_reason_bound_v1.sql",
+        "sha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 8,
+    "file": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+    "kind": "migration",
+    "sourceSqlHash": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+    "sqlHash": "45f247ed3e681e6721306391358c4708df8a1783ae744413e36ecf2249e013b7",
+    "bytes": 3736,
+    "statements": 8,
+    "byteStart": 50302,
+    "byteEnd": 54038,
+    "startLine": 648,
+    "endLine": 703,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+        "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 9,
+    "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+    "kind": "migration",
+    "sourceSqlHash": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+    "sqlHash": "f2383f31b668a683282d70491e1cd2a93a1e0053f3fd9fae70da970147fdf7e4",
+    "bytes": 1947,
+    "statements": 1,
+    "byteStart": 54227,
+    "byteEnd": 56174,
+    "startLine": 705,
+    "endLine": 734,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+        "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 10,
+    "file": "supabase/migrations/15102026_0205_healthroster_source_arbiter_kernel.sql",
+    "kind": "migration",
+    "sourceSqlHash": "f348f0b6849a40a58124c992128edd78ac95d886f764baed8bb70a4c341b82b7",
+    "sqlHash": "a38669034c3737d668016fb5d07906d903753ca8cd2fa1eefb31c54171b97bbe",
+    "bytes": 6508,
+    "statements": 7,
+    "byteStart": 56358,
+    "byteEnd": 62866,
+    "startLine": 736,
+    "endLine": 825,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/15102026_0205_healthroster_source_arbiter_kernel.sql",
+        "sha256": "f348f0b6849a40a58124c992128edd78ac95d886f764baed8bb70a4c341b82b7"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 11,
+    "file": "supabase/migrations/15102026_0800_candidate_push_timing_authority.sql",
+    "kind": "migration",
+    "sourceSqlHash": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450",
+    "sqlHash": "0516bef33a8e6253fd96332a88cb4cc9059d19679f7f6a30898bca6154c57dd7",
+    "bytes": 2915,
+    "statements": 11,
+    "byteStart": 63047,
+    "byteEnd": 65962,
+    "startLine": 827,
+    "endLine": 880,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/15102026_0800_candidate_push_timing_authority.sql",
+        "sha256": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 12,
+    "file": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+    "kind": "migration",
+    "sourceSqlHash": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673",
+    "sqlHash": "8244f66b4935b8ae9be5e2dd8200534a1c0c83a5a05844c89399130782835afe",
+    "bytes": 11356,
+    "statements": 17,
+    "byteStart": 66140,
+    "byteEnd": 77496,
+    "startLine": 882,
+    "endLine": 1056,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+        "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 13,
+    "file": "supabase/migrations/16102026_0135_weekly_contact_native_attempt_permit_unique.sql",
+    "kind": "migration",
+    "sourceSqlHash": "24fcf9601266f3600c37cbc30aa4a3e87dbd7fbcd3e78f9ad2acfeaa508dfde1",
+    "sqlHash": "52690f3fff4f4caf28cc31da4bb8806dec547fb3179185c3db3160eb03733983",
+    "bytes": 583,
+    "statements": 1,
+    "byteStart": 77689,
+    "byteEnd": 78272,
+    "startLine": 1058,
+    "endLine": 1073,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/16102026_0135_weekly_contact_native_attempt_permit_unique.sql",
+        "sha256": "24fcf9601266f3600c37cbc30aa4a3e87dbd7fbcd3e78f9ad2acfeaa508dfde1"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 14,
+    "file": "supabase/migrations/16102026_0142_weekly_contact_reuse_native_attempt_uniqueness.sql",
+    "kind": "migration",
+    "sourceSqlHash": "24b09382b7a99536ecdb85dcbc8a29588e1aa87106a8adeb11cc411ce71010b6",
+    "sqlHash": "6c6f5f13d2b44677428894c42999b858b029643950958266467747a005c399fd",
+    "bytes": 1592,
+    "statements": 1,
+    "byteStart": 78468,
+    "byteEnd": 80060,
+    "startLine": 1075,
+    "endLine": 1106,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/16102026_0142_weekly_contact_reuse_native_attempt_uniqueness.sql",
+        "sha256": "24b09382b7a99536ecdb85dcbc8a29588e1aa87106a8adeb11cc411ce71010b6"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 15,
+    "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+    "kind": "migration",
+    "sourceSqlHash": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+    "sqlHash": "c52a39e628df7e40570ba0f6cf8985743317da4188fb224761ddcf0431cb6e9c",
+    "bytes": 40647,
+    "statements": 53,
+    "byteStart": 80250,
+    "byteEnd": 120897,
+    "startLine": 1108,
+    "endLine": 1666,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+        "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 16,
+    "file": "supabase/migrations/16102026_0244_weekly_contact_global_timing_schema.sql",
+    "kind": "migration",
+    "sourceSqlHash": "36d9470a7b8033899ad2fe9c6ef37e4cf428f397290eed4e4caab575dfb93d40",
+    "sqlHash": "08cab237f3b5774e33378a9a6b23d9d0a0f3b511d3a0cb94492fc49ca68bd41a",
+    "bytes": 5309,
+    "statements": 17,
+    "byteStart": 121082,
+    "byteEnd": 126391,
+    "startLine": 1668,
+    "endLine": 1748,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/16102026_0244_weekly_contact_global_timing_schema.sql",
+        "sha256": "36d9470a7b8033899ad2fe9c6ef37e4cf428f397290eed4e4caab575dfb93d40"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 17,
+    "file": "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+    "kind": "migration",
+    "sourceSqlHash": "82a3d0487cb483e692c7fdf590a75280a4dd88a7a1057b43a7fb39639da4e9e7",
+    "sqlHash": "f5c4b167a19c15ffddb7c4716812be926f8a167c79355eefa001055dc87d0bda",
+    "bytes": 40501,
+    "statements": 52,
+    "byteStart": 126585,
+    "byteEnd": 167086,
+    "startLine": 1750,
+    "endLine": 2337,
+    "sourceFiles": [
+      {
+        "file": "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+        "sha256": "82a3d0487cb483e692c7fdf590a75280a4dd88a7a1057b43a7fb39639da4e9e7"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 18,
+    "file": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "b29d12e05f3f840bf43f11494150fc606e20c7024b994440e824c8112c33c83a",
+    "sqlHash": "846bbeeeb3902faf8144bfa4cd5ee6be25fded6a5556a1fd25fa123dc29d40dd",
+    "bytes": 28271,
+    "statements": 10,
+    "byteStart": 167277,
+    "byteEnd": 195548,
+    "startLine": 2339,
+    "endLine": 3345,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql",
+        "sha256": "846bbeeeb3902faf8144bfa4cd5ee6be25fded6a5556a1fd25fa123dc29d40dd"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 19,
+    "file": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "306489585aec541a38700bb7a9bca96b178fc291a644716a7079d45cf4a79747",
+    "sqlHash": "7f490b9c50541b05eda94655aef5e29527249b4c948b8e7e711d014bba9797b6",
+    "bytes": 557385,
+    "statements": 27,
+    "byteStart": 195746,
+    "byteEnd": 753131,
+    "startLine": 3347,
+    "endLine": 14364,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+        "sha256": "343776bd40c097fd6aeb1328f0f93deb52727edce78c6dc094dd6c8c319a92d3"
+      },
+      {
+        "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+        "sha256": "b9657bf480a01ded860e38a345917fdbc86a69c80b1831eeff96e272758ea073"
+      },
+      {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_detail_get.sql",
+        "sha256": "8833b9d788bb04dbec300c3c1f17715d7ddefc2c59f395b869cd25629721010d"
+      },
+      {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql",
+        "sha256": "4a198923913dc362b056772344d607ca9685b195b961a33b8d05542fdf03b45c"
+      },
+      {
+        "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql",
+        "sha256": "0c527cab3a5989918719dc8b192c2cf6f8c2162fb150710fe1121891f5da152e"
+      },
+      {
+        "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_context_batch.sql",
+        "sha256": "385e4e7b3b36c51c1fe32afffc61117e092748c42fd68a8aeaf4c18e2d8c67b3"
+      },
+      {
+        "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql",
+        "sha256": "b618abc8bc8e5ce44a05c54209db88bc0c08d1e11a81ad39e5507209868b64b0"
+      },
+      {
+        "file": "supabase/repeatable/03092026_1644_invoice_apply_edits_frozen_authority_acl_v1.sql",
+        "sha256": "16b8a349a684cdc9cdb5e9ecee446d57ef5a8ef9fbf131630163317987b5a6e4"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": true
+  },
+  {
+    "index": 20,
+    "file": "supabase/repeatable/30072026_1745_invoice_source_edit_residual_fix.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "b70334c7085a20558096d00748559e35db10780aa272ba2ee69e029a779af7b4",
+    "sqlHash": "b1ced3bf4edaefda95495b690a90bbaf3150cde5f5303a4e07ac9f3430b3633e",
+    "bytes": 224850,
+    "statements": 10,
+    "byteStart": 753314,
+    "byteEnd": 978164,
+    "startLine": 14366,
+    "endLine": 19301,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/30072026_1745_invoice_source_edit_residual_fix.sql",
+        "sha256": "79df902351d6c587ca8392cd85ed2037e552a21bc5aab6f635b35c056ab37bda"
+      },
+      {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql",
+        "sha256": "7c30d8293f3a9729d93a92f05c23ffee63b7627d0093e205db13199b0aede60c"
+      },
+      {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_invoice_document_invalidate.sql",
+        "sha256": "977b3caf353ada34ee3f1f275a20121ca488a291a20927bd59db04e71e265318"
+      },
+      {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql",
+        "sha256": "4a198923913dc362b056772344d607ca9685b195b961a33b8d05542fdf03b45c"
+      },
+      {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_detail_get.sql",
+        "sha256": "8833b9d788bb04dbec300c3c1f17715d7ddefc2c59f395b869cd25629721010d"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 21,
+    "file": "supabase/repeatable/31072026_1450_invoice_week_ending_document_identity.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "f0f00f14a088b5da8cff82057539b5305cd09396dc8cf43af5e672d543c3ce1d",
+    "sqlHash": "bdc2c0413c3dde4bac00389eee9a7979577a7eb1e856621777ed9bd6f9e831db",
+    "bytes": 571688,
+    "statements": 36,
+    "byteStart": 978352,
+    "byteEnd": 1550040,
+    "startLine": 19303,
+    "endLine": 32168,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/31072026_1450_invoice_week_ending_document_identity.sql",
+        "sha256": "0b6af92fb4d6508a18517bc27a9542575e35cc595ee7d588c07a93c759772968"
+      },
+      {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql",
+        "sha256": "4a198923913dc362b056772344d607ca9685b195b961a33b8d05542fdf03b45c"
+      },
+      {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_generate_classification_v2.sql",
+        "sha256": "3877472038dc6df25b79952587b08a9256c26642e1952cc7235ac748cb1424e0"
+      },
+      {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_issue_classification_v2.sql",
+        "sha256": "7a33d72dcdbba479ec88fa907c9a3d2995cdfd424b9664ddc3b5da57155e5bce"
+      },
+      {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql",
+        "sha256": "9dab259fdef65b8fb63acb5338ab7202ae3d3bf379972a046ddf08ae5ce83edc"
+      },
+      {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql",
+        "sha256": "d516373eff7d5ec68d58f1b13ee1ee096cc5bc53c5fae87fa17f9e7610771eec"
+      },
+      {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_11_private_invoice_operation_start_core_v8.sql",
+        "sha256": "5bb036fd44f31e86cfd346e3eefc2987b0c1c567538687a74a37b973478b9810"
+      },
+      {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_12_private_invoice_generation_advance_core_v8.sql",
+        "sha256": "50f7a74faee3b36e8252c87ac678703c61309b84f55360739eae8c9a744ecd93"
+      },
+      {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql",
+        "sha256": "24b5a265869fdebd00d05bb2756dc5eca928aa78b530c709d59cc07aa25aad25"
+      },
+      {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_18_private_invoice_batch_manifest_advance_v2.sql",
+        "sha256": "6dbb64219a2fe8151b052613cf0ce4b19d06933e618ccf15ec22a5ed1ef7ceb3"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 22,
+    "file": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+    "sqlHash": "1ba8f99dfb7e6b090e2a12322eb8d77ef60f1a4fdbd5617c157f65e7cb477d80",
+    "bytes": 931897,
+    "statements": 184,
+    "byteStart": 1550226,
+    "byteEnd": 2482123,
+    "startLine": 32170,
+    "endLine": 51368,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+        "sha256": "a9b639df6471cb2873a7239f6da6d78152d387144cd2a5364c675cce52aa47a4"
+      },
+      {
+        "file": "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql",
+        "sha256": "fcaa3b21d8da86ef6c4553ec637e203c4af673e78358339cd4f880f558ab788a"
+      },
+      {
+        "file": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+        "sha256": "3531e980fd4e3c1a10f7f967a55c639b7be02c069724be946fb2e22c53626065"
+      },
+      {
+        "file": "supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql",
+        "sha256": "9093e8f09ffea82bf383503357b6a5509be2436a053a1566fa99040a5961fcb0"
+      },
+      {
+        "file": "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+        "sha256": "40460c7c5778c3c5d5f772917688ce96a18c11cd1bcc0f1b1da85d43e1d71b04"
+      },
+      {
+        "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+        "sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+      },
+      {
+        "file": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql",
+        "sha256": "0e0e2d64770b265e2dd221629896f1ccf57a87251c65d099fd82794b90ac0691"
+      },
+      {
+        "file": "supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql",
+        "sha256": "b7b2266a582d70c17a438fc19df6d5af1ecc4557b04bb13412a9b0c50b2e7b24"
+      },
+      {
+        "file": "supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql",
+        "sha256": "f283c6011f70e4bf2534a7499d40ae797053f5d5e4cf115c3169ecb01d3f228c"
+      },
+      {
+        "file": "supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql",
+        "sha256": "7cedd4190392d8f6ca0c660897bb5914c9a542a1ef1a4732827d0f6d0ecdbe7f"
+      },
+      {
+        "file": "supabase/repeatable/04092026_1901_client_planned_override_refresh_v1.sql",
+        "sha256": "c3fe064c19895587ca09156372f35849a7fc17df1b3253e4bf4c3538237a58de"
+      },
+      {
+        "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql",
+        "sha256": "f03871a1c0ff89d519b3650577691bc633c25c2018c4b7ab1c03e1a88b435dfb"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": true
+  },
+  {
+    "index": 23,
+    "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_ordinary_isolation_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "c16b4af903d161653c951d308083de6e5d94a814cfb3f444dd097f5f4e3e2354",
+    "sqlHash": "73137c8843aadb8a15aa1e67513ce92dea4cd67955e20e368d0ebc3c5de67732",
+    "bytes": 43868,
+    "statements": 4,
+    "byteStart": 2482323,
+    "byteEnd": 2526191,
+    "startLine": 51370,
+    "endLine": 52576,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_ordinary_isolation_v1.sql",
+        "sha256": "3113fcdff54ce047f3eeb2a91a5fe72e9a85f3bd79865eab24261313121d7acb"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 24,
+    "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "66e1c05364cc3cacf56d3512aa1f8e86280bd5b74c7e91798a966250a2a00412",
+    "sqlHash": "11f6b61a855cd89b5a764915875b6b038c3915ead30fd9ce05faa00761828309",
+    "bytes": 349651,
+    "statements": 112,
+    "byteStart": 2526373,
+    "byteEnd": 2876024,
+    "startLine": 52578,
+    "endLine": 59487,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+      },
+      {
+        "file": "supabase/repeatable/05102026_1417_weekly_source_coverage_support/qualified_coverage.inc",
+        "sha256": "45a8a0bc2364318d734c1ec678d79fa617d549a62c3a532ef851c928773aee6e"
+      },
+      {
+        "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 25,
+    "file": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "49ae9f7ae5c122f4e9f544608c17cfbabaa8421bec6076016e0e31896c4d56f7",
+    "sqlHash": "795ef2aa57f4dec08a9b83d665e6ae1cbc9d92f421c41ae265ad95d519e72382",
+    "bytes": 149295,
+    "statements": 65,
+    "byteStart": 2876214,
+    "byteEnd": 3025509,
+    "startLine": 59489,
+    "endLine": 62600,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+        "sha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 26,
+    "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "0e48ac0cb5ad72b985abba88af84a1054a4d20d29834eabcf8be0aafcedc15dc",
+    "sqlHash": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+    "bytes": 67947,
+    "statements": 46,
+    "byteStart": 3025693,
+    "byteEnd": 3093640,
+    "startLine": 62602,
+    "endLine": 64043,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 27,
+    "file": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53",
+    "sqlHash": "779ff3892e44a2dfd718a4c0ec161691f764d47334a14222d8142b85c9cb0414",
+    "bytes": 442356,
+    "statements": 167,
+    "byteStart": 3093832,
+    "byteEnd": 3536188,
+    "startLine": 64045,
+    "endLine": 73306,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "sha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c"
+      },
+      {
+        "file": "supabase/repeatable/08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1.sql",
+        "sha256": "fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e"
+      },
+      {
+        "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+      },
+      {
+        "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+        "sha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff"
+      },
+      {
+        "file": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+        "sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21"
+      },
+      {
+        "file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+        "sha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": true
+  },
+  {
+    "index": 28,
+    "file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "36a132e585c9737b099e7ba2b445b1db326a4dd28fed9ef0641ae3c17ca87d1a",
+    "sqlHash": "1e5d4012138bdbf3f98a62eb72e625b77f752c74bfc90fca25a67945c5f59ade",
+    "bytes": 1085868,
+    "statements": 16,
+    "byteStart": 3536377,
+    "byteEnd": 4622245,
+    "startLine": 73308,
+    "endLine": 94480,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+        "sha256": "2246174a1df3ffb20da053b548b2224fe8b67afcc6f0e4fe3fabf3b35f876b67"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 29,
+    "file": "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "182f9d85ce6949d29dec2182fb51230956a610b493873b173f1df546f368f6e5",
+    "sqlHash": "87bc8cae4fdb6bcae96a8e732cf5ab0dae62f4d63b0953dbd9bbf9d43fbf34a4",
+    "bytes": 13849,
+    "statements": 15,
+    "byteStart": 4622437,
+    "byteEnd": 4636286,
+    "startLine": 94482,
+    "endLine": 94804,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
+        "sha256": "e69026ef2315b9dd4d6905b8a63fdde07d17152b56e1b7d99674e10e05ade561"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 30,
+    "file": "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "d55c49a188e0f92584eb54ac5be55016e710c4ff781ade028a5f0a180021427d",
+    "sqlHash": "4e147eaaced117e95f1171c18041564bddbada9e4cb580aa627e03190ce16b17",
+    "bytes": 57965,
+    "statements": 27,
+    "byteStart": 4636475,
+    "byteEnd": 4694440,
+    "startLine": 94806,
+    "endLine": 95451,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
+        "sha256": "f4eb08c3c963c1850396642fd98947cf27722d96e20b6bb77db394635c3341aa"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 31,
+    "file": "supabase/repeatable/04102026_0555_banking_pay_next_factual_legacy_projection_boundary_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "5637695a9196698f73076375daaa9f8448c620d417c8021c0dc4e6cd7e337ed1",
+    "sqlHash": "34da00aad24efcca2f2b7c4199408c3aeaab234978bf12077639d75561999bc9",
+    "bytes": 188026,
+    "statements": 14,
+    "byteStart": 4694645,
+    "byteEnd": 4882671,
+    "startLine": 95453,
+    "endLine": 99338,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/04102026_0555_banking_pay_next_factual_legacy_projection_boundary_v1.sql",
+        "sha256": "eba6b3596434aa6eecf133594579fb7833a7e3acdbe7d6fbd3676fbfb913db86"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 32,
+    "file": "supabase/repeatable/05102026_0308_weekly_source_pay_query_gate_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "04a44deeca5f00541429d31b2a090bcb7eb620dd6e3c75b7753653fbe916dac7",
+    "sqlHash": "128c6e5671e9623f2577e8c3c4e6c6a062c0a5acbaff993842a36e320ead04ef",
+    "bytes": 14624,
+    "statements": 9,
+    "byteStart": 4882853,
+    "byteEnd": 4897477,
+    "startLine": 99340,
+    "endLine": 99570,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/05102026_0308_weekly_source_pay_query_gate_v1.sql",
+        "sha256": "fb70e23a80c7686606b5cbf8f17e2878ca37224f5752067d903e9a253a3cbfa8"
+      },
+      {
+        "file": "supabase/repeatable/05102026_1417_weekly_source_coverage_support/qualified_coverage.inc",
+        "sha256": "45a8a0bc2364318d734c1ec678d79fa617d549a62c3a532ef851c928773aee6e"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 33,
+    "file": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "9663d69ee08fc30a263bcc8d8d2b29a0800093a23000dac12187454d10368b65",
+    "sqlHash": "347d8a46cd773b71c3ce9fb9e5b4d30ff608db205c391ea2a4ed48840bc0b84b",
+    "bytes": 38235,
+    "statements": 18,
+    "byteStart": 4897667,
+    "byteEnd": 4935902,
+    "startLine": 99572,
+    "endLine": 100090,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+        "sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 34,
+    "file": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "aebde30a8766aaa828aa6c88205023abddb71f20f02302216947241eb8448845",
+    "sqlHash": "09adf8fe2ed3c423484a277d30e32f761bf6b482b6633eb45201c6d47b9c2501",
+    "bytes": 21333,
+    "statements": 4,
+    "byteStart": 4936094,
+    "byteEnd": 4957427,
+    "startLine": 100092,
+    "endLine": 100503,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+        "sha256": "b57dfa67b74854a67563af4c3ec14cd43250ab9c2528eee54de27a2c1370a18e"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 35,
+    "file": "supabase/repeatable/06102026_1523_import_review_catalog_generic_plan_bound_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "06460ec7d80ef649538530da221bbcbece51e870ceb2c93e78eb2e2e7fc1bf7c",
+    "sqlHash": "e8168a094355971a81812034e221794448f1e18d7f12cb745641cc633865a880",
+    "bytes": 100776,
+    "statements": 4,
+    "byteStart": 4957621,
+    "byteEnd": 5058397,
+    "startLine": 100505,
+    "endLine": 101945,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/06102026_1523_import_review_catalog_generic_plan_bound_v1.sql",
+        "sha256": "a4517329d2b823d871eb1beed88a741acde65cb5a61651fc0251d763117c0302"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 36,
+    "file": "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "75675bfff39d26808bdff93c1c0b2eb18bf8d1c1163f7797f180e78e2c3c951a",
+    "sqlHash": "d7dbef9a38c09d869cdd7a2e33a41975b33158918fa299cf8a757a0fc9fd4849",
+    "bytes": 92548,
+    "statements": 9,
+    "byteStart": 5058591,
+    "byteEnd": 5151139,
+    "startLine": 101947,
+    "endLine": 103549,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+        "sha256": "91972ea67ab5c4898ff513a970a4cb63fa8a333a599ebcee4634977662f58511"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 37,
+    "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "507ee4a77a9bb0e95d8fadffab80c305e56dd2204a6d94a5ade633426804c701",
+    "sqlHash": "e60461a8b191bff635356a50df680193e4d30e65762e8d2911cdef2b20180e59",
+    "bytes": 39806,
+    "statements": 12,
+    "byteStart": 5151334,
+    "byteEnd": 5191140,
+    "startLine": 103551,
+    "endLine": 104291,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+        "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 38,
+    "file": "supabase/repeatable/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "a7d9d7b4703b6b7cbcd5a9d717650d306cf071db813e16d32c80c5c1651c4332",
+    "sqlHash": "4584327faafef9a084c825584e1282d527ff7f42afa069ba7580cd54f5e3dfec",
+    "bytes": 30151,
+    "statements": 8,
+    "byteStart": 5191325,
+    "byteEnd": 5221476,
+    "startLine": 104293,
+    "endLine": 104911,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+        "sha256": "1b31ce2a61c51d1d811630436d12d5470817bef326e1a010ca7cba990e321fdf"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 39,
+    "file": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "153aefe76367b27563d3ed4fb9c6e2dcd9da8e2f921263a727e3df748ec5bb62",
+    "sqlHash": "680f09f32686a57fb934cd526ee2da5f6ad731f2859d9ed7c2e0644329e554a6",
+    "bytes": 256488,
+    "statements": 72,
+    "byteStart": 5221676,
+    "byteEnd": 5478164,
+    "startLine": 104913,
+    "endLine": 109259,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 40,
+    "file": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "09676a2b4039f33433c6f263f4f7faae1d602869f5e9076b76ebf8c5ede85352",
+    "sqlHash": "720da16203199b37638c0f9edca450f28ea97b968593652cc7ee114e8bf1afcc",
+    "bytes": 82518,
+    "statements": 17,
+    "byteStart": 5478361,
+    "byteEnd": 5560879,
+    "startLine": 109261,
+    "endLine": 110469,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+        "sha256": "2698331479177a246d2ee581f71aa1514a1479f05bf6258c1ceb1f4f490104cf"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 41,
+    "file": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "bb7291af9635ba20692b97b92108e87674e2f2c2b7f2b1a831af7de48f429441",
+    "sqlHash": "0299059c54f5095c72328db5bba3a599cff567fd4e3858d5e60944739e7a34d6",
+    "bytes": 28945,
+    "statements": 12,
+    "byteStart": 5561077,
+    "byteEnd": 5590022,
+    "startLine": 110471,
+    "endLine": 110967,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
+        "sha256": "98067ed7e0ce4a633769f46df1582227cf50239bfc54402bc93d14ed261914a6"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 42,
+    "file": "supabase/repeatable/10102026_0755_banking_pay_next_first_authorise_qualified_gate_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "0dc8cf5efff57a710dbf9497de164ad6beee2609f7d2d0dcaa1e2ee96b0020ae",
+    "sqlHash": "0da49c18664ebb05df0dc3a0e2665c7a627814dd059b9e279f995077fa956ad5",
+    "bytes": 11125,
+    "statements": 4,
+    "byteStart": 5590223,
+    "byteEnd": 5601348,
+    "startLine": 110969,
+    "endLine": 111197,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_0755_banking_pay_next_first_authorise_qualified_gate_v1.sql",
+        "sha256": "07ae1fdb4f1cca122b05c879657e62321d8c5bb731e6b01525d9cd6eaa30282f"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 43,
+    "file": "supabase/repeatable/10102026_0806_banking_pay_next_first_authorise_covered_hours_gate_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "956cb3e27fdfa10bcad0f4f18bd2164dcf6003f52119634f4b72a244c60a04c4",
+    "sqlHash": "15749f258463b081e965e4dfec778a1f1bc19dc5983028010a2583f4b239568c",
+    "bytes": 11634,
+    "statements": 4,
+    "byteStart": 5601553,
+    "byteEnd": 5613187,
+    "startLine": 111199,
+    "endLine": 111439,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_0806_banking_pay_next_first_authorise_covered_hours_gate_v1.sql",
+        "sha256": "8024efb3a366ed6b2247df94c910a5176a5c9721a75d5688997b07b1c845bfe5"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 44,
+    "file": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "c6654540464369fc0d3be1f2eb87900f95571919a5a3e795c1de0b39ab7b8049",
+    "sqlHash": "fba4007e9b6997e98a4526a6b1905d294b2f6794587de9a04f0118623bd0ce58",
+    "bytes": 111905,
+    "statements": 11,
+    "byteStart": 5613380,
+    "byteEnd": 5725285,
+    "startLine": 111441,
+    "endLine": 113706,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+        "sha256": "abc874b2d4ed90529ad591ea08a0a5131a6bc32c86109911631c8516e18b2e94"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 45,
+    "file": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "87d868d116193805a94259139a493812a4147625249b86f6b2d0e93af877d856",
+    "sqlHash": "610691e34de4bf40aa8bf17619ce645c21e6938f0e69d029e8dbbea596a94cce",
+    "bytes": 121033,
+    "statements": 3,
+    "byteStart": 5725483,
+    "byteEnd": 5846516,
+    "startLine": 113708,
+    "endLine": 115847,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+        "sha256": "0b93bd0b0379348930ba9cff38b45e0196eb52b54690cfc29ea257252b922e06"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 46,
+    "file": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "9223c2fa16be6e96add845a8851425c5a966ba0218ac96a4fabbcf92a52e86e0",
+    "sqlHash": "a5e4b8cac72fb5be600186df7a8ec1e172afd15d735f98b7493836446d6de910",
+    "bytes": 342669,
+    "statements": 200,
+    "byteStart": 5846710,
+    "byteEnd": 6189379,
+    "startLine": 115849,
+    "endLine": 120992,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "sha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 47,
+    "file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "8d685172704e74d2413108fc401fb8da50b758151ed85e220dae7b865768a99c",
+    "sqlHash": "f8cd2d2d61d0d12b261771a371bf1ad167852944df33013553e5b6b7ae2ad578",
+    "bytes": 27746,
+    "statements": 11,
+    "byteStart": 6189565,
+    "byteEnd": 6217311,
+    "startLine": 120994,
+    "endLine": 121571,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+        "sha256": "7203e1229a43f4545bcc85b3ce280ffadc2968dceb5f80aa8a7b54d01328978b"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 48,
+    "file": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "26f2e4cef04b6d2557eb2b7fde3c11d54ba692e45eaec3385f6b62c31e610f98",
+    "sqlHash": "567b5670a959698410296c275b2225305791fd3b42187649a7db8180dc029488",
+    "bytes": 141939,
+    "statements": 54,
+    "byteStart": 6217504,
+    "byteEnd": 6359443,
+    "startLine": 121573,
+    "endLine": 123711,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "sha256": "b629fcc003b76ae61ec58c0d35ad2256a4cf9f736e307f5dc80e0a8fb0e20438"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 49,
+    "file": "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "0da4e5606cb829e84ec0d003f2520458994b34ddfcec9a7a96a7bd0604867acc",
+    "sqlHash": "b1e3791399d49f0f233ebfd36c0dd30a3d28ecccbe2cf1e699e688c8774cd2ff",
+    "bytes": 9791,
+    "statements": 4,
+    "byteStart": 6359646,
+    "byteEnd": 6369437,
+    "startLine": 123713,
+    "endLine": 123843,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql",
+        "sha256": "c5b00d79a426e3240c4e826fb1beb7867d48e553bbe7fb9affe5eed7813c40ed"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 50,
+    "file": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "27959e07077303330eb94625f03c1a7186dece46a7f27af6c93c8b9459fca9ba",
+    "sqlHash": "c274b417359f85b9d683bbb495bb9d10610682f3db8578682c3d4d25a65e0473",
+    "bytes": 56521,
+    "statements": 40,
+    "byteStart": 6369623,
+    "byteEnd": 6426144,
+    "startLine": 123845,
+    "endLine": 124632,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "sha256": "b15ecade7ce3a2b6248970e097b966ea7cbe2bb81645f2154a63517bccc0a8ce"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 51,
+    "file": "supabase/repeatable/10102026_2240_banking_pay_next_selection_receipt_cleanup_guard_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "0cd19dc31d38a91edc07f1e0611481d084c8a583eb5e70cc6cb86d518263d591",
+    "sqlHash": "b217e29b353773f5a9ecc88260347792ba9ddd022fd5bd5c3aa94b7c9be97a91",
+    "bytes": 854,
+    "statements": 4,
+    "byteStart": 6426346,
+    "byteEnd": 6427200,
+    "startLine": 124634,
+    "endLine": 124657,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_2240_banking_pay_next_selection_receipt_cleanup_guard_v1.sql",
+        "sha256": "36c7a3aac98fc13431e03f4534ba3ca1242cef2fc735775ebe890e412bb1fb45"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 52,
+    "file": "supabase/repeatable/10102026_2245_banking_pay_next_subset_upload_context_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "eb7710dc9a25f0a1017b69ad039de6cf1d8db40f12eee1c2daca9ccaed32bf51",
+    "sqlHash": "87c57a4ac7b039e903ba9acd0111f16092bac1e477d0b37a65aedf7d9c338e77",
+    "bytes": 2372,
+    "statements": 4,
+    "byteStart": 6427392,
+    "byteEnd": 6429764,
+    "startLine": 124659,
+    "endLine": 124691,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/10102026_2245_banking_pay_next_subset_upload_context_v1.sql",
+        "sha256": "100860c0519833d09092d750ef6f788243a9a85d223a1de3f539c38417541bba"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 53,
+    "file": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "18a8b7da604ad7cb90c20d7f32417ac04bd5bbea3a011b30782089bd75142bdd",
+    "sqlHash": "5da2e4ec7ce156e950cac8d3d260857bd6bf6c8534daf2464a4cfdde0a3e1be4",
+    "bytes": 70192,
+    "statements": 13,
+    "byteStart": 6429955,
+    "byteEnd": 6500147,
+    "startLine": 124693,
+    "endLine": 125641,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+        "sha256": "3f012d20437cd5dad8fa9fb621391abee4f6a115432674fa2a27311f6dfa2386"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 54,
+    "file": "supabase/repeatable/11102026_0121_banking_pay_next_case_choice_control_point_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "8673e3ff80aa9f3bdb0fd77cb517763505d3ddbfe550fe6b720b80a4b593a5d8",
+    "sqlHash": "e0a609b19487c6952110352131f308b73cdf3b541dba51a93656e6b1c56a432c",
+    "bytes": 4557,
+    "statements": 4,
+    "byteStart": 6500343,
+    "byteEnd": 6504900,
+    "startLine": 125643,
+    "endLine": 125696,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_0121_banking_pay_next_case_choice_control_point_v1.sql",
+        "sha256": "673da7ba198a86034416bec9b9c9dad4097865d770463b2620a0c7281079087d"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 55,
+    "file": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "11a6eecd0795889a603fd228dd6c7092aa9c90e19abc864fdece8bf47b5df7b0",
+    "sqlHash": "3436b960c7238987622c597d2fa78b353f1a864797bb1b0074526b6075d3a6ee",
+    "bytes": 50679,
+    "statements": 10,
+    "byteStart": 6505095,
+    "byteEnd": 6555774,
+    "startLine": 125698,
+    "endLine": 126349,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
+        "sha256": "7f4fea9a4e0ed1c5bfe51f9ad9ec17e20a27223c7280b490779640db0722f879"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 56,
+    "file": "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "6d0ff6afab6b653550d1fe54247c2d1c7842ee17a4b893a1470b19908420dd98",
+    "sqlHash": "c8388f4664c67bc85aa9ce6b096303ebb8d104cab8f0007206174dcb28326ed3",
+    "bytes": 132816,
+    "statements": 30,
+    "byteStart": 6555970,
+    "byteEnd": 6688786,
+    "startLine": 126351,
+    "endLine": 127835,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+        "sha256": "e81a8d32dcfa00688d2163d4b0b4740dd80721c90623121bdd3e5664e1c24aee"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 57,
+    "file": "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "bedf23f468922814db923bb0f7d064e292554008f0bda7899c2439425369e0ca",
+    "sqlHash": "f656e5c7992794da80dd45b448d2cca4484a755cd7ed55bdbb17f3dbf3528ffe",
+    "bytes": 158233,
+    "statements": 33,
+    "byteStart": 6688981,
+    "byteEnd": 6847214,
+    "startLine": 127837,
+    "endLine": 130302,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "sha256": "1f7d1710ca9e839f412dfb3dd40c9933489565ace3c8a6f945cd203c230863d7"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 58,
+    "file": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "ebcfa55f78521d52b24bb53e850c480cf675a07206aa68fff402e5d2073b8f5e",
+    "sqlHash": "123807f48b3cade020b506223b24e241cbfaf895ce84a191c11d4d0f695860f4",
+    "bytes": 519689,
+    "statements": 166,
+    "byteStart": 6847401,
+    "byteEnd": 7367090,
+    "startLine": 130304,
+    "endLine": 137222,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "sha256": "f257379bc578932a314a06dffd9c57c02eeb23353b52430a2bf8824b95e7293a"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 59,
+    "file": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "3e9651eb88987fecf69298a533941b3090475939098253bd1e9163cfb172aae0",
+    "sqlHash": "4e235a2d7d0b2477fee001ee6400983585a8d87488aa8b5c794da903a78bc0fb",
+    "bytes": 310476,
+    "statements": 106,
+    "byteStart": 7367280,
+    "byteEnd": 7677756,
+    "startLine": 137224,
+    "endLine": 141238,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "sha256": "b8cf134b06ce48b5778455ce0a1ae2c247bad918ebe1cccbff668804513ed47a"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 60,
+    "file": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "f4a54b70d242d2495aa4c1a9daf40b4bb06862a3c651ad2d6cedb3297903bba2",
+    "sqlHash": "8007dcd87cb5edb06dc4dfc8aa543b14d35b658988a60f754397b9454c447bdb",
+    "bytes": 104395,
+    "statements": 10,
+    "byteStart": 7677949,
+    "byteEnd": 7782344,
+    "startLine": 141240,
+    "endLine": 142613,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "sha256": "8519557c6e07221a063eb294e498064d9133a025f39065cbf6e9c5d7b995e605"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 61,
+    "file": "supabase/repeatable/11102026_0910_banking_pay_next_fence_expiry_row_projection_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "352223abaebfc8d7b8c3ebd566af8c5f8e6b4cc59c3831490ba1c0f596e86461",
+    "sqlHash": "0adec29b00ad0c0d54f5bffe19812e4651b2a52cd495422a8c893a3c2489c68b",
+    "bytes": 21522,
+    "statements": 1,
+    "byteStart": 7782542,
+    "byteEnd": 7804064,
+    "startLine": 142615,
+    "endLine": 142852,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_0910_banking_pay_next_fence_expiry_row_projection_v1.sql",
+        "sha256": "14803cd993ef6bb7e3c11835e73ad2219520ce5f1dcf55b0dabdb74088d9c654"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 62,
+    "file": "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "17cc10799d4137a420fcf4aff2f6cffc96a8acb12e2c8659d0f58ab295f93f53",
+    "sqlHash": "1dfdecb11f11ad142cebcac319bdabaf88e64e9f6828ec1a8f859b6b1549daeb",
+    "bytes": 33615,
+    "statements": 5,
+    "byteStart": 7804263,
+    "byteEnd": 7837878,
+    "startLine": 142854,
+    "endLine": 143530,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql",
+        "sha256": "3a7fb9b31fd418a16cb56a3a9980233a96ddd2ee66af64f59cadd1f807e02977"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 63,
+    "file": "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "24b7fa8d3065c69a85f117f0d3c2f7d7fd7820cdaf3db9bab1757e7c898485f3",
+    "sqlHash": "1b609ec785f8595fb23cc39aa29b476a05b280bdfff6987156250bf0859ae28c",
+    "bytes": 55146,
+    "statements": 11,
+    "byteStart": 7838063,
+    "byteEnd": 7893209,
+    "startLine": 143532,
+    "endLine": 144241,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+        "sha256": "6d13cd0a482be586e49aaeb2fb67bca82613aa092657cbcc208e6f012acbc0a6"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 64,
+    "file": "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "18e1f807fae7e03164f76f9d19deef3aa9f6ea88d0a3990d6f4e7897c64a17d0",
+    "sqlHash": "a428fa89f7ebd906176326408c00a22d94dccae938aed6e8b60af53390485f53",
+    "bytes": 32245,
+    "statements": 7,
+    "byteStart": 7893397,
+    "byteEnd": 7925642,
+    "startLine": 144243,
+    "endLine": 144652,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+        "sha256": "5777b06b24a9aa1dedad608926a6481665c02043652a842f3af4ab6a48e4750d"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 65,
+    "file": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "e4723b0084d64038596c1e17bdc4d445c38ef12ba5a6e04abf0042fbd5cc1582",
+    "sqlHash": "ccc2fdbf8d9580b185c2b9ad4476c84641e539c143f5e8c883329e60b8af2f64",
+    "bytes": 189732,
+    "statements": 41,
+    "byteStart": 7925823,
+    "byteEnd": 8115555,
+    "startLine": 144654,
+    "endLine": 146808,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "sha256": "6fe0e93f9dd42fbff6427591490d7d6cff4d40129560bc423d707af6c1d52e6b"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 66,
+    "file": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "051d550d953ee4ca96297aeadc647fae9097df807abbfc56b827dae23363b82d",
+    "sqlHash": "dc12db4fb25d3fe8a21f03fb5aac8c3ba048c48067c48c0f6d4897a6d270fd9f",
+    "bytes": 196250,
+    "statements": 35,
+    "byteStart": 8115747,
+    "byteEnd": 8311997,
+    "startLine": 146810,
+    "endLine": 149685,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "sha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 67,
+    "file": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "bdade956203ffbb55e7ead72be8f4ff4fcaed46bfa69a241a6f4175e756010d8",
+    "sqlHash": "33232cf7f4455a07895822d078495bc6183bbddc6bd62ace7e468ab986886260",
+    "bytes": 228636,
+    "statements": 79,
+    "byteStart": 8312181,
+    "byteEnd": 8540817,
+    "startLine": 149687,
+    "endLine": 152568,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+        "sha256": "1a57552c42d63d0dc885a4e7294472c03319537da9e913a96cbbadc10c2ab879"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 68,
+    "file": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "4321fa0ef3428e36e30a5c47f72887b2bd2aec09ed686c47ecf67ec6b49b246c",
+    "sqlHash": "b051030935bcf3446d3f70868e3aff0b42fa394b9790659f886575815f3040c7",
+    "bytes": 218656,
+    "statements": 46,
+    "byteStart": 8541018,
+    "byteEnd": 8759674,
+    "startLine": 152570,
+    "endLine": 156196,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+        "sha256": "7a5b4b56a424b2a07a8a54c895c4841ce6e0c2cbb0e9a80d06c27842fde5c96a"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 69,
+    "file": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "462ddc928e049dca0a243bb0b78da0c80c121045a6756f67f3d555e41a642373",
+    "sqlHash": "f6e2679f5d1dd2ae949650e1894eb199de46ec013b0bed9c8a23a9249d9bacd9",
+    "bytes": 85590,
+    "statements": 13,
+    "byteStart": 8759870,
+    "byteEnd": 8845460,
+    "startLine": 156198,
+    "endLine": 157669,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+        "sha256": "df49b9fc467ae9806effb19ec3b39820059fa46980a2f761f62c3f2ef8a96111"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 70,
+    "file": "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "3737df86f2e462f9a336b7964b0c8f851f0cc41137d0b771ffe9889916d0f04a",
+    "sqlHash": "0eb69044e17563b02095aba83e502730121b2418b394c00cdca37b339736090c",
+    "bytes": 95665,
+    "statements": 23,
+    "byteStart": 8845655,
+    "byteEnd": 8941320,
+    "startLine": 157671,
+    "endLine": 159049,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
+        "sha256": "2d9822da9881179dace5a2ff97c65fcaaf1dfbaad920337a4701133d8fe487ae"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 71,
+    "file": "supabase/repeatable/12102026_0718_banking_pay_next_active_preparations_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "5b4a2cdd89c8a7ce5f7d7243823b374f67742ff40f25490dfe23ebe3478979d4",
+    "sqlHash": "1354d56dedd2f239ada8e3a1f903c10542711325dc4038e01ee0c22fe2802a3e",
+    "bytes": 75674,
+    "statements": 8,
+    "byteStart": 8941510,
+    "byteEnd": 9017184,
+    "startLine": 159051,
+    "endLine": 159769,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_0718_banking_pay_next_active_preparations_v1.sql",
+        "sha256": "d040516eb3ad9f488025493d6d91eaadc99cee780c22e09f7fddb7ecc3eff501"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 72,
+    "file": "supabase/repeatable/12102026_0945_banking_pay_next_bounded_preparation_enrollment_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "70b73dff3d4c258ffed1c778d571ea9a1687970361aa590109dab2a1362ed210",
+    "sqlHash": "e2cd6260c59604f50c222742268249f8d5d4b51f4ee4f97cf12bc9ace4944e73",
+    "bytes": 5260,
+    "statements": 5,
+    "byteStart": 9017385,
+    "byteEnd": 9022645,
+    "startLine": 159771,
+    "endLine": 159866,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_0945_banking_pay_next_bounded_preparation_enrollment_v1.sql",
+        "sha256": "c181f7fe067d1c58387dc5eeee803e9a51da3295abaa202bdbe34da53c719056"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 73,
+    "file": "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "004bcbd311460b758ad77b333b0be880bff37b3a24c573659ea6f94908d6eac4",
+    "sqlHash": "7ef48e1696b086591e982b13bd5a3813edcaa6e23027de05ff758edb08924ae9",
+    "bytes": 104012,
+    "statements": 22,
+    "byteStart": 9022834,
+    "byteEnd": 9126846,
+    "startLine": 159868,
+    "endLine": 160929,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql",
+        "sha256": "8e92c091539f1516af4ca0cc8ec1d37c81d9b60b7caa48a3ea92b3548adde60a"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 74,
+    "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "fc1cab882bdf90311b71ebabc07f4a9fa3b33a432662f744aa01e3ba20072eef",
+    "sqlHash": "da1267ccb7656bd62167b26c4ab281b8340b8b24b6f107c7b0373185a223b51d",
+    "bytes": 380127,
+    "statements": 168,
+    "byteStart": 9127037,
+    "byteEnd": 9507164,
+    "startLine": 160931,
+    "endLine": 165697,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+        "sha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 75,
+    "file": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "3d5c57ebcd308171985b760a123d4016b2132375d18fe779851cdd8816b8267a",
+    "sqlHash": "7c9e532b64556e2f68362a427bf37515b6d263b51dd4545a16f8a8c8ec587904",
+    "bytes": 146207,
+    "statements": 22,
+    "byteStart": 9507363,
+    "byteEnd": 9653570,
+    "startLine": 165699,
+    "endLine": 168031,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+        "sha256": "16e437bb839cc8a91cd499303cd0d6d574797e3fb0da6570ab24858d42b6ce87"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 76,
+    "file": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "ef689b68f2d35ac94bbde34194cd03f075ed3df48d854bb4cf695807cec92a56",
+    "sqlHash": "284d45e603facca079b090c9ffb796d079e547a1bc4f982ffdb29852b845fd5f",
+    "bytes": 55156,
+    "statements": 16,
+    "byteStart": 9653755,
+    "byteEnd": 9708911,
+    "startLine": 168033,
+    "endLine": 168675,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+        "sha256": "0a3936fbfcd31e9fe327df2af40f1bf996d78aa01a48ae753b2765e294cf0e66"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 77,
+    "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "ff95842f1ed952ef0d988672fcbc3d43dd8876e4623cac9985a22e664134e55a",
+    "sqlHash": "fcea2ee527270c46d06e98e6fc05104d0cd0eadf48a5c0e612eb42bc3211952d",
+    "bytes": 314349,
+    "statements": 70,
+    "byteStart": 9709098,
+    "byteEnd": 10023447,
+    "startLine": 168677,
+    "endLine": 172541,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+        "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 78,
+    "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "ee56f06dfe49918f038f147d6d0de9d6cd44ad90362459721b361fe7099e9017",
+    "sqlHash": "3b25d3d002cbc6a6b1ddfb7c378894f25f7a67fbe48b78deadc1b38ebd98f7be",
+    "bytes": 284260,
+    "statements": 85,
+    "byteStart": 10023641,
+    "byteEnd": 10307901,
+    "startLine": 172543,
+    "endLine": 176109,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+        "sha256": "fec5dd533f37c45f26e46011a551009ae8d62fb93a18862e082b2acf74197456"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 79,
+    "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "cce39c2e226c079b077e625054670781c4db0af965fc22d8db7c1ec3dfa0731e",
+    "sqlHash": "b4539d055fe44b763299294957d886a1f873f9530cebb81b08ef3cd4efc79d87",
+    "bytes": 180931,
+    "statements": 33,
+    "byteStart": 10308098,
+    "byteEnd": 10489029,
+    "startLine": 176111,
+    "endLine": 178195,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+        "sha256": "b9650e9da89a3dca3b59bc33f73efc8acf132038dae163df826d1f18730990fd"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 80,
+    "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "be8d2f5397ef935a34831104b2b57f279fbdb828011ab27e1674094db16c6b95",
+    "sqlHash": "5701acc1bd36da3e4fbf756c2259a8a8b48164725f5aa31d35a1918e64323aeb",
+    "bytes": 9434,
+    "statements": 3,
+    "byteStart": 10489236,
+    "byteEnd": 10498670,
+    "startLine": 178197,
+    "endLine": 178306,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql",
+        "sha256": "86de08dd3bf9a64e7e347e9d41cb1430515e3ed83dc906ecab1ce7940b470a16"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 81,
+    "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "840c87c5b49621b9a57cf91c5db161be26c9a55f17b69c06bd127ad6801ed069",
+    "sqlHash": "190e0d96438f46cd7ad8f3459b1e015c4aae9ed239a6852506748dfbae6458f1",
+    "bytes": 41781,
+    "statements": 3,
+    "byteStart": 10498875,
+    "byteEnd": 10540656,
+    "startLine": 178308,
+    "endLine": 178773,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+        "sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 82,
+    "file": "supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "06900b094279dacb9ed12ce7dbd3037b06d18b07d3c516d8a5be57c7a2bfc4e0",
+    "sqlHash": "20c2779c4d4431021ae5c86d56945c5a50bf3817435bd37183c9915786edd0b8",
+    "bytes": 115341,
+    "statements": 15,
+    "byteStart": 10540856,
+    "byteEnd": 10656197,
+    "startLine": 178775,
+    "endLine": 180141,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql",
+        "sha256": "9fa243c98655e950e670bcb65eb73ef554883cf00cb2e1824982a5ed407c8eee"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 83,
+    "file": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "428fb4fdda93fbd2603b9482e79e09484d43ba52be74752b0d270b60427baf3b",
+    "sqlHash": "95d98279b706eec18a2f64f9685b4b29d172c5c7463c4923c2926f93d01dee77",
+    "bytes": 56463,
+    "statements": 9,
+    "byteStart": 10656391,
+    "byteEnd": 10712854,
+    "startLine": 180143,
+    "endLine": 180863,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
+        "sha256": "739e238d39d6848c50eb90746c8f5486091eb39e38948ea28c95ae5d6353f8e8"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 84,
+    "file": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "774e252b4b254b268d6b07fdfb8d4c24b4163e3f46a1487c16fb73264c1f4f8f",
+    "sqlHash": "241f1010593ad6cde054a6cfb36908103dc937ceeffa66530c012372d0a13609",
+    "bytes": 53211,
+    "statements": 9,
+    "byteStart": 10713049,
+    "byteEnd": 10766260,
+    "startLine": 180865,
+    "endLine": 181729,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+        "sha256": "5dd92083243dde0bd41418da6436d28d1566c32c1b0a0a540d9a8d4ae742f66a"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 85,
+    "file": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "f9400d2f0626873b3ab77f971477a78d6f1078c44f937cc50c35249a093fceaa",
+    "sqlHash": "3f3be9f3154500646cbccb365224a80ab0a186d58ca2a562ba3b7bcb9f9dbd1e",
+    "bytes": 78306,
+    "statements": 18,
+    "byteStart": 10766453,
+    "byteEnd": 10844759,
+    "startLine": 181731,
+    "endLine": 182661,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+        "sha256": "35648fde73f982466ed72c065eb9b6916d6ef998364bd64af0f491625a73cfd3"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 86,
+    "file": "supabase/repeatable/13102026_0028_banking_pay_next_frozen_selected_treatment_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "f3b2adf9f07906af21a07ef6391ed255f5c1ba1b6ff68acaf57b35b7a5d239ea",
+    "sqlHash": "7f9a0bf83a21fe75f33abdf4c14b19fc1f767cf26712cf11ed89494df82c272d",
+    "bytes": 38935,
+    "statements": 9,
+    "byteStart": 10844955,
+    "byteEnd": 10883890,
+    "startLine": 182663,
+    "endLine": 183189,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_0028_banking_pay_next_frozen_selected_treatment_v1.sql",
+        "sha256": "bb2bf3e049eb042036cb414e4801dbd163ac382b85123f50b2561df07d0746c7"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 87,
+    "file": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "82cbd99998d3d6780c22cd4a456d9d24e9048401708d7f6dc39b6c3d94eb5a1b",
+    "sqlHash": "e2e67b9a405d65fb7e2f5cc6e6a3f3fffe42cea4c915e99032cf068bec85ac1c",
+    "bytes": 31998,
+    "statements": 9,
+    "byteStart": 10884089,
+    "byteEnd": 10916087,
+    "startLine": 183191,
+    "endLine": 183557,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+        "sha256": "9cf9e4054bfd6c7c06babc1cfd8fdc0fe3280bf291e0ac059c009906c458ddec"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 88,
+    "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "9d5def4656866ff86fb0cf6f75b58ae3617b516549701bbfca8675ad02308b97",
+    "sqlHash": "d9228c918e2ff5806b69cdb4549549dbf4a601ff2cd5296126ebf8eec722a41c",
+    "bytes": 85836,
+    "statements": 26,
+    "byteStart": 10916280,
+    "byteEnd": 11002116,
+    "startLine": 183559,
+    "endLine": 184650,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+        "sha256": "8e8d9d34382587b84ccc1faeb7d2a7fcb279db51b3b8ed2efc42a5be37352325"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 89,
+    "file": "supabase/repeatable/13102026_0932_banking_pay_next_completion_parent_anchor_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "7e0fd811e5852d255cf142967655214a9cbc68c861dca65fc505b857faedbfa8",
+    "sqlHash": "9d50968b2380d3c0e79bcea27cb8a21860d2cc61cb914800216b74b54616cfa6",
+    "bytes": 185096,
+    "statements": 8,
+    "byteStart": 11002311,
+    "byteEnd": 11187407,
+    "startLine": 184652,
+    "endLine": 186541,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_0932_banking_pay_next_completion_parent_anchor_v1.sql",
+        "sha256": "a75f4c3d2c494cf79742e01c1a0b56aaf7d5b3c31401afbfc4993ffad1ae4310"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 90,
+    "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime_authority_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "50b463b04976f3f5dc221395782346a1f69de7ce09c5925a6f55cd1bcb5bd522",
+    "sqlHash": "9c06e7fa6b0d3fff834c24cdab75a59c2f4e1969441411a2f0342946deae9358",
+    "bytes": 238731,
+    "statements": 24,
+    "byteStart": 11187598,
+    "byteEnd": 11426329,
+    "startLine": 186543,
+    "endLine": 191427,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime_authority_v1.sql",
+        "sha256": "aaa8307e7da882a642edcd9688a2fccde690b641fbb236f5573ab27ec5375d57"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_resume.sqlinc",
+        "sha256": "f46bdcc85c717de157738ea0a21591d9cb32695c95ca23efff8117678038b0f8"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_support.sqlinc",
+        "sha256": "81c98e43d51bc236be543dc0af47df71523010078770273d2e95d457435f521a"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_start.sqlinc",
+        "sha256": "b0b822d8001d5f248fea628f656655fe91db2cacb5149651c937bdd1aa19bece"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_resolver.sqlinc",
+        "sha256": "0dab38012e7c5e29f84a2addd9544a83f9f23b4c51a8451feda62ab8232b744f"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_generation.sqlinc",
+        "sha256": "a4d821ec7d49c46677340e32c403d264d7add4327e9e7106b179c791fb487603"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_unissue.sqlinc",
+        "sha256": "d5b4aeb6fc73c32ddf6298f06f3292eab24c815dcd64fec183778fe751ee89ed"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_legacy.sqlinc",
+        "sha256": "e594d79e17dc3f90e7046cc48fd06a34eaf76644357a10389b20abfa7aaff44d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_dispatcher.sqlinc",
+        "sha256": "89d45adedb7fe53405502df5d8a1c79f47af04c1bd6413b16ffd835f82992ddd"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_acl.sqlinc",
+        "sha256": "94a2f758acfac0210b80662095cd1a3b57d8a22beed06243ce9822b15719d0f4"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 91,
+    "file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "8fa4122d574e4938e839d2d858b3f8f34320b3ace876fcea4d7eeebfd2e3cf28",
+    "sqlHash": "e3a0bacaa93fca0cae4158058367b24ffcfeb5c548f120900156652ad80f736a",
+    "bytes": 313344,
+    "statements": 65,
+    "byteStart": 11426520,
+    "byteEnd": 11739864,
+    "startLine": 191429,
+    "endLine": 196474,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+        "sha256": "4fe37de72a11c3a938d89d25660e996367a2ab6bfaca9bbf54a50a787062c3ae"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 92,
+    "file": "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "924bb48ff053c0394619758962765c1ee077be33fb2cf7b0e91dc7edd2c9ad0b",
+    "sqlHash": "f766218d17d8285b82dd70cb78827d8f7770b73c1b7a269e95e9ef5e1ddbd0af",
+    "bytes": 5797,
+    "statements": 5,
+    "byteStart": 11740069,
+    "byteEnd": 11745866,
+    "startLine": 196476,
+    "endLine": 196556,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql",
+        "sha256": "9bf04c59b90ea0ee0cd097e7e81bfb06edbbc40938cdaff6e8f7c96347dd7a9e"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 93,
+    "file": "supabase/repeatable/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "356c7a0e6dd8cdcad65c4864b8185602ef4bf05d9881b8cef4928d7836419a27",
+    "sqlHash": "41588eb040a7708207244afc096be85e63eb4b33c3388d5029d40a5af3569e0b",
+    "bytes": 275535,
+    "statements": 106,
+    "byteStart": 11746062,
+    "byteEnd": 12021597,
+    "startLine": 196558,
+    "endLine": 201157,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+        "sha256": "2c780a1aea2beac859f95633a41ebccf5844de1852242ac43d2dd0409ec20bcf"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+        "sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invariants.sqlinc",
+        "sha256": "af57e7e707915f43813e6f708b0680ba784eecfc41e3e59f219d998a676446ab"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+        "sha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+        "sha256": "9f8751a398ed483e2599520748483e76a4bb1399db1c7917360b0a41caefc6e4"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+        "sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_scope.sqlinc",
+        "sha256": "120ccfd2b77e85d2af9ee135e9fb40322c36c2d10b2dec0e2b31901c70db8a1e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+        "sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_finance_guard.sqlinc",
+        "sha256": "397a996c943d906105a35d6f1324c2e25f9f742d871fdde641a2235bdca445e1"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_manager.sqlinc",
+        "sha256": "b866dec3ce248f2bfe0c34c07645c3765b7e583622b49710e0b011621990461f"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_whole.sqlinc",
+        "sha256": "2cb0c835a251726bd5fb5d61d06096e57d1412cd30f8628661bf9167a8c1049f"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_chain.sqlinc",
+        "sha256": "d75971649d2bf35e2bb4aea8a645aa9eec1fd17977172681662ff81144e87a62"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_transition.sqlinc",
+        "sha256": "8a5547ea381fd11ef6fca4f3fe4deab050ef65eebb894a087e52d7f5e48e4a9e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_preview.sqlinc",
+        "sha256": "bdc5fa7d1f82582d3252f5e8d275b5cf7374102916a19124f44f1cf32c0b5b9c"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_expand.sqlinc",
+        "sha256": "94343940c7c2ede695b620ca499f5cae8dd120f821ddbe8558052c06fed606e5"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_overlap.sqlinc",
+        "sha256": "0485a8cc5fc63da8587194b313793b46214682a2aeaefbb57572ca335812d0af"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+        "sha256": "ca4ac3b9f88f9b86906d52c47e3477cc388deec112164d2bf451d85901127ff3"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_delete_guard.sqlinc",
+        "sha256": "004b05626594e9c0d078020453cbe7a66ce69903f7d3e1183a959d3d43d5a744"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_retire.sqlinc",
+        "sha256": "536095f99b49901c1e8a4be4aeaa2945145435cda07ec405ed025573ad954423"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_weekly_delete_preview.sqlinc",
+        "sha256": "4df7467f617bb5c610b9612c19ff1ffa16a0d01eb05b9a9bc5c0446df081b50d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_standard_delete_preview.sqlinc",
+        "sha256": "4334172f7cadf479e99816c34c162f96e6ecb6a719e13143ec80cb5531276043"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_pending_delete.sqlinc",
+        "sha256": "fe2af727bfcbed953c8087a62b30d113944cb24ff0fae08f440d67b586db2ac0"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_acl.sqlinc",
+        "sha256": "c082c64392a26268a0a344f6c101a7fc62a2e537d1cbe6582fdb613c72ad8a93"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 94,
+    "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "cf5ff77ce1c866205b9b29c4f51e8c820d8990d13f18bd88bc4a977b480ca6f4",
+    "sqlHash": "a404cb928af23824d27ba7518388afaa48df2dc8930b1470ce57bc75db673a0d",
+    "bytes": 101294,
+    "statements": 43,
+    "byteStart": 12021774,
+    "byteEnd": 12123068,
+    "startLine": 201159,
+    "endLine": 202623,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+        "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 95,
+    "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit_authority_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "136cf8b2ea8110449cfb76b9573d1bc72cb7eb17112e4a07ebf27686bcc0217d",
+    "sqlHash": "023e59bfa107d44cb9974e3f8ee02cc3c1af16230feea936f66d5c0ddb1e5b04",
+    "bytes": 450106,
+    "statements": 28,
+    "byteStart": 12123258,
+    "byteEnd": 12573364,
+    "startLine": 202625,
+    "endLine": 210946,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit_authority_v1.sql",
+        "sha256": "581bedba6025477bf16144a5d1f6957278289aea5bb05e5928c3896a5dabe671"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+        "sha256": "3d4476fd39d484ffe24057f56ec53902e0ea75bdc15b4de35b3de9551cf1bce9"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_nullable_daily.sqlinc",
+        "sha256": "3ca710f6cf84d67f66fc2c7894ee2c35fd533e73c7d5bb97afe3922cdc714669"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_validator.sqlinc",
+        "sha256": "c11a3c72f09e862cb970798e4da8ceb29c4bf42a96a37cee4f7f51b3fc59ae78"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_original_input.sqlinc",
+        "sha256": "524624e073b09621f5b6cb94574032feaa4584e46fbeb5dcea197ca6964f5733"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+        "sha256": "e573b48cc58db6a107848e0548b201f28584308577c2f5ff8629cdc9a269bdf3"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_start.sqlinc",
+        "sha256": "23f71a8b14940a9b94b10e99488e2857bf502ea162c0526235bc517d26c9d1e2"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_resolver.sqlinc",
+        "sha256": "71a3f9e6caa47248894478bdf33fb4f07d172449de39554c80890a3e5b351cd8"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+        "sha256": "f43014ce6cafe2c3a193b827cefdc72b7548215d4abf0d29db387158da71ae12"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_legacy.sqlinc",
+        "sha256": "1dae7e323edf51bc3e36eb811d3c6316f3cb297588b9bc719d8ab02ce8d2fc37"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_snapshot.sqlinc",
+        "sha256": "af1dad3fac315f0ad87256b1ad5f22f703537a166ed0d4e522a51b0ceaf6d101"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_planner.sqlinc",
+        "sha256": "905e85ab37073350203e8e322ce194f47307aa1f24aa7fbb4a02ccfdde54e71e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_acl.sqlinc",
+        "sha256": "5e0155cb0a6c1bc2411b838f62d332a33241b11241131bc1a1fcd71039d5ee98"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 96,
+    "file": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "9b14ea9fd3120f49a12d269b8dbefb405882241d497ff81b2d9dfb25d4514b34",
+    "sqlHash": "988765e87774bcb0b5d30b4ee5bd39e8fdb28069f504dfda226f5bfda4e62137",
+    "bytes": 128166,
+    "statements": 11,
+    "byteStart": 12573550,
+    "byteEnd": 12701716,
+    "startLine": 210948,
+    "endLine": 212743,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+        "sha256": "5e7e51c44f2c0ef713df0fd35fe284b9e264f437efaff72da33811b6eaf26a4c"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 97,
+    "file": "supabase/repeatable/support/13102026_1210_weekly_source_final_value_helpers_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "1ff9a4e86fbe95b0eb39c3cdafc623ef28c0424908d34addcafcc7153b50662d",
+    "sqlHash": "cdfce84ac9a82a3ea4483f91a1711d8d7488c441aa75f9a4438936161ee8b460",
+    "bytes": 15843,
+    "statements": 18,
+    "byteStart": 12701911,
+    "byteEnd": 12717754,
+    "startLine": 212745,
+    "endLine": 213019,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/support/13102026_1210_weekly_source_final_value_helpers_v1.sql",
+        "sha256": "cb441a2dbf78ba3246c02c3f33af1cbb46b94c006d76748e5ae0cf65dac518c1"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 98,
+    "file": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "c6450fa2297aa7a53e46143b0f562b2d078bc8484eb997b555e1d5817354ebfb",
+    "sqlHash": "5489207cf1a3680e9acc0f1e13a1ea36e63e0e953c06dbcf61ea0e86f790e108",
+    "bytes": 104521,
+    "statements": 22,
+    "byteStart": 12717951,
+    "byteEnd": 12822472,
+    "startLine": 213021,
+    "endLine": 214915,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+        "sha256": "dc2de45c684fd3856e9147cc7724c39e07390242e1c22d5a3bedf7ac76c9548b"
+      },
+      {
+        "file": "supabase/repeatable/support/13102026_1210_weekly_source_final_value_helpers_v1.sql",
+        "sha256": "cb441a2dbf78ba3246c02c3f33af1cbb46b94c006d76748e5ae0cf65dac518c1"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 99,
+    "file": "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "4e134ac1392e3d87a713ed8411d2eb3c3ac111dd7560f3fa67b1b9a93780b308",
+    "sqlHash": "7ccca5f2f9c7681887e13aa094a8a6ee0407348de132a1634b7bf24ec281b9df",
+    "bytes": 120033,
+    "statements": 8,
+    "byteStart": 12822664,
+    "byteEnd": 12942697,
+    "startLine": 214917,
+    "endLine": 216666,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+        "sha256": "a59d938b7403608103aa747be95dd202e5d7f0dd6a40d09dbdf0177e0e14a50a"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 100,
+    "file": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "2409f7690db6e6207085f941129e714dfafd7e7fea492c8c2bf3291ec795db16",
+    "sqlHash": "0e9af9a797911ee6babc797c96634ffe119230b2a6990bf52c50efd8daf8fd65",
+    "bytes": 56824,
+    "statements": 5,
+    "byteStart": 12942900,
+    "byteEnd": 12999724,
+    "startLine": 216668,
+    "endLine": 217696,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+        "sha256": "5845f7ee77cb9164da6150bddbdbb90bd4e1c062fc556fa2e2207c78cc5e66fe"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 101,
+    "file": "supabase/repeatable/13102026_1359_weekly_source_timing_coverage_group_guards_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "6f660dcc7c5ee5f784b1f64f346a9bc89dcea0d3023ab0bcd24075b7dde606b3",
+    "sqlHash": "1f7992840d5c67a9dccbecb8ad0cd708acb48f1f0441bd75598bd6cc89751656",
+    "bytes": 16839,
+    "statements": 13,
+    "byteStart": 12999921,
+    "byteEnd": 13016760,
+    "startLine": 217698,
+    "endLine": 217954,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1359_weekly_source_timing_coverage_group_guards_v1.sql",
+        "sha256": "20c98eb0c3ae673b25e3edf6834fde9bfd0fa8c06b2e98ceb224a4f08db58fe3"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 102,
+    "file": "supabase/repeatable/13102026_1404_weekly_source_client_group_move_guard_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "07947a4d783581d745b77a265d7c0bfe223f99cb72b8ed611c70e2bb29d682d7",
+    "sqlHash": "2ccf8453f08c40ce94f6f838540be5d638d0f87b274ecc93c12b84a5aef2e9f4",
+    "bytes": 19794,
+    "statements": 5,
+    "byteStart": 13016952,
+    "byteEnd": 13036746,
+    "startLine": 217956,
+    "endLine": 218359,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1404_weekly_source_client_group_move_guard_v1.sql",
+        "sha256": "2520880de9eda4628ebe821e9e5407d62103aaf16ee571479d2f4ae7af60138b"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 103,
+    "file": "supabase/repeatable/13102026_1404_weekly_source_import_preparation_timing_guard_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "18596a3dd3beef2b81a986d7d23e4e1c59a00871f612cc55e512905ba576aebf",
+    "sqlHash": "7132c4f9473c4a3462f286be670f4b6dcbbad485e07a345a6cd18a8ab47e78de",
+    "bytes": 3730,
+    "statements": 5,
+    "byteStart": 13036946,
+    "byteEnd": 13040676,
+    "startLine": 218361,
+    "endLine": 218419,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1404_weekly_source_import_preparation_timing_guard_v1.sql",
+        "sha256": "39ca3506b77ed6f70ac7ec5c7d57f66ce314b5977ce2baa6aa2ee96d88dd0b66"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 104,
+    "file": "supabase/repeatable/13102026_1404_weekly_source_upload_coverage_context_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "158b4bffa8c2efb083de2d1c81dc2a437d34228273f7f4e89de473f763606e11",
+    "sqlHash": "cdc2eb4d1edafd48798748140a5ee8ac4296cdb746f299e6c55fef5b1be7df6a",
+    "bytes": 25326,
+    "statements": 5,
+    "byteStart": 13040868,
+    "byteEnd": 13066194,
+    "startLine": 218421,
+    "endLine": 218925,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1404_weekly_source_upload_coverage_context_v1.sql",
+        "sha256": "66ad57c002afc8ccd6237ebd49e0e79121832f26571afc48c05895e3f3ba9f2e"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 105,
+    "file": "supabase/repeatable/13102026_1412_weekly_source_upload_stage_coverage_floor_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "b06e68d55745443dee096ddf5ac9b66231b74dcfba94170be23e3170e35b0f83",
+    "sqlHash": "58235a96002d118a2ea40bf4f012e130a44a7c8400e96552f8dad6e3952906a4",
+    "bytes": 32736,
+    "statements": 5,
+    "byteStart": 13066390,
+    "byteEnd": 13099126,
+    "startLine": 218927,
+    "endLine": 219553,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1412_weekly_source_upload_stage_coverage_floor_v1.sql",
+        "sha256": "ee33fbe66c4f9beb9cd136c3207d5a7eebc7986e718b2e0a25972b61cdb27c96"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 106,
+    "file": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "eece10432b4080b90cee9a1077336b0accbeb08c08f6d3649d4b4fa754e9de1b",
+    "sqlHash": "9a34852614a30ceeecec9a780c3ce079ee3be86b6152a4eb65c10e8cfc070ef5",
+    "bytes": 94495,
+    "statements": 42,
+    "byteStart": 13099315,
+    "byteEnd": 13193810,
+    "startLine": 219555,
+    "endLine": 221265,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+        "sha256": "61f0f9fc8e7a1ea8bc041d9b9c4faf67a0633d0f1600923c5d09ea2bba1094b5"
+      },
+      {
+        "file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+        "sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b"
+      },
+      {
+        "file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+        "sha256": "7203e1229a43f4545bcc85b3ce280ffadc2968dceb5f80aa8a7b54d01328978b"
+      },
+      {
+        "file": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+        "sha256": "523f5faf9d05c4151d2615438030470beae937c9cf794c5fb4c8c205c73fd2b5"
+      },
+      {
+        "file": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+        "sha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+        "sha256": "7335affaf41db16171e882d03174c7e3547bd48fd1b1cec903f81523088b979b"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": true
+  },
+  {
+    "index": 107,
+    "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "73a4737b1004a4260155b920a63c031c0fba412a11b33fd37904aa3233fb066b",
+    "sqlHash": "5e37fc69acc594f8e6c28ba72b9654683b41e813b67f8c6151dffe60aef9a1b7",
+    "bytes": 83953,
+    "statements": 52,
+    "byteStart": 13193999,
+    "byteEnd": 13277952,
+    "startLine": 221267,
+    "endLine": 222124,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 108,
+    "file": "supabase/repeatable/13102026_1432_weekly_source_invoice_money_publication_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "61e4263cc5614e20c719611e29618c5f594f7883e7f1c2895a7c32005f02a0b9",
+    "sqlHash": "31ac58172e422e6371dba8f62db38b6fc89ca37a29f7d8a3e28a37562dc87091",
+    "bytes": 168547,
+    "statements": 20,
+    "byteStart": 13278146,
+    "byteEnd": 13446693,
+    "startLine": 222126,
+    "endLine": 225278,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1432_weekly_source_invoice_money_publication_v1.sql",
+        "sha256": "a20938845a21d9510ca9f574799742a83c875f7f0a8a7126f2a34a24ddd21d11"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 109,
+    "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "96f1f03c9d30a659950b45f12be689eb71cd80bdb153d37a5b31981a9667c905",
+    "sqlHash": "55b87f204e60cad9bde06fe5a3a02b44ced33ba4ff83134cb3c97ddbbc4aada2",
+    "bytes": 206065,
+    "statements": 20,
+    "byteStart": 13446888,
+    "byteEnd": 13652953,
+    "startLine": 225280,
+    "endLine": 229114,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 110,
+    "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "5538dfd65c12369443f4cd7756525b05c77cd61f9a06ee759590ea753a823fc3",
+    "sqlHash": "6aaa05ed96de8e5d8be9be5f86d82272eb7b74b117e0ebac0520034e2cd6513e",
+    "bytes": 110727,
+    "statements": 15,
+    "byteStart": 13653145,
+    "byteEnd": 13763872,
+    "startLine": 229116,
+    "endLine": 231199,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+        "sha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 111,
+    "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "db53cbe3bbe01ed228e0a8f2a537c89df06ed0d184b5115a4994b9f5c0c9d7de",
+    "sqlHash": "b1bbc123f516034846f876d22dc459fbfda13df5f5df7d52ce5950bce1f0fde2",
+    "bytes": 164247,
+    "statements": 38,
+    "byteStart": 13764067,
+    "byteEnd": 13928314,
+    "startLine": 231201,
+    "endLine": 234064,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+        "sha256": "9f9c5ace5716f123cc547dd5c2deebef4b8c10d677e6abc2285d3f4e47d86190"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 112,
+    "file": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "6a44b757f1b04432b5c02c4711ddfc1b5aa887d490fbb257ee89132b74fd2ff7",
+    "sqlHash": "b79da4c020b67366c480661325d4bc4d8d6df4166f0ce03537d20ee993e0708d",
+    "bytes": 34848,
+    "statements": 9,
+    "byteStart": 13928510,
+    "byteEnd": 13963358,
+    "startLine": 234066,
+    "endLine": 234573,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+        "sha256": "d88a9a55af9c3bb360f73eedf42106fa8ce8b3d2ac15f7b786956047f7102aa7"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 113,
+    "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "2cc9077a66252452eba633f42f8d02ea05518d3bde4ef8c8fa90ee069e8a431b",
+    "sqlHash": "1d90943460b6a29dd33227be8e20aceef1523bb5717f40344e25ca34f387421c",
+    "bytes": 413100,
+    "statements": 177,
+    "byteStart": 13963545,
+    "byteEnd": 14376645,
+    "startLine": 234575,
+    "endLine": 241180,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+        "sha256": "c4c33f686dd3d1db4f51f467ca2984e7d99f4abcff4f933fa67d838a56cf7cae"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/00_checking_client_scope.sqlinc",
+        "sha256": "ced9c786bbe26995ed7d415ab16d2f2a4d8252cea155571b8dbdcdbe8a63d790"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/01_wait_receipt.sqlinc",
+        "sha256": "de1bbc3e9d1055cc0b1ca4eab94ec945e0be9426c19bbdf0e1aac1ec99c8d4b5"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc",
+        "sha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+        "sha256": "43feac012ac1be7b623a160bc50dae3f2f63433d60e790b227dbd0c6a5ecfc4d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/04_contact_retirement.sqlinc",
+        "sha256": "7fe56fe5e2f2ed14c835e96fc478512fd6a7956147b525ed8b37ca72805b8142"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/05_unprotected_close.sqlinc",
+        "sha256": "4c6d3ca8cdaead1433a57bb93612b95877e901e874711bf989778f48cb4c280b"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc",
+        "sha256": "bb3609e8c194b95e933f90ea91fd81b42540174e6d9ca578610d21e318144ef4"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07a_current_source_rows.sqlinc",
+        "sha256": "1a19e89bd7439a15ceac39d3e15b1c94f1de64d695d4e0e379f95784bc277d84"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07_submission_comparison.sqlinc",
+        "sha256": "89bca949dfe088c3f7485739f327224874f1f02e29cda8b4701e7670ad6b4855"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08_comparison_audit.sqlinc",
+        "sha256": "317e970b59f7f7a806e2916277d30b7d1c5404ae24b56481c7de30d4082589ac"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08a_expected_week_fingerprint.sqlinc",
+        "sha256": "559212099c2daf7d9b9d647ba2d8cb565d3e40b5f9c95c44c5f580a090347370"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/09_expected_week_materialiser.sqlinc",
+        "sha256": "764d3b5513f92dc45001ca6cc1e7e6d2705e7b78b7762f4e51a5112f42e5e285"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/10_publication_recheck.sqlinc",
+        "sha256": "b44abd36f95844fddcbe38ea74daf3a16619383ec42b2d479248e1461cdbb27c"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/10a_expected_question_scope.sqlinc",
+        "sha256": "0c2406657f06a848c2f6cdd55dc5cb35ae854a03375bfdcf82f497a139ca5c12"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_timing/010_timing_validation.sqlinc",
+        "sha256": "5172f1534da1e297cc477d53ed8e8c9d08f1a62ea64885e15c27f53fbf7325b4"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+        "sha256": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/11_manager_due_scope.sqlinc",
+        "sha256": "107549cdc9e9e2606992465e386b40872b3d507d0140ad623a4109dc6ed93fc0"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/12_manager_owned_facts.sqlinc",
+        "sha256": "a1f60c220121776af5fc05d7220c6ad22aafa0b326275de9f0ee15243d71aef8"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+        "sha256": "6684d0eda2a12f502e896f46844e0dd10a658831fb298a51f95afcd8e748ab5e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/14_not_finalised_dispatch.sqlinc",
+        "sha256": "a50ccbf231397fd968945ce6acc8c5fb96b9d3baa575caf523d68682c9f46832"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc",
+        "sha256": "7c20563bda1e32cf808688ed441da0a4e8a96cc9b6c9091900180ec730ee4b77"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/16_protected_lock_helpers.sqlinc",
+        "sha256": "5ad639381f656aa27c13a7b87319db8603bbc1bcaa3751bd8fe8b7d239d3e61c"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+        "sha256": "d7c821c1a41a47df2afaf7da31384b1590245cefddd488608e24cf943f29fb72"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/18_prepare_action.sqlinc",
+        "sha256": "a7078453d49205ad218c9349b9218fdb8349d9b423dbad72ec788d03941d6c62"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/19_action_context.sqlinc",
+        "sha256": "1f7f7a17dceea6aa4f28b02626b18a349eedb73243861076d056286b82d85e99"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/20_stage_request.sqlinc",
+        "sha256": "36bea12950392ba9d2721c86218fee31cce84a918ee0558b389bf4b47a3613c9"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/21_publication_family_fence.sqlinc",
+        "sha256": "a164fbca5a92f1bdefd19e1697cd2a0dfdaaf2fd4dbb948d8587b6b3cbc41745"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/22_query_groups.sqlinc",
+        "sha256": "ca4bba75f1e1aa7ee977f72cc888a7fc821d8b2b9e9e5615d5b78d9490cc8361"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/23_bulk_signed_selection.sqlinc",
+        "sha256": "1d4f13e3dfe66aa8c8c0cd8f55a29cf3c231bf26f3202b3d4b7ae52a7144c049"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/24_due_scope_capture.sqlinc",
+        "sha256": "ab3931cbfb55226f17c44c12a6ec51bb7c3750a577f40ccf7118398aefcc1d77"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+        "sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/26_bulk_command.sqlinc",
+        "sha256": "88a6c4ea62830ed5c72b3433864ddafe34120c5869541bcfedb5c428e5c3bdfa"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+        "sha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_timing/070_acl.sqlinc",
+        "sha256": "23e8f28ec1e958dc74f28182a3d28f25ef416fa154f8169cd6d1a0345eca9ba5"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 114,
+    "file": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "5c780cce735f845e8be48f3149a0444febdd6c4862045cb7161feffa6cd4f2a8",
+    "sqlHash": "1a7ffd74fde819230410547839ce87f98dff05b37e9f579f8b33e48101625d16",
+    "bytes": 675427,
+    "statements": 179,
+    "byteStart": 14376836,
+    "byteEnd": 15052263,
+    "startLine": 241182,
+    "endLine": 252416,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+        "sha256": "e8dc35a0bd6d510b4517a07a3e1665ceec97d181b37b8d6e5daf8b36a6d92291"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_profile.sqlinc",
+        "sha256": "d4fa441b951b57f64bc31065edb3e431d3a63c7c32998e13c253d0145f4bd8df"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_guards.sqlinc",
+        "sha256": "91fe0fc277c9e5e726e6c8c1ab365740d0eec26190d5da33f7288c9ed2a0d403"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_nhsp_scope.sqlinc",
+        "sha256": "a1c88c4919d12519c53f43550db98d4f942581ef01b714136a7a5d885e4c2b92"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+        "sha256": "783d138fbc36dd3ecf795a981743bab40a7e5333b44de098b6e17059bd28a3f4"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+        "sha256": "2174a13f828c927e7a7a739e10acbd0e1ce52ff35af8a40dbafd2f88684fc8b7"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_seal_assert.sqlinc",
+        "sha256": "8a9a11a8ef02fbbfa2abb4edd6ed478e58144e5aa32c970745475582287d2b08"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_timing.sqlinc",
+        "sha256": "59ad3bb4eaae371a72e5bd34bbca17dc26912ef1df8cdfed4e85c6a4123e28f2"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_prior_binding.sqlinc",
+        "sha256": "03e5426be6df9f735dfad97c7227105e28c2f07bd19a9cf1b0a9a7d0df43061d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_pay_witness.sqlinc",
+        "sha256": "fe00fbecb9a79d3f13c089f9c755912cd74cccb3164e7f7adda6345b9d2a02bf"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+        "sha256": "8a2021a4c239899bcf87ca9c1b910e57ba5ea326d1ee1f65fd258dd8b926887e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_context.sqlinc",
+        "sha256": "77f861c5aadaba61053f5e918ff36066f576f4d77e996fe9a09f45a30a0c714f"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_begin.sqlinc",
+        "sha256": "24de1b440445156b10cde31869580f741863dd60c5644d0386e92a6c6339eff6"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_rows.sqlinc",
+        "sha256": "4bc293b97b63652a5c4e0e39dd9f5e70b56f6fbd21ccb1c25eb1301543113f8d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_seal.sqlinc",
+        "sha256": "bed08f7a5919fc535977077432d0d8590e6282b224c4624a5fea16ff36af97fa"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_begin.sqlinc",
+        "sha256": "018283e5c5a06594dbf39e91793c9b86c02f3b609e0c36db1906b94e2d5e640a"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+        "sha256": "7c5c499d7c13d8974842fa932101c6c0fad71b1f746ea20cd96980ebaf219f2d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_publish.sqlinc",
+        "sha256": "2340ac5eaae3c2dfd0824a8fd2463afb351766e0698068d894f63f8ebd678175"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_import_prepare.sqlinc",
+        "sha256": "770f8f09834284ca53706f398bd055edc992f6f3769ecbe5ef21b37e3e0b95a3"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_duplicate_hold.sqlinc",
+        "sha256": "f881ad41948121ec2ef13b34d4f6bcaca4bcb71dc2002ba20be278d892914243"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+        "sha256": "4a0937f2608551801733ec3fbd2ec8c2ddf800344233b4f53340386bcd53ebe8"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+        "sha256": "be9f1e7dd5b3351510b027044dd00bca32b54c58a0c9e6fc6bf47f94dd79c40f"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_publication_guard.sqlinc",
+        "sha256": "b251ea88a9ea66bf1b7afaddc329653c545018bd632a6b9bfb709635a6daaf59"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_workspace_scopes.sqlinc",
+        "sha256": "9ec33620f3e240e87d4160dc86df894d2b6a1d15b6f66af354ac2daf1e2f15cf"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_completed_rows.sqlinc",
+        "sha256": "19e4a480cc63e1bb33166557504d31248c9dcca0931ab04d640c7c5730c51f61"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_workspace.sqlinc",
+        "sha256": "0f1b080ca21de14d911bb0233db6648fca3fb8c0af77a5236ae4a422c76ee7a3"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+        "sha256": "243b2d97b782c60498bdad0a35f09457c157f072e6a9dbd3dc85feaaf99e0c68"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_invoice_duty.sqlinc",
+        "sha256": "6dcaf79339c8ed3139b9d4bc0ca6641bf803fdb402af3b87e118c1b71ca3f36e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_acl.sqlinc",
+        "sha256": "e6eeb974e509df1fdb782179f87a50b3cf99fa3263e6302d79394b46120d2a9a"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 115,
+    "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "fb2fb8d89a9f19c54d08020765871313d37bd9652b54f837d69258b623134cdf",
+    "sqlHash": "7ee990f543e7ea65fd301f4085b2b89726e06c51898da31ec77aac18cda07da0",
+    "bytes": 93517,
+    "statements": 17,
+    "byteStart": 15052453,
+    "byteEnd": 15145970,
+    "startLine": 252418,
+    "endLine": 254074,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+        "sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 116,
+    "file": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "808a83317c8248443ce35809d020a6087283f0afddfc68fba0de7231ad7cea50",
+    "sqlHash": "6405ea187a0351fef0a5d79c557932ad0707e9bee47ed7e4bd3d3d35671b740d",
+    "bytes": 229068,
+    "statements": 51,
+    "byteStart": 15146156,
+    "byteEnd": 15375224,
+    "startLine": 254076,
+    "endLine": 256707,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+        "sha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 117,
+    "file": "supabase/repeatable/13102026_1649_healthroster_correction_request_read_authority_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "2e66daec6d4cc1995b4f34b7a19691c9c57802b64668fdda6aa9969b15765c9e",
+    "sqlHash": "7f931a2ba06fa6e59d287de0e2b7322ba74230ee03c4870e55d01f2f1bad0f4e",
+    "bytes": 1638,
+    "statements": 5,
+    "byteStart": 15375425,
+    "byteEnd": 15377063,
+    "startLine": 256709,
+    "endLine": 256735,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1649_healthroster_correction_request_read_authority_v1.sql",
+        "sha256": "2be4a45ff4a16c7171fd7dea91ffea5ec3860645a3fbf93a71d1756cce615c94"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 118,
+    "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "952def63ad9b8224913bef51dff233f4fae2f09728b13341db9405e1979abeba",
+    "sqlHash": "df808a44e66925cc1c9df5360e30ac5b89f9b1ee2b1c227027451345b828e8ec",
+    "bytes": 1258430,
+    "statements": 114,
+    "byteStart": 15377254,
+    "byteEnd": 16635684,
+    "startLine": 256737,
+    "endLine": 278752,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql",
+        "sha256": "d26063ed33e464716d6e42ae739541d589b9d9ebf44c0d02693b71ff98a2dc57"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/03_receipt_and_window_owners.sqlinc",
+        "sha256": "dd9d5ceb119867a6a07a768b86cc6f06c07d4949d4376207b13cd9ebe91bb2e9"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
+        "sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+        "sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/06_complete_allocation_issue.sqlinc",
+        "sha256": "d23855453b7b6f8f2db9d96aa2b46d8f83e8af6dd18967e7599a9d7cdb57830a"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/07_complete_header_move.sqlinc",
+        "sha256": "7a1f6eddd8cdc60bd52b10309bfab5107700ddab39aad3164df89afed7aa716d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+        "sha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10_complete_source_readers_correction.sqlinc",
+        "sha256": "420139cda0467dfa61d9fb28240f6c8843317610313c8f736fe6278b00520f0c"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10b_complete_remaining_manifest_consumers.sqlinc",
+        "sha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10d_retained_report_and_date_boundaries.sqlinc",
+        "sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/11_complete_native_snapshot_assembler.sqlinc",
+        "sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc",
+        "sha256": "50ecf38150cfdfcb5d197fd43bd6684a7a8c7ad510841c53178621a2c6b54f55"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/13_private_acl.sqlinc",
+        "sha256": "c7de0f44918eca3a8985ba6e89650fedb7d15218e99da8907f87b88b0af7e6da"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/14_complete_legacy_render_manifest.sqlinc",
+        "sha256": "e95ba0bf3dcb72b3f9952422e839f20e9a2c40a03ec6c4735493f6017aa496b5"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 119,
+    "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "82aa9f9694944bb5117486079c2a4016ed05c63b66eb695f3442fe9b3f1721b4",
+    "sqlHash": "82c4664300bb18c7f4ad0a690c9865c02655311699c065f7f336a1f323475177",
+    "bytes": 253520,
+    "statements": 35,
+    "byteStart": 16635872,
+    "byteEnd": 16889392,
+    "startLine": 278754,
+    "endLine": 284008,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+        "sha256": "60bdf030e045ffc523efb727ec23adb11a65fd1a4ca2faca7ba4ab97f9f9fae6"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+        "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+        "sha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+        "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/03_invoice_issue_validate.sqlinc",
+        "sha256": "3d04a8f41daa61980f733d279f6fa3bb0ea3c37bc6a9a4c66ce240b4d75839ef"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+        "sha256": "dc198c718436d8135c4ba6282896bc3aa7dab5099c3ba63650e9fa5aca2681fb"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+        "sha256": "b480b2b90a8148d1a0ab28d9172ae19dfb1150389116c0ab295642aee80239bc"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/06_native_acl.sqlinc",
+        "sha256": "62a8884633d4d3f5d7dc9bca09f9efa0f04b6230c9eeab7f74d0e455e9c77f4d"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/07_new_owner_acl.sqlinc",
+        "sha256": "6015f8338bc103b7e0355067667ca0be1688ba06b5ad8c87d2cbb7407fd166c2"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 120,
+    "file": "supabase/repeatable/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "e2a2011d2455bfd081eb4b9e83544c6874522c88a6afeb3869b3863e23037052",
+    "sqlHash": "abb5dce28a07ffa0491a818a0a6e164f838e402a436bb8a9dc93f63221eab924",
+    "bytes": 8387,
+    "statements": 4,
+    "byteStart": 16889587,
+    "byteEnd": 16897974,
+    "startLine": 284010,
+    "endLine": 284110,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+        "sha256": "25adbc44ae6579662134de37a40e02725f56ab7e3177165c95a3a186f633beca"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 121,
+    "file": "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "4671156183622ed97fecb9ad7d85673295254e2e623e569bde109c247824be33",
+    "sqlHash": "92f6a8e35f442d2231d33e5efc86ec8bfae2f0e9f815f230dab68f5c838e75b2",
+    "bytes": 54567,
+    "statements": 15,
+    "byteStart": 16898164,
+    "byteEnd": 16952731,
+    "startLine": 284112,
+    "endLine": 284768,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+        "sha256": "7d5988cf8e1792cd23eb479604d8735d5c9ebb2dda05d2eb8b28006da3cc2093"
+      },
+      {
+        "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+        "sha256": "3a4e886ad6d6280acd300884ce87625fff12ae66ebecb206e2cd98865fc915e8"
+      },
+      {
+        "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+        "sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987"
+      },
+      {
+        "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+        "sha256": "5757ef54f996c82cfb72353702ca9982ac9862222f20ca13420370fcde9ff7a5"
+      },
+      {
+        "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_calendar.sqlinc",
+        "sha256": "51509cebfcf3f6e8a263da7614d419294e0ab4ccea9f926add09b72f51091e3d"
+      },
+      {
+        "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+        "sha256": "7ee49ed797ccb4b469677a9ccddb20b7a821f6a318cb56e64dd31e8f34ddbb13"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 122,
+    "file": "supabase/repeatable/13102026_1745_weekly_source_owned_stage_self_bill_facts_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "3a93ca9b154e2282e723228cd1698bd0545b1f4e7db1d811aa67d933f385de11",
+    "sqlHash": "eb8b641f489b45af989aa98b69b0e0486f638c98a5032cf8750b0e01422bbd19",
+    "bytes": 11355,
+    "statements": 12,
+    "byteStart": 16952927,
+    "byteEnd": 16964282,
+    "startLine": 284770,
+    "endLine": 284912,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1745_weekly_source_owned_stage_self_bill_facts_v1.sql",
+        "sha256": "63c8329ea9455fa1eb984e964349296dfcc6c2e7bf24eca4dd1516e97e64c7ba"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 123,
+    "file": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "858ba7c5d1b8edc52f448d2795a00f9974c08f3d60b478fa0aadbfb08ac70863",
+    "sqlHash": "db2be00b1c2d7a19a80c0a3d75ef034a7f26dd12efa7a8d20daae03abe4a89e3",
+    "bytes": 74317,
+    "statements": 14,
+    "byteStart": 16964486,
+    "byteEnd": 17038803,
+    "startLine": 284914,
+    "endLine": 286304,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+        "sha256": "74ccc92c4370e92181ea29abb7ddc6546fd00abea0bc5ba212b464488503b061"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 124,
+    "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "c4d367625acb5dd0d8512b7784793c986686be2cafb2fc17fecf2579952eaa99",
+    "sqlHash": "e5242b76df512551953d11f21b37a5f8107380ded25291878db5a22a56c79f71",
+    "bytes": 48473,
+    "statements": 5,
+    "byteStart": 17038995,
+    "byteEnd": 17087468,
+    "startLine": 286306,
+    "endLine": 287312,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root_v1.sql",
+        "sha256": "39ca760351d11168130c71d212958347a5a14a8ab5c91e9f0b41a3f0e89b664f"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc",
+        "sha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 125,
+    "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "1da172c41e20dfaba3cf48eb9d7815d0d8a391cd2bc45364636c1152028688cb",
+    "sqlHash": "33cbd8b9b8c31428d041cbda7e0bc1a6adcae71bce3ac584905a4d4215c36d8f",
+    "bytes": 160538,
+    "statements": 26,
+    "byteStart": 17087660,
+    "byteEnd": 17248198,
+    "startLine": 287314,
+    "endLine": 289985,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker_v1.sql",
+        "sha256": "fe9b8fb19a463229c08959121edf1d95b3902225af672ab7cce19d7aee684842"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/01_projection_receipt.sqlinc",
+        "sha256": "7db8fb80cbcded8f5e69d43cdce97405dcd8bc4ed1e4086c422d7d3b004c8a20"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/02_pay_authority.sqlinc",
+        "sha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/03_pay_witness.sqlinc",
+        "sha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+        "sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+        "sha256": "712ed4bc6b9e8dd367d45da298ef2c83312564ff197f63f04292b875f4d38220"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/07_private_acl.sqlinc",
+        "sha256": "7bdfc266230363d6b03125ac4f7779cd76b43b8937d70ca24cd28eabe3fe2357"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 126,
+    "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "e369749a1ceb474ce03ca0d52203b00016345ccab25afc2c1d0704a4852d488b",
+    "sqlHash": "b8694c29481d352370363f44d1d2c25b1a8340846f23371d019f75455ae3c563",
+    "bytes": 261124,
+    "statements": 99,
+    "byteStart": 17248389,
+    "byteEnd": 17509513,
+    "startLine": 289987,
+    "endLine": 293561,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+        "sha256": "114a89a08baf88d9cbc119fe00d65815cfeaae6aa9dfdd98ce27963e28b2b4da"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/01_staged_source_documents.sqlinc",
+        "sha256": "3ae24232884c7742a85078804cee4c7196be65fe4379d4a0f3a32b0d060844cf"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/02_staged_publication_context.sqlinc",
+        "sha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/03_approved_detail_evidence.sqlinc",
+        "sha256": "dcbfbd9debb6b70803a376712dc5b4349a4ac2e7d9337ae03b11543fa05932e8"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+        "sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/05_staged_prior_wait_receipt.sqlinc",
+        "sha256": "f14e762ffb0eac77d78a974ea98aa708b5e0c38d453e9633ce39f372dcd79e95"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/06_expense_evidence.sqlinc",
+        "sha256": "f7991259460ce88edaa2ba166eb570174940f61bf5360fe6e7670dc88b79c861"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/07_staged_entitlement_components.sqlinc",
+        "sha256": "4bc041652ffd7edd658a1bee6b4c698b05d7344ff1d1534178e8d0feb532d261"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/08_complete_automatic_reconcile_delta_forward.sqlinc",
+        "sha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/09_complete_local_successor.sqlinc",
+        "sha256": "a2eb8e6b4cc02e3b84f15c6ba1f9b57ab49927865b04f7b20683e3f697d3f38b"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+        "sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+        "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3"
+      },
+      {
+        "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/15_final_automatic_private_acl.sqlinc",
+        "sha256": "c9ee3dd259c21eb3fa228e00c25e2b3bdb05f360c3229955042613f69e0afd0c"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 127,
+    "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "327a0e4169fd5c9cc66f1bad209ee796ddf07dcc6c07d995cd3a1590e3667c44",
+    "sqlHash": "9f23551b57ddd4c8e51e4156bd9c26bc90a1055a29cf1643af57a5ab3361e61b",
+    "bytes": 311571,
+    "statements": 65,
+    "byteStart": 17509705,
+    "byteEnd": 17821276,
+    "startLine": 293563,
+    "endLine": 298572,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 128,
+    "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "72092595af3f3d46f8bc5b71be646243cf3782205ce40d5d72a377510307dadc",
+    "sqlHash": "62f1a00cf32896e8b7c2511934d373e5cbbbad6321852e7bd3d7ea6b2512db1d",
+    "bytes": 717491,
+    "statements": 166,
+    "byteStart": 17821474,
+    "byteEnd": 18538965,
+    "startLine": 298574,
+    "endLine": 309653,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+        "sha256": "49fa65c7d185ad57f27d444585d79488715492c9f579206c4ddd84e99d6d8b0f"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/ORIGINAL_PREREQUISITES_SOURCE_FORWARD.sqlinc",
+        "sha256": "1ec71ddb192128b78a02e8ea11a7d5afd2797116e2d954b7cb7a03b9b2be74bc"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/01_cap_original_functions_02_source_cas.sqlinc",
+        "sha256": "0ec5032e9bfe7d7b88ee5d85c5b207f235fbd6cbdb81f854f25becc4b219208b"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/02_cap_original_functions_03_capability_owners.sqlinc",
+        "sha256": "434e6455857920740700009f52f88735071e1bd57e3d37e4440cfa19d359fd23"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/03_cap_original_functions_04_original_clients.sqlinc",
+        "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/04_cap_original_functions_11_non_self_bill_admission.sqlinc",
+        "sha256": "48f477cf908ab3c2a0310f1cfc93eaf3b0ffdb98983c12307749e2dff6029632"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/05_cap_original_functions_05_complete_existing_activation.sqlinc",
+        "sha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/06_cap_original_functions_06_complete_selection.sqlinc",
+        "sha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/07_cap_original_functions_07_complete_stage_proof.sqlinc",
+        "sha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/08_cap_original_functions_08_complete_bulk_command.sqlinc",
+        "sha256": "89d9dc8051f19e5091a3599548850313cdf9bb09744803f0615b067124e6ddaf"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/09_cap_original_functions_12_complete_17_prepare_family.sqlinc",
+        "sha256": "a5b08c97d35d62a47ef1271fda23f9c9cbd80a8455594104b11e4c054c0a44be"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/10_cap_original_functions_12_complete_18_prepare_action.sqlinc",
+        "sha256": "66c1d78f61e8cf8f1094382cdf97dbc9c082b6e21765e8aecba1352d54f4bcc5"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/11_cap_original_functions_12_complete_19_action_context.sqlinc",
+        "sha256": "edc8c9da16743a4af6758ba1beae1debcb13ac5c2da90c699a83b1c7da3a1d11"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/12_cap_original_functions_12_complete_20_stage_request.sqlinc",
+        "sha256": "80500039ea01d7eee54713425372666331d33d2079f48a23e9f80812ca668254"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/13_q25_owner_xid_qualification_00_complete_current_catalogue.sqlinc",
+        "sha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/14_q25_owner_xid_qualification_QUALIFICATION_SCOPE.sqlinc",
+        "sha256": "ca433a32c7c8f37e34a20cc68497ca702eed1a6370965314d7f72ede99343746"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/15_q25_owner_xid_qualification_QUALIFICATION_STEP.sqlinc",
+        "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/16_q25_owner_xid_qualification_03_complete_cas_admission.sqlinc",
+        "sha256": "c7b6d0812dacde13ff9ff5fb920fe73aa6ce959068b20e5c41134361e1a86342"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/17_q25_owner_xid_qualification_04_complete_non_self_bill_admission.sqlinc",
+        "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/18_q25_owner_xid_qualification_05_complete_automatic_admission.sqlinc",
+        "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/19_q25_owner_xid_qualification_QUALIFICATION_R2_READER.sqlinc",
+        "sha256": "e8776f728aea49370e1530d5db6a3150c1549cd375bd4297227bd033facc3a15"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/20_q25_owner_xid_qualification_08_complete_capability_release_reader.sqlinc",
+        "sha256": "e3b20bb7aeac049b3351c63b4a34f04693b3f75c698cff8f443a8f79b626ef85"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/21_q45_actor_event_closed_dto_cross_session_00_complete_current_catalogue.sqlinc",
+        "sha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/22_q45_actor_event_closed_dto_cross_session_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+        "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/23_q45_actor_event_closed_dto_cross_session_CAPABILITY_OWNERS.sqlinc",
+        "sha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/24_q45_actor_event_closed_dto_cross_session_04_original_clients.sqlinc",
+        "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/25_q45_actor_event_closed_dto_cross_session_04_complete_non_self_bill_admission.sqlinc",
+        "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+        "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/27_q45_actor_event_closed_dto_cross_session_05_complete_automatic_admission.sqlinc",
+        "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/28_q45_actor_event_closed_dto_cross_session_CLOSED_DTO.sqlinc",
+        "sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/29_q45_actor_event_closed_dto_cross_session_OPERATIONAL_CERTIFICATE.sqlinc",
+        "sha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/30_q45_actor_event_closed_dto_cross_session_01_complete_qualification_scope.sqlinc",
+        "sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/31_q45_actor_event_closed_dto_cross_session_02_complete_prerequisite_reader.sqlinc",
+        "sha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/32_q45_actor_event_closed_dto_cross_session_TEST_JOURNEY_SCOPE.sqlinc",
+        "sha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/33_q45_actor_event_closed_dto_cross_session_03_complete_operational_release_reader.sqlinc",
+        "sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/34_q45_actor_event_closed_dto_cross_session_04_complete_capability_receipt.sqlinc",
+        "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/35_q45_actor_event_closed_dto_cross_session_05_complete_bulk_readiness.sqlinc",
+        "sha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/36_q45_actor_event_closed_dto_cross_session_06_complete_automatic_readiness.sqlinc",
+        "sha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/37_q45_actor_event_closed_dto_cross_session_07_complete_existing_feature_setup.sqlinc",
+        "sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/38_q45_actor_event_closed_dto_cross_session_08_complete_cas_admission.sqlinc",
+        "sha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/39_q45_actor_event_closed_dto_cross_session_09_complete_actor_non_self_bill_admission.sqlinc",
+        "sha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/40_q45_actor_event_closed_dto_cross_session_10_complete_actor_bulk_selection.sqlinc",
+        "sha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/41_q45_actor_event_closed_dto_cross_session_11_complete_actor_own_stage.sqlinc",
+        "sha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/42_q45_actor_event_closed_dto_cross_session_12_complete_actor_17_prepare_family.sqlinc",
+        "sha256": "896a3769a099c3ebdc2f008dc89bcb667361acea70085b6e25847ea07378d63d"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/43_q45_actor_event_closed_dto_cross_session_12_complete_actor_18_prepare_action.sqlinc",
+        "sha256": "9c7637eba0478d7bf88c11bceec8a08066146234558510267fba14926c2438ea"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/44_q45_actor_event_closed_dto_cross_session_12_complete_actor_19_action_context.sqlinc",
+        "sha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/45_q45_actor_event_closed_dto_cross_session_12_complete_actor_20_stage_request.sqlinc",
+        "sha256": "73da2a876d936e692584b905c9271aa586f196a13f973fa714f1cc7c45a08019"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/46_q45_actor_event_closed_dto_cross_session_07_complete_stage_proof.sqlinc",
+        "sha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/47_q45_actor_event_closed_dto_cross_session_16_complete_bulk_command_presentation.sqlinc",
+        "sha256": "9116d060e31067aca182b4a9b3b567937d48945fe17c1e7e2e3437027accac9e"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/48_f12_first_use_full_inventory_OPERATIONAL_CERTIFICATE.sqlinc",
+        "sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/49_f12_first_use_full_inventory_TEST_JOURNEY_SCOPE.sqlinc",
+        "sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/50_final_original_source_cas_schema_lineage_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+        "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/51_final_original_source_cas_schema_lineage_LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+        "sha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 129,
+    "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "87387bd2ae8e5510ce06ac2ad21d13209eaea4b8f481743f2741049fb5c5888b",
+    "sqlHash": "dc7481185877e8eeffbd6658844bb7ec3ec1acad3b8c8e8328d61e6ff3e1272b",
+    "bytes": 148943,
+    "statements": 19,
+    "byteStart": 18539159,
+    "byteEnd": 18688102,
+    "startLine": 309655,
+    "endLine": 312204,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql",
+        "sha256": "39dfc2377184d170450d4028de43791d6561755d844cd5f2d4b12be2d7f178a1"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_exceptional_pay_complete_local_v1.complete.sqlinc",
+        "sha256": "39847b83448f48c414b0eb3cf04dbd581a8f4595039aeb04d1237f5ef64c653d"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_manual_review_resolve_v1.complete.sqlinc",
+        "sha256": "8ab22130ee40e9047201637e3528fc4baeb7a9582e4fa2c5d75df0e5db29f796"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_exceptional_pay_stage_c1_request_v1.complete.sqlinc",
+        "sha256": "532146598b453a2e0e253ccf0df2c29fa66977f63e644e8003d71e77e594c6f5"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+        "sha256": "c3ca231ecac79b0be0bf5473762952ccd8ffb703f37a66a57b11688fbd061a0f"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_manual_reviews_finalised_v1.complete.sqlinc",
+        "sha256": "b62af30fc18b5f15d5832eef6e56c4cfd3d4d646bf301f5a53796d07accbab32"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 130,
+    "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "fefc51941ebb29609bcd71fbd22893f7ace769927571e21978443d3613853903",
+    "sqlHash": "7eb54055528432b2ed7298a8c6599998b5a3253df0691f9831ad06ee515c11ba",
+    "bytes": 344214,
+    "statements": 222,
+    "byteStart": 18688293,
+    "byteEnd": 19032507,
+    "startLine": 312206,
+    "endLine": 315831,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+        "sha256": "bd93165a3c30a35aea8775bef8fb4234d1901b362fc69c3cda26ef9b8de8ae9d"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+        "sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/02_HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+        "sha256": "ea11961b8fd26f352cd45ee28a2e6582f0781e68ccfef961cdbc5e52b8dad202"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/03_HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+        "sha256": "62427e8448747206f82c9e533f615d469164b27a9fe0f5dc7e6208b16d948f28"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+        "sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+        "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/07_OFF_RULE_STATUS.sqlinc",
+        "sha256": "8eb29b29ffe55dc406dfadc4c84ff389ca493b62d0b331a15981e01fc3e0f97b"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+        "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/09_01_operational_rule_projection.sqlinc",
+        "sha256": "43a1f07212674c233e35dc24c6917377f639e703fe0a0a44fc18443b09113e5a"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+        "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/11_03_cas_operational_projection.sqlinc",
+        "sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/12_04_final_revision_rule_guard.sqlinc",
+        "sha256": "e2349dc619a7b30c74328d62a8f1aace2435a361d30309b9c43e3ff543fef3a3"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/13_05_coverage_floor_owner.sqlinc",
+        "sha256": "6f34e8d9ab9bf08a7bb0fc240fea49a35edc420ff7b7d1f98210a697476f34f3"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/14_07_automatic_capability_admission.sqlinc",
+        "sha256": "b08e604e3df9b13eaeb1b0e7ab635e85a0a80d94785ecb76327d35b14a866ac4"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/15_08_cas_admission_owner.sqlinc",
+        "sha256": "c5e3217b5ad271d66614ad3df0ad80870f57817fb18e042b9dcb43339a69e285"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/16_10_complete_bulk_test_scope.sqlinc",
+        "sha256": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/17_ACTIVATION_WINDOW_BINDING.sqlinc",
+        "sha256": "883eab37fd437a4b802c2f6331de865b7eb0e1bca8d5ec12d2624d9a950604a4"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/18_FINAL_OPERATIONAL_CERTIFICATE.sqlinc",
+        "sha256": "9ba9d59f3168492d53cf38c003e5a7cca117aa627edcbfe211061a0d628e8c2f"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/19_ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
+        "sha256": "9a4698490f95584ed2e94ea58e1a6a9312c52b3a55f3109f067e9e3be3ba88b9"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/20_ACTIVATION_PROBE_SCOPE.sqlinc",
+        "sha256": "03e72b4f50fe5716f5baf206e4979a799da161f365a5b8338792308c5b408bf6"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+        "sha256": "b400d184f791415db84c1badc31e9aee82fad7601512bfcbd78c267479dc468e"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/22_POST_VERIFIED_SETUP_ASSERT.sqlinc",
+        "sha256": "0610fc771a322fa11e8cc4c0aca94d0c20a34bf873626aa8926ab0de22f072e0"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/23_POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc",
+        "sha256": "81fbe2c9cd141d10a909072f140a734e8a759a39ce5102691b57ed25fd40982d"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/24_POST_VERIFIED_PARTIAL_ASSERT.sqlinc",
+        "sha256": "9eb4bff291bccd7127df1cf878854ffe896dacd24f0c68264690496188398724"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/25_REPORT_FIXTURE_REFERENCE.sqlinc",
+        "sha256": "697d3ca1fe0d9af1588d9e71c0b25c69b2dc48effd86e01dccc05aec65e28031"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/26_NONOPERATIONAL_PREREQUISITE_READER.sqlinc",
+        "sha256": "c0c7b32a56ad4974759932c38214691888d3bd4a8d5400838ceb24943cde110d"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/27_POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+        "sha256": "9f8e8a6448ead46d3d35e539938a6d1b36996d3a39ce8688645d4db806e12238"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/28_12_complete_report_nullable_rounding_owner.sqlinc",
+        "sha256": "c41ff4b378ab64eb4e566fc552c4f589100e8fab6a6a9f2d4361985b1c3c2312"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/29_11_complete_historical_fixture_native_assignment.sqlinc",
+        "sha256": "c1e8aa26fbea0b47aa4bd800efb5ca293469deb8363c1f51f61645d731b3b5ac"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/30_09_complete_controlled_setup_transport.sqlinc",
+        "sha256": "5af440278222cf223ef4bcfc8b75c9d7f24828ed135366148d2ec4c85c3f910f"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/31_OWNER_ONLY_ADDITIONS_ACL.sqlinc",
+        "sha256": "acfbbf1b156ac7d9183185ed52b4b240f4543b404498732510e9ad526a2f6a25"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 131,
+    "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "3a32d4f53b0eb466e96e451466a90b45d4bf85c669be54d33f11fcbd04854962",
+    "sqlHash": "3c310c310d6115c483556d840b6447da530cf07566c98306357775d8f78d2e19",
+    "bytes": 118743,
+    "statements": 107,
+    "byteStart": 19032704,
+    "byteEnd": 19151447,
+    "startLine": 315833,
+    "endLine": 317333,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+        "sha256": "6199a03d706976e2166eddaaa230e87326568c6a0cce2de876067bd8afad17bc"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/01_canonical_input_assert.sqlinc",
+        "sha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/02_complete_clock_scope.sqlinc",
+        "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/03_native_input_witness.sqlinc",
+        "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+        "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+        "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+        "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/07_complete_current_approval.sqlinc",
+        "sha256": "c85a08afc113c5a871bfada9a469a70c4a639278f92d30cab21916d0d4da165a"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+        "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 132,
+    "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "7078f5280e09afb24a2bc893371fdc6a113b55ee4d3fdc05fa26bb84393b4ddf",
+    "sqlHash": "c470fd3a3a230ca4edc159c532ee2914fd1864f78ff5580cac591acfb877d7bb",
+    "bytes": 446904,
+    "statements": 59,
+    "byteStart": 19151648,
+    "byteEnd": 19598552,
+    "startLine": 317335,
+    "endLine": 324446,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+        "sha256": "bf5a185e43e565afa45e9282d2bb9bca454a258b47bbd38cfa06ad2876339d23"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/13_slot_validators.sqlinc",
+        "sha256": "534b60cb7e7ada3fec3f376083da9633bf237cd4ea3918669ecdbc848435cb12"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/01_certificate.sqlinc",
+        "sha256": "34a5e2316ec74b00347f4c8d0f9f3a6f354435a2aa4f733cbe6d4043a890ced3"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/02_release_feature_strategy.sqlinc",
+        "sha256": "3dcfe4aa8ae3d407a184f24c0ca99f704be888161c34a1459bb5b99ea524433a"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/03_operational_dispatch.sqlinc",
+        "sha256": "ceea6d41132f9f5af4c5d6225766537a396a10dd4a2ea9c9ba8c45d3f3449142"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+        "sha256": "920a2fedc2f53680536b588d297e32b83fce8801b11167827c94b7ba7abe263e"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/05_complete_current_feature_setup.sqlinc",
+        "sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc",
+        "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+        "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/14_complete_native_snapshot_assembler.sqlinc",
+        "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/07_owner_acl.sqlinc",
+        "sha256": "ac499dd99243e7ef0e839e77c3ceb1cf0613b8777aab7bc570cc9f5d3c760724"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 133,
+    "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "890c04721cca58f3ca325303242b55ec0f6090cbed80ddb3a93d4c48014fb2c1",
+    "sqlHash": "ddab770c7371eb6adb85c7a085132665a816125cbaa921345cee13a9deb5682c",
+    "bytes": 84997,
+    "statements": 41,
+    "byteStart": 19598750,
+    "byteEnd": 19683747,
+    "startLine": 324448,
+    "endLine": 325825,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+        "sha256": "41f389a3d77ca66b2f2ebb0bf596cfd5b8790cd5e58ac29c0f063e8e1347dfea"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+        "sha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 134,
+    "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "155061e4626109906dd53899834dd180afa82f04610cc0f3317a34d008516acb",
+    "sqlHash": "57fdd21e34ac35e1f31a9ddcab6541791ede1bae49b8d8393b92fe809c16bcb9",
+    "bytes": 110254,
+    "statements": 4,
+    "byteStart": 19683940,
+    "byteEnd": 19794194,
+    "startLine": 325827,
+    "endLine": 327704,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields_v1.sql",
+        "sha256": "58af5fef09190f8343397013dc931521ea060579f0ad2be5c7ecf415f9ea6787"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+        "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 135,
+    "file": "supabase/repeatable/14102026_0953_healthroster_no_shifts_undo_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "a78540ed15daafae4991bf4384bcc584bbae317123121142bea003ac0295849a",
+    "sqlHash": "1f93850c4b166ac3249ce9f94b6b2efb0db11969bf3cdb283c8f515a44b6b28f",
+    "bytes": 7514,
+    "statements": 5,
+    "byteStart": 19794376,
+    "byteEnd": 19801890,
+    "startLine": 327706,
+    "endLine": 327800,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/14102026_0953_healthroster_no_shifts_undo_v1.sql",
+        "sha256": "25a25cf7c9f88352ca0dffadff6ecca151e80ac475ce7909d69479e780ad9547"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0953_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc",
+        "sha256": "0abb53f2ec202aac215476a45aee8ce70b6acfcbbd9806c285cb7359bad2267e"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 136,
+    "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "6d66e7ac0c37f15cbf36ebc5955bcb51a10633247eea448718cdea4b11848853",
+    "sqlHash": "83f4883088f0288f9fd4dcb77bbd8f69fa5effb3a0ba0e3d9d15092d5ef84327",
+    "bytes": 21589,
+    "statements": 16,
+    "byteStart": 19802079,
+    "byteEnd": 19823668,
+    "startLine": 327802,
+    "endLine": 328072,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+        "sha256": "886515c164737eaba7882a443213b6f678b00ecd8079da119720d042d4daadf7"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+        "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/01_complete_scalar_core.sqlinc",
+        "sha256": "b88809a015b97590f9ef9060329345c1b1fb8fffd9404eae2dd8a738f6d6a09e"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc",
+        "sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 137,
+    "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "df2dac127edb8dd35808328b3c9d88a412122141ab211947f71757daa9ee61bd",
+    "sqlHash": "b22632a7e2d56771ea9f97d1e7d2659821076a5251afadc9fcd03f2ea3a8744b",
+    "bytes": 93602,
+    "statements": 126,
+    "byteStart": 19823860,
+    "byteEnd": 19917462,
+    "startLine": 328074,
+    "endLine": 329195,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql",
+        "sha256": "a8ce93b2d17b66d4ef30aa04f66391b41f66d4c125e632bd57c8540f39217fd6"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/01_physical_token_and_retention_helpers.sqlinc",
+        "sha256": "5ff8eea6905813e1b2964d47497f23e46d2ba0eccdd8669ada202e0bc2a1d3c8"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/05_native_creator_intents_and_triggers.sqlinc",
+        "sha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/06_send_family_fence.sqlinc",
+        "sha256": "e9c44bcdd2b9221fedfad9960b5bb4b08b689e52199864168977c5c3f8a11022"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/08_complete_current_request.sqlinc",
+        "sha256": "c48af252f023a8bde617502fa34c4a470b4794dc2fe383fed8a0d9f1cd87d5ce"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/04_complete_native_lock_fence.sqlinc",
+        "sha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/09_native_child_raw_intents.sqlinc",
+        "sha256": "be53f4621a7aac921dbcc256acb97d194bd310e61130a9a69e41df5e44f9c162"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 138,
+    "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "98f062237a053d57dd7d75658d2fba84c5d880c4ed239aeca80f380392906291",
+    "sqlHash": "893cd067663cf6c70e4436e7dcfb9d86e42d9a6bddf6806c03bdf1a65ab5d0ed",
+    "bytes": 44182,
+    "statements": 19,
+    "byteStart": 19917646,
+    "byteEnd": 19961828,
+    "startLine": 329197,
+    "endLine": 329789,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors_v1.sql",
+        "sha256": "9ce8fc3e062cdeabef859ee323443a13f2de8caf26b7df6c77d272e3d365938f"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/06_complete_source_witness_policy_projection.sqlinc",
+        "sha256": "1be247f3656ce583549cbe4456d8ba5c7088a31bb983637df92c53060e5ccfd1"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/04_native_source_footprint.sqlinc",
+        "sha256": "7ce58452bf0980476076ad7f5ff9fd9e90ab0d49ddd40b99b37f32e7ddc6d59e"
+      },
+      {
+        "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/05_raw_selector_helpers.sqlinc",
+        "sha256": "dcce82193c28b7b68caad8532c798aa851f5c93aeca521c34d3529ff86d710de"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 139,
+    "file": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "866a54e8d11d3b53a55016cf66184685ef425b7c3c756213a6e3d49b3e058640",
+    "sqlHash": "597d217774bc262180bc71027b6266d75203b4f87841e846f9cce218954ab5e5",
+    "bytes": 14000,
+    "statements": 22,
+    "byteStart": 19962014,
+    "byteEnd": 19976014,
+    "startLine": 329791,
+    "endLine": 330033,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
+        "sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 140,
+    "file": "supabase/repeatable/15102026_0801_candidate_push_calendar_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "e25f5e47fd61b342624c5f14f883b7486bbf30bcd25954ef115532cf668405f2",
+    "sqlHash": "841df726e6ec581a0f1fad6a1c75323adc67053ac6ef2eb19ce308021310a455",
+    "bytes": 12093,
+    "statements": 11,
+    "byteStart": 19976192,
+    "byteEnd": 19988285,
+    "startLine": 330035,
+    "endLine": 330242,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15102026_0801_candidate_push_calendar_v1.sql",
+        "sha256": "c0ba94b1bb6c6859ef4acd09f7866c6efd9891a6baee54c143857de4072f3315"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 141,
+    "file": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "f1cbb453ffcbb4aa57d6919edcb9c2c66cce91cd272bb3cc12177f4833fefd3e",
+    "sqlHash": "d0374761796a48265fe2ac905cf4baa1d2f3ff8b60f862b997eccb112b8358ca",
+    "bytes": 20180,
+    "statements": 30,
+    "byteStart": 19988460,
+    "byteEnd": 20008640,
+    "startLine": 330244,
+    "endLine": 330519,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+        "sha256": "d83c11d3eae6ee290b545e714738e45f22c70a12de5d0a1188717b065f8bceff"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 142,
+    "file": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "7b76fa8794c8a89caf3081a67d36ea337112f78055f0b14984eafe5a5dbd0b25",
+    "sqlHash": "d378b262c9f802c200d90692f36eeafcbeef5523eaa9e82ee944ad94fc2a3164",
+    "bytes": 12781,
+    "statements": 9,
+    "byteStart": 20008823,
+    "byteEnd": 20021604,
+    "startLine": 330521,
+    "endLine": 330689,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
+        "sha256": "47789ebbdf899cb3045dc4164654c3eac499cf73a746bfdcb0b25c7c88beac5b"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 143,
+    "file": "supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "5a770d7c6c3008e1000eb168ef7a91967fa531c6c106883197f47efcef331641",
+    "sqlHash": "62d26bf27f88050a61e1114f08b70702d5940793ca72ca87b98c8c34607d36e1",
+    "bytes": 13226,
+    "statements": 8,
+    "byteStart": 20021792,
+    "byteEnd": 20035018,
+    "startLine": 330691,
+    "endLine": 330883,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql",
+        "sha256": "004bcc41d082c29ed7ac25b176dd3a1a4df4088522c453ec9f5fc584c82bf0e6"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 144,
+    "file": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "2739f369dd30bc976081df28bbed5d52ebfcfedf8933f7cf469dc1adfeb6a003",
+    "sqlHash": "19304f2b799903903ede0c6baf4a4cdcde3f405c3f7dc0332634a4c5a03228da",
+    "bytes": 27956,
+    "statements": 8,
+    "byteStart": 20035204,
+    "byteEnd": 20063160,
+    "startLine": 330885,
+    "endLine": 331273,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+        "sha256": "3b44a121db9bffd51351e579c251556c631ce19985d7a3b79b3c09c0f525c88f"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 145,
+    "file": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "d72d19314cfa0d5a80f0a405ffd38fab99994c79ea0fdaef05fc8045d550d3b4",
+    "sqlHash": "6eba652835bc659472e6671065563420cdb834b333ba59b1e6d069a48aaf13ea",
+    "bytes": 34479,
+    "statements": 18,
+    "byteStart": 20063352,
+    "byteEnd": 20097831,
+    "startLine": 331275,
+    "endLine": 331817,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+        "sha256": "ca631e753a0eb31c7468d5a757f89863e608012a66b11408c7a17a6109758037"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+        "sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 146,
+    "file": "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "ae76128f7dce1df0803660f1d464b4ab50591c4a66922a5d76df4eb9b30b92d8",
+    "sqlHash": "85c7d47c9a3508de8f8ccd0369f08ead4ec77bd25c39b4bf1ab4200fc084dad0",
+    "bytes": 55957,
+    "statements": 40,
+    "byteStart": 20098014,
+    "byteEnd": 20153971,
+    "startLine": 331819,
+    "endLine": 332589,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql",
+        "sha256": "19e92c8ce8fc01f87abcf553e5ebcc930e945fbaaad0af4ae8dbe0126ceee14b"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_timing/010_timing_validation.sqlinc",
+        "sha256": "5172f1534da1e297cc477d53ed8e8c9d08f1a62ea64885e15c27f53fbf7325b4"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_timing/030_global_owner.sqlinc",
+        "sha256": "9512c99a3fb22812dc0f8c93a80ae2faa272cd084793af75395c0ff84f733879"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+        "sha256": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/11_manager_due_scope.sqlinc",
+        "sha256": "107549cdc9e9e2606992465e386b40872b3d507d0140ad623a4109dc6ed93fc0"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+        "sha256": "6684d0eda2a12f502e896f46844e0dd10a658831fb298a51f95afcd8e748ab5e"
+      },
+      {
+        "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/14_not_finalised_dispatch.sqlinc",
+        "sha256": "a50ccbf231397fd968945ce6acc8c5fb96b9d3baa575caf523d68682c9f46832"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_timing/070_acl.sqlinc",
+        "sha256": "23e8f28ec1e958dc74f28182a3d28f25ef416fa154f8169cd6d1a0345eca9ba5"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 147,
+    "file": "supabase/repeatable/16102026_0319_weekly_contact_office_projection_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "136da95a8987968e25456a928048961cb82481ee37b3d131c245353db3fd8cba",
+    "sqlHash": "1bec4c6eaaede70f25ccd35d563c54540f188afad63d2afbde3656eb2b47a631",
+    "bytes": 36269,
+    "statements": 8,
+    "byteStart": 20154158,
+    "byteEnd": 20190427,
+    "startLine": 332591,
+    "endLine": 333093,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/16102026_0319_weekly_contact_office_projection_v1.sql",
+        "sha256": "d94522d3ae20fa2c4e2a0ee0d0918dbdd9ccc33e345995ae921cf8e19a07e597"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_office_rows_v1.sqlinc",
+        "sha256": "c96636a2fb262915af44830721e10a7bd4118646cf84b85353fe595faf104e0b"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 148,
+    "file": "supabase/repeatable/16102026_0339_weekly_contact_query_native_lifecycle_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "531115bc7efdd0fae3e1482a4a4cc50b830b7487f88f7db2154d4880dfcc6611",
+    "sqlHash": "ee5ed11006cb2bc1443d91038cbba214463a9cc5c8f16c01c768951c1e5d83ca",
+    "bytes": 107681,
+    "statements": 97,
+    "byteStart": 20190619,
+    "byteEnd": 20298300,
+    "startLine": 333095,
+    "endLine": 334395,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/16102026_0339_weekly_contact_query_native_lifecycle_v1.sql",
+        "sha256": "d7e7919d601e8d6a8eaf82a7fb30f3c46a287c2b08f95c98f8a7bdbbfefb2e79"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/020_native_member.sqlinc",
+        "sha256": "fc8c7e3f3ec942984a22fb5756c89f7e3f7315d067143b91c04cc1a00e665cfa"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/021_native_payload.sqlinc",
+        "sha256": "f7b74f5bda6d2bc5c3b009af10c5260b1b9928f2b7eeeab5d97d91417823aa37"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/030_native_enqueue_core.sqlinc",
+        "sha256": "80e333e33685204838b49ae2c67a055d5df5bf2534d9c66026a58955111d25de"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/040_native_recomposition.sqlinc",
+        "sha256": "74283f975ceb265dc07137652136414144c9c64d4f24a0cdfbf5fd80ae7ae7f6"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/050_native_entrypoints.sqlinc",
+        "sha256": "0958ee3673664c3f7b82860c0522d09db21bd73f25da67d35ac7d4ffc9a9476f"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/060_native_result.sqlinc",
+        "sha256": "9f0294f2aba86d207959eef9e3578736158c45595cc12693c01d39b8e06792b8"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/065_native_followup.sqlinc",
+        "sha256": "44847094bae7a1a33200a03540421c99d4f2bf1a69fcd7cb208f7a7da7ebc3e4"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/070_native_mark.sqlinc",
+        "sha256": "a76b9149dbadd5e9375a00eae5e2018d3bc74a5ced34b5f0b6fbaf4c0ed39705"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/080_native_integrity.sqlinc",
+        "sha256": "c416deb4987780e37714f99762c9c894266db5ef6409742773d6158885c00272"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/081_native_claim_guard.sqlinc",
+        "sha256": "eaf1a4f28f5fbb207b8e1ad8a30ca1de20966a78973c3ec1e50240284c261f3b"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+        "sha256": "9f9a54c9c3e650f6d71ccfd6fa0bd8181b9dfe816b6789e8be5907ea92a381dc"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/083_native_claim_bridge.sqlinc",
+        "sha256": "659c5c8c7186f99696fefcfed804fab35716b8826b2c89bc32d780a79017c3e9"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/086_pause_inflight.sqlinc",
+        "sha256": "788f41a4fba9de808fef4c7dc2bbacb11f887b6da2c74d54ff22d1b92fbe602e"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/090_acl.sqlinc",
+        "sha256": "d18558c0ab5ad72ae5fd17ad9d3de806d4b43cf7ff804137c4b1a5ff2a74bfa2"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_query/091_claim_acl.sqlinc",
+        "sha256": "5bdc4ac616da2e68d7e2b6e2b75338ad2addf86fb8b521f19be88ad35246e7cb"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 149,
+    "file": "supabase/repeatable/16102026_0403_weekly_contact_source_memberships_v1.sql",
+    "kind": "repeatable",
+    "sourceSqlHash": "0dd1b154cef912a0408feea783e28bb282a07a2532893c7ec63576c0f193e76d",
+    "sqlHash": "b2b12f9958f6ca5c1cde34aeab9ff1515de83144a3670ec8b44f3182822448f7",
+    "bytes": 24330,
+    "statements": 13,
+    "byteStart": 20298488,
+    "byteEnd": 20322818,
+    "startLine": 334397,
+    "endLine": 334658,
+    "sourceFiles": [
+      {
+        "file": "supabase/repeatable/16102026_0403_weekly_contact_source_memberships_v1.sql",
+        "sha256": "a2c5221c2531d7f0bb8245573fd945cfc3ba9c610be9b1b7acb5e5f37e8a9010"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_source_memberships/010_native_logical_members.sqlinc",
+        "sha256": "25fb04d1466e9f25c9e341d543cbe852c74614683f6e9c49dbc5dac21dc7e3a8"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_source_memberships/020_native_budget.sqlinc",
+        "sha256": "92f349dd431dc1808e4d6a851794a3cd51dbb898e804d3495592e2f51d382a7e"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_source_memberships/030_native_enrol_assert.sqlinc",
+        "sha256": "eed10421aa5248b6fe923456211b95189f0924c39de2eb158ebeb9d8e9d515ec"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_source_memberships/040_native_accept.sqlinc",
+        "sha256": "cab29973854389e28cbd22b3ac9a85c9dd5dcc6063156d499667c9c57367b914"
+      },
+      {
+        "file": "supabase/repeatable/includes/weekly_contact_source_memberships/090_acl.sqlinc",
+        "sha256": "3675ad3c2327fa0b41ad836ff9995e708868d2decda3660cac22e2b1e142bb39"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  },
+  {
+    "index": 150,
+    "file": "tests/healthroster/contact_source_native_start_v1.sql",
+    "kind": "verifier",
+    "sourceSqlHash": "c5e4fcbe3a98c8dcf74425b88fc814f1b8a7609b00c86892ac501def086a55bc",
+    "sqlHash": "c5e4fcbe3a98c8dcf74425b88fc814f1b8a7609b00c86892ac501def086a55bc",
+    "bytes": 128873,
+    "statements": 60,
+    "byteStart": 20322983,
+    "byteEnd": 20451856,
+    "startLine": 334660,
+    "endLine": 335871,
+    "sourceFiles": [
+      {
+        "file": "08_before-and-fresh-absence.sql",
+        "sha256": "276454ef6c32ef82d7f07f2f6b23141aca4a02cf82bbad6ee2d674422341624c"
+      },
+      {
+        "file": "00_service-boundaries.sql",
+        "sha256": "77fcf8e87bd16df89b7cf21abe8eb0d53d559996352e5b545e6f2d6e58f376b1"
+      },
+      {
+        "file": "01_fixture-input.sql",
+        "sha256": "d4df308febc10097af38238dcb0553282bee1a407759c8ead6cd461cdff48c23"
+      },
+      {
+        "file": "seed/10_generated-artifact.sql",
+        "sha256": "f9a93bec6d628e1d66c988a220edfe724ca2dcef61db192a2b34ca599ed56758"
+      },
+      {
+        "file": "seed/11_observe-native-inserts.sql",
+        "sha256": "407f5ba20ec4d4e5a3600c0086f50cba2eaecc70254782c1d9413ea16f6c75db"
+      },
+      {
+        "file": "seed/12_declare-native-weeks.sql",
+        "sha256": "6aba02d59f175d42f5d79ad533e37a3f7f058b7c8dd058ee74b3f16fe5a0f85f"
+      },
+      {
+        "file": "seed/13_native-publication.sql",
+        "sha256": "0b1f2a4a1a2ab9cb3f36692aa7cf9edb1eb1eee3c379525498800224407d4df0"
+      },
+      {
+        "file": "seed/14_native-generations.sql",
+        "sha256": "bc61289a2b1a7fb59cf7e3f23599df34c14018705a6165f57ee0ab3c7795eff1"
+      },
+      {
+        "file": "02_construct-native-targets.sql",
+        "sha256": "a16cf5139c5c112e48e2b9f003fa5c50de6fec4e4917f3cd7ffddbe68f73f035"
+      },
+      {
+        "file": "03_assertion-helpers.sql",
+        "sha256": "5e13a922ba6839a15af283591025085b2dfbd1426813a475526b4bbe46b411ae"
+      },
+      {
+        "file": "04_native-cases.sql",
+        "sha256": "e03eeaf317df27acdd5d742b09ab4e44291a89560202f857123f142caa9d4d1d"
+      },
+      {
+        "file": "05_fixture-qt-bootstrap.sql",
+        "sha256": "6eb97b2a4a48c12c7c34aa12de628c673032abd7556b0454b3366699a9fde77c"
+      },
+      {
+        "file": "06_run-native-cases.sql",
+        "sha256": "2bea4ce96ad78e70831aa4f46471a9cb9651c538254357d21e23a62e6e74502c"
+      },
+      {
+        "file": "07_capture-absence-set.sql",
+        "sha256": "95ef20c2d8fd6e6ac504d52db91b9a4c810246cef64a8cbcbaf4d3af5d712f35"
+      }
+    ],
+    "sourceOnlySpecialEnvelope": false
+  }
+]

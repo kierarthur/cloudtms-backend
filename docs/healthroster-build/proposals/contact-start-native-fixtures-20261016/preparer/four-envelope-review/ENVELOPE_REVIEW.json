@@ -1,0 +1,1917 @@
+{
+  "version": "CONTACT_FOUR_EXISTING_EXCEPTION_ENVELOPE_PROPOSAL_V1",
+  "rootCommit": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
+  "status": "SOURCE_REVIEW_PROPOSAL_NOT_EXECUTION_APPROVAL",
+  "rows": [
+    {
+      "path": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+      "reason": "INVOICE_GATE",
+      "rawClosureHash": "306489585aec541a38700bb7a9bca96b178fc291a644716a7079d45cf4a79747",
+      "rawExpandedHash": "c31ac9b9d36a0dae50fa623291d0a0d7cb2171d2c56378c51d651102c5cb7b08",
+      "fileHashes": [
+        {
+          "file": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+          "sha256": "343776bd40c097fd6aeb1328f0f93deb52727edce78c6dc094dd6c8c319a92d3",
+          "bytes": 944,
+          "physicalPackaging": [
+            {
+              "charStart": 23,
+              "charEnd": 29,
+              "byteStart": 23,
+              "byteEnd": 29,
+              "startLine": 3,
+              "endLine": 3,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 936,
+              "charEnd": 943,
+              "byteStart": 936,
+              "byteEnd": 943,
+              "startLine": 17,
+              "endLine": 17,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 0,
+              "charEnd": 21,
+              "byteStart": 0,
+              "byteEnd": 21,
+              "startLine": 1,
+              "endLine": 1,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+          "sha256": "b9657bf480a01ded860e38a345917fdbc86a69c80b1831eeff96e272758ea073",
+          "bytes": 112267,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 0,
+              "charEnd": 21,
+              "byteStart": 0,
+              "byteEnd": 21,
+              "startLine": 1,
+              "endLine": 1,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_detail_get.sql",
+          "sha256": "8833b9d788bb04dbec300c3c1f17715d7ddefc2c59f395b869cd25629721010d",
+          "bytes": 35054,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        },
+        {
+          "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql",
+          "sha256": "4a198923913dc362b056772344d607ca9685b195b961a33b8d05542fdf03b45c",
+          "bytes": 147499,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        },
+        {
+          "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql",
+          "sha256": "0c527cab3a5989918719dc8b192c2cf6f8c2162fb150710fe1121891f5da152e",
+          "bytes": 118254,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        },
+        {
+          "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_context_batch.sql",
+          "sha256": "385e4e7b3b36c51c1fe32afffc61117e092748c42fd68a8aeaf4c18e2d8c67b3",
+          "bytes": 33091,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        },
+        {
+          "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql",
+          "sha256": "b618abc8bc8e5ce44a05c54209db88bc0c08d1e11a81ad39e5507209868b64b0",
+          "bytes": 110074,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        },
+        {
+          "file": "supabase/repeatable/03092026_1644_invoice_apply_edits_frozen_authority_acl_v1.sql",
+          "sha256": "16b8a349a684cdc9cdb5e9ecee446d57ef5a8ef9fbf131630163317987b5a6e4",
+          "bytes": 856,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        }
+      ],
+      "exactProposedRemovals": [
+        {
+          "charStart": 0,
+          "charEnd": 21,
+          "byteStart": 0,
+          "byteEnd": 21,
+          "startLine": 1,
+          "endLine": 1,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 23,
+          "charEnd": 29,
+          "byteStart": 23,
+          "byteEnd": 29,
+          "startLine": 3,
+          "endLine": 3,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 31,
+          "charEnd": 52,
+          "byteStart": 31,
+          "byteEnd": 52,
+          "startLine": 5,
+          "endLine": 5,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 557401,
+          "charEnd": 557408,
+          "byteStart": 557409,
+          "byteEnd": 557416,
+          "startLine": 11017,
+          "endLine": 11017,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        }
+      ],
+      "preservedMetaSequence": [
+        {
+          "text": "\\gset",
+          "charStart": 355,
+          "sha256": "68e7f909ddaa7daba75ab616fd442591dc7ea5a93e7fb59d94197bf11d5e556f"
+        },
+        {
+          "text": "\\if :invoice_presentation_active_work",
+          "charStart": 362,
+          "sha256": "3b8073ca3f92d091912cf31f0ef32d16a04956ba44beb5a0a6455fcabf712d07"
+        },
+        {
+          "text": "\\else",
+          "charStart": 498,
+          "sha256": "0ff1d4210a87f53123df29205380480007a0bb9be975880fa15223d48e6e5ff6"
+        },
+        {
+          "text": "\\endif",
+          "charStart": 112289,
+          "sha256": "446e8ab0db71edc3ccf4b09a9165e87c34905ccbbced288410e7cc8a7156a599"
+        }
+      ],
+      "doCalls": [
+        {
+          "head": "DO",
+          "charStart": 400,
+          "charEnd": 497,
+          "sha256": "e4446be5fdb9ea627bbdd50080f2f92ed8358eef28071881849bfca96e0134ff",
+          "sql": "do $blocked$\nbegin\n  raise exception 'INVOICE_PRESENTATION_SNAPSHOT_ACTIVE_WORK';\nend;\n$blocked$;",
+          "scope": "ORIGINAL_CONDITIONAL_BLOCKED_ASSERTION",
+          "directNativeCallees": []
+        }
+      ],
+      "effectReview": "Retain exact native SELECT current invoice_operation_chunks active DOCUMENT_PLAN/BUILD_MANIFEST or ISSUE_INVOICE/FREEZE; retain original gset/if/else/endif and blocked DO. Append exact unitCheckpointSql gate. True or missing actual variable must fail; never force false. Existing resetWriterSql unsets the variable before the original command.",
+      "candidate": {
+        "file": "30072026_1216_invoice_timesheet_refs_ward_selective_numbering.review.psql",
+        "sha256": "95b9013bb1f0074ec5b19b96cc75fca97c1ea09a8b22f7ded629f99217623add",
+        "bytes": 557886
+      },
+      "existingNativeGate": {
+        "owner": "scripts/cloudtms-managed-release.mjs::unitCheckpointSql",
+        "ownerSourceHash": "4e4b827621a68011da46b72cbeac40c3b45d23a942b6eff5d0f97966800bde7a",
+        "literal": "\n\\if :{?invoice_presentation_active_work}\n  select pg_catalog.set_config('cloudtms.managed.invoice_active_work', :'invoice_presentation_active_work', false);\n  do $gate$ begin if pg_catalog.current_setting('cloudtms.managed.invoice_active_work')::boolean\n    then raise exception 'CLOUDTMS_INVOICE_INSTALL_DEFERRED_ACTIVE_WORK'; end if; end $gate$;\n\\else\n  do $gate$ begin raise exception 'CLOUDTMS_INVOICE_INSTALL_GATE_MISSING'; end $gate$;\n\\endif\n",
+        "sha256": "62bb8efc92cd8bbbb9a9a6b080107773bf4277fc3d38640cdd5be8db49f9b793",
+        "requiredPreUnitReset": "\\unset invoice_presentation_active_work"
+      },
+      "forbiddenRemovals": [
+        "FUNCTION_OR_PROCEDURE_BODY_TRANSACTION",
+        "OTHER_SQL",
+        "GSET_IF_ELSE_ENDIF",
+        "NATIVE_DO",
+        "ACTIVE_WORK_QUERY_OR_REFUSAL"
+      ],
+      "executionQualification": "PROPOSAL_ONLY_ROOT_REVIEW_REQUIRED_NATIVE_NOT_RUN"
+    },
+    {
+      "path": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "reason": "INVOICE_SETTINGS",
+      "rawClosureHash": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+      "rawExpandedHash": "780c14afd8d2b5584e7cc4b9662f9fda0d127312c135cc2724128aa2711e4510",
+      "fileHashes": [
+        {
+          "file": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+          "sha256": "a9b639df6471cb2873a7239f6da6d78152d387144cd2a5364c675cce52aa47a4",
+          "bytes": 583,
+          "physicalPackaging": [
+            {
+              "charStart": 388,
+              "charEnd": 394,
+              "byteStart": 388,
+              "byteEnd": 394,
+              "startLine": 9,
+              "endLine": 9,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 575,
+              "charEnd": 582,
+              "byteStart": 575,
+              "byteEnd": 582,
+              "startLine": 14,
+              "endLine": 14,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 0,
+              "charEnd": 21,
+              "byteStart": 0,
+              "byteEnd": 21,
+              "startLine": 1,
+              "endLine": 1,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql",
+          "sha256": "fcaa3b21d8da86ef6c4553ec637e203c4af673e78358339cd4f880f558ab788a",
+          "bytes": 1218,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 618,
+              "charEnd": 639,
+              "byteStart": 618,
+              "byteEnd": 639,
+              "startLine": 12,
+              "endLine": 12,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+          "sha256": "3531e980fd4e3c1a10f7f967a55c639b7be02c069724be946fb2e22c53626065",
+          "bytes": 249839,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        },
+        {
+          "file": "supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql",
+          "sha256": "9093e8f09ffea82bf383503357b6a5509be2436a053a1566fa99040a5961fcb0",
+          "bytes": 234886,
+          "physicalPackaging": [
+            {
+              "charStart": 207,
+              "charEnd": 213,
+              "byteStart": 207,
+              "byteEnd": 213,
+              "startLine": 7,
+              "endLine": 7,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 230238,
+              "charEnd": 230245,
+              "byteStart": 234878,
+              "byteEnd": 234885,
+              "startLine": 4907,
+              "endLine": 4907,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 184,
+              "charEnd": 205,
+              "byteStart": 184,
+              "byteEnd": 205,
+              "startLine": 5,
+              "endLine": 5,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+          "sha256": "40460c7c5778c3c5d5f772917688ce96a18c11cd1bcc0f1b1da85d43e1d71b04",
+          "bytes": 179772,
+          "physicalPackaging": [
+            {
+              "charStart": 473,
+              "charEnd": 479,
+              "byteStart": 473,
+              "byteEnd": 479,
+              "startLine": 10,
+              "endLine": 10,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 179762,
+              "charEnd": 179769,
+              "byteStart": 179764,
+              "byteEnd": 179771,
+              "startLine": 3580,
+              "endLine": 3580,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 450,
+              "charEnd": 471,
+              "byteStart": 450,
+              "byteEnd": 471,
+              "startLine": 8,
+              "endLine": 8,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18",
+          "bytes": 70450,
+          "physicalPackaging": [
+            {
+              "charStart": 23,
+              "charEnd": 29,
+              "byteStart": 23,
+              "byteEnd": 29,
+              "startLine": 3,
+              "endLine": 3,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 23718,
+              "charEnd": 23725,
+              "byteStart": 23718,
+              "byteEnd": 23725,
+              "startLine": 470,
+              "endLine": 470,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            },
+            {
+              "charStart": 23727,
+              "charEnd": 23733,
+              "byteStart": 23727,
+              "byteEnd": 23733,
+              "startLine": 472,
+              "endLine": 472,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 30879,
+              "charEnd": 30886,
+              "byteStart": 30879,
+              "byteEnd": 30886,
+              "startLine": 641,
+              "endLine": 641,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            },
+            {
+              "charStart": 30888,
+              "charEnd": 30894,
+              "byteStart": 30888,
+              "byteEnd": 30894,
+              "startLine": 643,
+              "endLine": 643,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 47731,
+              "charEnd": 47738,
+              "byteStart": 47731,
+              "byteEnd": 47738,
+              "startLine": 1048,
+              "endLine": 1048,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            },
+            {
+              "charStart": 47740,
+              "charEnd": 47746,
+              "byteStart": 47740,
+              "byteEnd": 47746,
+              "startLine": 1050,
+              "endLine": 1050,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 70442,
+              "charEnd": 70449,
+              "byteStart": 70442,
+              "byteEnd": 70449,
+              "startLine": 1557,
+              "endLine": 1557,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 0,
+              "charEnd": 21,
+              "byteStart": 0,
+              "byteEnd": 21,
+              "startLine": 1,
+              "endLine": 1,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql",
+          "sha256": "0e0e2d64770b265e2dd221629896f1ccf57a87251c65d099fd82794b90ac0691",
+          "bytes": 112802,
+          "physicalPackaging": [
+            {
+              "charStart": 294,
+              "charEnd": 300,
+              "byteStart": 294,
+              "byteEnd": 300,
+              "startLine": 7,
+              "endLine": 7,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 112792,
+              "charEnd": 112799,
+              "byteStart": 112794,
+              "byteEnd": 112801,
+              "startLine": 2179,
+              "endLine": 2179,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 271,
+              "charEnd": 292,
+              "byteStart": 271,
+              "byteEnd": 292,
+              "startLine": 5,
+              "endLine": 5,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql",
+          "sha256": "b7b2266a582d70c17a438fc19df6d5af1ecc4557b04bb13412a9b0c50b2e7b24",
+          "bytes": 889,
+          "physicalPackaging": [
+            {
+              "charStart": 313,
+              "charEnd": 319,
+              "byteStart": 313,
+              "byteEnd": 319,
+              "startLine": 8,
+              "endLine": 8,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 881,
+              "charEnd": 888,
+              "byteStart": 881,
+              "byteEnd": 888,
+              "startLine": 20,
+              "endLine": 20,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 290,
+              "charEnd": 311,
+              "byteStart": 290,
+              "byteEnd": 311,
+              "startLine": 6,
+              "endLine": 6,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql",
+          "sha256": "f283c6011f70e4bf2534a7499d40ae797053f5d5e4cf115c3169ecb01d3f228c",
+          "bytes": 32097,
+          "physicalPackaging": [
+            {
+              "charStart": 432,
+              "charEnd": 438,
+              "byteStart": 432,
+              "byteEnd": 438,
+              "startLine": 10,
+              "endLine": 10,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 32089,
+              "charEnd": 32096,
+              "byteStart": 32089,
+              "byteEnd": 32096,
+              "startLine": 612,
+              "endLine": 612,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 409,
+              "charEnd": 430,
+              "byteStart": 409,
+              "byteEnd": 430,
+              "startLine": 8,
+              "endLine": 8,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql",
+          "sha256": "7cedd4190392d8f6ca0c660897bb5914c9a542a1ef1a4732827d0f6d0ecdbe7f",
+          "bytes": 2088,
+          "physicalPackaging": [
+            {
+              "charStart": 316,
+              "charEnd": 322,
+              "byteStart": 316,
+              "byteEnd": 322,
+              "startLine": 8,
+              "endLine": 8,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 2080,
+              "charEnd": 2087,
+              "byteStart": 2080,
+              "byteEnd": 2087,
+              "startLine": 62,
+              "endLine": 62,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 293,
+              "charEnd": 314,
+              "byteStart": 293,
+              "byteEnd": 314,
+              "startLine": 6,
+              "endLine": 6,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/04092026_1901_client_planned_override_refresh_v1.sql",
+          "sha256": "c3fe064c19895587ca09156372f35849a7fc17df1b3253e4bf4c3538237a58de",
+          "bytes": 1454,
+          "physicalPackaging": [
+            {
+              "charStart": 194,
+              "charEnd": 200,
+              "byteStart": 194,
+              "byteEnd": 200,
+              "startLine": 6,
+              "endLine": 6,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 1446,
+              "charEnd": 1453,
+              "byteStart": 1446,
+              "byteEnd": 1453,
+              "startLine": 45,
+              "endLine": 45,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 171,
+              "charEnd": 192,
+              "byteStart": 171,
+              "byteEnd": 192,
+              "startLine": 4,
+              "endLine": 4,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql",
+          "sha256": "f03871a1c0ff89d519b3650577691bc633c25c2018c4b7ab1c03e1a88b435dfb",
+          "bytes": 46462,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        }
+      ],
+      "exactProposedRemovals": [
+        {
+          "charStart": 0,
+          "charEnd": 21,
+          "byteStart": 0,
+          "byteEnd": 21,
+          "startLine": 1,
+          "endLine": 1,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 388,
+          "charEnd": 394,
+          "byteStart": 388,
+          "byteEnd": 394,
+          "startLine": 9,
+          "endLine": 9,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 1014,
+          "charEnd": 1035,
+          "byteStart": 1014,
+          "byteEnd": 1035,
+          "startLine": 22,
+          "endLine": 22,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 251055,
+          "charEnd": 251076,
+          "byteStart": 251061,
+          "byteEnd": 251082,
+          "startLine": 5265,
+          "endLine": 5265,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 251078,
+          "charEnd": 251084,
+          "byteStart": 251084,
+          "byteEnd": 251090,
+          "startLine": 5267,
+          "endLine": 5267,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 481109,
+          "charEnd": 481116,
+          "byteStart": 485755,
+          "byteEnd": 485762,
+          "startLine": 10167,
+          "endLine": 10167,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 481568,
+          "charEnd": 481589,
+          "byteStart": 486214,
+          "byteEnd": 486235,
+          "startLine": 10176,
+          "endLine": 10176,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 481591,
+          "charEnd": 481597,
+          "byteStart": 486237,
+          "byteEnd": 486243,
+          "startLine": 10178,
+          "endLine": 10178,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 660880,
+          "charEnd": 660887,
+          "byteStart": 665528,
+          "byteEnd": 665535,
+          "startLine": 13748,
+          "endLine": 13748,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 660889,
+          "charEnd": 660910,
+          "byteStart": 665537,
+          "byteEnd": 665558,
+          "startLine": 13750,
+          "endLine": 13750,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 660912,
+          "charEnd": 660918,
+          "byteStart": 665560,
+          "byteEnd": 665566,
+          "startLine": 13752,
+          "endLine": 13752,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 684607,
+          "charEnd": 684614,
+          "byteStart": 689255,
+          "byteEnd": 689262,
+          "startLine": 14219,
+          "endLine": 14219,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 684616,
+          "charEnd": 684622,
+          "byteStart": 689264,
+          "byteEnd": 689270,
+          "startLine": 14221,
+          "endLine": 14221,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 691768,
+          "charEnd": 691775,
+          "byteStart": 696416,
+          "byteEnd": 696423,
+          "startLine": 14390,
+          "endLine": 14390,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 691777,
+          "charEnd": 691783,
+          "byteStart": 696425,
+          "byteEnd": 696431,
+          "startLine": 14392,
+          "endLine": 14392,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 708620,
+          "charEnd": 708627,
+          "byteStart": 713268,
+          "byteEnd": 713275,
+          "startLine": 14797,
+          "endLine": 14797,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 708629,
+          "charEnd": 708635,
+          "byteStart": 713277,
+          "byteEnd": 713283,
+          "startLine": 14799,
+          "endLine": 14799,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 731331,
+          "charEnd": 731338,
+          "byteStart": 735979,
+          "byteEnd": 735986,
+          "startLine": 15306,
+          "endLine": 15306,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 731611,
+          "charEnd": 731632,
+          "byteStart": 736259,
+          "byteEnd": 736280,
+          "startLine": 15312,
+          "endLine": 15312,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 731634,
+          "charEnd": 731640,
+          "byteStart": 736282,
+          "byteEnd": 736288,
+          "startLine": 15314,
+          "endLine": 15314,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 844132,
+          "charEnd": 844139,
+          "byteStart": 848782,
+          "byteEnd": 848789,
+          "startLine": 17486,
+          "endLine": 17486,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 844431,
+          "charEnd": 844452,
+          "byteStart": 849081,
+          "byteEnd": 849102,
+          "startLine": 17493,
+          "endLine": 17493,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 844454,
+          "charEnd": 844460,
+          "byteStart": 849104,
+          "byteEnd": 849110,
+          "startLine": 17495,
+          "endLine": 17495,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 845022,
+          "charEnd": 845029,
+          "byteStart": 849672,
+          "byteEnd": 849679,
+          "startLine": 17507,
+          "endLine": 17507,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 845440,
+          "charEnd": 845461,
+          "byteStart": 850090,
+          "byteEnd": 850111,
+          "startLine": 17516,
+          "endLine": 17516,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 845463,
+          "charEnd": 845469,
+          "byteStart": 850113,
+          "byteEnd": 850119,
+          "startLine": 17518,
+          "endLine": 17518,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 877120,
+          "charEnd": 877127,
+          "byteStart": 881770,
+          "byteEnd": 881777,
+          "startLine": 18120,
+          "endLine": 18120,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 877422,
+          "charEnd": 877443,
+          "byteStart": 882072,
+          "byteEnd": 882093,
+          "startLine": 18127,
+          "endLine": 18127,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 877445,
+          "charEnd": 877451,
+          "byteStart": 882095,
+          "byteEnd": 882101,
+          "startLine": 18129,
+          "endLine": 18129,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 879209,
+          "charEnd": 879216,
+          "byteStart": 883859,
+          "byteEnd": 883866,
+          "startLine": 18183,
+          "endLine": 18183,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 879389,
+          "charEnd": 879410,
+          "byteStart": 884039,
+          "byteEnd": 884060,
+          "startLine": 18188,
+          "endLine": 18188,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 879412,
+          "charEnd": 879418,
+          "byteStart": 884062,
+          "byteEnd": 884068,
+          "startLine": 18190,
+          "endLine": 18190,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 880664,
+          "charEnd": 880671,
+          "byteStart": 885314,
+          "byteEnd": 885321,
+          "startLine": 18229,
+          "endLine": 18229,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 927138,
+          "charEnd": 927145,
+          "byteStart": 931788,
+          "byteEnd": 931795,
+          "startLine": 19198,
+          "endLine": 19198,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        }
+      ],
+      "preservedMetaSequence": [],
+      "doCalls": [
+        {
+          "head": "DO",
+          "charStart": 729014,
+          "charEnd": 731297,
+          "sha256": "28e80785f5a41e135c0bd641856301e1b04ce0121b1e0e2742bb43950f63bb4e",
+          "sql": "do $backfill$\ndeclare v_row record; v_snapshot jsonb; v_date date;\nbegin\n  perform private._contract_settings_refresh_all_planned_v1();\n  for v_row in\n    select t.timesheet_id,t.contract_id,t.week_ending_date,t.sheet_scope,c.client_id\n    from public.timesheets t\n    join public.contracts c on c.id=t.contract_id\n    where t.settings_authority_json='{}'::jsonb\n      and t.sheet_scope='WEEKLY'::public.timesheet_scope_enum\n    order by t.timesheet_id\n  loop\n    v_snapshot:=private._contract_settings_effective_core_v1(\n      v_row.client_id,v_row.contract_id,v_row.week_ending_date,'WEEKLY',null\n    );\n    update public.timesheets set\n      settings_authority_json=v_snapshot,\n      settings_authority_version='CONTRACT_SETTINGS_AUTHORITY_V1',\n      settings_authority_fingerprint=v_snapshot->>'authority_fingerprint',\n      settings_authority_resolved_at=(v_snapshot->>'resolved_at_utc')::timestamptz\n    where timesheet_id=v_row.timesheet_id and settings_authority_json='{}'::jsonb;\n  end loop;\n  for v_row in\n    select distinct on (t.timesheet_id)\n      t.timesheet_id,t.contract_id,t.week_ending_date,t.worked_start_iso,\n      t.scheduled_start_iso,tf.client_id\n    from public.timesheets t\n    join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current=true\n    where t.settings_authority_json='{}'::jsonb\n      and t.sheet_scope='DAILY'::public.timesheet_scope_enum\n      and tf.processed_at_utc is not null\n    order by t.timesheet_id,tf.computed_at_utc desc nulls last,tf.updated_at desc,tf.id desc\n  loop\n    v_date:=coalesce(\n      (v_row.worked_start_iso at time zone 'Europe/London')::date,\n      (v_row.scheduled_start_iso at time zone 'Europe/London')::date,\n      v_row.week_ending_date\n    );\n    v_snapshot:=private._contract_settings_effective_core_v1(\n      v_row.client_id,v_row.contract_id,v_date,'DAILY',null\n    );\n    update public.timesheets set\n      settings_authority_json=v_snapshot,\n      settings_authority_version='CONTRACT_SETTINGS_AUTHORITY_V1',\n      settings_authority_fingerprint=v_snapshot->>'authority_fingerprint',\n      settings_authority_resolved_at=(v_snapshot->>'resolved_at_utc')::timestamptz\n    where timesheet_id=v_row.timesheet_id and settings_authority_json='{}'::jsonb;\n  end loop;\nend\n$backfill$;",
+          "scope": "TOP_LEVEL_NATIVE_DO",
+          "directNativeCallees": [
+            "private._contract_settings_refresh_all_planned_v1"
+          ]
+        },
+        {
+          "head": "DO",
+          "charStart": 877820,
+          "charEnd": 878280,
+          "sha256": "e42a192cc85ab63612a53513cf73cbb98275e3e01e4e48f72eac7a2706506b5c",
+          "sql": "do $acl$\nbegin\n  if exists (\n    select 1 from pg_catalog.pg_roles where rolname='authenticator'\n  ) then\n    execute 'revoke all on function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid) from authenticator';\n  end if;\n  if exists (\n    select 1 from pg_catalog.pg_roles where rolname='supabase_admin'\n  ) then\n    execute 'revoke all on function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid) from supabase_admin';\n  end if;\nend;\n$acl$;",
+          "scope": "TOP_LEVEL_NATIVE_DO",
+          "directNativeCallees": []
+        },
+        {
+          "head": "DO",
+          "charStart": 878654,
+          "charEnd": 879207,
+          "sha256": "2c9095beea602d7ec495ea00550b835154dd7542b47830eada8f5e4f6195dd83",
+          "sql": "do $verify_acl$\nbegin\n  if has_function_privilege(\n       'anon',\n       'public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)',\n       'EXECUTE'\n     )\n     or has_function_privilege(\n       'authenticated',\n       'public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)',\n       'EXECUTE'\n     )\n     or not has_function_privilege(\n       'service_role',\n       'public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)',\n       'EXECUTE'\n     ) then\n    raise exception 'TIMESHEET_QR_REFUSE_SERVICE_ACL_INVALID';\n  end if;\nend;\n$verify_acl$;",
+          "scope": "TOP_LEVEL_NATIVE_DO",
+          "directNativeCallees": []
+        }
+      ],
+      "effectReview": "Retain actual settings backfill and both ACL DOs unchanged. Backfill reads live settings and writes missing authority snapshots on Weekly TS and processed Daily TS, plus real planned ContractWeek settings refresh. Whole native business writes remain in the one outer rollback and full fresh restoration; not a definition-only unit.",
+      "candidate": {
+        "file": "08092026_1615_invoice_correction_stream_parity_v1.review.psql",
+        "sha256": "98c7c3623e465faf38e50ea260e5a5c05df7ee408993af00d22f529a73f6e4f2",
+        "bytes": 931430
+      },
+      "existingNativeGate": null,
+      "forbiddenRemovals": [
+        "FUNCTION_OR_PROCEDURE_BODY_TRANSACTION",
+        "OTHER_SQL",
+        "GSET_IF_ELSE_ENDIF",
+        "NATIVE_DO",
+        "ACTIVE_WORK_QUERY_OR_REFUSAL"
+      ],
+      "executionQualification": "PROPOSAL_ONLY_ROOT_REVIEW_REQUIRED_NATIVE_NOT_RUN"
+    },
+    {
+      "path": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "reason": "SOURCE_REASSERT",
+      "rawClosureHash": "4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53",
+      "rawExpandedHash": "303cd3fa80c5080831d1ae16b3ebf612898f3c764f141cb974a3302ad98e6215",
+      "fileHashes": [
+        {
+          "file": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+          "sha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c",
+          "bytes": 1648,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 1307,
+              "charEnd": 1328,
+              "byteStart": 1307,
+              "byteEnd": 1328,
+              "startLine": 17,
+              "endLine": 17,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1.sql",
+          "sha256": "fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e",
+          "bytes": 8712,
+          "physicalPackaging": [
+            {
+              "charStart": 207,
+              "charEnd": 213,
+              "byteStart": 207,
+              "byteEnd": 213,
+              "startLine": 6,
+              "endLine": 6,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 8704,
+              "charEnd": 8711,
+              "byteStart": 8704,
+              "byteEnd": 8711,
+              "startLine": 190,
+              "endLine": 190,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 184,
+              "charEnd": 205,
+              "byteStart": 184,
+              "byteEnd": 205,
+              "startLine": 4,
+              "endLine": 4,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+          "bytes": 67947,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        },
+        {
+          "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+          "sha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff",
+          "bytes": 29493,
+          "physicalPackaging": [
+            {
+              "charStart": 23,
+              "charEnd": 29,
+              "byteStart": 23,
+              "byteEnd": 29,
+              "startLine": 3,
+              "endLine": 3,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 29485,
+              "charEnd": 29492,
+              "byteStart": 29485,
+              "byteEnd": 29492,
+              "startLine": 805,
+              "endLine": 805,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 0,
+              "charEnd": 21,
+              "byteStart": 0,
+              "byteEnd": 21,
+              "startLine": 1,
+              "endLine": 1,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+          "sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+          "bytes": 170666,
+          "physicalPackaging": [
+            {
+              "charStart": 443,
+              "charEnd": 449,
+              "byteStart": 443,
+              "byteEnd": 449,
+              "startLine": 9,
+              "endLine": 9,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 170658,
+              "charEnd": 170665,
+              "byteStart": 170658,
+              "byteEnd": 170665,
+              "startLine": 3324,
+              "endLine": 3324,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 420,
+              "charEnd": 441,
+              "byteStart": 420,
+              "byteEnd": 441,
+              "startLine": 7,
+              "endLine": 7,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+          "sha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d",
+          "bytes": 164164,
+          "physicalPackaging": [
+            {
+              "charStart": 797,
+              "charEnd": 803,
+              "byteStart": 797,
+              "byteEnd": 803,
+              "startLine": 12,
+              "endLine": 12,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 164156,
+              "charEnd": 164163,
+              "byteStart": 164156,
+              "byteEnd": 164163,
+              "startLine": 3479,
+              "endLine": 3479,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 774,
+              "charEnd": 795,
+              "byteStart": 774,
+              "byteEnd": 795,
+              "startLine": 10,
+              "endLine": 10,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        }
+      ],
+      "exactProposedRemovals": [
+        {
+          "charStart": 1307,
+          "charEnd": 1328,
+          "byteStart": 1307,
+          "byteEnd": 1328,
+          "startLine": 17,
+          "endLine": 17,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 1513,
+          "charEnd": 1534,
+          "byteStart": 1513,
+          "byteEnd": 1534,
+          "startLine": 21,
+          "endLine": 21,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 1536,
+          "charEnd": 1542,
+          "byteStart": 1536,
+          "byteEnd": 1542,
+          "startLine": 23,
+          "endLine": 23,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 10033,
+          "charEnd": 10040,
+          "byteStart": 10033,
+          "byteEnd": 10040,
+          "startLine": 207,
+          "endLine": 207,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 77990,
+          "charEnd": 78011,
+          "byteStart": 77990,
+          "byteEnd": 78011,
+          "startLine": 1651,
+          "endLine": 1651,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 78013,
+          "charEnd": 78019,
+          "byteStart": 78013,
+          "byteEnd": 78019,
+          "startLine": 1653,
+          "endLine": 1653,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 107475,
+          "charEnd": 107482,
+          "byteStart": 107475,
+          "byteEnd": 107482,
+          "startLine": 2455,
+          "endLine": 2455,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 107904,
+          "charEnd": 107925,
+          "byteStart": 107904,
+          "byteEnd": 107925,
+          "startLine": 2463,
+          "endLine": 2463,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 107927,
+          "charEnd": 107933,
+          "byteStart": 107927,
+          "byteEnd": 107933,
+          "startLine": 2465,
+          "endLine": 2465,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 278142,
+          "charEnd": 278149,
+          "byteStart": 278142,
+          "byteEnd": 278149,
+          "startLine": 5780,
+          "endLine": 5780,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 278925,
+          "charEnd": 278946,
+          "byteStart": 278925,
+          "byteEnd": 278946,
+          "startLine": 5791,
+          "endLine": 5791,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 278948,
+          "charEnd": 278954,
+          "byteStart": 278948,
+          "byteEnd": 278954,
+          "startLine": 5793,
+          "endLine": 5793,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 442307,
+          "charEnd": 442314,
+          "byteStart": 442307,
+          "byteEnd": 442314,
+          "startLine": 9260,
+          "endLine": 9260,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        }
+      ],
+      "preservedMetaSequence": [],
+      "doCalls": [
+        {
+          "head": "DO",
+          "charStart": 242119,
+          "charEnd": 242723,
+          "sha256": "2fb38a704ed41d137436171beae43d19574e36cad122f5c62c1a716bd8c74d01",
+          "sql": "DO $do$\nBEGIN\n  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN\n    EXECUTE 'REVOKE ALL ON FUNCTION public.contract_week_delete_planned(uuid, uuid) FROM anon';\n  END IF;\n  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN\n    EXECUTE 'REVOKE ALL ON FUNCTION public.contract_week_delete_planned(uuid, uuid) FROM authenticated';\n  END IF;\n  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'service_role') THEN\n    EXECUTE 'GRANT EXECUTE ON FUNCTION public.contract_week_delete_planned(uuid, uuid) TO service_role';\n  END IF;\nEND\n$do$;",
+          "scope": "TOP_LEVEL_NATIVE_DO",
+          "directNativeCallees": []
+        }
+      ],
+      "effectReview": "Retain one existing role-presence ACL DO unchanged; its only executed strings revoke anon/authenticated and grant service_role EXECUTE on public.contract_week_delete_planned(uuid,uuid). No business function is invoked by that DO.",
+      "candidate": {
+        "file": "28092026_1234_stage2_hosted_final_authority_reassert_v1.review.psql",
+        "sha256": "5146bee2de821e6565193fb1183d24deb8fee7e4f3c3a10c54eb37629254f556",
+        "bytes": 442159
+      },
+      "existingNativeGate": null,
+      "forbiddenRemovals": [
+        "FUNCTION_OR_PROCEDURE_BODY_TRANSACTION",
+        "OTHER_SQL",
+        "GSET_IF_ELSE_ENDIF",
+        "NATIVE_DO",
+        "ACTIVE_WORK_QUERY_OR_REFUSAL"
+      ],
+      "executionQualification": "PROPOSAL_ONLY_ROOT_REVIEW_REQUIRED_NATIVE_NOT_RUN"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "reason": "CANDIDATE_RUNTIME_RELOAD",
+      "rawClosureHash": "eece10432b4080b90cee9a1077336b0accbeb08c08f6d3649d4b4fa754e9de1b",
+      "rawExpandedHash": "f70517567eaded0a84e8e8c766b6362c19c691cbd627a5bcba219e219dd17d70",
+      "fileHashes": [
+        {
+          "file": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+          "sha256": "61f0f9fc8e7a1ea8bc041d9b9c4faf67a0633d0f1600923c5d09ea2bba1094b5",
+          "bytes": 545,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 157,
+              "charEnd": 178,
+              "byteStart": 157,
+              "byteEnd": 178,
+              "startLine": 4,
+              "endLine": 4,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+          "sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b",
+          "bytes": 18584,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        },
+        {
+          "file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+          "sha256": "7203e1229a43f4545bcc85b3ce280ffadc2968dceb5f80aa8a7b54d01328978b",
+          "bytes": 27734,
+          "physicalPackaging": [],
+          "physicalOnErrorStop": []
+        },
+        {
+          "file": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+          "sha256": "523f5faf9d05c4151d2615438030470beae937c9cf794c5fb4c8c205c73fd2b5",
+          "bytes": 10383,
+          "physicalPackaging": [
+            {
+              "charStart": 206,
+              "charEnd": 212,
+              "byteStart": 206,
+              "byteEnd": 212,
+              "startLine": 6,
+              "endLine": 6,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 10375,
+              "charEnd": 10382,
+              "byteStart": 10375,
+              "byteEnd": 10382,
+              "startLine": 256,
+              "endLine": 256,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 183,
+              "charEnd": 204,
+              "byteStart": 183,
+              "byteEnd": 204,
+              "startLine": 4,
+              "endLine": 4,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+          "sha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338",
+          "bytes": 22294,
+          "physicalPackaging": [
+            {
+              "charStart": 215,
+              "charEnd": 221,
+              "byteStart": 215,
+              "byteEnd": 221,
+              "startLine": 6,
+              "endLine": 6,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 22286,
+              "charEnd": 22293,
+              "byteStart": 22286,
+              "byteEnd": 22293,
+              "startLine": 348,
+              "endLine": 348,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": [
+            {
+              "charStart": 192,
+              "charEnd": 213,
+              "byteStart": 192,
+              "byteEnd": 213,
+              "startLine": 4,
+              "endLine": 4,
+              "command": "\\set ON_ERROR_STOP on",
+              "kind": "PHYSICAL_ERROR_STOP",
+              "token": "\\set ON_ERROR_STOP on",
+              "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+            }
+          ]
+        },
+        {
+          "file": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+          "sha256": "7335affaf41db16171e882d03174c7e3547bd48fd1b1cec903f81523088b979b",
+          "bytes": 15251,
+          "physicalPackaging": [
+            {
+              "charStart": 261,
+              "charEnd": 267,
+              "byteStart": 261,
+              "byteEnd": 267,
+              "startLine": 4,
+              "endLine": 4,
+              "command": "BEGIN",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "begin;",
+              "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+            },
+            {
+              "charStart": 15243,
+              "charEnd": 15250,
+              "byteStart": 15243,
+              "byteEnd": 15250,
+              "startLine": 272,
+              "endLine": 272,
+              "command": "COMMIT",
+              "kind": "PHYSICAL_SOURCE_CONTROL",
+              "token": "commit;",
+              "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+            }
+          ],
+          "physicalOnErrorStop": []
+        }
+      ],
+      "exactProposedRemovals": [
+        {
+          "charStart": 157,
+          "charEnd": 178,
+          "byteStart": 157,
+          "byteEnd": 178,
+          "startLine": 4,
+          "endLine": 4,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 46683,
+          "charEnd": 46704,
+          "byteStart": 46683,
+          "byteEnd": 46704,
+          "startLine": 833,
+          "endLine": 833,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 46706,
+          "charEnd": 46712,
+          "byteStart": 46706,
+          "byteEnd": 46712,
+          "startLine": 835,
+          "endLine": 835,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 56875,
+          "charEnd": 56882,
+          "byteStart": 56875,
+          "byteEnd": 56882,
+          "startLine": 1085,
+          "endLine": 1085,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 57076,
+          "charEnd": 57097,
+          "byteStart": 57076,
+          "byteEnd": 57097,
+          "startLine": 1090,
+          "endLine": 1090,
+          "command": "\\set ON_ERROR_STOP on",
+          "kind": "EXACT_ERROR_STOP_PACKAGING",
+          "token": "\\set ON_ERROR_STOP on",
+          "sha256": "a2f8e0dba859f61cd85f5c5c611fe44ec7480ba1491c8e965bd1a2f36097a1f0"
+        },
+        {
+          "charStart": 57099,
+          "charEnd": 57105,
+          "byteStart": 57099,
+          "byteEnd": 57105,
+          "startLine": 1092,
+          "endLine": 1092,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 79170,
+          "charEnd": 79177,
+          "byteStart": 79170,
+          "byteEnd": 79177,
+          "startLine": 1434,
+          "endLine": 1434,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        },
+        {
+          "charStart": 79440,
+          "charEnd": 79446,
+          "byteStart": 79440,
+          "byteEnd": 79446,
+          "startLine": 1439,
+          "endLine": 1439,
+          "command": "BEGIN",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "begin;",
+          "sha256": "edd65695b320db381bb184e32a5dfcc16b4d4c822f560f090224bb840c63958b"
+        },
+        {
+          "charStart": 94422,
+          "charEnd": 94429,
+          "byteStart": 94422,
+          "byteEnd": 94429,
+          "startLine": 1707,
+          "endLine": 1707,
+          "command": "COMMIT",
+          "kind": "EXACT_TOP_LEVEL_PACKAGING",
+          "token": "commit;",
+          "sha256": "364647c86405c505850634a548a540e7738f7690d7e5f7d744edf0ba1dbbc575"
+        }
+      ],
+      "preservedMetaSequence": [],
+      "doCalls": [
+        {
+          "head": "DO",
+          "charStart": 56164,
+          "charEnd": 56873,
+          "sha256": "990afbe0f1690616a8bb3d184ca1103144c2d79466753107b792506575c9dd8a",
+          "sql": "do $grants$\nbegin\n  if exists(select 1 from pg_roles where rolname='anon') then\n    revoke all on function public.candidate_daily_legacy_availability_apply_atomic_v1(\n      jsonb,text,uuid,text,jsonb,text\n    ) from anon;\n  end if;\n  if exists(select 1 from pg_roles where rolname='authenticated') then\n    revoke all on function public.candidate_daily_legacy_availability_apply_atomic_v1(\n      jsonb,text,uuid,text,jsonb,text\n    ) from authenticated;\n  end if;\n  if exists(select 1 from pg_roles where rolname='service_role') then\n    grant execute on function public.candidate_daily_legacy_availability_apply_atomic_v1(\n      jsonb,text,uuid,text,jsonb,text\n    ) to service_role;\n  end if;\nend;\n$grants$;",
+          "scope": "TOP_LEVEL_NATIVE_DO",
+          "directNativeCallees": []
+        },
+        {
+          "head": "DO",
+          "charStart": 78525,
+          "charEnd": 79168,
+          "sha256": "95f97edadf9b08438b108f2e9cbeda5bbc64d5b0237c73385d617cc720b29452",
+          "sql": "do $grants$\nbegin\n  if exists(select 1 from pg_roles where rolname='anon') then\n    revoke all on function public.candidate_daily_reconciliation_apply_atomic_v1(jsonb,uuid,text,jsonb,text) from anon;\n  end if;\n  if exists(select 1 from pg_roles where rolname='authenticated') then\n    revoke all on function public.candidate_daily_reconciliation_apply_atomic_v1(jsonb,uuid,text,jsonb,text) from authenticated;\n  end if;\n  if exists(select 1 from pg_roles where rolname='service_role') then\n    grant execute on function public.candidate_daily_reconciliation_apply_atomic_v1(jsonb,uuid,text,jsonb,text) to service_role;\n  end if;\nend;\n$grants$;",
+          "scope": "TOP_LEVEL_NATIVE_DO",
+          "directNativeCallees": []
+        }
+      ],
+      "effectReview": "Retain both role-presence grants DOs unchanged; only revoke browser and grant existing service_role EXECUTE for the two actual Daily native apply functions. No apply function is called.",
+      "candidate": {
+        "file": "13102026_1418_candidate_runtime_reload_authority_v1.review.psql",
+        "sha256": "b65da1d7d8213871479dabe304e5486bd4242365a09b12915576339f1fa8af6c",
+        "bytes": 94361
+      },
+      "existingNativeGate": null,
+      "forbiddenRemovals": [
+        "FUNCTION_OR_PROCEDURE_BODY_TRANSACTION",
+        "OTHER_SQL",
+        "GSET_IF_ELSE_ENDIF",
+        "NATIVE_DO",
+        "ACTIVE_WORK_QUERY_OR_REFUSAL"
+      ],
+      "executionQualification": "PROPOSAL_ONLY_ROOT_REVIEW_REQUIRED_NATIVE_NOT_RUN"
+    }
+  ],
+  "businessEffect": "Native settings snapshot backfill retained; no payment/provider/email drain, no Bank approval or fake publication. Existing actual active-work refusal retained.",
+  "databaseCalls": 0,
+  "newExecutionAdapters": 0,
+  "sharedWrites": 0,
+  "spanCoordinateRule": "All spans refer to RAW canonical expanded/source bytes before logical-owner mapping. Verify exact raw closure/file hashes first; never reuse pre-map offsets on mapped SQL. Existing owner adapter/review remains root authority."
+}

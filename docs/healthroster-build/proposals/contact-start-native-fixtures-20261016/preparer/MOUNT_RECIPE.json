@@ -1,0 +1,74 @@
+{
+  "version": "CONTACT_NATIVE_SOURCE_PREPARER_MOUNT_RECIPE_V1",
+  "root_source_commit": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
+  "status": "SOURCE_REVIEW_READY_NATIVE_NOT_RUN",
+  "execution_authority": "ROOT_ONLY_SEND5B_FULL_EXACT_COMMIT_INSTALL_MILESTONE_REHEARSAL_IF_ALL_EXISTING_GATES_PASS",
+  "no_direct_tool_fit": true,
+  "no_new_executor_or_local_database": true,
+  "source_review_artifacts": [
+    "generated/MANIFEST.json",
+    "generated/10_complete-native-preparation.sql",
+    "generated/30_complete-trial-inner.sql",
+    "generated/UNIT_INDEX.json",
+    "generated/STATEMENT_MAP.json",
+    "generated/FINAL_ROUTINE_OWNERS.json",
+    "generated/FINAL_REGISTRY_DRIFT.json",
+    "REGISTRY_REVIEW_CENSUS.json",
+    "ALL_SELECTED_MANAGED_EXCEPTIONS.json",
+    "four-envelope-review/ENVELOPE_REVIEW.json",
+    "four-envelope-review/CALLEE_EFFECT_AUDIT.json"
+  ],
+  "fixture_mount": {
+    "source": "generated/20_genuine-source-prefix-and-25-cases.sql",
+    "target": "tests/healthroster/contact_source_native_start_v1.sql",
+    "sha256": "64b0663f7a190e9db572a8162d444459b0531385c768c33ab5b1fa25e0c81e8e",
+    "bytes": 128874,
+    "case_count": 25,
+    "unit": "ONE_ADDITIONALLY_REVIEWED_VERIFIER_IN_EXISTING_FULL_COMPILER",
+    "keep_all_mandatory_full_verifiers": true
+  },
+  "fresh_native_baseline": [
+    "generated/00_fresh-I1-predecessor.sql",
+    "generated/01_fresh-restoration-relations.sql",
+    "generated/02_before-and-fresh-schema-absence.sql",
+    "../08_before-and-fresh-absence.sql"
+  ],
+  "existing_owner_helpers": {
+    "fresh_predecessor": "scripts/healthroster-install2-native-gate.mjs::validateInstall2Predecessor",
+    "restoration": "scripts/healthroster-install1-full-rehearsal.mjs::restorationSnapshotSql+assertFreshRestoration",
+    "owned_turn": "scripts/healthroster-rehearsal-turn.mjs::withSharedRehearsalTurn",
+    "full_compile": "scripts/healthroster-install1-full-rehearsal.mjs::compileFullRehearsal",
+    "same_session": "scripts/healthroster-install1-full-rehearsal.mjs::executePsqlWithinOwnedTurn"
+  },
+  "required_after_rollback": [
+    "ROOT_EXISTING_FULL_CATALOGUE_LEDGER_RELATION_FINGERPRINT_PROOF",
+    "EXACT_NEW_SCHEMA_AND_MARKER_ABSENCE",
+    "PARENT08_NAMESPACE_ABSENCE",
+    "EMIT_FRESH_VERIFICATION_FROM_ACTUAL_NATIVE07_UUID_RECEIPT_AND_SETTINGS_SEALS"
+  ],
+  "current_holds": [
+    "DIRECT_KIER_ENVELOPE_EXCEEDED",
+    "ROOT_SEND5B_FULL_EXACT_COMMIT_MILESTONE_REHEARSAL_REVIEW_REQUIRED",
+    "EXISTING_MANAGED_REPLAY_POLICY_HASHES_AND_ATOMIC_ENVELOPES_REVIEW_REQUIRED",
+    "FRESH_I1_CATALOGUE_LEDGER_BASELINE_REQUIRED",
+    "EXACT_PENDING_CONTRACT_SEAL_AND_FULL_REHEARSAL_VERIFIER_REVIEW_REQUIRED",
+    "FRESH_FULL_RESTORATION_AND_ACTUAL_UUID_ABSENCE_REQUIRED",
+    "NATIVE_PREFIX_START_25_CASES_NOT_RUN"
+  ],
+  "direct_envelope": {
+    "bytes": 20451857,
+    "statements": 5134,
+    "limits": {
+      "sqlBytes": 8000000,
+      "parsedStatements": 1000
+    },
+    "fits": false,
+    "statementMetric": "SOURCE_PACKAGING_LEXER_RAW_PSQL_NOT_DIRECT_TOOL_SQL_PARSE",
+    "directToolParse": "NOT_APPLICABLE_SOURCE_REVIEW_PACKAGE"
+  },
+  "grammar_sql_statements": 5135,
+  "special_envelope_commands_removed_by_preparer": 0,
+  "database_calls": 0,
+  "external_calls": 0,
+  "native_result": "NOT_RUN"
+}

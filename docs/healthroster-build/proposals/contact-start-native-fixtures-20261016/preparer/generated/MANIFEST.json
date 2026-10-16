@@ -1,0 +1,3056 @@
+{
+  "version": "CONTACT_NATIVE_TRIAL_PREPARER_V1",
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "artifactType": "COMPLETE_SOURCE_REVIEW_PACKAGE_WITH_UNCLASSIFIED_SPECIAL_ENVELOPES_NOT_EXECUTABLE",
+  "rootCommit": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
+  "observedRootHead": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
+  "selectedReviewedInputsUnchanged": true,
+  "installedCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "installedContractHash": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+  "installedCounts": {
+    "migrations": 389,
+    "repeatables": 1019
+  },
+  "currentCounts": {
+    "migrations": 407,
+    "repeatables": 1074
+  },
+  "pendingCounts": {
+    "migrations": 18,
+    "repeatables": 60
+  },
+  "finalClosureCounts": {
+    "migrations": 18,
+    "repeatables": 132
+  },
+  "closurePolicy": "COMPLETE_PENDING_SOURCE_PLUS_REGISTERED_CLOSURES_AND_ACTUAL_FINAL_SOURCE_OWNERS_NO_DEPENDENCY_EXCLUSION",
+  "officialFinalGate": "PASS",
+  "registryDriftCount": 0,
+  "managedRejections": [
+    {
+      "file": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+      "rejection": "MANAGED_EXECUTABLE_TREE_REQUIRED",
+      "executionQualification": "HELD_NOT_APPROVED",
+      "actualClosureHash": "306489585aec541a38700bb7a9bca96b178fc291a644716a7079d45cf4a79747",
+      "sourceOnlySpecialEnvelope": true,
+      "removedEnvelopeCommands": [],
+      "metaCommands": [
+        "\\set",
+        "\\gset",
+        "\\if",
+        "\\else",
+        "\\endif"
+      ],
+      "transactionCommands": [
+        "BEGIN",
+        "COMMIT"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "rejection": "MANAGED_EXECUTABLE_TREE_REQUIRED",
+      "executionQualification": "HELD_NOT_APPROVED",
+      "actualClosureHash": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+      "sourceOnlySpecialEnvelope": true,
+      "removedEnvelopeCommands": [],
+      "metaCommands": [
+        "\\set"
+      ],
+      "transactionCommands": [
+        "BEGIN",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "COMMIT"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "rejection": "MANAGED_EXECUTABLE_TREE_REQUIRED",
+      "executionQualification": "HELD_NOT_APPROVED",
+      "actualClosureHash": "4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53",
+      "sourceOnlySpecialEnvelope": true,
+      "removedEnvelopeCommands": [],
+      "metaCommands": [
+        "\\set"
+      ],
+      "transactionCommands": [
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "rejection": "MANAGED_EXECUTABLE_TREE_REQUIRED",
+      "executionQualification": "HELD_NOT_APPROVED",
+      "actualClosureHash": "eece10432b4080b90cee9a1077336b0accbeb08c08f6d3649d4b4fa754e9de1b",
+      "sourceOnlySpecialEnvelope": true,
+      "removedEnvelopeCommands": [],
+      "metaCommands": [
+        "\\set"
+      ],
+      "transactionCommands": [
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT"
+      ]
+    }
+  ],
+  "currentContractIsI1": true,
+  "pendingCandidateContractQualification": "NOT_GENERATED_OR_ADOPTED_BY_THIS_PREPARER",
+  "directEnvelope": {
+    "bytes": 20451857,
+    "statements": 5134,
+    "limits": {
+      "sqlBytes": 8000000,
+      "parsedStatements": 1000
+    },
+    "fits": false,
+    "statementMetric": "SOURCE_PACKAGING_LEXER_RAW_PSQL_NOT_DIRECT_TOOL_SQL_PARSE",
+    "directToolParse": "NOT_APPLICABLE_SOURCE_REVIEW_PACKAGE"
+  },
+  "nativePreparation": {
+    "bytes": 20322819,
+    "statements": 5074,
+    "sha256": "637a383b0c3ff98bfe20aca24ed47a0cd7920e7cabd5875d8e3cc155b9dd8b53"
+  },
+  "fixture": {
+    "mount": "tests/healthroster/contact_source_native_start_v1.sql",
+    "caseCount": 25,
+    "bytes": 128874,
+    "statements": 60,
+    "sha256": "64b0663f7a190e9db572a8162d444459b0531385c768c33ab5b1fa25e0c81e8e",
+    "sourceFiles": [
+      {
+        "file": "08_before-and-fresh-absence.sql",
+        "sha256": "276454ef6c32ef82d7f07f2f6b23141aca4a02cf82bbad6ee2d674422341624c"
+      },
+      {
+        "file": "00_service-boundaries.sql",
+        "sha256": "77fcf8e87bd16df89b7cf21abe8eb0d53d559996352e5b545e6f2d6e58f376b1"
+      },
+      {
+        "file": "01_fixture-input.sql",
+        "sha256": "d4df308febc10097af38238dcb0553282bee1a407759c8ead6cd461cdff48c23"
+      },
+      {
+        "file": "seed/10_generated-artifact.sql",
+        "sha256": "f9a93bec6d628e1d66c988a220edfe724ca2dcef61db192a2b34ca599ed56758"
+      },
+      {
+        "file": "seed/11_observe-native-inserts.sql",
+        "sha256": "407f5ba20ec4d4e5a3600c0086f50cba2eaecc70254782c1d9413ea16f6c75db"
+      },
+      {
+        "file": "seed/12_declare-native-weeks.sql",
+        "sha256": "6aba02d59f175d42f5d79ad533e37a3f7f058b7c8dd058ee74b3f16fe5a0f85f"
+      },
+      {
+        "file": "seed/13_native-publication.sql",
+        "sha256": "0b1f2a4a1a2ab9cb3f36692aa7cf9edb1eb1eee3c379525498800224407d4df0"
+      },
+      {
+        "file": "seed/14_native-generations.sql",
+        "sha256": "bc61289a2b1a7fb59cf7e3f23599df34c14018705a6165f57ee0ab3c7795eff1"
+      },
+      {
+        "file": "02_construct-native-targets.sql",
+        "sha256": "a16cf5139c5c112e48e2b9f003fa5c50de6fec4e4917f3cd7ffddbe68f73f035"
+      },
+      {
+        "file": "03_assertion-helpers.sql",
+        "sha256": "5e13a922ba6839a15af283591025085b2dfbd1426813a475526b4bbe46b411ae"
+      },
+      {
+        "file": "04_native-cases.sql",
+        "sha256": "e03eeaf317df27acdd5d742b09ab4e44291a89560202f857123f142caa9d4d1d"
+      },
+      {
+        "file": "05_fixture-qt-bootstrap.sql",
+        "sha256": "6eb97b2a4a48c12c7c34aa12de628c673032abd7556b0454b3366699a9fde77c"
+      },
+      {
+        "file": "06_run-native-cases.sql",
+        "sha256": "2bea4ce96ad78e70831aa4f46471a9cb9651c538254357d21e23a62e6e74502c"
+      },
+      {
+        "file": "07_capture-absence-set.sql",
+        "sha256": "95ef20c2d8fd6e6ac504d52db91b9a4c810246cef64a8cbcbaf4d3af5d712f35"
+      }
+    ]
+  },
+  "exactNewRelationAbsence": [
+    "private.timesheet_contract_current_placements",
+    "private.timesheet_contract_family_aliases",
+    "private.timesheet_contract_move_billing_slices",
+    "private.timesheet_contract_move_capabilities",
+    "private.timesheet_contract_move_capability_consumptions",
+    "private.timesheet_contract_move_execution_contexts",
+    "private.timesheet_contract_move_invoice_scope_lines",
+    "private.timesheet_contract_move_invoice_scopes",
+    "private.timesheet_contract_move_members",
+    "private.timesheet_contract_move_operations",
+    "private.timesheet_contract_move_replacement_groups",
+    "private.timesheet_contract_move_replacement_members",
+    "private.timesheet_contract_move_requests",
+    "private.timesheet_contract_move_reviews",
+    "private.timesheet_contract_move_scope_fences",
+    "private.timesheet_correction_a0_transaction_fences",
+    "private.timesheet_correction_requests",
+    "private.weekly_source_pay_decision_bindings",
+    "private.weekly_source_pay_decision_members",
+    "private.weekly_source_pay_decision_preview_assemblies",
+    "private.weekly_source_pay_decision_preview_quotes",
+    "private.weekly_source_pay_decision_requests",
+    "private.weekly_source_pay_decision_reviews",
+    "private.weekly_source_pay_decision_unprotect_preparations",
+    "private.weekly_source_pay_decisions",
+    "public.candidate_push_timing_commands",
+    "public.candidate_push_timing_policy",
+    "public.weekly_contact_delivery_memberships",
+    "public.weekly_contact_pause_commands",
+    "public.weekly_contact_pause_events",
+    "public.weekly_contact_pause_scopes",
+    "public.weekly_contact_recheck_tasks",
+    "public.weekly_contact_submission_permits",
+    "public.weekly_source_global_settings_receipts",
+    "public.weekly_source_group_rule_assignments",
+    "public.weekly_source_invoice_hold_releases",
+    "public.weekly_source_rule_set_versions",
+    "public.weekly_source_rule_sets",
+    "public.weekly_source_self_bill_report_line_bindings",
+    "public.weekly_source_self_bill_reports"
+  ],
+  "finalRoutineCount": 905,
+  "sourceFiles": [
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "d551c08f0afee928962e859464599944c54eedfd7f0e5289c3c7a98a46de6230"
+    },
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    },
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "file": "scripts/cloudtms-managed-execution-policy.mjs",
+      "sha256": "069e6d1d2361c6c8026b193116db565d40503b9a2e338ddb75c4b1dadb15d415"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "4e4b827621a68011da46b72cbeac40c3b45d23a942b6eff5d0f97966800bde7a"
+    },
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "sha256": "45c120e90133fe49a06477d7a06dde2f41ac0b09052bf1d5489b90a088f640c4"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "96bddacd87c6e4720e7453eef51f2cac069f0304022eb31d5d8534339e379aca"
+    },
+    {
+      "file": "scripts/healthroster-install2-installed-source.mjs",
+      "sha256": "e4bd2904103c01446bc65e8c7590a86b20964a7ed4e3ecce2fe0970d6c98ecdc"
+    },
+    {
+      "file": "scripts/healthroster-install2-native-gate.mjs",
+      "sha256": "ec3c2eca5b648fdf2996dbeb3c116e39ef37fdc54d1e896cfb4489682cbad9be"
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-resource-guard.mjs",
+      "sha256": "55160d28cd55fd5e710f5dc4d48d0d43769af9986d16a2c7c29dbc134e3e5433"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-stream-observer.mjs",
+      "sha256": "d78c4742e831dbe38870a2df202ab54808028ec4fa7f399288c511cb3e494fa6"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "sha256": "b7e16cdb12e8b5c6d11894e53296e4d20aeeaceb8dd968ed32936884f3ab3610"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "scripts/weekly-source-reader-release.mjs",
+      "sha256": "b35b0d8698fbddecfc2b98f9226d5ecc88a076643366533822c3e3178b72e313"
+    },
+    {
+      "file": "supabase/migrations/13102026_1112_healthroster_invoice_support_members_v1.sql",
+      "sha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b"
+    },
+    {
+      "file": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+    },
+    {
+      "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+    },
+    {
+      "file": "supabase/migrations/13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+      "sha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6"
+    },
+    {
+      "file": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae"
+    },
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+    },
+    {
+      "file": "supabase/migrations/13102026_1456_weekly_source_protection_query_support_v1.sql",
+      "sha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17"
+    },
+    {
+      "file": "supabase/migrations/13102026_1519_healthroster_correction_reason_bound_v1.sql",
+      "sha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2"
+    },
+    {
+      "file": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0"
+    },
+    {
+      "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16"
+    },
+    {
+      "file": "supabase/migrations/15102026_0205_healthroster_source_arbiter_kernel.sql",
+      "sha256": "f348f0b6849a40a58124c992128edd78ac95d886f764baed8bb70a4c341b82b7"
+    },
+    {
+      "file": "supabase/migrations/15102026_0800_candidate_push_timing_authority.sql",
+      "sha256": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450"
+    },
+    {
+      "file": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+      "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+    },
+    {
+      "file": "supabase/migrations/16102026_0135_weekly_contact_native_attempt_permit_unique.sql",
+      "sha256": "24fcf9601266f3600c37cbc30aa4a3e87dbd7fbcd3e78f9ad2acfeaa508dfde1"
+    },
+    {
+      "file": "supabase/migrations/16102026_0142_weekly_contact_reuse_native_attempt_uniqueness.sql",
+      "sha256": "24b09382b7a99536ecdb85dcbc8a29588e1aa87106a8adeb11cc411ce71010b6"
+    },
+    {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82"
+    },
+    {
+      "file": "supabase/migrations/16102026_0244_weekly_contact_global_timing_schema.sql",
+      "sha256": "36d9470a7b8033899ad2fe9c6ef37e4cf428f397290eed4e4caab575dfb93d40"
+    },
+    {
+      "file": "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+      "sha256": "82a3d0487cb483e692c7fdf590a75280a4dd88a7a1057b43a7fb39639da4e9e7"
+    },
+    {
+      "file": "supabase/release/baseline-repeatable-lock.json",
+      "sha256": "c2779bc67cfbef0c10bbd7937f4fe571dce5daab4e8be3f93fa46bcc2cdcef5d"
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "supabase/release/current-release.json",
+      "sha256": "9eb294e6417d9a30671f3cf5cdad01d58c0e3734947ae63f603e11dd5f92a9cb"
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    },
+    {
+      "file": "supabase/release/migration-lock.json",
+      "sha256": "f2afa08d1c8efe06790348a26665ac80535c56c294ca092ef86d80893111a204"
+    },
+    {
+      "file": "supabase/release/protected-boundary-lock.json",
+      "sha256": "60d2d3d8a74535cf52c5213803d19b0654af48955b6096726e2b7a882545f30c"
+    },
+    {
+      "file": "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+      "sha256": "40460c7c5778c3c5d5f772917688ce96a18c11cd1bcc0f1b1da85d43e1d71b04"
+    },
+    {
+      "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+    },
+    {
+      "file": "supabase/repeatable/03092026_1644_invoice_apply_edits_frozen_authority_acl_v1.sql",
+      "sha256": "16b8a349a684cdc9cdb5e9ecee446d57ef5a8ef9fbf131630163317987b5a6e4"
+    },
+    {
+      "file": "supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql",
+      "sha256": "0e0e2d64770b265e2dd221629896f1ccf57a87251c65d099fd82794b90ac0691"
+    },
+    {
+      "file": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
+      "sha256": "2246174a1df3ffb20da053b548b2224fe8b67afcc6f0e4fe3fabf3b35f876b67"
+    },
+    {
+      "file": "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
+      "sha256": "e69026ef2315b9dd4d6905b8a63fdde07d17152b56e1b7d99674e10e05ade561"
+    },
+    {
+      "file": "supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql",
+      "sha256": "b7b2266a582d70c17a438fc19df6d5af1ecc4557b04bb13412a9b0c50b2e7b24"
+    },
+    {
+      "file": "supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql",
+      "sha256": "f283c6011f70e4bf2534a7499d40ae797053f5d5e4cf115c3169ecb01d3f228c"
+    },
+    {
+      "file": "supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql",
+      "sha256": "7cedd4190392d8f6ca0c660897bb5914c9a542a1ef1a4732827d0f6d0ecdbe7f"
+    },
+    {
+      "file": "supabase/repeatable/04092026_1901_client_planned_override_refresh_v1.sql",
+      "sha256": "c3fe064c19895587ca09156372f35849a7fc17df1b3253e4bf4c3538237a58de"
+    },
+    {
+      "file": "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
+      "sha256": "f4eb08c3c963c1850396642fd98947cf27722d96e20b6bb77db394635c3341aa"
+    },
+    {
+      "file": "supabase/repeatable/04102026_0555_banking_pay_next_factual_legacy_projection_boundary_v1.sql",
+      "sha256": "eba6b3596434aa6eecf133594579fb7833a7e3acdbe7d6fbd3676fbfb913db86"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0308_weekly_source_pay_query_gate_v1.sql",
+      "sha256": "fb70e23a80c7686606b5cbf8f17e2878ca37224f5752067d903e9a253a3cbfa8"
+    },
+    {
+      "file": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6"
+    },
+    {
+      "file": "supabase/repeatable/05102026_1417_weekly_source_coverage_support/qualified_coverage.inc",
+      "sha256": "45a8a0bc2364318d734c1ec678d79fa617d549a62c3a532ef851c928773aee6e"
+    },
+    {
+      "file": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+      "sha256": "b57dfa67b74854a67563af4c3ec14cd43250ab9c2528eee54de27a2c1370a18e"
+    },
+    {
+      "file": "supabase/repeatable/06102026_1523_import_review_catalog_generic_plan_bound_v1.sql",
+      "sha256": "a4517329d2b823d871eb1beed88a741acde65cb5a61651fc0251d763117c0302"
+    },
+    {
+      "file": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+      "sha256": "3531e980fd4e3c1a10f7f967a55c639b7be02c069724be946fb2e22c53626065"
+    },
+    {
+      "file": "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql",
+      "sha256": "fcaa3b21d8da86ef6c4553ec637e203c4af673e78358339cd4f880f558ab788a"
+    },
+    {
+      "file": "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+      "sha256": "91972ea67ab5c4898ff513a970a4cb63fa8a333a599ebcee4634977662f58511"
+    },
+    {
+      "file": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql",
+      "sha256": "846bbeeeb3902faf8144bfa4cd5ee6be25fded6a5556a1fd25fa123dc29d40dd"
+    },
+    {
+      "file": "supabase/repeatable/08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1.sql",
+      "sha256": "fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e"
+    },
+    {
+      "file": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "sha256": "a9b639df6471cb2873a7239f6da6d78152d387144cd2a5364c675cce52aa47a4"
+    },
+    {
+      "file": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2"
+    },
+    {
+      "file": "supabase/repeatable/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+      "sha256": "1b31ce2a61c51d1d811630436d12d5470817bef326e1a010ca7cba990e321fdf"
+    },
+    {
+      "file": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b"
+    },
+    {
+      "file": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "sha256": "2698331479177a246d2ee581f71aa1514a1479f05bf6258c1ceb1f4f490104cf"
+    },
+    {
+      "file": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
+      "sha256": "98067ed7e0ce4a633769f46df1582227cf50239bfc54402bc93d14ed261914a6"
+    },
+    {
+      "file": "supabase/repeatable/10102026_0755_banking_pay_next_first_authorise_qualified_gate_v1.sql",
+      "sha256": "07ae1fdb4f1cca122b05c879657e62321d8c5bb731e6b01525d9cd6eaa30282f"
+    },
+    {
+      "file": "supabase/repeatable/10102026_0806_banking_pay_next_first_authorise_covered_hours_gate_v1.sql",
+      "sha256": "8024efb3a366ed6b2247df94c910a5176a5c9721a75d5688997b07b1c845bfe5"
+    },
+    {
+      "file": "supabase/repeatable/10102026_0853_weekly_source_pay_query_entry_admission_v1.sql",
+      "sha256": "abc874b2d4ed90529ad591ea08a0a5131a6bc32c86109911631c8516e18b2e94"
+    },
+    {
+      "file": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+      "sha256": "0b93bd0b0379348930ba9cff38b45e0196eb52b54690cfc29ea257252b922e06"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "sha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "sha256": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql",
+      "sha256": "7203e1229a43f4545bcc85b3ce280ffadc2968dceb5f80aa8a7b54d01328978b"
+    },
+    {
+      "file": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+      "sha256": "b629fcc003b76ae61ec58c0d35ad2256a4cf9f736e307f5dc80e0a8fb0e20438"
+    },
+    {
+      "file": "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql",
+      "sha256": "c5b00d79a426e3240c4e826fb1beb7867d48e553bbe7fb9affe5eed7813c40ed"
+    },
+    {
+      "file": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "sha256": "b15ecade7ce3a2b6248970e097b966ea7cbe2bb81645f2154a63517bccc0a8ce"
+    },
+    {
+      "file": "supabase/repeatable/10102026_2240_banking_pay_next_selection_receipt_cleanup_guard_v1.sql",
+      "sha256": "36c7a3aac98fc13431e03f4534ba3ca1242cef2fc735775ebe890e412bb1fb45"
+    },
+    {
+      "file": "supabase/repeatable/10102026_2245_banking_pay_next_subset_upload_context_v1.sql",
+      "sha256": "100860c0519833d09092d750ef6f788243a9a85d223a1de3f539c38417541bba"
+    },
+    {
+      "file": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+      "sha256": "3f012d20437cd5dad8fa9fb621391abee4f6a115432674fa2a27311f6dfa2386"
+    },
+    {
+      "file": "supabase/repeatable/11102026_0121_banking_pay_next_case_choice_control_point_v1.sql",
+      "sha256": "673da7ba198a86034416bec9b9c9dad4097865d770463b2620a0c7281079087d"
+    },
+    {
+      "file": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
+      "sha256": "7f4fea9a4e0ed1c5bfe51f9ad9ec17e20a27223c7280b490779640db0722f879"
+    },
+    {
+      "file": "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+      "sha256": "e81a8d32dcfa00688d2163d4b0b4740dd80721c90623121bdd3e5664e1c24aee"
+    },
+    {
+      "file": "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+      "sha256": "1f7d1710ca9e839f412dfb3dd40c9933489565ace3c8a6f945cd203c230863d7"
+    },
+    {
+      "file": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "sha256": "f257379bc578932a314a06dffd9c57c02eeb23353b52430a2bf8824b95e7293a"
+    },
+    {
+      "file": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "sha256": "b8cf134b06ce48b5778455ce0a1ae2c247bad918ebe1cccbff668804513ed47a"
+    },
+    {
+      "file": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+      "sha256": "8519557c6e07221a063eb294e498064d9133a025f39065cbf6e9c5d7b995e605"
+    },
+    {
+      "file": "supabase/repeatable/11102026_0910_banking_pay_next_fence_expiry_row_projection_v1.sql",
+      "sha256": "14803cd993ef6bb7e3c11835e73ad2219520ce5f1dcf55b0dabdb74088d9c654"
+    },
+    {
+      "file": "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql",
+      "sha256": "3a7fb9b31fd418a16cb56a3a9980233a96ddd2ee66af64f59cadd1f807e02977"
+    },
+    {
+      "file": "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+      "sha256": "6d13cd0a482be586e49aaeb2fb67bca82613aa092657cbcc208e6f012acbc0a6"
+    },
+    {
+      "file": "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+      "sha256": "5777b06b24a9aa1dedad608926a6481665c02043652a842f3af4ab6a48e4750d"
+    },
+    {
+      "file": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "sha256": "6fe0e93f9dd42fbff6427591490d7d6cff4d40129560bc423d707af6c1d52e6b"
+    },
+    {
+      "file": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "sha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd"
+    },
+    {
+      "file": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "sha256": "1a57552c42d63d0dc885a4e7294472c03319537da9e913a96cbbadc10c2ab879"
+    },
+    {
+      "file": "supabase/repeatable/11102026_2337_banking_pay_next_source_query_workbench_refresh_v1.sql",
+      "sha256": "7a5b4b56a424b2a07a8a54c895c4841ce6e0c2cbb0e9a80d06c27842fde5c96a"
+    },
+    {
+      "file": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+      "sha256": "df49b9fc467ae9806effb19ec3b39820059fa46980a2f761f62c3f2ef8a96111"
+    },
+    {
+      "file": "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
+      "sha256": "2d9822da9881179dace5a2ff97c65fcaaf1dfbaad920337a4701133d8fe487ae"
+    },
+    {
+      "file": "supabase/repeatable/12102026_0718_banking_pay_next_active_preparations_v1.sql",
+      "sha256": "d040516eb3ad9f488025493d6d91eaadc99cee780c22e09f7fddb7ecc3eff501"
+    },
+    {
+      "file": "supabase/repeatable/12102026_0945_banking_pay_next_bounded_preparation_enrollment_v1.sql",
+      "sha256": "c181f7fe067d1c58387dc5eeee803e9a51da3295abaa202bdbe34da53c719056"
+    },
+    {
+      "file": "supabase/repeatable/12102026_1125_banking_pay_next_channel_draft_list_v1.sql",
+      "sha256": "8e92c091539f1516af4ca0cc8ec1d37c81d9b60b7caa48a3ea92b3548adde60a"
+    },
+    {
+      "file": "supabase/repeatable/12102026_1215_banking_pay_next_case_net_replacement_v1.sql",
+      "sha256": "23ac3d72354eac877d66e61e249de0db94f1f820bb7f96a90373c5d5425d72bb"
+    },
+    {
+      "file": "supabase/repeatable/12102026_1419_banking_pay_next_ordinary_umbrella_components_v1.sql",
+      "sha256": "16e437bb839cc8a91cd499303cd0d6d574797e3fb0da6570ab24858d42b6ce87"
+    },
+    {
+      "file": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+      "sha256": "0a3936fbfcd31e9fe327df2af40f1bf996d78aa01a48ae753b2765e294cf0e66"
+    },
+    {
+      "file": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+      "sha256": "14364da406573b3031c30e9f2f74148862109eb2c03613e0035b3897b6f0665b"
+    },
+    {
+      "file": "supabase/repeatable/12102026_1646_banking_pay_next_case_channel_resolution_v1.sql",
+      "sha256": "fec5dd533f37c45f26e46011a551009ae8d62fb93a18862e082b2acf74197456"
+    },
+    {
+      "file": "supabase/repeatable/12102026_1822_banking_pay_next_classified_work_collection_v1.sql",
+      "sha256": "b9650e9da89a3dca3b59bc33f73efc8acf132038dae163df826d1f18730990fd"
+    },
+    {
+      "file": "supabase/repeatable/12102026_2110_candidate_daily_legacy_two_way_availability_v1.sql",
+      "sha256": "523f5faf9d05c4151d2615438030470beae937c9cf794c5fb4c8c205c73fd2b5"
+    },
+    {
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_initial_source_certificate_v1.sql",
+      "sha256": "86de08dd3bf9a64e7e347e9d41cb1430515e3ed83dc906ecab1ce7940b470a16"
+    },
+    {
+      "file": "supabase/repeatable/12102026_2146_banking_pay_next_treatment_workbench_query_identity_v1.sql",
+      "sha256": "66bcfa404439221c75ccd23138f95f17ee651d0afa1789a5611e54ffbb66c522"
+    },
+    {
+      "file": "supabase/repeatable/12102026_2155_banking_pay_next_treatment_collection_identity_v1.sql",
+      "sha256": "9fa243c98655e950e670bcb65eb73ef554883cf00cb2e1824982a5ed407c8eee"
+    },
+    {
+      "file": "supabase/repeatable/12102026_2227_banking_pay_next_accepted_resolution_pin_v1.sql",
+      "sha256": "739e238d39d6848c50eb90746c8f5486091eb39e38948ea28c95ae5d6353f8e8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0005_banking_pay_next_captured_resolution_hold_v1.sql",
+      "sha256": "5dd92083243dde0bd41418da6436d28d1566c32c1b0a0a540d9a8d4ae742f66a"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0016_banking_pay_next_accepted_eligible_leaf_v1.sql",
+      "sha256": "35648fde73f982466ed72c065eb9b6916d6ef998364bd64af0f491625a73cfd3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0028_banking_pay_next_frozen_selected_treatment_v1.sql",
+      "sha256": "bb2bf3e049eb042036cb414e4801dbd163ac382b85123f50b2561df07d0746c7"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0029_candidate_daily_missing_legacy_choice_reconciliation_v1.sql",
+      "sha256": "fa64b9aedc712ee2938e7a0488b58ff767c2b90c2c527422f4ba699efdc63338"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0113_banking_pay_next_chosen_display_refresh_quote_v1.sql",
+      "sha256": "9cf9e4054bfd6c7c06babc1cfd8fdc0fe3280bf291e0ac059c009906c458ddec"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0721_banking_pay_next_frozen_decisions_clear_v1.sql",
+      "sha256": "8e8d9d34382587b84ccc1faeb7d2a7fcb279db51b3b8ed2efc42a5be37352325"
+    },
+    {
+      "file": "supabase/repeatable/13102026_0932_banking_pay_next_completion_parent_anchor_v1.sql",
+      "sha256": "a75f4c3d2c494cf79742e01c1a0b56aaf7d5b3c31401afbfc4993ffad1ae4310"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1033_candidate_daily_availability_copy_readiness_v1.sql",
+      "sha256": "7335affaf41db16171e882d03174c7e3547bd48fd1b1cec903f81523088b979b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime_authority_v1.sql",
+      "sha256": "aaa8307e7da882a642edcd9688a2fccde690b641fbb236f5573ab27ec5375d57"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_acl.sqlinc",
+      "sha256": "94a2f758acfac0210b80662095cd1a3b57d8a22beed06243ce9822b15719d0f4"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_dispatcher.sqlinc",
+      "sha256": "89d45adedb7fe53405502df5d8a1c79f47af04c1bd6413b16ffd835f82992ddd"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_generation.sqlinc",
+      "sha256": "a4d821ec7d49c46677340e32c403d264d7add4327e9e7106b179c791fb487603"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_legacy.sqlinc",
+      "sha256": "e594d79e17dc3f90e7046cc48fd06a34eaf76644357a10389b20abfa7aaff44d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_resolver.sqlinc",
+      "sha256": "0dab38012e7c5e29f84a2addd9544a83f9f23b4c51a8451feda62ab8232b744f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_resume.sqlinc",
+      "sha256": "f46bdcc85c717de157738ea0a21591d9cb32695c95ca23efff8117678038b0f8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_start.sqlinc",
+      "sha256": "b0b822d8001d5f248fea628f656655fe91db2cacb5149651c937bdd1aa19bece"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_support.sqlinc",
+      "sha256": "81c98e43d51bc236be543dc0af47df71523010078770273d2e95d457435f521a"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_unissue.sqlinc",
+      "sha256": "d5b4aeb6fc73c32ddf6298f06f3292eab24c815dcd64fec183778fe751ee89ed"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+      "sha256": "4fe37de72a11c3a938d89d25660e996367a2ab6bfaca9bbf54a50a787062c3ae"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1123_banking_pay_next_resolution_changed_evidence_reload_v1.sql",
+      "sha256": "9bf04c59b90ea0ee0cd097e7e81bfb06edbbc40938cdaff6e8f7c96347dd7a9e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_acl.sqlinc",
+      "sha256": "c082c64392a26268a0a344f6c101a7fc62a2e537d1cbe6582fdb613c72ad8a93"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_approval.sqlinc",
+      "sha256": "9d3129c7fdbb4ddf1b8ca5c2a195b3fcfa7ea661e4c4dc0a7f233eea77571fc1"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "sha256": "ca4ac3b9f88f9b86906d52c47e3477cc388deec112164d2bf451d85901127ff3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_chain.sqlinc",
+      "sha256": "d75971649d2bf35e2bb4aea8a645aa9eec1fd17977172681662ff81144e87a62"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_delete_guard.sqlinc",
+      "sha256": "004b05626594e9c0d078020453cbe7a66ce69903f7d3e1183a959d3d43d5a744"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_draft.sqlinc",
+      "sha256": "3b90d2acc22d4b95f0db18397a2a8d9b093d6539ef3fca6817b01e4f855be8bc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_expand.sqlinc",
+      "sha256": "94343940c7c2ede695b620ca499f5cae8dd120f821ddbe8558052c06fed606e5"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_finance_guard.sqlinc",
+      "sha256": "397a996c943d906105a35d6f1324c2e25f9f742d871fdde641a2235bdca445e1"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invariants.sqlinc",
+      "sha256": "af57e7e707915f43813e6f708b0680ba784eecfc41e3e59f219d998a676446ab"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_scope.sqlinc",
+      "sha256": "120ccfd2b77e85d2af9ee135e9fb40322c36c2d10b2dec0e2b31901c70db8a1e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_invoice_whole.sqlinc",
+      "sha256": "9f8751a398ed483e2599520748483e76a4bb1399db1c7917360b0a41caefc6e4"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_manager.sqlinc",
+      "sha256": "b866dec3ce248f2bfe0c34c07645c3765b7e583622b49710e0b011621990461f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_overlap.sqlinc",
+      "sha256": "0485a8cc5fc63da8587194b313793b46214682a2aeaefbb57572ca335812d0af"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_pending_delete.sqlinc",
+      "sha256": "fe2af727bfcbed953c8087a62b30d113944cb24ff0fae08f440d67b586db2ac0"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_preview.sqlinc",
+      "sha256": "bdc5fa7d1f82582d3252f5e8d275b5cf7374102916a19124f44f1cf32c0b5b9c"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_request.sqlinc",
+      "sha256": "5fb1e628a66dd1a295e0b5533da5e02ff57f4e484d9ba52632bd64cc08f37675"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_retire.sqlinc",
+      "sha256": "536095f99b49901c1e8a4be4aeaa2945145435cda07ec405ed025573ad954423"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_standard_delete_preview.sqlinc",
+      "sha256": "4334172f7cadf479e99816c34c162f96e6ecb6a719e13143ec80cb5531276043"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_transition.sqlinc",
+      "sha256": "8a5547ea381fd11ef6fca4f3fe4deab050ef65eebb894a087e52d7f5e48e4a9e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_weekly_delete_preview.sqlinc",
+      "sha256": "4df7467f617bb5c610b9612c19ff1ffa16a0d01eb05b9a9bc5c0446df081b50d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_whole.sqlinc",
+      "sha256": "2cb0c835a251726bd5fb5d61d06096e57d1412cd30f8628661bf9167a8c1049f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sha256": "2c780a1aea2beac859f95633a41ebccf5844de1852242ac43d2dd0409ec20bcf"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit_authority_v1.sql",
+      "sha256": "581bedba6025477bf16144a5d1f6957278289aea5bb05e5928c3896a5dabe671"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_acl.sqlinc",
+      "sha256": "5e0155cb0a6c1bc2411b838f62d332a33241b11241131bc1a1fcd71039d5ee98"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "sha256": "e573b48cc58db6a107848e0548b201f28584308577c2f5ff8629cdc9a269bdf3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "sha256": "3d4476fd39d484ffe24057f56ec53902e0ea75bdc15b4de35b3de9551cf1bce9"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+      "sha256": "f43014ce6cafe2c3a193b827cefdc72b7548215d4abf0d29db387158da71ae12"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_legacy.sqlinc",
+      "sha256": "1dae7e323edf51bc3e36eb811d3c6316f3cb297588b9bc719d8ab02ce8d2fc37"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_nullable_daily.sqlinc",
+      "sha256": "3ca710f6cf84d67f66fc2c7894ee2c35fd533e73c7d5bb97afe3922cdc714669"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_original_input.sqlinc",
+      "sha256": "524624e073b09621f5b6cb94574032feaa4584e46fbeb5dcea197ca6964f5733"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_planner.sqlinc",
+      "sha256": "905e85ab37073350203e8e322ce194f47307aa1f24aa7fbb4a02ccfdde54e71e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_resolver.sqlinc",
+      "sha256": "71a3f9e6caa47248894478bdf33fb4f07d172449de39554c80890a3e5b351cd8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_snapshot.sqlinc",
+      "sha256": "af1dad3fac315f0ad87256b1ad5f22f703537a166ed0d4e522a51b0ceaf6d101"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_start.sqlinc",
+      "sha256": "23f71a8b14940a9b94b10e99488e2857bf502ea162c0526235bc517d26c9d1e2"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_validator.sqlinc",
+      "sha256": "c11a3c72f09e862cb970798e4da8ceb29c4bf42a96a37cee4f7f51b3fc59ae78"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "sha256": "5e7e51c44f2c0ef713df0fd35fe284b9e264f437efaff72da33811b6eaf26a4c"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1210_weekly_source_finalisation_unchanged_values_v1.sql",
+      "sha256": "dc2de45c684fd3856e9147cc7724c39e07390242e1c22d5a3bedf7ac76c9548b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+      "sha256": "a59d938b7403608103aa747be95dd202e5d7f0dd6a40d09dbdf0177e0e14a50a"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+      "sha256": "5845f7ee77cb9164da6150bddbdbb90bd4e1c062fc556fa2e2207c78cc5e66fe"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_acl.sqlinc",
+      "sha256": "e6eeb974e509df1fdb782179f87a50b3cf99fa3263e6302d79394b46120d2a9a"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_binding.sqlinc",
+      "sha256": "8a2021a4c239899bcf87ca9c1b910e57ba5ea326d1ee1f65fd258dd8b926887e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_completed_rows.sqlinc",
+      "sha256": "19e4a480cc63e1bb33166557504d31248c9dcca0931ab04d640c7c5730c51f61"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "sha256": "be9f1e7dd5b3351510b027044dd00bca32b54c58a0c9e6fc6bf47f94dd79c40f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_duplicate_hold.sqlinc",
+      "sha256": "f881ad41948121ec2ef13b34d4f6bcaca4bcb71dc2002ba20be278d892914243"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_finalise.sqlinc",
+      "sha256": "4a0937f2608551801733ec3fbd2ec8c2ddf800344233b4f53340386bcd53ebe8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_guards.sqlinc",
+      "sha256": "91fe0fc277c9e5e726e6c8c1ab365740d0eec26190d5da33f7288c9ed2a0d403"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_import_prepare.sqlinc",
+      "sha256": "770f8f09834284ca53706f398bd055edc992f6f3769ecbe5ef21b37e3e0b95a3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_invoice_duty.sqlinc",
+      "sha256": "6dcaf79339c8ed3139b9d4bc0ca6641bf803fdb402af3b87e118c1b71ca3f36e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_nhsp_scope.sqlinc",
+      "sha256": "a1c88c4919d12519c53f43550db98d4f942581ef01b714136a7a5d885e4c2b92"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_office_workspace.sqlinc",
+      "sha256": "243b2d97b782c60498bdad0a35f09457c157f072e6a9dbd3dc85feaaf99e0c68"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_pay_witness.sqlinc",
+      "sha256": "fe00fbecb9a79d3f13c089f9c755912cd74cccb3164e7f7adda6345b9d2a02bf"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_prior_binding.sqlinc",
+      "sha256": "03e5426be6df9f735dfad97c7227105e28c2f07bd19a9cf1b0a9a7d0df43061d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_profile.sqlinc",
+      "sha256": "d4fa441b951b57f64bc31065edb3e431d3a63c7c32998e13c253d0145f4bd8df"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_begin.sqlinc",
+      "sha256": "018283e5c5a06594dbf39e91793c9b86c02f3b609e0c36db1906b94e2d5e640a"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_publish.sqlinc",
+      "sha256": "2340ac5eaae3c2dfd0824a8fd2463afb351766e0698068d894f63f8ebd678175"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_projection_rows.sqlinc",
+      "sha256": "7c5c499d7c13d8974842fa932101c6c0fad71b1f746ea20cd96980ebaf219f2d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_publication_guard.sqlinc",
+      "sha256": "b251ea88a9ea66bf1b7afaddc329653c545018bd632a6b9bfb709635a6daaf59"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_scope.sqlinc",
+      "sha256": "2174a13f828c927e7a7a739e10acbd0e1ce52ff35af8a40dbafd2f88684fc8b7"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_report_workspace.sqlinc",
+      "sha256": "0f1b080ca21de14d911bb0233db6648fca3fb8c0af77a5236ae4a422c76ee7a3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_row_authority.sqlinc",
+      "sha256": "783d138fbc36dd3ecf795a981743bab40a7e5333b44de098b6e17059bd28a3f4"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_seal_assert.sqlinc",
+      "sha256": "8a9a11a8ef02fbbfa2abb4edd6ed478e58144e5aa32c970745475582287d2b08"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_timing.sqlinc",
+      "sha256": "59ad3bb4eaae371a72e5bd34bbca17dc26912ef1df8cdfed4e85c6a4123e28f2"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_begin.sqlinc",
+      "sha256": "24de1b440445156b10cde31869580f741863dd60c5644d0386e92a6c6339eff6"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_context.sqlinc",
+      "sha256": "77f861c5aadaba61053f5e918ff36066f576f4d77e996fe9a09f45a30a0c714f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_rows.sqlinc",
+      "sha256": "4bc293b97b63652a5c4e0e39dd9f5e70b56f6fbd21ccb1c25eb1301543113f8d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_upload_seal.sqlinc",
+      "sha256": "bed08f7a5919fc535977077432d0d8590e6282b224c4624a5fea16ff36af97fa"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_workspace_scopes.sqlinc",
+      "sha256": "9ec33620f3e240e87d4160dc86df894d2b6a1d15b6f66af354ac2daf1e2f15cf"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1359_weekly_source_timing_coverage_group_guards_v1.sql",
+      "sha256": "20c98eb0c3ae673b25e3edf6834fde9bfd0fa8c06b2e98ceb224a4f08db58fe3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1404_weekly_source_client_group_move_guard_v1.sql",
+      "sha256": "2520880de9eda4628ebe821e9e5407d62103aaf16ee571479d2f4ae7af60138b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1404_weekly_source_import_preparation_timing_guard_v1.sql",
+      "sha256": "39ca3506b77ed6f70ac7ec5c7d57f66ce314b5977ce2baa6aa2ee96d88dd0b66"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1404_weekly_source_upload_coverage_context_v1.sql",
+      "sha256": "66ad57c002afc8ccd6237ebd49e0e79121832f26571afc48c05895e3f3ba9f2e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1412_weekly_source_upload_stage_coverage_floor_v1.sql",
+      "sha256": "ee33fbe66c4f9beb9cd136c3207d5a7eebc7986e718b2e0a25972b61cdb27c96"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "sha256": "61f0f9fc8e7a1ea8bc041d9b9c4faf67a0633d0f1600923c5d09ea2bba1094b5"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1432_weekly_source_invoice_money_publication_v1.sql",
+      "sha256": "a20938845a21d9510ca9f574799742a83c875f7f0a8a7126f2a34a24ddd21d11"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+      "sha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1435_weekly_source_invoice_only_pay_isolation_v1.sql",
+      "sha256": "9f9c5ace5716f123cc547dd5c2deebef4b8c10d677e6abc2285d3f4e47d86190"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+      "sha256": "d88a9a55af9c3bb360f73eedf42106fa8ce8b3d2ac15f7b786956047f7102aa7"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "sha256": "c4c33f686dd3d1db4f51f467ca2984e7d99f4abcff4f933fa67d838a56cf7cae"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/00_checking_client_scope.sqlinc",
+      "sha256": "ced9c786bbe26995ed7d415ab16d2f2a4d8252cea155571b8dbdcdbe8a63d790"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/01_wait_receipt.sqlinc",
+      "sha256": "de1bbc3e9d1055cc0b1ca4eab94ec945e0be9426c19bbdf0e1aac1ec99c8d4b5"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc",
+      "sha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/03_qualified_coverage.sqlinc",
+      "sha256": "43feac012ac1be7b623a160bc50dae3f2f63433d60e790b227dbd0c6a5ecfc4d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/04_contact_retirement.sqlinc",
+      "sha256": "7fe56fe5e2f2ed14c835e96fc478512fd6a7956147b525ed8b37ca72805b8142"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/05_unprotected_close.sqlinc",
+      "sha256": "4c6d3ca8cdaead1433a57bb93612b95877e901e874711bf989778f48cb4c280b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc",
+      "sha256": "bb3609e8c194b95e933f90ea91fd81b42540174e6d9ca578610d21e318144ef4"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07_submission_comparison.sqlinc",
+      "sha256": "89bca949dfe088c3f7485739f327224874f1f02e29cda8b4701e7670ad6b4855"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/07a_current_source_rows.sqlinc",
+      "sha256": "1a19e89bd7439a15ceac39d3e15b1c94f1de64d695d4e0e379f95784bc277d84"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08_comparison_audit.sqlinc",
+      "sha256": "317e970b59f7f7a806e2916277d30b7d1c5404ae24b56481c7de30d4082589ac"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/08a_expected_week_fingerprint.sqlinc",
+      "sha256": "559212099c2daf7d9b9d647ba2d8cb565d3e40b5f9c95c44c5f580a090347370"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/09_expected_week_materialiser.sqlinc",
+      "sha256": "764d3b5513f92dc45001ca6cc1e7e6d2705e7b78b7762f4e51a5112f42e5e285"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/10_publication_recheck.sqlinc",
+      "sha256": "b44abd36f95844fddcbe38ea74daf3a16619383ec42b2d479248e1461cdbb27c"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/10a_expected_question_scope.sqlinc",
+      "sha256": "0c2406657f06a848c2f6cdd55dc5cb35ae854a03375bfdcf82f497a139ca5c12"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/11_manager_due_scope.sqlinc",
+      "sha256": "107549cdc9e9e2606992465e386b40872b3d507d0140ad623a4109dc6ed93fc0"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/12_manager_owned_facts.sqlinc",
+      "sha256": "a1f60c220121776af5fc05d7220c6ad22aafa0b326275de9f0ee15243d71aef8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+      "sha256": "6684d0eda2a12f502e896f46844e0dd10a658831fb298a51f95afcd8e748ab5e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/14_not_finalised_dispatch.sqlinc",
+      "sha256": "a50ccbf231397fd968945ce6acc8c5fb96b9d3baa575caf523d68682c9f46832"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/15_import_outreach.sqlinc",
+      "sha256": "7c20563bda1e32cf808688ed441da0a4e8a96cc9b6c9091900180ec730ee4b77"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/16_protected_lock_helpers.sqlinc",
+      "sha256": "5ad639381f656aa27c13a7b87319db8603bbc1bcaa3751bd8fe8b7d239d3e61c"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/17_prepare_family.sqlinc",
+      "sha256": "d7c821c1a41a47df2afaf7da31384b1590245cefddd488608e24cf943f29fb72"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/18_prepare_action.sqlinc",
+      "sha256": "a7078453d49205ad218c9349b9218fdb8349d9b423dbad72ec788d03941d6c62"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/19_action_context.sqlinc",
+      "sha256": "1f7f7a17dceea6aa4f28b02626b18a349eedb73243861076d056286b82d85e99"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/20_stage_request.sqlinc",
+      "sha256": "36bea12950392ba9d2721c86218fee31cce84a918ee0558b389bf4b47a3613c9"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/21_publication_family_fence.sqlinc",
+      "sha256": "a164fbca5a92f1bdefd19e1697cd2a0dfdaaf2fd4dbb948d8587b6b3cbc41745"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/22_query_groups.sqlinc",
+      "sha256": "ca4bba75f1e1aa7ee977f72cc888a7fc821d8b2b9e9e5615d5b78d9490cc8361"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/23_bulk_signed_selection.sqlinc",
+      "sha256": "1d4f13e3dfe66aa8c8c0cd8f55a29cf3c231bf26f3202b3d4b7ae52a7144c049"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/24_due_scope_capture.sqlinc",
+      "sha256": "ab3931cbfb55226f17c44c12a6ec51bb7c3750a577f40ccf7118398aefcc1d77"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/26_bulk_command.sqlinc",
+      "sha256": "88a6c4ea62830ed5c72b3433864ddafe34120c5869541bcfedb5c428e5c3bdfa"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "sha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql",
+      "sha256": "e8dc35a0bd6d510b4517a07a3e1665ceec97d181b37b8d6e5daf8b36a6d92291"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1626_banking_pay_next_paye_net_rules_v1.sql",
+      "sha256": "32ca5bcc38c4b56817afdc02225d8cbddb095767c4d7189f075ce54e380353b3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1649_healthroster_correction_request_read_authority_v1.sql",
+      "sha256": "2be4a45ff4a16c7171fd7dea91ffea5ec3860645a3fbf93a71d1756cce615c94"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql",
+      "sha256": "d26063ed33e464716d6e42ae739541d589b9d9ebf44c0d02693b71ff98a2dc57"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/03_receipt_and_window_owners.sqlinc",
+      "sha256": "dd9d5ceb119867a6a07a768b86cc6f06c07d4949d4376207b13cd9ebe91bb2e9"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/04_complete_fin.sqlinc",
+      "sha256": "2a4c9960db34a01ec55f0d177a9b3f74c0406d39f9ae590a3eb59b5237f0b30d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+      "sha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/06_complete_allocation_issue.sqlinc",
+      "sha256": "d23855453b7b6f8f2db9d96aa2b46d8f83e8af6dd18967e7599a9d7cdb57830a"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/07_complete_header_move.sqlinc",
+      "sha256": "7a1f6eddd8cdc60bd52b10309bfab5107700ddab39aad3164df89afed7aa716d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+      "sha256": "71decaa0646d7beb357361ed215b01bea296ae2849aad027fa0cbdfa9b2434ff"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10_complete_source_readers_correction.sqlinc",
+      "sha256": "420139cda0467dfa61d9fb28240f6c8843317610313c8f736fe6278b00520f0c"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10b_complete_remaining_manifest_consumers.sqlinc",
+      "sha256": "e30e77ed0a745b8651178afe1912c5d540bdcaee8b63e5fa81e7a2205e85d2c8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10d_retained_report_and_date_boundaries.sqlinc",
+      "sha256": "fdc5a3af42106150000cd01f3382688c55aad60215085474f6094775adf58ab5"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/11_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/12_retained_final_issue_transport.sqlinc",
+      "sha256": "50ecf38150cfdfcb5d197fd43bd6684a7a8c7ad510841c53178621a2c6b54f55"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/13_private_acl.sqlinc",
+      "sha256": "c7de0f44918eca3a8985ba6e89650fedb7d15218e99da8907f87b88b0af7e6da"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/14_complete_legacy_render_manifest.sqlinc",
+      "sha256": "e95ba0bf3dcb72b3f9952422e839f20e9a2c40a03ec6c4735493f6017aa496b5"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+      "sha256": "60bdf030e045ffc523efb727ec23adb11a65fd1a4ca2faca7ba4ab97f9f9fae6"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+      "sha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/03_invoice_issue_validate.sqlinc",
+      "sha256": "3d04a8f41daa61980f733d279f6fa3bb0ea3c37bc6a9a4c66ce240b4d75839ef"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+      "sha256": "dc198c718436d8135c4ba6282896bc3aa7dab5099c3ba63650e9fa5aca2681fb"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+      "sha256": "b480b2b90a8148d1a0ab28d9172ae19dfb1150389116c0ab295642aee80239bc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/06_native_acl.sqlinc",
+      "sha256": "62a8884633d4d3f5d7dc9bca09f9efa0f04b6230c9eeab7f74d0e455e9c77f4d"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/07_new_owner_acl.sqlinc",
+      "sha256": "6015f8338bc103b7e0355067667ca0be1688ba06b5ad8c87d2cbb7407fd166c2"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+      "sha256": "25adbc44ae6579662134de37a40e02725f56ab7e3177165c95a3a186f633beca"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+      "sha256": "7d5988cf8e1792cd23eb479604d8735d5c9ebb2dda05d2eb8b28006da3cc2093"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1745_weekly_source_owned_stage_self_bill_facts_v1.sql",
+      "sha256": "63c8329ea9455fa1eb984e964349296dfcc6c2e7bf24eca4dd1516e97e64c7ba"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1755_weekly_source_publication_comparison_family_union_v1.sql",
+      "sha256": "74ccc92c4370e92181ea29abb7ddc6546fd00abea0bc5ba212b464488503b061"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root_v1.sql",
+      "sha256": "39ca760351d11168130c71d212958347a5a14a8ab5c91e9f0b41a3f0e89b664f"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2025_healthroster_lineage_own_created_root/complete_lineage_owner.sqlinc",
+      "sha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker_v1.sql",
+      "sha256": "fe9b8fb19a463229c08959121edf1d95b3902225af672ab7cce19d7aee684842"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/01_projection_receipt.sqlinc",
+      "sha256": "7db8fb80cbcded8f5e69d43cdce97405dcd8bc4ed1e4086c422d7d3b004c8a20"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/02_pay_authority.sqlinc",
+      "sha256": "c2012e9c522953383004a571fb26c7c9ab395324522dfde1de2ae494a17349f9"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/03_pay_witness.sqlinc",
+      "sha256": "199312f5a3633f43b0668ef9a22074bf57d0ca2611357048be28926d38eace11"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/04_complete_fin_overload.sqlinc",
+      "sha256": "644b4537ce710ff47700e63561e569d09eeccdcb42e8025a1d09d7975fc874a7"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/07_private_acl.sqlinc",
+      "sha256": "7bdfc266230363d6b03125ac4f7779cd76b43b8937d70ca24cd28eabe3fe2357"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "sha256": "712ed4bc6b9e8dd367d45da298ef2c83312564ff197f63f04292b875f4d38220"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+      "sha256": "114a89a08baf88d9cbc119fe00d65815cfeaae6aa9dfdd98ce27963e28b2b4da"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/01_staged_source_documents.sqlinc",
+      "sha256": "3ae24232884c7742a85078804cee4c7196be65fe4379d4a0f3a32b0d060844cf"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/02_staged_publication_context.sqlinc",
+      "sha256": "48fe9f687d828362bdbe13e88c83a4a16083a80fad49f70eb9af12dc47b22dd0"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/03_approved_detail_evidence.sqlinc",
+      "sha256": "dcbfbd9debb6b70803a376712dc5b4349a4ac2e7d9337ae03b11543fa05932e8"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/05_staged_prior_wait_receipt.sqlinc",
+      "sha256": "f14e762ffb0eac77d78a974ea98aa708b5e0c38d453e9633ce39f372dcd79e95"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/06_expense_evidence.sqlinc",
+      "sha256": "f7991259460ce88edaa2ba166eb570174940f61bf5360fe6e7670dc88b79c861"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/07_staged_entitlement_components.sqlinc",
+      "sha256": "4bc041652ffd7edd658a1bee6b4c698b05d7344ff1d1534178e8d0feb532d261"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/08_complete_automatic_reconcile_delta_forward.sqlinc",
+      "sha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/09_complete_local_successor.sqlinc",
+      "sha256": "a2eb8e6b4cc02e3b84f15c6ba1f9b57ab49927865b04f7b20683e3f697d3f38b"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+      "sha256": "14b0b8336da22b7111b0f1ff8811286c4e4e7646e820e1261fe5532ecc79e7e9"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3"
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/15_final_automatic_private_acl.sqlinc",
+      "sha256": "c9ee3dd259c21eb3fa228e00c25e2b3bdb05f360c3229955042613f69e0afd0c"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql",
+      "sha256": "49fa65c7d185ad57f27d444585d79488715492c9f579206c4ddd84e99d6d8b0f"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/01_cap_original_functions_02_source_cas.sqlinc",
+      "sha256": "0ec5032e9bfe7d7b88ee5d85c5b207f235fbd6cbdb81f854f25becc4b219208b"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/02_cap_original_functions_03_capability_owners.sqlinc",
+      "sha256": "434e6455857920740700009f52f88735071e1bd57e3d37e4440cfa19d359fd23"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/03_cap_original_functions_04_original_clients.sqlinc",
+      "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/04_cap_original_functions_11_non_self_bill_admission.sqlinc",
+      "sha256": "48f477cf908ab3c2a0310f1cfc93eaf3b0ffdb98983c12307749e2dff6029632"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/05_cap_original_functions_05_complete_existing_activation.sqlinc",
+      "sha256": "d2b468d14cba481783e7ceead6e365f4be167e74f5968d70c73d3a96a90540bc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/06_cap_original_functions_06_complete_selection.sqlinc",
+      "sha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/07_cap_original_functions_07_complete_stage_proof.sqlinc",
+      "sha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/08_cap_original_functions_08_complete_bulk_command.sqlinc",
+      "sha256": "89d9dc8051f19e5091a3599548850313cdf9bb09744803f0615b067124e6ddaf"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/09_cap_original_functions_12_complete_17_prepare_family.sqlinc",
+      "sha256": "a5b08c97d35d62a47ef1271fda23f9c9cbd80a8455594104b11e4c054c0a44be"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/10_cap_original_functions_12_complete_18_prepare_action.sqlinc",
+      "sha256": "66c1d78f61e8cf8f1094382cdf97dbc9c082b6e21765e8aecba1352d54f4bcc5"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/11_cap_original_functions_12_complete_19_action_context.sqlinc",
+      "sha256": "edc8c9da16743a4af6758ba1beae1debcb13ac5c2da90c699a83b1c7da3a1d11"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/12_cap_original_functions_12_complete_20_stage_request.sqlinc",
+      "sha256": "80500039ea01d7eee54713425372666331d33d2079f48a23e9f80812ca668254"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/13_q25_owner_xid_qualification_00_complete_current_catalogue.sqlinc",
+      "sha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/14_q25_owner_xid_qualification_QUALIFICATION_SCOPE.sqlinc",
+      "sha256": "ca433a32c7c8f37e34a20cc68497ca702eed1a6370965314d7f72ede99343746"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/15_q25_owner_xid_qualification_QUALIFICATION_STEP.sqlinc",
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/16_q25_owner_xid_qualification_03_complete_cas_admission.sqlinc",
+      "sha256": "c7b6d0812dacde13ff9ff5fb920fe73aa6ce959068b20e5c41134361e1a86342"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/17_q25_owner_xid_qualification_04_complete_non_self_bill_admission.sqlinc",
+      "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/18_q25_owner_xid_qualification_05_complete_automatic_admission.sqlinc",
+      "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/19_q25_owner_xid_qualification_QUALIFICATION_R2_READER.sqlinc",
+      "sha256": "e8776f728aea49370e1530d5db6a3150c1549cd375bd4297227bd033facc3a15"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/20_q25_owner_xid_qualification_08_complete_capability_release_reader.sqlinc",
+      "sha256": "e3b20bb7aeac049b3351c63b4a34f04693b3f75c698cff8f443a8f79b626ef85"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/21_q45_actor_event_closed_dto_cross_session_00_complete_current_catalogue.sqlinc",
+      "sha256": "17e09f21d93c92103b5562ebabb81dc3d996718b8559a525430870bdb2b2476f"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/22_q45_actor_event_closed_dto_cross_session_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/23_q45_actor_event_closed_dto_cross_session_CAPABILITY_OWNERS.sqlinc",
+      "sha256": "56b1905c4e03e9cd077c2d5937815d0dd47c847331919607c8a8cb2b5b2a7b66"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/24_q45_actor_event_closed_dto_cross_session_04_original_clients.sqlinc",
+      "sha256": "81b5f8b58ee56366150b187dd550c89063fc834e223c49eb4a43fe5751d9a741"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/25_q45_actor_event_closed_dto_cross_session_04_complete_non_self_bill_admission.sqlinc",
+      "sha256": "2413194f1fa1ef019c2ba21181445dffbf7a47b2ad90259ef72b849360ab57a4"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/26_q45_actor_event_closed_dto_cross_session_QUALIFICATION_STEP.sqlinc",
+      "sha256": "417376d47f125e1bfae2e410cb9dde14bf35cbdbb0b6748636f38db7f4790076"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/27_q45_actor_event_closed_dto_cross_session_05_complete_automatic_admission.sqlinc",
+      "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/28_q45_actor_event_closed_dto_cross_session_CLOSED_DTO.sqlinc",
+      "sha256": "e664f83e9743c183496ad6e9f4ce9e6c54ee9661de90956087b66fdf135c612c"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/29_q45_actor_event_closed_dto_cross_session_OPERATIONAL_CERTIFICATE.sqlinc",
+      "sha256": "13988f99f02d6c5d7c37fcc2d6fcea3a2b8e58b3ceaf152aa1c8d2c5ea180a99"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/30_q45_actor_event_closed_dto_cross_session_01_complete_qualification_scope.sqlinc",
+      "sha256": "65fc863efe71de3a33e3b729ccf56a3b1a5cdf8daa2e70fe826eae14a5d96f70"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/31_q45_actor_event_closed_dto_cross_session_02_complete_prerequisite_reader.sqlinc",
+      "sha256": "714dd90889ab539dd7be18c49adae1804dcab24042fb33df21e4d620f6471ad0"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/32_q45_actor_event_closed_dto_cross_session_TEST_JOURNEY_SCOPE.sqlinc",
+      "sha256": "84c4e0a4483ee477d682a5faccb9202163f5d3678af367c0b44cc88cb38ae100"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/33_q45_actor_event_closed_dto_cross_session_03_complete_operational_release_reader.sqlinc",
+      "sha256": "fce069954939547918a77cc49fe3a308e8265327f46ecd23c031a5443049f54e"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/34_q45_actor_event_closed_dto_cross_session_04_complete_capability_receipt.sqlinc",
+      "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/35_q45_actor_event_closed_dto_cross_session_05_complete_bulk_readiness.sqlinc",
+      "sha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/36_q45_actor_event_closed_dto_cross_session_06_complete_automatic_readiness.sqlinc",
+      "sha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/37_q45_actor_event_closed_dto_cross_session_07_complete_existing_feature_setup.sqlinc",
+      "sha256": "c5b68d89297448630bb99b7252cdbf54953b97728e0b30ea0d24c3c68612e223"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/38_q45_actor_event_closed_dto_cross_session_08_complete_cas_admission.sqlinc",
+      "sha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/39_q45_actor_event_closed_dto_cross_session_09_complete_actor_non_self_bill_admission.sqlinc",
+      "sha256": "5c2d61f54ca9d3c84f65768b723c9ee366f040c6674cd72d6a0e1952cb1038c4"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/40_q45_actor_event_closed_dto_cross_session_10_complete_actor_bulk_selection.sqlinc",
+      "sha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/41_q45_actor_event_closed_dto_cross_session_11_complete_actor_own_stage.sqlinc",
+      "sha256": "099944edcc9ef0b1ce144d605be24ed78872cb18525bfe528b4e4e5ac76eafad"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/42_q45_actor_event_closed_dto_cross_session_12_complete_actor_17_prepare_family.sqlinc",
+      "sha256": "896a3769a099c3ebdc2f008dc89bcb667361acea70085b6e25847ea07378d63d"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/43_q45_actor_event_closed_dto_cross_session_12_complete_actor_18_prepare_action.sqlinc",
+      "sha256": "9c7637eba0478d7bf88c11bceec8a08066146234558510267fba14926c2438ea"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/44_q45_actor_event_closed_dto_cross_session_12_complete_actor_19_action_context.sqlinc",
+      "sha256": "ccfe50258c54c735b5b54d79c97d967f92b4e432e67bdde5ae043adf35ef1f14"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/45_q45_actor_event_closed_dto_cross_session_12_complete_actor_20_stage_request.sqlinc",
+      "sha256": "73da2a876d936e692584b905c9271aa586f196a13f973fa714f1cc7c45a08019"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/46_q45_actor_event_closed_dto_cross_session_07_complete_stage_proof.sqlinc",
+      "sha256": "b5e5c8137983a58a5aa8c49c88eec13898e38c024c8925559dbc52803093c861"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/47_q45_actor_event_closed_dto_cross_session_16_complete_bulk_command_presentation.sqlinc",
+      "sha256": "9116d060e31067aca182b4a9b3b567937d48945fe17c1e7e2e3437027accac9e"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/48_f12_first_use_full_inventory_OPERATIONAL_CERTIFICATE.sqlinc",
+      "sha256": "0ef19a0cb5d772ea4d98813fb3a95533452f60822e616a7f0e0525b7faf90b72"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/49_f12_first_use_full_inventory_TEST_JOURNEY_SCOPE.sqlinc",
+      "sha256": "c6cf6e6a22a1d72ff0d77fb9e01e77b7ed7885171833e34159a61f501cff1923"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/50_final_original_source_cas_schema_lineage_CAPABILITY_SOURCE_CAS_SCHEMA_FORWARD.sqlinc",
+      "sha256": "98657501e2a6eaa48c9ef107d39a42dcde7e1c49521eff13795a825b86096a83"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/51_final_original_source_cas_schema_lineage_LINEAGE_OWN_NEW_ROOT_FORWARD.sqlinc",
+      "sha256": "e782684aaff697a0f3ae9b9c899ed17c46728b8cf690ec0db266c18861c72ea8"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/ORIGINAL_PREREQUISITES_SOURCE_FORWARD.sqlinc",
+      "sha256": "1ec71ddb192128b78a02e8ea11a7d5afd2797116e2d954b7cb7a03b9b2be74bc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition_v1.sql",
+      "sha256": "39dfc2377184d170450d4028de43791d6561755d844cd5f2d4b12be2d7f178a1"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_exceptional_pay_complete_local_v1.complete.sqlinc",
+      "sha256": "39847b83448f48c414b0eb3cf04dbd581a8f4595039aeb04d1237f5ef64c653d"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_exceptional_pay_stage_c1_request_v1.complete.sqlinc",
+      "sha256": "532146598b453a2e0e253ccf0df2c29fa66977f63e644e8003d71e77e594c6f5"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_candidate_submission_compare_sync_v1.complete.sqlinc",
+      "sha256": "c3ca231ecac79b0be0bf5473762952ccd8ffb703f37a66a57b11688fbd061a0f"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_manual_review_resolve_v1.complete.sqlinc",
+      "sha256": "8ab22130ee40e9047201637e3528fc4baeb7a9582e4fa2c5d75df0e5db29f796"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0420_healthroster_current_native_composition/weekly_source_manual_reviews_finalised_v1.complete.sqlinc",
+      "sha256": "b62af30fc18b5f15d5832eef6e56c4cfd3d4d646bf301f5a53796d07accbab32"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "sha256": "bd93165a3c30a35aea8775bef8fb4234d1901b362fc69c3cda26ef9b8de8ae9d"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/02_HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "sha256": "ea11961b8fd26f352cd45ee28a2e6582f0781e68ccfef961cdbc5e52b8dad202"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/03_HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+      "sha256": "62427e8448747206f82c9e533f615d469164b27a9fe0f5dc7e6208b16d948f28"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/07_OFF_RULE_STATUS.sqlinc",
+      "sha256": "8eb29b29ffe55dc406dfadc4c84ff389ca493b62d0b331a15981e01fc3e0f97b"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+      "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/09_01_operational_rule_projection.sqlinc",
+      "sha256": "43a1f07212674c233e35dc24c6917377f639e703fe0a0a44fc18443b09113e5a"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/11_03_cas_operational_projection.sqlinc",
+      "sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/12_04_final_revision_rule_guard.sqlinc",
+      "sha256": "e2349dc619a7b30c74328d62a8f1aace2435a361d30309b9c43e3ff543fef3a3"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/13_05_coverage_floor_owner.sqlinc",
+      "sha256": "6f34e8d9ab9bf08a7bb0fc240fea49a35edc420ff7b7d1f98210a697476f34f3"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/14_07_automatic_capability_admission.sqlinc",
+      "sha256": "b08e604e3df9b13eaeb1b0e7ab635e85a0a80d94785ecb76327d35b14a866ac4"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/15_08_cas_admission_owner.sqlinc",
+      "sha256": "c5e3217b5ad271d66614ad3df0ad80870f57817fb18e042b9dcb43339a69e285"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/16_10_complete_bulk_test_scope.sqlinc",
+      "sha256": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/17_ACTIVATION_WINDOW_BINDING.sqlinc",
+      "sha256": "883eab37fd437a4b802c2f6331de865b7eb0e1bca8d5ec12d2624d9a950604a4"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/18_FINAL_OPERATIONAL_CERTIFICATE.sqlinc",
+      "sha256": "9ba9d59f3168492d53cf38c003e5a7cca117aa627edcbfe211061a0d628e8c2f"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/19_ACTIVATION_PROBE_AUTHORIZATION_ASSERT.sqlinc",
+      "sha256": "9a4698490f95584ed2e94ea58e1a6a9312c52b3a55f3109f067e9e3be3ba88b9"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/20_ACTIVATION_PROBE_SCOPE.sqlinc",
+      "sha256": "03e72b4f50fe5716f5baf206e4979a799da161f365a5b8338792308c5b408bf6"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "sha256": "b400d184f791415db84c1badc31e9aee82fad7601512bfcbd78c267479dc468e"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/22_POST_VERIFIED_SETUP_ASSERT.sqlinc",
+      "sha256": "0610fc771a322fa11e8cc4c0aca94d0c20a34bf873626aa8926ab0de22f072e0"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/23_POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc",
+      "sha256": "81fbe2c9cd141d10a909072f140a734e8a759a39ce5102691b57ed25fd40982d"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/24_POST_VERIFIED_PARTIAL_ASSERT.sqlinc",
+      "sha256": "9eb4bff291bccd7127df1cf878854ffe896dacd24f0c68264690496188398724"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/25_REPORT_FIXTURE_REFERENCE.sqlinc",
+      "sha256": "697d3ca1fe0d9af1588d9e71c0b25c69b2dc48effd86e01dccc05aec65e28031"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/26_NONOPERATIONAL_PREREQUISITE_READER.sqlinc",
+      "sha256": "c0c7b32a56ad4974759932c38214691888d3bd4a8d5400838ceb24943cde110d"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/27_POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+      "sha256": "9f8e8a6448ead46d3d35e539938a6d1b36996d3a39ce8688645d4db806e12238"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/28_12_complete_report_nullable_rounding_owner.sqlinc",
+      "sha256": "c41ff4b378ab64eb4e566fc552c4f589100e8fab6a6a9f2d4361985b1c3c2312"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/29_11_complete_historical_fixture_native_assignment.sqlinc",
+      "sha256": "c1e8aa26fbea0b47aa4bd800efb5ca293469deb8363c1f51f61645d731b3b5ac"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/30_09_complete_controlled_setup_transport.sqlinc",
+      "sha256": "5af440278222cf223ef4bcfc8b75c9d7f24828ed135366148d2ec4c85c3f910f"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/31_OWNER_ONLY_ADDITIONS_ACL.sqlinc",
+      "sha256": "acfbbf1b156ac7d9183185ed52b4b240f4543b404498732510e9ad526a2f6a25"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition_v1.sql",
+      "sha256": "6199a03d706976e2166eddaaa230e87326568c6a0cce2de876067bd8afad17bc"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/01_canonical_input_assert.sqlinc",
+      "sha256": "2cd65e45477e28681bf64f30550de76ae3db39dbf6c174bfe0449d12c1a6ef39"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/02_complete_clock_scope.sqlinc",
+      "sha256": "f20d846c5342cbf8f23f511c4828dd3cca90520c1e0d645593707d233c562eaa"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/03_native_input_witness.sqlinc",
+      "sha256": "870ce56a51eeb9bcf0a9668f809268a210d7fbab871604abb3db4a8649ad6638"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/04_complete_native_lock_fence.sqlinc",
+      "sha256": "693ba3df876823767a9eb455f0646ea444d468470a83e49425c7316812282315"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/05_native_creator_intents_and_triggers.sqlinc",
+      "sha256": "53c4301a9b556e91358287f23654e5284877e7577ead7561197b2efb2a5ea4a1"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/06_send_family_fence.sqlinc",
+      "sha256": "e904da7a8cebab76a3baba0e04b3fa5d64ee4cb4d67e27f2ce0062c5e58aacae"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/07_complete_current_approval.sqlinc",
+      "sha256": "c85a08afc113c5a871bfada9a469a70c4a639278f92d30cab21916d0d4da165a"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0519_healthroster_a0_current_native_composition/08_complete_current_request.sqlinc",
+      "sha256": "5d36d746d772f28083e032b72e6d8384c6295f5fe85643dabf4d28e0c9c78cfe"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition_v1.sql",
+      "sha256": "bf5a185e43e565afa45e9282d2bb9bca454a258b47bbd38cfa06ad2876339d23"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/01_certificate.sqlinc",
+      "sha256": "34a5e2316ec74b00347f4c8d0f9f3a6f354435a2aa4f733cbe6d4043a890ced3"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/02_release_feature_strategy.sqlinc",
+      "sha256": "3dcfe4aa8ae3d407a184f24c0ca99f704be888161c34a1459bb5b99ea524433a"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/03_operational_dispatch.sqlinc",
+      "sha256": "ceea6d41132f9f5af4c5d6225766537a396a10dd4a2ea9c9ba8c45d3f3449142"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+      "sha256": "920a2fedc2f53680536b588d297e32b83fce8801b11167827c94b7ba7abe263e"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/05_complete_current_feature_setup.sqlinc",
+      "sha256": "73128dfb2010750d8984602b21cf99ca3b1e14f1f0778b3f267b661834290667"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/06_complete_fin4_lock_observation.sqlinc",
+      "sha256": "4be1a04f25af16bd827a69ebfe3a569009e14cebed485b2a14f83834f28aef1b"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/07_owner_acl.sqlinc",
+      "sha256": "ac499dd99243e7ef0e839e77c3ceb1cf0613b8777aab7bc570cc9f5d3c760724"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/13_slot_validators.sqlinc",
+      "sha256": "534b60cb7e7ada3fec3f376083da9633bf237cd4ea3918669ecdbc848435cb12"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/14_complete_native_snapshot_assembler.sqlinc",
+      "sha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+      "sha256": "41f389a3d77ca66b2f2ebb0bf596cfd5b8790cd5e58ac29c0f063e8e1347dfea"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+      "sha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields_v1.sql",
+      "sha256": "58af5fef09190f8343397013dc931521ea060579f0ad2be5c7ecf415f9ea6787"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0953_healthroster_no_shifts_undo_v1.sql",
+      "sha256": "25a25cf7c9f88352ca0dffadff6ecca151e80ac475ce7909d69479e780ad9547"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0953_healthroster_no_shifts_undo/01_no_shifts_undo_atomic.sqlinc",
+      "sha256": "0abb53f2ec202aac215476a45aee8ce70b6acfcbbd9806c285cb7359bad2267e"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_ordinary_isolation_v1.sql",
+      "sha256": "3113fcdff54ce047f3eeb2a91a5fe72e9a85f3bd79865eab24261313121d7acb"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "file": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "sha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6"
+    },
+    {
+      "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+      "sha256": "886515c164737eaba7882a443213b6f678b00ecd8079da119720d042d4daadf7"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+      "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/01_complete_scalar_core.sqlinc",
+      "sha256": "b88809a015b97590f9ef9060329345c1b1fb8fffd9404eae2dd8a738f6d6a09e"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc",
+      "sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql",
+      "sha256": "a8ce93b2d17b66d4ef30aa04f66391b41f66d4c125e632bd57c8540f39217fd6"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/01_physical_token_and_retention_helpers.sqlinc",
+      "sha256": "5ff8eea6905813e1b2964d47497f23e46d2ba0eccdd8669ada202e0bc2a1d3c8"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/04_complete_native_lock_fence.sqlinc",
+      "sha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/05_native_creator_intents_and_triggers.sqlinc",
+      "sha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/06_send_family_fence.sqlinc",
+      "sha256": "e9c44bcdd2b9221fedfad9960b5bb4b08b689e52199864168977c5c3f8a11022"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/08_complete_current_request.sqlinc",
+      "sha256": "c48af252f023a8bde617502fa34c4a470b4794dc2fe383fed8a0d9f1cd87d5ce"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/09_native_child_raw_intents.sqlinc",
+      "sha256": "be53f4621a7aac921dbcc256acb97d194bd310e61130a9a69e41df5e44f9c162"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors_v1.sql",
+      "sha256": "9ce8fc3e062cdeabef859ee323443a13f2de8caf26b7df6c77d272e3d365938f"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/04_native_source_footprint.sqlinc",
+      "sha256": "7ce58452bf0980476076ad7f5ff9fd9e90ab0d49ddd40b99b37f32e7ddc6d59e"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/05_raw_selector_helpers.sqlinc",
+      "sha256": "dcce82193c28b7b68caad8532c798aa851f5c93aeca521c34d3529ff86d710de"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0344_healthroster_source_selectors/06_complete_source_witness_policy_projection.sqlinc",
+      "sha256": "1be247f3656ce583549cbe4456d8ba5c7088a31bb983637df92c53060e5ccfd1"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
+      "sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0801_candidate_push_calendar_v1.sql",
+      "sha256": "c0ba94b1bb6c6859ef4acd09f7866c6efd9891a6baee54c143857de4072f3315"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+      "sha256": "d83c11d3eae6ee290b545e714738e45f22c70a12de5d0a1188717b065f8bceff"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql",
+      "sha256": "47789ebbdf899cb3045dc4164654c3eac499cf73a746bfdcb0b25c7c88beac5b"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql",
+      "sha256": "004bcc41d082c29ed7ac25b176dd3a1a4df4088522c453ec9f5fc584c82bf0e6"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "sha256": "3b44a121db9bffd51351e579c251556c631ce19985d7a3b79b3c09c0f525c88f"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+      "sha256": "ca631e753a0eb31c7468d5a757f89863e608012a66b11408c7a17a6109758037"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql",
+      "sha256": "19e92c8ce8fc01f87abcf553e5ebcc930e945fbaaad0af4ae8dbe0126ceee14b"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0319_weekly_contact_office_projection_v1.sql",
+      "sha256": "d94522d3ae20fa2c4e2a0ee0d0918dbdd9ccc33e345995ae921cf8e19a07e597"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0339_weekly_contact_query_native_lifecycle_v1.sql",
+      "sha256": "d7e7919d601e8d6a8eaf82a7fb30f3c46a287c2b08f95c98f8a7bdbbfefb2e79"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0403_weekly_contact_source_memberships_v1.sql",
+      "sha256": "a2c5221c2531d7f0bb8245573fd945cfc3ba9c610be9b1b7acb5e5f37e8a9010"
+    },
+    {
+      "file": "supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql",
+      "sha256": "9093e8f09ffea82bf383503357b6a5509be2436a053a1566fa99040a5961fcb0"
+    },
+    {
+      "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "sha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff"
+    },
+    {
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql",
+      "sha256": "4a198923913dc362b056772344d607ca9685b195b961a33b8d05542fdf03b45c"
+    },
+    {
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_detail_get.sql",
+      "sha256": "8833b9d788bb04dbec300c3c1f17715d7ddefc2c59f395b869cd25629721010d"
+    },
+    {
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql",
+      "sha256": "f03871a1c0ff89d519b3650577691bc633c25c2018c4b7ab1c03e1a88b435dfb"
+    },
+    {
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_invoice_document_invalidate.sql",
+      "sha256": "977b3caf353ada34ee3f1f275a20121ca488a291a20927bd59db04e71e265318"
+    },
+    {
+      "file": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql",
+      "sha256": "7c30d8293f3a9729d93a92f05c23ffee63b7627d0093e205db13199b0aede60c"
+    },
+    {
+      "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql",
+      "sha256": "b618abc8bc8e5ce44a05c54209db88bc0c08d1e11a81ad39e5507209868b64b0"
+    },
+    {
+      "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_context_batch.sql",
+      "sha256": "385e4e7b3b36c51c1fe32afffc61117e092748c42fd68a8aeaf4c18e2d8c67b3"
+    },
+    {
+      "file": "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql",
+      "sha256": "0c527cab3a5989918719dc8b192c2cf6f8c2162fb150710fe1121891f5da152e"
+    },
+    {
+      "file": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21"
+    },
+    {
+      "file": "supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql",
+      "sha256": "b9657bf480a01ded860e38a345917fdbc86a69c80b1831eeff96e272758ea073"
+    },
+    {
+      "file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "sha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d"
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql",
+      "sha256": "9dab259fdef65b8fb63acb5338ab7202ae3d3bf379972a046ddf08ae5ce83edc"
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql",
+      "sha256": "d516373eff7d5ec68d58f1b13ee1ee096cc5bc53c5fae87fa17f9e7610771eec"
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_11_private_invoice_operation_start_core_v8.sql",
+      "sha256": "5bb036fd44f31e86cfd346e3eefc2987b0c1c567538687a74a37b973478b9810"
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_12_private_invoice_generation_advance_core_v8.sql",
+      "sha256": "50f7a74faee3b36e8252c87ac678703c61309b84f55360739eae8c9a744ecd93"
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql",
+      "sha256": "24b5a265869fdebd00d05bb2756dc5eca928aa78b530c709d59cc07aa25aad25"
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_18_private_invoice_batch_manifest_advance_v2.sql",
+      "sha256": "6dbb64219a2fe8151b052613cf0ce4b19d06933e618ccf15ec22a5ed1ef7ceb3"
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_generate_classification_v2.sql",
+      "sha256": "3877472038dc6df25b79952587b08a9256c26642e1952cc7235ac748cb1424e0"
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_issue_classification_v2.sql",
+      "sha256": "7a33d72dcdbba479ec88fa907c9a3d2995cdfd424b9664ddc3b5da57155e5bce"
+    },
+    {
+      "file": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "sha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c"
+    },
+    {
+      "file": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+      "sha256": "343776bd40c097fd6aeb1328f0f93deb52727edce78c6dc094dd6c8c319a92d3"
+    },
+    {
+      "file": "supabase/repeatable/30072026_1745_invoice_source_edit_residual_fix.sql",
+      "sha256": "79df902351d6c587ca8392cd85ed2037e552a21bc5aab6f635b35c056ab37bda"
+    },
+    {
+      "file": "supabase/repeatable/31072026_1450_invoice_week_ending_document_identity.sql",
+      "sha256": "0b6af92fb4d6508a18517bc27a9542575e35cc595ee7d588c07a93c759772968"
+    },
+    {
+      "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "sha256": "5757ef54f996c82cfb72353702ca9982ac9862222f20ca13420370fcde9ff7a5"
+    },
+    {
+      "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_calendar.sqlinc",
+      "sha256": "51509cebfcf3f6e8a263da7614d419294e0ab4ccea9f926add09b72f51091e3d"
+    },
+    {
+      "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "sha256": "7ee49ed797ccb4b469677a9ccddb20b7a821f6a318cb56e64dd31e8f34ddbb13"
+    },
+    {
+      "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+      "sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987"
+    },
+    {
+      "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "sha256": "3a4e886ad6d6280acd300884ce87625fff12ae66ebecb206e2cd98865fc915e8"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_office_rows_v1.sqlinc",
+      "sha256": "c96636a2fb262915af44830721e10a7bd4118646cf84b85353fe595faf104e0b"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/020_native_member.sqlinc",
+      "sha256": "fc8c7e3f3ec942984a22fb5756c89f7e3f7315d067143b91c04cc1a00e665cfa"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/021_native_payload.sqlinc",
+      "sha256": "f7b74f5bda6d2bc5c3b009af10c5260b1b9928f2b7eeeab5d97d91417823aa37"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/030_native_enqueue_core.sqlinc",
+      "sha256": "80e333e33685204838b49ae2c67a055d5df5bf2534d9c66026a58955111d25de"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/040_native_recomposition.sqlinc",
+      "sha256": "74283f975ceb265dc07137652136414144c9c64d4f24a0cdfbf5fd80ae7ae7f6"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/050_native_entrypoints.sqlinc",
+      "sha256": "0958ee3673664c3f7b82860c0522d09db21bd73f25da67d35ac7d4ffc9a9476f"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/060_native_result.sqlinc",
+      "sha256": "9f0294f2aba86d207959eef9e3578736158c45595cc12693c01d39b8e06792b8"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/065_native_followup.sqlinc",
+      "sha256": "44847094bae7a1a33200a03540421c99d4f2bf1a69fcd7cb208f7a7da7ebc3e4"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/070_native_mark.sqlinc",
+      "sha256": "a76b9149dbadd5e9375a00eae5e2018d3bc74a5ced34b5f0b6fbaf4c0ed39705"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/080_native_integrity.sqlinc",
+      "sha256": "c416deb4987780e37714f99762c9c894266db5ef6409742773d6158885c00272"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/081_native_claim_guard.sqlinc",
+      "sha256": "eaf1a4f28f5fbb207b8e1ad8a30ca1de20966a78973c3ec1e50240284c261f3b"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+      "sha256": "9f9a54c9c3e650f6d71ccfd6fa0bd8181b9dfe816b6789e8be5907ea92a381dc"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/083_native_claim_bridge.sqlinc",
+      "sha256": "659c5c8c7186f99696fefcfed804fab35716b8826b2c89bc32d780a79017c3e9"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/086_pause_inflight.sqlinc",
+      "sha256": "788f41a4fba9de808fef4c7dc2bbacb11f887b6da2c74d54ff22d1b92fbe602e"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/090_acl.sqlinc",
+      "sha256": "d18558c0ab5ad72ae5fd17ad9d3de806d4b43cf7ff804137c4b1a5ff2a74bfa2"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_query/091_claim_acl.sqlinc",
+      "sha256": "5bdc4ac616da2e68d7e2b6e2b75338ad2addf86fb8b521f19be88ad35246e7cb"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_source_memberships/010_native_logical_members.sqlinc",
+      "sha256": "25fb04d1466e9f25c9e341d543cbe852c74614683f6e9c49dbc5dac21dc7e3a8"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_source_memberships/020_native_budget.sqlinc",
+      "sha256": "92f349dd431dc1808e4d6a851794a3cd51dbb898e804d3495592e2f51d382a7e"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_source_memberships/030_native_enrol_assert.sqlinc",
+      "sha256": "eed10421aa5248b6fe923456211b95189f0924c39de2eb158ebeb9d8e9d515ec"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_source_memberships/040_native_accept.sqlinc",
+      "sha256": "cab29973854389e28cbd22b3ac9a85c9dd5dcc6063156d499667c9c57367b914"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_source_memberships/090_acl.sqlinc",
+      "sha256": "3675ad3c2327fa0b41ad836ff9995e708868d2decda3660cac22e2b1e142bb39"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_timing/010_timing_validation.sqlinc",
+      "sha256": "5172f1534da1e297cc477d53ed8e8c9d08f1a62ea64885e15c27f53fbf7325b4"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_timing/030_global_owner.sqlinc",
+      "sha256": "9512c99a3fb22812dc0f8c93a80ae2faa272cd084793af75395c0ff84f733879"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_timing/040_native_timing.sqlinc",
+      "sha256": "17cf6430346da4bb2ce5aa79034824b131c527c6a56a278243fea27047f329be"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_timing/070_acl.sqlinc",
+      "sha256": "23e8f28ec1e958dc74f28182a3d28f25ef416fa154f8169cd6d1a0345eca9ba5"
+    },
+    {
+      "file": "supabase/repeatable/support/13102026_1210_weekly_source_final_value_helpers_v1.sql",
+      "sha256": "cb441a2dbf78ba3246c02c3f33af1cbb46b94c006d76748e5ae0cf65dac518c1"
+    }
+  ],
+  "payloads": [
+    {
+      "file": "10_complete-native-preparation.sql",
+      "sha256": "637a383b0c3ff98bfe20aca24ed47a0cd7920e7cabd5875d8e3cc155b9dd8b53",
+      "bytes": 20322819
+    },
+    {
+      "file": "20_genuine-source-prefix-and-25-cases.sql",
+      "sha256": "64b0663f7a190e9db572a8162d444459b0531385c768c33ab5b1fa25e0c81e8e",
+      "bytes": 128874
+    },
+    {
+      "file": "30_complete-trial-inner.sql",
+      "sha256": "a6f71bc7bc355d85a69b625c5c5448327e0fb973bb551e70cf31a5fa2d978aa4",
+      "bytes": 20451857
+    },
+    {
+      "file": "00_fresh-I1-predecessor.sql",
+      "sha256": "d0bafc4cf56dda42b43ed7bfc0cdbbed16f5ac142f9830f1dd8dc97ce986e5f3",
+      "bytes": 16113
+    },
+    {
+      "file": "01_fresh-restoration-relations.sql",
+      "sha256": "44d4c6396890f2fc550ff1f17841d2a255e07ff467f01131b80cd06930b98d49",
+      "bytes": 377
+    },
+    {
+      "file": "UNIT_INDEX.json",
+      "sha256": "748a6bbc8f629d2a8f76182eec4e83964489bbb02ec1b6a15b2278b2d17486c6",
+      "bytes": 190642
+    },
+    {
+      "file": "STATEMENT_MAP.json",
+      "sha256": "0302de9aec07fa6968cb5db76113cf80b4b3e45f2541cb056bcfd333915b03c2",
+      "bytes": 1545962
+    },
+    {
+      "file": "FINAL_REGISTRY_DRIFT.json",
+      "sha256": "14a67d6ed9ebf7559c2f71af03ae857642dee842f67885671947768ea410a1e0",
+      "bytes": 2765
+    },
+    {
+      "file": "FINAL_ROUTINE_OWNERS.json",
+      "sha256": "67983ea4527e5f3afd8fd4a3772ec4e2a1f3c482dabda59f5ba10b50628188d3",
+      "bytes": 253140
+    },
+    {
+      "file": "02_before-and-fresh-schema-absence.sql",
+      "sha256": "38a08047c8e09427c2f2148e830beb697e2d4e98dcaddd9a5a7fd7ad68d80d3b",
+      "bytes": 2236
+    }
+  ],
+  "held": [
+    "DIRECT_KIER_ENVELOPE_EXCEEDED",
+    "ROOT_SEND5B_FULL_EXACT_COMMIT_MILESTONE_REHEARSAL_REVIEW_REQUIRED",
+    "EXISTING_MANAGED_REPLAY_POLICY_HASHES_AND_ATOMIC_ENVELOPES_REVIEW_REQUIRED",
+    "FRESH_I1_CATALOGUE_LEDGER_BASELINE_REQUIRED",
+    "EXACT_PENDING_CONTRACT_SEAL_AND_FULL_REHEARSAL_VERIFIER_REVIEW_REQUIRED",
+    "FRESH_FULL_RESTORATION_AND_ACTUAL_UUID_ABSENCE_REQUIRED",
+    "NATIVE_PREFIX_START_25_CASES_NOT_RUN"
+  ],
+  "mandatoryVerifierInputs": [
+    {
+      "file": "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
+      "sha256": "012b8ebe81b46a486abe9e2faf4c4d507decff9726a45ff4f35b6bb068113d5c"
+    },
+    {
+      "file": "tests/12102026_2140_candidate_daily_legacy_two_way_runtime_verification.sql",
+      "sha256": "05e9676d1b3f86f9085ec9355906c37f60aa8965a70acb3590de14fb0650c6c1"
+    },
+    {
+      "file": "supabase/verification/10102026_1700_candidate_notification_management_v1.sql",
+      "sha256": "54efab0b929e2e8da38a161908e3a9ceba88fada326f5296a33f11c703903232"
+    },
+    {
+      "file": "supabase/verification/10102026_1405_import_expense_qr_approval_v1.sql",
+      "sha256": "1df601877c770cdaae660e514e148a5a6bc77f2f03658f48c8747f59b676e485"
+    },
+    {
+      "file": "supabase/verification/10102026_0810_weekly_source_contact_policy_v1.sql",
+      "sha256": "892fc4ad6be3f99b7c7b40761d7a93514a6312ee582a8b4f2b380c8cde7d9f7a"
+    },
+    {
+      "file": "supabase/verification/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+      "sha256": "a34b3f5687c57d9c60a6f8010436fee2e0f7b302ec90ebf9a32108f4551eee01"
+    },
+    {
+      "file": "supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "sha256": "84b081908ff837103c907e2e4032ce52264735403a92598bfdffd7e5018bf0ba"
+    },
+    {
+      "file": "supabase/verification/07102026_1204_candidate_emergency_roster_snapshot_verification.sql",
+      "sha256": "6fc8e976fe4d0ceebcd2b14f5035cba4432173f25e817b75675e33cd2f2ddb54"
+    },
+    {
+      "file": "supabase/verification/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "sha256": "e2081a2d69d2e7b0649036800fe09f9f3ae4a32fa174fbafc0356d46ed2f91c2"
+    },
+    {
+      "file": "supabase/verification/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+      "sha256": "099067d21e9f5110c65f958c67f13f1419b3a52a42919d02e2b1fda34610d994"
+    },
+    {
+      "file": "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
+      "sha256": "fe7df45348b9ac8a1bfe9fba46cf3067e0b10c8c8d54d0e53fb559d0ee60cff7"
+    },
+    {
+      "file": "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql",
+      "sha256": "e0666765091409704533ed0f471aea4dc0d001801715a5730be00c3697c6dede"
+    },
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "sha256": "70784b8c5be9ff9467f790c9c80854f197a9c2f396ea7448e90aee30e6192845"
+    },
+    {
+      "file": "supabase/verification/22082026_1712_daily_validation_compatibility_security_verification.sql",
+      "sha256": "97bec745fcfa91d39d003a64dd632154fa4a437043d2ae6edfc30ec198a38523"
+    },
+    {
+      "file": "supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql",
+      "sha256": "e4f027dc5656d30844312e8b1e99d4ef3dcf37676ddc73faad58318755a64be1"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "sha256": "0feb5cdf864c893a9015e2955f5051673ca57d0eb1323b711dbac939a8d62d02"
+    },
+    {
+      "file": "supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql",
+      "sha256": "efad90585235ed640a51f5ae3cdeec9aed2695714c5cb0f4afc2d53541d0b06b"
+    },
+    {
+      "file": "supabase/verification/24082026_1721_miget_private_helper_service_acl_verification.sql",
+      "sha256": "2822fbe2718626863dbe89d5f6058a2e7219715039c643942389562f1f5ea9d6"
+    },
+    {
+      "file": "supabase/verification/26082026_0044_candidate_manager_authoriser_policy_v2_verification.sql",
+      "sha256": "232da03b5625e1dfa69bb1c421dbeff70aec39a09af5a808e468e696a1db64ff"
+    },
+    {
+      "file": "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql",
+      "sha256": "7b3b12279a152679d5adb63660b190d4e94d5702398f48f4d68d85d69d8ae3d9"
+    },
+    {
+      "file": "supabase/verification/26082026_2058_candidate_system_actor_verification.sql",
+      "sha256": "721074977f0dbadbd9761206f74bdee25b6957ca8e0d2da5cbca0f8bd541682e"
+    },
+    {
+      "file": "supabase/verification/27082026_1936_candidate_timesheet_summary_refresh_verification.sql",
+      "sha256": "7e07a9ed18275836cf7bb661e9c4d70ac0e51c34529ad140471b14319e592406"
+    },
+    {
+      "file": "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql",
+      "sha256": "676742eec620099f188fd6ddd0c87246e58a096a51f1a6f3f728a88ac0c19fbf"
+    },
+    {
+      "file": "supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql",
+      "sha256": "01e6749bbf851ce70f85cef8b552005713bfb86ae273d28051b81241684a454d"
+    },
+    {
+      "file": "supabase/verification/28082026_1236_candidate_daily_rota_clear_key_verification.sql",
+      "sha256": "e3a97257a36662fe6c6791c1540ddf261a2f9d70692e94ecfb0e4d1e89bf9419"
+    },
+    {
+      "file": "supabase/verification/28082026_1321_candidate_daily_calendar_freshness_verification.sql",
+      "sha256": "ff54dc1e5b0666776fc8e2e3691752ef41cf8538fdd76f03cca1d3a3a09e3ab2"
+    },
+    {
+      "file": "supabase/verification/31082026_1026_candidate_daily_active_window_projection_readiness_verification.sql",
+      "sha256": "b1e9061e6066fbe83151a3c256229099697abb5785e2c47341191c0213adf404"
+    },
+    {
+      "file": "supabase/verification/28082026_1657_candidate_google_rota_removal_verification.sql",
+      "sha256": "9177f72342ee4ff3f43bc4da3e4ad5b28813feda8cadefc027f7c355b1cb5d68"
+    },
+    {
+      "file": "supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql",
+      "sha256": "73842f8c6593f5b37d1886709f489760efb9b90a86e2b3e03d5fc0a33da92e0b"
+    },
+    {
+      "file": "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql",
+      "sha256": "d8031788eee1fb06cdd82528051889ac1c476f89a639c8300e22bafd203cebd8"
+    },
+    {
+      "file": "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql",
+      "sha256": "e4fb9311b074e521616fc1c9a8e816d22b64f4c961920289473e5ce4dba5ef4d"
+    },
+    {
+      "file": "tests/29082026_0117_candidate_daily_projection_expired_lease_recovery_runtime_verification.sql",
+      "sha256": "9b5515545e4c9a4241ebe9d6139516ac5dca0e5fbb2e145f255ef04bfd29c30b"
+    },
+    {
+      "file": "supabase/verification/29082026_0246_banking_pay_modal_structure_v2_verification.sql",
+      "sha256": "6c8a68077adb2c59c90c96741e5dde5b28877bcbd26bcde824cd1ead1d479774"
+    },
+    {
+      "file": "supabase/verification/29082026_0336_banking_pay_release_authority_repair_verification.sql",
+      "sha256": "2f42c3cb26114dfcd62e6b3fa623aef11ad8d75a1c3b85aca218ec94763a5449"
+    },
+    {
+      "file": "supabase/verification/29082026_0518_banking_pay_replaced_queue_terminal_shape_verification.sql",
+      "sha256": "c4bc774476338df50eee3437a3fb0d335e42059238156fe21d104f169c0a5629"
+    },
+    {
+      "file": "supabase/verification/29082026_0614_banking_pay_replaced_candidate_owner_verification.sql",
+      "sha256": "25746a344a4cc862826c56689710e35acda95bedf113b6106ee5a445041a1c47"
+    },
+    {
+      "file": "supabase/verification/29082026_0720_banking_pay_discarded_session_blocker_verification.sql",
+      "sha256": "b4f1895f05a94d5e6ba273471463983d82448e1e8543984519b59f5f1dc35768"
+    },
+    {
+      "file": "supabase/verification/29082026_0804_banking_pay_version_one_refresh_verification.sql",
+      "sha256": "0734bd8a5ce7f41a85d4649a49bd4f394752e2964be649eff9051a5ff67dd617"
+    },
+    {
+      "file": "supabase/verification/29082026_0923_candidate_daily_reconciliation_linked_window_verification.sql",
+      "sha256": "c5012d2476a440824d7e013edeb7ac142a81a266394e1987d87ed223353eab07"
+    },
+    {
+      "file": "tests/29082026_0924_candidate_daily_reconciliation_linked_window_runtime_verification.sql",
+      "sha256": "0640554467f31b374706dfcfced2f7c17e48a0596aa035515c50ed0e3bc359fb"
+    },
+    {
+      "file": "supabase/verification/29082026_1407_candidate_daily_reconciliation_identity_probe_verification.sql",
+      "sha256": "81b1c7f5af33729edd6232f51f1ff951e296184610f9a3c592434170eb79e97e"
+    },
+    {
+      "file": "tests/29082026_1408_candidate_daily_reconciliation_identity_probe_runtime_verification.sql",
+      "sha256": "5833af1d3305aaadb45e5447b5a28c13a6b04f15e87c0e3f4fd599e281261d7b"
+    },
+    {
+      "file": "supabase/verification/29082026_0952_candidate_expense_resubmission_anchor_verification.sql",
+      "sha256": "159393c883d534091d42d50951483843c6fd1f9ade5f3bb59c83f05c486445b0"
+    },
+    {
+      "file": "supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql",
+      "sha256": "85e3879cf552e2374aa9a7ed78973fc1b54b19cd87a931d2f720689b22e0c8d9"
+    },
+    {
+      "file": "supabase/verification/29082026_1157_banking_pay_source_refresh_terminal_verification.sql",
+      "sha256": "3d856d46bddeec29fcb2131816bbccaae05f547ad617aada3971b5c7a3833dba"
+    },
+    {
+      "file": "supabase/verification/29082026_1313_banking_pay_invalid_source_authority_repair_verification.sql",
+      "sha256": "a8b062ac19f41febeb0f0c888ef40beb776bd71b3ed37ba644ae1225716e2538"
+    },
+    {
+      "file": "supabase/verification/29082026_1857_banking_pay_action_list_presentation_verification.sql",
+      "sha256": "305a0e56e35fea90a68746413ecf821f8bfc24c5c05dae241e661daf7c494f71"
+    },
+    {
+      "file": "supabase/verification/31082026_2231_banking_pay_action_required_amount_presentation_verification.sql",
+      "sha256": "c7b26b54423a8fc10e234723d7bf7b74e5936bf72f174235256e4bcf0a8b2fd3"
+    },
+    {
+      "file": "supabase/verification/30082026_0134_candidate_submitted_weekly_card_linkage_verification.sql",
+      "sha256": "6f4e13b9ac3508bd52a1635b7679ae55a9ef65cf124bcc0a7c9ae1e1247b7d90"
+    },
+    {
+      "file": "supabase/verification/30082026_0316_candidate_daily_information_directory_verification.sql",
+      "sha256": "4686588c0fcff6efa30aa3fe539b074a212a51d43b2cce45ded8802de7f57e5c"
+    },
+    {
+      "file": "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql",
+      "sha256": "54591ecaf499bf4767f509c424ed5666d9a43b807cbfa9a30e1505ea658fb3a6"
+    },
+    {
+      "file": "supabase/verification/30082026_1113_candidate_paper_return_proof_transaction_boundary_verification.sql",
+      "sha256": "38bd47904579fe717bf8397aae827a36d4c288a730b64bb20b74e839a18f788b"
+    },
+    {
+      "file": "supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql",
+      "sha256": "eecae1828f5ac8b25db0832b089610cd3b0f17fc6a9d10bc62f4143151949001"
+    },
+    {
+      "file": "tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql",
+      "sha256": "717c8b145f77b3f708b64caeedb6aa17b0f111403fb8d3ef558616b98bb98b95"
+    },
+    {
+      "file": "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql",
+      "sha256": "ad10ad9f3cadeab76dd049f6a6cc002b8ce2217d3e77a913357ed9ee9f453763"
+    },
+    {
+      "file": "supabase/verification/31082026_0322_timesheet_cross_record_overlap_guard_verification.sql",
+      "sha256": "1135b2912a9c36e7019a6503ee59ab1c330f2cc6d8148cadc7640e79739efa40"
+    },
+    {
+      "file": "supabase/verification/31082026_0605_candidate_empty_expense_carrier_action_verification.sql",
+      "sha256": "d54b8f3bd086719186e279658debaaca2daac7fa8ec05906984fe3692dfec03b"
+    },
+    {
+      "file": "supabase/verification/24092026_2300_candidate_provisional_expense_carrier_verification.sql",
+      "sha256": "8e8294dbecd274df714ec4f771c55f018b622b4f39c9c0eabaf97c5ed242b6de"
+    },
+    {
+      "file": "supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql",
+      "sha256": "0277e4251fd48b52fa9e4e6707f7a4e791237ea5a77cb400b1bcbec6d7661bf3"
+    },
+    {
+      "file": "supabase/verification/31082026_0925_candidate_workflow_mutation_receipt_lookup_verification.sql",
+      "sha256": "f0b2a398bdbab3fe33df6ae8bf739d62a64066099f9cb0f4bab2058f51b37f8d"
+    },
+    {
+      "file": "supabase/verification/31082026_1436_banking_pay_candidate_group_pagination_v2_verification.sql",
+      "sha256": "9948633c9d9a5b36607ab1ca5f19ae5e92fc44274f2143835798e70a0a473977"
+    },
+    {
+      "file": "tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql",
+      "sha256": "deba21b8960fb4edd7e695bf4e31609759fe8af5cf88231479295f824f80cdc4"
+    },
+    {
+      "file": "supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql",
+      "sha256": "bdeedbd409687dbf48bef5eab14e36b7da8ba4dd547cbb77bfa9953113d98e60"
+    },
+    {
+      "file": "supabase/verification/01092026_1151_candidate_federated_session_monotonic_projection_verification.sql",
+      "sha256": "7c15efb889771bbe02ff670b67899c23d20219e82b69927506ad9d69735ae3d2"
+    },
+    {
+      "file": "supabase/verification/01092026_2032_candidate_federated_session_family_projection_verification.sql",
+      "sha256": "582da91929f7f5746f73f35d05d5539e58f4e9f2e00e2d36386bb70548939d3e"
+    },
+    {
+      "file": "supabase/verification/31082026_1906_banking_pay_candidate_group_display_only_selection_tuple_verification.sql",
+      "sha256": "d3e38d5e47878c5201e864f7accc157cae10724d73c621baed12313e6acbd620"
+    },
+    {
+      "file": "tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql",
+      "sha256": "95c3a5bea1bec630fd6078bd27f8d48238443ea36c20dfd68dc687153d7c7968"
+    },
+    {
+      "file": "tests/01092026_1400_candidate_legacy_paper_orphan_cancel_verification.sql",
+      "sha256": "7c5771d95b3574b74ba1621951f296ca805edaf5c0bb3f6dabcb0220e8d77921"
+    },
+    {
+      "file": "supabase/verification/01092026_1500_candidate_no_work_factual_guard_verification.sql",
+      "sha256": "4ae4200f80de12fc7235312519c8da45d561c2c941151a8a03e4bf5bed47eb83"
+    },
+    {
+      "file": "supabase/verification/01092026_1510_banking_pay_signed_recovery_draft_verification.sql",
+      "sha256": "73f65a8c30ec53e0c99164c6f9b7347fc147bcd9e76ec5da5cf15466a4d0e07e"
+    },
+    {
+      "file": "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
+      "sha256": "9cc1a6d050fe7d7ea9e6515cf2a06d2acee1a26e348170297a3ae0cf6f392c9e"
+    },
+    {
+      "file": "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql",
+      "sha256": "97e624c284317d59f7206d0697d09f9c18bed80bb471fc5f6c680a6197e52b6f"
+    },
+    {
+      "file": "supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql",
+      "sha256": "3dae01af0dc970a5540213c0e95e1cfc86986bbd8b831782311939534145e119"
+    },
+    {
+      "file": "supabase/verification/02092026_2390_banking_pay_workbench_settled_certificate_v8_verification.sql",
+      "sha256": "65de66c1135816de1de6ba99a26cfffad055a76f56a68a4cb733916e662980a7"
+    },
+    {
+      "file": "supabase/verification/03092026_1944_banking_pay_draft_certified_v8_verification.sql",
+      "sha256": "7a76bac4bc0a7f9105cc57c852021e00dc85425015b04d0d68154a08d08df9ce"
+    },
+    {
+      "file": "supabase/verification/05092026_0311_banking_pay_draft_integrity_setwise_v8_verification.sql",
+      "sha256": "e1cf2e5f8215b518a05cf72a3ce289820ab3ce028b394d3c5ea90dc31807a45f"
+    },
+    {
+      "file": "supabase/verification/05092026_0410_banking_pay_one_candidate_cancellation_scope_integrity_verification.sql",
+      "sha256": "f126afc09e0efc21adf8db990de9eb508bf2cfb3335a6bcc702e0efc4c501e2c"
+    },
+    {
+      "file": "tests/02092026_2392_banking_pay_workbench_settled_certificate_v8_runtime_verification.sql",
+      "sha256": "3e6aec635c9f97d2462cf9e531f8591c2f47b094d36ad333bd9eb14f6c4b7dc0"
+    },
+    {
+      "file": "supabase/verification/02092026_1041_banking_pay_draft_insert_items_finance_handoff_verification.sql",
+      "sha256": "17eb4894f0e18d80360939562b924b560531529d758bc755359157352fb08174"
+    },
+    {
+      "file": "supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql",
+      "sha256": "fc0f9d2930be5f4b5a0f754d9383255ce17351beb17cd3f96664ec98107fb325"
+    },
+    {
+      "file": "supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql",
+      "sha256": "984d883a0c2be3c71d6bf9d82c0766e9501a0695d7cc4d8b3b2a80225d8dbc85"
+    },
+    {
+      "file": "tests/03092026_1000_banking_pay_workbench_targeted_zero_output_runtime_verification.sql",
+      "sha256": "6f8a4c33e4f6c769f505eb2b912ec2f3f62fba48cd0ae7e3cc47cb5f277bc36f"
+    },
+    {
+      "file": "supabase/verification/03092026_1216_candidate_weekly_preroute_break_entry_verification.sql",
+      "sha256": "fc7aa4649eaf5a6a9d441cc5bba77db500de24783e5c70797e6efddcf49964bf"
+    },
+    {
+      "file": "supabase/verification/28092026_1111_candidate_source_self_entry_break_context_verification.sql",
+      "sha256": "10c94dde60b3c38bcf0d5de8aa19ef137c07d8dd75425c0b40440b01c4250328"
+    },
+    {
+      "file": "tests/04092026_0130_candidate_finalisation_lock_budget_verification.sql",
+      "sha256": "bff68de405603577a46342c44231822cbbe04582658b825b4b661d41d8c433f2"
+    },
+    {
+      "file": "tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql",
+      "sha256": "4525b8f7d82e47b0b687db83edd2ab2cd14f97c8ee7027f472dee65016be2a10"
+    },
+    {
+      "file": "supabase/verification/04092026_1421_candidate_finalisation_single_flight_verification.sql",
+      "sha256": "0cf9be478318c9f94457300430ee06fc50783e15c3ed04078e775081e97b4328"
+    },
+    {
+      "file": "supabase/verification/03092026_1642_contract_settings_effective_authority_verification.sql",
+      "sha256": "6e22356b38b580733ad4c127c96d519cc69a679b948090f39de01018fc722efc"
+    },
+    {
+      "file": "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql",
+      "sha256": "f25f52b22c97f26ea5cb9b26c4dfeaffcf697d7fc82060aedcb2845faf07e887"
+    },
+    {
+      "file": "tests/04092026_2005_candidate_expense_history_anchor_runtime_verification.sql",
+      "sha256": "34a686e83b485bece81da5f94bb63ebe6b59ba87bd319e6990cd4bfb7a09e209"
+    },
+    {
+      "file": "supabase/verification/05092026_1331_banking_pay_bank_event_movement_classification_verification.sql",
+      "sha256": "4fd1cecde5b0e7d460120551126ed020ba2bf02fe0172789b0186a80f87a9846"
+    },
+    {
+      "file": "supabase/verification/05092026_1415_banking_pay_no_money_unwind_result_arity_verification.sql",
+      "sha256": "33b46b26124e1f46d4e25f970f5bc5e9231e842f16ddeea90be99d807312b0d5"
+    },
+    {
+      "file": "supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql",
+      "sha256": "8b22c09e81139e3cc3032e71a46206fc77a7e91011fdf651aa5d7da54a064298"
+    },
+    {
+      "file": "supabase/verification/06092026_0345_candidate_sequential_expense_manager_approval_gate_verification.sql",
+      "sha256": "540a2ce881326e2db0f31b27e91799d62a5012205329cd7871f1a4849f2a1f1d"
+    },
+    {
+      "file": "supabase/verification/06092026_0600_candidate_targetless_expense_paper_after_approval_verification.sql",
+      "sha256": "85598fcd848f15d1d7ac5e0b28e37711c5041596bc88a9f95160222e09738ef2"
+    },
+    {
+      "file": "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql",
+      "sha256": "d6469494ff2f828cb1b7c3ce1f65a40f22b5d6a43ee94abcc36ebfaef569c35c"
+    },
+    {
+      "file": "supabase/verification/05092026_2109_unified_outbox_list_v2_verification.sql",
+      "sha256": "6536b48249d08d021224321335ee4c73dda6c1fbf72696af6aba6541200d9f75"
+    },
+    {
+      "file": "supabase/verification/05092026_2110_candidate_submission_delete_reject_guard_verification.sql",
+      "sha256": "e3809e5cd92a6fa4cd17483ac992fbd3eb77c2f0453e63c1895e7a32018ae4ac"
+    },
+    {
+      "file": "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql",
+      "sha256": "86817ae1154349f82e39a25fd03329f7746d158b5764b371f4fb780281a57c39"
+    },
+    {
+      "file": "supabase/verification/08092026_1416_legacy_daily_settings_authority_backfill_verification.sql",
+      "sha256": "6fdf0ac0ff4a1b3a2d3be662a8a67fb408a36e8eb9fa62b2e9c1b354c69d7206"
+    },
+    {
+      "file": "supabase/verification/09092026_1340_candidate_receipt_reuse_atomic_verification.sql",
+      "sha256": "3b0382a1d768dea01b5bc8032c7f786cbef9fb25058759b5ad33cd929990f355"
+    },
+    {
+      "file": "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql",
+      "sha256": "af6c0ae67eaddadc7fc92d966bbcf45ed33a54699e56274502a4f5a464a24f99"
+    },
+    {
+      "file": "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql",
+      "sha256": "dd577c016084f95792bc235597655d57ed1f057fa54b5150352071829656afde"
+    },
+    {
+      "file": "supabase/verification/07092026_2115_banking_pay_unpaid_cancellation_sourceless_verification.sql",
+      "sha256": "bd19af9ad73649964403bf593d75dd3d9b858b748ec84e121627737cbf0cfa66"
+    },
+    {
+      "file": "supabase/verification/07092026_2142_banking_pay_manual_carry_forward_economic_identity_verification.sql",
+      "sha256": "5987309458ec22ac181af50e0a86611133ca16e958850b569511fa752cd09214"
+    },
+    {
+      "file": "supabase/verification/07092026_2302_banking_pay_payment_cancellation_notice_verification.sql",
+      "sha256": "5d68c277e982d798f5dd43103602d7c04a61f9237ffa227e9b3ad1274c38ef3f"
+    },
+    {
+      "file": "supabase/verification/08092026_0511_banking_pay_payment_correction_prepare_idempotency_verification.sql",
+      "sha256": "446f69450173160d79f74a57f2c95a0fe77c4300f934404016d2111b01a81d37"
+    },
+    {
+      "file": "supabase/verification/08092026_0519_banking_pay_candidate_dirty_cohort_authority_verification.sql",
+      "sha256": "436157abd5c8b4ee980af8705da256b8ee6488f068354d3f458fe744f4d66a2d"
+    },
+    {
+      "file": "supabase/verification/08092026_0805_pay_workbench_scope_invalidate_pair_arrays_verification.sql",
+      "sha256": "55d56128944832843dd3e8449ccdd9ed5ec579e80a61c7b5db5928562bee4ab0"
+    },
+    {
+      "file": "supabase/verification/08092026_1203_banking_pay_cancel_return_selection_intent_verification.sql",
+      "sha256": "7e65b7dbe77cdc09156d394fbaf27c9fda12f66d452b626bb3a49eba199afe69"
+    },
+    {
+      "file": "supabase/verification/09092026_0022_banking_pay_no_money_workbench_return_verification.sql",
+      "sha256": "fc95f4009bf2507947d99583978181ade0fd49c44f736d3ce63c7aadf15e0826"
+    },
+    {
+      "file": "supabase/verification/09092026_1501_candidate_duplicate_expense_anchor_final_authority_verification.sql",
+      "sha256": "1eb752ba8b04100354ce7dc45b4dd1f005062712af23e0963f8b2f35a9306e34"
+    },
+    {
+      "file": "supabase/verification/09092026_1901_candidate_expense_update_submit_final_authority_verification.sql",
+      "sha256": "e2d14e33d375edfbf078b9b3598d46e85aab94e8d65329fd4254c60625ab688a"
+    },
+    {
+      "file": "supabase/verification/10092026_0835_planned_week_candidate_submission_delete_guard_verification.sql",
+      "sha256": "e91e932af400d59698cdbde59560752749a4729d2d7746d18108d7842555529b"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "sha256": "63f724b2c04297a309d663b90963c6905f16b3e7291372f64761c74b11fcfed5"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "sha256": "b00ca0d3214f8fe23e27a98f031bd62ad6bfbc30a6ab0aac0b90785e1fbe76ba"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_upload_context_v1.sql",
+      "sha256": "840215eb7ab94d2094a606834a06f80a311ec160a77ef241325b08a6d614353c"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_projection_build_v1.sql",
+      "sha256": "8d45408f1e8c996d01e22fe136de077c4937979dc32d46a44c5d33572c1729ef"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256": "3d7f6788885a23a95f02c7c108ae345e9dd289b8a74c9adb91dd59585f42d091"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "sha256": "440296e29e7fb7b090d7e86b2369d349892f05184ffb7dab400987784eef5684"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_finalisation_v1.sql",
+      "sha256": "17274f274bf7ca2b4510f2f6f8313559fea58678b3f0442ace13ba1f846ba66e"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "sha256": "149ef563ad171d9ed872d84dc69e65de1666b3503a50014c1b4a248560d7d161"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "sha256": "07367101ed8b12d497617143a81c35abbd56d6e4f3ff6d21aab83ae5abb35afb"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "sha256": "ecba43d2cadc87c14283c02a5065e6c873caf22643e2feef4f58b70e3bbc8d7f"
+    },
+    {
+      "file": "supabase/verification/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "sha256": "3feb7047ac1461cc74956c9d95797406f868f0645147d8747ade2db3585961fc"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_read_projections_v1.sql",
+      "sha256": "14be3691add62d1851ed28d7ee53c60a5b7418ef9342bcd12132fbe6f9cf880f"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "sha256": "4b22d05688fd59ee20f43a62da2e33495db1c208a1a64c8d36821fc4e04168c6"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "sha256": "263c8e7870591bdae6942103f718e3540574eb2708fa66f9a4173df3e07ebedd"
+    },
+    {
+      "file": "supabase/verification/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "sha256": "566d739595c2987ea507d91a353190fa0a1f1c24bec32c9892bac14cae0e4d25"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "sha256": "75a30a6fde8a533eafd7e82c05cb0f20741e4a00b6c3b97e65c558822d9ec505"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+      "sha256": "1cb06489bfd0871f9f82e0bba62c782265d5f97aa07a5754a91cf4a587af64c0"
+    },
+    {
+      "file": "supabase/verification/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "sha256": "3ec090d8f862faafc38d40b7e24342dbdc6e1df80ded73c75f0f941c78785b1e"
+    },
+    {
+      "file": "supabase/verification/15092026_2312_weekly_source_delivery_targets_v1.sql",
+      "sha256": "5a97fc8588ff265008a4f41a4dcd80bbeafc4f193c3d5d14845a277af9d28f0f"
+    },
+    {
+      "file": "supabase/verification/19092026_0100_weekly_source_correction_cancel_v1.sql",
+      "sha256": "46c5ce919874e95b63ccf9f4be7529c6bde9f65ba507f8c1030a5b15c9eab84d"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sha256": "a0b0692be1b751443fab1cbe5b13c1787e9207e75bb61c1356b9295ceecee631"
+    },
+    {
+      "file": "supabase/verification/17092026_0100_weekly_source_entitlement_schema_v1.sql",
+      "sha256": "2eaf7da4939c8a3ccffb20f089d1785a2ba210119327adec1050d1d4b23cb565"
+    },
+    {
+      "file": "supabase/verification/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "sha256": "3c09f94fa0119823aa03e90f94a6d8ef19dc5ade42b4728a00c73189cd642430"
+    },
+    {
+      "file": "supabase/verification/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "sha256": "9043ca8e254cdea64867c9df0ec7fdf55a21b2c29ae12907b2b87becea4ec646"
+    },
+    {
+      "file": "supabase/verification/17092026_0400_weekly_source_freeze_census_v1.sql",
+      "sha256": "1f248fd6ed1aaaf6027683cfcd846700e7e4036ec1edeab2351ace290c10564b"
+    },
+    {
+      "file": "supabase/verification/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "sha256": "a41daf737c3b35f1b67f387a6d995ebfe4b817b3a397d97f4d315b1e5243a1e5"
+    },
+    {
+      "file": "supabase/verification/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+      "sha256": "9cb8f4f265f8be0f5b49fca533b066a296cfa266b43349460ccb89f04f4fd4c8"
+    },
+    {
+      "file": "supabase/verification/17092026_0600_weekly_source_first_authorisation_v1.sql",
+      "sha256": "d0c8ceb99c7539c77c2463e6e46c2f7b26f7c59d1e1adac5423a7ebee49f8a3e"
+    },
+    {
+      "file": "supabase/verification/17092026_0610_weekly_source_withdrawal_supersession_v1.sql",
+      "sha256": "98b819b77ff45889f559c772e10e5a4763d6272cdda86119f560cac1031dd557"
+    },
+    {
+      "file": "supabase/verification/17092026_0110_weekly_source_banking_pay_absence_v1.sql",
+      "sha256": "fd28eaad9f4997f54b929201b369f2932cb32d571dec3d6f9bb08d44d5c282f7"
+    },
+    {
+      "file": "supabase/verification/17092026_0700_weekly_source_pending_entitlement_release_v1.sql",
+      "sha256": "982a340f48e88d25f01131410e730c3de4b0a579f4769f6da2ca57d8d0cb1edb"
+    },
+    {
+      "file": "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+      "sha256": "4f54fc72f00235af7b58c8d1a63b14991e6361b92356b9524c32f51beb1b8611"
+    },
+    {
+      "file": "supabase/verification/17092026_1000_weekly_source_settlement_allocation_v1.sql",
+      "sha256": "fcdd174c91e013c600bf283db39521aa2a639619218c80eb747a4b1fe68f88c5"
+    },
+    {
+      "file": "supabase/verification/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "sha256": "81b8c4e4ffc9cd6ccacc1aa12d0533f7d454ae3f7b0cf14a028b492c4c24056c"
+    },
+    {
+      "file": "supabase/verification/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "sha256": "f2ef1a14d4402b871b38af4868c1ea0babb0e1de81aeca3b8c602d7d03ea9264"
+    },
+    {
+      "file": "supabase/verification/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql",
+      "sha256": "c019a151500b71a1dc30c6d7e212fa5f91b057c6735fa1f005cd007da810e5b4"
+    },
+    {
+      "file": "supabase/verification/17092026_1500_weekly_source_row_admission_guards_v1.sql",
+      "sha256": "1f6077ba4d55b24373f28b97a9c02a1892fd0c2fbf874f1c2bcf618099141be4"
+    },
+    {
+      "file": "supabase/verification/17092026_0900_weekly_source_installed_writer_census_v1.sql",
+      "sha256": "6275452c1ce4b86c41f604e23ded6e7a1222f6adad3b732e91dd04c81472579c"
+    },
+    {
+      "file": "supabase/verification/19092026_1645_weekly_source_completed_pack_copy_v1.sql",
+      "sha256": "b2664cf469e171b519a35886763a84d677b623f4d3bc9dd6f9e40255e5ea9014"
+    },
+    {
+      "file": "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql",
+      "sha256": "31feeb45a4df081327a31ed1f302bec7f3d79c206399042e87e91c5679e656e9"
+    },
+    {
+      "file": "supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql",
+      "sha256": "d63c766ee4a26eed5038b8c10840686eb007334761d2c770d82901e0352a4669"
+    },
+    {
+      "file": "supabase/verification/22092026_1645_weekly_source_workbench_inventory_v1.sql",
+      "sha256": "d30a11f94bd927600c119622a8db9567b6e32cf1c3190377ac547069f50cd1f3"
+    },
+    {
+      "file": "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql",
+      "sha256": "2adb60638d56139a776bde3625c18f6cc4602cdcaef992713618d682abfa91c3"
+    },
+    {
+      "file": "supabase/verification/13102026_1126_weekly_source_protected_pay_authority_verification.sql",
+      "sha256": "fd284e10ede8d670cc79b6aad63d8a14a5325e81c87f81c68f8c340ec0e3ab7a"
+    },
+    {
+      "file": "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+      "sha256": "d7affa8fd21d5c24c3efe4b302a3caea7d847743fb7c6d1a277837e0ed358b9c"
+    },
+    {
+      "file": "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+      "sha256": "54c23241ecb76bb4d6e7635b1ba4a14eab388557bed450ae561042273737a173"
+    },
+    {
+      "file": "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+      "sha256": "c71b4bf1ef670c45ca5d7d15dcb3576725d2e5a57889dfedc1d9ec7f17a1a86f"
+    },
+    {
+      "file": "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+      "sha256": "3677aec9cf1c9ed279788361de8c8b1ab517ff9390295799747c5f5a8fe53325"
+    },
+    {
+      "file": "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+      "sha256": "f57031b819cdceff1304c946aeead197944fb6697371bf1b49bb2e4871312f72"
+    },
+    {
+      "file": "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "sha256": "0c5d54641108c02201e0206a8aec89cdc74b020ca4eb507e3c713a1b26b9f904"
+    },
+    {
+      "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "sha256": "f44135e0379b733835591579d02131f270b66a1542f14f71a98b1e7d54b2f531"
+    },
+    {
+      "file": "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+      "sha256": "d6b90fb5ffe8d76e48ce06ab89ee4d1b7e32f25b8d2ab8afea23ba76bf6fce32"
+    },
+    {
+      "file": "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+      "sha256": "0e8bc553a872ac7d4461fdc6b195fb461c7661bcf6e541ba58a62336ccbe6fdd"
+    },
+    {
+      "file": "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+      "sha256": "9831b5fb431e8f7078d2b7aad3d898fc68b7b51b3fdac40449299e7aa9e2112b"
+    },
+    {
+      "file": "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+      "sha256": "becbe5bd4d8c8e182a6ee40939fc0cb4210e1e875904e4cc7e8e4176c9717bc4"
+    },
+    {
+      "file": "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql",
+      "sha256": "b0fb823e090fe21fcc62e5eee58e1da11b119cfb309ab5b6066d7c55c6ab3ef4"
+    },
+    {
+      "file": "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+      "sha256": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d"
+    },
+    {
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "sha256": "7a04174cd9d456ddc5161e8fd024f4ede7e8755a5b142e0ac49ca4c4b5ad14bb"
+    },
+    {
+      "file": "supabase/verification/14102026_0541_healthroster_report_current_native_composition_declarations.sql",
+      "sha256": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a"
+    },
+    {
+      "file": "supabase/verification/15102026_0205_healthroster_source_arbiter_kernel_verification.sql",
+      "sha256": "cfe19a172aa36e51d7e9f60413ddd959895fc33ca26b4cc51a7943e7177e3da3"
+    },
+    {
+      "file": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union_verification.sql",
+      "sha256": "ab9888f7a593039183162ceec4b5bd41d398b9fc469d9354f11d522052b30f0b"
+    },
+    {
+      "file": "supabase/verification/15102026_0344_healthroster_source_selectors_verification.sql",
+      "sha256": "88cd76940fd2f351f3675d969d7c4f4d85e0b1ca1a3ff41ee5f9376b22dec1c1"
+    }
+  ],
+  "mandatoryVerifierDisposition": "ALL_RETAINED_BY_EXISTING_FULL_COMPILER_AND_EXACT_ROOT_REVIEW_NO_WAIVERS_BY_PREPARER",
+  "excludedChecks": [],
+  "databaseCalls": 0,
+  "externalEffects": 0,
+  "localDatabaseInfrastructure": 0,
+  "sharedOwnerWrites": 0,
+  "specialEnvelopeCommandsRemoved": 0,
+  "rawSqlOuterTransactions": 40,
+  "specialEnvelopeUnitCount": 4,
+  "bankingPublisherSubstitutes": 0
+}

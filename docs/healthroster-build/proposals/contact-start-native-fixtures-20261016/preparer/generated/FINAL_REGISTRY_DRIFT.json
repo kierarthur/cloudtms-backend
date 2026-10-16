@@ -1,0 +1,102 @@
+{
+  "officialFinalGate": "PASS",
+  "registryDrift": [],
+  "managedRejections": [
+    {
+      "file": "supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql",
+      "rejection": "MANAGED_EXECUTABLE_TREE_REQUIRED",
+      "executionQualification": "HELD_NOT_APPROVED",
+      "actualClosureHash": "306489585aec541a38700bb7a9bca96b178fc291a644716a7079d45cf4a79747",
+      "sourceOnlySpecialEnvelope": true,
+      "removedEnvelopeCommands": [],
+      "metaCommands": [
+        "\\set",
+        "\\gset",
+        "\\if",
+        "\\else",
+        "\\endif"
+      ],
+      "transactionCommands": [
+        "BEGIN",
+        "COMMIT"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "rejection": "MANAGED_EXECUTABLE_TREE_REQUIRED",
+      "executionQualification": "HELD_NOT_APPROVED",
+      "actualClosureHash": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf",
+      "sourceOnlySpecialEnvelope": true,
+      "removedEnvelopeCommands": [],
+      "metaCommands": [
+        "\\set"
+      ],
+      "transactionCommands": [
+        "BEGIN",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "COMMIT"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "rejection": "MANAGED_EXECUTABLE_TREE_REQUIRED",
+      "executionQualification": "HELD_NOT_APPROVED",
+      "actualClosureHash": "4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53",
+      "sourceOnlySpecialEnvelope": true,
+      "removedEnvelopeCommands": [],
+      "metaCommands": [
+        "\\set"
+      ],
+      "transactionCommands": [
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/13102026_1418_candidate_runtime_reload_authority_v1.sql",
+      "rejection": "MANAGED_EXECUTABLE_TREE_REQUIRED",
+      "executionQualification": "HELD_NOT_APPROVED",
+      "actualClosureHash": "eece10432b4080b90cee9a1077336b0accbeb08c08f6d3649d4b4fa754e9de1b",
+      "sourceOnlySpecialEnvelope": true,
+      "removedEnvelopeCommands": [],
+      "metaCommands": [
+        "\\set"
+      ],
+      "transactionCommands": [
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT",
+        "BEGIN",
+        "COMMIT"
+      ]
+    }
+  ]
+}
