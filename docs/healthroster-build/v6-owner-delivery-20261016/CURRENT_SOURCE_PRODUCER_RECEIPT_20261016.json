@@ -1,0 +1,165 @@
+{
+  "version": "HEALTH_V6_CURRENT_SOURCE_PRODUCER_RECEIPT_V1",
+  "sourceCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "reviewedProducerSources": [
+    {
+      "checkpoint": "Physical0713",
+      "record": "docs/healthroster-build/v6-owner-delivery-20261016/PHYSICAL_CONTRACT_SOURCE_INTEGRATION.json",
+      "exists": true
+    },
+    {
+      "checkpoint": "Invoice0955",
+      "record": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_NATIVE_SQL_SOURCE_INTEGRATION.json",
+      "exists": true
+    },
+    {
+      "checkpoint": "Candidate1003",
+      "record": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json",
+      "exists": true
+    },
+    {
+      "checkpoint": "Source1100/1110/1120",
+      "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_NATIVE_SQL_SOURCE_INTEGRATION.json",
+      "exists": true
+    }
+  ],
+  "producerRows": [
+    {
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "closureSha256": "b8a9346de8601b612cbc405f1085c501d3ff1684842829140eb2426cff676be1",
+      "physicalSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "completeFunctionTrimSha256": "c5bed2df9b498cfbe27695ec4a67ef390d2250e04efe6f4d375faad97dbc7827",
+      "declaration": "create or replace function private.timesheet_contract_current_placement_v1(p_timesheet_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'",
+      "sourceAclStatements": [
+        "revoke all on function private.timesheet_contract_current_placement_v1(uuid) from public,anon,authenticated,service_role;"
+      ],
+      "nativeInstalled": "NOT_RUN",
+      "qualification": "SOURCE_COMPOSITION_ONLY_NOT_RUNTIME_APPROVAL"
+    },
+    {
+      "signature": "private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean)",
+      "root": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "closureSha256": "e0c488daa9bffc3362c2eb8f3c786427f691806c70026ea9190724e7ef2571bf",
+      "physicalSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "completeFunctionTrimSha256": "788ca4870796f671045ebd4de397ae6de4daa5694d685171aba603df7f32c958",
+      "declaration": "create or replace function private.weekly_source_invoice_certificate_assert_v1(p_expected jsonb,p_lock boolean)\nreturns jsonb language plpgsql volatile security definer\nset search_path to 'pg_catalog','public','private','pg_temp'",
+      "sourceAclStatements": [
+        "revoke all on function private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean) from public,anon,authenticated,service_role;",
+        "revoke all on function private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean) from public,anon,authenticated,service_role;"
+      ],
+      "nativeInstalled": "NOT_RUN",
+      "qualification": "SOURCE_COMPOSITION_ONLY_NOT_RUNTIME_APPROVAL"
+    },
+    {
+      "signature": "private.invoice_contract_move_source_certificate_v1(uuid,boolean)",
+      "root": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "closureSha256": "e0c488daa9bffc3362c2eb8f3c786427f691806c70026ea9190724e7ef2571bf",
+      "physicalSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "completeFunctionTrimSha256": "2b847acf28fd515abd3b8afda09956d1be36f86a89abb414429be3e583f41f3b",
+      "declaration": "create or replace function private.invoice_contract_move_source_certificate_v1(p_operation_id uuid,p_lock boolean)\nreturns jsonb language plpgsql volatile security definer\nset search_path to 'pg_catalog','public','private','pg_temp'",
+      "sourceAclStatements": [
+        "revoke all on function private.invoice_contract_move_source_certificate_v1(uuid,boolean) from public,anon,authenticated,service_role;"
+      ],
+      "nativeInstalled": "NOT_RUN",
+      "qualification": "SOURCE_COMPOSITION_ONLY_NOT_RUNTIME_APPROVAL"
+    }
+  ],
+  "definitionSequence": "Health definitions -> genuine Bank cut -> Health application/adoption -> genuine Bank publication/member -> Health bridge/composition",
+  "sourceManagedFiles": [
+    {
+      "path": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6",
+      "bytes": 11034,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0",
+      "bytes": 3839,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131",
+      "bytes": 7486,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5",
+      "bytes": 1823,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "bytes": 2261,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/migrations/16102026_1105_nhsp_v6_source_incident_resolution.sql",
+      "sha256": "80d9c6244ae47cf674c77b55df85976d6501217856e8227995186071eff2a4d5",
+      "bytes": 2909,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "bytes": 636634,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc",
+      "sha256": "121631f2f6c0fa1fa2b45c857a683df64838bbbffa5e23e87d6ec755460b627f",
+      "bytes": 19818,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "sha256": "3f645a99ccdf35b69475f65c33dee019767392aafd754c55b80521dc86e9c80c",
+      "bytes": 491,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c",
+      "bytes": 55454,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "sha256": "04f985ed70f921803e74aac1394cd5d11deb8aac1ba6a48af50d5f66c4ebdc7f",
+      "bytes": 397,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "sha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c",
+      "bytes": 36006,
+      "selection": "EXACT_FULL_FILE"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "sha256": "0d9156c674e4725d6198fc68783d8c6999daad3b6b557ff38c34deda27f64aaa",
+      "bytes": 382,
+      "selection": "EXACT_FULL_FILE"
+    }
+  ],
+  "bankingBodiesAuthored": 0,
+  "sourceF23": "Finite reviews in progress; not full green proof",
+  "installed": "NOT_INSTALLED",
+  "contract": "NOT_REGENERATED_FOR_THIS_SOURCE",
+  "fullRehearsal": "NOT_RUN",
+  "activation": false,
+  "returnItems": [
+    "CM-08/CM-16/F-10/SP-15",
+    "CM-20/SP-26/WB-03",
+    "Health ACTIVE_PLAN step2/3/4",
+    "V5-BANK-037/038/039/059/060"
+  ],
+  "limits": "Exact source/ACL/closure publication only. Current Contract/Daily positive financial/public result composers and Source B051 result stay held for actual compatible producer contracts. No Banking chat or worktree changes."
+}

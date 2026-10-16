@@ -1,0 +1,91 @@
+{
+  "version": "HEALTH_MONEY_PREDECESSOR_NEGATIVE_NATIVE_RECEIPT_V1",
+  "candidate": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+  "status": "PASS_EXACT_POSITIVE_AND_NINE_DRIFT_REFUSALS_ONLY",
+  "account": "kier@arthur-rai.co.uk",
+  "nativeServer": "cloudtms-miget-operations-kier-codex",
+  "database": "cloudtms_test_clone",
+  "sqlSha256": "b2942e76d7a3d359fedeca49afa44161e2b27a4abefc1bd4fed1245fa9bfb389",
+  "accepted": true,
+  "statementCount": 67,
+  "rolledBack": true,
+  "connectedFresh": true,
+  "nativeRawResultSha256": "4e83ce811f6a0495f82b902809da6588c841aec836c4a0fecf81f8f5016d3bf0",
+  "rawResultCommitted": false,
+  "result": {
+    "status": "PASS_EXACT_PREDECESSOR_POSITIVE_AND_NINE_NEGATIVES",
+    "negativeCaseCount": 9,
+    "sourceProgramSha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50"
+  },
+  "cases": [
+    {
+      "id": "public.weekly_source_charge_checks#RENAMED_CHECK",
+      "expectedError": "HEALTH_F23_WEEKLY_SOURCE_CHARGE_CHECKS_PREDECESSOR_CHANGED"
+    },
+    {
+      "id": "public.weekly_source_charge_checks#UNVALIDATED_CHECK",
+      "expectedError": "HEALTH_F23_WEEKLY_SOURCE_CHARGE_CHECKS_PREDECESSOR_CHANGED"
+    },
+    {
+      "id": "public.weekly_source_charge_checks#EXTRA_MATCHED_CHECK",
+      "expectedError": "HEALTH_F23_WEEKLY_SOURCE_CHARGE_CHECKS_PREDECESSOR_CHANGED"
+    },
+    {
+      "id": "public.weekly_source_billing_movements#RENAMED_CHECK",
+      "expectedError": "HEALTH_F23_WEEKLY_SOURCE_BILLING_MOVEMENTS_PREDECESSOR_CHANGED"
+    },
+    {
+      "id": "public.weekly_source_billing_movements#UNVALIDATED_CHECK",
+      "expectedError": "HEALTH_F23_WEEKLY_SOURCE_BILLING_MOVEMENTS_PREDECESSOR_CHANGED"
+    },
+    {
+      "id": "public.weekly_source_billing_movements#EXTRA_MATCHED_CHECK",
+      "expectedError": "HEALTH_F23_WEEKLY_SOURCE_BILLING_MOVEMENTS_PREDECESSOR_CHANGED"
+    },
+    {
+      "id": "public.weekly_source_invoice_presentation_lines#RENAMED_CHECK",
+      "expectedError": "HEALTH_F23_PRICE_ENUM_PREDECESSOR_CHANGED"
+    },
+    {
+      "id": "public.weekly_source_invoice_presentation_lines#UNVALIDATED_CHECK",
+      "expectedError": "HEALTH_F23_PRICE_ENUM_PREDECESSOR_CHANGED"
+    },
+    {
+      "id": "public.weekly_source_invoice_presentation_lines#EXTRA_MATCHED_CHECK",
+      "expectedError": "HEALTH_F23_PRICE_ENUM_PREDECESSOR_CHANGED"
+    }
+  ],
+  "restoration": {
+    "ledgerFingerprint": true,
+    "catalogueFingerprint": true,
+    "businessCountsFingerprint": true,
+    "businessRowsFingerprint": true,
+    "relationCensus": true
+  },
+  "allSixCreatedRelationsAndMarkerAbsent": true,
+  "businessFixtures": 0,
+  "businessRowsChanged": 0,
+  "backgroundJobsPaused": false,
+  "legacy": "LEGACY:1",
+  "turn": {
+    "chat": "HealthRoster",
+    "task": "HEALTH_MONEY_PREDECESSOR_NEGATIVES_32EE8711",
+    "status": "RELEASED",
+    "takenAt": "2026-10-16T10:03:34.035Z",
+    "releasedAt": "2026-10-16T10:04:18.999Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": true,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "nativeLimits": [
+    "Only five pending schema units before1430; migration1430body not run here",
+    "Every drift is subtransaction-contained; exact unmodified program positive before and after",
+    "No two-session contention, completeclosure, lifecycle, API, fullrehearsal or Install2 qualification"
+  ],
+  "harness": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\money-predecessor-negative-20261016",
+  "localMarkerPreparationFailure": "Existing marker guard refused non-admitted prefix before any native SQL. Corrected only to hr_install2_ plus exact32hex; no guard weakened."
+}

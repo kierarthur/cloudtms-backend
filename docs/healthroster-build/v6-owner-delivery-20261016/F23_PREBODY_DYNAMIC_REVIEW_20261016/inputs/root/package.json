@@ -1,0 +1,87 @@
+{
+  "name": "cloudtms-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm run candidate:bindings:check && node --test tests/*.test.js",
+    "security:toolchain": "node scripts/verify-approved-toolchain.mjs",
+    "security:dependencies": "node scripts/verify-backend-dependency-security.mjs",
+    "security:secrets": "node scripts/verify-source-secret-safety.mjs",
+    "security:audit:prod": "node scripts/run-npm-audit.mjs --omit=dev",
+    "security:audit:all": "node scripts/run-npm-audit.mjs",
+    "security:verify": "npm run security:toolchain && npm run security:dependencies && npm run security:secrets && npm run security:audit:prod && npm run security:audit:all",
+    "candidate:bindings:generate": "node scripts/generate-candidate-data-plane-registry.mjs",
+    "candidate:bindings:check": "node scripts/generate-candidate-data-plane-registry.mjs --check",
+    "test:candidate-boundary": "node --test tests/candidate-app-backend.test.js tests/candidate-broker-boundary.test.js",
+    "check:candidate-broker": "wrangler deploy --dry-run --config candidate-broker/wrangler.jsonc",
+    "check:candidate-private-api": "wrangler deploy --dry-run --config candidate-private-api/wrangler.jsonc",
+    "check:candidate-synthetic-private-api": "wrangler deploy --dry-run --config candidate-synthetic-private-api/wrangler.jsonc",
+    "test:invoice-async": "node --test tests/invoice_async_backend.test.js",
+    "test:weekly-source:builders": "node scripts/run-weekly-source-harness.mjs builders",
+    "test:weekly-source:unit": "node scripts/run-weekly-source-harness.mjs unit",
+    "test:weekly-source:db:new": "node scripts/run-weekly-source-harness.mjs db:new",
+    "test:weekly-source:db:upgrade": "node scripts/run-weekly-source-harness.mjs db:upgrade",
+    "test:weekly-source:db:component": "node scripts/run-weekly-source-component-db.mjs",
+    "test:weekly-source:service": "node scripts/run-weekly-source-harness.mjs service",
+    "test:weekly-source:browser": "node scripts/run-weekly-source-harness.mjs browser",
+    "test:weekly-source:differential": "node scripts/run-weekly-source-harness.mjs differential",
+    "test:weekly-source:model": "node scripts/run-weekly-source-harness.mjs model",
+    "test:weekly-source:all": "node scripts/run-weekly-source-harness.mjs all",
+    "release:test": "node scripts/request-test-release.mjs",
+    "release:test:plan": "node scripts/cloudtms-auto-test-release.mjs plan",
+    "test:release-routing": "node --test tests/automatic-test-release-policy.test.mjs",
+    "db:check": "node scripts/cloudtms-db-release.mjs check",
+    "db:new:migration": "node scripts/cloudtms-db-release.mjs new --kind=migration",
+    "db:new:repeatable": "node scripts/cloudtms-db-release.mjs new --kind=repeatable",
+    "db:lock:update": "node scripts/cloudtms-db-release.mjs lock:update",
+    "db:contract:export": "node scripts/cloudtms-db-release.mjs export-contract --output=supabase/release/current-contract.json",
+    "db:contract:verify": "node scripts/cloudtms-db-release.mjs compare-contract --expected=supabase/release/current-contract.json",
+    "db:contract:seal-local": "node scripts/seal-local-database-contract.mjs",
+    "db:contract:coupling": "node scripts/verify-database-contract-coupling.mjs",
+    "db:plan": "node scripts/cloudtms-db-release.mjs plan",
+    "db:apply": "node scripts/cloudtms-db-release.mjs apply",
+    "db:component:check": "node scripts/cloudtms-db-component-release.mjs check --environment=TEST",
+    "db:component:plan": "node scripts/cloudtms-db-component-release.mjs plan --environment=TEST",
+    "db:component:rehearse": "node scripts/cloudtms-db-component-release.mjs rehearse --environment=TEST",
+    "db:component:apply": "node scripts/cloudtms-db-component-release.mjs apply --environment=TEST",
+    "dev": "wrangler dev",
+    "preview": "wrangler dev --remote",
+    "deploy": "wrangler deploy",
+    "check": "wrangler whoami && wrangler deploy --dry-run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kierarthur/cloudtms-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kierarthur/cloudtms-backend/issues"
+  },
+  "homepage": "https://github.com/kierarthur/cloudtms-backend#readme",
+  "description": "",
+  "type": "module",
+  "packageManager": "npm@11.12.1",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0",
+    "npm": ">=11.0.0 <12.0.0"
+  },
+  "dependencies": {
+    "@cloudflare/puppeteer": "1.4.0",
+    "jpeg-js": "0.4.4",
+    "jsqr": "1.4.0",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4",
+    "sanitize-html": "2.17.7",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "wrangler": "4.125.0"
+  },
+  "overrides": {
+    "@puppeteer/browsers": "3.2.1",
+    "sharp": "0.35.5",
+    "undici": "7.29.1"
+  }
+}

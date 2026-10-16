@@ -1,0 +1,16 @@
+{
+  "version": "SOURCE13_LOCAL_CARDINALITY_REVIEW_MANIFEST_V1",
+  "status": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "files": [
+    {
+      "path": "EVIDENCE.json",
+      "sha256": "9154e570cc4240557fafe5f81fb775ebc596a84ca551b282db4dfc5a463323a4",
+      "bytes": 9096
+    },
+    {
+      "path": "REVIEW.md",
+      "sha256": "8ec66b8caf66230ce7ef43c06671c652c45f143a26be3476373de0b1544dc82b",
+      "bytes": 5399
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "version": "CONTACT_MANUAL_ENQUIRY_PARENT_INTEGRATION_V1",
+  "status": "OFFICE_SOURCE_MOUNTED_BACKEND_PROPOSED_NATIVE_NOT_RUN",
+  "branch": "codex/healthroster-v2-office-13102026",
+  "baselineOfficeCommit": "db25784674882a4b1c3b0ca3530cee1db2399260",
+  "rootReviewCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "actualParent": "Existing CombinedReview More -> import-workspace event binder -> workspace-actions existing child modal stack -> supplied typed manual enquiry controller -> existing issueCommand/authFetch",
+  "backendProposal": "Report: docs/healthroster-build/proposals/v6-office-manual-enquiry-parent-20261016",
+  "files": [
+    {
+      "path": "index.html",
+      "rawSha256": "2cae93e06450386762827e26a75a5e71c6b571476e85b5de7b15388fe4e200fd",
+      "lfSha256": "2cae93e06450386762827e26a75a5e71c6b571476e85b5de7b15388fe4e200fd"
+    },
+    {
+      "path": "css/weekly-source.css",
+      "rawSha256": "0507e15f13c0f1e9f7b1cf192a9f3f719a80bf6cc2f3dd012615518bc07c4a2b",
+      "lfSha256": "0507e15f13c0f1e9f7b1cf192a9f3f719a80bf6cc2f3dd012615518bc07c4a2b"
+    },
+    {
+      "path": "js/weekly-source/combined-review.js",
+      "rawSha256": "1b072b2de1dbf79cef82f3d57b7b505e07266825fb500f28705a5777a904df5b",
+      "lfSha256": "1b072b2de1dbf79cef82f3d57b7b505e07266825fb500f28705a5777a904df5b"
+    },
+    {
+      "path": "js/weekly-source/import-workspace.js",
+      "rawSha256": "1064233f1ffb870c76d7a5788717b2b6f67e7bebe1d7150a23b42f0cd65b8b5b",
+      "lfSha256": "1064233f1ffb870c76d7a5788717b2b6f67e7bebe1d7150a23b42f0cd65b8b5b"
+    },
+    {
+      "path": "js/weekly-source/workspace-actions.js",
+      "rawSha256": "80128cb485d8e72ba52595c9d78a16bbe924fe1aed8fbaee87868581b54b93ee",
+      "lfSha256": "80128cb485d8e72ba52595c9d78a16bbe924fe1aed8fbaee87868581b54b93ee"
+    },
+    {
+      "path": "js/weekly-source/contact-manual-enquiry-controls.mjs",
+      "rawSha256": "3032be0fc47d6c8967bbacc636e7500c06c2c0ca11f3a0657a013c8cf019d615",
+      "lfSha256": "3032be0fc47d6c8967bbacc636e7500c06c2c0ca11f3a0657a013c8cf019d615"
+    },
+    {
+      "path": "tests/unit/contact-manual-enquiry-parent.test.mjs",
+      "rawSha256": "7be0a4c40b4db69e8a672e8c441002a224ea33ec92a5ea9fbb2035776a8fc467",
+      "lfSha256": "7be0a4c40b4db69e8a672e8c441002a224ea33ec92a5ea9fbb2035776a8fc467"
+    },
+    {
+      "path": "tests/ui/contact-manual-enquiry-workspace-local-browser.mjs",
+      "rawSha256": "649404b3eac3d1f5dd8ed6c5f464128ef6ab97df18c645d4fa61ec0487a1fa84",
+      "lfSha256": "649404b3eac3d1f5dd8ed6c5f464128ef6ab97df18c645d4fa61ec0487a1fa84"
+    },
+    {
+      "path": "tests/unit/weekly-source-protected-resume-asset-cache.test.cjs",
+      "rawSha256": "3a865a7fbe571b9329efc5b2691f48083ef5c917ced65d1265329442db4369d4",
+      "lfSha256": "3a865a7fbe571b9329efc5b2691f48083ef5c917ced65d1265329442db4369d4"
+    }
+  ],
+  "semantics": [
+    "Separate contact_manual_enquiry row projection; original seven-key contact_controls unchanged",
+    "Only validated native same-pair open issue IDs present in genuine bounded children can be selected",
+    "Explicit selected row groups can form multi-scope manager requests; no automatic cross-owner send",
+    "Actual actor/workspace/parent/generation/filters/tab/current frame required for every command",
+    "One original uncertain controller per parent/actor; parent recovery stays usable even when its row disappears",
+    "Preview message -> Send email or Send worker question; no provider acceptance claim on queued acknowledgement",
+    "No synthetic financial DTO, Source financial Confirm/Result or alternate modal"
+  ],
+  "checks": {
+    "focusedAndExistingOfficeTests": 125,
+    "result": "PASS",
+    "actualParentBrowserViewports": [
+      {
+        "width": 1366,
+        "height": 900
+      },
+      {
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "browser": "LOCAL_ACTUAL_WORKSPACE_MOCK_SHELL_API_NOT_NATIVE_OR_INSTALLED",
+    "screenshotsVisuallyInspected": true,
+    "externalRequests": 0,
+    "pageErrors": 0,
+    "backendActualParentTests": 5
+  },
+  "baselineTestCorrection": "The protected-resume full URL assertion was already stale at db257 (missing earlier contact-controls suffix). Updated it to verify the same protected cache parameters plus actual Contact/manual assets and preserved load order.",
+  "runtime": "NOT_INSTALLED_NOT_DEPLOYED",
+  "native": "NOT_RUN",
+  "PartB": "NOT_RUN",
+  "realProviderOrBusinessMutation": false,
+  "publicSourceFinancialConfirmResult": "HELD_MISSING_REAL_B051",
+  "screenshots": [
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/manual-enquiry-parent/1366-review.png",
+      "sha256": "ea39c0fae9e1181326ed2ffb54984faeb70690303541bb57161d953318529957",
+      "scope": "ISOLATED_LOCAL_RENDER_NOT_FULL_OFFICE_ACCEPTANCE"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/manual-enquiry-parent/390-review.png",
+      "sha256": "1f9b6cc8c8dfe92dc45d6d6890a90a3881a4fe4c472bc18811481236d2ed909c",
+      "scope": "ISOLATED_LOCAL_RENDER_NOT_FULL_OFFICE_ACCEPTANCE"
+    }
+  ]
+}

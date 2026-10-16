@@ -1,5 +1,13 @@
 # Published HealthRoster helpers on TEST
 
+## Current V6 producer return — source only, 16 October 2026
+
+Reviewed complete physical/Invoice/Candidate/Source definitions are backed up at **34b8e2584b7500a6e7aad9db32fa2061b484977d**. Exact final signature, physical owner, complete-function SHA, recursive closure SHA and source ACL statements are in `v6-owner-delivery-20261016/CURRENT_SOURCE_PRODUCER_RECEIPT_20261016.json`. This continues the existing CM-08/CM-16/F-10/SP-15 and CM-20/SP-26/WB-03 producer/consumer returns; no consumer is automatically completed.
+
+The actual current placement owner is Candidate1003, not the earlier Physical0713 body. Invoice0955 owns both Source invoice certificate helpers. These three private helpers retain PUBLIC/anon/authenticated/service_role revocation in their exact source; they are consumed only through approved native owner composition. Source1100/1110/1120 contains83 complete declarations/81 final signatures and six new migrations, preserving original source/schema ownership. Banking cut/publication relationships remain genuine prerequisites; the Health bridge is not independently deployable. Source/schema publication permits compatible dependent source work only.
+
+**Not installed:** native first use, final owner/ACL/contract/API, complete rollback rehearsal and Install2 remain required. The existing WP-PP installed receipt below stays authoritative. Current Contract/Daily positive financial composers and final Source B051 result cannot use invented producer JSON. Actual installed dependency probes are separately dated in `PRODUCER_READINESS_NATIVE_CHECKPOINT_20261016.json`; they do not audit unpublished Banking source. No Banking chat message was sent.
+
 ## V6 source checkpoints — not installed
 
 Source pay Worker consumer continuation from d863577918ce7d439206296e91ad78de298e98b2 is integrated as runtime source; exact file hashes,351passing runtime/C1 cases, immutable-A/current-B separation, new opaque context policy witness and uninstalled dependencies are in v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json. No new Source public command is mounted before genuine Bank02/04/Physical/Invoice/ACL/native qualification. Sole Health closed decoder is broker/src/contract-correction-v3.mjs; Daily runtime-only source continuation and44cases are recorded in DAILY_RATE_SOURCE_INTEGRATION.json. Original installed WP-PP receipt below remains unchanged.

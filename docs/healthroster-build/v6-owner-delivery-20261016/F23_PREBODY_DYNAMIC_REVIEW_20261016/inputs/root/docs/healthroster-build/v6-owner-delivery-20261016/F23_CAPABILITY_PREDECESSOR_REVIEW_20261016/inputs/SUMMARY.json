@@ -1,0 +1,196 @@
+{
+  "version": "HEALTH_CAPABILITY_CANONICAL_PREFIX_NATIVE_CENSUS_V1",
+  "status": "PASS_TARGETED_CONSTRUCTOR_CAPTURE_AND_RESTORATION_ONLY",
+  "candidate": "bcfd75a051d5c88e524a5ddb552b269c71c407b1",
+  "account": "kier@arthur-rai.co.uk",
+  "nativeServer": "cloudtms-miget-operations-kier-codex",
+  "database": "cloudtms_test_clone",
+  "postgresqlVersionNum": 170011,
+  "route": {
+    "authenticated": true,
+    "rollbackOnly": true,
+    "durableWritesAllowed": false,
+    "anonymousMcp": 401,
+    "secretsReturned": false
+  },
+  "turns": [
+    {
+      "attempt": 1,
+      "pid": 181240,
+      "takenAt": "2026-10-16T09:50:49.810Z",
+      "result": "42501temp_file_limit; no migration ran; rolledBack/fresh/absence true; released closed",
+      "releasedAt": "2026-10-16T09:51:26.615Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true
+    },
+    {
+      "attempt": 2,
+      "pid": 181350,
+      "takenAt": "2026-10-16T09:52:17.421Z",
+      "result": "accepted99statements/rollback/freshrestorationPASS; explicitlyreleased closed",
+      "releasedAt": "2026-10-16T09:53:01.418Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true
+    }
+  ],
+  "firstAttempt": {
+    "accepted": false,
+    "sourceSqlSha256": "878eb907731606f30bf7947e282c74f0a32343a3dacf3a9445cdbae775450da8",
+    "failureStatement": 5,
+    "errorCode": "42501",
+    "reason": "Miget generated owner cannot set temp_file_limit; no database schema/program error observed",
+    "firstMigrationReached": false
+  },
+  "retry": {
+    "accepted": true,
+    "sqlSha256": "ee1433146e45ce21b81f5a2290dd8a76a2d43e66de68c128459e0e34a47c85e0",
+    "inputRecordedSqlSha256": "ee1433146e45ce21b81f5a2290dd8a76a2d43e66de68c128459e0e34a47c85e0",
+    "sqlBytes": 151277,
+    "statements": 99,
+    "profile": "jitoff,pg_show_plansoff,work_mem4MB,maintenance_work_mem32MB,toolstatement_timeout30s,lock_timeout2s; unsupportedtemp_file_limit omitted, all SQL assertions unchanged",
+    "canonicalPrefix": [
+      {
+        "file": "supabase/migrations/13102026_1112_healthroster_invoice_support_members_v1.sql",
+        "sqlHash": "663d93125c4cf121b9960481d0f6a11c4e2cd2271e3bbf54f30ab529f453a1d8",
+        "statements": 3
+      },
+      {
+        "file": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+        "sqlHash": "79f8591b808879f2bae46ba93967f12ac96a71751e8a44b858b38cee5d051c0f",
+        "statements": 10
+      },
+      {
+        "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+        "sqlHash": "0884899495bea783cad34abeb82610b954e3fc6c0940f1e2fd19994b89455af0",
+        "statements": 11
+      },
+      {
+        "file": "supabase/migrations/13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+        "sqlHash": "526e2b99328eaaa4bbbac27d98988c3a6526eb30c2ab0cd06272197af7e71aee",
+        "statements": 4
+      },
+      {
+        "file": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+        "sqlHash": "2892c587e484ee05b289a575a81f6fff117d01cd4c8d928bf821d10e88cc17e8",
+        "statements": 18
+      },
+      {
+        "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+        "sqlHash": "b4f75ad6dd6d2d0a897d00af7577b031a1a29abbcb92523767cd6ebd67629113",
+        "statements": 20
+      },
+      {
+        "file": "supabase/migrations/13102026_1456_weekly_source_protection_query_support_v1.sql",
+        "sqlHash": "738f59118143bf5be8fcddc6a3b13c28f79041e14f4fd59d7eb7c5ff6ad95d4e",
+        "statements": 3
+      },
+      {
+        "file": "supabase/migrations/13102026_1519_healthroster_correction_reason_bound_v1.sql",
+        "sqlHash": "44ec25b68ea6b1c40bfbadba3db5a8406c01e00f387d4397e02e7f28dff8cd1c",
+        "statements": 1
+      },
+      {
+        "file": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+        "sqlHash": "45f247ed3e681e6721306391358c4708df8a1783ae744413e36ecf2249e013b7",
+        "statements": 8
+      }
+    ],
+    "prefixMigrationCount": 9,
+    "stopBefore": "14102026_0400_healthroster_protected_source_capability.sql",
+    "changedRepeatablesOrVerifiersExecuted": 0
+  },
+  "restoration": {
+    "pass": true,
+    "checks": {
+      "ledgerFingerprint": true,
+      "catalogueFingerprint": true,
+      "businessCountsFingerprint": true,
+      "businessRowsFingerprint": true,
+      "relationCensus": true
+    },
+    "createdRelationsAllAbsent": true,
+    "markerAbsent": true,
+    "all389MigrationHashesGuardedAgainstInstalledF743": true,
+    "migrationCount": 389,
+    "repeatableCount": 1019,
+    "module": "LEGACY:1",
+    "backgroundJobsPaused": false,
+    "businessFixtures": 0,
+    "marker": "hr_install2_9b991a1525da4aba9334519e4d0253d0",
+    "observedBusinessRelations": 4,
+    "observedBusinessChanges": 0,
+    "attributionRequired": false,
+    "otherActivityObserved": 0
+  },
+  "census": {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/native-capability-prefix-bcfd75a0/NATIVE_PREDECESSOR_CENSUS.json",
+    "sha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6",
+    "selected": 2,
+    "purpose": 1,
+    "version": 1,
+    "totalChecks": 10,
+    "retainedChecks": 8,
+    "structuralPreconditionsMatch": true,
+    "expressionApproved": false,
+    "nativeCompanionApproved": false
+  },
+  "limits": [
+    "Only nine actual canonical pending schema units through before0400; not current complete1079closure first-use/fullrehearsal",
+    "1430exactpositiveprebody/body ran; negative-drift/two-sessionconcurrency cases stillrequired",
+    "No capability0400replacement/drop was run; actual source expressions/native deparse need independent review before a bound companion",
+    "No publicContract/Daily/Source/Contact/Candidate lifecycle, finance, API, phone, Install2, activation or finalCritic qualification"
+  ],
+  "preservation": {
+    "frozenProducerAndMigrationBytesUnchanged": true,
+    "bankingImplementationChanges": 0,
+    "externalEffects": 0
+  },
+  "artifacts": "docs/healthroster-build/v6-owner-delivery-20261016/native-capability-prefix-bcfd75a0",
+  "temporaryHarnessDirectory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\capability-prefix-census-20261016",
+  "temporaryScriptsCopiedAsExactNonExecutableProvenance": true,
+  "artifactPolicy": "Permanent receipt package contains schema-only census, source provenance and derived statement/restoration receipts. Complete raw MCP responses remain only in the ignored harness directory.",
+  "artifactHashes": [
+    {
+      "file": "build-input.mjs.source.txt",
+      "sha256": "8667aa5cedb8b89b6a25e4394dafa3173833d6a5c3a71c31d64931258ab7151c"
+    },
+    {
+      "file": "hold-turn.mjs.source.txt",
+      "sha256": "4481e02f853f477f795b08f363674a66ceae0914398e42c18efec58b8dc93fee"
+    },
+    {
+      "file": "INPUT_RECEIPT.json",
+      "sha256": "da9e1fb982ae498fa132a30c770b05a4bd5c71a85e837e261b633257ea9c11a7"
+    },
+    {
+      "file": "INPUT_RECEIPT_R1.json",
+      "sha256": "e0c99e59c94c70f49e3db388cd493fcb1684738558741dd189bc839c1116ee2a"
+    },
+    {
+      "file": "NATIVE_PREDECESSOR_CENSUS.json",
+      "sha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6"
+    },
+    {
+      "file": "NATIVE_R1.json",
+      "sha256": "8d4923fc4faa3cc8dac19ec10782c5dfcc0ede656d6938febd6b10fcf5c2f9f3"
+    },
+    {
+      "file": "NATIVE_R2.json",
+      "sha256": "0a8997f662d045996832a384866d1fa26c08f5f9db188f6f855d1fe4eb255086"
+    },
+    {
+      "file": "PLAN.json",
+      "sha256": "e75b276f6e766f4d98d10729982352e4b9801bb2ec16bb8cc28f231e492399eb"
+    },
+    {
+      "file": "plan.mjs.source.txt",
+      "sha256": "faf0b073a3d5bd362252ab8f2d8894dedcde3ca1fc2fa381ad201a81a88c152e"
+    },
+    {
+      "file": "RESTORATION.json",
+      "sha256": "582ba3016d5fcc9673036032e78ad786c5a3b88abeb472f40f3b1f73c896e1fc"
+    }
+  ]
+}

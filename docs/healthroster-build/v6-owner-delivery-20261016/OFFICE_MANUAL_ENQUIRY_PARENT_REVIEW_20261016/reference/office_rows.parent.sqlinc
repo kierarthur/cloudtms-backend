@@ -1,0 +1,50 @@
+-- Read projection only. Contact actions do not grant financial authority or
+-- change issue status/counts. Each opening still uses current native GET.
+create or replace function private.weekly_contact_office_rows_v1(p_rows jsonb,p_owners jsonb,p_actor uuid)
+returns jsonb language plpgsql stable security definer
+set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare item jsonb;owner jsonb;result jsonb:='[]';candidate uuid;client uuid;
+ source_group public.weekly_source_groups%rowtype;scope public.weekly_contact_pause_scopes%rowtype;
+ at_utc timestamptz:=statement_timestamp();worker_paused boolean;manager_paused boolean;actions jsonb;summary jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ perform private._weekly_source_settings_require_admin_v1(p_actor);
+ if jsonb_typeof(p_rows) is distinct from 'array' or jsonb_array_length(p_rows)>100
+  or jsonb_typeof(p_owners) is distinct from 'array' then raise exception 'CONTACT_DEPENDENCY_UNAVAILABLE' using errcode='P0001';end if;
+ for item in select value from jsonb_array_elements(p_rows) loop
+  -- Unresolved file-level rows have no actual worker/client contact scope.
+  if item->>'candidate_id' is null or item->>'client_id' is null or item->>'scope_key' is null then
+   result:=result||jsonb_build_array(item);continue;end if;
+  candidate:=private.weekly_contact_uuid_v1(item->'candidate_id');client:=private.weekly_contact_uuid_v1(item->'client_id');
+  select x into owner from jsonb_array_elements(p_owners)x where x->>'key'=item->>'scope_key';
+  if not found then result:=result||jsonb_build_array(item);continue;end if;
+  if (select count(*) from jsonb_array_elements(p_owners)x where x->>'key'=item->>'scope_key')<>1 then
+   raise exception 'CONTACT_DEPENDENCY_UNAVAILABLE' using errcode='P0001';end if;
+  -- The owner scope comes from the current authenticated native workspace,
+  -- not a browser field, a manager address or a guessed adjacent Client.
+  select g.* into strict source_group from public.weekly_source_cycles c
+   join public.weekly_source_groups g on g.id=c.source_group_id
+   where c.id=private.weekly_contact_uuid_v1(owner#>'{scope,source_cycle_id}')
+    and g.id=private.weekly_contact_uuid_v1(owner#>'{scope,source_group_id}');
+  select x.* into scope from public.weekly_contact_pause_scopes x
+   where x.environment=source_group.environment and x.agency_id=source_group.agency_id
+    and x.candidate_id=candidate and x.client_id=client;
+  worker_paused:=coalesce(scope.worker_paused_until_utc>at_utc,false);
+  manager_paused:=coalesce(scope.manager_paused_until_utc>at_utc,false);
+  actions:=jsonb_build_array(jsonb_build_object('operation','PAUSE','label','Pause messages'));
+  if worker_paused or manager_paused then actions:=actions||jsonb_build_array(jsonb_build_object('operation','RESUME','label','Resume messages'));end if;
+  summary:=jsonb_build_object('version','CONTACT_CONTROLS_ROW_V1','candidate_id',candidate,'client_id',client,
+   'scope_revision',coalesce(scope.revision,0)::text,
+   'worker',jsonb_build_object('paused',worker_paused,'until_local',case when worker_paused then
+    to_char(scope.worker_paused_until_utc at time zone 'Europe/London','DD/MM/YYYY HH24:MI')||' (UK)' end),
+   'manager',jsonb_build_object('paused',manager_paused,'until_local',case when manager_paused then
+    to_char(scope.manager_paused_until_utc at time zone 'Europe/London','DD/MM/YYYY HH24:MI')||' (UK)' end),
+   'actions',actions);
+  result:=result||jsonb_build_array(item||jsonb_build_object('contact_controls',summary));
+ end loop;
+ return result;
+end;
+$function$;
+alter function private.weekly_contact_office_rows_v1(jsonb,jsonb,uuid) owner to postgres;
+revoke all on function private.weekly_contact_office_rows_v1(jsonb,jsonb,uuid) from public,anon,authenticated,service_role;

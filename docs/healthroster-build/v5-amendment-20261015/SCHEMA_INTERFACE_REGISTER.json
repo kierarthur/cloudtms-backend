@@ -6644,5 +6644,17 @@
     "original92ObjectsRetained": true,
     "releaseAndFinancialReadResultHold": true,
     "native": "NOT_RUN"
+  },
+  "native_compiler_predecessor_continuation_20261016": {
+    "status": "TARGETED_NATIVE_ROLLBACK_PASS_NOT_INSTALLED",
+    "sourceCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+    "compilerReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/CAPABILITY_PREDECESSOR_COMPILER_INTEGRATION.json",
+    "moneyPositive": "docs/healthroster-build/v6-owner-delivery-20261016/native-capability-prefix-bcfd75a0/SUMMARY.json",
+    "moneyNineDrifts": "docs/healthroster-build/v6-owner-delivery-20261016/native-money-predecessor-negatives-32ee8711/SUMMARY.json",
+    "moneyContention": "docs/healthroster-build/v6-owner-delivery-20261016/native-money-predecessor-contention-efd18231/SUMMARY.json",
+    "capabilityPositiveSixDriftsTruthAndRestoration": "docs/healthroster-build/v6-owner-delivery-20261016/native-capability0400-34b8e258/SUMMARY.json",
+    "currentSourceProducerReturn": "docs/healthroster-build/v6-owner-delivery-20261016/CURRENT_SOURCE_PRODUCER_RECEIPT_20261016.json",
+    "original92ObjectsUnchanged": true,
+    "fullContractAndRehearsalAndInstall2AndPartB": "NOT_RUN"
   }
 }

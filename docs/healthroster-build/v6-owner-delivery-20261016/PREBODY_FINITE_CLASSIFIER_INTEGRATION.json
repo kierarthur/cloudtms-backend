@@ -1,0 +1,19 @@
+{
+  "version": "HEALTH_FOUR_PREBODY_ROOT_INTEGRATION_V1",
+  "sourceCommit": "bdc7946972e7c5182e7295acd5dc5002e4ecb9ec",
+  "rootCandidate": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "targets": 124,
+  "rawGateBeforeSha256": "4317692f8696f8f008d7f08f1533a4a661aaa364a71f30f3b933b5c2432d3caa",
+  "rawGateAfterSha256": "c88dc8fe8df78e377f1c45483103676f8a4d5c54045625c84e21352d01b63616",
+  "canonicalGateBeforeSha256": "4c5a4ad0f2174217a247aa031b930a8339cd92053226f9a660071821249fbc07",
+  "canonicalGateAfterSha256": "2a785685248edbd5eaad51b39c51edbb667b9843550f0a57dff9cf2ed849881d",
+  "exactEdits": 3,
+  "fullRawReverseEquality": true,
+  "existingMixedLineEndingsPreserved": true,
+  "sourceClassificationOnly": true,
+  "historicalNativeNotRunUnchanged": true,
+  "separateNativeProof": "native-capability0400-34b8e258/SUMMARY.json",
+  "fullF23": "PENDING_NEW_SOURCE13_CLASSIFIER",
+  "install2": "NOT_RUN",
+  "finalPartB": "NOT_RUN"
+}

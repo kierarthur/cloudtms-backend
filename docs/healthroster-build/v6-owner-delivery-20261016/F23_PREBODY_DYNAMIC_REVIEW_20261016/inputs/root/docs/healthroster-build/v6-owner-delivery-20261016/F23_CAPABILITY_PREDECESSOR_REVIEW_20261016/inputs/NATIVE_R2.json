@@ -1,0 +1,616 @@
+{
+  "version": "HEALTH_TARGETED_NATIVE_ROLLBACK_RECEIPT_V1",
+  "sourceRawResultSha256": "15f79ad54a40d01ae4b5a3bc639d91881f63e7f03fc24c61de9beb70e0be9ff1",
+  "rawResultRetainedOnlyInIgnoredHarness": true,
+  "accepted": true,
+  "databaseTarget": "agency_test",
+  "database": "cloudtms_test_clone",
+  "label": "HR_CAPABILITY_PREFIX_CENSUS_BCFD75A0_R2",
+  "sqlSha256": "ee1433146e45ce21b81f5a2290dd8a76a2d43e66de68c128459e0e34a47c85e0",
+  "statementCount": 99,
+  "statementResults": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "SET",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 7,
+      "command": "SET",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 8,
+      "command": "SELECT",
+      "rowCount": 1,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 9,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 10,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 11,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 12,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 13,
+      "command": "COMMENT",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 14,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 15,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 16,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 17,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 18,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 19,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 20,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 21,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 22,
+      "command": "REVOKE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 23,
+      "command": "GRANT",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 24,
+      "command": "COMMENT",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 25,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 26,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 27,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 28,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 29,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 30,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 31,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 32,
+      "command": "COMMENT",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 33,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 34,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 35,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 36,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 37,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 38,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 39,
+      "command": "COMMENT",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 40,
+      "command": "COMMENT",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 41,
+      "command": "COMMENT",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 42,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 43,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 44,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 45,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 46,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 47,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 48,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 49,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 50,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 51,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 52,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 53,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 54,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 55,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 56,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 57,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 58,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 59,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 60,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 61,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 62,
+      "command": "LOCK",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 63,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 64,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 65,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 66,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 67,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 68,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 69,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 70,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 71,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 72,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 73,
+      "command": "REVOKE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 74,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 75,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 76,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 77,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 78,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 79,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 80,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 81,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 82,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 83,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 84,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 85,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 86,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 87,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 88,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 89,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 90,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 91,
+      "command": "ALTER",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 92,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 93,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 94,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 95,
+      "command": "DROP",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 96,
+      "command": "CREATE",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 97,
+      "command": "DO",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 98,
+      "command": "SET",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 99,
+      "command": "SELECT",
+      "rowCount": 1,
+      "rowsTruncated": false
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+  ]
+}

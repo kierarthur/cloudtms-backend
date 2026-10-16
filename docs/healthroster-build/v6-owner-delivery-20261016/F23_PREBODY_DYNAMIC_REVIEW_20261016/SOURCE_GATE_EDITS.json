@@ -1,0 +1,23 @@
+{
+  "file": "scripts/bpay-next-source-gates.mjs",
+  "beforeSha256": "4c5a4ad0f2174217a247aa031b930a8339cd92053226f9a660071821249fbc07",
+  "afterSha256": "2a785685248edbd5eaad51b39c51edbb667b9843550f0a57dff9cf2ed849881d",
+  "edits": [
+    {
+      "from": "import {reviewedJoinedNonDynamicHazards} from './healthroster-joined-nondynamic-review.mjs';",
+      "to": "import {reviewedPrebodyDynamicHazards} from './healthroster-prebody-dynamic-review.mjs';\nimport {reviewedJoinedNonDynamicHazards} from './healthroster-joined-nondynamic-review.mjs';",
+      "count": 1
+    },
+    {
+      "from": "assertSpecialConstructs(source,file,reviewedJoinedNonDynamicHazards(source,file,",
+      "to": "assertSpecialConstructs(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,",
+      "count": 1
+    },
+    {
+      "from": "specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}",
+      "to": "specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}",
+      "count": 1
+    }
+  ],
+  "fullReverseEquality": true
+}

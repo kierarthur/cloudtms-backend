@@ -1,0 +1,900 @@
+{
+  "version": "SOURCE13_EXACT_COUNTERPART_COMPARISON_V1",
+  "qualification": "PROVENANCE_AND_BASELINE_COUNTS_ONLY_NO_NEW_BEHAVIORAL_APPROVAL",
+  "base": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+  "baselineSearch": "Case-insensitive fixed-name Git grep selects every .sql file in the exact gate baseline directories that can contain a target signature; each selected complete file is scanned with the unchanged gate. Outer keys contain the new physical path and cannot equal an old path.",
+  "baselineFilesScanned": 25,
+  "baselineFiles": [
+    "supabase/repeatable/04102026_0505_banking_pay_next_source_current_hooks_v1.sql",
+    "supabase/repeatable/04102026_0557_banking_pay_next_source_owner_completion_v1.sql",
+    "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+    "supabase/repeatable/04102026_2120_weekly_source_approval_basis_v2.sql",
+    "supabase/repeatable/04102026_2338_weekly_source_candidate_saved_local_hours_v2.sql",
+    "supabase/repeatable/05102026_0057_weekly_source_pay_query_scope_v1.sql",
+    "supabase/repeatable/05102026_0512_weekly_source_operational_category_v2.sql",
+    "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+    "supabase/repeatable/05102026_0740_weekly_source_approval_duty_v1.sql",
+    "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+    "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+    "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+    "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+    "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+    "supabase/repeatable/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+    "supabase/repeatable/15092026_1534_weekly_source_timesheet_lineage_v1.sql",
+    "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+    "supabase/repeatable/17092026_0600_weekly_source_first_authorisation_v1.sql",
+    "supabase/repeatable/17092026_0700_weekly_source_pending_entitlement_release_v1.sql",
+    "supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+    "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+    "supabase/verification/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+    "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+    "supabase/verification/17092026_0200_weekly_source_rotation_authority_v1.sql",
+    "supabase/verification/17092026_0700_weekly_source_pending_entitlement_release_v1.sql"
+  ],
+  "counts": {
+    "raw": 38,
+    "baselineCovered": 12,
+    "newFinitePoints": 26,
+    "exactOldReviewedKeys": 6,
+    "completeOldFunctionEqual": 0
+  },
+  "rows": [
+    {
+      "id": 1,
+      "keySha256": "1c19b052a2b77aadea11f3b3c4c57cadaf6d131613f57a573e3e14d14b5ee36b",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 2,
+      "keySha256": "b62a164dbb8827cbb06de7f4f2a325a6e55eaaf06ddd228207848307ee6651bb",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 3,
+      "keySha256": "f7503e655b5e420dc6d6f59fe31ead0e79b668664ab0dafb7d794017d50548c1",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 4,
+      "keySha256": "8c38b7acde90039e1b4fb973bc523273c3f3353d1f89bc5d1a1f61cde6fda898",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 5,
+      "keySha256": "6d67b0d18be3bc5ad9fc488390b5e899d22d66958fb0e83f925f7d9f97a25beb",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 6,
+      "keySha256": "f84b1445af2e3c96508946e2d9ed1683e3d9b69fd74d2c60cefa0a88f580292d",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 7,
+      "keySha256": "f84b1445af2e3c96508946e2d9ed1683e3d9b69fd74d2c60cefa0a88f580292d",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 2,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 8,
+      "keySha256": "b08979472b95625d1eb643cb945877b608165e4968060cc82e159459786905d1",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 9,
+      "keySha256": "b358515873a23685764d772f0f073154cb7e870039a1a3ea78483bdfb31625ac",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 10,
+      "keySha256": "b94e1dae30d8d61f2c754a36ed6eba607704ea0fbd884ad6c0c7ba017f593ce2",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 11,
+      "keySha256": "c3da58a7cff56919544aa1f115b1368c020586d4dec3f6b4d2ebb9e0b3850ef9",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 12,
+      "keySha256": "b7af3b7f962ff3edda5783193c4ef1621a5210c6923f07c87a903cf240dcd93e",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 13,
+      "keySha256": "b7af3b7f962ff3edda5783193c4ef1621a5210c6923f07c87a903cf240dcd93e",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 2,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 14,
+      "keySha256": "c3da58a7cff56919544aa1f115b1368c020586d4dec3f6b4d2ebb9e0b3850ef9",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 2,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 15,
+      "keySha256": "21c07a823044f0425de03138fa0395fb0272b9bdde89d8ad27701dddf5c94eeb",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 16,
+      "keySha256": "e8948f44c9e9a5c1812af21f7e371b92f8020cbe8227d966f9e06c7553161a99",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 17,
+      "keySha256": "98fef17ff10dcfff7eeb9640fe0f17de18bdfb2050478ddf960008a0ba28b1ca",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 18,
+      "keySha256": "bbcb544826bb3060d6ecef690f9c2b3f4b446073729919065fa39c556755a6ea",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 19,
+      "keySha256": "d52e810b051a6897089158f4a57bceed76ebbce1b120e027dd454c6929e050c6",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 20,
+      "keySha256": "c2c643e46ec0282c194142288e3e64beed2f77ba4019e40543b9a217c06d7e22",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 21,
+      "keySha256": "329892148a2f7e0ea0b20848872a856516627fc2848996ba71cc307b37a3d1cf",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 22,
+      "keySha256": "176643d3e53bb2e002d755cd8c2604bbb0c5690f4a6f589a6104efd11831305e",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 23,
+      "keySha256": "7670817a4bacd8f2c79f6e176219fe79bd9bdc4311c27cbc1193b61a498c0671",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 24,
+      "keySha256": "235620bc77bead4dd46a5a8ea47538a7fb0a7f9b228034a0e6df69589db24aa1",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+          "sourceSha256": "2a4f0d619ec2800f3d5a880459d0c0421f41c890bb6706750eb0464cab24fb03",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+          "sourceSha256": "2a4f0d619ec2800f3d5a880459d0c0421f41c890bb6706750eb0464cab24fb03",
+          "signature": "private.weekly_source_local_protected_pending_released_v1()",
+          "completeStatementSha256": "20a6cc5e8f4e21614770ae25179443eacb9fd56a571c8073a06b1b435a99da21",
+          "bodySha256": "13f90d31c923fa29779f1bf1a69ce03fed95e918496fee62042f9e26fcccc98d",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "keySha256": "d239ac70287321159760790535e544b77e49f7a4b1be210d803e6e6932025974",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+          "sourceSha256": "2a4f0d619ec2800f3d5a880459d0c0421f41c890bb6706750eb0464cab24fb03",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+          "sourceSha256": "2a4f0d619ec2800f3d5a880459d0c0421f41c890bb6706750eb0464cab24fb03",
+          "signature": "private.weekly_source_local_protected_pending_released_v1()",
+          "completeStatementSha256": "20a6cc5e8f4e21614770ae25179443eacb9fd56a571c8073a06b1b435a99da21",
+          "bodySha256": "13f90d31c923fa29779f1bf1a69ce03fed95e918496fee62042f9e26fcccc98d",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "keySha256": "8a080b28e181eaef1e56cc94fb08fd41e25e9c7c2a2c3cc76bbfca381a843ea0",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+          "sourceSha256": "2a4f0d619ec2800f3d5a880459d0c0421f41c890bb6706750eb0464cab24fb03",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+          "sourceSha256": "2a4f0d619ec2800f3d5a880459d0c0421f41c890bb6706750eb0464cab24fb03",
+          "signature": "private.weekly_source_local_protected_pending_released_v1()",
+          "completeStatementSha256": "20a6cc5e8f4e21614770ae25179443eacb9fd56a571c8073a06b1b435a99da21",
+          "bodySha256": "13f90d31c923fa29779f1bf1a69ce03fed95e918496fee62042f9e26fcccc98d",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "keySha256": "225d9e46623688d10a24d2567a5fb16e68ee2335200e02f7ec8c02afa77e8c4c",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 28,
+      "keySha256": "16cd67065bfbaf8d54693a1267a801dd547a9a1509905032de982cc37bcd0209",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": []
+    },
+    {
+      "id": 29,
+      "keySha256": "44e6b6c838ca8504db4bb4dc4cd26f0d99d1699c737adc0973b1b11313eea585",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+          "sourceSha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+          "sourceSha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+          "signature": "private.weekly_source_resolve_root_identity_v1(uuid)",
+          "completeStatementSha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6",
+          "bodySha256": "461f2de5cb0875238371e06baee6f64f2e9c87d566d66c40721f754c661734d8",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "keySha256": "c40cfc1f3d989829f6744a54c72892cb4793ae09dfd5d7a5f8f2bf08c3956569",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+          "sourceSha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+          "sourceSha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+          "signature": "private.weekly_source_resolve_root_identity_v1(uuid)",
+          "completeStatementSha256": "0eef84f28865f7badd54338c75820b1c69d0a88ca80ddd49b7dae9416484cca6",
+          "bodySha256": "461f2de5cb0875238371e06baee6f64f2e9c87d566d66c40721f754c661734d8",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "keySha256": "7d61c452fd34f63a41ccb7671d1a2307e6422448054f4ea131b1763b885dc90e",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+          "sourceSha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+          "sourceSha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+          "signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+          "completeStatementSha256": "b8bb674c0fce15e438c52fc0936dbfaa0b2cec951e31ae17eb69c97a1a00fdc7",
+          "bodySha256": "b70f516b31f156ec26bd43bec7ef76700691a27f429c5ec7f1ced7e085244392",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "keySha256": "1de6af9ef7a0d4903065faf97afa54f90d767e82fc3898380cbbbacbf8d9b401",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+          "sourceSha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [],
+      "oldReviewedExactStatements": [],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/17092026_0200_weekly_source_rotation_authority_v1.sql",
+          "sourceSha256": "2e85bf31707c6b1bc3d9243a4a6a19962a276797eb0cf2727a2cf5bc8b55406b",
+          "signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+          "completeStatementSha256": "b8bb674c0fce15e438c52fc0936dbfaa0b2cec951e31ae17eb69c97a1a00fdc7",
+          "bodySha256": "b70f516b31f156ec26bd43bec7ef76700691a27f429c5ec7f1ced7e085244392",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "keySha256": "9bf51c18fabc43a96bac435a1478d526cc6649de578bd8217c1782c6e4e2f7bb",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.3",
+          "keySha256": "9bf51c18fabc43a96bac435a1478d526cc6649de578bd8217c1782c6e4e2f7bb",
+          "statementSha256": "9d8ac574ab3113b9cbce29a4aade2dbaa7cead247f14f530df55dcd467846bed",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.43",
+          "keySha256": "9bf51c18fabc43a96bac435a1478d526cc6649de578bd8217c1782c6e4e2f7bb",
+          "statementSha256": "9d8ac574ab3113b9cbce29a4aade2dbaa7cead247f14f530df55dcd467846bed",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldReviewedExactStatements": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.3",
+          "keySha256": "9bf51c18fabc43a96bac435a1478d526cc6649de578bd8217c1782c6e4e2f7bb",
+          "statementSha256": "9d8ac574ab3113b9cbce29a4aade2dbaa7cead247f14f530df55dcd467846bed",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.43",
+          "keySha256": "9bf51c18fabc43a96bac435a1478d526cc6649de578bd8217c1782c6e4e2f7bb",
+          "statementSha256": "9d8ac574ab3113b9cbce29a4aade2dbaa7cead247f14f530df55dcd467846bed",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+          "completeStatementSha256": "bac414a4cf32f66fd5a0b197429a504bcbd3c987d1eeff993e3785d758a907ef",
+          "bodySha256": "d13b25417f8c4325476eed2745f6f26408fa2b90c54d083c6a3a0b1d6316def2",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "keySha256": "940725e087d4d0313dfe45f524c9fef2bf62821401a5b298395daecf6be38d12",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.2",
+          "keySha256": "940725e087d4d0313dfe45f524c9fef2bf62821401a5b298395daecf6be38d12",
+          "statementSha256": "821c96caea4d0c26b3e8508e122e8e55a26433ed7393aeb2265ca4715c899dd7",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.41",
+          "keySha256": "940725e087d4d0313dfe45f524c9fef2bf62821401a5b298395daecf6be38d12",
+          "statementSha256": "821c96caea4d0c26b3e8508e122e8e55a26433ed7393aeb2265ca4715c899dd7",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldReviewedExactStatements": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.2",
+          "keySha256": "940725e087d4d0313dfe45f524c9fef2bf62821401a5b298395daecf6be38d12",
+          "statementSha256": "821c96caea4d0c26b3e8508e122e8e55a26433ed7393aeb2265ca4715c899dd7",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.41",
+          "keySha256": "940725e087d4d0313dfe45f524c9fef2bf62821401a5b298395daecf6be38d12",
+          "statementSha256": "821c96caea4d0c26b3e8508e122e8e55a26433ed7393aeb2265ca4715c899dd7",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+          "completeStatementSha256": "bac414a4cf32f66fd5a0b197429a504bcbd3c987d1eeff993e3785d758a907ef",
+          "bodySha256": "d13b25417f8c4325476eed2745f6f26408fa2b90c54d083c6a3a0b1d6316def2",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "keySha256": "f0a4fec442921a653d10fbaec3f5279ada71504b7bab8eaa3bebeae4944550fe",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.5",
+          "keySha256": "f0a4fec442921a653d10fbaec3f5279ada71504b7bab8eaa3bebeae4944550fe",
+          "statementSha256": "b67dcb5833a9f29201f31af42a6ffbfb86c54e45790778de4df74e4f3596b447",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.58",
+          "keySha256": "f0a4fec442921a653d10fbaec3f5279ada71504b7bab8eaa3bebeae4944550fe",
+          "statementSha256": "b67dcb5833a9f29201f31af42a6ffbfb86c54e45790778de4df74e4f3596b447",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldReviewedExactStatements": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.5",
+          "keySha256": "f0a4fec442921a653d10fbaec3f5279ada71504b7bab8eaa3bebeae4944550fe",
+          "statementSha256": "b67dcb5833a9f29201f31af42a6ffbfb86c54e45790778de4df74e4f3596b447",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.12.rows.1",
+          "keySha256": "f462397144870086b8cb03dc1d967d768130f5c658950d722f028585a7a022db",
+          "statementSha256": "b67dcb5833a9f29201f31af42a6ffbfb86c54e45790778de4df74e4f3596b447",
+          "signature": "private.weekly_source_final_upload_gate_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.14.rows.3",
+          "keySha256": "f462397144870086b8cb03dc1d967d768130f5c658950d722f028585a7a022db",
+          "statementSha256": "b67dcb5833a9f29201f31af42a6ffbfb86c54e45790778de4df74e4f3596b447",
+          "signature": "private.weekly_source_final_upload_gate_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.58",
+          "keySha256": "f0a4fec442921a653d10fbaec3f5279ada71504b7bab8eaa3bebeae4944550fe",
+          "statementSha256": "b67dcb5833a9f29201f31af42a6ffbfb86c54e45790778de4df74e4f3596b447",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+          "completeStatementSha256": "bac414a4cf32f66fd5a0b197429a504bcbd3c987d1eeff993e3785d758a907ef",
+          "bodySha256": "d13b25417f8c4325476eed2745f6f26408fa2b90c54d083c6a3a0b1d6316def2",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "keySha256": "2915089cedadd43ff27914b6ab9b7da6ea25cd080e29da6d41588ea9927d6e23",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.0",
+          "keySha256": "2915089cedadd43ff27914b6ab9b7da6ea25cd080e29da6d41588ea9927d6e23",
+          "statementSha256": "9de065b207f36a6e008e46425f9a23c6950548aa820cda304a0081f42fb5e92f",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.10",
+          "keySha256": "2915089cedadd43ff27914b6ab9b7da6ea25cd080e29da6d41588ea9927d6e23",
+          "statementSha256": "9de065b207f36a6e008e46425f9a23c6950548aa820cda304a0081f42fb5e92f",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldReviewedExactStatements": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.0",
+          "keySha256": "2915089cedadd43ff27914b6ab9b7da6ea25cd080e29da6d41588ea9927d6e23",
+          "statementSha256": "9de065b207f36a6e008e46425f9a23c6950548aa820cda304a0081f42fb5e92f",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.10",
+          "keySha256": "2915089cedadd43ff27914b6ab9b7da6ea25cd080e29da6d41588ea9927d6e23",
+          "statementSha256": "9de065b207f36a6e008e46425f9a23c6950548aa820cda304a0081f42fb5e92f",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+          "completeStatementSha256": "bac414a4cf32f66fd5a0b197429a504bcbd3c987d1eeff993e3785d758a907ef",
+          "bodySha256": "d13b25417f8c4325476eed2745f6f26408fa2b90c54d083c6a3a0b1d6316def2",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "keySha256": "c21b02ed13cbcbd7dfa324fbd3514d772776e73949c51f4d0ee4489b42293370",
+      "baselineMaxPerFile": 0,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": false,
+      "baselineMatches": [],
+      "oldReviewedExactKeys": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.4",
+          "keySha256": "c21b02ed13cbcbd7dfa324fbd3514d772776e73949c51f4d0ee4489b42293370",
+          "statementSha256": "906a735f069488fc97bac42033c06b577438698fc9e754419b719adbc7d04766",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.53",
+          "keySha256": "c21b02ed13cbcbd7dfa324fbd3514d772776e73949c51f4d0ee4489b42293370",
+          "statementSha256": "906a735f069488fc97bac42033c06b577438698fc9e754419b719adbc7d04766",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_JOINED_NON_DYNAMIC_REVIEW_20261016/EXTENSION_MAP.json",
+          "reviewSha256": "660d83da88bf88054106e4f407cc43bfe5b455cc82727dc5c705448641f6ab0e",
+          "jsonPath": "$.points.0",
+          "keySha256": "c21b02ed13cbcbd7dfa324fbd3514d772776e73949c51f4d0ee4489b42293370",
+          "statementSha256": "906a735f069488fc97bac42033c06b577438698fc9e754419b719adbc7d04766",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldReviewedExactStatements": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.4",
+          "keySha256": "c21b02ed13cbcbd7dfa324fbd3514d772776e73949c51f4d0ee4489b42293370",
+          "statementSha256": "906a735f069488fc97bac42033c06b577438698fc9e754419b719adbc7d04766",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.53",
+          "keySha256": "c21b02ed13cbcbd7dfa324fbd3514d772776e73949c51f4d0ee4489b42293370",
+          "statementSha256": "906a735f069488fc97bac42033c06b577438698fc9e754419b719adbc7d04766",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_JOINED_NON_DYNAMIC_REVIEW_20261016/EXTENSION_MAP.json",
+          "reviewSha256": "660d83da88bf88054106e4f407cc43bfe5b455cc82727dc5c705448641f6ab0e",
+          "jsonPath": "$.points.0",
+          "keySha256": "c21b02ed13cbcbd7dfa324fbd3514d772776e73949c51f4d0ee4489b42293370",
+          "statementSha256": "906a735f069488fc97bac42033c06b577438698fc9e754419b719adbc7d04766",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+          "completeStatementSha256": "bac414a4cf32f66fd5a0b197429a504bcbd3c987d1eeff993e3785d758a907ef",
+          "bodySha256": "d13b25417f8c4325476eed2745f6f26408fa2b90c54d083c6a3a0b1d6316def2",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "keySha256": "4d3614dc9e62829a5d8149a12e95f90c1d22357949ea47c5f32b86d1d8eb6acc",
+      "baselineMaxPerFile": 1,
+      "baselineOccurrenceConsumed": 1,
+      "baselineCovered": true,
+      "baselineMatches": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "count": 1
+        }
+      ],
+      "oldReviewedExactKeys": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.1",
+          "keySha256": "4d3614dc9e62829a5d8149a12e95f90c1d22357949ea47c5f32b86d1d8eb6acc",
+          "statementSha256": "1b3dcdc74b9699aedca050067741149abd74318adf00f294ae6693ce3aefa755",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.21",
+          "keySha256": "4d3614dc9e62829a5d8149a12e95f90c1d22357949ea47c5f32b86d1d8eb6acc",
+          "statementSha256": "1b3dcdc74b9699aedca050067741149abd74318adf00f294ae6693ce3aefa755",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldReviewedExactStatements": [
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.6.rows.1",
+          "keySha256": "4d3614dc9e62829a5d8149a12e95f90c1d22357949ea47c5f32b86d1d8eb6acc",
+          "statementSha256": "1b3dcdc74b9699aedca050067741149abd74318adf00f294ae6693ce3aefa755",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        },
+        {
+          "file": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+          "reviewSha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc",
+          "jsonPath": "$.files.39.rows.21",
+          "keySha256": "4d3614dc9e62829a5d8149a12e95f90c1d22357949ea47c5f32b86d1d8eb6acc",
+          "statementSha256": "1b3dcdc74b9699aedca050067741149abd74318adf00f294ae6693ce3aefa755",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)"
+        }
+      ],
+      "oldCompleteFunctions": [
+        {
+          "file": "supabase/repeatable/05102026_0710_weekly_source_invoice_duty_v1.sql",
+          "sourceSha256": "852eb511ef23d698e0a825be9b8f6156e520a225c1efd425f4711d74b443a92f",
+          "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+          "completeStatementSha256": "bac414a4cf32f66fd5a0b197429a504bcbd3c987d1eeff993e3785d758a907ef",
+          "bodySha256": "d13b25417f8c4325476eed2745f6f26408fa2b90c54d083c6a3a0b1d6316def2",
+          "completeStatementEqual": false,
+          "bodyEqual": false
+        }
+      ]
+    }
+  ],
+  "native": "NOT_RUN"
+}

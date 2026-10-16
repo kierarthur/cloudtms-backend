@@ -1,0 +1,94 @@
+{
+  "version": "V6_OFFICE_MANUAL_ENQUIRY_PARENT_PROPOSAL_V1",
+  "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "rootWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "status": "SOURCE_PROPOSAL_ONLY_ROOT_SOLE_INTEGRATOR_NATIVE_NOT_RUN",
+  "inputs": [
+    {
+      "path": "broker/src/weekly-source/routes.js",
+      "rawSha256": "ed92abc085aaac15fc72aa58de649ebced8e1ae580d0bfac9d8c3a2078ac0242",
+      "lfSha256": "fd97a02e6fdc3554b9310aad90b949028aadd8de9f518af829dda7af9568a314"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_office_rows_v1.sqlinc",
+      "rawSha256": "c96636a2fb262915af44830721e10a7bd4118646cf84b85353fe595faf104e0b",
+      "lfSha256": "c96636a2fb262915af44830721e10a7bd4118646cf84b85353fe595faf104e0b"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0319_weekly_contact_office_projection_v1.sql",
+      "rawSha256": "d94522d3ae20fa2c4e2a0ee0d0918dbdd9ccc33e345995ae921cf8e19a07e597",
+      "lfSha256": "d94522d3ae20fa2c4e2a0ee0d0918dbdd9ccc33e345995ae921cf8e19a07e597"
+    },
+    {
+      "path": "tests/fixtures/contact-manual-enquiry-contract-fixture.mjs",
+      "rawSha256": "d6361f267b4e79db52924dbc6aa4f3acefa522e2f26f3e755e7c5ea214d8310c",
+      "lfSha256": "d6361f267b4e79db52924dbc6aa4f3acefa522e2f26f3e755e7c5ea214d8310c"
+    },
+    {
+      "path": "broker/src/weekly-source/contact-manual-enquiry-office.mjs",
+      "rawSha256": "d75605c2d485e3162116e5e592917a78941724c9e01bca7738f4573816a6d932",
+      "lfSha256": "d75605c2d485e3162116e5e592917a78941724c9e01bca7738f4573816a6d932"
+    },
+    {
+      "path": "broker/src/weekly-source/contact-manual-enquiry-request.mjs",
+      "rawSha256": "cbec35660eab50592d3749e31a7acf7be385cdc8cb6b644aa1b72df97087db51",
+      "lfSha256": "cbec35660eab50592d3749e31a7acf7be385cdc8cb6b644aa1b72df97087db51"
+    },
+    {
+      "path": "broker/src/weekly-source/contact-manual-enquiry-contract.mjs",
+      "rawSha256": "f6c5f6f2335f3e2ea69f36bcdd4a2b3b19315d1d8a6f9831e9355db43e3ffe23",
+      "lfSha256": "f6c5f6f2335f3e2ea69f36bcdd4a2b3b19315d1d8a6f9831e9355db43e3ffe23"
+    },
+    {
+      "path": "broker/src/weekly-source/push-timing-office.mjs",
+      "rawSha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa",
+      "lfSha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa"
+    }
+  ],
+  "routes": {
+    "source": "broker/src/weekly-source/routes.js",
+    "beforeLfSha256": "fd97a02e6fdc3554b9310aad90b949028aadd8de9f518af829dda7af9568a314",
+    "afterLfSha256": "e2aae8ebce5d2d8b48544540ca1d2b007087adf796f39f8803e942664b3e10a6",
+    "fullReverseEqual": true,
+    "replacements": [
+      {
+        "before": "import { contactReminderRefusal } from './contact-reminder-refusal.mjs';",
+        "after": "import { contactReminderRefusal } from './contact-reminder-refusal.mjs';\nimport {CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,isContactManualEnquiryCommand,parseContactManualEnquiryBody,handleContactManualEnquiryOfficeCommand} from './contact-manual-enquiry-office.mjs';"
+      },
+      {
+        "before": "    return isContactPauseCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null)\n      ? parseContactPauseCommandBody(text) : parsed;",
+        "after": "    if(isContactManualEnquiryCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null))return parseContactManualEnquiryBody(text);\n    return isContactPauseCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null)\n      ? parseContactPauseCommandBody(text) : parsed;"
+      },
+      {
+        "before": "  if (action === 'LATER_CHANGE_DECISION') {",
+        "after": "  if(isContactManualEnquiryCommand(action)){\n    return handleContactManualEnquiryOfficeCommand({body,user,search:new URL(req.url).search,\n      deploymentContext:()=>weeklySourceDeploymentContext(env),\n      rpc:(name,request)=>callRpc(dependencies,name,request,20_000)});\n  }\n\n  if (action === 'LATER_CHANGE_DECISION') {"
+      },
+      {
+        "before": "  contactPauseRpcCommands: CONTACT_PAUSE_RPC_COMMANDS,",
+        "after": "  contactPauseRpcCommands: CONTACT_PAUSE_RPC_COMMANDS,\n  contactManualEnquiryRpcCommands: CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,"
+      }
+    ]
+  },
+  "read": {
+    "signature": "private.weekly_contact_office_rows_v1(jsonb,jsonb,uuid)",
+    "beforeLfSha256": "c96636a2fb262915af44830721e10a7bd4118646cf84b85353fe595faf104e0b",
+    "afterLfSha256": "d9f357da000be10590e85df31f2704bcbcdfe4b0e7e8b05821035496102a8001",
+    "fullReverseEqual": true,
+    "before": "  result:=result||jsonb_build_array(item||jsonb_build_object('contact_controls',summary));",
+    "after": "  result:=result||jsonb_build_array(item||jsonb_build_object('contact_controls',summary)\n   ||case when item->>'section'='questions' then jsonb_build_object('contact_manual_enquiry',\n    private.weekly_contact_manual_enquiry_read_v1(source_group.agency_id,source_group.environment,candidate,client))\n    else '{}'::jsonb end);",
+    "nativeCallee": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
+    "rowProperty": "contact_manual_enquiry",
+    "previousSevenKeyPauseContractPreserved": true,
+    "ordering": "After complete Contact1210 including closed legacy START successor and final ACL; before runtime/Office release. Root allocates/registers successor and updates final definer physical path with all companions retained."
+  },
+  "limits": {
+    "database": "NOT_RUN",
+    "native": "NOT_RUN",
+    "provider": "NOT_RUN",
+    "deployment": "NOT_RUN",
+    "PartB": "NOT_RUN",
+    "publicSourceFinancialConfirmResult": "HELD_REAL_B051_DEPENDENCY"
+  },
+  "originalReviewRootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "currentRootInputsRechecked": true
+}
