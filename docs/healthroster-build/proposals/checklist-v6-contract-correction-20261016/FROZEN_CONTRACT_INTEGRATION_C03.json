@@ -1,0 +1,1399 @@
+{
+  "version": 1,
+  "status": "FROZEN_REVIEWABLE_SOURCE_NATIVE_NOT_RUN",
+  "rootObservedHead": "66c6e5ef2971a22d34264b829877d6546c49a1be",
+  "physicalSourceCommit": "00f25571ac7fb65f44351a52beced0710211138e",
+  "schemaSourceCommit": "7d1be386431f5a88b7206d24c9af37b504c36f4e",
+  "migration": {
+    "actualTarget": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+    "physicalPayload": "forward/sql/physical-schema.sqlinc",
+    "physicalSha256": "5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115",
+    "invoicePayload": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/001_billing_schema.sqlinc",
+    "invoiceSha256": "7cf768b713f421248e62dbc23178efbf24adf6096eafe63d284eb316a4d81545",
+    "mode": "Already source-composed by root with Source one-time union. Preserve exact locked7d andInvoice001 bytes; no repeated CREATE, migration rename/relock or mutable include. Root native57-statement schema proof is separate, not function/lifecycle acceptance.",
+    "stores": [
+      "private.timesheet_contract_move_operations",
+      "private.timesheet_contract_move_requests",
+      "private.timesheet_contract_move_reviews",
+      "private.timesheet_contract_move_members",
+      "private.timesheet_contract_current_placements",
+      "private.timesheet_contract_family_aliases",
+      "private.timesheet_contract_move_execution_contexts",
+      "private.timesheet_contract_move_capabilities",
+      "private.timesheet_contract_move_capability_consumptions"
+    ],
+    "security": "FORCERLS owner-only grants/policies; no service/browser table access."
+  },
+  "orderedPhysicalDefinitions": [
+    {
+      "file": "forward/sql/00_identity.sqlinc",
+      "sha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "mode": "Copy complete exact payload once; preserve its internal function/trigger order."
+    },
+    {
+      "file": "forward/sql/01_capability.sqlinc",
+      "sha256": "71974b7bab2325a8488d46051ded503b1e27b36fccceb674fde730ab73a8bd4b",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "mode": "Copy complete exact payload once; preserve its internal function/trigger order."
+    },
+    {
+      "file": "forward/sql/02_physical_apply.sqlinc",
+      "sha256": "916d7a0438014aa1a700878cc5ea76f97eb3138484947691801917ffe4abeea9",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "mode": "Copy complete exact payload once; preserve its internal function/trigger order."
+    },
+    {
+      "file": "forward/sql/03_native_guards.sqlinc",
+      "sha256": "230841b9bd2a2ea6913858837640a84196af45ec36b57eafa27ab4a686ee6ec8",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_native_compatibility.sqlinc",
+      "mode": "Copy complete exact payload once; preserve its internal function/trigger order."
+    },
+    {
+      "file": "forward/sql/04_atomic_assert.sqlinc",
+      "sha256": "c5b2f14b2150a60e3b6160c58d1eb4eeb838f56067b7d7248d09c42a3ade8113",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "mode": "Copy complete exact payload once; preserve its internal function/trigger order."
+    },
+    {
+      "file": "forward/sql/04a_accept_composition.sqlinc",
+      "sha256": "d900ad23fbc0b4b5130b6c8138767ba9d7827b3e8506feefcac12e12cbaaae10",
+      "target": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "mode": "Copy complete exact payload once; preserve its internal function/trigger order."
+    }
+  ],
+  "dailyForCompleteInvoice": {
+    "reason": "Whole c86 Invoice032a/inspect/prepare uses genuine Daily helpers. Include these complete private definitions before invoice and unfiltered05ACL; they do not supply missing Bank publisher/preflight. If excluded, use exact Contract-only ACL and hold Daily-specific owner mounting instead of pretending closure.",
+    "orderedFiles": [
+      {
+        "file": "forward/sql/04b_daily_context.sqlinc",
+        "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f"
+      },
+      {
+        "file": "forward/sql/04c_daily_admission.sqlinc",
+        "sha256": "6c419edd7a1fe95cb5dfd7a501a3d1a4c8cd105917664eb3563d60e495695025"
+      },
+      {
+        "file": "forward/sql/04d_daily_requests.sqlinc",
+        "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+      }
+    ]
+  },
+  "invoice": {
+    "sourceCommit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+    "sourceRoot": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+    "directory": "docs/healthroster-build/proposals/v6-invoice-native-20261016",
+    "orderedCompleteFiles": [
+      {
+        "file": "forward/001_billing_schema.sqlinc",
+        "sha256": "7cf768b713f421248e62dbc23178efbf24adf6096eafe63d284eb316a4d81545",
+        "kind": "NEW_SCHEMA_BODY",
+        "targets": []
+      },
+      {
+        "file": "forward/010_source_invoice_facts.sqlinc",
+        "sha256": "9078a3008fb77d0f5cb3d5c9c9a7667adf3fbd623ae266ec85d892c7b205fad8",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.weekly_source_invoice_preservation_facts_v1",
+            "arguments": "p_timesheet_ids uuid[],p_source_row_ids uuid[],p_lock boolean"
+          }
+        ]
+      },
+      {
+        "file": "forward/015_source_certificate.sqlinc",
+        "sha256": "554463c9b554c3c16171255ab069faac4885b80f2b7ebd96e27700520336cda7",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.weekly_source_invoice_certificate_v1",
+            "arguments": "p_timesheet_ids uuid[],p_source_row_ids uuid[],p_lock boolean"
+          },
+          {
+            "name": "private.weekly_source_invoice_certificate_assert_v1",
+            "arguments": "p_expected jsonb,p_lock boolean"
+          }
+        ]
+      },
+      {
+        "file": "forward/017_evidence_subject.sqlinc",
+        "sha256": "f1c45a5c395d679364b6a407e2d0c7c0996f7077fc8a33ce31a3f6bbb225868e",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_original_evidence_eligible_v1",
+            "arguments": "p_timesheet_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/018_source_original.sqlinc",
+        "sha256": "46d7cb7d66b03e64f9f4bb10e8024fd191b63a5b511518b65cca4bc1e78f1854",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.timesheet_contract_source_original_eligible_v1",
+            "arguments": "p_original_timesheet_id uuid"
+          },
+          {
+            "name": "private.timesheet_contract_source_pay_only_v1",
+            "arguments": "p_timesheet_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/019_source_generation_witness.sqlinc",
+        "sha256": "74f06fce83bb96c5a3d851b66d66d38918f976574c4e2044c227e35268f86603",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_source_original_claim_enter_v1",
+            "arguments": "p_claims jsonb,p_now_utc timestamptz"
+          },
+          {
+            "name": "private.invoice_source_original_claim_v1",
+            "arguments": "p_chunk_id uuid"
+          },
+          {
+            "name": "private.invoice_source_original_line_plan_v1",
+            "arguments": "p_chunk_id uuid,p_lines jsonb"
+          },
+          {
+            "name": "private.invoice_source_original_line_allowed_v1",
+            "arguments": "p_new jsonb"
+          }
+        ]
+      },
+      {
+        "file": "forward/019a_source_admission_witness.sqlinc",
+        "sha256": "f0ebe9fb057ccee1a10f58dfd8a154a31de63e4b54a8fb37665d6fe876228351",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_source_admission_origin_v1",
+            "arguments": "p_timesheet_id uuid"
+          },
+          {
+            "name": "private.invoice_source_admission_line_claim_v1",
+            "arguments": "p_invoice_id uuid"
+          },
+          {
+            "name": "private.invoice_source_admission_line_enter_v1",
+            "arguments": "p_invoice_id uuid,p_actor_user_id uuid,p_manifest_id uuid,p_line jsonb"
+          },
+          {
+            "name": "private.invoice_source_admission_line_allowed_v1",
+            "arguments": "p_new jsonb"
+          },
+          {
+            "name": "private.invoice_source_admission_line_finish_v1",
+            "arguments": "p_invoice_id uuid,p_invoice_line_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/019b_source_allocation_witness.sqlinc",
+        "sha256": "e9540570a286428daad3264c460cf67dbb1a60d82ce180d71118719f4940e603",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_source_allocation_claim_v1",
+            "arguments": "p_destination_invoice_id uuid"
+          },
+          {
+            "name": "private.invoice_source_allocation_enter_v1",
+            "arguments": "p_source uuid,p_destination uuid,p_actor uuid,p_line_ids uuid[]"
+          },
+          {
+            "name": "private.invoice_source_allocation_line_allowed_v1",
+            "arguments": "p_new jsonb"
+          },
+          {
+            "name": "private.invoice_source_allocation_finish_v1",
+            "arguments": "p_destination uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/020_source_family.sqlinc",
+        "sha256": "142e3216e23a5b41fb4f089bc67401a525b220ac1a85620947cf198cb2778598",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.weekly_source_invoice_family_timesheet_ids_v1",
+            "arguments": "p_timesheet_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/021_source_lineage.sqlinc",
+        "sha256": "e7a52c3d953356663f7eea2eb4bcde3f6a70182da9602144e2f828a5578ad66a",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.weekly_source_finalisation_lineage_assert_v1",
+            "arguments": "p_row_resolution_id uuid, p_source_cycle_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/021a_source_duty.sqlinc",
+        "sha256": "0e74042257973b6ee0507f7f2168b5bad6f5f3f11a73f0c48673b70aaebecc99",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.weekly_source_invoice_duty_v1",
+            "arguments": "p_root_timesheet_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/022_source_presentation.sqlinc",
+        "sha256": "052a8b6d0451160c510aa378d8a4759d077a80e4f171e49caf7b8d8b1e769ac0",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_presentation_snapshot_batch",
+            "arguments": "p_requests jsonb, p_now_utc timestamptz default null"
+          }
+        ]
+      },
+      {
+        "file": "forward/023_source_archive.sqlinc",
+        "sha256": "208d4c1dbf004f5803e2888dfa16fa634bf8ed1e951159885f49f4c79c404df9",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "public.invoice_line_archived_timesheet_guard_v1",
+            "arguments": ""
+          }
+        ]
+      },
+      {
+        "file": "forward/023a_native_document_source.sqlinc",
+        "sha256": "b0621a41ea1b188846dcb1f951c5b6f82d43001a95e9f68e9c3fad2f6753cdb8",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_document_advance_batch",
+            "arguments": "p_claims jsonb, p_now_utc timestamptz"
+          }
+        ]
+      },
+      {
+        "file": "forward/024_line_admission.sqlinc",
+        "sha256": "bc6d5e889c54e3803bc20d52fbc95a8497cce6768b446de43529fb28b019624e",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_line_allowed_v1",
+            "arguments": "p_new jsonb"
+          },
+          {
+            "name": "private.invoice_contract_move_verified_unissue_v1",
+            "arguments": "p_invoice_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/024a_source_native_admission.sqlinc",
+        "sha256": "bc1ce152c05c7ab726503f67bdb8e84f7af8046ad767b34de9c334f70135ab60",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "public.weekly_source_invoice_admit_atomic_v1",
+            "arguments": "p_request jsonb"
+          }
+        ]
+      },
+      {
+        "file": "forward/024b_source_native_allocation.sqlinc",
+        "sha256": "f980846c742b528aaf862d59a2de0f20d1b24b30e1f36efbff9cf3a3c06cab09",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "public.weekly_source_invoice_move_atomic_v1",
+            "arguments": "p_request jsonb"
+          }
+        ]
+      },
+      {
+        "file": "forward/025_claim_placement.sqlinc",
+        "sha256": "a23f2a30eae352a9903449adbfbd5d1761db96ceac61f883aa4ecbbe72f6ce78",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.timesheet_contract_claim_placement_v1",
+            "arguments": "p_workflow_id uuid,p_stored_timesheet_id uuid,p_expense_component_id uuid default null"
+          }
+        ]
+      },
+      {
+        "file": "forward/026_claim_current.sqlinc",
+        "sha256": "bf5098454a3dbe32feaa230d460ebc796181d093b068fcaa20c82cb25a7cc942",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._candidate_expense_current_timesheet_id_v1",
+            "arguments": "p_workflow_id uuid, p_stored_timesheet_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/027_claim_owned.sqlinc",
+        "sha256": "20f9a2394fbe9fee7e29fcc91ab321c8ed13c2b29c7960628d6d27cd0e74d455",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._candidate_expense_owned_timesheet_id_v1",
+            "arguments": "p_workflow_id uuid, p_stored_timesheet_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/028_claim_lock.sqlinc",
+        "sha256": "de2a58a673e9ca657a203874635f7916b9833ef1a15904636d325344c141b268",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._candidate_expense_owner_context_lock_v1",
+            "arguments": "p_expense_component_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/029_claim_financial.sqlinc",
+        "sha256": "267c5817ca565f0ccecc4bc8b54c5b15189841aae710faddd7f59d656d1171cb",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._candidate_expense_components_sync_financial_v1",
+            "arguments": "p_timesheet_id uuid, p_now_utc timestamp with time zone DEFAULT now()"
+          }
+        ]
+      },
+      {
+        "file": "forward/030_claim_sync.sqlinc",
+        "sha256": "3ba92317e968970c17be22fa89d097a3d66da80b2a9cf316965b2f2cff4ab999",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._candidate_expense_components_sync_v1",
+            "arguments": "p_workflow_id uuid, p_now_utc timestamptz default now()"
+          }
+        ]
+      },
+      {
+        "file": "forward/031_source_line_owner.sqlinc",
+        "sha256": "ac0d0da1833e7b5b31180c029e835bcb05ca2671c009dd37a7acf60307bffb67",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.weekly_source_invoice_line_owner_guard_v1",
+            "arguments": ""
+          }
+        ]
+      },
+      {
+        "file": "forward/032_prospective_group.sqlinc",
+        "sha256": "8e380f1f30176524f9a7d07b1dd9b0ed37e84e4cf0ea981e8820c7ccdff1c184",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_prospective_source_v1",
+            "arguments": "p_operation_id uuid,p_timesheet_id uuid,p_actor_user_id uuid"
+          },
+          {
+            "name": "private.invoice_contract_move_group_facts_v1",
+            "arguments": "p_operation_id uuid,p_groups jsonb,p_preview boolean"
+          }
+        ]
+      },
+      {
+        "file": "forward/032a_daily_native_basis.sqlinc",
+        "sha256": "ae71613414162b317cb3de0b21492e92cf7fc7c529cd554b5340d96142d85bda",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_correction_scope_v1",
+            "arguments": "p_operation_id uuid,p_lock boolean"
+          },
+          {
+            "name": "private.invoice_contract_correction_prospective_source_v1",
+            "arguments": "p_operation_id uuid,p_timesheet_id uuid,p_actor_user_id uuid,p_daily jsonb"
+          },
+          {
+            "name": "private.invoice_daily_rate_actual_revision_assert_v1",
+            "arguments": "p_operation_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/033_native_grouping.sqlinc",
+        "sha256": "8427f61568b3a5fa978134b424fbbd04b2adae1f3c3d224e91ec2db85c49d6e6",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_generation_resolve_command_groups",
+            "arguments": "p_commands jsonb, p_actor_user_id uuid, p_effective_at_utc timestamptz"
+          }
+        ]
+      },
+      {
+        "file": "forward/033a_native_collection.sqlinc",
+        "sha256": "12662ec29d0fe31ce338f8a40c4cbe6a27883fe15e398ff8a66d70e0ff104c19",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_batch_generate_classification_v2",
+            "arguments": "p_allow_early boolean default false, p_scope_keys text[] default null, p_now_utc timestamptz default now()"
+          }
+        ]
+      },
+      {
+        "file": "forward/033b_native_references.sqlinc",
+        "sha256": "71698ead9aa3a773c857ba9551424f80323804601753895445d23a1a4dfb29ba",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_source_reference_validate_batch",
+            "arguments": "p_source_members jsonb"
+          }
+        ]
+      },
+      {
+        "file": "forward/033c_native_vat_policy.sqlinc",
+        "sha256": "44c63c951b368d167131266a8220a64d5b3adee8c218844fc8c7ded7e759b217",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": []
+      },
+      {
+        "file": "forward/033d_native_invoice_references.sqlinc",
+        "sha256": "c792009404507fb8a0719ee62accd9a0b55ec893bb75eaa4b003dc59d2a392e3",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_reference_rows_batch",
+            "arguments": "p_invoice_ids uuid[]"
+          }
+        ]
+      },
+      {
+        "file": "forward/034_contract_certificates.sqlinc",
+        "sha256": "e0dc74daca0c61a5e397e8cc6c3e8be2e197231fa39fc6d8a939933a75d1a648",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.timesheet_contract_source_coverage_v1",
+            "arguments": "p_timesheet_id uuid"
+          },
+          {
+            "name": "private.timesheet_contract_move_invoice_certificate_v1",
+            "arguments": "p_operation_id uuid,p_lock boolean"
+          }
+        ]
+      },
+      {
+        "file": "forward/034a_document_preflight.sqlinc",
+        "sha256": "38557a757d802b9b0bd5741f6d65c089639c40000e82998ac4932a7f96d5fe8d",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_correction_document_preflight_v1",
+            "arguments": "p_physical jsonb,p_daily jsonb,p_actor_user_id uuid,p_slices jsonb"
+          }
+        ]
+      },
+      {
+        "file": "forward/035_preflight.sqlinc",
+        "sha256": "a0d1a5439277e145f58314d0abc821e247a3aa8c52bbf56ca1a9cebf35ad6485",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_inspect_v1",
+            "arguments": "p_physical jsonb,p_daily jsonb,p_actor_user_id uuid,p_lock boolean"
+          },
+          {
+            "name": "private.invoice_contract_move_inspect_v1",
+            "arguments": "p_physical jsonb,p_actor_user_id uuid,p_lock boolean"
+          },
+          {
+            "name": "private.invoice_contract_move_preflight_v1",
+            "arguments": "p_review_id uuid,p_actor_user_id uuid,p_lock boolean"
+          }
+        ]
+      },
+      {
+        "file": "forward/036_native_selected_edit.sqlinc",
+        "sha256": "04135f211f90e991a6c2976e3ad77ced587c3dae374285a2ecb277464e86ae5b",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "public.invoice_apply_edits",
+            "arguments": "p_invoice_id uuid, p_payload jsonb, p_actor_user_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/036a_native_selected_unlock.sqlinc",
+        "sha256": "25af72528e6393f0f742c3c4ecf9674fff5869fc687842ef52fce090b5bff558",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "public._inv_unlock_segments_for_invoice",
+            "arguments": "p_invoice_id uuid, p_timesheet_ids uuid[]"
+          }
+        ]
+      },
+      {
+        "file": "forward/037_selected_draft.sqlinc",
+        "sha256": "015fd6ede7064aa39f015fef0f423a76d574317a40c335845810c18286620ec9",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_selected_financial_authorise_v1",
+            "arguments": "p_old jsonb,p_new jsonb,p_invoice_id uuid"
+          },
+          {
+            "name": "private.invoice_contract_move_selected_drafts_prepare_v1",
+            "arguments": "p_operation_id uuid,p_actor_user_id uuid,p_now_utc timestamptz"
+          }
+        ]
+      },
+      {
+        "file": "forward/038_billing_read.sqlinc",
+        "sha256": "6b547368acb9359c40a490ea931a7d367fbe15391dde4429bf1954146b04cea8",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_source_certificate_v1",
+            "arguments": "p_operation_id uuid,p_lock boolean"
+          },
+          {
+            "name": "private.invoice_contract_move_invoice_after_seal_v1",
+            "arguments": "p_operation_id uuid,p_billing_revision bigint"
+          },
+          {
+            "name": "private.invoice_contract_move_billing_read_v1",
+            "arguments": "p_operation_id uuid,p_actor_user_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/040_prepare.sqlinc",
+        "sha256": "956ddc1dec521eb4f721987f35ac52035e47e8312a973795c2185568433f7457",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_prepare_v1",
+            "arguments": "p_move_operation_id uuid,p_expected_billing_revision bigint,p_actor_user_id uuid,p_now_utc timestamptz default now()"
+          }
+        ]
+      },
+      {
+        "file": "forward/045_preparation_native.sqlinc",
+        "sha256": "551bc083c9862e2e9b7a0b57ba14ad86bbaf91ba40a7801516c8d2c99e4b1a57",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_obligation_assert_v1",
+            "arguments": "p_operation_id uuid,p_billing_revision bigint"
+          },
+          {
+            "name": "private.invoice_contract_move_prepare_advance_v1",
+            "arguments": "p_claims jsonb,p_now_utc timestamptz"
+          },
+          {
+            "name": "private.invoice_contract_move_line_reservation_assert_v1",
+            "arguments": "p_new jsonb"
+          }
+        ]
+      },
+      {
+        "file": "forward/050_credit_owner.sqlinc",
+        "sha256": "9600e697a2580bc89165087623129da9f126322b1d385a239ded5a5d049edce6",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_draft_only_v1",
+            "arguments": "p_chunk_id uuid"
+          },
+          {
+            "name": "private.invoice_credit_contract_move_context_v1",
+            "arguments": "p_chunk_id uuid,p_lock boolean"
+          },
+          {
+            "name": "private.invoice_contract_move_credit_advance_v1",
+            "arguments": "p_claim jsonb,p_now_utc timestamptz"
+          }
+        ]
+      },
+      {
+        "file": "forward/055_credit_scope_projection.sqlinc",
+        "sha256": "d220d1a9d783aadecc7561f90428c510fb63ad2d52fbdea58c50987a7d80687b",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_credit_contract_move_scope_context_v1",
+            "arguments": "p_scope_id uuid,p_lock_rows boolean"
+          }
+        ]
+      },
+      {
+        "file": "forward/060_scoped_native.sqlinc",
+        "sha256": "ca9cc70f684a1f22eb61006c4ed9c83d09b013d3bb5ca1337c6f4b3a4f4257f5",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_credit_scoped_advance_v1",
+            "arguments": "p_claim jsonb,p_now_utc timestamptz"
+          }
+        ]
+      },
+      {
+        "file": "forward/070_generation_native.sqlinc",
+        "sha256": "c8524ad717b322439f767c70ec46e038645878580157d1037c89f4f93400563f",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_generation_advance_core_v8",
+            "arguments": "p_claims jsonb, p_now_utc timestamptz"
+          }
+        ]
+      },
+      {
+        "file": "forward/071_generation_dispatch.sqlinc",
+        "sha256": "83c8a0a6143cd9e8feec788903869fb0e0ec2cad4aa97d2674b5654140e9a202",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_generation_advance_batch",
+            "arguments": "p_claims jsonb, p_now_utc timestamptz"
+          }
+        ]
+      },
+      {
+        "file": "forward/074_current_billing.sqlinc",
+        "sha256": "7688307a5e215615275c98d00cdd548577315993f819be9a4ac46aabd42bfcfd",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_current_billing_operations_v1",
+            "arguments": "p_invoice_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/075_issue_owner.sqlinc",
+        "sha256": "4fb7492bae833baeb767e0df5799b79ff60371533a25ec3d2304a8dddc5f4921",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_credit_ready_v1",
+            "arguments": "p_invoice_id uuid,p_lock boolean"
+          },
+          {
+            "name": "private.invoice_contract_move_issue_context_v1",
+            "arguments": "p_invoice_id uuid,p_actor_user_id uuid,p_lock boolean"
+          },
+          {
+            "name": "private.invoice_contract_move_issue_commands_v1",
+            "arguments": "p_commands jsonb,p_actor_user_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/076_credit_issue_admission.sqlinc",
+        "sha256": "9dc224c09c1ac3399fd922a067f8aa01bc8b600e9a39fff838c7362f153bb994",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private.invoice_contract_move_credit_invoice_valid_v1",
+            "arguments": "p_invoice_id uuid,p_lock boolean"
+          }
+        ]
+      },
+      {
+        "file": "forward/079_native_issue_admission.sqlinc",
+        "sha256": "2c533098962f92a962b5261e5837cb3232eb8500bee69d213fbe0445755fc9ff",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_issue_validate_batch",
+            "arguments": "p_requests jsonb, p_evaluation_date date"
+          }
+        ]
+      },
+      {
+        "file": "forward/080_issue_native.sqlinc",
+        "sha256": "8557905c65d47509291cecb5cf4395d8da8f6b9e09777e02d405dda4147b5cbc",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_issue_advance_core_v8",
+            "arguments": "p_claims jsonb, p_now_utc timestamptz"
+          }
+        ]
+      },
+      {
+        "file": "forward/081_issue_registration.sqlinc",
+        "sha256": "ebb82d0c41f252b999e1cda0b03e6a26822bad4dee417d9fab0c1ae785565209",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "private._invoice_operation_start_core_v8",
+            "arguments": "p_commands jsonb, p_actor_user_id uuid, p_now_utc timestamptz default now()"
+          }
+        ]
+      },
+      {
+        "file": "forward/082_issue_one.sqlinc",
+        "sha256": "f4b321f9e696fd117ef350d8982d899b6de984e5ea5320d463eeb8bc974486e9",
+        "kind": "FULL_FUNCTION_DEFINITIONS",
+        "targets": [
+          {
+            "name": "public.invoice_issue_one",
+            "arguments": "p_invoice_id uuid, p_actor_user_id uuid"
+          }
+        ]
+      },
+      {
+        "file": "forward/099_new_private_acl.sqlinc",
+        "sha256": "4c9c50cae2047b31182ae2c29c7927d76aea0aa17ac773f9526c89815207e8a9",
+        "kind": "NEW_PRIVATE_ACL",
+        "targets": []
+      }
+    ],
+    "recipe": "INTEGRATION_RECIPE_c86a1dfc.json",
+    "recipeSha256": "ea62458836c0fbd2f8881fe3102569057eb568c92422719e81f7beafe2482e9c",
+    "manifestAtC86Sha256": "adcd92adcef738644791cae671310ad0ec67d9d29403fe89f324957841d39e49",
+    "mountOrder": "PhysicalDDL alreadyroot0159;00..04a (andDaily04b/c/d for whole exact c86); complete Invoice c86 list in given order OMIT001alreadyroot0159; finite330a015/035; final per-owner ACL and root effective security. Definitions only; no invocation against absent Bank dependency.",
+    "laterFiniteActualSuccessors": [
+      {
+        "file": "forward/015_source_certificate.sqlinc",
+        "sourceCommit": "330a4770a208f0c6a927fd3a7ebee366dbc96340",
+        "before": "554463c9b554c3c16171255ab069faac4885b80f2b7ebd96e27700520336cda7",
+        "after": "91080dc3dc322fd2f7540ad7724dc08c020fe49f007acf6623ba97cf1d13dbc9",
+        "mode": "Complete finite successor once after c86 original; Source unresolved certificate remains actual nine-key, preflight actual ordinary Move rejects unresolved. Separate owner review required; not relabelled c86."
+      },
+      {
+        "file": "forward/035_preflight.sqlinc",
+        "sourceCommit": "330a4770a208f0c6a927fd3a7ebee366dbc96340",
+        "before": "a0d1a5439277e145f58314d0abc821e247a3aa8c52bbf56ca1a9cebf35ad6485",
+        "after": "a40dc5388d7b020e0a07e7f64faff885691589c2cc99b7476c7cd27122ea7a60",
+        "mode": "Complete finite successor once after c86 original; Source unresolved certificate remains actual nine-key, preflight actual ordinary Move rejects unresolved. Separate owner review required; not relabelled c86."
+      }
+    ],
+    "sharedGuard": "Only Health physical defines financial guard/capability predicate. Invoice owns actual invoice line/Source line guards and real preparation/Issue owners, not duplicated here.",
+    "currentClaimRotation": "ffc317246e54fd2c943d65f7af653c4537dae80f is later separate025/028 requiringc03 actualnativeRotation; exclude from initial frozenContract stack unless c03 mounted together."
+  },
+  "acl": {
+    "contractOnly": {
+      "file": "forward/compat/contract_only_final_acl.sqlinc",
+      "sha256": "8a15cbfe1f4e52d6ca1a549c4000ad5e813f23684296b72c59bd287248a12e97",
+      "functionCount": 41,
+      "serviceExecute": false
+    },
+    "allPhysical": {
+      "file": "forward/sql/05_acl.sqlinc",
+      "sha256": "a092da99c35e7e42989155e6a08b7a42694105212c2bdb785d6ab6aa157bdac8",
+      "requiresCompleteDaily": true
+    },
+    "invoice": {
+      "file": "forward/099_new_private_acl.sqlinc",
+      "sha256": "4c9c50cae2047b31182ae2c29c7927d76aea0aa17ac773f9526c89815207e8a9"
+    },
+    "publicAccept": "Full04a ends exact owner/revokePUBLIC,anon,authenticated,service_role. Keep unexposed until actual native Bank/read/preview and API proof.",
+    "postFinalDefinitions": "Root effective grants/defaultACL/RLS/browser isolation/current security and PostgREST cache/API proof required after all owners; source grant text alone is not ACL acceptance."
+  },
+  "functions": [
+    {
+      "signature": "private.timesheet_contract_move_row_hash_v1(jsonb)",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "e935c652a6bfdf2b13d90d422abe47c88049a5f3103a029573f2ba492bbe6258"
+    },
+    {
+      "signature": "private.timesheet_contract_move_changed_columns_v1(jsonb,jsonb)",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "21ce44a2ed6922a3b942011557268590917bbe3658d4ebfbaa3a561ec103d536"
+    },
+    {
+      "signature": "private.timesheet_contract_move_uuid_array_v1(uuid[])",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "5be3f6fce9e9a3063f33d03349c6518c16bbcdcb820af4228daf37f1a0d5a9ce"
+    },
+    {
+      "signature": "private.timesheet_contract_move_accepting_v1(uuid)",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "298f3343e6ba40bc9aee32b31e718d34f779553582b319c43fe2b08fe2d3d7bb"
+    },
+    {
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "609d9ff56289fa5f19bdf595e6be3350c009c9070c7c866de62c82052a74e3ba"
+    },
+    {
+      "signature": "private.timesheet_contract_move_family_lock_v1(uuid)",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "f019ea3247e9b8314ee1c478022a53cd36af975c9b25c89748a82ec091e2c7b0"
+    },
+    {
+      "signature": "private.timesheet_contract_move_immutable_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "3a51513d66dcdeb35090a06dc817b6054938c9993a7771bbb7ea408cde55810a"
+    },
+    {
+      "signature": "private.timesheet_contract_move_operation_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "004b151bdde8219707d90c64bf56d82dc1d39b04542257409a79831a78a76e2a"
+    },
+    {
+      "signature": "private.timesheet_contract_move_request_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "ee4601c9e2b531acbbffdd1a74fcd607c043371f38b86ce5e25f735d884b6d6c"
+    },
+    {
+      "signature": "private.timesheet_contract_move_member_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "5ddb80d4021553aad6f1c68b2e55909d81705190a89768625ec007dcc31b3af5"
+    },
+    {
+      "signature": "private.timesheet_contract_move_placement_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "f14f439136b4dd2e66c52d538388da9a4f61d02a2974c8866651b62de45d90a4"
+    },
+    {
+      "signature": "private.timesheet_contract_move_commit_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "c319cbb94fe146a5ca46ee8318c4d9cfa867bf981cfd554b8e4bd3f0860f5ed4"
+    },
+    {
+      "signature": "private.timesheet_contract_move_context_actor_allowed_v1(uuid,text,uuid)",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "2119317c91e5ba8ce656d50883ef1d759d87959273a2b2969f64e04f44f5b0ef"
+    },
+    {
+      "signature": "private.timesheet_contract_move_financial_economics_v1(jsonb)",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "831600548ddcb7a3b12783e0cb029871852147ab8f2a12605adaf45774b5b436"
+    },
+    {
+      "signature": "private.timesheet_contract_move_context_v1()",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "6b14f504e4216bb540fd50ab44382d4492e512255c3c562816ef28d9a31f09d3"
+    },
+    {
+      "signature": "private.timesheet_contract_move_context_guard_v1()",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "516b2dcadc94cfe4f028c6b9e9a37d6a57b339e2202daf219de0096a82b6ea1e"
+    },
+    {
+      "signature": "private.timesheet_contract_move_context_commit_guard_v1()",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "8b5dc1db014d3a9e1d9e7972798f4ed090bb74e1671baea2b9d48a3fa2223833"
+    },
+    {
+      "signature": "private.timesheet_contract_move_event_register_v1(text,text,oid,text,jsonb,jsonb,uuid,uuid)",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "aa4d688a75802ca9cee9144ed38d436922bd8e267062031c791a0f9c6048995e"
+    },
+    {
+      "signature": "private.timesheet_contract_move_event_assert_v1(uuid,jsonb)",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "d657e7ac97f0e7cb890debf95acedb7d6edf54bcc9eee22e3a389b55263c8d69"
+    },
+    {
+      "signature": "private.timesheet_contract_move_capability_issue_v1(uuid,text,text,text)",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "b36aaea3feb169d076b8530aa9a09c0c07a7f792d79ca6b266ec2e8b76737db0"
+    },
+    {
+      "signature": "private.timesheet_contract_move_capability_assert_v1(uuid,text,oid,text,jsonb,jsonb)",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "03bd8a179e9fb57986269b580419f9019de2feaf39529402bee7ecada2d3d0bd"
+    },
+    {
+      "signature": "private.timesheet_contract_move_capability_resolve_v1(text,oid,text,jsonb,jsonb)",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "8d43650bc01deaf5951efffc619c6152ee9b3841c301fa84fad1c1f8531a762e"
+    },
+    {
+      "signature": "private.timesheet_contract_move_capability_consume_v1(uuid,text,oid,text,jsonb,jsonb)",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "85b90f6c31076eda71209a009fdf6a7d6c6f00053298cc4b6651666cdb0fe49c"
+    },
+    {
+      "signature": "private.timesheet_contract_move_capability_cleanup_v1()",
+      "source": "forward/sql/01_capability.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "316eb714037902278fcc02f32a75d9ff329092d42d6de0c430c3762abfc40ae5"
+    },
+    {
+      "signature": "private.timesheet_contract_move_evidence_v1(uuid)",
+      "source": "forward/sql/02_physical_apply.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "e1af08510c4ec7b1f5b4e10aee1eaebe6eface72de6448e9d3f55c8a4acb8596"
+    },
+    {
+      "signature": "private.timesheet_contract_move_scope_v1(uuid,boolean)",
+      "source": "forward/sql/02_physical_apply.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "eb85c56790f4e103662bc21f51de8965d83281a823690d1e873c2cad12838515"
+    },
+    {
+      "signature": "private.timesheet_contract_move_review_members_v1(uuid,jsonb)",
+      "source": "forward/sql/02_physical_apply.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "4e6043e90892224ca56bbd43c0cea76aa6244fc983fd71369bcaba85ff2d95e9"
+    },
+    {
+      "signature": "private.timesheet_contract_move_booking_part_v1(text)",
+      "source": "forward/sql/02_physical_apply.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "c215d73cc457a925c48fdf79f6e484ad36268ee7a88931a546146049525b7bb2"
+    },
+    {
+      "signature": "private.timesheet_contract_move_booking_v1(uuid,uuid,date,integer)",
+      "source": "forward/sql/02_physical_apply.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "588c1fa0b0d69fba308d9a1b6f688cc988b1788e0f87c3b0201f2bf0958b429f"
+    },
+    {
+      "signature": "private.timesheet_contract_move_inherited_evidence_v1(jsonb)",
+      "source": "forward/sql/02_physical_apply.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "c30f128ac0e9230e859120621210d63fa5e70273f74aa82344dc50973aae9070"
+    },
+    {
+      "signature": "private.timesheet_contract_move_evidence_source_v1(uuid)",
+      "source": "forward/sql/02_physical_apply.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "b925d0cb0afb4e9b6c0f971ce6dae70b74fffa122f42c66a1ba9b301f20d2e2a"
+    },
+    {
+      "signature": "private.timesheet_contract_move_stage_v1(uuid,uuid,bytea)",
+      "source": "forward/sql/02_physical_apply.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "3f902b0f7f57ca8f4cf670b020dd4fd83a3e78a9e6314222f18f7c9554996e75"
+    },
+    {
+      "signature": "public.timesheet_archive_row_guard_v1()",
+      "source": "forward/sql/03_native_guards.sqlinc",
+      "owner": "native owner preserved",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "74bf941720b5d35bf54a78bf9f7476bb19535d7cb4e5956943395a0fb2539398"
+    },
+    {
+      "signature": "public.timesheet_archived_evidence_guard_v1()",
+      "source": "forward/sql/03_native_guards.sqlinc",
+      "owner": "native owner preserved",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "e301f06de7c7fede65d4cb526ac09217a9930eb26b3cf27a9bb0a81374e913ef"
+    },
+    {
+      "signature": "private.timesheet_contract_move_financial_row_guard_v1()",
+      "source": "forward/sql/03_native_guards.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "fec9f596c6e481631894677bdda5e7b2a5fbbeaa652f7675cbaf5008d55ce255"
+    },
+    {
+      "signature": "private.timesheet_contract_move_original_finance_assert_v1(uuid,text,bytea,bytea)",
+      "source": "forward/sql/04_atomic_assert.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "2ea94287008ee14b269e2ebaf6f071778128ca369bb99c3c129bb313a9f3c80d"
+    },
+    {
+      "signature": "private.timesheet_contract_move_assert_v1(uuid,uuid)",
+      "source": "forward/sql/04_atomic_assert.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "754a2710624146aa25ad6fa0d817c0cf9f74d6ffdfe542e8d1b3f2f95d480a4b"
+    },
+    {
+      "signature": "private.timesheet_contract_move_reason_v1(text,text)",
+      "source": "forward/sql/04a_accept_composition.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "6155c55e10536557cb152ab84cb7655550215d2626eeabf12437f3a00753ba21"
+    },
+    {
+      "signature": "private.timesheet_contract_move_request_assert_v1(jsonb,text)",
+      "source": "forward/sql/04a_accept_composition.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "5936e4464cb6ded205d2081f29eefd4ca1999f8bf7e049c3674dc8f3109eaade"
+    },
+    {
+      "signature": "private.timesheet_contract_move_request_hash_v1(jsonb,text)",
+      "source": "forward/sql/04a_accept_composition.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "52ed6ca00aeed7640458b30c8230f345526a6a33b44e4043bd77bc4b486e42e8"
+    },
+    {
+      "signature": "public.timesheet_contract_move_accept_v1(jsonb)",
+      "source": "forward/sql/04a_accept_composition.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "b11c1117515d4df6bf6fe677147d5915c8ab120df86df47e7317cabcfa128bc0"
+    }
+  ],
+  "triggers": [
+    {
+      "name": "timesheet_contract_move_operation_guard",
+      "relation": "private.timesheet_contract_move_operations",
+      "function": "private.timesheet_contract_move_operation_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "14f9ce3c5bf25ffb7f41d0e694774026bee8938fad423e94499defd6ef874101"
+    },
+    {
+      "name": "timesheet_contract_move_request_guard",
+      "relation": "private.timesheet_contract_move_requests",
+      "function": "private.timesheet_contract_move_request_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "3f4ce9d400a143c61b01aa7ace9942f05d0c712e10e0194b1788e3726920eb51"
+    },
+    {
+      "name": "timesheet_contract_move_member_guard",
+      "relation": "private.timesheet_contract_move_members",
+      "function": "private.timesheet_contract_move_member_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "36f908207a1ade6e69a155306d3acb18da24171af296a62c24171fd87ef4777b"
+    },
+    {
+      "name": "timesheet_contract_move_placement_guard",
+      "relation": "private.timesheet_contract_current_placements",
+      "function": "private.timesheet_contract_move_placement_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "5edfd098ea9a52838a2277b882769dbcd5329b864bcde1245eaebaed6cf00e27"
+    },
+    {
+      "name": "timesheet_contract_move_review_immutable",
+      "relation": "private.timesheet_contract_move_reviews",
+      "function": "private.timesheet_contract_move_immutable_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "2f91c180cb29c702f31b293cd335ae23388b5a8cbe9ffa6a3980ac0c888dd734"
+    },
+    {
+      "name": "timesheet_contract_move_alias_immutable",
+      "relation": "private.timesheet_contract_family_aliases",
+      "function": "private.timesheet_contract_move_immutable_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "71dc5660b8578e75d39de0949f76385fd909911beb872d0aedbae4ff706e02c4"
+    },
+    {
+      "name": "timesheet_contract_move_consumption_immutable",
+      "relation": "private.timesheet_contract_move_capability_consumptions",
+      "function": "private.timesheet_contract_move_immutable_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "b59b30ec00776e608e4e0c08cc5b0b159f4f7dd65b90bac613a265f8ebdefb2c"
+    },
+    {
+      "name": "timesheet_contract_move_commit_guard",
+      "relation": "private.timesheet_contract_move_operations",
+      "function": "private.timesheet_contract_move_commit_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "53415747c5abc3bf0798afb4115cdd5d6d56a67612aa7d9bc75b88dfcbdca554"
+    },
+    {
+      "name": "timesheet_contract_move_member_commit_guard",
+      "relation": "private.timesheet_contract_move_members",
+      "function": "private.timesheet_contract_move_commit_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "0849bb414f9c6967cfa171436254cff0b6cfdc3d8f8b377a1db42ee555a6597c"
+    },
+    {
+      "name": "timesheet_contract_move_context_guard",
+      "relation": "private.timesheet_contract_move_execution_contexts",
+      "function": "private.timesheet_contract_move_context_guard_v1()",
+      "source": "forward/sql/01_capability.sqlinc",
+      "definitionSha256": "3f6bf4cc71e88bfe1068831dbaa7489d5d58adbaf2188623dc6c70018b60a7c1"
+    },
+    {
+      "name": "timesheet_contract_move_context_commit_guard",
+      "relation": "private.timesheet_contract_move_execution_contexts",
+      "function": "private.timesheet_contract_move_context_commit_guard_v1()",
+      "source": "forward/sql/01_capability.sqlinc",
+      "definitionSha256": "6829e4b77a563f27d23e0c59dac655ce5705919e1e41b4ff28dc4a4ce6144df9"
+    },
+    {
+      "name": "zz_timesheet_contract_move_financial_row_guard_v1",
+      "relation": "public.timesheets_financials",
+      "function": "private.timesheet_contract_move_financial_row_guard_v1()",
+      "source": "forward/sql/03_native_guards.sqlinc",
+      "definitionSha256": "56042338077166a8ab2d936d0673aa469e771474ac0b03fb174e00066929f530"
+    },
+    {
+      "name": "daily_rate_authority_client_lock_v1",
+      "relation": "public.rates_client_defaults",
+      "function": "private.daily_rate_authority_lock_v1()",
+      "source": "forward/sql/04b_daily_context.sqlinc",
+      "definitionSha256": "c7934c6736325421aacab5383a70b40b92444832790843a0458ac3ecb7cd337a"
+    },
+    {
+      "name": "daily_rate_authority_candidate_lock_v1",
+      "relation": "public.rates_candidate_overrides",
+      "function": "private.daily_rate_authority_lock_v1()",
+      "source": "forward/sql/04b_daily_context.sqlinc",
+      "definitionSha256": "90791f5e2818aa5740696e2a826fab7b890e397501a8d2a8a93fef384d6ab93e"
+    },
+    {
+      "name": "trg_timesheet_archive_row_guard_v1",
+      "relation": "public.timesheets",
+      "function": "public.timesheet_archive_row_guard_v1()",
+      "source": "existing native trigger; body amended in 03_native_guards.sqlinc"
+    },
+    {
+      "name": "trg_timesheet_archived_evidence_guard_v1",
+      "relation": "public.timesheet_evidence",
+      "function": "public.timesheet_archived_evidence_guard_v1()",
+      "source": "existing native evidence-table trigger only; no original TF attachment inferred"
+    }
+  ],
+  "nativeGuardInputs": {
+    "canonicalI2": "7f5a5a876a9b485beee2b040409233eef70448c7",
+    "functions": [
+      {
+        "signature": "public.timesheet_archive_row_guard_v1()",
+        "inputPath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\supabase\\repeatable\\26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "inputSha256": "2c23e6e364554c682c94a8f3a7d081ccdf33ecbc5a54675ea43422cdf8c02dc5",
+        "outputSha256": "53b33d072e151bb2325c1662ecd4b7dbfb5fac49428eb9b6d89ca107c72935af",
+        "exactChange": "One DECLARE variable and exact resolver/consume arm before original BEGIN body; evidence arm applies only to native archived rows, leaving normal B admission intact; all original body bytes retained."
+      },
+      {
+        "signature": "public.timesheet_archived_evidence_guard_v1()",
+        "inputPath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\supabase\\repeatable\\26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "inputSha256": "1e3e6d9a7f8fea06ee51737e4a37db193a1c689a49f5a9de1907220ccfeafedc",
+        "outputSha256": "e5b4392ceceb58c51716a540526bef98b635c5f388097597ac10281f7ff7f4b9",
+        "exactChange": "One DECLARE variable and exact resolver/consume arm before original BEGIN body; evidence arm applies only to native archived rows, leaving normal B admission intact; all original body bytes retained."
+      }
+    ]
+  },
+  "currentNativeGuardInputMatch": true,
+  "centralRegisters": {
+    "migrationLock": "Root0159 already allocated/locked. Any laterpending migration is separate and rootallocated only.",
+    "repeatableRoot": "Use existing db:new scaffold for final nhsp_v6_06_integrated_move_source_composition_v1 when complete reviewed closure exists; no fabricated timestamp or adapter.",
+    "finalDefinerRegistry": "41 exact physical signatures plus every exact Invoice recipe target: existing original chain/predecessors/ALL companion finalClosures retained, actual new selected06 finalRoot and actualinclude finalPhysical explicit; no blanket register-current.",
+    "currentContract": "Requires actual cleanPG17 generated schema/routine/trigger/ACL contract after full exact composition, native final security/contract proof; not generated or claimed here."
+  },
+  "held": [
+    {
+      "signature": "private.bpay_next_contract_move_cut_v1(uuid,boolean)",
+      "author": "BANKING",
+      "required": "Actual native current comparison/locks and reviewed cut/valuation producer; Health does not invent returned hash/valuation schema."
+    },
+    {
+      "signature": "private.timesheet_contract_move_read_v1(uuid,uuid)",
+      "author": "HEALTH physical projection",
+      "required": "Actual native financial current-result/Summary projection needed before shared Result can be produced; no generic job status substituted."
+    },
+    {
+      "signature": "private.invoice_contract_move_verified_unissue_v1(uuid)",
+      "author": "HEALTH invoice lane",
+      "required": "Actual original unpaid Draft/current verified-unissue qualification for exact selected native lock update."
+    },
+    {
+      "signature": "private.bpay_next_contract_move_stage_v1(uuid,bytea)",
+      "author": "BANKING",
+      "required": "Genuine approved B revision/flat binding, native expected row events, original finance unchanged; no inferred return DTO."
+    },
+    {
+      "signature": "private.bpay_next_contract_move_publish_v1(uuid)",
+      "author": "BANKING",
+      "required": "One exact CM command; own comparison/currentness/collection guard bodies unchanged by Health."
+    },
+    {
+      "signature": "private.bpay_next_contract_move_not_required_v1(uuid)",
+      "author": "BANKING",
+      "required": "Canonical true no-Work/no-approved/no-effect certificate; never unknown/paid as zero."
+    },
+    {
+      "signature": "private.invoice_contract_move_obligation_assert_v1(uuid,bigint)",
+      "author": "HEALTH invoice lane",
+      "required": "Source equality, exclusive billing obligation, deterministic native draft registration."
+    },
+    {
+      "signature": "private.invoice_contract_move_preflight_v1(uuid,uuid,boolean)",
+      "author": "HEALTH invoice lane",
+      "required": "Locked known-input preflight before acceptance."
+    },
+    {
+      "signature": "private.invoice_contract_move_prepare_v1(uuid,bigint,uuid,timestamp with time zone)",
+      "author": "HEALTH invoice lane",
+      "required": "Same transaction after actual placement, before final COMPLETE."
+    },
+    {
+      "signature": "private.bpay_next_daily_rate_correction_publish_v1(uuid,uuid)",
+      "author": "BANKING",
+      "original": "DAILY-RATE-ADMISSION-01 / DY02/04/05/06/10",
+      "required": "Actual once-only existing ordinary publication plus named INSERT deferral in real ordinary authorisation trigger and exact correction-purpose approval-evidence overlay. Current bpay_next_daily_approval_evidence_v1 preserves original hours-only baseline and rejects nonzero reimbursements/mileage; Health does not weaken that owner. Health context requires genuine existing frozen Timesheet settings. Admission fails before writes when publisher is absent. No direct ordinary publisher shortcut or auth toggle."
+    },
+    {
+      "signature": null,
+      "author": "BANKING",
+      "original": "DAILY-RATE-ADMISSION-01 / DY02/04/05/06/10",
+      "required": "Actual paid/frozen original financial preflight, known freeze admission and canonical SummaryDTO preview/current reader interface remain unprovided; no signature guessed and no review Ready/result fabricated. Actual NOT_REQUIRED certificate ABI also remains unprovided."
+    },
+    {
+      "signature": null,
+      "author": "HEALTH + actual native Additional rate owner",
+      "original": "DAILY-RATE-ADMISSION-01",
+      "required": "Current native Client/Candidate schema supplies five standard buckets and mileage only. Used/unknown Additional needs actual selector authority; unused zero is valid and does not block."
+    }
+  ],
+  "excludeLaterWip": [
+    "c03native lifecycle until independent review+Invoice strictclaim successor",
+    "CurrentQR/paper successor WIP",
+    "Nullable genuine withdrawal/allocation schema/reader WIP"
+  ],
+  "qualification": {
+    "frozenSourceReviewReady": true,
+    "nativeCompile": "NOT_RUN",
+    "nativeAcceptance": "NOT_RUN",
+    "effectiveAcl": "NOT_RUN",
+    "api": "NOT_RUN",
+    "financial": "NOT_RUN",
+    "databaseCalls": 0,
+    "rootEdits": false
+  }
+}
