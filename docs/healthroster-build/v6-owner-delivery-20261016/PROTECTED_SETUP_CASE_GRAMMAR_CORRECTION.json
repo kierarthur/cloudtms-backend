@@ -1,0 +1,88 @@
+{
+  "version": "PROTECTED_SETUP_CASE_GRAMMAR_CORRECTION_V1",
+  "status": "SOURCE_CORRECTED_NATIVE_NOT_RUN",
+  "sourceParent": "d4a0bcbd3335edb97c5d6d63c136083e00343a14",
+  "scope": "447 complete PLpgSQL/DO bodies from the182remainingF23 changed SQL leaves; not every repository routine or not-yet-mounted proposal.",
+  "before": {
+    "parsed": 444,
+    "failures": [
+      {
+        "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/19_q25_owner_xid_qualification_QUALIFICATION_R2_READER.sqlinc",
+        "signature": "private.weekly_source_protected_prerequisite_release_assert_v2(jsonb,uuid,date,date,text)",
+        "kind": "PLPGSQL",
+        "error": "syntax error at end of input"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+        "signature": "private.weekly_source_rule_qualification_authorization_v1(uuid,uuid,text)",
+        "kind": "PLPGSQL",
+        "error": "syntax error at end of input"
+      },
+      {
+        "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/22_POST_VERIFIED_SETUP_ASSERT.sqlinc",
+        "signature": "private.weekly_source_post_verified_setup_artifact_assert_v1(jsonb,jsonb)",
+        "kind": "PLPGSQL",
+        "error": "syntax error at end of input"
+      }
+    ]
+  },
+  "after": {
+    "parsed": 447,
+    "failures": 0,
+    "actualSavedBodiesMatched": true
+  },
+  "changes": [
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/19_q25_owner_xid_qualification_QUALIFICATION_R2_READER.sqlinc",
+      "from": "or case when jsonb_typeof(source_value->'files')='array' then jsonb_array_length(source_value->'files')=0 else true end",
+      "to": "or (case when jsonb_typeof(source_value->'files')='array' then jsonb_array_length(source_value->'files')=0 else true end)",
+      "beforeSha256": "e8776f728aea49370e1530d5db6a3150c1549cd375bd4297227bd033facc3a15",
+      "afterSha256": "08c7514dc9bc4c2d77d7b7ce221247ce82227b3b4cf2ce455cb1839e4bf21246",
+      "onlyCaseGrouping": true
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "from": "recorded_at+\n      case when p_purpose='SOURCE_FIXTURE_SETUP' then interval '14 days' else interval '2 hours' end",
+      "to": "recorded_at+\n      (case when p_purpose='SOURCE_FIXTURE_SETUP' then interval '14 days' else interval '2 hours' end)",
+      "beforeSha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b",
+      "afterSha256": "bea5502f430a3933d3b0101a4c3e6a0fc759c4723c754233f2e2d06154076250",
+      "onlyCaseGrouping": true
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/22_POST_VERIFIED_SETUP_ASSERT.sqlinc",
+      "from": "clock_timestamp()+\n      case when p_artifact->>'purpose'='SOURCE_FIXTURE_SETUP' then interval '14 days' else interval '2 hours' end then",
+      "to": "clock_timestamp()+\n      (case when p_artifact->>'purpose'='SOURCE_FIXTURE_SETUP' then interval '14 days' else interval '2 hours' end) then",
+      "beforeSha256": "0610fc771a322fa11e8cc4c0aca94d0c20a34bf873626aa8926ab0de22f072e0",
+      "afterSha256": "ff735bbfdc0d640ff4d2637ca36e3a7acde4f4921967e6d2d307ead85c63a0eb",
+      "onlyCaseGrouping": true
+    }
+  ],
+  "method": "Offline pglast linked PostgreSQL17 parser; declared public/private/unqualified percent-rowtype aliases normalized to record only in parser input. No DB server, data execution, object-resolution or concurrency qualification.",
+  "preserved": "Full release/source-equivalence/expiry/actor/scope/refusal predicates unchanged; only explicit CASE-expression parentheses added. Same signatures/ACL; no immutable migration or original proposal edited.",
+  "temporaryEvidence": {
+    "directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\current-plpgsql-grammar-20261016",
+    "files": [
+      "inputs.json",
+      "check.py",
+      "PRE_CORRECTION_RESULT.json",
+      "RESULT.json"
+    ],
+    "privateBusinessData": false,
+    "needed": true
+  },
+  "gates": {
+    "integrity": "407migrations/1075repeatables PASS",
+    "sourceClassification": "907previously observed refusals remain pending exact current effects classification; this grammar success does not admit them.",
+    "currentContract": "PENDING_FINAL_COMPOSITION",
+    "native": "NOT_RUN",
+    "install2": "NOT_INSTALLED",
+    "fullRehearsal": "NOT_RUN"
+  },
+  "effects": {
+    "testMutation": false,
+    "dbSessionHeld": false,
+    "deploy": false,
+    "bankingMessage": false,
+    "secretsPrinted": false
+  }
+}

@@ -48,7 +48,7 @@ begin
     or extract(dow from (auth->>'week_ending')::date)<>0
     or (auth->>'expires_at_utc')::timestamptz<=clock_timestamp()
     or (auth->>'expires_at_utc')::timestamptz>recorded_at+
-      case when p_purpose='SOURCE_FIXTURE_SETUP' then interval '14 days' else interval '2 hours' end
+      (case when p_purpose='SOURCE_FIXTURE_SETUP' then interval '14 days' else interval '2 hours' end)
     or private.weekly_source_protected_qualification_release_v1()->>'release_id' is distinct from r.release_id then
     raise exception 'WEEKLY_SOURCE_RULE_QUALIFICATION_AUTHORIZATION_REQUIRED' using errcode='55000'; end if;
   -- These actual evidence bindings are measured by the protected writer, never

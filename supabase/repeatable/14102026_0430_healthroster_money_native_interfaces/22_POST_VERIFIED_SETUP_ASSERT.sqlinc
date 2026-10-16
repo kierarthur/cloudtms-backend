@@ -24,7 +24,7 @@ begin
     or coalesce(p_artifact->>'assignment_version','') !~ '^[1-9][0-9]*$'
     or (p_artifact->>'expires_at_utc')::timestamptz<=clock_timestamp()
     or (p_artifact->>'expires_at_utc')::timestamptz>clock_timestamp()+
-      case when p_artifact->>'purpose'='SOURCE_FIXTURE_SETUP' then interval '14 days' else interval '2 hours' end then
+      (case when p_artifact->>'purpose'='SOURCE_FIXTURE_SETUP' then interval '14 days' else interval '2 hours' end) then
     raise exception 'WEEKLY_SOURCE_POST_VERIFIED_SETUP_INVALID' using errcode='22023'; end if;
   perform private._weekly_source_settings_require_admin_v1((p_artifact->>'setup_actor_user_id')::uuid);
   select * into strict c from public.weekly_source_cycles where id=(p_artifact->>'source_cycle_id')::uuid;

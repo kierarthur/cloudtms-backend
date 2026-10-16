@@ -60,7 +60,7 @@ begin
     or source_value->>'execution_source_commit' is distinct from executed.git_commit
     or source_value->>'installation_source_commit' is distinct from r.git_commit
     or jsonb_typeof(source_value->'files') is distinct from 'array'
-    or case when jsonb_typeof(source_value->'files')='array' then jsonb_array_length(source_value->'files')=0 else true end
+    or (case when jsonb_typeof(source_value->'files')='array' then jsonb_array_length(source_value->'files')=0 else true end)
     or source_value->>'source_equivalence_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
       'WEEKLY_SOURCE_COMMITTED_NATIVE_SOURCE_EQUIVALENCE_V1',source_value-'source_equivalence_sha256'),'hex')
     or (select count(distinct file->>'path') from jsonb_array_elements(source_value->'files') file)
