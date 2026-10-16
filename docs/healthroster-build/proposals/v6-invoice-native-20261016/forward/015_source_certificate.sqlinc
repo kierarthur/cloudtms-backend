@@ -9,9 +9,8 @@ declare v_facts jsonb;v_phase text;v_money jsonb;v_result jsonb;
 begin
  v_facts:=private.weekly_source_invoice_preservation_facts_v1(p_timesheet_ids,p_source_row_ids,p_lock);
  v_phase:=v_facts->>'certificate_phase';
- if v_phase='UNRESOLVED' or (v_phase<>'NO_FINAL_REPORT_YET' and jsonb_array_length(v_facts->'issues')>0) then
-  raise exception 'SOURCE_INVOICE_CERTIFICATE_UNRESOLVED' using errcode='55000';end if;
- if v_phase<>'NO_FINAL_REPORT_YET' then
+ if jsonb_array_length(v_facts->'issues')>0 then v_phase:='UNRESOLVED';end if;
+ if v_phase in('ACCEPTED_UNINVOICED','INVOICED') then
   select jsonb_build_object('net',(sum((m->>'invoice_presentation_charge_pence')::numeric)/100)::numeric(20,2),
    'vat',sum((m->>'vat_amount')::numeric)::numeric(20,2),'gross',sum((m->>'total_inc_vat')::numeric)::numeric(20,2))
   into v_money from jsonb_array_elements(v_facts#>'{witnesses,billing_movements}') m
@@ -23,9 +22,9 @@ begin
    from jsonb_array_elements(v_facts#>'{witnesses,final_snapshots}') s),'[]'::jsonb),
   'invoice_ids',coalesce((select jsonb_agg(i->'id' order by i->>'id')
    from jsonb_array_elements(v_facts#>'{witnesses,invoice_headers}') i),'[]'::jsonb),
-  'net',case when v_phase='NO_FINAL_REPORT_YET' then null else v_money->>'net' end,
-  'vat',case when v_phase='NO_FINAL_REPORT_YET' then null else v_money->>'vat' end,
-  'gross',case when v_phase='NO_FINAL_REPORT_YET' then null else v_money->>'gross' end);
+  'net',case when v_phase in('NO_FINAL_REPORT_YET','UNRESOLVED') then null else v_money->>'net' end,
+  'vat',case when v_phase in('NO_FINAL_REPORT_YET','UNRESOLVED') then null else v_money->>'vat' end,
+  'gross',case when v_phase in('NO_FINAL_REPORT_YET','UNRESOLVED') then null else v_money->>'gross' end);
  if v_phase='NO_FINAL_REPORT_YET' and (v_result->'invoice_ids'<>'[]'::jsonb
   or v_result->'accepted_final_member_ids'<>'[]'::jsonb) then
   raise exception 'SOURCE_INVOICE_CERTIFICATE_PHASE_INVALID' using errcode='55000';end if;

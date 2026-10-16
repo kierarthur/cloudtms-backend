@@ -12,7 +12,7 @@
     },
     {
       "file": "forward/015_source_certificate.sqlinc",
-      "sha256": "554463c9b554c3c16171255ab069faac4885b80f2b7ebd96e27700520336cda7"
+      "sha256": "91080dc3dc322fd2f7540ad7724dc08c020fe49f007acf6623ba97cf1d13dbc9"
     },
     {
       "file": "forward/017_evidence_subject.sqlinc",
@@ -136,7 +136,7 @@
     },
     {
       "file": "forward/035_preflight.sqlinc",
-      "sha256": "a0d1a5439277e145f58314d0abc821e247a3aa8c52bbf56ca1a9cebf35ad6485"
+      "sha256": "a40dc5388d7b020e0a07e7f64faff885691589c2cc99b7476c7cd27122ea7a60"
     },
     {
       "file": "forward/036_native_selected_edit.sqlinc",

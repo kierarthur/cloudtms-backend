@@ -256,7 +256,7 @@
       "file": "035_preflight.sqlinc",
       "sql_statements": 7,
       "plpgsql_functions": 3,
-      "inner_sql_expressions": 84,
+      "inner_sql_expressions": 86,
       "rowtype_parser_alias_only": true
     },
     {

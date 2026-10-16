@@ -19,10 +19,12 @@ test('Source certificate is original invoice evidence, with unknown before-final
  const facts=sql('010_source_invoice_facts.sqlinc'),certificate=sql('015_source_certificate.sqlinc');
  assert.match(facts,/to_jsonb\(native_row\)-'canonical_pay_vector_json'-'total_pay_ex_vat'/);
  assert.doesNotMatch(facts,/private\.bpay_|weekly_source_expense_pay_materialisations/);
- assert.match(certificate,/v_phase='NO_FINAL_REPORT_YET' then null/);
+ assert.match(certificate,/v_phase in\('NO_FINAL_REPORT_YET','UNRESOLVED'\) then null/);
  assert.match(certificate,/v_actual is distinct from p_expected/);
  assert.match(certificate,/original_invoice_timesheet_ids/);
  assert.doesNotMatch(certificate,/current_timesheet_id|current_contract_id|current_financial_cut/);
+ assert.doesNotMatch(certificate,/raise exception 'SOURCE_INVOICE_CERTIFICATE_UNRESOLVED'/);
+ assert.match(sql('035_preflight.sqlinc'),/v_certificate->>'phase'='UNRESOLVED'/);
 });
 test('Source family is the exact accepted member, including retained superseded aliases',()=>{
  const family=sql('020_source_family.sqlinc');

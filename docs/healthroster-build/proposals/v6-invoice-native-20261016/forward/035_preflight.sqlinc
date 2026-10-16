@@ -125,6 +125,9 @@ begin
  if cardinality(v_sources)>0 then
   select array_agg(distinct id order by id) into v_sources from unnest(v_sources) id;
   v_certificate:=private.weekly_source_invoice_certificate_v1(v_sources,'{}'::uuid[],p_lock);
+  if v_certificate->>'phase'='UNRESOLVED' then
+   v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','SOURCE_INVOICE_CERTIFICATE_UNRESOLVED',
+    'native_owner','HEALTH','field_key',null,'permitted_action',null));end if;
  end if;
  v_facts:=jsonb_build_object('physical_scope_sha256',p_physical->>'scope_sha256','source_certificate',v_certificate,'document_inputs',v_document_inputs,
   'native_group_manifest',v_group_manifest,'native_group_facts',v_group_facts,'slices',v_slices,'required_capabilities',case when v_requires_admin then jsonb_build_array('INVOICE_PREPARE') else '[]'::jsonb end,
