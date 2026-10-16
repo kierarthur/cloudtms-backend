@@ -231,5 +231,132 @@
     "databaseSourceIntegrity": "PASS_407_MIGRATIONS_1074_REPEATABLES",
     "diffCheck": "PASS",
     "databaseExecution": "NOT_RUN"
-  }
+  },
+  "calleeReviewSlices": [
+    {
+      "root": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+      "status": "FOUR_COMPLETE_BODIES_READ_EFFECT_SCOPE_IDENTIFIED_NOT_FULL_REHEARSAL_APPROVAL",
+      "functions": [
+        {
+          "signature": "private.timesheet_correction_a0_fence_acquire_v1(jsonb,boolean)",
+          "statementSha256": "b21bece194a7d1939fd1d9b092ec58d4ea388cdd3860d9daf0bfbbf659942a09",
+          "sourceFileHashes": [
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+              "sha256": "886515c164737eaba7882a443213b6f678b00ecd8079da119720d042d4daadf7",
+              "bytes": 390
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+              "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9",
+              "bytes": 5580
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/01_complete_scalar_core.sqlinc",
+              "sha256": "b88809a015b97590f9ef9060329345c1b1fb8fffd9404eae2dd8a738f6d6a09e",
+              "bytes": 8168
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc",
+              "sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae",
+              "bytes": 7703
+            }
+          ],
+          "writes": []
+        },
+        {
+          "signature": "private.timesheet_correction_a0_fence_scalar_acquire_core_v1(jsonb,boolean)",
+          "statementSha256": "e12ddf9173c888f7753d578e8663cf2cbc3a73d80e048f71543a7f3a12fa4155",
+          "sourceFileHashes": [
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+              "sha256": "886515c164737eaba7882a443213b6f678b00ecd8079da119720d042d4daadf7",
+              "bytes": 390
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+              "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9",
+              "bytes": 5580
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/01_complete_scalar_core.sqlinc",
+              "sha256": "b88809a015b97590f9ef9060329345c1b1fb8fffd9404eae2dd8a738f6d6a09e",
+              "bytes": 8168
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc",
+              "sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae",
+              "bytes": 7703
+            }
+          ],
+          "writes": [
+            "private.timesheet_correction_a0_transaction_fences"
+          ]
+        },
+        {
+          "signature": "private.timesheet_correction_a0_source_coverage_acquire_core_v1(text,uuid,daterange,boolean)",
+          "statementSha256": "b8a918c63badf6e84365aaf2c08ac0ecb6317ca4ecf3aa2f2165f5f01592ebb7",
+          "sourceFileHashes": [
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+              "sha256": "886515c164737eaba7882a443213b6f678b00ecd8079da119720d042d4daadf7",
+              "bytes": 390
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+              "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9",
+              "bytes": 5580
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/01_complete_scalar_core.sqlinc",
+              "sha256": "b88809a015b97590f9ef9060329345c1b1fb8fffd9404eae2dd8a738f6d6a09e",
+              "bytes": 8168
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc",
+              "sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae",
+              "bytes": 7703
+            }
+          ],
+          "writes": [
+            "private.timesheet_correction_a0_transaction_fences"
+          ]
+        },
+        {
+          "signature": "private.timesheet_correction_a0_source_token_assert_v1(jsonb)",
+          "statementSha256": "c611bc3e99c77a060309c11c4d56669e16d74f62537d854cdbf1b8af2545b73c",
+          "sourceFileHashes": [
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel_v1.sql",
+              "sha256": "886515c164737eaba7882a443213b6f678b00ecd8079da119720d042d4daadf7",
+              "bytes": 390
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/00_source_token_grammar.sqlinc",
+              "sha256": "9442fade79f985aea6e87b844ecaefdde75a9ec9de64b3518975c5e87078e1c9",
+              "bytes": 5580
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/01_complete_scalar_core.sqlinc",
+              "sha256": "b88809a015b97590f9ef9060329345c1b1fb8fffd9404eae2dd8a738f6d6a09e",
+              "bytes": 8168
+            },
+            {
+              "file": "supabase/repeatable/15102026_0205_healthroster_source_arbiter_kernel/02_complete_coverage_and_dispatch.sqlinc",
+              "sha256": "2e0c6d4d470ce5877bfb3893001289f957c7b19d92fa1a2efc08aefa160ad4ae",
+              "bytes": 7703
+            }
+          ],
+          "writes": []
+        }
+      ],
+      "assessment": [
+        "Closed native token grammar validates full new envelope before acquisition; delegates non-Source envelopes to original scalar core.",
+        "Scalar and coverage DML touches only private.timesheet_correction_a0_transaction_fences; ordinary transient spans delete only their own top-level XID span, retained spans remain real guard data.",
+        "Current lock_timeout is saved/restored on success and exception. No dynamic SQL, payment/provider/email/network operation in these four bodies.",
+        "Native contention, old repeatable-read visibility, trigger caller closure, isolation and rollback proof remain separate REQUIRED_NOT_RUN gates."
+      ],
+      "executionApproval": false
+    }
+  ]
 }
