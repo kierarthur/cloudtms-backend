@@ -1,0 +1,881 @@
+{
+  "version": "F23_CURRENT_DYNAMIC_OFFLINE_AST_V1",
+  "sourceCommit": "c1ebb691feb6a11324060e0c28210e2bd735624a",
+  "pglastVersion": "v7.20",
+  "postgresqlParserVersion": [
+    17,
+    7
+  ],
+  "counts": {
+    "completeProducers": 44,
+    "actualDynamicExecuteStatements": 100,
+    "dynamicForStatements": 0,
+    "all35FilesCompleteDynamicProducers": 45,
+    "all35FilesActualDynamicExecuteStatements": 102
+  },
+  "producers": [
+    {
+      "file": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "signature": "outer:supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "3f2d4440f213491e1dddf2a4a14536e31ca1bef4507d093639cba8a5efe17ed9",
+      "bodyFile": "bodies/01-3f2d4440f213.sqlinc",
+      "producerFile": "producers/01-3f2d4440f213.sqlinc",
+      "producerSha256": "b0d648c2d9d41813a724a6732c76af60c77ea75ed7b05815d78cc617cc9aa958",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_foreach_a": 1,
+        "PLpgSQL_stmt_dynexecute": 4,
+        "PLpgSQL_stmt_if": 1,
+        "PLpgSQL_stmt_raise": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 4,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "signature": "outer:supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "sha256": "1b09b9f04ba796f0e67b940d731b3d7de97d6357a9d430db54ffb159ed94029b",
+      "bodyFile": "bodies/02-1b09b9f04ba7.sqlinc",
+      "producerFile": "producers/02-1b09b9f04ba7.sqlinc",
+      "producerSha256": "a2b4db10c4ba9527ca470eade14ce3acf6c688554651c912b946954e598dc60f",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_foreach_a": 1,
+        "PLpgSQL_stmt_dynexecute": 4,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 4,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "signature": "outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "e39700fba8f01d791f4bb99a8204c2d875d43a447d29fa2c67ec8c56dc565bb2",
+      "bodyFile": "bodies/03-e39700fba8f0.sqlinc",
+      "producerFile": "producers/03-e39700fba8f0.sqlinc",
+      "producerSha256": "d38cf74f0157032c8fe8dae3fccd2f679c1e8a523808d6906ed6e9c3145ef800",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "signature": "outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "0d59b85eff3da4213aabd73adde09f55dc3645c227edf78c5ba773f45a12cc58",
+      "bodyFile": "bodies/04-0d59b85eff3d.sqlinc",
+      "producerFile": "producers/04-0d59b85eff3d.sqlinc",
+      "producerSha256": "2238f6ce749844c4796a3455530a8307e99a82553f4ad9683cc59b03c671fc45",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "signature": "outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "a3a31a5654c8038289d92f6b70ee07422632515ffd6fa592225c598044d1d1f1",
+      "bodyFile": "bodies/05-a3a31a5654c8.sqlinc",
+      "producerFile": "producers/05-a3a31a5654c8.sqlinc",
+      "producerSha256": "c122b8d9f307831edb604ff0444504bbd543495d346523844d2519051caec57e",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_execsql": 2,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "signature": "outer:supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "sha256": "8d58babcb103c347e7f838bca4a8848f768373a0bf9575c1e56e48f6d0bc9ecf",
+      "bodyFile": "bodies/06-8d58babcb103.sqlinc",
+      "producerFile": "producers/06-8d58babcb103.sqlinc",
+      "producerSha256": "6c627b213f9fa9828179d3feacd4f5e73b9b3f348064d9a874979d6436f47ddb",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_execsql": 1,
+        "PLpgSQL_stmt_if": 1,
+        "PLpgSQL_stmt_raise": 1,
+        "PLpgSQL_stmt_assign": 1,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "signature": "outer:supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql",
+      "sha256": "20127141ea6162fcf351b396a6c1fc1003746b7480f1b528cbb8616493c32427",
+      "bodyFile": "bodies/07-20127141ea61.sqlinc",
+      "producerFile": "producers/07-20127141ea61.sqlinc",
+      "producerSha256": "fd049b67ce8026d9c3866f6e409b765776c5b4f2afaf33c7721be1115f0b35a0",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_if": 4,
+        "PLpgSQL_stmt_raise": 3,
+        "PLpgSQL_stmt_assign": 2,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_execsql": 2,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+      "signature": "outer:supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+      "sha256": "95f4ef40ffdb7a3174996af800feff0ba449240522dedf794e0585f22af1c107",
+      "bodyFile": "bodies/08-95f4ef40ffdb.sqlinc",
+      "producerFile": "producers/08-95f4ef40ffdb.sqlinc",
+      "producerSha256": "a24f4ee85f33bf5c6ea32619d12b3ba39521a2fcecbd0e4c5b68ef13d3cf6924",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_foreach_a": 1,
+        "PLpgSQL_stmt_dynexecute": 4,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 4,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/16102026_0142_weekly_contact_reuse_native_attempt_uniqueness.sql",
+      "signature": "outer:supabase/migrations/16102026_0142_weekly_contact_reuse_native_attempt_uniqueness.sql",
+      "sha256": "af35924bd350279a15fda7744235f894a8f4497f6be1f8e509cdae3b7a15263b",
+      "bodyFile": "bodies/09-af35924bd350.sqlinc",
+      "producerFile": "producers/09-af35924bd350.sqlinc",
+      "producerSha256": "391d5a606bfc22bd00236bb6a2caf77271069e72d9c4357f465994daa0b0e726",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_execsql": 1,
+        "PLpgSQL_stmt_if": 1,
+        "PLpgSQL_stmt_raise": 1,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "sha256": "1f66f9d0a234f26bb2004c4e77e3730c4254cbfdb8586f66c144668b74b7b379",
+      "bodyFile": "bodies/10-1f66f9d0a234.sqlinc",
+      "producerFile": "producers/10-1f66f9d0a234.sqlinc",
+      "producerSha256": "88e7d7fe8f6354f9d3238ccd2270fcedcaeb495050469dd66e1d243fc44eaea7",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_foreach_a": 1,
+        "PLpgSQL_stmt_dynexecute": 5,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 5,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "sha256": "8a4edaaae740b95e093528073651e53527498c4f8fbdb7e69dd867874b6d7060",
+      "bodyFile": "bodies/11-8a4edaaae740.sqlinc",
+      "producerFile": "producers/11-8a4edaaae740.sqlinc",
+      "producerSha256": "6e6689698c33073d3f34ed0cc84fe548ed3265c4adc3275c0f1b87d530fe47ab",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_foreach_a": 1,
+        "PLpgSQL_stmt_dynexecute": 4,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 4,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "sha256": "5389142c41d88832569a43f4a9451c73199f2d38b44c72e1ae084544ac8789f8",
+      "bodyFile": "bodies/12-5389142c41d8.sqlinc",
+      "producerFile": "producers/12-5389142c41d8.sqlinc",
+      "producerSha256": "1dd204abdb5219c4fe259fda1f15a9f1d29c83a17d7b1f5b8e87e9f597b2fbee",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_foreach_a": 1,
+        "PLpgSQL_stmt_dynexecute": 4,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 4,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+      "signature": "outer:supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+      "sha256": "719d8d84fbb9b088abc7974490e45eb87bf0db5d1e2a0250c01b6d113c725113",
+      "bodyFile": "bodies/13-719d8d84fbb9.sqlinc",
+      "producerFile": "producers/13-719d8d84fbb9.sqlinc",
+      "producerSha256": "e171b3fe05583b64f445bc4274639e0812389801e5d6c37b0617c6ec79307c34",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_execsql": 1,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_generation.sqlinc",
+      "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "sha256": "d8d7ea65b8c11a163571dbe4cc39ef34d21cac02d450ea0d41418e5623b7e3f5",
+      "bodyFile": "bodies/14-d8d7ea65b8c1.sqlinc",
+      "producerFile": "producers/14-d8d7ea65b8c1.sqlinc",
+      "producerSha256": "b6ea3f14341e59545c0c2b358c4b0b3e2fe7a52cf6a057e2ae51b2e9f589bafd",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_execsql": 8,
+        "PLpgSQL_stmt_assign": 5,
+        "PLpgSQL_stmt_perform": 1,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "signature": "private.timesheet_correction_actor_allowed_v1(uuid)",
+      "sha256": "0211f8a2342f9930d44461ffee1d5f3f55136a57e7b6ba5627a58f2216aea1d6",
+      "bodyFile": "bodies/15-0211f8a2342f.sqlinc",
+      "producerFile": "producers/15-0211f8a2342f.sqlinc",
+      "producerSha256": "a785818d83a6e9c897e5b5ff74ff4edb9f00b3ee88c7c0e8b7d1408debfd7e3a",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_if": 2,
+        "PLpgSQL_stmt_return": 3,
+        "PLpgSQL_stmt_dynexecute": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "signature": "private.timesheet_correction_actor_assert_v1(uuid)",
+      "sha256": "d52cc1a5df3d8cab2d21c2ca5d7734f05c94133acccd56f46bc1fe88cad03f8a",
+      "bodyFile": "bodies/16-d52cc1a5df3d.sqlinc",
+      "producerFile": "producers/16-d52cc1a5df3d.sqlinc",
+      "producerSha256": "424dc15fd13ab55fa9c3c4d2d7b1f5fbb7e0b50308bd7d8e9bc12d4694ae69ce",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_perform": 1,
+        "PLpgSQL_stmt_if": 3,
+        "PLpgSQL_stmt_raise": 3,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "signature": "private.timesheet_correction_origin_v1(uuid)",
+      "sha256": "dac58a061c7517941c970dac5e9579cdffc9cd356d295a46f00f7b7eb35af5f5",
+      "bodyFile": "bodies/17-dac58a061c75.sqlinc",
+      "producerFile": "producers/17-dac58a061c75.sqlinc",
+      "producerSha256": "9516b4a34fd27a09b09bc24f76ab6eaaae7fde986ba41dbfa31f8fd24716c55b",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_if": 4,
+        "PLpgSQL_stmt_dynexecute": 2,
+        "PLpgSQL_stmt_return": 5
+      },
+      "actualDynamicExecuteStatements": 2,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "signature": "private.timesheet_correction_cancel_capability_v1(uuid,uuid)",
+      "sha256": "6a1c24429f27a447cde2daa5bea429e02b5014a90c4ece0465389af753e05da5",
+      "bodyFile": "bodies/18-6a1c24429f27.sqlinc",
+      "producerFile": "producers/18-6a1c24429f27.sqlinc",
+      "producerSha256": "b4bfa0ff517e58d3ad33bce5cc3764ccd18496b5ab2deb213e48c91074d5420f",
+      "rowtypeParserAliasOnly": true,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_if": 3,
+        "PLpgSQL_stmt_return": 4,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_execsql": 2
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+      "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "sha256": "6e3cd5611e3488279d8032b9a3c84d496b50946b758cbf2a9fbe3f7d5d84d3fe",
+      "bodyFile": "bodies/19-6e3cd5611e34.sqlinc",
+      "producerFile": "producers/19-6e3cd5611e34.sqlinc",
+      "producerSha256": "6b9ed8b6c4c345d34afb5ae45a22a0917153740b448400c3d533f79b5bdd6730",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_assign": 6,
+        "PLpgSQL_stmt_execsql": 9,
+        "PLpgSQL_stmt_perform": 1,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "signature": "private.weekly_source_issued_signed_query_evidence_v1(uuid,uuid)",
+      "sha256": "5801d09a887ec4d2f498fc25d05b4bbe50780e69706b204d9fc5bf590633ed0a",
+      "bodyFile": "bodies/20-5801d09a887e.sqlinc",
+      "producerFile": "producers/20-5801d09a887e.sqlinc",
+      "producerSha256": "97cc92e3a74d23f76194d2d532d735b0caeb3209422dcbf90d1217eedb675dfd",
+      "rowtypeParserAliasOnly": true,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_assign": 5,
+        "PLpgSQL_stmt_if": 14,
+        "PLpgSQL_stmt_return": 14,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_execsql": 7
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+      "signature": "private.weekly_source_configured_upload_profile_v1(uuid,uuid,text,text)",
+      "sha256": "cfbb894ca893cb081f042e07dfe7aa8caefe37587aa48379a3b5e5025c206994",
+      "bodyFile": "bodies/21-cfbb894ca893.sqlinc",
+      "producerFile": "producers/21-cfbb894ca893.sqlinc",
+      "producerSha256": "fd64b3aff0b09338a22825fe47b0d321dab2d173ea36c598fa46afb6eb8132e8",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_assign": 2,
+        "PLpgSQL_stmt_if": 4,
+        "PLpgSQL_stmt_return": 4,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_raise": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/23_bulk_signed_selection.sqlinc",
+      "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+      "sha256": "886ffa34d9f57962f40064b60ec2918b279f8d2d0b1d227b99e6bbb7578298fa",
+      "bodyFile": "bodies/22-886ffa34d9f5.sqlinc",
+      "producerFile": "producers/22-886ffa34d9f5.sqlinc",
+      "producerSha256": "b469cb3e759a301b00e983a1889e972dbeb4c453410f378610b8da29d5932fb4",
+      "rowtypeParserAliasOnly": true,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_perform": 3,
+        "PLpgSQL_stmt_execsql": 3,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_assign": 27,
+        "PLpgSQL_stmt_if": 12,
+        "PLpgSQL_stmt_raise": 3,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+      "sha256": "426fac22aa4eb77c868be0b4f26da6e4091c1e7f777a408d90d6cecd43e15691",
+      "bodyFile": "bodies/23-426fac22aa4e.sqlinc",
+      "producerFile": "producers/23-426fac22aa4e.sqlinc",
+      "producerSha256": "717c488bae965a73bacacb04d34431e821d5043dae664378521c6b5ea2e4c60d",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_if": 4,
+        "PLpgSQL_stmt_raise": 4,
+        "PLpgSQL_stmt_execsql": 1,
+        "PLpgSQL_stmt_dynexecute": 2,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 2,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+      "sha256": "98ec0df0f50d6bb5c2840e11199e24382c24e7f1789e6b1373a6719b49cf9aa6",
+      "bodyFile": "bodies/24-98ec0df0f50d.sqlinc",
+      "producerFile": "producers/24-98ec0df0f50d.sqlinc",
+      "producerSha256": "c2b3d0f9e02c32eb47e0137ea93a3c75eba838d701d5f40de21c8614c524b5d0",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_if": 2,
+        "PLpgSQL_stmt_raise": 2,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "signature": "private.weekly_source_automatic_reconcile_certificate_v1(uuid,uuid,uuid)",
+      "sha256": "cf9bc91c5313730097b476caf91b5f87d857c65ff509078042d8a02ed4e0097d",
+      "bodyFile": "bodies/25-cf9bc91c5313.sqlinc",
+      "producerFile": "producers/25-cf9bc91c5313.sqlinc",
+      "producerSha256": "e24cf1c119ad7243527f1e16d77bfdefa663663fc6948c8c741622c0c8e2b558",
+      "rowtypeParserAliasOnly": true,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_perform": 1,
+        "PLpgSQL_stmt_execsql": 1,
+        "PLpgSQL_stmt_assign": 1,
+        "PLpgSQL_stmt_if": 2,
+        "PLpgSQL_stmt_raise": 2,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "signature": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+      "sha256": "d1f038db9eafe18ee564b6587e6c70227f9c34ee2524e5a8611635c40e7687ff",
+      "bodyFile": "bodies/26-d1f038db9eaf.sqlinc",
+      "producerFile": "producers/26-d1f038db9eaf.sqlinc",
+      "producerSha256": "1a18c8c4af63a2d93e6e5c3bdfc39503377e723eecf127049cacd544e2376450",
+      "rowtypeParserAliasOnly": true,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_perform": 2,
+        "PLpgSQL_stmt_assign": 15,
+        "PLpgSQL_stmt_if": 12,
+        "PLpgSQL_stmt_raise": 3,
+        "PLpgSQL_stmt_execsql": 5,
+        "PLpgSQL_stmt_return": 7,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_dynexecute": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/03_approved_detail_evidence.sqlinc",
+      "signature": "private.weekly_source_approved_detail_evidence_v1(uuid,jsonb)",
+      "sha256": "37d198b58620efcf75d6fe9e88e847a421acc7fae1f7eef78937dc77d42520c1",
+      "bodyFile": "bodies/27-37d198b58620.sqlinc",
+      "producerFile": "producers/27-37d198b58620.sqlinc",
+      "producerSha256": "eee19f051d59b30e33f0b205446ceea740aabcd7f33ae627ba71a3a27b687a7d",
+      "rowtypeParserAliasOnly": true,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_if": 7,
+        "PLpgSQL_stmt_raise": 7,
+        "PLpgSQL_stmt_execsql": 2,
+        "PLpgSQL_stmt_assign": 6,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 2
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "sha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+      "bodyFile": "bodies/28-ba1f564bce8c.sqlinc",
+      "producerFile": "producers/28-ba1f564bce8c.sqlinc",
+      "producerSha256": "3441d0434fbb3534183657ecdc6549fc6d9fbdd75feefc776db12863dd0fd16d",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_execsql": 4,
+        "PLpgSQL_stmt_if": 15,
+        "PLpgSQL_stmt_raise": 11,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_dynexecute": 13,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 13,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "sha256": "565346b6012890a17a208af83f316a2d6f282ea330be8ec8b61d2878388cecce",
+      "bodyFile": "bodies/29-565346b60128.sqlinc",
+      "producerFile": "producers/29-565346b60128.sqlinc",
+      "producerSha256": "48595d7c402b38c3a538eb2e17210a5491dae772a8cec51345bae3c3f6d3e68d",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_fors": 2,
+        "PLpgSQL_stmt_dynexecute": 4,
+        "PLpgSQL_stmt_if": 4,
+        "PLpgSQL_stmt_raise": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 4,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/06_cap_original_functions_06_complete_selection.sqlinc",
+      "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+      "sha256": "dc09ba673de1344d0529e7fec81f7cb55ddd68ca3f7053eefa5bcf1d946809f3",
+      "bodyFile": "bodies/30-dc09ba673de1.sqlinc",
+      "producerFile": "producers/30-dc09ba673de1.sqlinc",
+      "producerSha256": "e910ba5859f9484250a29d732d1eeda317b0de4b4f3fc2795437e7ea42321097",
+      "rowtypeParserAliasOnly": true,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_perform": 3,
+        "PLpgSQL_stmt_execsql": 4,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_assign": 27,
+        "PLpgSQL_stmt_if": 14,
+        "PLpgSQL_stmt_raise": 4,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/16_q25_owner_xid_qualification_03_complete_cas_admission.sqlinc",
+      "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+      "sha256": "b29f3379a98a64dcaf7893e45c44993e245610789d107018aa96446afdb41ab8",
+      "bodyFile": "bodies/31-b29f3379a98a.sqlinc",
+      "producerFile": "producers/31-b29f3379a98a.sqlinc",
+      "producerSha256": "095ba17a98937bde73fd296e00663cd2e0a2f39cb0564484b2835c02707b9790",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_if": 4,
+        "PLpgSQL_stmt_raise": 4,
+        "PLpgSQL_stmt_execsql": 1,
+        "PLpgSQL_stmt_dynexecute": 2,
+        "PLpgSQL_stmt_perform": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 2,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/18_q25_owner_xid_qualification_05_complete_automatic_admission.sqlinc",
+      "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+      "sha256": "0cf17432cde8c17ec4754fca2aa892180f7af266a784e50c6aec8411e588a73e",
+      "bodyFile": "bodies/32-0cf17432cde8.sqlinc",
+      "producerFile": "producers/32-0cf17432cde8.sqlinc",
+      "producerSha256": "d90ad6f5fe4cf6c18ca3628abb3e72501c976f49b49d046474813c433c4912ef",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_if": 2,
+        "PLpgSQL_stmt_raise": 2,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_perform": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/27_q45_actor_event_closed_dto_cross_session_05_complete_automatic_admission.sqlinc",
+      "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+      "sha256": "0cf17432cde8c17ec4754fca2aa892180f7af266a784e50c6aec8411e588a73e",
+      "bodyFile": "bodies/33-0cf17432cde8.sqlinc",
+      "producerFile": "producers/33-0cf17432cde8.sqlinc",
+      "producerSha256": "d90ad6f5fe4cf6c18ca3628abb3e72501c976f49b49d046474813c433c4912ef",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_if": 2,
+        "PLpgSQL_stmt_raise": 2,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_perform": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/38_q45_actor_event_closed_dto_cross_session_08_complete_cas_admission.sqlinc",
+      "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+      "sha256": "b29f3379a98a64dcaf7893e45c44993e245610789d107018aa96446afdb41ab8",
+      "bodyFile": "bodies/34-b29f3379a98a.sqlinc",
+      "producerFile": "producers/34-b29f3379a98a.sqlinc",
+      "producerSha256": "095ba17a98937bde73fd296e00663cd2e0a2f39cb0564484b2835c02707b9790",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_if": 4,
+        "PLpgSQL_stmt_raise": 4,
+        "PLpgSQL_stmt_execsql": 1,
+        "PLpgSQL_stmt_dynexecute": 2,
+        "PLpgSQL_stmt_perform": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 2,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/40_q45_actor_event_closed_dto_cross_session_10_complete_actor_bulk_selection.sqlinc",
+      "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+      "sha256": "89eb70e8358375da54e642fcd0fd24ec08a04b5ec94339433a6e57ef48792016",
+      "bodyFile": "bodies/35-89eb70e83583.sqlinc",
+      "producerFile": "producers/35-89eb70e83583.sqlinc",
+      "producerSha256": "4ab8f82b54cc5d26894c7b1901b0be67d7d62f92768998513b85bcbeeb4252dc",
+      "rowtypeParserAliasOnly": true,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_perform": 3,
+        "PLpgSQL_stmt_execsql": 4,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_assign": 27,
+        "PLpgSQL_stmt_if": 14,
+        "PLpgSQL_stmt_raise": 4,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/14_07_automatic_capability_admission.sqlinc",
+      "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+      "sha256": "e246d5d08159c720d8eab15f5a7070dafabe4d6d850c3fc3393490023dab3281",
+      "bodyFile": "bodies/36-e246d5d08159.sqlinc",
+      "producerFile": "producers/36-e246d5d08159.sqlinc",
+      "producerSha256": "c42d144aa23af3c5146ba972123b8023c015147ee560dfcbef7a853294e26580",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_if": 3,
+        "PLpgSQL_stmt_raise": 2,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_assign": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/15_08_cas_admission_owner.sqlinc",
+      "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+      "sha256": "aaac30335cfbb502d6106a9321b2df449dc7cb970f178202a7b259af1dae563f",
+      "bodyFile": "bodies/37-aaac30335cfb.sqlinc",
+      "producerFile": "producers/37-aaac30335cfb.sqlinc",
+      "producerSha256": "4a1ee268851a08b18d73256904ff78e698adc5457b1519021100f867e4e3c790",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_if": 5,
+        "PLpgSQL_stmt_raise": 4,
+        "PLpgSQL_stmt_execsql": 1,
+        "PLpgSQL_stmt_dynexecute": 2,
+        "PLpgSQL_stmt_perform": 1,
+        "PLpgSQL_stmt_assign": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 2,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+      "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+      "sha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+      "bodyFile": "bodies/38-ba1f564bce8c.sqlinc",
+      "producerFile": "producers/38-ba1f564bce8c.sqlinc",
+      "producerSha256": "3441d0434fbb3534183657ecdc6549fc6d9fbdd75feefc776db12863dd0fd16d",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_execsql": 4,
+        "PLpgSQL_stmt_if": 15,
+        "PLpgSQL_stmt_raise": 11,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_dynexecute": 13,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 13,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+      "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+      "sha256": "565346b6012890a17a208af83f316a2d6f282ea330be8ec8b61d2878388cecce",
+      "bodyFile": "bodies/39-565346b60128.sqlinc",
+      "producerFile": "producers/39-565346b60128.sqlinc",
+      "producerSha256": "48595d7c402b38c3a538eb2e17210a5491dae772a8cec51345bae3c3f6d3e68d",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_fors": 2,
+        "PLpgSQL_stmt_dynexecute": 4,
+        "PLpgSQL_stmt_if": 4,
+        "PLpgSQL_stmt_raise": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 4,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/04_final_acl.sqlinc",
+      "signature": "outer:supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/04_final_acl.sqlinc",
+      "sha256": "a6455e373908a48d6e3c66dab688096b7cb7455050b42cf70650c7eb0e861ead",
+      "bodyFile": "bodies/40-a6455e373908.sqlinc",
+      "producerFile": "producers/40-a6455e373908.sqlinc",
+      "producerSha256": "daea4ca750540f259caa282a81912b338e19ac5479c96aa06f56dbd08a812f63",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_foreach_a": 1,
+        "PLpgSQL_stmt_if": 1,
+        "PLpgSQL_stmt_raise": 1,
+        "PLpgSQL_stmt_dynexecute": 2,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 2,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "sha256": "ec83cffa2199324a20beea31ac7230edf26c3fc1fcc656459af3358d599429cb",
+      "bodyFile": "bodies/41-ec83cffa2199.sqlinc",
+      "producerFile": "producers/41-ec83cffa2199.sqlinc",
+      "producerSha256": "655b8fcfa012b52efba3c52b629a6c5b5ae153d9424111bfc0b02aa7735a33ac",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 1,
+        "PLpgSQL_stmt_perform": 2,
+        "PLpgSQL_stmt_fors": 1,
+        "PLpgSQL_stmt_assign": 6,
+        "PLpgSQL_stmt_execsql": 10,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_return": 1
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+      "sha256": "6217908cb29d9edd13b79c6f2cd9a57417c081b55a8cf960c0bcf84661ccd268",
+      "bodyFile": "bodies/42-6217908cb29d.sqlinc",
+      "producerFile": "producers/42-6217908cb29d.sqlinc",
+      "producerSha256": "71110183272885f700a1a0b5813dc1734c5abdcab8a25b5bed4b86593cf616a6",
+      "rowtypeParserAliasOnly": true,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 7,
+        "PLpgSQL_stmt_assign": 262,
+        "PLpgSQL_stmt_if": 388,
+        "PLpgSQL_stmt_raise": 276,
+        "PLpgSQL_stmt_perform": 46,
+        "PLpgSQL_stmt_execsql": 164,
+        "PLpgSQL_stmt_return": 22,
+        "PLpgSQL_stmt_fors": 5,
+        "PLpgSQL_stmt_foreach_a": 3,
+        "PLpgSQL_stmt_dynexecute": 2,
+        "PLpgSQL_stmt_getdiag": 1
+      },
+      "actualDynamicExecuteStatements": 2,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+      "signature": "pg_temp.f1_refuses(text,text)",
+      "sha256": "48a141a104d22f5cbff46cb845a36c69b053c28240334ada71c87d12f20c1cc9",
+      "bodyFile": "bodies/43-48a141a104d2.sqlinc",
+      "producerFile": "producers/43-48a141a104d2.sqlinc",
+      "producerSha256": "1cf8c50bcca188cb9054b432e4f699ad8b2c914520456c23427444b8a9f4d601",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_if": 1,
+        "PLpgSQL_stmt_return": 2,
+        "PLpgSQL_stmt_raise": 2
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    },
+    {
+      "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "signature": "pg_temp.f5_refuses(text,text)",
+      "sha256": "ac5ba8187854ce8c7adbf661522a6b1c5e70e49b5d8aeb07405cedb076225320",
+      "bodyFile": "bodies/44-ac5ba8187854.sqlinc",
+      "producerFile": "producers/44-ac5ba8187854.sqlinc",
+      "producerSha256": "8551f94e7215d9e672cda77fd6167cceeff825b0f724ff6d92298c3860f56270",
+      "rowtypeParserAliasOnly": false,
+      "statementNodes": {
+        "PLpgSQL_stmt_block": 2,
+        "PLpgSQL_stmt_dynexecute": 1,
+        "PLpgSQL_stmt_if": 1,
+        "PLpgSQL_stmt_return": 2,
+        "PLpgSQL_stmt_raise": 2
+      },
+      "actualDynamicExecuteStatements": 1,
+      "dynamicForStatements": 0
+    }
+  ],
+  "limits": "Offline grammar and statement count only. Rowtype aliases do not resolve any native object/type/field. No authority or effect was exercised.",
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "inheritedAdditionalProducer": {
+    "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+    "signature": "public.invoice_issue_one(uuid,uuid)",
+    "producerFile": "INHERITED_INVOICE_ISSUE_COMPLETE.sqlinc",
+    "producerSha256": "4ed1bea255fb61c98ebc3e7bb2694a0d0244b715990b61604d24c9833fdc2990",
+    "purpose": "Raw35-file coverage only; two existing frozen baseline points, no new allowance.",
+    "statementNodes": {
+      "PLpgSQL_stmt_block": 14,
+      "PLpgSQL_stmt_assign": 47,
+      "PLpgSQL_stmt_if": 22,
+      "PLpgSQL_stmt_return_next": 5,
+      "PLpgSQL_stmt_return": 5,
+      "PLpgSQL_stmt_execsql": 17,
+      "PLpgSQL_stmt_raise": 7,
+      "PLpgSQL_stmt_perform": 7,
+      "PLpgSQL_stmt_dynexecute": 2
+    }
+  }
+}

@@ -1,0 +1,60 @@
+do $weekly_source_function_acl$
+declare
+  v_function record;
+  v_signature text;
+begin
+  for v_function in
+    select p.oid,p.proowner,n.nspname,p.proname,
+           pg_catalog.pg_get_function_identity_arguments(p.oid) as identity_arguments
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    where n.nspname in ('public','private')
+      and (
+        p.proname like 'weekly\_source\_%' escape '\'
+        or p.proname like '\_weekly\_source\_%' escape '\'
+        or p.proname like '\_ctms\_weekly\_source\_%' escape '\'
+        or p.proname like 'weekly\_exceptional\_%' escape '\'
+      )
+  loop
+    execute pg_catalog.format(
+      'revoke all on function %I.%I(%s) from public,anon,authenticated,service_role',
+      v_function.nspname,v_function.proname,v_function.identity_arguments
+    );
+    if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then
+      execute pg_catalog.format(
+        'revoke all on function %I.%I(%s) from authenticator',
+        v_function.nspname,v_function.proname,v_function.identity_arguments
+      );
+    end if;
+    if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then
+      execute pg_catalog.format(
+        'revoke all on function %I.%I(%s) from supabase_admin',
+        v_function.nspname,v_function.proname,v_function.identity_arguments
+      );
+    end if;
+    if v_function.proowner<>(current_user::pg_catalog.regrole)::oid
+       or exists(
+         select 1
+         from pg_catalog.pg_proc p
+         cross join lateral pg_catalog.aclexplode(
+           coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))
+         ) acl
+         where p.oid=v_function.oid
+           and acl.grantee<>p.proowner
+       ) then
+      raise exception 'WEEKLY_SOURCE_ACL_UNEXPECTED_FUNCTION_GRANTEE: %.%(%)',
+        v_function.nspname,v_function.proname,v_function.identity_arguments
+        using errcode='55000';
+    end if;
+  end loop;
+
+  for v_signature in
+    select function_signature
+    from private._weekly_source_acl_service_rpc_contract_v1()
+  loop
+    if pg_catalog.to_regprocedure(v_signature) is not null then
+      execute 'grant execute on function '||v_signature||' to service_role';
+    end if;
+  end loop;
+end;
+$weekly_source_function_acl$;

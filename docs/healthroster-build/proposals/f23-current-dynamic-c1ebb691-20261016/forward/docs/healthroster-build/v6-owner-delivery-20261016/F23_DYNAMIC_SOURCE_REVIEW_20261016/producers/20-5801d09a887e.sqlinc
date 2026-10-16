@@ -1,0 +1,97 @@
+create or replace function private.weekly_source_issued_signed_query_evidence_v1(
+  p_timesheet_id uuid,p_import_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+  v_evidence jsonb;
+  v_ts public.timesheets%rowtype;
+  v_import public.hr_imports%rowtype;
+  v_invoice public.invoices%rowtype;
+  v_document public.invoice_document_versions%rowtype;
+  v_invoice_ids uuid[];
+  v_signature jsonb;
+  v_contract public.contracts%rowtype;
+  v_client_id uuid;
+  v_preset boolean:=false;
+  v_fin_client_id uuid;
+  v_fin_client_count integer;
+  v_frozen_client text;
+begin
+  v_evidence:=public._import_review_query_evidence_core_v1(p_timesheet_id);
+  if v_evidence->>'reason_code' is distinct from 'TIMESHEET_PRESENT_BUT_INVOICED'
+     or not coalesce((v_evidence->>'source_complete')::boolean,false)
+     or not coalesce((v_evidence->>'document_ready')::boolean,false) then
+    return v_evidence;
+  end if;
+  if to_regprocedure('private.weekly_source_signed_check_only_v1(uuid)') is null then return v_evidence; end if;
+  execute 'select private.weekly_source_signed_check_only_v1($1)' into v_preset using p_timesheet_id;
+  if v_preset is distinct from true then return v_evidence; end if;
+  select t.* into v_ts from public.timesheets t where t.timesheet_id=p_timesheet_id;
+  if v_ts.contract_id is not null then
+    select c.* into v_contract from public.contracts c where c.id=v_ts.contract_id;
+    if v_contract.id is null then return v_evidence; end if;
+  end if;
+  v_client_id:=v_contract.client_id;
+  if v_ts.contract_id is null and v_ts.sheet_scope::text='DAILY' then
+    select count(distinct f.client_id),(array_agg(distinct f.client_id))[1]
+      into v_fin_client_count,v_fin_client_id
+    from public.timesheets_financials f where f.timesheet_id=p_timesheet_id
+      and f.is_current and f.timesheet_version=v_ts.version and f.client_id is not null;
+    if v_fin_client_count<>1 then return v_evidence; end if;
+    v_client_id:=v_fin_client_id;
+  end if;
+  v_frozen_client:=nullif(v_ts.settings_authority_json->>'client_id','');
+  if v_frozen_client is not null and lower(v_frozen_client) is distinct from v_client_id::text then return v_evidence; end if;
+  select i.* into v_import from public.hr_imports i where i.id=p_import_id;
+  if v_ts.timesheet_id is null or not v_ts.is_current or v_ts.revoked_at is not null
+     or v_ts.archived_at_utc is not null or v_import.id is null or v_import.pruned_at is not null
+     or upper(v_import.source_system::text) not in ('HEALTHROSTER','HEALTHROSTER_DAILY')
+     or v_client_id is null
+     or (v_import.client_id is not null and v_import.client_id is distinct from v_client_id) then
+    return v_evidence;
+  end if;
+  -- Electronic finalisation uses the established worker/manager component
+  -- witness. Legacy QR uses the existing complete signed-QR evidence contract.
+  if v_ts.submission_mode::text='ELECTRONIC' then
+    begin
+      v_signature:=private.timesheet_correction_signed_witness_v1(p_timesheet_id,false);
+    exception when sqlstate '55000' then
+      return v_evidence;
+    end;
+    if v_signature is null then return v_evidence; end if;
+  elsif not coalesce((v_evidence->>'signed_qr')::boolean,false) then
+    return v_evidence;
+  end if;
+  select array_agg(distinct l.invoice_id order by l.invoice_id) into v_invoice_ids
+  from public.invoice_lines l where l.timesheet_id=p_timesheet_id;
+  if coalesce(cardinality(v_invoice_ids),0)<>1 then return v_evidence; end if;
+  select i.* into v_invoice from public.invoices i where i.id=v_invoice_ids[1];
+  if v_invoice.id is null or v_invoice.type::text<>'INVOICE'
+     or v_invoice.client_id is distinct from v_client_id
+     or v_invoice.status::text not in ('ISSUED','PAID','ON_HOLD')
+     or v_invoice.issued_at_utc is null or v_import.uploaded_at_utc<=v_invoice.issued_at_utc
+     or v_invoice.issued_document_version_id is null then
+    return v_evidence;
+  end if;
+  select d.* into v_document from public.invoice_document_versions d
+  where d.id=v_invoice.issued_document_version_id;
+  if v_document.id is null or v_document.entity_type<>'INVOICE'
+     or v_document.entity_id is distinct from v_invoice.id or v_document.purpose<>'FINAL_ISSUE'
+     or v_document.status<>'READY' or v_document.verified_at_utc is null
+     or v_document.ready_at_utc is null or coalesce(v_document.sha256,'') !~ '^[0-9a-f]{64}$'
+     or coalesce(v_document.size_bytes,0)<=0 or coalesce(v_document.page_count,0)<=0
+     or nullif(btrim(v_document.r2_key),'') is null then
+    return v_evidence;
+  end if;
+  return (v_evidence-'reason_code')||jsonb_build_object(
+    'query_purpose','SIGNED_CHECK_ONLY_AFTER_ISSUE',
+    'issued_invoice_id',v_invoice.id,'issued_document_version_id',v_document.id,
+    'issued_document_sha256',v_document.sha256,
+    'evidence_fingerprint',public._import_review_hash_v1(concat_ws('|',
+      'signed-check-only-issued-query-v1',v_evidence->>'evidence_fingerprint',
+      p_import_id,v_import.source_file_sha256,v_invoice.id,
+      v_invoice.issued_at_utc,v_document.id,v_document.sha256,v_signature::text))
+  );
+end;
+$function$;

@@ -1,0 +1,33 @@
+create or replace function private.weekly_source_automatic_reconcile_certificate_v1(p_request_id uuid,p_actor_id uuid,p_cycle_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_certificate jsonb; v_generation public.weekly_exceptional_pay_generations%rowtype; v_proof jsonb;
+begin
+  perform private.weekly_source_automatic_reconcile_capability_assert_v1(p_cycle_id);
+  select generation.* into strict v_generation from public.weekly_exceptional_c1_publication_requests request
+    join public.weekly_exceptional_pay_generations generation on generation.id=request.generation_id and generation.family_id=request.family_id
+    where request.id=p_request_id;
+  v_proof:=v_generation.complete_next_vector_json->'automatic_reconcile_proof';
+  if v_proof->>'actor_user_id' is distinct from p_actor_id::text or v_proof->>'source_cycle_id' is distinct from p_cycle_id::text
+    or v_proof->>'eligible' is distinct from 'true'
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_AUTOMATIC_RECONCILE_SELECTION_V1',v_proof-'selection_sha256')
+      is distinct from private.weekly_exceptional_hex_sha256_v1(v_proof->>'selection_sha256')
+    or private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',v_generation.complete_next_vector_json)
+      is distinct from v_generation.complete_next_vector_hash then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+  execute 'select private.weekly_source_automatic_reconcile_delta_assert_v1($1,$2)' into v_certificate using p_request_id,p_actor_id;
+  if not private.weekly_exceptional_json_keys_exact_v1(v_certificate,array['schema_version','publication_request_id','actor_user_id',
+      'prior_inventory_digest','complete_next_vector_sha256','delta_pay_ex_vat','qualification_sha256'])
+    or not(v_certificate ?& array['schema_version','publication_request_id','actor_user_id','prior_inventory_digest',
+      'complete_next_vector_sha256','delta_pay_ex_vat','qualification_sha256'])
+    or v_certificate->>'schema_version' is distinct from 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_V1'
+    or v_certificate->>'publication_request_id' is distinct from p_request_id::text
+    or v_certificate->>'actor_user_id' is distinct from p_actor_id::text
+    or v_certificate->>'prior_inventory_digest' is distinct from v_generation.complete_next_vector_json#>>'{prior_effective_inventory,inventory_digest}'
+    or v_certificate->>'complete_next_vector_sha256' is distinct from encode(v_generation.complete_next_vector_hash,'hex')
+    or v_certificate->>'delta_pay_ex_vat' is distinct from '0.00'
+    or coalesce(v_certificate->>'qualification_sha256','') !~ '^[0-9a-f]{64}$' then
+    raise exception 'WEEKLY_SOURCE_AUTOMATIC_RECONCILE_DELTA_UNAVAILABLE' using errcode='55000'; end if;
+  return v_certificate;
+end;
+$function$;

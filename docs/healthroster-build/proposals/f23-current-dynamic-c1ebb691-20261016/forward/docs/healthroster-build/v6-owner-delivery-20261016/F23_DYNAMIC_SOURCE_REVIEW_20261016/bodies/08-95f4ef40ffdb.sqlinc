@@ -1,0 +1,10 @@
+declare v_table text;
+begin
+ foreach v_table in array array['weekly_contact_pause_scopes','weekly_contact_pause_commands','weekly_contact_pause_events',
+  'weekly_contact_submission_permits','weekly_contact_delivery_memberships','weekly_contact_recheck_tasks'] loop
+  execute format('alter table public.%I enable row level security',v_table);
+  execute format('alter table public.%I force row level security',v_table);
+  execute format('create policy cloudtms_miget_service_owner_all on public.%I for all to CURRENT_USER,service_role using(true) with check(true)',v_table);
+  execute format('revoke all on public.%I from public,anon,authenticated,service_role',v_table);
+ end loop;
+end;

@@ -1,0 +1,17 @@
+declare v_default text;v_rules jsonb;v_profile text;
+begin
+  v_default:=case when p_source_family='NHSP' then 'NHSP_FINAL_BACKING_V1'
+    else 'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1' end;
+  if p_current_upload_profile is not null then return p_current_upload_profile; end if;
+  if p_source_family is distinct from 'ROSTER' or p_client_id is null or p_cycle_id is null
+    or to_regprocedure('private.weekly_source_effective_rule_set_v1(uuid,uuid)') is null then return v_default; end if;
+  execute 'select private.weekly_source_effective_rule_set_v1($1,$2)' into v_rules using p_client_id,p_cycle_id;
+  if v_rules is null then return v_default; end if;
+  v_profile:=v_rules#>>'{values,checking_profile_kind}';
+  if v_rules->>'contract' is distinct from 'WEEKLY_SOURCE_EFFECTIVE_RULE_SET_V1'
+    or v_profile not in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1')
+    or v_profile is null then
+    raise exception 'WEEKLY_SOURCE_RULE_CHECKING_PROFILE_INVALID' using errcode='55000';
+  end if;
+  return v_profile;
+end;

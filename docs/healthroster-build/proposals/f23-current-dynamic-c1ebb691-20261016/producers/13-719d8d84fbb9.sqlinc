@@ -1,0 +1,11 @@
+do $migration$
+declare constraint_name text;
+begin
+ select c.conname into strict constraint_name from pg_constraint c
+ where c.conrelid='public.hr_issue_email_deliveries'::regclass and c.contype='u'
+ and (select array_agg(a.attname::text order by key.ordinality) from unnest(c.conkey)with ordinality key(attnum,ordinality)
+  join pg_attribute a on a.attrelid=c.conrelid and a.attnum=key.attnum)
+ =array['operation_id','recipient_scope_key','issue_set_fingerprint','reminder_sequence'];
+ execute format('alter table public.hr_issue_email_deliveries drop constraint %I',constraint_name);
+end;
+$migration$;

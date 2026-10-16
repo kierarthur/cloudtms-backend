@@ -1,0 +1,13 @@
+do $acl$
+declare table_name text;
+begin
+ foreach table_name in array array['timesheet_contract_move_invoice_scopes','timesheet_contract_move_invoice_scope_lines',
+  'timesheet_contract_move_billing_slices','timesheet_contract_move_replacement_groups',
+  'timesheet_contract_move_replacement_members','timesheet_contract_move_scope_fences'] loop
+  execute format('alter table private.%I enable row level security',table_name);
+  execute format('alter table private.%I force row level security',table_name);
+  execute format('create policy invoice_correction_owner on private.%I to current_user using(true) with check(true)',table_name);
+  execute format('revoke all on table private.%I from public,anon,authenticated,service_role',table_name);
+ end loop;
+end;
+$acl$;

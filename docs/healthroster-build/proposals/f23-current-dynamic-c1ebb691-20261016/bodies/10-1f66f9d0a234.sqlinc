@@ -1,0 +1,14 @@
+declare n text;
+begin
+  foreach n in array array['timesheet_contract_move_operations','timesheet_contract_move_requests',
+    'timesheet_contract_move_reviews','timesheet_contract_move_members','timesheet_contract_current_placements',
+    'timesheet_contract_family_aliases','timesheet_contract_move_execution_contexts',
+    'timesheet_contract_move_capabilities','timesheet_contract_move_capability_consumptions'] loop
+     
+    execute format('alter table private.%I owner to %I',n,current_user);
+    execute format('alter table private.%I enable row level security',n);
+    execute format('alter table private.%I force row level security',n);
+    execute format('create policy timesheet_contract_move_owner_only on private.%I for all to current_user using(true) with check(true)',n);
+    execute format('revoke all on private.%I from public,anon,authenticated,service_role',n);
+  end loop;
+end;

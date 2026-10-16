@@ -1,0 +1,1615 @@
+{
+  "version": "HEALTHROSTER_EXACT_DYNAMIC_CONSTRUCTION_CLASSIFICATION_V1",
+  "status": "SOURCE_EXECUTION_CONSTRUCTION_ONLY_NATIVE_NOT_RUN",
+  "sourceCommit": "c1ebb691feb6a11324060e0c28210e2bd735624a",
+  "native": "NOT_RUN",
+  "review": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_DYNAMIC_SOURCE_REVIEW_20261016/REVIEW.json",
+    "sha256": "cae4974a5686868d23acc92a28b455d4cffbce5db15530b08a0640fe6cec19b3"
+  },
+  "priorReview": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_DYNAMIC_SOURCE_REVIEW_20261016/PRIOR_SOURCE_REVIEW.json",
+    "sha256": "ec6085b5746ef5542c38c1cb4624b04e86040ba66aef3a82e45f82b0d2de631a"
+  },
+  "ast": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_DYNAMIC_SOURCE_REVIEW_20261016/AST.json",
+    "sha256": "e14a9a785cb98b0661c292e07ebdb6653ff9627e8c16fae818cd801a38d89f67"
+  },
+  "dependencies": [
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "sha256": "4d5bd92b34ce4bdb659d3178144b3f1e7822f053dc91cf9c4d40c356dbbcbbba",
+      "reason": "Exact sole c1ebb amendment explicitly groups JSONB before_values extraction before JSONB concatenation in static settings rollback. No EXECUTE/template/identifier/USING/callee or permission edit; current complete file pinned, no claim of old/new runtime equivalence."
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/11_03_cas_operational_projection.sqlinc",
+      "sha256": "38fb7787aa4d96f1d7832fd9735f7ed7ab921ef22a4ccf252e3dc76083b07fe7",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/34_q45_actor_event_closed_dto_cross_session_04_complete_capability_receipt.sqlinc",
+      "sha256": "228ac38ee6959c9c84bc2208849a5879649747dc63b306f61ba5562d7fa767d1",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/35_q45_actor_event_closed_dto_cross_session_05_complete_bulk_readiness.sqlinc",
+      "sha256": "effb7385adf9cefc795f20d3f0bc4b6231dd33a6b2b8ae65c533471bf74dc3e3",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/36_q45_actor_event_closed_dto_cross_session_06_complete_automatic_readiness.sqlinc",
+      "sha256": "76e52ae37fe20a632bfb8143bdfdc3b5fdf34008049395bbad9a79e6126ed456",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/13102026_1745_weekly_source_owned_stage_self_bill_facts_v1.sql",
+      "sha256": "63c8329ea9455fa1eb984e964349296dfcc6c2e7bf24eca4dd1516e97e64c7ba",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/08_complete_automatic_reconcile_delta_forward.sqlinc",
+      "sha256": "896a817c3b47bbaffec6d3f5f3c3f19af0141043fa7de71701b6462daf03b51b",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_resume.sqlinc",
+      "sha256": "f46bdcc85c717de157738ea0a21591d9cb32695c95ca23efff8117678038b0f8",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_validator.sqlinc",
+      "sha256": "c11a3c72f09e862cb970798e4da8ceb29c4bf42a96a37cee4f7f51b3fc59ae78",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/02_wait_witness.sqlinc",
+      "sha256": "90ea5c7bb3ddb9c26119adf40774f3512a0278ffa44703b99679392c5212ba0b",
+      "reason": "Exact previous full callee/constructor/schema input independently re-read at c1ebb; preserved complete producer authority, not a native qualification."
+    },
+    {
+      "path": "supabase/repeatable/30082026_1232_candidate_qr_document_revision_order_v1.sql",
+      "sha256": "f9b0b2071b12bd355502b63d4c04e8aaaf2f550ef090757cace630fc494f7d85",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "sha256": "00d7ed67ac696e84ac7867b56662495589267300a7acec32b556237c74f1f3dc",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/04_final_acl.sqlinc",
+      "sha256": "a092da99c35e7e42989155e6a08b7a42694105212c2bdb785d6ab6aa157bdac8",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "sha256": "798806292bf5191934cc8f338f258abd8822199db0f8a63cb1d2c3d6a9681e88",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "sha256": "3b06ab2efedd567349c5c0d0441733ec0a7bf76a63e6a0dcae64db86bf3a1257",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/03_final_acl.sqlinc",
+      "sha256": "2489d92c14804bd04a95bc9a90781264f947787478133c188d96f547e076551f",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_NATIVE_SQL_SOURCE_INTEGRATION.json",
+      "sha256": "8a8fa23e7427f44f564a3345a76c17b7eb348d7090fb90b993c35bba051cc02d",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json",
+      "sha256": "1faf60732570b07efbbb4d4cd7c00853796a5f2e1b17a89e7cf975aa90eafae6",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_SOURCE_ASSEMBLY_20261016/ASSEMBLY_MANIFEST.json",
+      "sha256": "f7261f85c3d409ed00e78e0f7a7508038752d1e09128b7c8224e0608677b960f",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "sha256": "920248f7ed713c881e379ddc33a5400d9f3804a2ac3fcb7771be1bcc02002f39",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "sha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "sha256": "40945fe7761856b8296ef9a760c7168bdeeabedcbba7d619e4a5413167a0b0db",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/includes/nhsp_v6_health_native_compatibility.sqlinc",
+      "sha256": "230841b9bd2a2ea6913858837640a84196af45ec36b57eafa27ab4a686ee6ec8",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "sha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    },
+    {
+      "path": "supabase/repeatable/includes/nhsp_v6_health_contract_final_acl.sqlinc",
+      "sha256": "01871c5ad2433ee52ffecdfcee73e696847574490bf8eb4adea1e76edcd9b944",
+      "reason": "Complete joined constructor/callee/ACL/order or source provenance input. No native/provider/financial approval."
+    }
+  ],
+  "counts": {
+    "diagnostics": 99,
+    "fileSignatureGroups": 38,
+    "files": 35,
+    "enclosingBodies": 44,
+    "priorExactPoints": 95,
+    "priorExactBodies": 95,
+    "newPoints": 4,
+    "reportedActualExecuteStatements": 99,
+    "selectedCompleteProducerActualExecuteStatements": 100,
+    "all35FilesRawDynamicKeys": 102,
+    "all35FilesCompleteDynamicProducers": 45,
+    "inheritedFrozenKeys": 3,
+    "proposedFinitePoints": 95,
+    "withheld1430": 3,
+    "withheld0400": 1
+  },
+  "files": [
+    {
+      "path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "5b777111e5b111d8c38d7507cf7b0b9809779ccb9fd18dc054bed4cd8f205273",
+          "count": 1
+        },
+        {
+          "keySha256": "2405408fa14e67b84d174e5d1666001714f60d64d3c7f831e102655fada3cc14",
+          "count": 1
+        },
+        {
+          "keySha256": "8acc06aab4830b45c526614d61389ba8bc821bbe1b472c8535ddd92a65b2664b",
+          "count": 1
+        },
+        {
+          "keySha256": "5074ee71d806a764250ac9251830bbcb82f4f87ceae548e1c5e8c71202b98ac4",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "outer:supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "keySha256": "5b777111e5b111d8c38d7507cf7b0b9809779ccb9fd18dc054bed4cd8f205273",
+          "statementSha256": "8bcf655f7ee434c02c50c7300b40d63a7f0d769de63fe1ae810c1043d0c8f04f",
+          "bodySha256": "3f2d4440f213491e1dddf2a4a14536e31ca1bef4507d093639cba8a5efe17ed9",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        },
+        {
+          "signature": "outer:supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "keySha256": "2405408fa14e67b84d174e5d1666001714f60d64d3c7f831e102655fada3cc14",
+          "statementSha256": "d7b3eed568467355d7f5d1d682b7ba89b51197fd60fd07db3212ea7323103c18",
+          "bodySha256": "3f2d4440f213491e1dddf2a4a14536e31ca1bef4507d093639cba8a5efe17ed9",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        },
+        {
+          "signature": "outer:supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "keySha256": "8acc06aab4830b45c526614d61389ba8bc821bbe1b472c8535ddd92a65b2664b",
+          "statementSha256": "33e5c2a4aa33f056a779a2eaa5926c1717f37e427cfa4cf0c1903ac0fd400342",
+          "bodySha256": "3f2d4440f213491e1dddf2a4a14536e31ca1bef4507d093639cba8a5efe17ed9",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        },
+        {
+          "signature": "outer:supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+          "keySha256": "5074ee71d806a764250ac9251830bbcb82f4f87ceae548e1c5e8c71202b98ac4",
+          "statementSha256": "f022fce91bcbedda0aa6e408f66771474ff57c7bda6b5a743f52e3240dcc0ccd",
+          "bodySha256": "3f2d4440f213491e1dddf2a4a14536e31ca1bef4507d093639cba8a5efe17ed9",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        }
+      ]
+    },
+    {
+      "path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "1bf78bfc75606a2df3645962eae1a28e4e87247cab7aa5a72c247f83c588a736",
+          "count": 1
+        },
+        {
+          "keySha256": "e31536829e9480ab1fb4cc0a6c0a5b03130b329fd3dbc56359715fad641f92c6",
+          "count": 1
+        },
+        {
+          "keySha256": "b24da86147e5b660ed8be2cd043c6866a0c133026d43f1f56b9053fe8e53130c",
+          "count": 1
+        },
+        {
+          "keySha256": "36f7f026f09917f88071aacee1dbb79c804b03dafecdd687a310f249cc95f21c",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "outer:supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "keySha256": "1bf78bfc75606a2df3645962eae1a28e4e87247cab7aa5a72c247f83c588a736",
+          "statementSha256": "dcfbfed0976e7307d555c51d46dec57b4b7daa57bdae5c80dd4679c2bd5c53a3",
+          "bodySha256": "1b09b9f04ba796f0e67b940d731b3d7de97d6357a9d430db54ffb159ed94029b",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        },
+        {
+          "signature": "outer:supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "keySha256": "e31536829e9480ab1fb4cc0a6c0a5b03130b329fd3dbc56359715fad641f92c6",
+          "statementSha256": "b44b0e2e827de835c641fa971b5062bad949183f69c5b75356c2463d27392102",
+          "bodySha256": "1b09b9f04ba796f0e67b940d731b3d7de97d6357a9d430db54ffb159ed94029b",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        },
+        {
+          "signature": "outer:supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "keySha256": "b24da86147e5b660ed8be2cd043c6866a0c133026d43f1f56b9053fe8e53130c",
+          "statementSha256": "7be56c1e2377a949509d77c26ed247d65f439d8c2b2ec7b1483f57fb74c1aeed",
+          "bodySha256": "1b09b9f04ba796f0e67b940d731b3d7de97d6357a9d430db54ffb159ed94029b",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        },
+        {
+          "signature": "outer:supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+          "keySha256": "36f7f026f09917f88071aacee1dbb79c804b03dafecdd687a310f249cc95f21c",
+          "statementSha256": "72218a7c47788b8728f38bcf8d712ac40f78e2eaae2ab7d66ec670f0ea3892c8",
+          "bodySha256": "1b09b9f04ba796f0e67b940d731b3d7de97d6357a9d430db54ffb159ed94029b",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        }
+      ]
+    },
+    {
+      "path": "supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "39dc54bd6e54c7edabba6206539ff25036a6999171f10901be7a197756e56b06",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "outer:supabase/migrations/13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+          "keySha256": "39dc54bd6e54c7edabba6206539ff25036a6999171f10901be7a197756e56b06",
+          "statementSha256": "bc71d5dd70ad3711ff26ec1e70a240e92338acbdcc6224294742e1e62008c660",
+          "bodySha256": "8d58babcb103c347e7f838bca4a8848f768373a0bf9575c1e56e48f6d0bc9ecf",
+          "count": 1,
+          "reviewKind": "CLOSED_SINGLE_NATIVE_UNIQUE_DROP"
+        }
+      ]
+    },
+    {
+      "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+      "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "e4928b6ce6445c12a6845e1771fd5732cb5d31cb4aa2d8de571ba28f7f92b7da",
+          "count": 1
+        },
+        {
+          "keySha256": "503c9432bd10354ed93bc03c7d2d864b192cab55657ba671cedcd87f42c3e143",
+          "count": 1
+        },
+        {
+          "keySha256": "969ee5dd55e360c0824f23346d48840fe634000a310030498f83a257d5695d8f",
+          "count": 1
+        },
+        {
+          "keySha256": "7f736a2529ea822e024c772c4ab1faa18d6bf9eed31483cda4a5e2f3d5bb5cc5",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "outer:supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+          "keySha256": "e4928b6ce6445c12a6845e1771fd5732cb5d31cb4aa2d8de571ba28f7f92b7da",
+          "statementSha256": "6abde0401e745a56c46de7b7acc914c9e2c556327db9b1db1a9df44564338239",
+          "bodySha256": "95f4ef40ffdb7a3174996af800feff0ba449240522dedf794e0585f22af1c107",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        },
+        {
+          "signature": "outer:supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+          "keySha256": "503c9432bd10354ed93bc03c7d2d864b192cab55657ba671cedcd87f42c3e143",
+          "statementSha256": "d7b3eed568467355d7f5d1d682b7ba89b51197fd60fd07db3212ea7323103c18",
+          "bodySha256": "95f4ef40ffdb7a3174996af800feff0ba449240522dedf794e0585f22af1c107",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        },
+        {
+          "signature": "outer:supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+          "keySha256": "969ee5dd55e360c0824f23346d48840fe634000a310030498f83a257d5695d8f",
+          "statementSha256": "5add951b11947c71a291233f9f41d45c0a233f440c587368ba8eb7de01ad5930",
+          "bodySha256": "95f4ef40ffdb7a3174996af800feff0ba449240522dedf794e0585f22af1c107",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        },
+        {
+          "signature": "outer:supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+          "keySha256": "7f736a2529ea822e024c772c4ab1faa18d6bf9eed31483cda4a5e2f3d5bb5cc5",
+          "statementSha256": "80a7067e7f8eb4331facd432e741280a84891581737c1240f65f095bb3e3e5f2",
+          "bodySha256": "95f4ef40ffdb7a3174996af800feff0ba449240522dedf794e0585f22af1c107",
+          "count": 1,
+          "reviewKind": "CLOSED_NEW_TABLE_RLS_ACL_LOOP"
+        }
+      ]
+    },
+    {
+      "path": "supabase/migrations/16102026_0142_weekly_contact_reuse_native_attempt_uniqueness.sql",
+      "sha256": "24b09382b7a99536ecdb85dcbc8a29588e1aa87106a8adeb11cc411ce71010b6",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "0cb3241ee4455f3a7683974dc4df50387610f3c255c501bb1a77c549da2ff8c3",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "outer:supabase/migrations/16102026_0142_weekly_contact_reuse_native_attempt_uniqueness.sql",
+          "keySha256": "0cb3241ee4455f3a7683974dc4df50387610f3c255c501bb1a77c549da2ff8c3",
+          "statementSha256": "9d238a76d5a9cdd2da5f03ec4dc572d866deb28db5efefc143b4e5932e53604c",
+          "bodySha256": "af35924bd350279a15fda7744235f894a8f4497f6be1f8e509cdae3b7a15263b",
+          "count": 1,
+          "reviewKind": "CONSTANT_PROVED_REDUNDANT_INDEX_DROP"
+        }
+      ]
+    },
+    {
+      "path": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "c22e118d7a9b9a69abb8babfb41ee62e2be70c136c0e72b4eabeb6e6ea9081ce",
+          "count": 1
+        },
+        {
+          "keySha256": "317e2b6dab30d25a8a016291db725830438d26be07070e7009e3056219a398f3",
+          "count": 1
+        },
+        {
+          "keySha256": "902edba3e1776283642a49a5ce6ee846f42288caa7b586e537cfeb823926e9ee",
+          "count": 1
+        },
+        {
+          "keySha256": "85c97cdcb78fa7dd470b243effffe0b4f4f04a0e507a3fce3c8fb7ed933c880a",
+          "count": 1
+        },
+        {
+          "keySha256": "8e376db0fe8269eb901074a50e4300a4ee5b00af27cf7d97cf3a487fcc62f881",
+          "count": 1
+        },
+        {
+          "keySha256": "b55095f1f9a333d7d048c2dd6cb0d91079a92d1f6fa2843d34e2a87de04b7f5d",
+          "count": 1
+        },
+        {
+          "keySha256": "99d16e94fa1f495146b3fece24afb8b98a12abaecbec9a1017dc36e163046044",
+          "count": 1
+        },
+        {
+          "keySha256": "51531b92ed9751dd4e2aaecd05eca6e9d63c9e69b4c42666b00a6518ebc6e76f",
+          "count": 1
+        },
+        {
+          "keySha256": "98cc0ab7bce08cc4492e6459bafeda77b25525cec156222f3921b329eee73bba",
+          "count": 1
+        },
+        {
+          "keySha256": "288f662f23106b7e762b9c4889bf9b893156041dc4696a4d91bc8ea705e3ad0e",
+          "count": 1
+        },
+        {
+          "keySha256": "11a1428cb668c736a127b8d9c5c8296cbbc5e7a4bb8e1e95c7901a5580e28c6f",
+          "count": 1
+        },
+        {
+          "keySha256": "92d2956b9ed3a2eed6480a1fb179565f896e4db24a1d465e874172f89c2792c4",
+          "count": 1
+        },
+        {
+          "keySha256": "4b84713fb54f66ecd8c5c9828eb241898521424034bc064c5ca050af39a3ccf3",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "c22e118d7a9b9a69abb8babfb41ee62e2be70c136c0e72b4eabeb6e6ea9081ce",
+          "statementSha256": "7a8bcc8f7f8026cbde6e8cb242603de4bd6a0c29726e87d018b58428d9365d21",
+          "bodySha256": "1f66f9d0a234f26bb2004c4e77e3730c4254cbfdb8586f66c144668b74b7b379",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "317e2b6dab30d25a8a016291db725830438d26be07070e7009e3056219a398f3",
+          "statementSha256": "6946a0fbfe044875e2995e725636305488083cded56ca1de2522851bf867ff38",
+          "bodySha256": "1f66f9d0a234f26bb2004c4e77e3730c4254cbfdb8586f66c144668b74b7b379",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "902edba3e1776283642a49a5ce6ee846f42288caa7b586e537cfeb823926e9ee",
+          "statementSha256": "97d6810b5c123e2f9d83d35c6ab18e9ea2c4d73d5c13c9aac2a82e60ca71c18f",
+          "bodySha256": "1f66f9d0a234f26bb2004c4e77e3730c4254cbfdb8586f66c144668b74b7b379",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "85c97cdcb78fa7dd470b243effffe0b4f4f04a0e507a3fce3c8fb7ed933c880a",
+          "statementSha256": "01c9ba69662b83803b88cd450a77d82f875aeeab0ee6ceb42b5f7491df746ea3",
+          "bodySha256": "1f66f9d0a234f26bb2004c4e77e3730c4254cbfdb8586f66c144668b74b7b379",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "8e376db0fe8269eb901074a50e4300a4ee5b00af27cf7d97cf3a487fcc62f881",
+          "statementSha256": "4b3fdf58bb3e2683736b4d47e8cab15edcc83db376f6839129ee8b59fb426c6e",
+          "bodySha256": "1f66f9d0a234f26bb2004c4e77e3730c4254cbfdb8586f66c144668b74b7b379",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "b55095f1f9a333d7d048c2dd6cb0d91079a92d1f6fa2843d34e2a87de04b7f5d",
+          "statementSha256": "87fb0310ceb831d8667cdf78c490de24c8d69c9bed15af3a530572c4dd33e399",
+          "bodySha256": "8a4edaaae740b95e093528073651e53527498c4f8fbdb7e69dd867874b6d7060",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "99d16e94fa1f495146b3fece24afb8b98a12abaecbec9a1017dc36e163046044",
+          "statementSha256": "1b8050c8e19765435d79d1adb0f8e82c087612b0d82b01d2e11c132ce6fa5549",
+          "bodySha256": "8a4edaaae740b95e093528073651e53527498c4f8fbdb7e69dd867874b6d7060",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "51531b92ed9751dd4e2aaecd05eca6e9d63c9e69b4c42666b00a6518ebc6e76f",
+          "statementSha256": "4ea5acca1e0091e8628fcdd66337bbb0ee63977dd7af1a25dc8c3af3876136c9",
+          "bodySha256": "8a4edaaae740b95e093528073651e53527498c4f8fbdb7e69dd867874b6d7060",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "98cc0ab7bce08cc4492e6459bafeda77b25525cec156222f3921b329eee73bba",
+          "statementSha256": "65b0b23627f98f0f947297eca097ea30dccbb6b372524de5814402f1d7cec0bb",
+          "bodySha256": "8a4edaaae740b95e093528073651e53527498c4f8fbdb7e69dd867874b6d7060",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "288f662f23106b7e762b9c4889bf9b893156041dc4696a4d91bc8ea705e3ad0e",
+          "statementSha256": "8949074df6e95a9558ec79515b7a04782bd150cd4794efdc9272bc5ea2b69ea5",
+          "bodySha256": "5389142c41d88832569a43f4a9451c73199f2d38b44c72e1ae084544ac8789f8",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "11a1428cb668c736a127b8d9c5c8296cbbc5e7a4bb8e1e95c7901a5580e28c6f",
+          "statementSha256": "82bb49bad22a1d9d824964a6dd35188ebeaef2e58b22f0ba40db72f788066f88",
+          "bodySha256": "5389142c41d88832569a43f4a9451c73199f2d38b44c72e1ae084544ac8789f8",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "92d2956b9ed3a2eed6480a1fb179565f896e4db24a1d465e874172f89c2792c4",
+          "statementSha256": "6f2155a2e848ac2bbd66f9823ccf57705b14a1543513fb8d424ba68333ed1e60",
+          "bodySha256": "5389142c41d88832569a43f4a9451c73199f2d38b44c72e1ae084544ac8789f8",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        },
+        {
+          "signature": "outer:supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+          "keySha256": "4b84713fb54f66ecd8c5c9828eb241898521424034bc064c5ca050af39a3ccf3",
+          "statementSha256": "61111af1f2e3f7306ba3dcd26328d6b5fb66538ac0f7c45ba44fe98f52deb8a2",
+          "bodySha256": "5389142c41d88832569a43f4a9451c73199f2d38b44c72e1ae084544ac8789f8",
+          "count": 1,
+          "reviewKind": "CLOSED_PRIVATE_NEW_TABLE_RLS_ACL_LOOPS"
+        }
+      ]
+    },
+    {
+      "path": "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+      "sha256": "82a3d0487cb483e692c7fdf590a75280a4dd88a7a1057b43a7fb39639da4e9e7",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "4f79d685bd8253d9f8103da1ba1f9c376775779dbaf94e025260a9919b298e05",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "outer:supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+          "keySha256": "4f79d685bd8253d9f8103da1ba1f9c376775779dbaf94e025260a9919b298e05",
+          "statementSha256": "21bfd336bcad7b5861edbbaa9bd43440d5c5ed129adf67e84d06413a60601275",
+          "bodySha256": "719d8d84fbb9b088abc7974490e45eb87bf0db5d1e2a0250c01b6d113c725113",
+          "count": 1,
+          "reviewKind": "CLOSED_SINGLE_NATIVE_UNIQUE_DROP"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_generation.sqlinc",
+      "sha256": "a4d821ec7d49c46677340e32c403d264d7add4327e9e7106b179c791fb487603",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "d79a089c20632130cd6cada6f1ab656293593e9d5dad614d3d29cbf0b31a21f2",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+          "keySha256": "d79a089c20632130cd6cada6f1ab656293593e9d5dad614d3d29cbf0b31a21f2",
+          "statementSha256": "c49175d01359b3b966222bcebe8a6cc99f834f2309bd60137ef75f33f573a544",
+          "bodySha256": "d8d7ea65b8c11a163571dbe4cc39ef34d21cac02d450ea0d41418e5623b7e3f5",
+          "count": 1,
+          "reviewKind": "CONSTANT_NATIVE_CREDIT_CTE_EXECUTION"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_context.sqlinc",
+      "sha256": "23285adf471a0da045c8678f2764be690ef56a63c0b919f16dea7ce200e0b5c2",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "a315f5da755a872c8d6e7e23b17a8250ba0a6eb1fd990d7399d7ed4ce09b13f9",
+          "count": 1
+        },
+        {
+          "keySha256": "da87f1558cb5cd872d356a22f3a2dfaf39fb947084cc0743cd0d7b69c11b642d",
+          "count": 1
+        },
+        {
+          "keySha256": "69e6d7074cd8c025d537d086f7267de4dd8b78e21890b52b68b74aa231564c83",
+          "count": 1
+        },
+        {
+          "keySha256": "3db9e0367d8bf9af263c84577a3522fb64eeab4e9b7acbcb91b7708e74e17c67",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.timesheet_correction_actor_allowed_v1(uuid)",
+          "keySha256": "a315f5da755a872c8d6e7e23b17a8250ba0a6eb1fd990d7399d7ed4ce09b13f9",
+          "statementSha256": "58aaecd29f786276d93cc400c43c7fae85ae2f278fe081e7ec292d9cddd86a22",
+          "bodySha256": "0211f8a2342f9930d44461ffee1d5f3f55136a57e7b6ba5627a58f2216aea1d6",
+          "count": 1,
+          "reviewKind": "LITERAL_PRIVATE_BOOLEAN_CALL"
+        },
+        {
+          "signature": "private.timesheet_correction_actor_assert_v1(uuid)",
+          "keySha256": "da87f1558cb5cd872d356a22f3a2dfaf39fb947084cc0743cd0d7b69c11b642d",
+          "statementSha256": "58aaecd29f786276d93cc400c43c7fae85ae2f278fe081e7ec292d9cddd86a22",
+          "bodySha256": "d52cc1a5df3d8cab2d21c2ca5d7734f05c94133acccd56f46bc1fe88cad03f8a",
+          "count": 1,
+          "reviewKind": "LITERAL_PRIVATE_BOOLEAN_CALL"
+        },
+        {
+          "signature": "private.timesheet_correction_origin_v1(uuid)",
+          "keySha256": "69e6d7074cd8c025d537d086f7267de4dd8b78e21890b52b68b74aa231564c83",
+          "statementSha256": "4527927de0f5dda114a1097f1777b9a984d2c249b3c9513098377155616dfe51",
+          "bodySha256": "dac58a061c7517941c970dac5e9579cdffc9cd356d295a46f00f7b7eb35af5f5",
+          "count": 1,
+          "reviewKind": "LITERAL_OPTIONAL_ORIGIN_READ_CALLS"
+        },
+        {
+          "signature": "private.timesheet_correction_origin_v1(uuid)",
+          "keySha256": "3db9e0367d8bf9af263c84577a3522fb64eeab4e9b7acbcb91b7708e74e17c67",
+          "statementSha256": "fb7a0c20303286af4894df5b3ff5c0b5a6dcb3d762589decdc789ee85047e8be",
+          "bodySha256": "dac58a061c7517941c970dac5e9579cdffc9cd356d295a46f00f7b7eb35af5f5",
+          "count": 1,
+          "reviewKind": "LITERAL_OPTIONAL_ORIGIN_READ_CALLS"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_cancel.sqlinc",
+      "sha256": "ca4ac3b9f88f9b86906d52c47e3477cc388deec112164d2bf451d85901127ff3",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "c7cf68c7ecb5c824a293ef426081596d30e043802e6a0b601bda1468d45104fd",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.timesheet_correction_cancel_capability_v1(uuid,uuid)",
+          "keySha256": "c7cf68c7ecb5c824a293ef426081596d30e043802e6a0b601bda1468d45104fd",
+          "statementSha256": "47ccb681bccb86cb279523cfdc5fecc0ba07e2102bc17e0ad7c5acc3a67c80f4",
+          "bodySha256": "6a1c24429f27a447cde2daa5bea429e02b5014a90c4ece0465389af753e05da5",
+          "count": 1,
+          "reviewKind": "GUARDED_NATIVE_TEMP_CAPABILITY_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+      "sha256": "f43014ce6cafe2c3a193b827cefdc72b7548215d4abf0d29db387158da71ae12",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "d79a089c20632130cd6cada6f1ab656293593e9d5dad614d3d29cbf0b31a21f2",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+          "keySha256": "d79a089c20632130cd6cada6f1ab656293593e9d5dad614d3d29cbf0b31a21f2",
+          "statementSha256": "c49175d01359b3b966222bcebe8a6cc99f834f2309bd60137ef75f33f573a544",
+          "bodySha256": "6e3cd5611e3488279d8032b9a3c84d496b50946b758cbf2a9fbe3f7d5d84d3fe",
+          "count": 1,
+          "reviewKind": "CONSTANT_NATIVE_CREDIT_CTE_EXECUTION"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "sha256": "5e7e51c44f2c0ef713df0fd35fe284b9e264f437efaff72da33811b6eaf26a4c",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "b186eddcbcc6ad9567d3ce03f13fc9bac7bc4b56afba49cb8b9f55b0af14d972",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_issued_signed_query_evidence_v1(uuid,uuid)",
+          "keySha256": "b186eddcbcc6ad9567d3ce03f13fc9bac7bc4b56afba49cb8b9f55b0af14d972",
+          "statementSha256": "86bd59d5c29017cce04c792d0d8555e4ac0a36748f13a3b3088ac6b3dcc7312e",
+          "bodySha256": "5801d09a887ec4d2f498fc25d05b4bbe50780e69706b204d9fc5bf590633ed0a",
+          "count": 1,
+          "reviewKind": "LITERAL_OPTIONAL_SIGNED_SCOPE_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1222_healthroster_configured_upload_profile_v1.sql",
+      "sha256": "a59d938b7403608103aa747be95dd202e5d7f0dd6a40d09dbdf0177e0e14a50a",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "8b55c77896e9d0101f10e590b6373eeefee44005ec8e33fb447f14320ebe1cb2",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_configured_upload_profile_v1(uuid,uuid,text,text)",
+          "keySha256": "8b55c77896e9d0101f10e590b6373eeefee44005ec8e33fb447f14320ebe1cb2",
+          "statementSha256": "d1fd39e57de6a19872cff37cf98bd8e6733a5c4dba2299782cb321d1c7c55d4c",
+          "bodySha256": "cfbb894ca893cb081f042e07dfe7aa8caefe37587aa48379a3b5e5025c206994",
+          "count": 1,
+          "reviewKind": "LITERAL_CURRENT_EFFECTIVE_RULE_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/23_bulk_signed_selection.sqlinc",
+      "sha256": "1d4f13e3dfe66aa8c8c0cd8f55a29cf3c231bf26f3202b3d4b7ae52a7144c049",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "c3efbce44241896238c106d5d0cc7e150e91204e76deaee126f65fcb5afecc74",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb)",
+          "keySha256": "c3efbce44241896238c106d5d0cc7e150e91204e76deaee126f65fcb5afecc74",
+          "statementSha256": "444da03a3984a89f3df29bcaf96211435b3f6283ff0328486529dccd15348249",
+          "bodySha256": "886ffa34d9f57962f40064b60ec2918b279f8d2d0b1d227b99e6bbb7578298fa",
+          "count": 1,
+          "reviewKind": "LITERAL_OWN_STAGE_SELF_BILL_FACT_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc",
+      "sha256": "89f4759d42fb638c527f9bb88aeb97b172adcd954e76166d5ad232e1107d40a8",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "5ef16c7deaf89c717d3c89483d95eff2baf60016a4479021f2a8b2ddf5976bbe",
+          "count": 1
+        },
+        {
+          "keySha256": "22fe7f76c76335ed437dc705cc53fd34510552e9363df2fb4e16044526490219",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "keySha256": "5ef16c7deaf89c717d3c89483d95eff2baf60016a4479021f2a8b2ddf5976bbe",
+          "statementSha256": "4441247a758ed085471a05d3800b9f02e7856a6cc2c0f21d56b082d02f1b29c6",
+          "bodySha256": "426fac22aa4eb77c868be0b4f26da6e4091c1e7f777a408d90d6cecd43e15691",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_CAPABILITY_AND_CAS_READS"
+        },
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "keySha256": "22fe7f76c76335ed437dc705cc53fd34510552e9363df2fb4e16044526490219",
+          "statementSha256": "b427fa4d6dcc9edf3b08da14bad8ff20a192a33db4e22f1c1d2916fa3e26862f",
+          "bodySha256": "426fac22aa4eb77c868be0b4f26da6e4091c1e7f777a408d90d6cecd43e15691",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_CAPABILITY_AND_CAS_READS"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc",
+      "sha256": "1d0e49b46a6eee67aee17dad4d99c0a62dbaf267b7ddcfe72a713300798b3138",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "1ef64003569dcc0c34640e87dd2f123a67bbbba0c293139e0d6837e6ac31a65f",
+          "count": 1
+        },
+        {
+          "keySha256": "bb74276d897dfb8ebc694fd420ccec1a20de15bc0a15bdb366ebe68e364184a1",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+          "keySha256": "1ef64003569dcc0c34640e87dd2f123a67bbbba0c293139e0d6837e6ac31a65f",
+          "statementSha256": "e3e3a89ddee222fe37df56bacdb6a9fa2b74031a866e43d0762f5e263336ddf0",
+          "bodySha256": "98ec0df0f50d6bb5c2840e11199e24382c24e7f1789e6b1373a6719b49cf9aa6",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_AUTOMATIC_READINESS_READ"
+        },
+        {
+          "signature": "private.weekly_source_automatic_reconcile_certificate_v1(uuid,uuid,uuid)",
+          "keySha256": "bb74276d897dfb8ebc694fd420ccec1a20de15bc0a15bdb366ebe68e364184a1",
+          "statementSha256": "4d955646f2be87d62759ee05cf5452ee1d6e4daac5a44c3f46af97708de756e3",
+          "bodySha256": "cf9bc91c5313730097b476caf91b5f87d857c65ff509078042d8a02ed4e0097d",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_ZERO_DELTA_CERTIFICATE_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "sha256": "7ee49ed797ccb4b469677a9ccddb20b7a821f6a318cb56e64dd31e8f34ddbb13",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "87f9d19c50fd0d0e9c70949767bb88ac6301c8e258fae10d6f7a1f2e31a43b5f",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+          "keySha256": "87f9d19c50fd0d0e9c70949767bb88ac6301c8e258fae10d6f7a1f2e31a43b5f",
+          "statementSha256": "4beddaf0276dde159a28760ae67d4a82acb83c9834131d61fa0b4a1e334603d6",
+          "bodySha256": "d1f038db9eafe18ee564b6587e6c70227f9c34ee2524e5a8611635c40e7687ff",
+          "count": 1,
+          "reviewKind": "LITERAL_QUALIFIED_WAIT_FACT_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/03_approved_detail_evidence.sqlinc",
+      "sha256": "dcbfbd9debb6b70803a376712dc5b4349a4ac2e7d9337ae03b11543fa05932e8",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "097cea2ebd76567914ea11ed2d624d7641dc93adc65b5babcfd18b59084f8916",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_approved_detail_evidence_v1(uuid,jsonb)",
+          "keySha256": "097cea2ebd76567914ea11ed2d624d7641dc93adc65b5babcfd18b59084f8916",
+          "statementSha256": "fe4c36b9b8af1959b58e33a9fd1a9a0d77e320f17d813530a222934691397375",
+          "bodySha256": "37d198b58620efcf75d6fe9e88e847a421acc7fae1f7eef78937dc77d42520c1",
+          "count": 1,
+          "reviewKind": "LITERAL_CHOSEN_DETAIL_RELATION_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+      "sha256": "2c1efa029d5c4f2f0e170dc0afa5f3c93a2bc85b60d6921ee04781edcba951f3",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "0175d2c2bda9b81e86dbc5d49d4a8b104269dae666c6ebb1dd65bab564a1d7de",
+          "count": 1
+        },
+        {
+          "keySha256": "6bd3cba569740fb6e07e8e1c514f1f5a1c13775f61148dcb0e69331a73f3df03",
+          "count": 1
+        },
+        {
+          "keySha256": "98dab1abbe13db179c3acdd2e29af0081efcf2294b30a48200f318a47be542e9",
+          "count": 1
+        },
+        {
+          "keySha256": "ceec5896579e32b86ae49835322c5ea84e832f32c10d63cc672258609107cc77",
+          "count": 1
+        },
+        {
+          "keySha256": "ab5ea92422761c2e19bd948fa472d3e845bc16a3e5284b3494e6e59a15ca7781",
+          "count": 1
+        },
+        {
+          "keySha256": "54dffe50a88f1e9db9d9b5069fc9977c126509bbb6446df49aa52c2cf39f49cd",
+          "count": 1
+        },
+        {
+          "keySha256": "2083ef6934d36ba89287de5de17f7b37358153bbda3db4bdd649c3d8a094106d",
+          "count": 1
+        },
+        {
+          "keySha256": "f75120efed258deaa29cc78e26b6663b167c0bc538d7c1f583d3e9c312b96653",
+          "count": 1
+        },
+        {
+          "keySha256": "ba0e943cf4365e6ef5b0f8ff433d1cf17945b862fa912217b36f3aa605c77cf8",
+          "count": 1
+        },
+        {
+          "keySha256": "e10442bdaba773f37774723b201a808825caeae45b236d44dd86f91e2a727ca7",
+          "count": 1
+        },
+        {
+          "keySha256": "0f2a36e5ffeb6dce4ed8d8de6485aa95672ebd41578418a27e17a8d1c44bab09",
+          "count": 1
+        },
+        {
+          "keySha256": "116ec5f53ca05e25ae25031f6f6cec2653beaf2b94187bc733053bcbc443a4f9",
+          "count": 1
+        },
+        {
+          "keySha256": "a5becbf740a2933b41004fed5b1dbcb3456f822d1cc08738368822a980d986ed",
+          "count": 1
+        },
+        {
+          "keySha256": "d39bd24b9b4179bbf92302911cfba1211e1e2617a959d4c8ad79c0e6a332cd51",
+          "count": 1
+        },
+        {
+          "keySha256": "ee01db70e3effe9db576cf35acc2bc736aa221fcee9f0d9983a26fd45afadeaa",
+          "count": 1
+        },
+        {
+          "keySha256": "9f9145af1fdba613f837c00b98e789347d1705907d8814082a3e577e817f64c0",
+          "count": 1
+        },
+        {
+          "keySha256": "3ff2ddd2ad11df4c5eb8a29956bdb72b360e398a8d1eecf4a295a89a1cd06b8a",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "0175d2c2bda9b81e86dbc5d49d4a8b104269dae666c6ebb1dd65bab564a1d7de",
+          "statementSha256": "8d994fa3bfde8f2a5b801a11f15b690c6f4644a4e14fbfa07d651660e8b4bb1e",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "6bd3cba569740fb6e07e8e1c514f1f5a1c13775f61148dcb0e69331a73f3df03",
+          "statementSha256": "8f07c7df2d87e0216c79a9511ed5b1d2ed0973b208d2098c50c422b81bca9398",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "98dab1abbe13db179c3acdd2e29af0081efcf2294b30a48200f318a47be542e9",
+          "statementSha256": "a70410fedd2173225afbb32d47a1e24e79c5a34dbe8b53842f9389722afebc1d",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "ceec5896579e32b86ae49835322c5ea84e832f32c10d63cc672258609107cc77",
+          "statementSha256": "f3a31e03cbf1af8f8639b4c9a7cf62b8e57185a4c079cd02c7ee9beb63592d8a",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "ab5ea92422761c2e19bd948fa472d3e845bc16a3e5284b3494e6e59a15ca7781",
+          "statementSha256": "b1f3167aa4ea14cf0d715d363e605d117020d32e7ef34d3adca2890c7cbe7e8c",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "54dffe50a88f1e9db9d9b5069fc9977c126509bbb6446df49aa52c2cf39f49cd",
+          "statementSha256": "d40e7200f3f4c3371fb44d8a267121dcd96571c6bf609d7111d5472e4635bb73",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "2083ef6934d36ba89287de5de17f7b37358153bbda3db4bdd649c3d8a094106d",
+          "statementSha256": "1bd0bf93d1c8ed8ef70bf9c8942175a3c84b91262f9720c805f1f726faa19266",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "f75120efed258deaa29cc78e26b6663b167c0bc538d7c1f583d3e9c312b96653",
+          "statementSha256": "8ed274dc6ba90c25ae2d4222e3128bb055116244f0a8ce733b53779d44d8b4b3",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "ba0e943cf4365e6ef5b0f8ff433d1cf17945b862fa912217b36f3aa605c77cf8",
+          "statementSha256": "6e0f1dd4bfe30f9852f6f477208c0a937d0c19fef4a65058b4051b64092e4f0d",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "e10442bdaba773f37774723b201a808825caeae45b236d44dd86f91e2a727ca7",
+          "statementSha256": "15fa2715b760641d324646c20e6ddbd2b229d6df79e889d91150b4450861405c",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "0f2a36e5ffeb6dce4ed8d8de6485aa95672ebd41578418a27e17a8d1c44bab09",
+          "statementSha256": "642bf3d26a4da2d668f1b997d5ec8e0919822bd3d7753c7d21e296707bdc4ed6",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "116ec5f53ca05e25ae25031f6f6cec2653beaf2b94187bc733053bcbc443a4f9",
+          "statementSha256": "037977f392869018943f1c1fc90f4920f58762b0e485a732d53db28e7e15a061",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "a5becbf740a2933b41004fed5b1dbcb3456f822d1cc08738368822a980d986ed",
+          "statementSha256": "0aee3fb3151053dee9e85d89c561884ff02ad4981884c406726474b7c880ce3a",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "d39bd24b9b4179bbf92302911cfba1211e1e2617a959d4c8ad79c0e6a332cd51",
+          "statementSha256": "0a901b7191d4e103f30eee45774ce7ee47b1e02d4bee66f6e1bff9e35c21164a",
+          "bodySha256": "565346b6012890a17a208af83f316a2d6f282ea330be8ec8b61d2878388cecce",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "ee01db70e3effe9db576cf35acc2bc736aa221fcee9f0d9983a26fd45afadeaa",
+          "statementSha256": "ece7edb42eb898a81167555383867c41d0ba83ec963d4523a80b615373623619",
+          "bodySha256": "565346b6012890a17a208af83f316a2d6f282ea330be8ec8b61d2878388cecce",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "9f9145af1fdba613f837c00b98e789347d1705907d8814082a3e577e817f64c0",
+          "statementSha256": "6e5dfa7a873e5ff0c46e2ab1d8e66bd242b55ff3cb6a327fb231360b3b2dae12",
+          "bodySha256": "565346b6012890a17a208af83f316a2d6f282ea330be8ec8b61d2878388cecce",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "keySha256": "3ff2ddd2ad11df4c5eb8a29956bdb72b360e398a8d1eecf4a295a89a1cd06b8a",
+          "statementSha256": "db0294f38e6d958c02e751a4854651d5c36a9d7e16f2e96c83e9d7e50b829398",
+          "bodySha256": "565346b6012890a17a208af83f316a2d6f282ea330be8ec8b61d2878388cecce",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/06_cap_original_functions_06_complete_selection.sqlinc",
+      "sha256": "96302b0a755afae771337153ab1c7737d93154eca42f876a37839a911a663aa1",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "e0c57d0fef4380493eeeb11acfccd7db2fb103f3ca480efbe61dd8b1cc40ba34",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+          "keySha256": "e0c57d0fef4380493eeeb11acfccd7db2fb103f3ca480efbe61dd8b1cc40ba34",
+          "statementSha256": "444da03a3984a89f3df29bcaf96211435b3f6283ff0328486529dccd15348249",
+          "bodySha256": "dc09ba673de1344d0529e7fec81f7cb55ddd68ca3f7053eefa5bcf1d946809f3",
+          "count": 1,
+          "reviewKind": "LITERAL_OWN_STAGE_SELF_BILL_FACT_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/16_q25_owner_xid_qualification_03_complete_cas_admission.sqlinc",
+      "sha256": "c7b6d0812dacde13ff9ff5fb920fe73aa6ce959068b20e5c41134361e1a86342",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "5ef16c7deaf89c717d3c89483d95eff2baf60016a4479021f2a8b2ddf5976bbe",
+          "count": 1
+        },
+        {
+          "keySha256": "22fe7f76c76335ed437dc705cc53fd34510552e9363df2fb4e16044526490219",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "keySha256": "5ef16c7deaf89c717d3c89483d95eff2baf60016a4479021f2a8b2ddf5976bbe",
+          "statementSha256": "4441247a758ed085471a05d3800b9f02e7856a6cc2c0f21d56b082d02f1b29c6",
+          "bodySha256": "b29f3379a98a64dcaf7893e45c44993e245610789d107018aa96446afdb41ab8",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_CAPABILITY_AND_CAS_READS"
+        },
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "keySha256": "22fe7f76c76335ed437dc705cc53fd34510552e9363df2fb4e16044526490219",
+          "statementSha256": "b427fa4d6dcc9edf3b08da14bad8ff20a192a33db4e22f1c1d2916fa3e26862f",
+          "bodySha256": "b29f3379a98a64dcaf7893e45c44993e245610789d107018aa96446afdb41ab8",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_CAPABILITY_AND_CAS_READS"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/18_q25_owner_xid_qualification_05_complete_automatic_admission.sqlinc",
+      "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "1ef64003569dcc0c34640e87dd2f123a67bbbba0c293139e0d6837e6ac31a65f",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+          "keySha256": "1ef64003569dcc0c34640e87dd2f123a67bbbba0c293139e0d6837e6ac31a65f",
+          "statementSha256": "e3e3a89ddee222fe37df56bacdb6a9fa2b74031a866e43d0762f5e263336ddf0",
+          "bodySha256": "0cf17432cde8c17ec4754fca2aa892180f7af266a784e50c6aec8411e588a73e",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_AUTOMATIC_READINESS_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/27_q45_actor_event_closed_dto_cross_session_05_complete_automatic_admission.sqlinc",
+      "sha256": "e40729c7d6393323fb79707575dc60a7bf214a4f8c12336ad82753caf937de46",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "1ef64003569dcc0c34640e87dd2f123a67bbbba0c293139e0d6837e6ac31a65f",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+          "keySha256": "1ef64003569dcc0c34640e87dd2f123a67bbbba0c293139e0d6837e6ac31a65f",
+          "statementSha256": "e3e3a89ddee222fe37df56bacdb6a9fa2b74031a866e43d0762f5e263336ddf0",
+          "bodySha256": "0cf17432cde8c17ec4754fca2aa892180f7af266a784e50c6aec8411e588a73e",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_AUTOMATIC_READINESS_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/38_q45_actor_event_closed_dto_cross_session_08_complete_cas_admission.sqlinc",
+      "sha256": "fd5e75e004016de8ac1dd641a20e5a101ae31b4e9d003b2a4e578908dcb08da4",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "5ef16c7deaf89c717d3c89483d95eff2baf60016a4479021f2a8b2ddf5976bbe",
+          "count": 1
+        },
+        {
+          "keySha256": "22fe7f76c76335ed437dc705cc53fd34510552e9363df2fb4e16044526490219",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "keySha256": "5ef16c7deaf89c717d3c89483d95eff2baf60016a4479021f2a8b2ddf5976bbe",
+          "statementSha256": "4441247a758ed085471a05d3800b9f02e7856a6cc2c0f21d56b082d02f1b29c6",
+          "bodySha256": "b29f3379a98a64dcaf7893e45c44993e245610789d107018aa96446afdb41ab8",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_CAPABILITY_AND_CAS_READS"
+        },
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "keySha256": "22fe7f76c76335ed437dc705cc53fd34510552e9363df2fb4e16044526490219",
+          "statementSha256": "b427fa4d6dcc9edf3b08da14bad8ff20a192a33db4e22f1c1d2916fa3e26862f",
+          "bodySha256": "b29f3379a98a64dcaf7893e45c44993e245610789d107018aa96446afdb41ab8",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_CAPABILITY_AND_CAS_READS"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/40_q45_actor_event_closed_dto_cross_session_10_complete_actor_bulk_selection.sqlinc",
+      "sha256": "703d0a81928dfc3a98edf7bcf6fc8d02923d889563d800344d07041c6ed3b986",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "e0c57d0fef4380493eeeb11acfccd7db2fb103f3ca480efbe61dd8b1cc40ba34",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_protect_all_signed_selection_v1(uuid,uuid,jsonb,uuid[])",
+          "keySha256": "e0c57d0fef4380493eeeb11acfccd7db2fb103f3ca480efbe61dd8b1cc40ba34",
+          "statementSha256": "444da03a3984a89f3df29bcaf96211435b3f6283ff0328486529dccd15348249",
+          "bodySha256": "89eb70e8358375da54e642fcd0fd24ec08a04b5ec94339433a6e57ef48792016",
+          "count": 1,
+          "reviewKind": "LITERAL_OWN_STAGE_SELF_BILL_FACT_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/14_07_automatic_capability_admission.sqlinc",
+      "sha256": "b08e604e3df9b13eaeb1b0e7ab635e85a0a80d94785ecb76327d35b14a866ac4",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "1ef64003569dcc0c34640e87dd2f123a67bbbba0c293139e0d6837e6ac31a65f",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_automatic_reconcile_capability_assert_v1(uuid)",
+          "keySha256": "1ef64003569dcc0c34640e87dd2f123a67bbbba0c293139e0d6837e6ac31a65f",
+          "statementSha256": "e3e3a89ddee222fe37df56bacdb6a9fa2b74031a866e43d0762f5e263336ddf0",
+          "bodySha256": "e246d5d08159c720d8eab15f5a7070dafabe4d6d850c3fc3393490023dab3281",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_AUTOMATIC_READINESS_READ"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/15_08_cas_admission_owner.sqlinc",
+      "sha256": "c5e3217b5ad271d66614ad3df0ad80870f57817fb18e042b9dcb43339a69e285",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "5ef16c7deaf89c717d3c89483d95eff2baf60016a4479021f2a8b2ddf5976bbe",
+          "count": 1
+        },
+        {
+          "keySha256": "22fe7f76c76335ed437dc705cc53fd34510552e9363df2fb4e16044526490219",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "keySha256": "5ef16c7deaf89c717d3c89483d95eff2baf60016a4479021f2a8b2ddf5976bbe",
+          "statementSha256": "4441247a758ed085471a05d3800b9f02e7856a6cc2c0f21d56b082d02f1b29c6",
+          "bodySha256": "aaac30335cfbb502d6106a9321b2df449dc7cb970f178202a7b259af1dae563f",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_CAPABILITY_AND_CAS_READS"
+        },
+        {
+          "signature": "private.weekly_source_bulk_source_cas_assert_v1(uuid,uuid[])",
+          "keySha256": "22fe7f76c76335ed437dc705cc53fd34510552e9363df2fb4e16044526490219",
+          "statementSha256": "b427fa4d6dcc9edf3b08da14bad8ff20a192a33db4e22f1c1d2916fa3e26862f",
+          "bodySha256": "aaac30335cfbb502d6106a9321b2df449dc7cb970f178202a7b259af1dae563f",
+          "count": 1,
+          "reviewKind": "LITERAL_NATIVE_CAPABILITY_AND_CAS_READS"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+      "sha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "fe4f776d30f38bac95d08e43d0062cc9d1ca8c94fde92febe332964327168a2c",
+          "count": 1
+        },
+        {
+          "keySha256": "5ce6ce44345f8fc8089ecb49469fc96475bf9b2556e12af40e3662774cc151d8",
+          "count": 1
+        },
+        {
+          "keySha256": "179fdfc9cf8ab80dd8ea3e21f09fdcd6793490d8ccc1806eb33fd53733c5975b",
+          "count": 1
+        },
+        {
+          "keySha256": "d87f0c1ceeed1f87413d54558db893457f53ecea57c17e2b78d43a9572077816",
+          "count": 1
+        },
+        {
+          "keySha256": "e07320d4fd79926238d648930807a4f8ae8dcbfab80d06d37c48845f1b9288b4",
+          "count": 1
+        },
+        {
+          "keySha256": "1815c46cba46afc93c69f6bf143c710c88c4f7cca6b317b78b4c60da15bda74e",
+          "count": 1
+        },
+        {
+          "keySha256": "3998e6c1cf0a70fe9a96ab219ed09d8cba689a197e5d59c28a951e3771bf298b",
+          "count": 1
+        },
+        {
+          "keySha256": "49b164ad6a33dc01926f4107c2771de769046877ef75569cd65bbcb7aa103d5d",
+          "count": 1
+        },
+        {
+          "keySha256": "7b7ecd759cc7372a4a386c5f0d2f7c2e17696989f07c10c0c611153aa2dd0ea3",
+          "count": 1
+        },
+        {
+          "keySha256": "d55e0996c895a6b2bef0e75be52e321384d7aca94e9ee442343d5508633bd84d",
+          "count": 1
+        },
+        {
+          "keySha256": "27d6e8a4d0d61fb3c484eefbf3605f2fe22b99766537444f1834328a9b158f11",
+          "count": 1
+        },
+        {
+          "keySha256": "e9139a0e5cac7b73340c5ec756ecefed7eafa8522f1b5e7b2668cbd2fc30e53b",
+          "count": 1
+        },
+        {
+          "keySha256": "37446a95d7f73686a09b9498b2a66f16b9f3bc05cd621689f7ccef237ce59240",
+          "count": 1
+        },
+        {
+          "keySha256": "c0af4cea175ca6050d7d2189dbd468931d4af5978002a910178292be8d4ea333",
+          "count": 1
+        },
+        {
+          "keySha256": "a117d6f910f0fc379e4a11f6dd6da9d107d06c4125f6b6576a2dd5c31bbdc7f6",
+          "count": 1
+        },
+        {
+          "keySha256": "533be0abf365afa2ea958ced7bf77af9bd04ae496ed5bbaabe8b71e61ab713c7",
+          "count": 1
+        },
+        {
+          "keySha256": "da90862bf34b4b879012bbacc8e98784672351c2bb633c70e57f2bb60c6e3db8",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "fe4f776d30f38bac95d08e43d0062cc9d1ca8c94fde92febe332964327168a2c",
+          "statementSha256": "8d994fa3bfde8f2a5b801a11f15b690c6f4644a4e14fbfa07d651660e8b4bb1e",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "5ce6ce44345f8fc8089ecb49469fc96475bf9b2556e12af40e3662774cc151d8",
+          "statementSha256": "8f07c7df2d87e0216c79a9511ed5b1d2ed0973b208d2098c50c422b81bca9398",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "179fdfc9cf8ab80dd8ea3e21f09fdcd6793490d8ccc1806eb33fd53733c5975b",
+          "statementSha256": "a70410fedd2173225afbb32d47a1e24e79c5a34dbe8b53842f9389722afebc1d",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "d87f0c1ceeed1f87413d54558db893457f53ecea57c17e2b78d43a9572077816",
+          "statementSha256": "f3a31e03cbf1af8f8639b4c9a7cf62b8e57185a4c079cd02c7ee9beb63592d8a",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "e07320d4fd79926238d648930807a4f8ae8dcbfab80d06d37c48845f1b9288b4",
+          "statementSha256": "b1f3167aa4ea14cf0d715d363e605d117020d32e7ef34d3adca2890c7cbe7e8c",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "1815c46cba46afc93c69f6bf143c710c88c4f7cca6b317b78b4c60da15bda74e",
+          "statementSha256": "d40e7200f3f4c3371fb44d8a267121dcd96571c6bf609d7111d5472e4635bb73",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "3998e6c1cf0a70fe9a96ab219ed09d8cba689a197e5d59c28a951e3771bf298b",
+          "statementSha256": "1bd0bf93d1c8ed8ef70bf9c8942175a3c84b91262f9720c805f1f726faa19266",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "49b164ad6a33dc01926f4107c2771de769046877ef75569cd65bbcb7aa103d5d",
+          "statementSha256": "8ed274dc6ba90c25ae2d4222e3128bb055116244f0a8ce733b53779d44d8b4b3",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "7b7ecd759cc7372a4a386c5f0d2f7c2e17696989f07c10c0c611153aa2dd0ea3",
+          "statementSha256": "6e0f1dd4bfe30f9852f6f477208c0a937d0c19fef4a65058b4051b64092e4f0d",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "d55e0996c895a6b2bef0e75be52e321384d7aca94e9ee442343d5508633bd84d",
+          "statementSha256": "15fa2715b760641d324646c20e6ddbd2b229d6df79e889d91150b4450861405c",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "27d6e8a4d0d61fb3c484eefbf3605f2fe22b99766537444f1834328a9b158f11",
+          "statementSha256": "642bf3d26a4da2d668f1b997d5ec8e0919822bd3d7753c7d21e296707bdc4ed6",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "e9139a0e5cac7b73340c5ec756ecefed7eafa8522f1b5e7b2668cbd2fc30e53b",
+          "statementSha256": "037977f392869018943f1c1fc90f4920f58762b0e485a732d53db28e7e15a061",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "37446a95d7f73686a09b9498b2a66f16b9f3bc05cd621689f7ccef237ce59240",
+          "statementSha256": "0aee3fb3151053dee9e85d89c561884ff02ad4981884c406726474b7c880ce3a",
+          "bodySha256": "ba1f564bce8cc6625d996c52107944f9d2d93172dd62689daf527b9e5095853f",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "c0af4cea175ca6050d7d2189dbd468931d4af5978002a910178292be8d4ea333",
+          "statementSha256": "0a901b7191d4e103f30eee45774ce7ee47b1e02d4bee66f6e1bff9e35c21164a",
+          "bodySha256": "565346b6012890a17a208af83f316a2d6f282ea330be8ec8b61d2878388cecce",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "a117d6f910f0fc379e4a11f6dd6da9d107d06c4125f6b6576a2dd5c31bbdc7f6",
+          "statementSha256": "ece7edb42eb898a81167555383867c41d0ba83ec963d4523a80b615373623619",
+          "bodySha256": "565346b6012890a17a208af83f316a2d6f282ea330be8ec8b61d2878388cecce",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "533be0abf365afa2ea958ced7bf77af9bd04ae496ed5bbaabe8b71e61ab713c7",
+          "statementSha256": "6e5dfa7a873e5ff0c46e2ab1d8e66bd242b55ff3cb6a327fb231360b3b2dae12",
+          "bodySha256": "565346b6012890a17a208af83f316a2d6f282ea330be8ec8b61d2878388cecce",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        },
+        {
+          "signature": "outer:supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "keySha256": "da90862bf34b4b879012bbacc8e98784672351c2bb633c70e57f2bb60c6e3db8",
+          "statementSha256": "db0294f38e6d958c02e751a4854651d5c36a9d7e16f2e96c83e9d7e50b829398",
+          "bodySha256": "565346b6012890a17a208af83f316a2d6f282ea330be8ec8b61d2878388cecce",
+          "count": 1,
+          "reviewKind": "PINNED_LITERAL_REGISTRY_ACL_CLOSURE"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/04_final_acl.sqlinc",
+      "sha256": "a092da99c35e7e42989155e6a08b7a42694105212c2bdb785d6ab6aa157bdac8",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "a09c6324860e00e8b14335720c74fd1f20d95900222097b70f94fa69f985741f",
+          "count": 1
+        },
+        {
+          "keySha256": "daa6d57dcb096c721acf82bc3b4901a879913000317efcf9960ba4142b527d5f",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "outer:supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/04_final_acl.sqlinc",
+          "keySha256": "a09c6324860e00e8b14335720c74fd1f20d95900222097b70f94fa69f985741f",
+          "statementSha256": "6bebb536f0e06936d9f3bb7c57e9c6c185719252e7f630af0108b574dd905920",
+          "bodySha256": "a6455e373908a48d6e3c66dab688096b7cb7455050b42cf70650c7eb0e861ead",
+          "count": 1,
+          "reviewKind": "CLOSED_LITERAL_OWNER_ONLY_ACL_REGISTRY"
+        },
+        {
+          "signature": "outer:supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/04_final_acl.sqlinc",
+          "keySha256": "daa6d57dcb096c721acf82bc3b4901a879913000317efcf9960ba4142b527d5f",
+          "statementSha256": "e53114fffcde103e4b6464b42ab8bbd89919979edc10c4d179b33d43f335cdd4",
+          "bodySha256": "a6455e373908a48d6e3c66dab688096b7cb7455050b42cf70650c7eb0e861ead",
+          "count": 1,
+          "reviewKind": "CLOSED_LITERAL_OWNER_ONLY_ACL_REGISTRY"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sha256": "a8c57548c911fb11140be3b3d2256aba876995fb196396850b6fe38e2f0797f4",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "d79a089c20632130cd6cada6f1ab656293593e9d5dad614d3d29cbf0b31a21f2",
+          "count": 1
+        },
+        {
+          "keySha256": "dc0c503beb8a33849f62f2694be9ef96aa298c89a52b187e5d7865eca4ad32a5",
+          "count": 1
+        },
+        {
+          "keySha256": "4c9ff5c9f8b1eb03c1a0277f4ba5f7579e6dc42fb5d315e37f88a5098c97ba2a",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+          "keySha256": "d79a089c20632130cd6cada6f1ab656293593e9d5dad614d3d29cbf0b31a21f2",
+          "statementSha256": "c49175d01359b3b966222bcebe8a6cc99f834f2309bd60137ef75f33f573a544",
+          "bodySha256": "ec83cffa2199324a20beea31ac7230edf26c3fc1fcc656459af3358d599429cb",
+          "count": 1,
+          "reviewKind": "CONSTANT_NATIVE_CREDIT_CTE_EXECUTION_IN_JOINED_OWNER"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "sha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "40eaca3be8f71b845e29a7e374c449ef99b4eeb20f246ddfcb7c824d54bb259e",
+          "count": 1
+        },
+        {
+          "keySha256": "4ce2cc9e266231186323168a22d83b3cc8c4372304485161ed7b04a1ee920efe",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+          "keySha256": "40eaca3be8f71b845e29a7e374c449ef99b4eeb20f246ddfcb7c824d54bb259e",
+          "statementSha256": "e646159201e4f3914daf8081732c26c22214a5a7c4d3f1d5274a912e12b42848",
+          "bodySha256": "6217908cb29d9edd13b79c6f2cd9a57417c081b55a8cf960c0bcf84661ccd268",
+          "count": 1,
+          "reviewKind": "LITERAL_EFFECT_CALL_IN_EXACT_JOINED_WORKFLOW_OWNER"
+        }
+      ]
+    },
+    {
+      "path": "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+      "sha256": "d7affa8fd21d5c24c3efe4b302a3caea7d847743fb7c6d1a277837e0ed358b9c",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "ce6535509ae8a363926d92d2b251107cc803fea5b6950bf0c10a9686fdb0713e",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "pg_temp.f1_refuses(text,text)",
+          "keySha256": "ce6535509ae8a363926d92d2b251107cc803fea5b6950bf0c10a9686fdb0713e",
+          "statementSha256": "b7f94bc9673e204f4bee8eaa092fe12ae27ded54b571b17be223c1c45615c254",
+          "bodySha256": "48a141a104d22f5cbff46cb845a36c69b053c28240334ada71c87d12f20c1cc9",
+          "count": 1,
+          "reviewKind": "TEMP_REFUSAL_FIXTURE_EXECUTOR"
+        }
+      ]
+    },
+    {
+      "path": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "sha256": "f59d1d21587dfa604d95a97b2bb2f2d7af2642feb55c267686ab1bb9b948c3b1",
+      "rawDynamicKeys": [
+        {
+          "keySha256": "ef985843a0fd312e27b60d49388c67cc636f1a56f1bdd8efeb0158640ad06223",
+          "count": 1
+        }
+      ],
+      "points": [
+        {
+          "signature": "pg_temp.f5_refuses(text,text)",
+          "keySha256": "ef985843a0fd312e27b60d49388c67cc636f1a56f1bdd8efeb0158640ad06223",
+          "statementSha256": "91fd36ce8c08d32a87df7101f62bb9a3fcbf1182461e1b8c7d9af24c20edc0d2",
+          "bodySha256": "ac5ba8187854ce8c7adbf661522a6b1c5e70e49b5d8aeb07405cedb076225320",
+          "count": 1,
+          "reviewKind": "TEMP_REFUSAL_FIXTURE_EXECUTOR"
+        }
+      ]
+    }
+  ]
+}

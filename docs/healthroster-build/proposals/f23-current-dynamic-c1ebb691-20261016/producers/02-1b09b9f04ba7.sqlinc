@@ -1,0 +1,11 @@
+do $report_rls$
+declare v_name text;
+begin
+  foreach v_name in array array['weekly_source_self_bill_reports','weekly_source_self_bill_report_line_bindings'] loop
+    execute pg_catalog.format('alter table public.%I enable row level security',v_name);
+    execute pg_catalog.format('alter table public.%I force row level security',v_name);
+    execute pg_catalog.format('revoke all on table public.%I from public,anon,authenticated,service_role',v_name);
+    execute pg_catalog.format('create policy cloudtms_miget_service_owner_all on public.%I for all to %I,service_role using (true) with check (true)',v_name,current_user);
+  end loop;
+end;
+$report_rls$;

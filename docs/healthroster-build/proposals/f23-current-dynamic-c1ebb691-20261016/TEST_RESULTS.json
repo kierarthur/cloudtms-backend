@@ -1,0 +1,100 @@
+{
+  "version": "HEALTHROSTER_DYNAMIC_PROPOSAL_TEST_RESULTS_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "sourceCommit": "c1ebb691feb6a11324060e0c28210e2bd735624a",
+  "helperSha256": "c34ae4b2c0596577cb93664ee84a61c86f2ff35323baab27e8e9210348d5fd41",
+  "classificationSha256": "6f66d839660fff83046838763cf111d79ac41ce6f0834d32f62f16c4634777da",
+  "tests": [
+    {
+      "name": "all95 finite points across complete files, preserved unrelated baseline",
+      "status": "PASS"
+    },
+    {
+      "name": "unknown file and same signature cannot borrow approval",
+      "status": "PASS"
+    },
+    {
+      "name": "caller-controlled identifier substituted for literal registry is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "unquoted caller target concatenated into real Candidate effect is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "changed financial write target is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "changed fixed effect callee is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "removed current-source claim admission is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "Candidate auth removal outside EXECUTE is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "extra effect appended to an otherwise exact file is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "unknown dynamic key in exact file stays refused",
+      "status": "PASS"
+    },
+    {
+      "name": "duplicate occurrence is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "edited masked body with original source and key is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "ambiguous enclosing body is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "unclassified enclosing producer is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "all three1430 points remain outside proposal allowance",
+      "status": "PASS"
+    },
+    {
+      "name": "capability0400 native census gap remains outside allowance",
+      "status": "PASS"
+    },
+    {
+      "name": "three inherited baseline keys gain no new approval",
+      "status": "PASS"
+    },
+    {
+      "name": "callee dependency edit is refused in reused process, exact restore recovers",
+      "status": "PASS"
+    },
+    {
+      "name": "approval tampering is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "evidence tampering is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "offline AST tampering is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "rollback fixture arbitrary-text executor cannot move to runtime path",
+      "status": "PASS"
+    }
+  ],
+  "passed": 22,
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}

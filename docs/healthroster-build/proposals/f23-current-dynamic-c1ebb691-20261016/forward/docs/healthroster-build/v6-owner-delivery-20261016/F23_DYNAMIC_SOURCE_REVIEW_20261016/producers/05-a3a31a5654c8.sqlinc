@@ -1,0 +1,9 @@
+do $block$
+declare constraint_name text; price_att smallint;
+begin
+  select attnum into strict price_att from pg_catalog.pg_attribute where attrelid='public.weekly_source_invoice_presentation_lines'::regclass and attname='price_check_result' and not attisdropped;
+  select conname into strict constraint_name from pg_catalog.pg_constraint where conrelid='public.weekly_source_invoice_presentation_lines'::regclass and contype='c'
+    and conkey=array[price_att]::smallint[] and pg_catalog.pg_get_constraintdef(oid) like '%NOT_APPLICABLE%';
+  execute format('alter table public.weekly_source_invoice_presentation_lines drop constraint %I',constraint_name);
+end;
+$block$;

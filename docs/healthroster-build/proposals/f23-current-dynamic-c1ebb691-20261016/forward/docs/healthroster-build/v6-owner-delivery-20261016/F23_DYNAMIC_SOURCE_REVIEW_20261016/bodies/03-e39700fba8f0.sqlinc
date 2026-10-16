@@ -1,0 +1,8 @@
+declare c record;
+begin
+  for c in select conname from pg_catalog.pg_constraint where conrelid='public.weekly_source_charge_checks'::regclass and contype='c'
+    and (pg_catalog.pg_get_constraintdef(oid) like '%comparison_profile_version%'
+      or pg_catalog.pg_get_constraintdef(oid) like '%comparison_result%'
+      or pg_catalog.pg_get_constraintdef(oid) like '%row_sign_kind%')
+  loop execute format('alter table public.weekly_source_charge_checks drop constraint %I',c.conname); end loop;
+end;

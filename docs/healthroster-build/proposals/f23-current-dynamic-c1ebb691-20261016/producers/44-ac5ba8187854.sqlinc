@@ -1,0 +1,4 @@
+create function pg_temp.f5_refuses(p_sql text,p_code text) returns void language plpgsql as $f$
+begin begin execute p_sql; exception when others then if sqlerrm=p_code then return; end if;
+raise exception 'F5_WRONG_REFUSAL: expected %, received %',p_code,sqlerrm; end;
+raise exception 'F5_REFUSAL_MISSING: %',p_code; end; $f$;

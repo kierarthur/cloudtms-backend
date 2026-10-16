@@ -1,0 +1,21 @@
+do $security$
+declare v_table text; v_owner text:=current_user;
+begin
+  foreach v_table in array array['weekly_source_rule_sets','weekly_source_rule_set_versions','weekly_source_group_rule_assignments'] loop
+    execute format('alter table public.%I enable row level security',v_table);
+    execute format('alter table public.%I force row level security',v_table);
+    execute format('create policy cloudtms_miget_service_owner_all on public.%I for all to %I,service_role using (true) with check (true)',v_table,v_owner);
+    execute format('revoke all on table public.%I from public,anon,authenticated,service_role',v_table);
+    if not exists(select 1 from pg_catalog.pg_policy p join pg_catalog.pg_class c on c.oid=p.polrelid
+      join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+      where n.nspname='public' and c.relname=v_table and c.relrowsecurity and c.relforcerowsecurity
+        and p.polname='cloudtms_miget_service_owner_all' and p.polcmd='*'
+        and (select oid from pg_catalog.pg_roles where rolname=v_owner)=any(p.polroles)
+        and (select oid from pg_catalog.pg_roles where rolname='service_role')=any(p.polroles)
+        and pg_catalog.pg_get_expr(p.polqual,p.polrelid)='true'
+        and pg_catalog.pg_get_expr(p.polwithcheck,p.polrelid)='true') then
+      raise exception 'WEEKLY_SOURCE_RULE_SET_RLS_POLICY_MISSING';
+    end if;
+  end loop;
+end;
+$security$;
