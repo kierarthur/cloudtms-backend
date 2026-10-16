@@ -6308,5 +6308,109 @@
       "record": "docs/healthroster-build/v6-owner-delivery-20261016/MANUAL_ENQUIRY_WORKER_COMPONENT_SOURCE.json",
       "requestProducerCommit": "7161b1732fb682f78f9387e8ed9c9fe89c4e59f5"
     }
+  },
+  "source_contact_producer_continuation_20261016": {
+    "sourceCommit": "91dff912f96d8e8546c9b9347c049bbeac8e3ed6",
+    "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
+    "publishedRecords": [
+      {
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/READ_SOURCE_CHECKPOINT.json",
+        "sha256": "04ca6869a289c900d65a17dc91066e040ad2971618c30eb8765193bc730a5449"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/REGISTER_DELTA_WIP.json",
+        "sha256": "a076739944e4d4ee35a4b1eebfec4f24ab410310be90d526d3001786830db618"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/WIP_SUCCESSOR_RECEIPT.json",
+        "sha256": "a0162f5ebce38e579fa94528ce84101a1a77b7db74ea39c110d7191595f0e4a9"
+      }
+    ],
+    "additionalProposedTables": [
+      {
+        "table_name": "weekly_contact_checking_scope_versions",
+        "record_class": "STATEFUL_SERVER_OWNED",
+        "immutable_row_trigger": null,
+        "truncate_trigger": "weekly_contact_checking_scope_versions_no_truncate"
+      },
+      {
+        "table_name": "weekly_contact_manual_acceptances",
+        "record_class": "IMMUTABLE_APPEND_ONLY",
+        "immutable_row_trigger": "weekly_contact_manual_acceptances_immutable",
+        "truncate_trigger": "weekly_contact_manual_acceptances_no_truncate"
+      },
+      {
+        "table_name": "weekly_contact_manual_reviews",
+        "record_class": "IMMUTABLE_APPEND_ONLY",
+        "immutable_row_trigger": "weekly_contact_manual_reviews_immutable",
+        "truncate_trigger": "weekly_contact_manual_reviews_no_truncate"
+      },
+      {
+        "table_name": "weekly_contact_recheck_progress",
+        "record_class": "STATEFUL_SERVER_OWNED",
+        "immutable_row_trigger": null,
+        "truncate_trigger": "weekly_contact_recheck_progress_no_truncate"
+      },
+      {
+        "table_name": "weekly_contact_recheck_steps",
+        "record_class": "IMMUTABLE_APPEND_ONLY",
+        "immutable_row_trigger": "weekly_contact_recheck_steps_immutable",
+        "truncate_trigger": "weekly_contact_recheck_steps_no_truncate"
+      },
+      {
+        "table_name": "weekly_contact_source_due_event_rebases",
+        "record_class": "IMMUTABLE_APPEND_ONLY",
+        "immutable_row_trigger": "weekly_contact_source_due_event_rebases_immutable",
+        "truncate_trigger": "weekly_contact_source_due_event_rebases_no_truncate"
+      },
+      {
+        "table_name": "weekly_contact_source_intent_capture_members",
+        "record_class": "IMMUTABLE_APPEND_ONLY",
+        "immutable_row_trigger": "weekly_contact_source_intent_capture_members_immutable",
+        "truncate_trigger": "weekly_contact_source_intent_capture_members_no_truncate"
+      },
+      {
+        "table_name": "weekly_contact_source_intent_captures",
+        "record_class": "IMMUTABLE_APPEND_ONLY",
+        "immutable_row_trigger": "weekly_contact_source_intent_captures_immutable",
+        "truncate_trigger": "weekly_contact_source_intent_captures_no_truncate"
+      },
+      {
+        "table_name": "weekly_contact_source_ordinal_owners",
+        "record_class": "STATEFUL_SERVER_OWNED",
+        "immutable_row_trigger": null,
+        "truncate_trigger": "weekly_contact_source_ordinal_owners_no_truncate"
+      }
+    ],
+    "proposedFunctionCount": 59,
+    "readSourceBodies": [
+      {
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/14_manager_action_current_witness.sqlinc",
+        "sha256": "32971df052f0c419e83d8d52774e2226941e65820bcfc8ae8408025067339bd7"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/15_configured_manual_step.sqlinc",
+        "sha256": "6b948fb1c22f20bc5b216016c1ff82393a08d4dad6f75e7a8824a0eba196e49d"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/16_recheck_native_progress.sqlinc",
+        "sha256": "4d2050c471d615631c7cbb1064ccdcce631a58bd7cb1e099124803a663126ff9"
+      },
+      {
+        "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/17_common_recheck_consumer.sqlinc",
+        "sha256": "2f7d4adf9f6f7c460bbc2cf142b31d2eb1fe913c46ccb0e85d3166cbfbeccdf3"
+      }
+    ],
+    "currentFrozenWorkerContract": "7161b1732fb682f78f9387e8ed9c9fe89c4e59f5",
+    "rootMountRequirements": [
+      "Update sole central table/record_class literal contracts and independent verifier literal set/count together",
+      "Add actual private and final-definer metadata/signatures/ACL inventory from exact final reviewed source",
+      "Preserve original92 approved plan items; this is an additive current contact implementation delta only",
+      "No shared root/Office/Bank edit is made by this lane"
+    ],
+    "original92ObjectsPreserved": true,
+    "centralTableAclFinalDefinerAndIndependentLiteralVerifier": "NOT_UPDATED_FOR_WIP_NOT_MOUNTED",
+    "native": "NOT_RUN",
+    "implementationComplete": false
   }
 }
