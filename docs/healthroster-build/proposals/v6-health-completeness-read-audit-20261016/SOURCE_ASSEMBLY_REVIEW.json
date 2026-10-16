@@ -1,7 +1,7 @@
 {
   "version": "SOURCE_CONTACT_FINITE_ASSEMBLY_READ_AUDIT_V1",
   "qualification": "READ_ONLY_SELECTION_NOT_MOUNTABLE_SQL_NOT_COMPILE_OR_BEHAVIOR_PROOF",
-  "latest_root_observed": "5383434d29d39d994476da36a7c514a7b28690f2",
+  "latest_root_observed": "5623005b91e4bc425e79587a88b1c5cad168d5eb",
   "frozen_native_source_parent": "a934ee1d460b444939234e812babccb90dc3ddff",
   "receipts": [
     {
@@ -21,7 +21,7 @@
     }
   ],
   "selected_counts": {
-    "source": 77,
+    "source": 76,
     "contact": 106,
     "source_pending": 6,
     "mounted_candidate": 55,
@@ -652,20 +652,12 @@
       "saved_disk_equals_frozen_git_object": true,
       "recorded_receipt_sha256": "ae5cbe2f8660103e6bce24eb61c4b604d05c36dddaa267e5686a2c723c9a939e",
       "receipt_sha256_verified": true,
-      "selection": "WHOLE_FILE",
-      "complete_function_names": [
-        "private.bpay_next_protected_owner_route_v1"
-      ],
-      "declarations": [
-        {
-          "signature": "private.bpay_next_protected_owner_route_v1(uuid)",
-          "line": 3,
-          "complete_header": "create or replace function private.bpay_next_protected_owner_route_v1(p_family_id uuid)\nreturns text language plpgsql stable security definer\nset search_path=pg_catalog,private,public\n",
-          "header_sha256": "8c70cd0f6b0000265c657710d35b59289eca9d3fa2c7e40e76de1c61f3f9818a",
-          "complete_function_sha256": "6206497211b5bd7f39b6b509ccb9d270d72008fcabe029e416ee0b91ad330f81",
-          "acl_identity_source": "Exact selected inline revoke or selected final ACL; whitespace-normalized type signature"
-        }
-      ]
+      "selection": "EXCLUDE_BANKING_OWNED_WHOLE_FILE",
+      "complete_function_names": [],
+      "declarations": [],
+      "selected_bytes": 0,
+      "selected_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "held_by": "BANK_OWNER_ROUTE_CONTRIBUTION_REQUIRED"
     },
     {
       "package": "source",
@@ -3688,6 +3680,17 @@
   ],
   "excluded_banking_body": [
     {
+      "function": "private.bpay_next_protected_owner_route_v1(uuid)",
+      "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/18_current_native_owner_route.sqlinc",
+      "commit": "d863577918ce7d439206296e91ad78de298e98b2",
+      "excluded_byte_start": 0,
+      "excluded_suffix_sha256": "ae5cbe2f8660103e6bce24eb61c4b604d05c36dddaa267e5686a2c723c9a939e",
+      "excluded_complete_function_sha256": "6206497211b5bd7f39b6b509ccb9d270d72008fcabe029e416ee0b91ad330f81",
+      "reason": "Banking-owned owner-route full body and owner/ACL are outside Health scope",
+      "required_contribution": "Genuine Bank-owned route discriminator delegates to exact Health weekly_source_pay_decision_family_native_route_v1(uuid,uuid) for Source-composed current generations while preserving its complete ordinary native authority",
+      "native_effects": "NOT_RUN"
+    },
+    {
       "function": "private.bpay_next_source_receipt_publish_v1()",
       "path": "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/19_exact_local_head_capture.sqlinc",
       "commit": "d863577918ce7d439206296e91ad78de298e98b2",
@@ -3704,7 +3707,6 @@
     ],
     "private.bpay_next_protected_source_receipt": [
       "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/16_native_next_implementation.sqlinc",
-      "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/forward/18_current_native_owner_route.sqlinc",
       "docs/healthroster-build/proposals/source-pay-decision-v5-foundation-20261015/native-entry/weekly_exceptional_pay_next_publication_status_v1.sqlinc"
     ],
     "private.bpay_next_source_pay_decision_cut": [
@@ -4135,6 +4137,6 @@
     "only_allowed_semantic_delta": "Replace this single SHA field, preserving all functions/ACL bytes and every other recipe field",
     "state": "PROPOSED_REVIEWED_ONE_FIELD_CORRECTION_ONLY_NOT_APPLIED_BY_THIS_AUDIT"
   },
-  "declaration_count_note": "Contact has 107 CREATE declarations /106 unique signatures: its creation-time immutable trigger helper is byte-identically repeated in forward01. Source77 + Contact107 + pending6 gives190 CREATE declarations /189 per-package unique signatures; pending2 deliberately supersede Source2.",
-  "selected_counts_metric": "Unique qualified function names; exact signature/header/body hashes are per-file declarations. Mounted Invoice has94 declarations /93 qualified names because of an overload."
+  "declaration_count_note": "Of115 frozen input records,114 carry Health selections and forward18 is wholly excluded. Contact has107 CREATE declarations/106 unique signatures: creation-time immutable trigger helper is byte-identically repeated in forward01. Source76 + Contact107 + pending6 gives189 selected CREATE declarations/188 per-package unique signatures; pending2 deliberately supersede Source2, leaving186 effective unique signatures.",
+  "selected_counts_metric": "Unique qualified function names in Health selection; forward18 and forward19 Bank bodies excluded. Exact signature/header/body hashes are per-file selected declarations. Mounted Invoice has94 declarations/93 qualified names because of an overload."
 }

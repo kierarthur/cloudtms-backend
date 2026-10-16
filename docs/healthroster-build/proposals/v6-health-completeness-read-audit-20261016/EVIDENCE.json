@@ -2,7 +2,7 @@
   "version": "HEALTH_V6_COMPLETENESS_READ_AUDIT_V1",
   "qualification": "READ_ONLY_SOURCE_COMPLETENESS_NOT_PART_B_NOT_NATIVE_ACCEPTANCE",
   "initial_i2_commit": "77c629dba2efe39fa0e676e551e12bf5cf442664",
-  "latest_i2_observed": "5383434d29d39d994476da36a7c514a7b28690f2",
+  "latest_i2_observed": "5623005b91e4bc425e79587a88b1c5cad168d5eb",
   "office_commit": "db25784674882a4b1c3b0ca3530cee1db2399260",
   "mytms_commit": "a7a1526e697cec792db4123a5b0aa1b1deee9303",
   "reviewed_pack_content": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
@@ -35,10 +35,10 @@
   ],
   "integration_updates": {
     "invoice": "e246 source-mounted while audit ran; no native/release qualification",
-    "candidate": "f566 full55 plus genuine nullable native-pending migration mounted5383434d; native NOT_RUN",
+    "candidate": "f566 full55 plus genuine nullable native-pending migration mounted5383434d;10 Worker contributions mounted5623005b with312existing/76selected-payload checks PASS; native/API/phone NOT_RUN",
     "source_pending": "e8cc reviewed source plus Report1808 full duty successor awaiting root",
     "contact": "e466 full continuation published WIP awaiting full root/native review; existing strict controllers not parent-mounted",
-    "source_native": "d863 full52 inputs/78 declarations unmounted;77 complete Health functions selected after excluding embedded Bank receipt-hook body; existing25 Worker files/351 source tests do not replace SQL"
+    "source_native": "d863 full52 inputs/78 declarations unmounted;76 complete Health functions selected after excluding Bank forward18 and forward19 receipt-hook suffix; existing25 Worker files/351 source tests do not replace SQL"
   },
   "banking_boundary": {
     "read_source_or_checklist": false,
@@ -124,7 +124,7 @@
       "sha256": "d54278e9d763fa6a9a5d9c7d34a4eccaa553db92bccf6353894a104107e0023b"
     }
   ],
-  "audit_sha256": "5968e847126b00ad2dc33a3706a44b3ddcc43f90965bb57dea4b9fb4ae647b89",
+  "audit_sha256": "759d10a5aaeb7e61cb1f63efb04086623a2e88ecfcdb61b317114cabd2266be2",
   "effects": {
     "database_connections": 0,
     "application_source_edits": 0,
@@ -137,11 +137,24 @@
   "assembly_supplement": {
     "markdown": "SOURCE_ASSEMBLY_REVIEW.md",
     "json": "SOURCE_ASSEMBLY_REVIEW.json",
-    "json_sha256": "7a82f40abf75b94079247c98060989c5c0e5cd117fce8449f92e80d6382cdcc9",
-    "markdown_sha256": "b4de381b0fdb67ac1ec1c28fbcc4535bf79b4a5dedcbe2a42d28841f3dd62e7e",
+    "json_sha256": "76d9c6eccae0882d509baab2db619f6c50f258b7102c42dbc8c565751e94982d",
+    "markdown_sha256": "52cee66a324a05a3e2d5e47b8cc2fad64343527c2e5fda2f7d7ce8e8c8f08dbc",
     "frozen_inputs_verified": 115,
     "contact_recipe_stale_hashes": 1,
-    "banking_body_excluded": "private.bpay_next_source_receipt_publish_v1() and owner/ACL/trigger suffix of d863 forward19",
+    "banking_body_excluded": "private.bpay_next_protected_owner_route_v1(uuid) in d863 forward18 and private.bpay_next_source_receipt_publish_v1()/owner/ACL/trigger suffix of forward19",
     "scope": "Read-only audit evidence; no product or source-receipt correction authored"
+  },
+  "assembly_read_checks": {
+    "state": "PASS",
+    "frozen_inputs_exact": 115,
+    "bank_bodies_excluded": 2,
+    "selected_health_source_functions": 76,
+    "bounded_acl_recipe_hash_corrections_proposed_not_applied": 1,
+    "creation_bank_fks": 7,
+    "creation_bank_row_types": 5,
+    "sql_language_definitions_enumerated": 17,
+    "unintended_function_name_intersections": 0,
+    "intentional_pending_successors": 2,
+    "native_compile_execution_acl_concurrency_api": "NOT_RUN"
   }
 }
