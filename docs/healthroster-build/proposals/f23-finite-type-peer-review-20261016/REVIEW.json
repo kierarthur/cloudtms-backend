@@ -1,0 +1,140 @@
+{
+  "version": "HEALTHROSTER_FINITE_F23_INTERIM_PEER_REVIEW_V1",
+  "status": "INTERIM_SOURCE_PEER_REVIEW_NO_BLOCKING_FINDING",
+  "reviewedCommit": "24a2cabb9aaf31b91f8b9c671ba4a8dda3f9605f",
+  "reviewedCommits": [
+    "ef5468b5288e2d4ffef61edb20b703583fe2b66c",
+    "c29b4a6b7cfaf60deb888a740c3015a77aedc3b0",
+    "24a2cabb9aaf31b91f8b9c671ba4a8dda3f9605f"
+  ],
+  "rootWorktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "reportSourceParent": "f5668bf45854ca36b47e713c0e8f3dd3ae4b852b",
+  "authorLane": "Health physical/Candidate implementation; independently reviewed root finite gate changes",
+  "finalPartBCritic": false,
+  "blockingSourceFindings": [],
+  "inputFiles": [
+    {
+      "path": "scripts/healthroster-rowtype-type-review.mjs",
+      "sha256": "fe380ca1c44803f8dad5b04aa0779e025cbdd8ff4c7104356835e5be739496e3"
+    },
+    {
+      "path": "scripts/healthroster-uuid-cardinality-review.mjs",
+      "sha256": "8630b73db11b949906bc261175a4d0efda19de838d8a3f65d62296968fd4c6aa"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "29b3944cdad627b2b3ae0e380caa8b95034e6eb43d2fd829f2d323951e6f1dec"
+    },
+    {
+      "path": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "path": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "path": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    },
+    {
+      "path": "tests/healthroster-rowtype-type-review.test.mjs",
+      "sha256": "2d5db93a148598444adf52aeb9c3732a2016ee2fed9f26556d09a5fa61fdae81"
+    },
+    {
+      "path": "tests/healthroster-uuid-cardinality-review.test.mjs",
+      "sha256": "f14866d187df985e053c80688b42f3e7b7e349a9d22bf30ea4da5cf8bce1a0b0"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+      "sha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_CLASSIFICATION_INTEGRATION.json",
+      "sha256": "8b1971ee8b18fa6d0f6a61c344a9a050fe6e4905f8ffe10c09c12b02bb8a0abd"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/UUID_CARDINALITY_CLASSIFICATION.json",
+      "sha256": "4d7bd39d0d2669cb07a332e57f371b7d3b7e1ba4cbe9c189d8432b247f766aec"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/UUID_CARDINALITY_CLASSIFICATION_INTEGRATION.json",
+      "sha256": "760e54bbdec17b762e57a08f3c0afdced0901e07be9fe48cc9b7169fc372e149"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json",
+      "sha256": "22f8ade4e2dd6bde62e559c6b75f363e71f04935540e012c3a05d2a44008c4da"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.md",
+      "sha256": "c110eb47dcdaf71fc7ea193d0be4cd450bcee85196fb21fb5199ddf043303cab"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_PRESENTATION_CARDINALITY_CORRECTION.json",
+      "sha256": "b9f5a359c88618bfaa8e3ed93318c5a68984e3840a95b17add13302666e9e298"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "path": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+      "sha256": "304c56dcd2015e4dab934f2e20d3d9616a038c460d8145132a9e5cd18dd26063"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+      "sha256": "6b3a87eb80d738755eeb92b21e92f52d65685ae7c1a3abfbb2f670b47396ebbb"
+    }
+  ],
+  "reviewedCensus": {
+    "tupleFiles": 151,
+    "tupleOccurrences": 1204,
+    "tupleDistinctFileKeys": 1178,
+    "independentPg17AstPass": 1204,
+    "nativeRelations": 91,
+    "controlPrefixesBeforeActualSelect": 19,
+    "uuidFiles": 19,
+    "uuidStatementKeys": 21,
+    "directUuidExpressions": 23,
+    "uuidGuardWitnesses": 46,
+    "originalSafeUuidDiagnostics": 17,
+    "correctedUuidDiagnostics": 2,
+    "focusedSourceTests": 46
+  },
+  "qualifications": {
+    "sourcePeerReview": "PASS_FINITE_SCOPE_ONLY",
+    "native": "NOT_RUN",
+    "fullF23": "HELD_REMAINING_DYNAMIC_AND_AGGREGATE_REVIEW",
+    "finalPartB": "NOT_A_FINAL_CRITIC",
+    "catalogueTypeBinding": "NOT_PROVED",
+    "effectsAclAndApi": "NOT_PROVED",
+    "lifecycleAndConcurrency": "NOT_PROVED",
+    "fullRehearsal": "NOT_RUN",
+    "install2": "NOT_INSTALLED"
+  },
+  "effects": {
+    "databaseCalls": false,
+    "heldLock": false,
+    "newInfrastructure": false,
+    "networkCallsForReview": false,
+    "rootEdits": false,
+    "productEdits": false,
+    "bankingEdits": false,
+    "candidateFrozenPayloadEdits": false
+  },
+  "notes": [
+    "Whole normalized source pins transitively fix every tuple/UUID reviewed path and key; no generic source/type/authority waiver.",
+    "F23_UUID_CARDINALITY_REVIEW is the preserved pre-correction finding. The separately pinned correction record supplies both exact after owners; it is not silently rewritten.",
+    "ROWTYPE_CLASSIFICATION_INTEGRATION preserves the original85a1 review pin and explicitly records the5b5a correction continuation.",
+    "Offline PG17 pglast7.20 grammar/AST proof is not database execution.",
+    "Original inline read-only AST recheck initially parsed complete diagnostic keys and found19 PLpgSQL control-prefix grammar errors; correctly extracting the actual SELECT before INTO passed all1204. This was checker interpretation, not a product-source change."
+  ]
+}

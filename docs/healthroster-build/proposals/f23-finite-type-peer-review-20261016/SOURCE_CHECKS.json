@@ -1,0 +1,29 @@
+{
+  "status": "PASS_SOURCE_ONLY",
+  "reviewedCommit": "24a2cabb9aaf31b91f8b9c671ba4a8dda3f9605f",
+  "tupleFiles": 151,
+  "tupleOccurrences": 1204,
+  "tupleDistinctFileKeys": 1178,
+  "pg17AstPass": 1204,
+  "nativeRelations": 91,
+  "controlPrefixes": 19,
+  "uuidFiles": 19,
+  "uuidKeys": 21,
+  "uuidGuardWitnesses": 46,
+  "exactInvoiceGuardInsertions": 2,
+  "focusedTests": 46,
+  "native": "NOT_RUN",
+  "fullF23": "HELD_REMAINING_DYNAMIC_AND_AGGREGATE_REVIEW",
+  "finalPartBCritic": false,
+  "databaseOrNetworkOperations": false,
+  "command": [
+    "python",
+    "docs\\healthroster-build\\proposals\\f23-finite-type-peer-review-20261016\\verify-source.py",
+    "--root",
+    "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "--parser-path",
+    "C:/tmp/healthroster-v6-physical-parser"
+  ],
+  "verifierSha256": "37b647350e589f49c697488daa6f0845ffb3f65fa7bb81859a416977ec71cc10",
+  "reviewSha256": "e7e9c6c72cdc7367cf079d9a0832d89cd19028d00f0904529a32530d0da60336"
+}
