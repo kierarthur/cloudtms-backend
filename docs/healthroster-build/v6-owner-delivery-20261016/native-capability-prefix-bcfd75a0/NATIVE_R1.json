@@ -1,0 +1,54 @@
+{
+  "version": "HEALTH_TARGETED_NATIVE_ROLLBACK_RECEIPT_V1",
+  "sourceRawResultSha256": "85be9a0b2cbe7768cae587ae8c994ecd9336371d3282ee72c66bd56d0bb7366d",
+  "rawResultRetainedOnlyInIgnoredHarness": true,
+  "accepted": false,
+  "databaseTarget": "agency_test",
+  "database": "cloudtms_test_clone",
+  "label": "HR_CAPABILITY_PREFIX_CENSUS_BCFD75A0",
+  "sqlSha256": "878eb907731606f30bf7947e282c74f0a32343a3dacf3a9445cdbae775450da8",
+  "statementCount": 100,
+  "statementResults": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "SET",
+      "rowCount": null,
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "error": {
+        "message": "permission denied to set parameter \"temp_file_limit\"",
+        "code": "42501",
+        "routine": "set_config_with_handle"
+      }
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+  ]
+}
