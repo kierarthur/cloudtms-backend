@@ -1,0 +1,235 @@
+{
+  "version": "HEALTHROSTER_INSTALL2_VERIFIER_BODY_REVIEW_CHECKPOINT_V1",
+  "status": "BODY_REVIEW_PARTIAL_EFFECT_REVIEW_PENDING",
+  "sourceCommitBeforeReceiptCorrection": "fb1103659a79028a1bc2976c72b1b59917fca948",
+  "census": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/INSTALL2_VERIFIER_CALLEE_CENSUS.json.gz",
+    "sha256": "caeed6c40c5fc5f993731319d9b8a93c2c2dc25b549e703bd6aaba4db6298b72",
+    "uncompressedSha256": "4e09c0b367e761b403a3b909473ce2d728b5395261470cbdb7005a3ec92c3f6a",
+    "counts": {
+      "migrations": 407,
+      "repeatables": 1074,
+      "verifiers": 176
+    },
+    "snapshotPrecedesProfileReceiptCorrection": true
+  },
+  "newBodies": [
+    {
+      "index": 158,
+      "file": "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+      "sourceSqlHash": "d7affa8fd21d5c24c3efe4b302a3caea7d847743fb7c6d1a277837e0ed358b9c",
+      "closureHash": "3a4e3679010022ca2d1537f8136abedddc3d6139dd520310d48fb3567be856fd",
+      "bodyRead": true,
+      "assessment": "SCOPED_RULE_FIXTURES_WITH_GENUINE_RELEASE_GATE_BRANCH",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 159,
+      "file": "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+      "sourceSqlHash": "54c23241ecb76bb4d6e7635b1ba4a14eab388557bed450ae561042273737a173",
+      "closureHash": "fa7c0227825a0b01bfd13d58b2ce70807a44f0c7e7b64c96772293c540c529a1",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 160,
+      "file": "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+      "sourceSqlHash": "c71b4bf1ef670c45ca5d7d15dcb3576725d2e5a57889dfedc1d9ec7f17a1a86f",
+      "closureHash": "74324d82fddbe031d5263f76c9a03f03dbaea701804dd31395cd1d3931d9a051",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 161,
+      "file": "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+      "sourceSqlHash": "3677aec9cf1c9ed279788361de8c8b1ab517ff9390295799747c5f5a8fe53325",
+      "closureHash": "0f2ed4c112058c6eaf0df85c6e2ec6454d4cf1604867318c7be2059ba9aca991",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 162,
+      "file": "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+      "sourceSqlHash": "39004cd2046ac92cf3eeb8cdcfbba3f6c0ffc5b1dd21dfe54f8f3c078a390324",
+      "closureHash": "c5ec5ff5802bb10512041b8690ba59c3ee826916963d404f869cdc92b73f08e7",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 163,
+      "file": "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "sourceSqlHash": "0c5d54641108c02201e0206a8aec89cdc74b020ca4eb507e3c713a1b26b9f904",
+      "closureHash": "7e0767ec809ea012731d6ce4249e3485ac4097050f59498136460d2819216f6f",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 164,
+      "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "sourceSqlHash": "f44135e0379b733835591579d02131f270b66a1542f14f71a98b1e7d54b2f531",
+      "closureHash": "c1b38400ee6611cec63ee04368f8a1ba00fd38bb42f29ce8e3b43b1a7d126df3",
+      "bodyRead": true,
+      "assessment": "GATED_POSITIVE_STAGING_FIXTURE_REQUIRES_CORRECTION",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 165,
+      "file": "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+      "sourceSqlHash": "d6b90fb5ffe8d76e48ce06ab89ee4d1b7e32f25b8d2ab8afea23ba76bf6fce32",
+      "closureHash": "ac81207217ce6d327392a5acedf2d6ead6c5094e3205607e4f4f038cb1ad0981",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 166,
+      "file": "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+      "sourceSqlHash": "988b0488a96639080167cdebc8f9a33551066fcc36b222e656c1cb724d28ceca",
+      "closureHash": "970a8aa0e5004b1ff10e0823e7bb12974a6826d4e3e6475f768a65cb87c9db70",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 167,
+      "file": "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+      "sourceSqlHash": "9831b5fb431e8f7078d2b7aad3d898fc68b7b51b3fdac40449299e7aa9e2112b",
+      "closureHash": "8d1f9312849de4a5c79c17bf165ec1cb41d4a0064839bb033cdb51e9a26ac5a8",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 168,
+      "file": "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+      "sourceSqlHash": "becbe5bd4d8c8e182a6ee40939fc0cb4210e1e875904e4cc7e8e4176c9717bc4",
+      "closureHash": "393270229cdbb875ba778ed1837b4a6a385bdc17d9eb2e8f633db5b80625ad4d",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 169,
+      "file": "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql",
+      "sourceSqlHash": "b0fb823e090fe21fcc62e5eee58e1da11b119cfb309ab5b6066d7c55c6ab3ef4",
+      "closureHash": "b696d3f3a68d72c3bed30e99509b7ac5b0e31c433919603324a7f1914b16fa35",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 170,
+      "file": "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+      "sourceSqlHash": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d",
+      "closureHash": "f8ccea0d7ce172e8af1280d578eb6bc4699c53e9db921b67e5885aeffc8a077d",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 171,
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "sourceSqlHash": "7a04174cd9d456ddc5161e8fd024f4ede7e8755a5b142e0ac49ca4c4b5ad14bb",
+      "closureHash": "68420cadb5827e134af3a6e98fd0cfd86890f69e17d7f781ed90e6be93f1a3fe",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 172,
+      "file": "supabase/verification/14102026_0541_healthroster_report_current_native_composition_declarations.sql",
+      "sourceSqlHash": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a",
+      "closureHash": "887fac337f3a68e8de190a83757f5aea6e7f2954a03d9c388a304e7dd03844ea",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 173,
+      "file": "supabase/verification/15102026_0205_healthroster_source_arbiter_kernel_verification.sql",
+      "sourceSqlHash": "cfe19a172aa36e51d7e9f60413ddd959895fc33ca26b4cc51a7943e7177e3da3",
+      "closureHash": "945bab82b16a50e23cb91ec797a4a2343d06c9d5a223dc30512d7779cd5aca5e",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 174,
+      "file": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union_verification.sql",
+      "sourceSqlHash": "9cc884fec3ea8b14197d7af8b2007f1ca91bc7978b0f2ccecffa6dbe20bb5b4c",
+      "closureHash": "edb8f9d9d3e7fce5021972c837a1b56aa5ac242162e61b88c5d824c6df63c500",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    },
+    {
+      "index": 175,
+      "file": "supabase/verification/15102026_0344_healthroster_source_selectors_verification.sql",
+      "sourceSqlHash": "88cd76940fd2f351f3675d969d7c4f4d85e0b1ca1a3ff41ee5f9376b22dec1c1",
+      "closureHash": "a07c9973613d8e838bb6e310a56f15b9ec7a8e33ecb04814f2b7d3e7dacb185e",
+      "bodyRead": true,
+      "assessment": "CATALOGUE_OR_PURE_VECTORS_OR_EARLY_GUARDED_REFUSALS",
+      "effectGraphApproval": false
+    }
+  ],
+  "changedBodies": [
+    {
+      "index": 126,
+      "file": "supabase/verification/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "review": "Fixture policy assertions read; six-profile assertion had a stale five-profile output receipt, corrected to six. Callee and trigger review remains pending."
+    },
+    {
+      "index": 134,
+      "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "review": "Independent set additions/counts and new private owner-only access sweep inspected; complete helper/registry effect audit remains pending."
+    },
+    {
+      "index": 145,
+      "file": "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+      "review": "Exact diff and full seed_head helper read. Deferral is followed by IMMEDIATE validation before returning to DEFERRED. No constraint check removed. Existing verifier effect approval is not inherited."
+    }
+  ],
+  "findings": [
+    {
+      "id": "I2-VERIFIER-F5-CURRENT-AUTHORITY",
+      "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "status": "OWNED_FIX_IN_PROGRESS",
+      "evidence": [
+        "Current managed release invokes verify before its final VERIFIED update in scripts/cloudtms-managed-release.mjs.",
+        "F5 asserts actual latest.status=VERIFIED before its positive stage/hold assertions.",
+        "Actual final feature setter in 14102026_0541/05_complete_current_feature_setup.sqlinc requires a genuine protected_capability_qualification_sha256 for RULE_SET true before the latest release check. The F5 request supplies none."
+      ],
+      "requirement": "Use a genuine reviewed protected setup/qualification path and preserve every original positive staging/hold assertion. Never fabricate VERIFIED/release/qualification rows, relax the feature setter, skip the fixture or claim a native pass.",
+      "native": "NOT_RUN"
+    },
+    {
+      "id": "I2-VERIFIER-PROFILE-RECEIPT",
+      "file": "supabase/verification/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "status": "SOURCE_CORRECTED",
+      "change": "Only result profile_count 5 to 6, matching the existing six-active-profile assertion.",
+      "native": "NOT_RUN"
+    }
+  ],
+  "effectReview": {
+    "changedGraphs": 102,
+    "newCalleeEntries": 394,
+    "complete": false,
+    "notes": "Callee inventory has no new literal network call, but native writes, dynamic SQL, early guards, triggers and qualification/release effects still require complete call-context review. Lexical absence is not execution approval."
+  },
+  "executionApproval": false,
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "rehearsal": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "earlierApprovals": "Original 158-verifier review and 16 exclusions unchanged.",
+  "validation": {
+    "databaseSourceIntegrity": "PASS_407_MIGRATIONS_1074_REPEATABLES",
+    "diffCheck": "PASS",
+    "databaseExecution": "NOT_RUN"
+  }
+}

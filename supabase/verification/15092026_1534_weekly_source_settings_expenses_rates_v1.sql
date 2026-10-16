@@ -118,7 +118,7 @@ rollback;
 select pg_catalog.jsonb_build_object(
   'ok',true,
   'verification','weekly_source_settings_expenses_rates_v1',
-  'profile_count',5,
+  'profile_count',6,
   'roster_c1_source_mode','HEALTHROSTER_WEEKLY',
   'client_specific_banking_mode',false
 ) as result;
