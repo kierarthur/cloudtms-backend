@@ -1,0 +1,10 @@
+{
+  "target": "js/weekly-source/contact-pause-contract.js",
+  "patches": [
+    {
+      "description": "Same strict legacy claim union as Worker",
+      "before": "  for (const item of value.in_flight) {\n",
+      "after": "  for (const item of value.in_flight) {\n    if (item?.kind==='LEGACY_QUERY_CLAIM') {\n      if (!exact(item,['kind','mail_outbox_id','query_delivery_id','claim_identity_sha256','claimed_at_utc','lease_expires_at_utc','status','provider_submission_established','can_auto_resend'])\n        || !uuid(item.mail_outbox_id) || !uuid(item.query_delivery_id)\n        || typeof item.claim_identity_sha256!=='string' || !/^[0-9a-f]{64}$/.test(item.claim_identity_sha256)\n        || (item.claimed_at_utc!==null && !instant(item.claimed_at_utc))\n        || (item.lease_expires_at_utc!==null && !instant(item.lease_expires_at_utc))\n        || item.status!=='CHECKING_ORIGINAL_LEGACY_CLAIM' || item.provider_submission_established!==false || item.can_auto_resend!==false) unavailable();\n      continue;\n    }\n"
+    }
+  ]
+}

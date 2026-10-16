@@ -64,7 +64,28 @@ def render_queries(sql):
  return result
 before=render_queries(original);after=render_queries(amended)
 if len(before)!=3 or before!=after:failures.append({'native_render_projection':'CHANGED_OR_MISSING'})
-result={'database_execution':False,'rowtype_checks':checks,'root0226_composition_grammar':'PASS','native_render_attachment_ast_queries_unchanged':len(before) if before==after else False,'failures':failures,'native':'REQUIRED_NOT_RUN'}
+claim=(root/'reference/claim.sql').read_text(encoding='utf-8')
+kernel=(root/'forward/082_native_claim_kernel.sqlinc').read_text(encoding='utf-8')
+kernel=kernel.replace('public._email_outbox_contact_claim_core_v1(','public.email_outbox_claim_ready_batch(',1).replace('p_lease_minutes integer default 5,p_contact_bridge boolean default false,p_agency uuid default null,p_environment text default null','p_lease_minutes integer default 5',1)
+gate="""(mo.type<>'TIMESHEET_QUERY' or(p_contact_bridge and exists(
+      select 1 from public.hr_issue_email_deliveries d join public.hr_issue_email_deliveries original on original.id=d.original_delivery_id
+      where d.mail_outbox_id=mo.id and d.contact_managed and d.legacy_claim_lease_token is null
+       and d.status='QUEUED' and d.retired_at_utc is null and original.original_delivery_id=original.id and original.payload_revision=1)))
+      and """
+if kernel.count(gate)!=1:failures.append({'native_claim_gate':'MISSING_OR_AMBIGUOUS'})
+kernel=kernel.replace(gate,'',1)
+stamp="""  contact_claim as materialized (
+    select case when p_contact_bridge then public._email_outbox_contact_claim_stamp_v1(
+      coalesce(array_agg(p.id),'{}'::uuid[]),p_attempt_lease_token,v_now,v_now+make_interval(mins=>v_lease),p_agency,p_environment) else null end proof
+    from picked p
+  ),
+"""
+if kernel.count(stamp)!=1:failures.append({'native_claim_stamp_composition':'MISSING_OR_AMBIGUOUS'})
+kernel=kernel.replace(stamp,'',1).replace('from picked p cross join contact_claim proof where','from picked p where',1).replace('  if p_contact_bridge then perform public._email_outbox_contact_claim_cleanup_v1(p_attempt_lease_token);end if;\n','',1)
+if canonical(pglast.parse_plpgsql(claim))!=canonical(pglast.parse_plpgsql(kernel)):failures.append({'native_non_query_claim_owner':'CHANGED'})
+# Compose the one in-flight reader body without installing it.
+pglast.parse_sql((root/'test-runtime/pause-overlay.sqlinc').read_text(encoding='utf-8'))
+result={'database_execution':False,'rowtype_checks':checks,'root0226_composition_grammar':'PASS','native_pause_composition_grammar':'PASS','native_claim_owner_unchanged_except_query_gate':not any('native_non_query_claim_owner'in x for x in failures),'native_render_attachment_ast_queries_unchanged':len(before) if before==after else False,'failures':failures,'native':'REQUIRED_NOT_RUN'}
 (root/'NATIVE_SOURCE_CHECK.json').write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps({'rowtype_checks':len(checks),'unchanged_render_queries':len(before),'failures':failures}))
 sys.exit(bool(failures))

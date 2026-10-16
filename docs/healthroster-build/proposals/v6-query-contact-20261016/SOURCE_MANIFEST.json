@@ -14,7 +14,11 @@
     "forward/065_native_followup.sqlinc",
     "forward/070_native_mark.sqlinc",
     "forward/080_native_integrity.sqlinc",
-    "forward/090_acl.sqlinc"
+    "forward/081_native_claim_guard.sqlinc",
+    "forward/082_native_claim_kernel.sqlinc",
+    "forward/083_native_claim_bridge.sqlinc",
+    "forward/090_acl.sqlinc",
+    "forward/091_claim_acl.sqlinc"
   ],
   "functions": [
     {
@@ -71,12 +75,59 @@
       "name": "private.weekly_contact_query_integrity_v1",
       "signature": "private.weekly_contact_query_integrity_v1()",
       "payload": "forward/080_native_integrity.sqlinc"
+    },
+    {
+      "name": "public._email_outbox_contact_claim_stamp_v1",
+      "signature": "public._email_outbox_contact_claim_stamp_v1(uuid[],text,timestamptz,timestamptz,uuid,text)",
+      "payload": "forward/081_native_claim_guard.sqlinc"
+    },
+    {
+      "name": "public._email_outbox_contact_claim_cleanup_v1",
+      "signature": "public._email_outbox_contact_claim_cleanup_v1(text)",
+      "payload": "forward/081_native_claim_guard.sqlinc"
+    },
+    {
+      "name": "private.weekly_contact_query_claim_guard_v1",
+      "signature": "private.weekly_contact_query_claim_guard_v1()",
+      "payload": "forward/081_native_claim_guard.sqlinc"
+    },
+    {
+      "name": "public._email_outbox_contact_claim_core_v1",
+      "signature": "public._email_outbox_contact_claim_core_v1(integer,text,integer,boolean,uuid,text)",
+      "payload": "forward/082_native_claim_kernel.sqlinc"
+    },
+    {
+      "name": "public.email_outbox_claim_ready_batch",
+      "signature": "public.email_outbox_claim_ready_batch(integer,text,integer)",
+      "payload": "forward/083_native_claim_bridge.sqlinc"
+    },
+    {
+      "name": "public._email_outbox_contact_claim_deployment_v1",
+      "signature": "public._email_outbox_contact_claim_deployment_v1(uuid,text)",
+      "payload": "forward/083_native_claim_bridge.sqlinc"
+    },
+    {
+      "name": "public.email_outbox_claim_ready_batch_contact_v1",
+      "signature": "public.email_outbox_claim_ready_batch_contact_v1(jsonb)",
+      "payload": "forward/083_native_claim_bridge.sqlinc"
+    },
+    {
+      "name": "private.weekly_contact_query_legacy_claims_v1",
+      "signature": "private.weekly_contact_query_legacy_claims_v1(uuid,uuid,uuid,text)",
+      "payload": "forward/083_native_claim_bridge.sqlinc"
     }
   ],
   "schema": {
     "target": "New root-allocated protected migration only",
     "payload": "forward/010_existing_delivery_lineage.sqlinc",
-    "note": "Existing delivery store only; root self identity and genuine revision1, no timestamp backfill."
+    "atomic_claim_fence": [
+      "forward/010_existing_delivery_lineage.sqlinc",
+      "forward/081_native_claim_guard.sqlinc",
+      "forward/082_native_claim_kernel.sqlinc",
+      "forward/083_native_claim_bridge.sqlinc",
+      "forward/091_claim_acl.sqlinc"
+    ],
+    "note": "Snapshot and query lease/generic claim fence plus every created routine ACL must commit atomically. Existing delivery store only; root self identity and genuine revision1, no timestamp backfill."
   },
   "root0226": {
     "target": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
@@ -93,8 +144,23 @@
     {
       "target": "public._timesheet_query_email_delivery_mark_core_v1(uuid,text,text,timestamptz,uuid)",
       "payload": "forward/070_native_mark.sqlinc"
+    },
+    {
+      "target": "public.email_outbox_claim_ready_batch(integer,text,integer)",
+      "payload": "forward/083_native_claim_bridge.sqlinc",
+      "core": "forward/082_native_claim_kernel.sqlinc",
+      "preserved": "Original SECURITY INVOKER/RLS, queue, leases, order, bounds and every non-query predicate. Old generic entry excludes query work; only the same-kernel current contact bridge selects new managed queries."
     }
   ],
+  "compatibility": {
+    "database_first": true,
+    "jobs_remain_running": true,
+    "pause_recipe": "ROOT_PAUSE_PATCH.json",
+    "worker_pause_recipe": "WORKER_PAUSE_PATCH.json",
+    "office_contract_recipe": "OFFICE_CONTRACT_PATCH.json",
+    "office_controls_recipe": "OFFICE_CONTROLS_PATCH.json",
+    "pre_upgrade_claims": "Freeze actual original native lease identity and timestamps; unknown remains legacy ownership without fabricated START/permit or expiry resend."
+  },
   "worker": {
     "module_target": "broker/src/weekly-source/query-contact-drain.mjs",
     "module": "forward/query-contact-drain.mjs",
@@ -105,7 +171,7 @@
   "files": [
     {
       "file": "forward/010_existing_delivery_lineage.sqlinc",
-      "sha256": "10ed2aa070ab247f4da427aa963664ca13b4a79042814fa6f6bc94d2e77a4845"
+      "sha256": "d25d3ddb024a52e0903492fb990650492fa79fbafda49fd6b4fc32c7000c907d"
     },
     {
       "file": "forward/020_native_member.sqlinc",
@@ -121,7 +187,7 @@
     },
     {
       "file": "forward/040_native_recomposition.sqlinc",
-      "sha256": "2e422cfdcfe1dd9ed66443bbf35d23390f52edf7eeaa706ff4097c774e84aac8"
+      "sha256": "74283f975ceb265dc07137652136414144c9c64d4f24a0cdfbf5fd80ae7ae7f6"
     },
     {
       "file": "forward/050_native_entrypoints.sqlinc",
@@ -141,11 +207,27 @@
     },
     {
       "file": "forward/080_native_integrity.sqlinc",
-      "sha256": "421892f2021459e02a92aeb1c9c6f9c68ee5088da7be45d0f0bdf3990e719706"
+      "sha256": "1d9954198e87665af1ac1b3f06d5390f6a2434ee1bf111c9efd6a96efd24f244"
+    },
+    {
+      "file": "forward/081_native_claim_guard.sqlinc",
+      "sha256": "36e9a9bdf74e09a04face13618ccacefc79a1788a86818590d6842fdbb6f8a54"
+    },
+    {
+      "file": "forward/082_native_claim_kernel.sqlinc",
+      "sha256": "9f9a54c9c3e650f6d71ccfd6fa0bd8181b9dfe816b6789e8be5907ea92a381dc"
+    },
+    {
+      "file": "forward/083_native_claim_bridge.sqlinc",
+      "sha256": "659c5c8c7186f99696fefcfed804fab35716b8826b2c89bc32d780a79017c3e9"
     },
     {
       "file": "forward/090_acl.sqlinc",
-      "sha256": "a91f166a2de1ed15f8f618c28600e548028ab2ac9eacfa2f028dbfe6b4170a49"
+      "sha256": "6c0e4aae56a004ef5e2c82197f8dcd0713062fcb94740b505a236e7fa346aacc"
+    },
+    {
+      "file": "forward/091_claim_acl.sqlinc",
+      "sha256": "58b73fdeb32d095c74d21d7e22af2a6e6b80a23e6ed79efe388b182fe96c212c"
     },
     {
       "file": "forward/query-contact-drain.mjs",
@@ -157,18 +239,34 @@
     },
     {
       "file": "INDEX_DRAIN_PATCH.json",
-      "sha256": "8486b7d56364949ca923ff70e85347544d70e3efb5a8c0ef5433bcde0f075ca3"
+      "sha256": "7f970ea5cab3b966c19d304a6d1f078e655bddf75365850739d3048671faaec8"
+    },
+    {
+      "file": "ROOT_PAUSE_PATCH.json",
+      "sha256": "d73b66bd4fb1e9e52c6148c08c31e4a9699cd7bd9c4898912267ba9d0d9f3c50"
+    },
+    {
+      "file": "WORKER_PAUSE_PATCH.json",
+      "sha256": "8a2cd91275f0a7ba58a09d66f70e5e4a5df487fa7a1ba1081cdd2e18f865f339"
+    },
+    {
+      "file": "OFFICE_CONTRACT_PATCH.json",
+      "sha256": "06a88b3b8744c949bb3abcb331dfb85be589a8549ade9520ffccf21ee4899683"
+    },
+    {
+      "file": "OFFICE_CONTROLS_PATCH.json",
+      "sha256": "b58c2626f8d7217bdcf093dda4a126533b5129c77508a82a136069fb1f6c69f2"
     },
     {
       "file": "fixtures/native-query-contact-assertions.sqlinc",
-      "sha256": "b840f1626f03a17d0af5d4839ed3741cdf4fe851abdbda851e6ee5055ce37dbd"
+      "sha256": "d86f73f06decf6c95acaf499ba4184a239fa79bc810f0d2d714a15fb0a665498"
     }
   ],
   "focused_dependencies": [
     "Actual current Root0226 common START/permit and Root contact primitives must be mounted with finite patches.",
     "A PDF key genuinely shared with excluded workers holds for native per-Timesheet evidence rebuild; no guessed document command or page filtering.",
     "Pre-existing legacy DELIVERY_UNCERTAIN with no genuine new permit remains held for original outcome review; no fabricated provenance.",
-    "Quiesce old TIMESHEET_QUERY runtime across protected database/Worker upgrade; the old sender cannot perform the new START.",
+    "Mount exact same-kernel claim fence, typed legacy in-flight union and current drain bridge before claiming new managed query mail. Jobs remain running; generic old sender excludes query work and cannot fabricate managed SENT.",
     "Genuine schema/transaction/Office history/provider-result/runtime fixtures remain NOT_RUN."
   ]
 }

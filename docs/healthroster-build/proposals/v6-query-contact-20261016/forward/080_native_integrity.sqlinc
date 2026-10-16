@@ -6,10 +6,10 @@ begin
  if tg_table_name='hr_issue_email_deliveries' then
   if tg_op='UPDATE' and (old.original_delivery_id,old.payload_revision,old.contact_managed,old.import_id,old.operation_id,old.recipient_scope,
     old.recipient_scope_key,old.recipient_route_fingerprint,old.recipient_email,old.reminder_sequence,old.issue_set_fingerprint,
-    old.deterministic_outbox_key,old.mail_outbox_id,old.created_by_user_id,old.created_at_utc)
+    old.deterministic_outbox_key,old.mail_outbox_id,old.created_by_user_id,old.created_at_utc,old.legacy_claim_lease_token,old.legacy_claim_leased_at_utc,old.legacy_claim_expires_at_utc)
    is distinct from(new.original_delivery_id,new.payload_revision,new.contact_managed,new.import_id,new.operation_id,new.recipient_scope,
     new.recipient_scope_key,new.recipient_route_fingerprint,new.recipient_email,new.reminder_sequence,new.issue_set_fingerprint,
-    new.deterministic_outbox_key,new.mail_outbox_id,new.created_by_user_id,new.created_at_utc) then
+    new.deterministic_outbox_key,new.mail_outbox_id,new.created_by_user_id,new.created_at_utc,new.legacy_claim_lease_token,new.legacy_claim_leased_at_utc,new.legacy_claim_expires_at_utc) then
    raise exception 'CONTACT_QUERY_LINEAGE_IMMUTABLE' using errcode='23514';end if;
   if tg_op='UPDATE' and old.status='RETIRED' and(new.status,old.retired_at_utc,old.retirement_reason) is distinct from(old.status,new.retired_at_utc,new.retirement_reason) then
    raise exception 'CONTACT_QUERY_RETIRED_DELIVERY' using errcode='23514';end if;
@@ -33,7 +33,6 @@ begin
  elsif tg_table_name='mail_outbox' then
   if new.type<>'TIMESHEET_QUERY' then return new;end if;
   select * into strict d from public.hr_issue_email_deliveries where mail_outbox_id=new.id;
-  if not d.contact_managed then return new;end if;
   if old.status::text='SENT' or old.sent_at is not null then
    if new.status::text<>'SENT' or new.sent_at is distinct from old.sent_at or new.provider_message_id is distinct from old.provider_message_id then
     raise exception 'CONTACT_QUERY_ACCEPTED_HISTORY_IMMUTABLE' using errcode='23514';end if;
@@ -41,6 +40,15 @@ begin
    return new;
   end if;
   if new.status::text<>'SENT' and new.sent_at is null then return new;end if;
+  if not d.contact_managed then
+   if d.legacy_claim_lease_token is null or d.legacy_claim_leased_at_utc is null or d.legacy_claim_expires_at_utc is null
+    or d.legacy_claim_expires_at_utc<=d.legacy_claim_leased_at_utc or old.attempt_lease_token is distinct from d.legacy_claim_lease_token
+    or old.attempt_leased_at_utc is distinct from d.legacy_claim_leased_at_utc
+    or old.attempt_lease_expires_at_utc is distinct from d.legacy_claim_expires_at_utc
+    or new.status::text<>'SENT' or new.sent_at is null or new.provider_status is distinct from 'ACCEPTED' then
+    raise exception 'CONTACT_QUERY_LEGACY_CLAIM_PROOF_REQUIRED' using errcode='42501';end if;
+   return new;
+  end if;
   select * into p from public.weekly_contact_submission_permits x where x.query_delivery_id=d.id and x.mail_outbox_id=new.id and x.status='ACCEPTED';
   if p.id is null or d.status='RETIRED' or p.accepted_at_utc is distinct from new.sent_at or new.provider_status is distinct from 'ACCEPTED'
    or p.provider_idempotency_identity is distinct from new.provider_message_id

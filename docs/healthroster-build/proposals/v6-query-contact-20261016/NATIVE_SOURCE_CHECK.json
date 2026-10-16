@@ -142,6 +142,16 @@
       "table": "public.weekly_contact_submission_permits"
     },
     {
+      "file": "081_native_claim_guard.sqlinc",
+      "variable": "d",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "variable": "d",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
       "file": "native-query-contact-assertions.sqlinc",
       "variable": "root",
       "table": "public.hr_issue_email_deliveries"
@@ -178,6 +188,8 @@
     }
   ],
   "root0226_composition_grammar": "PASS",
+  "native_pause_composition_grammar": "PASS",
+  "native_claim_owner_unchanged_except_query_gate": true,
   "native_render_attachment_ast_queries_unchanged": 3,
   "failures": [],
   "native": "REQUIRED_NOT_RUN"

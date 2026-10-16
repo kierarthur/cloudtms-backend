@@ -1,0 +1,66 @@
+-- Existing native claim provenance only. This is not provider admission.
+-- The real picked CTE has already locked these exact mail rows with the native
+-- queue predicates/order/bounds. Fixed deployment/service checks are repeated.
+create or replace function public._email_outbox_contact_claim_stamp_v1(p_ids uuid[],p_token text,p_at timestamptz,p_expires timestamptz,p_agency uuid,p_environment text)
+returns boolean language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ perform private.weekly_source_query_require_service_v1();
+ perform private.weekly_contact_context_v1(p_agency,p_environment);
+ if cardinality(p_ids)>500 or nullif(btrim(p_token),'') is null or p_at is distinct from transaction_timestamp()
+  or p_expires<=p_at or p_expires>p_at+interval '30 minutes' then raise exception 'CONTACT_QUERY_CLAIM_INVALID' using errcode='22023';end if;
+ update public.hr_issue_email_deliveries d set contact_claim_backend_pid=pg_backend_pid(),contact_claim_transaction_id=pg_current_xact_id(),
+  contact_claim_token=p_token,contact_claim_at_utc=p_at,contact_claim_expires_at_utc=p_expires
+ from public.mail_outbox o,public.hr_issue_email_deliveries original
+ where o.id=any(p_ids) and d.mail_outbox_id=o.id and o.type='TIMESHEET_QUERY' and d.contact_managed and d.legacy_claim_lease_token is null
+  and d.status='QUEUED' and d.retired_at_utc is null and original.id=d.original_delivery_id and original.original_delivery_id=original.id and original.payload_revision=1
+  and o.status::text='QUEUED' and o.sent_at is null and o.delivered_at is null and o.read_at is null
+  and coalesce(o.next_attempt_at_utc,o.scheduled_for_utc,o.created_at_utc)<=p_at
+  and(o.attempt_lease_token is null or o.attempt_lease_expires_at_utc is null or o.attempt_lease_expires_at_utc<=p_at)
+  and d.contact_claim_backend_pid is null and d.contact_claim_transaction_id is null and d.contact_claim_token is null
+  and d.contact_claim_at_utc is null and d.contact_claim_expires_at_utc is null;
+ return true;
+end;
+$function$;
+
+create or replace function public._email_outbox_contact_claim_cleanup_v1(p_token text)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ perform private.weekly_source_query_require_service_v1();
+ update public.hr_issue_email_deliveries set contact_claim_backend_pid=null,contact_claim_transaction_id=null,contact_claim_token=null,
+  contact_claim_at_utc=null,contact_claim_expires_at_utc=null
+ where contact_claim_backend_pid=pg_backend_pid() and contact_claim_transaction_id=pg_current_xact_id_if_assigned() and contact_claim_token=p_token;
+end;
+$function$;
+
+create or replace function private.weekly_contact_query_claim_guard_v1()
+returns trigger language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare d public.hr_issue_email_deliveries%rowtype;
+begin
+ if tg_table_name='hr_issue_email_deliveries' then
+  -- Deferred final state, including update-then-clear within the same claim.
+  if exists(select 1 from public.hr_issue_email_deliveries x where x.id=new.id and
+   (x.contact_claim_backend_pid is not null or x.contact_claim_transaction_id is not null or x.contact_claim_token is not null
+    or x.contact_claim_at_utc is not null or x.contact_claim_expires_at_utc is not null)) then
+   raise exception 'CONTACT_QUERY_CLAIM_STAMP_SURVIVED' using errcode='23514';end if;
+  return null;
+ end if;
+ if new.type<>'TIMESHEET_QUERY' or new.attempt_lease_token is null
+  or(new.attempt_lease_token,new.attempt_leased_at_utc,new.attempt_lease_expires_at_utc)
+   is not distinct from(old.attempt_lease_token,old.attempt_leased_at_utc,old.attempt_lease_expires_at_utc) then return new;end if;
+ select * into strict d from public.hr_issue_email_deliveries where mail_outbox_id=new.id;
+ if not d.contact_managed or d.legacy_claim_lease_token is not null or d.status<>'QUEUED' or d.retired_at_utc is not null
+  or d.contact_claim_backend_pid is distinct from pg_backend_pid() or d.contact_claim_transaction_id is distinct from pg_current_xact_id_if_assigned()
+  or d.contact_claim_token is distinct from new.attempt_lease_token or d.contact_claim_at_utc is distinct from new.attempt_leased_at_utc
+  or d.contact_claim_expires_at_utc is distinct from new.attempt_lease_expires_at_utc or new.attempt_leased_at_utc is distinct from transaction_timestamp()
+  or new.status::text<>'QUEUED' or new.sent_at is not null or new.delivered_at is not null or new.read_at is not null then
+  raise exception 'CONTACT_QUERY_CURRENT_CLAIM_BRIDGE_REQUIRED' using errcode='42501';end if;
+ return new;
+end;
+$function$;
+create trigger weekly_contact_query_claim_guard_v1 before update of attempt_lease_token,attempt_leased_at_utc,attempt_lease_expires_at_utc on public.mail_outbox
+ for each row execute function private.weekly_contact_query_claim_guard_v1();
+create constraint trigger weekly_contact_query_claim_cleanup_v1 after insert or update on public.hr_issue_email_deliveries
+ deferrable initially deferred for each row execute function private.weekly_contact_query_claim_guard_v1();

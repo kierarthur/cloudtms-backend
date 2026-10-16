@@ -3,27 +3,31 @@
   "installation": false,
   "native": "REQUIRED_NOT_RUN",
   "source_tests": {
-    "passed": 11,
+    "passed": 14,
     "failed": 0,
     "command": "node --test source.test.mjs"
   },
   "grammar": {
     "command": "python parse-source.py C:/tmp/healthroster-v6-invoice-parser-20261016",
     "parser": "pglast7.20",
-    "sql_files": 11,
-    "fixture_functions": 4,
+    "sql_files": 15,
+    "fixture_functions": 7,
     "failures": 0
   },
   "native_source_checks": {
     "command": "python native-source-check.py C:/tmp/healthroster-v6-invoice-parser-20261016",
-    "rowtype_variables": 35,
+    "rowtype_variables": 37,
     "contact_fixture_aliases": "actual Sep schema PASS",
     "root0226_composed_grammar": "PASS",
-    "native_render_attachment_queries_ast_unchanged": 3
+    "native_render_attachment_queries_ast_unchanged": 3,
+    "native_claim_owner_unchanged_except_query_gate_and_stamp": "PASS",
+    "pause_reader_composed_grammar": "PASS"
   },
   "javascript_syntax": [
     "query-only module PASS",
-    "exact composed native drain PASS"
+    "exact composed native drain PASS",
+    "Worker pause decoder PASS",
+    "Office pause contract/controls PASS"
   ],
   "input_currency": [
     {
@@ -57,6 +61,22 @@
     {
       "file": "broker/src/index.js",
       "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+      "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "broker/src/weekly-source/contact-pause-office.mjs",
+      "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "js/weekly-source/contact-pause-contract.js",
+      "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "js/weekly-source/contact-pause-controls.js",
+      "selected_saved_owner_matches_current": true
     }
   ],
   "scope": "Proposal only; no root/shared/Office/Bank/DB/provider changes",
@@ -69,6 +89,8 @@
     "Actual unknown original + expired/reclaimed lease retains original ownership",
     "Provider missing/duplicate/FAILED uncertainty and original receipt loss; noautomaticresend",
     "Actual Worker drain/provider boundary and ordinary other-type regression",
-    "Shared-worker PDF requires genuine native rebuilding evidence before it can proceed"
-  ]
+    "Shared-worker PDF requires genuine native rebuilding evidence before it can proceed",
+    "Atomic snapshot/lease guard/generic fence migration and exact RLS/ACL; old cached claim crossing DDL, stale/foreign backend/xid, cleanup/deferred commit and original legacy actual result"
+  ],
+  "schedules_jobs": "Remain running; no pause or disable requested/authorized"
 }

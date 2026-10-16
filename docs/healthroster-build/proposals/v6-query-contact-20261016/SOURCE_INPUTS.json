@@ -50,6 +50,34 @@
       "sha256": "0a1eb678acd1b8d79f8652bcf88c5da2248fc6a15abf8b027700b64da5bf6865",
       "reference": "reference/drainEmailOutboxOnce.jsinc",
       "selection": "drainEmailOutboxOnce only"
+    },
+    {
+      "file": "supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql",
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+      "commit": "b192e0433cd24c4e7027ec1ca91470a715e57584",
+      "sha256": "d83c11d3eae6ee290b545e714738e45f22c70a12de5d0a1188717b065f8bceff",
+      "reference": "reference/pause.sql"
+    },
+    {
+      "file": "broker/src/weekly-source/contact-pause-office.mjs",
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+      "commit": "b192e0433cd24c4e7027ec1ca91470a715e57584",
+      "sha256": "47d3e4db19d29addfedaefd63c36c8b13a43abf4fe4d5a260531b2a1a51ceca9",
+      "reference": "reference/contact-pause-office.mjs"
+    },
+    {
+      "file": "js/weekly-source/contact-pause-contract.js",
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-office-13102026",
+      "commit": "7db0009982ce955468327c104417e3b35cec68f1",
+      "sha256": "83d4078fb267bb28ac8f859d4925a190643175a2cb275aeee9b6b7acf86bd826",
+      "reference": "reference/office-contact-pause-contract.js"
+    },
+    {
+      "file": "js/weekly-source/contact-pause-controls.js",
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-office-13102026",
+      "commit": "7db0009982ce955468327c104417e3b35cec68f1",
+      "sha256": "5e703462e45c375665f6999f15c79821f616507dd417f29b0e20cd0b1b19b9d4",
+      "reference": "reference/office-contact-pause-controls.js"
     }
   ]
 }

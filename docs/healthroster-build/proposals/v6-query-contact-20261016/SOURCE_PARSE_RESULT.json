@@ -4,16 +4,16 @@
   "fixture_grammar_checks": [
     {
       "file": "fixtures/native-query-contact-assertions.sqlinc",
-      "sql_statements": 4,
-      "plpgsql_functions": 4,
-      "inner_sql_expressions": 36,
+      "sql_statements": 7,
+      "plpgsql_functions": 7,
+      "inner_sql_expressions": 47,
       "native": "REQUIRED_NOT_RUN"
     }
   ],
   "checks": [
     {
       "file": "010_existing_delivery_lineage.sqlinc",
-      "sql_statements": 12,
+      "sql_statements": 14,
       "plpgsql_functions": 0,
       "inner_sql_expressions": 0,
       "rowtype_parser_alias_only": false
@@ -78,12 +78,40 @@
       "file": "080_native_integrity.sqlinc",
       "sql_statements": 4,
       "plpgsql_functions": 1,
-      "inner_sql_expressions": 36,
+      "inner_sql_expressions": 38,
       "rowtype_parser_alias_only": true
     },
     {
+      "file": "081_native_claim_guard.sqlinc",
+      "sql_statements": 5,
+      "plpgsql_functions": 3,
+      "inner_sql_expressions": 18,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "082_native_claim_kernel.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 8,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "file": "083_native_claim_bridge.sqlinc",
+      "sql_statements": 4,
+      "plpgsql_functions": 4,
+      "inner_sql_expressions": 10,
+      "rowtype_parser_alias_only": false
+    },
+    {
       "file": "090_acl.sqlinc",
-      "sql_statements": 26,
+      "sql_statements": 48,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "file": "091_claim_acl.sqlinc",
+      "sql_statements": 22,
       "plpgsql_functions": 0,
       "inner_sql_expressions": 0,
       "rowtype_parser_alias_only": false

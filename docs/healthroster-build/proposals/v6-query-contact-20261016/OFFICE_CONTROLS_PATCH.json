@@ -1,0 +1,10 @@
+{
+  "target": "js/weekly-source/contact-pause-controls.js",
+  "patches": [
+    {
+      "description": "Describe factual old claim separately from actual started permit; no new action",
+      "before": "   const inflight=s?.in_flight.length?`<aside role=\"status\"><strong>One message had already started; its result is being checked.</strong><ul>${s.in_flight.map(item=>`<li>${item.channel==='EMAIL'?'Email':'Worker push'} \u00b7 ${item.status==='AMBIGUOUS'?'Checking send result':'Started'} \u00b7 ${escape(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/London',dateStyle:'short',timeStyle:'medium',hour12:false}).format(new Date(item.started_at_utc)))} (UK)</li>`).join('')}</ul></aside>`:'';",
+      "after": "   const inflight=s?.in_flight.length?`<aside role=\"status\"><strong>An earlier message has an outcome being checked.</strong><ul>${s.in_flight.map(item=>item.kind==='LEGACY_QUERY_CLAIM'?'<li>Earlier query claimed; its original send outcome is being checked. It will not be sent again automatically.</li>':`<li>${item.channel==='EMAIL'?'Email':'Worker push'} \u00b7 ${item.status==='AMBIGUOUS'?'Checking send result':'Started'} \u00b7 ${escape(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/London',dateStyle:'short',timeStyle:'medium',hour12:false}).format(new Date(item.started_at_utc)))} (UK)</li>`).join('')}</ul></aside>`:'';"
+    }
+  ]
+}

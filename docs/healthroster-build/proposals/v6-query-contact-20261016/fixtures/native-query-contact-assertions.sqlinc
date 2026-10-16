@@ -1,5 +1,60 @@
 -- Genuine native identities/receipts are inputs. Invoke only inside root's
 -- server-owned TEST rollback. These functions never contact a provider.
+create or replace function pg_temp.query_contact_old_claim_guard_assert_v1(p_managed_outbox uuid)
+returns void language plpgsql as $function$
+declare message text;
+begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ if not exists(select 1 from public.hr_issue_email_deliveries d join public.mail_outbox o on o.id=d.mail_outbox_id
+  where o.id=p_managed_outbox and d.contact_managed and d.status='QUEUED' and d.legacy_claim_lease_token is null
+   and d.retired_at_utc is null and o.type='TIMESHEET_QUERY' and o.status::text='QUEUED' and o.sent_at is null
+   and d.contact_claim_backend_pid is null and d.contact_claim_transaction_id is null) then raise exception 'GENUINE_MANAGED_NATIVE_QUERY_REQUIRED';end if;
+ begin
+  -- The original cached claim's actual lease UPDATE has no new stamp. This
+  -- bounded one-row variation must fail even if its old SELECT ran pre-upgrade.
+  update public.mail_outbox set attempt_lease_token=gen_random_uuid()::text,attempt_leased_at_utc=now(),attempt_lease_expires_at_utc=now()+interval '5 minutes'
+   where id=p_managed_outbox;
+  raise exception 'OLD_CACHED_CLAIM_WAS_ALLOWED';
+ exception when insufficient_privilege then
+  get stacked diagnostics message=message_text;
+  if message<>'CONTACT_QUERY_CURRENT_CLAIM_BRIDGE_REQUIRED' then raise;end if;
+ end;
+end;
+$function$;
+
+create or replace function pg_temp.query_contact_current_claim_assert_v1(p_genuine_claimed_outbox uuid,p_genuine_lease_token text)
+returns void language plpgsql as $function$
+begin
+ -- Input is a real row returned by the current native bridge, never a fixture
+ -- fabricated lease. Caller owns the actual bounded queue claim in rollback.
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ if not exists(select 1 from public.mail_outbox o join public.hr_issue_email_deliveries d on d.mail_outbox_id=o.id
+  where o.id=p_genuine_claimed_outbox and o.type='TIMESHEET_QUERY' and o.status::text='QUEUED' and o.sent_at is null
+   and o.attempt_lease_token=p_genuine_lease_token and o.attempt_leased_at_utc=transaction_timestamp()
+   and o.attempt_lease_expires_at_utc>o.attempt_leased_at_utc and d.contact_managed and d.status='QUEUED'
+   and d.contact_claim_backend_pid is null and d.contact_claim_transaction_id is null and d.contact_claim_token is null
+   and d.contact_claim_at_utc is null and d.contact_claim_expires_at_utc is null) then raise exception 'GENUINE_NATIVE_CLAIM_OR_CLEANUP_MISSING';end if;
+ if exists(select 1 from public.weekly_contact_submission_permits where mail_outbox_id=p_genuine_claimed_outbox) then
+  raise exception 'CLAIM_MUST_NOT_FABRICATE_START';end if;
+end;
+$function$;
+
+create or replace function pg_temp.query_contact_legacy_claim_inflight_assert_v1(p_delivery uuid,p_candidate uuid,p_client uuid,p_agency uuid,p_environment text)
+returns void language plpgsql as $function$
+declare d public.hr_issue_email_deliveries%rowtype;r jsonb;
+begin
+ select * into strict d from public.hr_issue_email_deliveries where id=p_delivery;
+ if d.contact_managed or d.legacy_claim_lease_token is null or d.status='SENT' or d.legacy_claim_expires_at_utc>=now() then
+  raise exception 'GENUINE_PREUPGRADE_EXPIRED_NATIVE_CLAIM_REQUIRED';end if;
+ r:=private.weekly_contact_query_legacy_claims_v1(p_candidate,p_client,p_agency,p_environment);
+ if not exists(select 1 from jsonb_array_elements(r)x where x->>'query_delivery_id'=p_delivery::text
+  and x->>'kind'='LEGACY_QUERY_CLAIM' and x->>'status'='CHECKING_ORIGINAL_LEGACY_CLAIM'
+  and x->'can_auto_resend'='false'::jsonb and x->'provider_submission_established'='false'::jsonb
+  and not(x?'permit_id')) or exists(select 1 from public.weekly_contact_submission_permits where query_delivery_id=p_delivery) then
+  raise exception 'LEGACY_CLAIM_WAS_RELABELLED_OR_FREED_BY_EXPIRY';end if;
+end;
+$function$;
+
 create or replace function pg_temp.query_contact_mixed_prepare_assert_v1(p_original_delivery uuid,p_agency uuid,p_environment text,p_eligible_action text,p_paused_action text)
 returns jsonb language plpgsql as $function$
 declare root public.hr_issue_email_deliveries%rowtype;before_payload jsonb;after_payload jsonb;r jsonb;child public.hr_issue_email_deliveries%rowtype;ids text[];

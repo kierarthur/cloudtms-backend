@@ -46,6 +46,8 @@ begin
   elsif exists(select 1 from public.weekly_contact_delivery_memberships m join public.weekly_contact_submission_permits p on p.query_delivery_id=m.delivery_id
    where m.logical_contact_key=logical and m.send_ordinal=ordinal and p.owner_kind='TIMESHEET_QUERY_OUTBOX' and p.status in('PREPARED','STARTED','AMBIGUOUS'))
    or exists(select 1 from public.hr_issue_email_delivery_items i join public.hr_issue_email_deliveries x on x.id=i.delivery_id
+    where i.action_id=item.action_id and x.legacy_claim_lease_token is not null and x.status<>'SENT')
+   or exists(select 1 from public.hr_issue_email_delivery_items i join public.hr_issue_email_deliveries x on x.id=i.delivery_id
     join public.mail_outbox mail on mail.id=x.mail_outbox_id where i.action_id=item.action_id and mail.provider_status='DELIVERY_UNCERTAIN') then
    unknown_count:=unknown_count+1;reason:='CHECK_ORIGINAL_ATTEMPT';
   elsif fact->'current' is distinct from 'true'::jsonb then reason:='OBSOLETE';
@@ -95,7 +97,7 @@ begin
   and x.id is distinct from target_id order by x.id loop
   if exists(select 1 from public.weekly_contact_submission_permits p where p.query_delivery_id=d.id and p.status in('PREPARED','STARTED','AMBIGUOUS','ACCEPTED')) then continue;end if;
   select * into strict o from public.mail_outbox where id=d.mail_outbox_id;
-  if o.status::text='SENT' or o.sent_at is not null or o.provider_status='DELIVERY_UNCERTAIN' then continue;end if;
+  if o.status::text='SENT' or o.sent_at is not null or o.provider_status='DELIVERY_UNCERTAIN' or d.legacy_claim_lease_token is not null then continue;end if;
   update public.hr_issue_email_deliveries set status='RETIRED',retired_at_utc=at_utc,
    retirement_reason=case when target_id is not null then 'CONTACT_RECOMPOSED' when paused_count>0 then 'CONTACT_PAUSED'
     when accepted_count>0 then 'CONTACT_ACCEPTED_ELSEWHERE' else 'CONTACT_OBSOLETE' end,updated_at_utc=at_utc where id=d.id;

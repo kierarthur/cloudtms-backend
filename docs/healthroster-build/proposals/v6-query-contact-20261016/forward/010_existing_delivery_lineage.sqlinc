@@ -1,17 +1,35 @@
 -- Minimal additive lineage in the existing native store. No new queue/store.
+-- Serialize the snapshot/fence installation with native mail mutations. An
+-- already executing old claim is also fenced at its actual lease UPDATE by
+-- the new query-only trigger; replacing its function alone is insufficient.
+lock table public.mail_outbox in share row exclusive mode;
 alter table public.hr_issue_email_deliveries
  add column original_delivery_id uuid,
  add column payload_revision bigint not null default 1 check(payload_revision>=1),
  add column next_payload_revision bigint not null default 2 check(next_payload_revision>=2),
  add column contact_managed boolean not null default false,
  add column contact_rechecked_at_utc timestamptz,
+ add column legacy_claim_lease_token text,
+ add column legacy_claim_leased_at_utc timestamptz,
+ add column legacy_claim_expires_at_utc timestamptz,
+ add column contact_claim_backend_pid integer,
+ add column contact_claim_transaction_id xid8,
+ add column contact_claim_token text,
+ add column contact_claim_at_utc timestamptz,
+ add column contact_claim_expires_at_utc timestamptz,
  add column retired_at_utc timestamptz,
  add column retirement_reason text check(retirement_reason is null or retirement_reason in('CONTACT_PAUSED','CONTACT_OBSOLETE','CONTACT_RECOMPOSED','CONTACT_ACCEPTED_ELSEWHERE'));
 -- Preserve genuine existing identities/timestamps; original is itself, never a
 -- guessed latest row. Existing accepted legacy history remains legacy history.
 update public.hr_issue_email_deliveries set original_delivery_id=id;
+-- Snapshot only real native claim facts already present. A lease is not a
+-- fabricated START, acceptance or NOT_SUBMITTED proof, even after expiry.
+update public.hr_issue_email_deliveries d set legacy_claim_lease_token=o.attempt_lease_token,
+ legacy_claim_leased_at_utc=o.attempt_leased_at_utc,legacy_claim_expires_at_utc=o.attempt_lease_expires_at_utc
+ from public.mail_outbox o where o.id=d.mail_outbox_id and o.type='TIMESHEET_QUERY' and o.status::text<>'SENT' and o.sent_at is null
+  and o.attempt_lease_token is not null;
 update public.hr_issue_email_deliveries d set contact_managed=true
- where d.status<>'SENT' and not exists(select 1 from public.mail_outbox o where o.id=d.mail_outbox_id and(o.status::text='SENT' or o.sent_at is not null));
+ where d.status<>'SENT' and d.legacy_claim_lease_token is null and not exists(select 1 from public.mail_outbox o where o.id=d.mail_outbox_id and(o.status::text='SENT' or o.sent_at is not null));
 alter table public.hr_issue_email_deliveries alter column original_delivery_id set not null;
 alter table public.hr_issue_email_deliveries alter column contact_managed set default true;
 alter table public.hr_issue_email_deliveries add constraint hr_issue_email_deliveries_original_fk
