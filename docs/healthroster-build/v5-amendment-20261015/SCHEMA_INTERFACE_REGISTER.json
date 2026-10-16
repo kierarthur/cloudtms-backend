@@ -5265,6 +5265,15 @@
         "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
         "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
         "installed": false
+      },
+      "contact_control_view_qualification": {
+        "source_commit": "a6d9d1e13d9e2aa3d9e9c191b5f1c3c428565297",
+        "native": "PASS_BOUNDED_CONTROL_SETTINGS_ONLY",
+        "server_expiry": "Existing strictly-future London Monday helper; no browser clock",
+        "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/GLOBAL_CONTACT_TIMING_NATIVE_ROLLBACK_R2.json",
+        "office_source": "7db0009982ce955468327c104417e3b35cec68f1",
+        "office": "9functional tests + actual local desktop/mobile component DOM; parent/real API/installed acceptance pending",
+        "original_status_preserved": true
       }
     },
     {
@@ -5353,6 +5362,15 @@
         "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
         "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
         "installed": false
+      },
+      "contact_control_view_qualification": {
+        "source_commit": "a6d9d1e13d9e2aa3d9e9c191b5f1c3c428565297",
+        "native": "PASS_BOUNDED_CONTROL_SETTINGS_ONLY",
+        "server_expiry": "Existing strictly-future London Monday helper; no browser clock",
+        "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/GLOBAL_CONTACT_TIMING_NATIVE_ROLLBACK_R2.json",
+        "office_source": "7db0009982ce955468327c104417e3b35cec68f1",
+        "office": "9functional tests + actual local desktop/mobile component DOM; parent/real API/installed acceptance pending",
+        "original_status_preserved": true
       }
     },
     {
@@ -5441,6 +5459,15 @@
         "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
         "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
         "installed": false
+      },
+      "contact_control_view_qualification": {
+        "source_commit": "a6d9d1e13d9e2aa3d9e9c191b5f1c3c428565297",
+        "native": "PASS_BOUNDED_CONTROL_SETTINGS_ONLY",
+        "server_expiry": "Existing strictly-future London Monday helper; no browser clock",
+        "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/GLOBAL_CONTACT_TIMING_NATIVE_ROLLBACK_R2.json",
+        "office_source": "7db0009982ce955468327c104417e3b35cec68f1",
+        "office": "9functional tests + actual local desktop/mobile component DOM; parent/real API/installed acceptance pending",
+        "original_status_preserved": true
       }
     },
     {
