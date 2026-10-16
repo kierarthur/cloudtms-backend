@@ -1,6 +1,6 @@
 {
   "version": "V6_GLOBAL_CONTACT_TIMING_INTEGRATION_V1",
-  "status": "SOURCE_CHECKPOINT_NATIVE_PENDING",
+  "status": "BOUNDED_NATIVE_SETTINGS_PASS_FULL_CONTACT_ACCEPTANCE_PENDING",
   "proposal_commit": "48db6e9ad82d04b846b959f91640a47ba9834667",
   "fixture_correction_commit": "0c7e90ce5faf4b1da72f312d5c1173a3d871124c",
   "proposal_manifest_sha256": "5e63389823641ebffa4205e9b88c91a526528298ef5cd01002f210230d0d5c47",
@@ -33,10 +33,12 @@
     "Earlier settings fixture envelopes updated to the new closed request/response; Client/Contract/source-group assertions retained."
   ],
   "pending": [
-    "Native singleton GET/save/CAS/receipt/ACL trial",
     "Native purpose split/scheduler/render/current admission/follow-up budget/real Office route and browser acceptance",
     "Full generated contract/registry/security replay/rehearsal/Install2 and activation"
   ],
   "database_installed": false,
-  "provider_calls": false
+  "provider_calls": false,
+  "native_settings_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/GLOBAL_CONTACT_TIMING_NATIVE_ROLLBACK.json",
+  "source_commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
+  "office_commit": "e9bc07e25f82a50420f65ffccdfd052e58717700"
 }

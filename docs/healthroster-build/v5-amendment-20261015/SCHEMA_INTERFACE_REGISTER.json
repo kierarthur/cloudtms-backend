@@ -5667,7 +5667,14 @@
         "record": "docs/healthroster-build/v6-owner-delivery-20261016/GLOBAL_CONTACT_TIMING_IMPLEMENTATION.json",
         "native": "REQUIRED_NOT_RUN",
         "source_tests": "64 backend / 31 Office focused PASS; offline grammar only",
-        "preserve_original_status": true
+        "preserve_original_status": true,
+        "native_settings": {
+          "status": "PASS_BOUNDED_SETTINGS_ONLY",
+          "source_commit": "2176fa91d9007b4f648b38ee69cea997103c5a75",
+          "statements": 134,
+          "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/GLOBAL_CONTACT_TIMING_NATIVE_ROLLBACK.json",
+          "remaining": "Scheduler/purpose split/follow-up budget/final admission/real Office API/UI/full release NOT_RUN"
+        }
       }
     },
     {
