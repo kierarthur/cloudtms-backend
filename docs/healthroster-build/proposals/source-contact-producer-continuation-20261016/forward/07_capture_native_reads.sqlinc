@@ -94,7 +94,7 @@ as $function$
 declare cap public.weekly_contact_source_intent_captures%rowtype;i public.weekly_message_intents%rowtype;
  m public.weekly_contact_source_intent_capture_members%rowtype;incident public.weekly_discrepancy_incidents%rowtype;
  c public.weekly_issue_comparison_revisions%rowtype;w public.weekly_work_events%rowtype;policy jsonb;guard jsonb;request record;
- manual_actor uuid;sealed_fact jsonb;followup jsonb;
+ manual_actor uuid;sealed_fact jsonb;followup jsonb;history jsonb;
 begin
  perform private.weekly_contact_source_capture_assert_v1(p_intent_id);
  select * into strict cap from public.weekly_contact_source_intent_captures where message_intent_id=p_intent_id;
@@ -106,6 +106,10 @@ begin
  if i.audience_kind='CANDIDATE' then
   if not exists(select 1 from public.weekly_candidate_outreach_generations g where g.id=i.candidate_generation_id
    and g.state='ACTIVE' and g.deadline_at_utc>p_at and private.weekly_source_candidate_generation_current_v1(g.id)) then return false;end if;
+  if i.tranche_kind in('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL') and exists(
+   select 1 from public.weekly_message_intents later where later.candidate_generation_id=i.candidate_generation_id
+    and later.tranche_kind in('CANDIDATE_REMINDER_6H','TIMESHEET_SUBMISSION_REMINDER_6H') and later.due_at_utc<=p_at) then
+   return false;end if;
  else
   if not exists(select 1 from public.weekly_manager_recipient_generations g join public.weekly_manager_recipient_routes route
     on route.id=g.recipient_route_id and route.current_generation_id=g.id where g.id=i.recipient_generation_id and g.state='ACTIVE'
@@ -124,6 +128,12 @@ begin
  for m in select * from public.weekly_contact_source_intent_capture_members where message_intent_id=i.id order by logical_contact_key loop
   if not exists(select 1 from public.weekly_contact_source_ordinal_owners owner where owner.logical_contact_key=m.logical_contact_key
    and owner.send_ordinal=m.send_ordinal and owner.message_intent_id=i.id) then return false;end if;
+  history:=private.weekly_contact_source_logical_history_v1(cap.agency_id,cap.environment,m.candidate_id,m.client_id,m.logical_contact_key);
+  if exists(select 1 from jsonb_array_elements(history->'events')event
+   join public.weekly_message_dispatch_commands command on command.id=(event->>'dispatch_command_id')::uuid
+   where command.message_intent_id<>i.id and(
+    (event->>'accepted_at_utc' is null and(event->'unknown'='true'::jsonb or event->'original_retry_pending'='true'::jsonb))
+    or(event->>'accepted_at_utc' is not null and(event->>'send_ordinal')::integer>=m.send_ordinal))) then return false;end if;
   if p_check_pause then
    guard:=private.weekly_contact_scope_guard_v1(m.candidate_id,m.client_id,m.audience,p_at);
    if guard->'allow' is distinct from 'true'::jsonb then return false;end if;

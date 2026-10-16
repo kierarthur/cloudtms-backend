@@ -107,8 +107,9 @@ begin
  -- Reviewed additive native tranche: manual resend retains its own meaning.
  -- The capture seals the actual accepted predecessor and routine sequence.
  insert into public.weekly_message_intents(environment,agency_id,source_cycle_id,audience_kind,recipient_route_id,recipient_generation_id,
-  sorted_due_event_ids,tranche_kind,tranche_sequence,logical_key,state,due_at_utc)
- values(sg.environment,sg.agency_id,i.source_cycle_id,'MANAGER',route_id,generation_id,'{}','MANAGER_AUTOMATIC_FOLLOWUP',sequence,logical,'DUE',p_at)
+  sorted_due_event_ids,tranche_kind,tranche_sequence,logical_key,state,due_at_utc,created_at_utc)
+ values(sg.environment,sg.agency_id,i.source_cycle_id,'MANAGER',route_id,generation_id,'{}','MANAGER_AUTOMATIC_FOLLOWUP',sequence,logical,'DUE',
+  (state->>'due_at_utc')::timestamptz,clock_timestamp())
  returning id into intent_id;
  model:=jsonb_build_object('kind','MANAGER_QUERY_MODEL_V1','policy_version','1.8.0','renderer_version','1.4.0','structure_version','1.0.0',
   'rows',jsonb_build_array(member->'manager_row'),'plain_body',null,'attachment_count',0);

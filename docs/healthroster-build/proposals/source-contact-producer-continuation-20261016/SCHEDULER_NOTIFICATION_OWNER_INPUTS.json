@@ -1,0 +1,40 @@
+{
+  "version": "CONTACT_SCHEDULER_NOTIFICATION_OWNER_INPUTS_V1",
+  "inputs": [
+    {
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "sha256_normalized_lf": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+    },
+    {
+      "source_commit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "path": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/08_native_scheduler.sqlinc",
+      "sha256_normalized_lf": "72cc98cd728b6bc774ec9b51acd53c934a739b8b89ddc5d9206b78bd4588c7ec"
+    },
+    {
+      "source_commit": "1859790b0596761f405a10c258394a1d47ca304e",
+      "path": "supabase/repeatable/includes/weekly_contact_query/040_native_recomposition.sqlinc",
+      "sha256_normalized_lf": "74283f975ceb265dc07137652136414144c9c64d4f24a0cdfbf5fd80ae7ae7f6"
+    },
+    {
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "path": "supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql",
+      "sha256_normalized_lf": "16b19ea35d6046ef66c3430b05b02288149cbbb01fbbe2ef36f1381b5232a12b"
+    }
+  ],
+  "existing_query_owner": {
+    "signature": "private.weekly_contact_query_recompose_v1(uuid,uuid,text,uuid,text)",
+    "dependency_status": "PUBLISHED_SOURCE_PRESENT_NOT_REDECLARED_BY_THIS_LANE"
+  },
+  "outputs": [
+    {
+      "path": "forward/30_native_notification_retirement.sqlinc",
+      "sha256": "a9542b570e0b21d0764cf6083cda33cd3784969cc4cda2c81f34c8686b42a0ea"
+    },
+    {
+      "path": "forward/32_native_scheduler_followups.sqlinc",
+      "sha256": "0e18fec0f00643859afb97060200f9490ac9fcf08225ef35a1fb05c70ff58179"
+    }
+  ],
+  "qualification": "Authored source; actual PostgreSQL/scheduler/provider-free qualification NOT_RUN"
+}

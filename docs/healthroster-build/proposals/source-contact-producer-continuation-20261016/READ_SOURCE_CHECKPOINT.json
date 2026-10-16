@@ -74,11 +74,11 @@
     },
     {
       "path": "forward/04_original_logical_history.sqlinc",
-      "sha256": "5bc8bce37f0007a135544a13f8a73026a15404ced1cbb3ee8b1a995a704fd8b5"
+      "sha256": "bfed563a5d80a0ed884daea971cf0ac1e681834461a9750d8254edfdb4e13efe"
     },
     {
       "path": "forward/05_manual_member_facts.sqlinc",
-      "sha256": "844301db5f075ffee2cfa3d1ee09024565938a7574eba30361254cc87c7e3d94"
+      "sha256": "3457f7ce340a7c279d345dc8945f2dfe8beab85caecd5a367cab827c2a6bc3b2"
     },
     {
       "path": "forward/06_manual_manifest_and_preview.sqlinc",
@@ -86,11 +86,11 @@
     },
     {
       "path": "forward/07_capture_native_reads.sqlinc",
-      "sha256": "929edb19489d5ad00e735e7ce2b0113f89cc483cd8cdea9f10b908b79e729e9c"
+      "sha256": "be3a71643ebd18fdd5e14e85d5b1fbff78ab7800f7256bebd3fc7ce1aa80b80b"
     },
     {
       "path": "forward/08_manual_native_enqueue.sqlinc",
-      "sha256": "66658b86a114ba21c0039f250585cbca29ce02002710fbfca353544a82c2cb16"
+      "sha256": "47ba45140a7eaf4fea9663b799c8af60043bd107deaa123b3116714e21f729d7"
     },
     {
       "path": "forward/09_manual_accept_and_errors.sqlinc",
@@ -102,15 +102,39 @@
     },
     {
       "path": "forward/11_followup_state_and_enqueue.sqlinc",
-      "sha256": "03268f7caa08096187ab81b9e7a377be276ebfe4b2ebd9e3722ad14fd9570b44"
+      "sha256": "e25e97c2f0d0b871d615ecf8653ca73c6dab27210a5aa4852bcad87fdae5bcff"
     },
     {
       "path": "forward/12_current_native_subset.sqlinc",
-      "sha256": "9b15d5fba7ddc532e768f327ede80ad3ad74f1431d128409afcf76666777ae30"
+      "sha256": "d61e2e301fa3040c81e072cf40646d65aceceb275fc90d9e0daf6e070fa63549"
     },
     {
       "path": "forward/13_recompose_native_intents.sqlinc",
-      "sha256": "381869e1e81aadb2061780add1c379b60c9bf62b6c5c0228a429154c43e1e91c"
+      "sha256": "6392623cd141b9f7624890bf4299b953aa92d8a5ea2d9f55cd22c0e4f4086281"
+    },
+    {
+      "path": "forward/14_manager_action_current_witness.sqlinc",
+      "sha256": "32971df052f0c419e83d8d52774e2226941e65820bcfc8ae8408025067339bd7"
+    },
+    {
+      "path": "forward/15_configured_manual_step.sqlinc",
+      "sha256": "6b948fb1c22f20bc5b216016c1ff82393a08d4dad6f75e7a8824a0eba196e49d"
+    },
+    {
+      "path": "forward/16_recheck_native_progress.sqlinc",
+      "sha256": "4d2050c471d615631c7cbb1064ccdcce631a58bd7cb1e099124803a663126ff9"
+    },
+    {
+      "path": "forward/17_common_recheck_consumer.sqlinc",
+      "sha256": "2f7d4adf9f6f7c460bbc2cf142b31d2eb1fe913c46ccb0e85d3166cbfbeccdf3"
+    },
+    {
+      "path": "forward/18_capture_question_presentation.sqlinc",
+      "sha256": "b049b5744ba1dae58cebdab3510f9d9c33c8e39e310a8506b5b20b846a3e84da"
+    },
+    {
+      "path": "forward/19_capture_and_rebase_integrity.sqlinc",
+      "sha256": "b4061f936d97648bf1d83cf354976042da6b993ec158f1398043bd6145632ef0"
     },
     {
       "path": "forward/20_native_manager_members.sqlinc",
@@ -145,8 +169,28 @@
       "sha256": "50e601b2651098700e6785fac1f0b537a84428ce43e56b1d8bd015641c29edc4"
     },
     {
+      "path": "forward/28_native_contact_workspace.sqlinc",
+      "sha256": "48c28182274acc2f27de4ee8751135b24b71afa9fcce782a616630b9b9bab028"
+    },
+    {
+      "path": "forward/29_native_contact_bulk.sqlinc",
+      "sha256": "3ed93a677573603dcf83a66c0738f84fd0080fa5a7a0d9d28a87d69a7a0964df"
+    },
+    {
+      "path": "forward/30_native_notification_retirement.sqlinc",
+      "sha256": "a9542b570e0b21d0764cf6083cda33cd3784969cc4cda2c81f34c8686b42a0ea"
+    },
+    {
+      "path": "forward/31_current_followup_candidate.sqlinc",
+      "sha256": "8dd820ed75dc2d1faefec5f5899c2ceea1c2438e3631524018fffa28b317ab0c"
+    },
+    {
+      "path": "forward/32_native_scheduler_followups.sqlinc",
+      "sha256": "0e18fec0f00643859afb97060200f9490ac9fcf08225ef35a1fb05c70ff58179"
+    },
+    {
       "path": "forward/99_acl.sqlinc",
-      "sha256": "1de760382335021c411211963aa9e3379d2806741a29e9e81cb7394c93bd93c9"
+      "sha256": "bb5118a7417398d2388f7b5afc8d3c51ea6682859a92ae08946973159e924ce3"
     },
     {
       "path": "runtime/contact-manual-enquiry.mjs",
@@ -162,7 +206,7 @@
     },
     {
       "path": "NATIVE_CONTINUATION_WIP.md",
-      "sha256": "30abcae4a7d1fa4de3c55127ed8170796d6d79cad9a96206463e8c257a34ef0a"
+      "sha256": "b734837a11d89ba278fb06bad95522b132f9419f4a7f9daebf250df8d8cee38f"
     },
     {
       "path": "NATIVE_OWNER_INPUTS.json",
@@ -170,33 +214,69 @@
     },
     {
       "path": "REGISTER_DELTA_WIP.json",
-      "sha256": "c90be35265bd492c8f66b81c6fb768b06db02524d1cc911e350ee674f662e7a1"
+      "sha256": "a076739944e4d4ee35a4b1eebfec4f24ab410310be90d526d3001786830db618"
+    },
+    {
+      "path": "MANAGER_ACTION_OWNER_INPUTS.json",
+      "sha256": "da212088bfe6b59790641d337b3cb0cf936b393740454f8896a2f962cfd1fdf1"
+    },
+    {
+      "path": "SCHEDULER_NOTIFICATION_OWNER_INPUTS.json",
+      "sha256": "d7bc855c81e17334f5c08e18c3ade74cb095bd4d0a8019747beff2811e86fc5d"
+    },
+    {
+      "path": "RUNTIME_CONTRIBUTION.json",
+      "sha256": "af1f5af6a79bf2f50fa8b532b74a7f4421e4800bfc5274f2e4342688b1641188"
     },
     {
       "path": "build-current-owners.mjs",
       "sha256": "2abba5291fbba821086fb9a2be5d11cec9557324aa1678179776371c3f1b8b50"
     },
     {
+      "path": "build-manager-action-owners.mjs",
+      "sha256": "0a2e0333827833b7c3f0fe03b0af9e6b155d82716222e0293993ef0df9b6ac2a"
+    },
+    {
       "path": "build-read-checkpoint.mjs",
-      "sha256": "86f9370690315ee343299a63694b2190f57a9b8a00ad940fbd55b281eb7443ed"
+      "sha256": "713422ca7d20e95da6bda4693b4a47d43354f135b3efe49d6cb661e2211a7b93"
+    },
+    {
+      "path": "build-register-delta.mjs",
+      "sha256": "75af385caa763060c50dd11f9b44e669e19fb743a1065552e273459e5da40207"
+    },
+    {
+      "path": "build-runtime-contribution.mjs",
+      "sha256": "b981df9f98dfe316a915a847c57a677ce7e1d75298f44bc5b509312d1f1c1d18"
+    },
+    {
+      "path": "build-scheduler-notification-owners.mjs",
+      "sha256": "d09703d3fa383ed13d7f3beb9a6e670d8e279ca18b856994402bec3f0d049797"
+    },
+    {
+      "path": "runtime/contact-recheck-runtime.mjs",
+      "sha256": "0a7f1d0dc0a23b7593b4551df5ddf7089475cdb5ba20c80a211ad16b4672f60f"
+    },
+    {
+      "path": "tests/contact-recheck-runtime.test.mjs",
+      "sha256": "2bb1261112f497bef5e8413a6eac63761b5beebc7f2de605038fbcf2ba21a32e"
     },
     {
       "path": "tests/manual-request.test.mjs",
       "sha256": "abd04e11e7abe2286748b5da0346a18084a5122fd9a8e1e4fafbd6911e51f2c4"
     }
   ],
-  "sql_statement_count": 163,
-  "private_owner_declarations": 42,
+  "sql_statement_count": 226,
+  "private_owner_declarations": 59,
   "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
   "readonly_row_owner": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
   "native": "NOT_RUN; managed scanner treats PL/pgSQL bodies as opaque",
   "unfinished": [
-    "Configured MANUAL-step actual SEND_MANAGER_NOW/bulk projection/CAS successor",
-    "Bounded existing recheck-task consumer/progress/cursor/future-wake + genuine legacy outbox phase",
-    "Unchanged capture replay/coalescing, due rebase integrity, aliases and actual notification fallback",
-    "Bounded actual scheduler/runtime followup/recheck invocation with existing fanout/failure semantics",
+    "Paused-before-first-activation actual current cohort/activation/submission/generation continuation",
+    "Native review of manual mixed initial/followup group ineligibility and actual route grouping/throttle",
+    "Complete retained capture/alias/rebase/notification native integrity review and first-use fixture assertions",
+    "Root finite current runtime/combined-read/routes/Office/central ACL mount only after complete source review",
     "Hostile native fixtures and actual root-owned PostgreSQL/ACL/concurrency/provider-free acceptance"
   ],
-  "source_only_tests": "manual-request.test.mjs uses actual current shared JSON parser; no database/provider/native proof",
+  "source_only_tests": "Request/shared parser and strict recheck transport/reply tests only; no database/provider/native proof",
   "database_actions": "NONE"
 }

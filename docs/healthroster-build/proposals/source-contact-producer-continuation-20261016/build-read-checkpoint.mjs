@@ -27,11 +27,14 @@ for(const file of readdirSync(path.join(base,'forward')).filter(x=>x.endsWith('.
    +(m[2]==='public'?`\ngrant execute on function ${signature} to service_role;`:''));
  }
 }
-writeFileSync(path.join(base,'forward/99_acl.sqlinc'),acl.join('\n')+'\n');
+writeFileSync(path.join(base,'forward/99_acl.sqlinc'),acl.join('\n')+"\nnotify pgrst, 'reload schema';\n");
 const outputs=[...readdirSync(path.join(base,'one-time')).filter(x=>x.endsWith('.sqlinc')).sort().map(x=>'one-time/'+x),...readdirSync(path.join(base,'forward')).filter(x=>x.endsWith('.sqlinc')).sort().map(x=>'forward/'+x),
  'runtime/contact-manual-enquiry.mjs','runtime/contact-manual-enquiry.d.ts','MANUAL_RUNTIME_CONTRACT_RECEIPT.json',
  'NATIVE_CONTINUATION_WIP.md','NATIVE_OWNER_INPUTS.json','REGISTER_DELTA_WIP.json',
- 'build-current-owners.mjs','build-read-checkpoint.mjs','tests/manual-request.test.mjs'].map(file=>({path:file,sha256:sha(readFileSync(path.join(base,file)))}));
+ 'MANAGER_ACTION_OWNER_INPUTS.json','SCHEDULER_NOTIFICATION_OWNER_INPUTS.json','RUNTIME_CONTRIBUTION.json',
+ ...readdirSync(base).filter(file=>file.startsWith('build-')&&file.endsWith('.mjs')).sort(),
+ ...readdirSync(path.join(base,'runtime')).filter(file=>file!=='contact-manual-enquiry.mjs'&&file!=='contact-manual-enquiry.d.ts').sort().map(file=>'runtime/'+file),
+ ...readdirSync(path.join(base,'tests')).sort().map(file=>'tests/'+file)].map(file=>({path:file,sha256:sha(readFileSync(path.join(base,file)))}));
 const atomic='begin;\n'+outputs.filter(x=>x.path.endsWith('.sqlinc')).map(x=>readFileSync(path.join(base,x.path),'utf8')).join('\n')+'\ncommit;\n';
 const statements=scanManagedSql(exactAtomicBody(atomic,{allowAtomicBody:false})).statements.length;
 writeFileSync(path.join(base,'READ_SOURCE_CHECKPOINT.json'),JSON.stringify({version:'CONTACT_COMMISSIONED_PRODUCERS_READ_CHECKPOINT_V1',base_commit:commit,inputs,outputs,
@@ -39,11 +42,11 @@ writeFileSync(path.join(base,'READ_SOURCE_CHECKPOINT.json'),JSON.stringify({vers
  status:'NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN',
  readonly_row_owner:'private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)',
  native:'NOT_RUN; managed scanner treats PL/pgSQL bodies as opaque',
- unfinished:['Configured MANUAL-step actual SEND_MANAGER_NOW/bulk projection/CAS successor',
-  'Bounded existing recheck-task consumer/progress/cursor/future-wake + genuine legacy outbox phase',
-  'Unchanged capture replay/coalescing, due rebase integrity, aliases and actual notification fallback',
-  'Bounded actual scheduler/runtime followup/recheck invocation with existing fanout/failure semantics',
+ unfinished:['Paused-before-first-activation actual current cohort/activation/submission/generation continuation',
+  'Native review of manual mixed initial/followup group ineligibility and actual route grouping/throttle',
+  'Complete retained capture/alias/rebase/notification native integrity review and first-use fixture assertions',
+  'Root finite current runtime/combined-read/routes/Office/central ACL mount only after complete source review',
   'Hostile native fixtures and actual root-owned PostgreSQL/ACL/concurrency/provider-free acceptance'],
- source_only_tests:'manual-request.test.mjs uses actual current shared JSON parser; no database/provider/native proof',
+ source_only_tests:'Request/shared parser and strict recheck transport/reply tests only; no database/provider/native proof',
  database_actions:'NONE'},null,2)+'\n');
 console.log(JSON.stringify({private_owner_declarations:acl.length,statements,status:'IN_PROGRESS_NATIVE_REQUIRED_NOT_RUN'}));

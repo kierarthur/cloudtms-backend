@@ -37,7 +37,7 @@ returns jsonb language plpgsql stable security definer set search_path='pg_catal
 as $function$
 declare c record;facts jsonb;member jsonb;events jsonb:='[]';n integer:=0;ordinal integer;max_ordinal integer:=0;
  accepted timestamptz;last_accepted timestamptz;last_ordinal integer;unknown boolean;retry_pending boolean;
- unknown_ordinals integer[]:='{}';accepted_ordinals integer[]:='{}';retry_ordinals integer[]:='{}';
+ accepted_ordinals integer[]:='{}';
 begin
  perform private.weekly_source_query_require_service_v1();
  perform private._weekly_source_settings_deployment_v1(p_agency,p_environment);
@@ -112,11 +112,9 @@ begin
    if ordinal=any(accepted_ordinals) then
     raise exception 'CONTACT_SOURCE_NATIVE_ACCEPTED_HISTORY_UNRESOLVED' using errcode='55000';end if;
    accepted_ordinals:=array_append(accepted_ordinals,ordinal);
-   if last_ordinal is null or ordinal>last_ordinal then last_ordinal:=ordinal;last_accepted:=accepted;
-   elsif ordinal=last_ordinal then last_accepted:=least(last_accepted,accepted);end if;
+   if last_accepted is null or accepted>last_accepted or(accepted=last_accepted and ordinal>last_ordinal) then
+    last_ordinal:=ordinal;last_accepted:=accepted;end if;
   end if;
-  if unknown then unknown_ordinals:=array_append(unknown_ordinals,ordinal);end if;
-  if retry_pending then retry_ordinals:=array_append(retry_ordinals,ordinal);end if;
   events:=events||jsonb_build_array(jsonb_build_object('dispatch_command_id',c.id,'send_ordinal',ordinal,
    'accepted_at_utc',case when accepted is null then null else to_char(accepted at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end,
    'unknown',unknown,'original_retry_pending',retry_pending));
@@ -126,8 +124,13 @@ begin
  return jsonb_build_object('version','CONTACT_SOURCE_LOGICAL_HISTORY_V1','logical_contact_key',encode(p_logical,'hex'),
   'next_send_ordinal',max_ordinal+1,'last_accepted_send',case when last_ordinal is null then null else
    jsonb_build_object('accepted_at_utc',to_char(last_accepted at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'send_ordinal',last_ordinal) end,
-  'unknown_original',exists(select 1 from unnest(unknown_ordinals)x where not(x=any(accepted_ordinals))),
-  'original_retry_pending',exists(select 1 from unnest(retry_ordinals)x where not(x=any(accepted_ordinals))),
+  -- Acceptance of another command under the same ordinal is not evidence of
+  -- this command's outcome. Only actual siblings of this original command can
+  -- resolve its uncertainty/retry ownership.
+  'unknown_original',exists(select 1 from jsonb_array_elements(events)e
+   where e->>'accepted_at_utc' is null and e->'unknown'='true'::jsonb),
+  'original_retry_pending',exists(select 1 from jsonb_array_elements(events)e
+   where e->>'accepted_at_utc' is null and e->'original_retry_pending'='true'::jsonb),
   'events',events);
 end;
 $function$;

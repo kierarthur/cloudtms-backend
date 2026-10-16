@@ -1,0 +1,134 @@
+create or replace function private.weekly_contact_recheck_progress_guard_v1()
+returns trigger language plpgsql volatile security definer set search_path='pg_catalog','public','pg_temp'
+as $function$
+begin
+ if TG_OP='DELETE' then raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
+ if TG_OP='INSERT' then
+  if new.revision<>1 or new.phase<>'SOURCE_WORKER' or new.last_native_id is not null then
+   raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
+ else
+  if new.task_id<>old.task_id or new.revision<>old.revision+1 or new.recorded_at_utc<old.recorded_at_utc then
+   raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
+  if new.phase='SOURCE_WORKER' and new.last_native_id is null and(
+   (new.scope_revision,new.checking_revision) is distinct from(old.scope_revision,old.checking_revision) or old.phase='COMPLETE') then
+   null; -- An evidenced current-facts reset or an actual existing future wake.
+  elsif old.phase<>'COMPLETE' then
+   if array_position(array['SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE'],new.phase)
+      <array_position(array['SOURCE_WORKER','SOURCE_MANAGER','LEGACY_OUTBOX','COMPLETE'],old.phase)
+    or(new.phase=old.phase and old.last_native_id is not null and(new.last_native_id is null or new.last_native_id<=old.last_native_id)) then
+    raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
+  else
+   raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
+ end if;
+ if not exists(select 1 from public.weekly_contact_recheck_steps step where step.task_id=new.task_id and step.progress_revision=new.revision
+  and(step.phase,step.native_id,step.scope_revision,step.checking_revision,step.recorded_at_utc)
+    is not distinct from(new.phase,new.last_native_id,new.scope_revision,new.checking_revision,new.recorded_at_utc)) then
+  raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
+ return new;
+end;
+$function$;
+create or replace trigger weekly_contact_recheck_progress_guard before insert or update or delete on public.weekly_contact_recheck_progress
+ for each row execute function private.weekly_contact_recheck_progress_guard_v1();
+
+create or replace function private.weekly_contact_recheck_record_v1(p_task uuid,p_phase text,p_native uuid,
+ p_scope_revision bigint,p_checking_revision bigint,p_facts bytea,p_disposition jsonb)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare revision bigint;at_utc timestamptz:=clock_timestamp();
+begin
+ select progress.revision+1 into revision from public.weekly_contact_recheck_progress progress where task_id=p_task for update;
+ revision:=coalesce(revision,1);
+ insert into public.weekly_contact_recheck_steps(task_id,progress_revision,phase,native_id,scope_revision,checking_revision,
+  facts_sha256,disposition_json,recorded_at_utc)
+ values(p_task,revision,p_phase,p_native,p_scope_revision,p_checking_revision,p_facts,p_disposition,at_utc);
+ insert into public.weekly_contact_recheck_progress(task_id,scope_revision,checking_revision,phase,last_native_id,revision,recorded_at_utc)
+ values(p_task,p_scope_revision,p_checking_revision,p_phase,p_native,revision,at_utc)
+ on conflict(task_id) do update set scope_revision=excluded.scope_revision,checking_revision=excluded.checking_revision,
+  phase=excluded.phase,last_native_id=excluded.last_native_id,revision=excluded.revision,recorded_at_utc=excluded.recorded_at_utc;
+end;
+$function$;
+
+-- Only real native identities are cursor operands. A retired original may be
+-- reconsidered while its original question still exists; lifetime unrelated
+-- closed questions are not added to the current worker pass.
+create or replace function private.weekly_contact_recheck_native_ids_v1(p_scope uuid,p_phase text,p_after uuid)
+returns table(native_id uuid) language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select intent.id from public.weekly_contact_pause_scopes scope join public.weekly_message_intents intent
+  on intent.agency_id=scope.agency_id and intent.environment=scope.environment
+ join public.weekly_candidate_outreach_generations generation on generation.id=intent.candidate_generation_id
+ where scope.id=p_scope and p_phase='SOURCE_WORKER' and intent.audience_kind='CANDIDATE'
+  and(p_after is null or intent.id>p_after) and generation.candidate_id=scope.candidate_id
+  and(intent.state in('DUE','RENDERED') or(intent.state='RETIRED' and generation.state='ACTIVE'
+   and generation.deadline_at_utc>statement_timestamp() and private.weekly_source_candidate_generation_current_v1(generation.id)))
+  and(generation.client_id=scope.client_id or exists(select 1 from public.weekly_timesheet_submission_requests request
+   join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+   where request.candidate_cohort_id=generation.candidate_cohort_id and request.request_generation=generation.generation_number
+    and request.membership_hash=generation.membership_hash and member.client_id=scope.client_id))
+ union
+ select intent.id from public.weekly_contact_pause_scopes scope join public.weekly_message_intents intent
+  on intent.agency_id=scope.agency_id and intent.environment=scope.environment
+ where scope.id=p_scope and p_phase='SOURCE_MANAGER' and intent.audience_kind='MANAGER'
+  and(p_after is null or intent.id>p_after) and(intent.state in('DUE','RENDERED') or(intent.state='RETIRED' and exists(
+   select 1 from public.weekly_manager_recipient_generations generation join public.weekly_manager_recipient_routes route
+    on route.current_generation_id=generation.id where generation.id=intent.recipient_generation_id and generation.state='ACTIVE')))
+  and(exists(select 1 from public.weekly_contact_source_intent_capture_members member where member.message_intent_id=intent.id
+   and member.candidate_id=scope.candidate_id and member.client_id=scope.client_id)
+   or exists(select 1 from public.weekly_manager_recipient_memberships member join public.weekly_discrepancy_incidents incident
+    on incident.id=member.incident_id where member.recipient_generation_id=intent.recipient_generation_id
+     and incident.candidate_id=scope.candidate_id and incident.client_id=scope.client_id))
+ union
+ select delivery.id from public.weekly_contact_pause_scopes scope join public.hr_issue_email_deliveries delivery
+  on delivery.original_delivery_id=delivery.id join public.mail_outbox mail on mail.id=delivery.mail_outbox_id
+ where scope.id=p_scope and p_phase='LEGACY_OUTBOX' and delivery.status in('QUEUED','RETIRED')
+  and(p_after is null or delivery.id>p_after)
+  and(delivery.contact_rechecked_at_utc is null or scope.updated_at_utc>delivery.contact_rechecked_at_utc
+   or(mail.next_attempt_at_utc is not null and mail.next_attempt_at_utc<=statement_timestamp()))
+  and exists(select 1 from public.hr_issue_email_delivery_items item join public.import_review_decisions action on action.action_id=item.action_id
+   where item.delivery_id=delivery.id and action.candidate_id=scope.candidate_id and action.client_id=scope.client_id)
+$function$;
+
+-- Existing future clock operands only. No invented poll interval, accepted
+-- timestamp, new question start or manager manual-step automatic send.
+create or replace function private.weekly_contact_recheck_next_due_v1(p_scope uuid,p_at timestamptz)
+returns timestamptz language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare scope public.weekly_contact_pause_scopes%rowtype;next_due timestamptz;incident record;state jsonb;
+begin
+ select * into strict scope from public.weekly_contact_pause_scopes where id=p_scope;
+ select min(value) into next_due from(
+  select scope.worker_paused_until_utc value union all select scope.manager_paused_until_utc
+  union all select generation.reminder_due_at_utc from public.weekly_candidate_outreach_generations generation
+   join public.weekly_source_cycles cycle on cycle.id=generation.source_cycle_id join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+   where source_group.agency_id=scope.agency_id and source_group.environment=scope.environment and generation.candidate_id=scope.candidate_id
+    and generation.state='ACTIVE' and private.weekly_source_candidate_generation_current_v1(generation.id)
+    and(generation.client_id=scope.client_id or exists(select 1 from public.weekly_timesheet_submission_requests request
+     join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+     where request.candidate_cohort_id=generation.candidate_cohort_id and request.request_generation=generation.generation_number
+      and request.membership_hash=generation.membership_hash and member.client_id=scope.client_id))
+  union all select generation.deadline_at_utc from public.weekly_candidate_outreach_generations generation
+   join public.weekly_source_cycles cycle on cycle.id=generation.source_cycle_id join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+   where source_group.agency_id=scope.agency_id and source_group.environment=scope.environment and generation.candidate_id=scope.candidate_id
+    and generation.client_id=scope.client_id and generation.state='ACTIVE' and private.weekly_source_candidate_generation_current_v1(generation.id)
+  union all select event.due_at_utc from public.weekly_manager_cohort_due_events event
+   join public.weekly_manager_recipient_generations generation on generation.id=event.recipient_generation_id and generation.state='ACTIVE'
+   join public.weekly_manager_recipient_routes route on route.current_generation_id=generation.id
+   where route.agency_id=scope.agency_id and route.environment=scope.environment and event.state='PENDING'
+    and exists(select 1 from public.weekly_manager_recipient_memberships member join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id
+     where member.recipient_generation_id=generation.id and member.candidate_cohort_id=event.candidate_cohort_id
+      and incident.candidate_id=scope.candidate_id and incident.client_id=scope.client_id)
+  union all select mail.next_attempt_at_utc from public.hr_issue_email_deliveries delivery join public.mail_outbox mail on mail.id=delivery.mail_outbox_id
+   where delivery.original_delivery_id=delivery.id and delivery.status in('QUEUED','RETIRED')
+    and exists(select 1 from public.hr_issue_email_delivery_items item join public.import_review_decisions action on action.action_id=item.action_id
+     where item.delivery_id=delivery.id and action.candidate_id=scope.candidate_id and action.client_id=scope.client_id)
+ )actual where value>p_at;
+ for incident in select incident.id from public.weekly_discrepancy_incidents incident join public.weekly_source_groups source_group
+  on source_group.id=incident.source_group_id where incident.candidate_id=scope.candidate_id and incident.client_id=scope.client_id
+   and incident.state='OPEN' and source_group.agency_id=scope.agency_id and source_group.environment=scope.environment order by incident.id loop
+  state:=private.weekly_contact_source_manager_followup_state_v1(incident.id,p_at);
+  if state->>'reason'='SCHEDULED' and state->>'mode'='AUTOMATIC' and(state->>'due_at_utc')::timestamptz>p_at then
+   next_due:=least(next_due,(state->>'due_at_utc')::timestamptz);end if;
+ end loop;
+ return next_due;
+end;
+$function$;

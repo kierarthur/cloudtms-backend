@@ -1,0 +1,45 @@
+{
+  "version": "CONTACT_NATIVE_CONTINUATION_WIP_SUCCESSOR_RECEIPT_V1",
+  "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
+  "prior_source_checkpoint": "ae6ec8514891f7fb3f270fc5456ecbe092608257",
+  "source_files": [
+    {
+      "path": "READ_SOURCE_CHECKPOINT.json",
+      "sha256": "04ca6869a289c900d65a17dc91066e040ad2971618c30eb8765193bc730a5449"
+    },
+    {
+      "path": "REGISTER_DELTA_WIP.json",
+      "sha256": "a076739944e4d4ee35a4b1eebfec4f24ab410310be90d526d3001786830db618"
+    },
+    {
+      "path": "NATIVE_OWNER_INPUTS.json",
+      "sha256": "3c1b4b292ad099e8d660b3ea132f2d09231734b1335f42671cac4e78c9f01cfb"
+    },
+    {
+      "path": "MANAGER_ACTION_OWNER_INPUTS.json",
+      "sha256": "da212088bfe6b59790641d337b3cb0cf936b393740454f8896a2f962cfd1fdf1"
+    },
+    {
+      "path": "SCHEDULER_NOTIFICATION_OWNER_INPUTS.json",
+      "sha256": "d7bc855c81e17334f5c08e18c3ade74cb095bd4d0a8019747beff2811e86fc5d"
+    },
+    {
+      "path": "RUNTIME_CONTRIBUTION.json",
+      "sha256": "af1f5af6a79bf2f50fa8b532b74a7f4421e4800bfc5274f2e4342688b1641188"
+    }
+  ],
+  "frozen_7161": {
+    "runtime/contact-manual-enquiry.mjs": "cbec35660eab50592d3749e31a7acf7be385cdc8cb6b644aa1b72df97087db51",
+    "runtime/contact-manual-enquiry.d.ts": "d946b2a2ec0b68afc0941e7bd822cff313f860c505938d089690bf09dcc7c61e"
+  },
+  "source_only_tests": {
+    "pass": 31,
+    "native": false
+  },
+  "sql_scan": {
+    "statements": 226,
+    "PLpgSQL": "OPAQUE_NOT_PARSED"
+  },
+  "database_actions": "NONE",
+  "work_continues": true
+}

@@ -1,0 +1,31 @@
+{
+  "version": "CONTACT_MANAGER_ACTION_OWNER_INPUTS_V1",
+  "inputs": [
+    {
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "sha256_normalized_lf": "613c9d3502fbf9332b2c1d9a0c2262cdb8c9a47285d58868ab988fc699aa997a"
+    },
+    {
+      "source_commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256_normalized_lf": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    }
+  ],
+  "unchanged_two_argument_version": {
+    "signature": "private.weekly_source_office_workspace_version_v1(uuid,uuid)",
+    "sha256_normalized_lf": "e5bb8414c1b15989baaf73725d82974bb96673edef7e3f528155b289701f8b0b",
+    "declaration_in_package": false
+  },
+  "outputs": [
+    {
+      "path": "forward/28_native_contact_workspace.sqlinc",
+      "sha256": "48c28182274acc2f27de4ee8751135b24b71afa9fcce782a616630b9b9bab028"
+    },
+    {
+      "path": "forward/29_native_contact_bulk.sqlinc",
+      "sha256": "3ed93a677573603dcf83a66c0738f84fd0080fa5a7a0d9d28a87d69a7a0964df"
+    }
+  ],
+  "qualification": "Authored complete finite successors; existing public ABI unchanged; PostgreSQL/pay-isolation/concurrency NOT_RUN"
+}

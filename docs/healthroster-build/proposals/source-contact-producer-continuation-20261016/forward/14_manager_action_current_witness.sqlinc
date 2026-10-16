@@ -1,0 +1,85 @@
+-- A CURRENT, contact-only witness for the existing Send manager now action.
+-- The established two-argument workspace hash and every unrelated action stay
+-- byte-for-byte owned by their original producer. No GET allocates a journal.
+create or replace function private.weekly_contact_source_manager_action_v1(p_actor uuid,p_cycle uuid,p_publication uuid,p_filters jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path='pg_catalog','public','private','pg_temp' set timezone='UTC'
+as $function$
+declare guard jsonb;sg public.weekly_source_groups%rowtype;query record;incident_id uuid;fact jsonb;history jsonb;
+ scope public.weekly_contact_pause_scopes%rowtype;checking public.weekly_contact_checking_scope_versions%rowtype;
+ members jsonb;groups jsonb:='[]';reservations jsonb;keys jsonb;mode text;member_mode text;reason text;at_utc timestamptz;
+ base_version text;version text;eligible integer:=0;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ guard:=private.weekly_source_query_current_publication_v1(p_cycle,p_publication);
+ perform private.weekly_source_office_authority_v1(p_actor,'SEND_MANAGER',(guard->>'source_group_id')::uuid,null,
+  (guard->>'finalisation_week_ending')::date);
+ select * into strict sg from public.weekly_source_groups where id=(guard->>'source_group_id')::uuid;
+ perform private.weekly_contact_context_v1(sg.agency_id,sg.environment);
+ base_version:=private.weekly_source_office_workspace_version_v1(p_cycle,p_publication);
+ at_utc:=clock_timestamp();
+ for query in select * from private.weekly_source_office_query_groups_v1(p_cycle,p_publication,p_filters) order by group_key loop
+  members:='[]';mode:=null;reason:=null;
+  if not query.manager_eligible or cardinality(query.incident_ids)=0 or jsonb_array_length(query.missing_scopes)>0 then
+   reason:='UNAVAILABLE_FOR_MANAGER';
+  end if;
+  for incident_id in select value from unnest(query.incident_ids)value order by value loop
+   fact:=private.weekly_contact_manual_member_facts_v1(incident_id,'MANAGER',at_utc);
+   history:=private.weekly_contact_source_logical_history_v1(sg.agency_id,sg.environment,(fact->>'candidate_id')::uuid,
+    (fact->>'client_id')::uuid,decode(fact->>'logical_contact_key','hex'));
+   select * into scope from public.weekly_contact_pause_scopes where agency_id=sg.agency_id and environment=sg.environment
+    and candidate_id=(fact->>'candidate_id')::uuid and client_id=(fact->>'client_id')::uuid;
+   select * into checking from public.weekly_contact_checking_scope_versions where scope_id=scope.id;
+   select coalesce(jsonb_agg(jsonb_build_object('send_ordinal',owner.send_ordinal,'message_intent_id',owner.message_intent_id,
+    'revision',owner.revision::text,'state',intent.state,'capture_kind',capture.capture_kind,
+    'routine_step',member.routine_step) order by owner.send_ordinal),'[]') into reservations
+    from public.weekly_contact_source_ordinal_owners owner join public.weekly_message_intents intent on intent.id=owner.message_intent_id
+    left join public.weekly_contact_source_intent_captures capture on capture.message_intent_id=intent.id
+    left join public.weekly_contact_source_intent_capture_members member on member.message_intent_id=intent.id
+     and member.logical_contact_key=owner.logical_contact_key where owner.logical_contact_key=decode(fact->>'logical_contact_key','hex');
+   member_mode:=case when history->'last_accepted_send'='null'::jsonb then 'INITIAL' else 'ROUTINE_MANUAL_FOLLOWUP' end;
+   if fact->'eligible' is distinct from 'true'::jsonb then reason:=coalesce(reason,fact->>'exclusion_reason');end if;
+   if fact->'cutoff'->'routine'->'in_scope' is distinct from 'true'::jsonb then reason:=coalesce(reason,'OUTSIDE_ROUTINE_SCOPE');end if;
+   if member_mode='ROUTINE_MANUAL_FOLLOWUP' then
+    keys:=private.weekly_contact_source_manager_followup_state_v1(incident_id,at_utc);
+    if keys->>'reason' is distinct from 'SCHEDULED' or keys->>'mode' is distinct from 'MANUAL'
+     or(keys->>'due_at_utc')::timestamptz>at_utc then reason:=coalesce(reason,'NO_DUE_CONFIGURED_MANUAL_STEP');end if;
+   else keys:=null;end if;
+   if mode is null then mode:=member_mode;
+   elsif mode<>member_mode then reason:=coalesce(reason,'MIXED_INITIAL_AND_FOLLOWUP_SELECTION');end if;
+   members:=members||jsonb_build_array(jsonb_build_object('incident_id',incident_id,
+    'current_facts',fact-'cooldown_remaining_seconds','logical_history',history,'reservations',reservations,'routine_step',keys,
+    'scope_revision',coalesce(scope.revision,0)::text,'checking_revision',coalesce(checking.revision,0)::text,
+    'checking_facts_sha256',case when checking.facts_sha256 is null then null else encode(checking.facts_sha256,'hex') end));
+  end loop;
+  if reason is null then eligible:=eligible+1;end if;
+  groups:=groups||jsonb_build_array(jsonb_build_object('group_key',query.group_key,'incident_ids',to_jsonb(query.incident_ids),
+   'eligible',reason is null,'reason',reason,'mode',mode,'members',members));
+ end loop;
+ version:=encode(private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_MANAGER_WORKSPACE_V1',jsonb_build_object(
+  'actor_user_id',p_actor,'source_cycle_id',p_cycle,'projection_publication_id',p_publication,'filters',p_filters,
+  'base_workspace_version',base_version,'groups',groups)),'hex');
+ return jsonb_build_object('version','CONTACT_SOURCE_MANAGER_ACTION_V1','workspace_version',version,
+  'eligible_group_count',eligible,'groups',groups);
+end;
+$function$;
+
+-- Same shared deployment/sorted scope protocol, before the bulk owner's first
+-- cycle/intent/target/command row lock. No additional pause or clock authority.
+create or replace function private.weekly_contact_source_manager_action_lock_v1(p_actor uuid,p_cycle uuid,p_publication uuid,p_filters jsonb)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare guard jsonb;sg public.weekly_source_groups%rowtype;pair record;
+begin
+ guard:=private.weekly_source_query_current_publication_v1(p_cycle,p_publication);
+ perform private.weekly_source_office_authority_v1(p_actor,'SEND_MANAGER',(guard->>'source_group_id')::uuid,null,
+  (guard->>'finalisation_week_ending')::date);
+ select * into strict sg from public.weekly_source_groups where id=(guard->>'source_group_id')::uuid;
+ perform private.weekly_contact_deployment_lock_v1(sg.agency_id,sg.environment);
+ perform private.weekly_contact_context_v1(sg.agency_id,sg.environment);
+ for pair in select distinct candidate_id,client_id from private.weekly_source_office_query_groups_v1(p_cycle,p_publication,p_filters)
+  order by candidate_id,client_id loop
+  perform private.weekly_contact_scope_lock_v1(sg.agency_id,sg.environment,pair.candidate_id,pair.client_id);
+ end loop;
+end;
+$function$;

@@ -57,9 +57,17 @@ begin
  select * into strict i from public.weekly_message_intents where id=p_intent_id;
  select source_group.* into strict sg from public.weekly_source_cycles cycle join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
   where cycle.id=i.source_cycle_id;
+ if i.audience_kind='CANDIDATE' and i.tranche_kind in('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL') and exists(
+  select 1 from public.weekly_message_intents later where later.candidate_generation_id=i.candidate_generation_id
+   and later.tranche_kind in('CANDIDATE_REMINDER_6H','TIMESHEET_SUBMISSION_REMINDER_6H') and later.due_at_utc<=p_at) then
+  return '[]'::jsonb;end if;
  select * into cap from public.weekly_contact_source_intent_captures where message_intent_id=i.id;
  if found then
   perform private.weekly_contact_source_capture_assert_v1(i.id);basis_members:=cap.manifest_json->'members';
+  if cap.accepted_actor_user_id is not null then
+   begin perform private.weekly_source_office_authority_v1(cap.accepted_actor_user_id,'ASK_CANDIDATES',null,null,null);
+   exception when insufficient_privilege then return '[]'::jsonb;end;
+  end if;
  elsif i.audience_kind='CANDIDATE' then
   select * into strict g from public.weekly_candidate_outreach_generations where id=i.candidate_generation_id;
   ordinal:=case when i.tranche_kind in('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL') and i.tranche_sequence=1 then 1

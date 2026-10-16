@@ -1,0 +1,12 @@
+-- A fault for one actual accepted logical history must not fail unrelated
+-- scheduler routes. This wrapper supplies no replacement history or clock.
+create or replace function private.weekly_contact_source_followup_candidate_v1(p_incident uuid,p_at timestamptz)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ return private.weekly_contact_source_manager_followup_state_v1(p_incident,p_at);
+exception when others then
+ return jsonb_build_object('version','CONTACT_SOURCE_FOLLOWUP_CANDIDATE_FAULT_V1','incident_id',p_incident,
+  'reason','HELD_DEPENDENCY','code','CONTACT_SOURCE_FOLLOWUP_ITEM_HELD','due_at_utc',null);
+end;
+$function$;

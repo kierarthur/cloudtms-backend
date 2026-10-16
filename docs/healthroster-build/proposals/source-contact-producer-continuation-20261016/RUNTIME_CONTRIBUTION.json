@@ -1,0 +1,38 @@
+{
+  "version": "CONTACT_RECHECK_RUNTIME_CONTRIBUTION_V1",
+  "source_commit": "1859790b0596761f405a10c258394a1d47ca304e",
+  "source_path": "broker/src/weekly-source/delivery-runtime.mjs",
+  "source_sha256_normalized_lf": "cda0983c5292f6f86c6c812cccd176057ce8dc34059753e3009d25bcf398ea75",
+  "edits": [
+    {
+      "before": "import { weeklySourceDeploymentContext } from './routes.js';",
+      "after": "import { weeklySourceDeploymentContext } from './routes.js';\nimport { runWeeklySourceContactRecheck } from './contact-recheck-runtime.mjs';"
+    },
+    {
+      "before": "  const renders = await renderDueIntents(env, dependencies, limit);",
+      "after": "  // This consumes the existing contact tasks after actual native due-step\n  // creation. An unavailable item/RPC cannot interrupt unrelated safe targets;\n  // every original final START still independently enforces current admission.\n  let contactRecheck;\n  try {\n    contactRecheck = await runWeeklySourceContactRecheck(dependencies, {\n      deployment: weeklySourceDeploymentContext(env), workerId, limit,\n    });\n  } catch {\n    contactRecheck = { ok: false, error_code: 'CONTACT_RECHECK_UNAVAILABLE', processed: 0, held: 0, results: [] };\n  }\n  const renders = await renderDueIntents(env, dependencies, limit);"
+    },
+    {
+      "before": "    scheduler,\n    renders,",
+      "after": "    scheduler,\n    contact_recheck: contactRecheck,\n    renders,"
+    }
+  ],
+  "result_sha256_normalized_lf": "b5b7109136fe51b26b643a4b4381d411e56efc8009a7ff0ce67e6b7c763cdaa5",
+  "leaf": {
+    "source_path": "runtime/contact-recheck-runtime.mjs",
+    "mount_path": "broker/src/weekly-source/contact-recheck-runtime.mjs",
+    "sha256": "0a7f1d0dc0a23b7593b4551df5ddf7089475cdb5ba20c80a211ad16b4672f60f"
+  },
+  "authoritative_manual_components": {
+    "source_commits": [
+      "1859790b0596761f405a10c258394a1d47ca304e",
+      "81d06f820af6670c3783f0a7d825be9fc5c5d767"
+    ],
+    "record": "docs/healthroster-build/proposals/v6-owner-delivery-20261016/MANUAL_ENQUIRY_WORKER_COMPONENT_SOURCE.json",
+    "request": "broker/src/weekly-source/contact-manual-enquiry-request.mjs",
+    "types": "broker/src/weekly-source/contact-manual-enquiry-types.d.ts",
+    "handler": "broker/src/weekly-source/contact-manual-enquiry-office.mjs",
+    "reply_decoder": "broker/src/weekly-source/contact-manual-enquiry-contract.mjs"
+  },
+  "qualification": "Finite contribution only. Root rechecks current complete owner and applies reviewed edits; no whole stale parent replacement. Unit transport/orchestration only; native/runtime activation NOT_RUN"
+}

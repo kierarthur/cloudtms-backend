@@ -18,6 +18,11 @@ begin
   return jsonb_build_object('version','CONTACT_SOURCE_RECOMPOSITION_V1','original_message_intent_id',original.id,
    'message_intent_id',null,'disposition','ORIGINAL_ATTEMPT_OWNER');end if;
  at_utc:=clock_timestamp();
+ select * into cap from public.weekly_contact_source_intent_captures where message_intent_id=original.id;
+ if found and original.state in('DUE','RENDERED') and(p_manager_generation is null or p_manager_generation=original.recipient_generation_id)
+  and private.weekly_contact_source_capture_current_v1(original.id,at_utc,true) then
+  return jsonb_build_object('version','CONTACT_SOURCE_RECOMPOSITION_V1','original_message_intent_id',original.id,
+   'message_intent_id',original.id,'disposition','CURRENT_CAPTURE_UNCHANGED');end if;
  members:=private.weekly_contact_source_intent_current_subset_v1(original.id,at_utc);
  select * into cap from public.weekly_contact_source_intent_captures where message_intent_id=original.id;
  if jsonb_array_length(members)=0 then
@@ -71,10 +76,10 @@ begin
   'canonical_content_sha256',encode(private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_RECOMPOSITION_CONTENT_V1',
     jsonb_build_object('group_key',encode(group_key,'hex'),'recipient',recipient,'preview',model)),'hex'));
  insert into public.weekly_message_intents(environment,agency_id,source_cycle_id,audience_kind,candidate_cohort_id,candidate_generation_id,
-  recipient_route_id,recipient_generation_id,sorted_due_event_ids,tranche_kind,tranche_sequence,logical_key,state,due_at_utc)
+  recipient_route_id,recipient_generation_id,sorted_due_event_ids,tranche_kind,tranche_sequence,logical_key,state,due_at_utc,created_at_utc)
  values(original.environment,original.agency_id,original.source_cycle_id,original.audience_kind,original.candidate_cohort_id,
   case when original.audience_kind='CANDIDATE' then generation_id end,route_id,
-  case when original.audience_kind='MANAGER' then generation_id end,event_ids,original.tranche_kind,original.tranche_sequence,key,'DUE',original.due_at_utc)
+  case when original.audience_kind='MANAGER' then generation_id end,event_ids,original.tranche_kind,original.tranche_sequence,key,'DUE',original.due_at_utc,clock_timestamp())
  returning id into intent_id;
  perform private.weekly_contact_source_capture_insert_v1(intent_id,kind,manual_request,original.id,members,group_json,null,null,at_utc,cap.accepted_actor_user_id);
  if not private.weekly_contact_source_retire_unsubmitted_v1(original.id) then

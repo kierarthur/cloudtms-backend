@@ -141,9 +141,9 @@ begin
  if cooldown<=p_at then cooldown:=null;end if;
  if cooldown is not null then remaining:=least(2147483647,ceil(extract(epoch from cooldown-p_at)))::integer;end if;
  if p_audience='MANAGER' then
-  select id into accepted_id from public.weekly_contact_delivery_memberships where logical_contact_key=decode(keys->>'logical_contact_key','hex')
-   and accepted_at_utc is not null order by send_ordinal limit 1;
-  if accepted_id is not null then
+  -- Actual pre-bridge accepted native commands are equally real clock inputs;
+  -- a missing later membership bridge is not absence of the original send.
+  if history->'last_accepted_send'<>'null'::jsonb then
    timing:=private.weekly_contact_source_manager_followup_state_v1(i.id,p_at);
    if timing->>'mode' is not null and timing->>'due_at_utc' is not null then
     select jsonb_build_object('sequence',(step->>'sequence')::integer,'mode',timing->>'mode','due_at_utc',timing->>'due_at_utc') into next_step

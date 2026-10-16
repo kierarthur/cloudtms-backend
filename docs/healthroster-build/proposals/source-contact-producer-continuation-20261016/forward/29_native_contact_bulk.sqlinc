@@ -1,0 +1,456 @@
+create or replace function public.weekly_source_office_bulk_query_action_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_allowed_keys constant text[]:=array[
+    'actor_user_id','source_cycle_id','projection_publication_id',
+    'expected_workspace_version','action','selection'
+  ]::text[];
+  v_selection_allowed constant text[]:=array[
+    'mode','group_keys','excluded_group_keys','incident_ids','filters',
+    'sort_key','sort_direction','selection_proof','group_selection_proofs'
+  ]::text[];
+  v_filter_allowed constant text[]:=array['status','candidate','issue']::text[];
+  v_unknown text;
+  v_actor uuid;
+  v_cycle_id uuid;
+  v_publication_id uuid;
+  v_expected_version text;
+  v_current_version text;
+  v_manager_action jsonb;
+  v_action text;
+  v_selection jsonb;
+  v_mode text;
+  v_filters jsonb;
+  v_group_selection_proofs jsonb;
+  v_selection_proof text;
+  v_expected_selection_proof text;
+  v_group_keys text[]:='{}'::text[];
+  v_excluded_keys text[]:='{}'::text[];
+  v_current_keys text[]:='{}'::text[];
+  v_selected_keys text[]:='{}'::text[];
+  v_incident_ids uuid[]:='{}'::uuid[];
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_guard jsonb;
+  v_group record;
+  v_candidate record;
+  v_client record;
+  v_route record;
+  v_scopes jsonb;
+  v_exact_incidents uuid[];
+  v_owner_result jsonb;
+  v_results jsonb:='[]'::jsonb;
+  v_exclusions jsonb:='[]'::jsonb;
+  v_selected_count integer:=0;
+  v_included_count integer:=0;
+  v_included_issue_count integer:=0;
+  v_excluded_count integer:=0;
+  v_candidate_available boolean;
+  v_candidate_results jsonb;
+  v_candidate_issue_count integer;
+  v_candidate_failed boolean;
+  v_message text;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_BULK_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select key into v_unknown from pg_catalog.jsonb_object_keys(p_request) key
+  where not (key=any(v_allowed_keys)) order by key limit 1;
+  if v_unknown is not null then
+    raise exception 'WEEKLY_SOURCE_BULK_REQUEST_UNKNOWN_FIELD'
+      using errcode='22023',detail=v_unknown;
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_cycle_id:=(p_request->>'source_cycle_id')::uuid;
+    v_publication_id:=(p_request->>'projection_publication_id')::uuid;
+    v_expected_version:=p_request->>'expected_workspace_version';
+    v_action:=pg_catalog.upper(pg_catalog.btrim(p_request->>'action'));
+    v_selection:=p_request->'selection';
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_BULK_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_actor is null or v_cycle_id is null or v_publication_id is null
+     or coalesce(v_expected_version,'')!~ '^[0-9a-f]{64}$'
+     or v_action not in ('ASK_CANDIDATES','SEND_MANAGER_NOW','ACCEPT_SYSTEM_HOURS')
+     or pg_catalog.jsonb_typeof(v_selection)<>'object' then
+    raise exception 'WEEKLY_SOURCE_BULK_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select key into v_unknown from pg_catalog.jsonb_object_keys(v_selection) key
+  where not (key=any(v_selection_allowed)) order by key limit 1;
+  if v_unknown is not null then
+    raise exception 'WEEKLY_SOURCE_BULK_SELECTION_UNKNOWN_FIELD'
+      using errcode='22023',detail=v_unknown;
+  end if;
+  v_mode:=pg_catalog.upper(pg_catalog.btrim(coalesce(v_selection->>'mode','')));
+  if v_mode not in ('ALL_FILTERED','EXPLICIT')
+     or pg_catalog.jsonb_typeof(coalesce(v_selection->'group_keys','[]'::jsonb))<>'array'
+     or pg_catalog.jsonb_typeof(coalesce(v_selection->'excluded_group_keys','[]'::jsonb))<>'array'
+     or pg_catalog.jsonb_typeof(coalesce(v_selection->'incident_ids','[]'::jsonb))<>'array'
+     or pg_catalog.jsonb_typeof(coalesce(v_selection->'group_selection_proofs','[]'::jsonb))<>'array'
+     or pg_catalog.jsonb_typeof(coalesce(v_selection->'filters','{}'::jsonb))<>'object' then
+    raise exception 'WEEKLY_SOURCE_BULK_SELECTION_INVALID' using errcode='22023';
+  end if;
+  v_filters:=coalesce(v_selection->'filters','{}'::jsonb);
+  v_group_selection_proofs:=coalesce(v_selection->'group_selection_proofs','[]'::jsonb);
+  v_selection_proof:=nullif(pg_catalog.lower(pg_catalog.btrim(v_selection->>'selection_proof')),'');
+  select key into v_unknown from pg_catalog.jsonb_object_keys(v_filters) key
+  where not (key=any(v_filter_allowed)) order by key limit 1;
+  if v_unknown is not null then
+    raise exception 'WEEKLY_SOURCE_BULK_FILTER_UNKNOWN_FIELD'
+      using errcode='22023',detail=v_unknown;
+  end if;
+  if exists(
+    select 1 from pg_catalog.jsonb_each(v_filters) item
+    where pg_catalog.jsonb_typeof(item.value)<>'string'
+  )
+     or coalesce(v_filters->>'status','UNRESOLVED') not in ('UNRESOLVED','ALL')
+     or coalesce(v_filters->>'issue','ALL') not in ('ALL','TIMESHEET_MISSING','HOURS_DIFFER','MISSING_SHIFT')
+     or pg_catalog.char_length(coalesce(v_filters->>'candidate',''))>120
+     or coalesce(v_selection->>'sort_key','candidate') not in (
+       'candidate','client','issues','candidate_asked','manager_informed','status','age'
+     )
+     or pg_catalog.lower(coalesce(v_selection->>'sort_direction','asc')) not in ('asc','desc')
+     or (v_selection_proof is not null and v_selection_proof!~ '^[0-9a-f]{64}$') then
+    raise exception 'WEEKLY_SOURCE_BULK_SELECTION_INVALID' using errcode='22023';
+  end if;
+  begin
+    select coalesce(pg_catalog.array_agg(value order by value),'{}'::text[]) into v_group_keys
+    from pg_catalog.jsonb_array_elements_text(coalesce(v_selection->'group_keys','[]'::jsonb)) value;
+    select coalesce(pg_catalog.array_agg(value order by value),'{}'::text[]) into v_excluded_keys
+    from pg_catalog.jsonb_array_elements_text(coalesce(v_selection->'excluded_group_keys','[]'::jsonb)) value;
+    select coalesce(pg_catalog.array_agg(value::uuid order by value::uuid),'{}'::uuid[]) into v_incident_ids
+    from pg_catalog.jsonb_array_elements_text(coalesce(v_selection->'incident_ids','[]'::jsonb)) value;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_BULK_SELECTION_INVALID' using errcode='22023';
+  end;
+  if exists(select 1 from pg_catalog.unnest(v_group_keys) key where key!~ '^qg_[0-9a-f]{64}$')
+     or exists(select 1 from pg_catalog.jsonb_array_elements(coalesce(v_selection->'group_keys','[]'::jsonb)) item
+       where pg_catalog.jsonb_typeof(item)<>'string')
+     or exists(select 1 from pg_catalog.jsonb_array_elements(coalesce(v_selection->'excluded_group_keys','[]'::jsonb)) item
+       where pg_catalog.jsonb_typeof(item)<>'string')
+     or exists(select 1 from pg_catalog.jsonb_array_elements(coalesce(v_selection->'incident_ids','[]'::jsonb)) item
+       where pg_catalog.jsonb_typeof(item)<>'string')
+     or exists(select 1 from pg_catalog.jsonb_array_elements(v_group_selection_proofs) item
+       where pg_catalog.jsonb_typeof(item)<>'object'
+          or exists(select 1 from pg_catalog.jsonb_object_keys(item) key
+            where key not in ('group_key','selection_proof'))
+          or pg_catalog.jsonb_typeof(item->'group_key')<>'string'
+          or pg_catalog.jsonb_typeof(item->'selection_proof')<>'string'
+          or coalesce(item->>'group_key','')!~ '^qg_[0-9a-f]{64}$'
+          or coalesce(item->>'selection_proof','')!~ '^[0-9a-f]{64}$')
+     or exists(select 1 from pg_catalog.unnest(v_excluded_keys) key where key!~ '^qg_[0-9a-f]{64}$')
+     or pg_catalog.cardinality(v_group_keys)<>(select pg_catalog.count(distinct key) from pg_catalog.unnest(v_group_keys) key)
+     or pg_catalog.cardinality(v_excluded_keys)<>(select pg_catalog.count(distinct key) from pg_catalog.unnest(v_excluded_keys) key)
+     or pg_catalog.cardinality(v_incident_ids)<>(select pg_catalog.count(distinct id) from pg_catalog.unnest(v_incident_ids) id)
+     or (v_mode='ALL_FILTERED' and pg_catalog.cardinality(v_group_keys)<>0)
+     or (v_mode='EXPLICIT' and pg_catalog.cardinality(v_group_keys)=0 and pg_catalog.cardinality(v_incident_ids)=0)
+     or (v_mode='EXPLICIT' and pg_catalog.cardinality(v_excluded_keys)<>0)
+     or (v_mode='ALL_FILTERED' and pg_catalog.cardinality(v_incident_ids)<>0)
+     or (v_action<>'ACCEPT_SYSTEM_HOURS' and pg_catalog.cardinality(v_incident_ids)<>0)
+     or (v_action<>'ACCEPT_SYSTEM_HOURS' and pg_catalog.jsonb_array_length(v_group_selection_proofs)<>0)
+     or (v_action='ACCEPT_SYSTEM_HOURS' and (
+       v_mode<>'EXPLICIT' or pg_catalog.cardinality(v_group_keys)=0
+       or pg_catalog.cardinality(v_incident_ids)=0
+       or pg_catalog.jsonb_array_length(v_group_selection_proofs)<>pg_catalog.cardinality(v_group_keys)
+       or (select pg_catalog.count(distinct item->>'group_key')
+           from pg_catalog.jsonb_array_elements(v_group_selection_proofs) item)
+          <>pg_catalog.cardinality(v_group_keys)
+     )) then
+    raise exception 'WEEKLY_SOURCE_BULK_SELECTION_INVALID' using errcode='22023';
+  end if;
+
+  v_guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
+  if v_action='ACCEPT_SYSTEM_HOURS' then
+    perform private.weekly_source_pay_query_admit_v2();
+  end if;
+  if v_action='SEND_MANAGER_NOW' then
+    perform private.weekly_contact_source_manager_action_lock_v1(v_actor,v_cycle_id,v_publication_id,v_filters);
+  end if;
+  select * into strict v_cycle from public.weekly_source_cycles
+  where id=v_cycle_id for update;
+  v_guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
+  if v_action='SEND_MANAGER_NOW' then
+    v_manager_action:=private.weekly_contact_source_manager_action_v1(v_actor,v_cycle_id,v_publication_id,v_filters);
+    v_current_version:=v_manager_action->>'workspace_version';
+  else
+    v_current_version:=private.weekly_source_office_workspace_version_v1(v_cycle_id,v_publication_id);
+  end if;
+  if v_current_version is distinct from v_expected_version then
+    raise exception 'WEEKLY_SOURCE_BULK_WORKSPACE_STALE' using errcode='40001';
+  end if;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,case v_action when 'SEND_MANAGER_NOW' then 'SEND_MANAGER'
+      when 'ACCEPT_SYSTEM_HOURS' then 'ACCEPT_SYSTEM_HOURS' else 'ASK_CANDIDATES' end,
+    (v_guard->>'source_group_id')::uuid,null,(v_guard->>'finalisation_week_ending')::date
+  );
+  select coalesce(pg_catalog.array_agg(query.group_key order by query.group_key),'{}'::text[])
+  into v_current_keys
+  from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters) query;
+  v_expected_selection_proof:=pg_catalog.encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_BULK_FILTER_SELECTION_V1',pg_catalog.jsonb_build_object(
+      'action',v_action,'source_cycle_id',v_cycle_id,
+      'projection_publication_id',v_publication_id,
+      'workspace_version',v_current_version,'filters',v_filters,
+      'group_keys',to_jsonb(v_current_keys)
+    )),'hex');
+  if v_action in ('ASK_CANDIDATES','SEND_MANAGER_NOW')
+     and v_selection_proof is distinct from v_expected_selection_proof then
+    raise exception 'WEEKLY_SOURCE_BULK_SELECTION_STALE' using errcode='40001';
+  end if;
+  if v_mode='ALL_FILTERED' then
+    if exists(select 1 from pg_catalog.unnest(v_excluded_keys) key where not (key=any(v_current_keys))) then
+      raise exception 'WEEKLY_SOURCE_BULK_SELECTION_STALE' using errcode='40001';
+    end if;
+    select coalesce(pg_catalog.array_agg(key order by key),'{}'::text[]) into v_selected_keys
+    from pg_catalog.unnest(v_current_keys) key where not (key=any(v_excluded_keys));
+  else
+    if exists(select 1 from pg_catalog.unnest(v_group_keys) key where not (key=any(v_current_keys))) then
+      raise exception 'WEEKLY_SOURCE_BULK_SELECTION_STALE' using errcode='40001';
+    end if;
+    v_selected_keys:=v_group_keys;
+  end if;
+  v_selected_count:=pg_catalog.cardinality(v_selected_keys);
+
+  if v_action='ACCEPT_SYSTEM_HOURS' then
+    if exists(
+      select 1 from pg_catalog.jsonb_array_elements(v_group_selection_proofs) proof
+      where not ((proof->>'group_key')=any(v_selected_keys))
+    ) then
+      raise exception 'WEEKLY_SOURCE_BULK_SELECTION_STALE' using errcode='40001';
+    end if;
+    for v_group in
+      select query.group_key,query.accept_incident_ids
+      from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters) query
+      where query.group_key=any(v_selected_keys)
+      order by query.group_key
+    loop
+      if pg_catalog.cardinality(v_group.accept_incident_ids)=0
+         or not (v_group.accept_incident_ids && v_incident_ids)
+         or not exists(
+           select 1 from pg_catalog.jsonb_array_elements(v_group_selection_proofs) proof
+           where proof->>'group_key'=v_group.group_key
+             and proof->>'selection_proof'=pg_catalog.encode(
+               private.weekly_source_sha256_jsonb_v1(
+                 'WEEKLY_SOURCE_ACCEPT_GROUP_SELECTION_V1',pg_catalog.jsonb_build_object(
+                   'workspace_version',v_current_version,
+                   'group_key',v_group.group_key,
+                   'incident_ids',to_jsonb(v_group.accept_incident_ids)
+                 )
+               ),'hex'
+             )
+         ) then
+        raise exception 'WEEKLY_SOURCE_BULK_SELECTION_STALE' using errcode='40001';
+      end if;
+    end loop;
+    if exists(
+      select 1
+      from pg_catalog.unnest(v_incident_ids) selected_incident(incident_id)
+      left join (
+        select eligible_group.group_key,eligible_incident.incident_id
+        from private.weekly_source_office_query_groups_v1(
+          v_cycle_id,v_publication_id,v_filters
+        ) eligible_group
+        cross join lateral pg_catalog.unnest(
+          eligible_group.accept_incident_ids
+        ) eligible_incident(incident_id)
+        where eligible_group.group_key=any(v_selected_keys)
+      ) eligible on eligible.incident_id=selected_incident.incident_id
+      group by selected_incident.incident_id
+      having pg_catalog.count(eligible.group_key)<>1
+    ) then
+      raise exception 'WEEKLY_SOURCE_BULK_SELECTION_STALE' using errcode='40001';
+    end if;
+    v_owner_result:=public.weekly_source_query_accept_system_hours_atomic_v1(
+      pg_catalog.jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_cycle_id,
+        'projection_publication_id',v_publication_id,'incident_ids',to_jsonb(v_incident_ids))
+    );
+    return pg_catalog.jsonb_build_object('ok',true,'action',v_action,'status','COMPLETE',
+      'selected_count',v_selected_count,'included_count',v_selected_count,
+      'included_issue_count',pg_catalog.cardinality(v_incident_ids),'excluded_count',0,
+      'excluded','[]'::jsonb,'result',v_owner_result);
+  end if;
+
+  if v_action='ASK_CANDIDATES' then
+    for v_group in
+      select query.group_key
+      from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters) query
+      where query.group_key=any(v_selected_keys)
+        and not (query.outreach_eligible or not query.candidate_app_available)
+      order by query.group_key
+    loop
+      v_excluded_count:=v_excluded_count+1;
+      if pg_catalog.jsonb_array_length(v_exclusions)<100 then
+        v_exclusions:=v_exclusions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+          'group_key',v_group.group_key,'status','UNAVAILABLE_FOR_CANDIDATE_QUERIES'
+        ));
+      end if;
+    end loop;
+    for v_candidate in
+      select query.candidate_id,
+        bool_and(query.candidate_app_available) candidate_app_available,
+        pg_catalog.array_agg(query.group_key order by query.group_key) group_keys
+      from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters) query
+      where query.group_key=any(v_selected_keys)
+        and (query.outreach_eligible or not query.candidate_app_available)
+      group by query.candidate_id order by query.candidate_id
+    loop
+      select pg_catalog.count(*)=1 into v_candidate_available
+      from public.candidate_app_global_membership_links membership
+      join public.candidate_app_accounts account on account.id=membership.account_id
+      where membership.candidate_id=v_candidate.candidate_id
+        and membership.state='ACTIVE' and account.status='ACTIVE';
+      if not v_candidate_available then
+        v_excluded_count:=v_excluded_count+pg_catalog.cardinality(v_candidate.group_keys);
+        if pg_catalog.jsonb_array_length(v_exclusions)<100 then
+          v_exclusions:=v_exclusions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'candidate_id',v_candidate.candidate_id,'group_keys',to_jsonb(v_candidate.group_keys),
+            'status','UNAVAILABLE_NO_ACTIVE_APP_ACCOUNT'
+          ));
+        end if;
+        continue;
+      end if;
+
+      v_candidate_results:='[]'::jsonb;
+      v_candidate_issue_count:=0;
+      v_candidate_failed:=false;
+      begin
+        select coalesce(pg_catalog.jsonb_agg(scope.value order by
+          (scope.value->>'week_ending')::date,(scope.value->>'client_id')::uuid,(scope.value->>'contract_id')::uuid),'[]'::jsonb)
+        into v_scopes
+        from (
+          select distinct on (value->>'week_ending',value->>'client_id',value->>'contract_id') value
+          from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters) query
+          cross join lateral pg_catalog.jsonb_array_elements(query.missing_scopes) value
+          where query.group_key=any(v_selected_keys) and query.candidate_id=v_candidate.candidate_id
+            and (query.outreach_eligible or not query.candidate_app_available)
+          order by value->>'week_ending',value->>'client_id',value->>'contract_id',value::text
+        ) scope;
+        if pg_catalog.jsonb_array_length(v_scopes)>0 then
+          v_owner_result:=public.weekly_source_timesheet_submission_request_start_atomic_v1(
+            pg_catalog.jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_cycle_id,
+              'projection_publication_id',v_publication_id,'candidate_id',v_candidate.candidate_id,
+              'scopes',v_scopes)
+          );
+          v_candidate_results:=v_candidate_results||pg_catalog.jsonb_build_array(v_owner_result);
+          v_candidate_issue_count:=v_candidate_issue_count+pg_catalog.jsonb_array_length(v_scopes);
+        end if;
+
+        for v_client in
+          select query.client_id,
+            pg_catalog.array_agg(query.group_key order by query.group_key) group_keys,
+            bool_or(pg_catalog.jsonb_array_length(query.missing_scopes)>0) has_missing_scope
+          from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters) query
+          where query.group_key=any(v_selected_keys) and query.candidate_id=v_candidate.candidate_id
+            and (query.outreach_eligible or not query.candidate_app_available)
+          group by query.client_id order by query.client_id
+        loop
+          if v_client.has_missing_scope then continue; end if;
+          select pg_catalog.array_agg(incident.id order by incident.id) into v_exact_incidents
+          from public.weekly_discrepancy_incidents incident
+          join public.weekly_issue_comparison_revisions comparison
+            on comparison.id=incident.current_comparison_revision_id
+          where incident.source_cycle_id=v_cycle_id
+            and incident.candidate_id=v_candidate.candidate_id
+            and incident.client_id=v_client.client_id and incident.state='OPEN'
+            and not private.weekly_source_covered_hours_incident_v1(incident.id)
+            and incident.candidate_action_state not in ('RESPONDED','NOT_REQUIRED');
+          if coalesce(pg_catalog.cardinality(v_exact_incidents),0)=0 then continue; end if;
+          v_owner_result:=public.weekly_source_query_ask_candidate_atomic_v1(
+            pg_catalog.jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_cycle_id,
+              'projection_publication_id',v_publication_id,'candidate_id',v_candidate.candidate_id,
+              'client_id',v_client.client_id,'incident_ids',to_jsonb(v_exact_incidents))
+          );
+          v_candidate_results:=v_candidate_results||pg_catalog.jsonb_build_array(v_owner_result);
+          v_candidate_issue_count:=v_candidate_issue_count+pg_catalog.cardinality(v_exact_incidents);
+        end loop;
+      exception when sqlstate '55000' then
+        get stacked diagnostics v_message=message_text;
+        if v_message='WEEKLY_SOURCE_CANDIDATE_APP_UNAVAILABLE' then
+          v_candidate_failed:=true;
+        else
+          raise;
+        end if;
+      end;
+
+      if v_candidate_failed then
+        v_excluded_count:=v_excluded_count+pg_catalog.cardinality(v_candidate.group_keys);
+        if pg_catalog.jsonb_array_length(v_exclusions)<100 then
+          v_exclusions:=v_exclusions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'candidate_id',v_candidate.candidate_id,'group_keys',to_jsonb(v_candidate.group_keys),
+            'status','UNAVAILABLE_NO_ACTIVE_APP_ACCOUNT'
+          ));
+        end if;
+      else
+        v_results:=v_results||v_candidate_results;
+        v_included_count:=v_included_count+pg_catalog.cardinality(v_candidate.group_keys);
+        v_included_issue_count:=v_included_issue_count+v_candidate_issue_count;
+      end if;
+    end loop;
+  else
+    for v_group in
+      select query.*
+      from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters) query
+      where query.group_key=any(v_selected_keys)
+      order by query.group_key
+    loop
+      if not v_group.manager_eligible or pg_catalog.cardinality(v_group.incident_ids)=0
+         or pg_catalog.jsonb_array_length(v_group.missing_scopes)>0
+         or not exists(select 1 from jsonb_array_elements(v_manager_action->'groups') contact
+           where contact->>'group_key'=v_group.group_key and contact->'eligible'='true'::jsonb) then
+        v_excluded_count:=v_excluded_count+1;
+        if pg_catalog.jsonb_array_length(v_exclusions)<100 then
+          v_exclusions:=v_exclusions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'group_key',v_group.group_key,'status','UNAVAILABLE_FOR_MANAGER'
+          ));
+        end if;
+      else
+        v_included_count:=v_included_count+1;
+        v_included_issue_count:=v_included_issue_count+pg_catalog.cardinality(v_group.incident_ids);
+      end if;
+    end loop;
+    for v_route in
+      select query.manager_recipient_route_key,contact.value->>'mode' contact_mode,
+        pg_catalog.array_agg(distinct incident_id order by incident_id) incident_ids
+      from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters) query
+      cross join lateral pg_catalog.unnest(query.incident_ids) incident_id
+      join lateral jsonb_array_elements(v_manager_action->'groups') contact(value)
+        on contact.value->>'group_key'=query.group_key and contact.value->'eligible'='true'::jsonb
+      where query.group_key=any(v_selected_keys) and query.manager_eligible
+        and pg_catalog.jsonb_array_length(query.missing_scopes)=0
+      group by query.manager_recipient_route_key,contact.value->>'mode'
+      order by pg_catalog.encode(query.manager_recipient_route_key,'hex'),contact.value->>'mode'
+    loop
+      if v_route.contact_mode='ROUTINE_MANUAL_FOLLOWUP' then
+        v_owner_result:=private.weekly_contact_source_manager_manual_step_v1(v_actor,v_cycle_id,v_publication_id,
+          v_route.incident_ids,v_current_version);
+      else
+        v_owner_result:=public.weekly_source_query_send_manager_now_atomic_v1(
+          pg_catalog.jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_cycle_id,
+            'projection_publication_id',v_publication_id,'incident_ids',to_jsonb(v_route.incident_ids))
+        );
+      end if;
+      v_results:=v_results||pg_catalog.jsonb_build_array(v_owner_result);
+    end loop;
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'action',v_action,
+    'status',case when v_included_count=0 then 'NO_ELIGIBLE_SELECTION'
+      when v_excluded_count>0 then 'PARTLY_COMPLETE' else 'COMPLETE' end,
+    'selected_count',v_selected_count,'included_count',v_included_count,
+    'included_issue_count',v_included_issue_count,'excluded_count',v_excluded_count,
+    'excluded',v_exclusions,'excluded_omitted_count',greatest(v_excluded_count-pg_catalog.jsonb_array_length(v_exclusions),0),
+    'results',v_results,'workspace_version',v_current_version
+  );
+exception
+  when invalid_text_representation or numeric_value_out_of_range or datetime_field_overflow then
+    raise exception 'WEEKLY_SOURCE_BULK_REQUEST_INVALID' using errcode='22023';
+end;
+$function$;
