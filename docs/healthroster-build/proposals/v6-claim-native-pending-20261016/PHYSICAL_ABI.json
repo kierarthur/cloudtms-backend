@@ -1,0 +1,20 @@
+{
+  "source_commit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+  "physical_mount_sha256": "5a4bc204c3126c463fd569f8cd5243af649ad0fbd68c220833b37b15963e3cf2",
+  "payloads": {
+    "forward/00_pending_binding.sqlinc": "69f0d5d13ed732ede9a2b5a84a03c5ed0019f9c3ba079521183cf06fd3080ea0",
+    "forward/02_allocation_binding.sqlinc": "d7aa249b8c23750d0fe553acc90d65381aafc5793f9a31f04697b12ca7612ba5",
+    "forward/03a_pending_read_enter.sqlinc": "30183fe608e64d5e54570ae8581afeb639b13bbf2c6f57ad6115f3beb2e2825b",
+    "forward/03f_pending_workflow.sqlinc": "508efa90dea3b70b316b137a3ff254b8d1c7654de0867c11fc6cc37b71686b6e",
+    "forward/04_current_placement.sqlinc": "cbc671065fefa41025ce7b850b477206422221f33c186fa444a9264a33b1a7da",
+    "forward/10_native_workflow_admission.sqlinc": "3f9f6fbde4afe49b79c52317a1b5307c0c9de47572da1d534c30b42dff12c41b",
+    "forward/14_original_evidence_source.sqlinc": "4bbd6895031ef92bb32c6d63f2f8e53e7eea54b8196ff4ded40f7d5cf1535846"
+  },
+  "abi": [
+    "private.timesheet_contract_native_pending_for_v1(uuid)->jsonb|null",
+    "private.timesheet_contract_native_pending_week_v1(uuid)->jsonb|null",
+    "private.timesheet_contract_native_pending_workflow_v1(jsonb,uuid)->boolean",
+    "private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)->boolean"
+  ],
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN"
+}

@@ -1,0 +1,40 @@
+-- NOT_RUN. Genuine native withdrawn COMBINED claim input only, after the real
+-- original CANCEL/PENDING publication/AFTER-trigger journey. No fake audit,
+-- acceptance, financial publication, renderer/provider or synthetic clock.
+create or replace function pg_temp.invoice_pending_claim_assert_v1(p_expense_component_id uuid)
+returns jsonb language plpgsql volatile security invoker set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare component public.candidate_expense_components%rowtype; workflow public.candidate_submission_workflows%rowtype;
+ pending jsonb; before_rows jsonb; after_rows jsonb; sync_result jsonb;
+begin
+ select * into strict component from public.candidate_expense_components where expense_component_id=p_expense_component_id;
+ select * into strict workflow from public.candidate_submission_workflows where id=component.workflow_id;
+ pending:=private.timesheet_contract_claim_pending_v1(workflow.id,component.owning_timesheet_id,component.expense_component_id);
+ if pending is null or workflow.state<>'CANCELLED' or component.lifecycle_state<>'CANCELLED' then
+  raise exception 'GENUINE_NATIVE_CANCELLED_PENDING_CLAIM_INPUT_REQUIRED' using errcode='55000';end if;
+ before_rows:=jsonb_build_object('workflow',to_jsonb(workflow),'component',to_jsonb(component),'pending',pending,
+  'timesheets',(select jsonb_agg(to_jsonb(t) order by t.timesheet_id) from public.timesheets t
+    where t.timesheet_id in(select a.timesheet_id from private.timesheet_contract_family_aliases a where a.family_root_id=(pending#>>'{placement,family_root_id}')::uuid)),
+  'financials',(select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f where f.timesheet_id in(
+    select a.timesheet_id from private.timesheet_contract_family_aliases a where a.family_root_id=(pending#>>'{placement,family_root_id}')::uuid)),
+  'events',(select jsonb_agg(to_jsonb(e) order by e.id) from public.candidate_expense_component_events e where e.workflow_id=workflow.id));
+ if private.timesheet_contract_claim_placement_v1(workflow.id,component.owning_timesheet_id,component.expense_component_id) is not null
+  or private._candidate_expense_current_timesheet_id_v1(workflow.id,component.owning_timesheet_id) is not null
+  or private._candidate_expense_owned_timesheet_id_v1(workflow.id,component.owning_timesheet_id) is not null
+  or private._candidate_expense_owner_context_lock_v1(component.expense_component_id) is not null then
+  raise exception 'NATIVE_PENDING_CLAIM_BORROWED_PHYSICAL_UUID';end if;
+ sync_result:=private._candidate_expense_components_sync_v1(workflow.id,clock_timestamp());
+ select * into strict component from public.candidate_expense_components where expense_component_id=p_expense_component_id;
+ select * into strict workflow from public.candidate_submission_workflows where id=component.workflow_id;
+ after_rows:=jsonb_build_object('workflow',to_jsonb(workflow),'component',to_jsonb(component),
+  'pending',private.timesheet_contract_claim_pending_v1(workflow.id,component.owning_timesheet_id,component.expense_component_id),
+  'timesheets',(select jsonb_agg(to_jsonb(t) order by t.timesheet_id) from public.timesheets t
+    where t.timesheet_id in(select a.timesheet_id from private.timesheet_contract_family_aliases a where a.family_root_id=(pending#>>'{placement,family_root_id}')::uuid)),
+  'financials',(select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f where f.timesheet_id in(
+    select a.timesheet_id from private.timesheet_contract_family_aliases a where a.family_root_id=(pending#>>'{placement,family_root_id}')::uuid)),
+  'events',(select jsonb_agg(to_jsonb(e) order by e.id) from public.candidate_expense_component_events e where e.workflow_id=workflow.id));
+ if after_rows is distinct from before_rows then raise exception 'NATIVE_PENDING_REPLAY_CHANGED_ORIGINAL_CLAIM_OR_FINANCE';end if;
+ return jsonb_build_object('status','SQL_ASSERTIONS_PENDING_OUTER_ROLLBACK_AND_FRESH_RESTORATION','pending',pending,'before',before_rows,'after',after_rows,
+  'sync_result',sync_result,'provider_or_native_acceptance_claimed',false);
+end;
+$function$;

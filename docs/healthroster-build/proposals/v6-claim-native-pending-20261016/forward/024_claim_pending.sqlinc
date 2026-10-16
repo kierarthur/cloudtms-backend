@@ -1,0 +1,57 @@
+-- Read-only absence of an allocated physical owner, from the exact native
+-- withdrawal/CW/member witness. NULL here means no certified pending subject.
+-- It never selects a carrier or changes the immutable original claim owner.
+create or replace function private.timesheet_contract_claim_pending_v1(
+ p_workflow_id uuid,p_stored_timesheet_id uuid,p_expense_component_id uuid default null
+) returns jsonb language plpgsql stable security definer
+set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare w public.candidate_submission_workflows%rowtype; m private.timesheet_contract_move_members%rowtype;
+ e public.candidate_expense_components%rowtype; pending jsonb; subject_id uuid;
+begin
+ select v.* into w from public.candidate_submission_workflows v where v.id=p_workflow_id;
+ if not found or w.scope<>'WEEKLY' then return null;end if;
+ subject_id:=coalesce(p_stored_timesheet_id,w.target_timesheet_id,w.anchor_timesheet_id);
+ if subject_id is not null then
+  pending:=private.timesheet_contract_native_pending_for_v1(subject_id);
+ elsif w.contract_week_id is not null then
+  pending:=private.timesheet_contract_native_pending_week_v1(w.contract_week_id);
+ else return null;end if;
+ if pending is null then return null;end if;
+ -- This owner independently reasserts exact native withdrawal, current CW,
+ -- accepted member and real original/new workflow association. No new rules.
+ if not private.timesheet_contract_native_pending_workflow_v1(pending,w.id) then
+  raise exception 'CANDIDATE_EXPENSE_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';end if;
+ select v.* into strict m from private.timesheet_contract_move_members v
+  where v.operation_id=(pending#>>'{placement,operation_id}')::uuid and v.member_key=pending#>>'{placement,member_key}';
+ if p_stored_timesheet_id is not null and not exists(select 1 from private.timesheet_contract_family_aliases a
+  where a.timesheet_id=p_stored_timesheet_id and a.family_root_id=m.family_root_id and a.member_key=m.member_key) then
+  return null; -- A different actual member is not this pending worked member.
+ end if;
+ if p_expense_component_id is not null then
+  select v.* into e from public.candidate_expense_components v where v.expense_component_id=p_expense_component_id;
+  if not found or e.workflow_id is distinct from w.id or e.owning_timesheet_id is distinct from p_stored_timesheet_id then
+   raise exception 'CANDIDATE_EXPENSE_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';end if;
+  if not (
+   -- Original reviewed claim IDs stay on the SAME exact accepted member.
+   (w.id=any(m.workflow_ids) and e.expense_component_id=any(m.expense_component_ids)
+    and (e.owning_timesheet_id is null or exists(select 1 from private.timesheet_contract_family_aliases a
+     where a.timesheet_id=e.owning_timesheet_id and a.family_root_id=m.family_root_id and a.member_key=m.member_key)))
+   -- A genuine component of the actual withdrawn combined workflow remains
+   -- its own native claim; this grants no transfer and returns no UUID.
+   or (w.id=(pending->>'workflow_id')::uuid and w.workflow_kind='CONTRACT_COMBINED'
+    and e.owning_timesheet_id is not null and exists(select 1 from private.timesheet_contract_family_aliases a
+     where a.timesheet_id=e.owning_timesheet_id and a.family_root_id=m.family_root_id and a.member_key=m.member_key))
+   -- An actual new combined draft on the certified unallocated CW can have
+   -- NULL native claim owner. Expense-only carriers remain a separate owner.
+   or (e.owning_timesheet_id is null and w.workflow_kind='CONTRACT_COMBINED'
+    and w.contract_week_id=(pending->>'contract_week_id')::uuid
+    and w.contract_id=(pending#>>'{placement,current_contract_id}')::uuid
+    and w.target_timesheet_id is null and w.anchor_timesheet_id is null)
+  ) then raise exception 'CANDIDATE_EXPENSE_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';end if;
+ end if;
+ return pending;
+end;
+$function$;
+alter function private.timesheet_contract_claim_pending_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.timesheet_contract_claim_pending_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

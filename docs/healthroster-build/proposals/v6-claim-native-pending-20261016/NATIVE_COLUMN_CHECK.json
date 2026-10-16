@@ -1,0 +1,180 @@
+{
+  "qualification": "SOURCE_SCHEMA_ONLY_NATIVE_NOT_RUN",
+  "checks": [
+    {
+      "file": "fixtures/native-pending-claims.sqlinc",
+      "rowvar": "component",
+      "relation": "public.candidate_expense_components",
+      "fields": [
+        "expense_component_id",
+        "lifecycle_state",
+        "owning_timesheet_id",
+        "workflow_id"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "fixtures/native-pending-claims.sqlinc",
+      "rowvar": "workflow",
+      "relation": "public.candidate_submission_workflows",
+      "fields": [
+        "id",
+        "state"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/024_claim_pending.sqlinc",
+      "rowvar": "w",
+      "relation": "public.candidate_submission_workflows",
+      "fields": [
+        "anchor_timesheet_id",
+        "contract_id",
+        "contract_week_id",
+        "id",
+        "scope",
+        "target_timesheet_id",
+        "workflow_kind"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/024_claim_pending.sqlinc",
+      "rowvar": "e",
+      "relation": "public.candidate_expense_components",
+      "fields": [
+        "expense_component_id",
+        "owning_timesheet_id",
+        "workflow_id"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/026_claim_current.sqlinc",
+      "rowvar": "v_workflow",
+      "relation": "public.candidate_submission_workflows",
+      "fields": [
+        "anchor_timesheet_id",
+        "contract_id",
+        "target_timesheet_id",
+        "week_ending_date"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/026_claim_current.sqlinc",
+      "rowvar": "v_stored",
+      "relation": "public.timesheets",
+      "fields": [
+        "booking_id",
+        "sheet_scope"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/027_claim_owned.sqlinc",
+      "rowvar": "v_workflow",
+      "relation": "public.candidate_submission_workflows",
+      "fields": [
+        "contract_id",
+        "week_ending_date"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/027_claim_owned.sqlinc",
+      "rowvar": "v_stored",
+      "relation": "public.timesheets",
+      "fields": [
+        "archived_at_utc",
+        "booking_id",
+        "is_current",
+        "sheet_scope",
+        "timesheet_id"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/028_claim_lock.sqlinc",
+      "rowvar": "v_component",
+      "relation": "public.candidate_expense_components",
+      "fields": [
+        "owning_timesheet_id",
+        "workflow_id"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/030_claim_sync.sqlinc",
+      "rowvar": "v_workflow",
+      "relation": "public.candidate_submission_workflows",
+      "fields": [
+        "environment",
+        "generation",
+        "id",
+        "immutable_submission_json",
+        "manager_approved_at_utc",
+        "rejection_reason",
+        "state",
+        "target_timesheet_id",
+        "updated_at_utc",
+        "worker_submitted_at_utc",
+        "workflow_kind"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/030_claim_sync.sqlinc",
+      "rowvar": "v_fin",
+      "relation": "public.timesheets_financials",
+      "fields": [
+        "authorised_at_utc",
+        "locked_by_invoice_id",
+        "paid_at_utc"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/030_claim_sync.sqlinc",
+      "rowvar": "v_timesheet",
+      "relation": "public.timesheets",
+      "fields": [
+        "archived_at_utc",
+        "authorised_at_server",
+        "sheet_scope",
+        "status"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/030_claim_sync.sqlinc",
+      "rowvar": "v_approval",
+      "relation": "public.candidate_approval_requests",
+      "fields": [
+        "id",
+        "refusal_reason",
+        "refused_at_utc",
+        "state"
+      ],
+      "source_schema_pass": true
+    },
+    {
+      "file": "forward/030_claim_sync.sqlinc",
+      "rowvar": "v_component",
+      "relation": "public.candidate_expense_components",
+      "fields": [
+        "agency_authorisation_state",
+        "amount",
+        "approval_request_id",
+        "component_generation",
+        "expense_component_id",
+        "lifecycle_state",
+        "manager_approval_state",
+        "mileage_units",
+        "owning_timesheet_id",
+        "workflow_generation"
+      ],
+      "source_schema_pass": true
+    }
+  ]
+}

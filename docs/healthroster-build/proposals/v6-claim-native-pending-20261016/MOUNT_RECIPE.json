@@ -1,0 +1,53 @@
+{
+  "schema_version": "HEALTH_INVOICE_PENDING_CLAIM_SOURCE_V1",
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "physical_source": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+  "prerequisites": [
+    "exactc86+330a015/035",
+    "ffc025/028 rotation",
+    "150ac twelve current native ingress owners",
+    "f017 two-locking-helper successor",
+    "complete Physical975 pending schema/publishers/H103/accessors/native fullWF"
+  ],
+  "new_private_routine": "private.timesheet_contract_claim_pending_v1(uuid,uuid,uuid)->jsonb|null",
+  "new_public_operations": false,
+  "new_schema": false,
+  "mount_order": [
+    "forward/024_claim_pending.sqlinc",
+    "forward/025_claim_placement.sqlinc",
+    "forward/026_claim_current.sqlinc",
+    "forward/027_claim_owned.sqlinc",
+    "forward/028_claim_lock.sqlinc",
+    "forward/030_claim_sync.sqlinc"
+  ],
+  "complete_replacement_recipe": "FINITE_REPLACEMENTS.json",
+  "native_fixture": "fixtures/native-pending-claims.sqlinc",
+  "source_cases": 6,
+  "source_cases_status": "PASS",
+  "native_api_concurrency": "NOT_RUN",
+  "no_native_acceptance_claim": true,
+  "financial_029_body_unchanged": true,
+  "original_source_evidence_consumers_017_022_079_unchanged": true,
+  "payload_sha256": {
+    "FINITE_REPLACEMENTS.json": "fe976b62eadeeeb723ac5bbb2e3e0f50aef6f5c6b4d8696fb48030d2f454604f",
+    "fixtures/native-pending-claims.sqlinc": "cbb3c69d18a8424d21b766fd12f7b2561ed6c3e9bb9c426547e5b7000bf4dc0a",
+    "forward/024_claim_pending.sqlinc": "3f8a75179c2a3949ec3eef2ae92f9b1a18cb3f884fa07ac556c109403852b128",
+    "forward/025_claim_placement.sqlinc": "c92466618483af23f5db63e18c6a60f5468cc1cbf3bb0f9e53660b1281d9e725",
+    "forward/026_claim_current.sqlinc": "45f595bbacf81eb6b9ee5ea2a4a8b6e5c97a93c23b95caa6ac22ef23b3a21dc6",
+    "forward/027_claim_owned.sqlinc": "26af6eb0947d1bfc91261d802d05ca1c39a203edc182c529c3bbcde2526c784f",
+    "forward/028_claim_lock.sqlinc": "df68f058ddda8ccbf8e1a55f7133d953e426d3b06bccadf23772da3b01afa04d",
+    "forward/030_claim_sync.sqlinc": "81e2c35db983e53636817e07fd41730c52f747ca126748672ff2aef644b60292",
+    "INTEGRATION.md": "7d888d9755942d3361c5afeb48264ba7843666a583bf76de0fa1fb6ba0860309",
+    "NATIVE_COLUMN_CHECK.json": "fcfd071e180253f6f4fdf690bbc99c546f0d9c2e9a7ee0817fab7bedf4ae6657",
+    "parse-source.py": "a1a18ad032dfd3d424baf4baa330283fec30e55ab8803d7e65f8d3d5ada12ebd",
+    "PHYSICAL_ABI.json": "3f2028ff9973768a4218e54606d6b0e22ec9401468513ef2184f85dc40920f42",
+    "prepare-source.py": "bbff78d6676c2d2cc2153de2cb34ec6eb23f8c15a1adb0a71cebb56ac7f633c3",
+    "reference/025_claim_placement.sqlinc": "985cb854e50102c87ad01818a0f287eff8286ae1340d0ab612296e9db1db6c24",
+    "reference/026_claim_current.sqlinc": "bf5098454a3dbe32feaa230d460ebc796181d093b068fcaa20c82cb25a7cc942",
+    "reference/027_claim_owned.sqlinc": "20f9a2394fbe9fee7e29fcc91ab321c8ed13c2b29c7960628d6d27cd0e74d455",
+    "reference/028_claim_lock.sqlinc": "32472ea3409d7db4099ba352a9b5ff3a9831f541ab0720f643b7a54aaef2758c",
+    "reference/030_claim_sync.sqlinc": "3ba92317e968970c17be22fa89d097a3d66da80b2a9cf316965b2f2cff4ab999",
+    "source.test.mjs": "39314aed6eb9f027e90e3370df05f0ba7eaeb8bfd58e61069060abe6a19eac2e",
+    "SOURCE_PARSE_RESULT.json": "d4edae2e79cdcadbaeea98c22dc733aaea62eb2503582280c4727ff52253e855"
+  }
+}

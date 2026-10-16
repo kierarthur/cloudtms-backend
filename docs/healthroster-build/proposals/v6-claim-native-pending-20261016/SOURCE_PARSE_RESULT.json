@@ -1,0 +1,56 @@
+{
+  "qualification": "OFFLINE_GRAMMAR_ONLY",
+  "native": "NOT_RUN",
+  "pglast": "v7.20",
+  "checks": [
+    {
+      "path": "fixtures/native-pending-claims.sqlinc",
+      "statements": 1,
+      "plpgsql": 1,
+      "inner_sql": 13,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/024_claim_pending.sqlinc",
+      "statements": 3,
+      "plpgsql": 1,
+      "inner_sql": 23,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/025_claim_placement.sqlinc",
+      "statements": 3,
+      "plpgsql": 1,
+      "inner_sql": 11,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "path": "forward/026_claim_current.sqlinc",
+      "statements": 1,
+      "plpgsql": 1,
+      "inner_sql": 18,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/027_claim_owned.sqlinc",
+      "statements": 1,
+      "plpgsql": 1,
+      "inner_sql": 23,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/028_claim_lock.sqlinc",
+      "statements": 3,
+      "plpgsql": 1,
+      "inner_sql": 24,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/030_claim_sync.sqlinc",
+      "statements": 1,
+      "plpgsql": 1,
+      "inner_sql": 53,
+      "rowtype_parser_alias_only": true
+    }
+  ]
+}

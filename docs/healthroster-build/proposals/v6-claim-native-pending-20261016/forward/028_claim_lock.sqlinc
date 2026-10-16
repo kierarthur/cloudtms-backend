@@ -1,0 +1,71 @@
+create or replace function private._candidate_expense_owner_context_lock_v1(
+  p_expense_component_id uuid
+)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_component public.candidate_expense_components%rowtype;
+  v_timesheet_id uuid;
+  v_initial_workflow_id uuid;
+  v_initial_owner_id uuid;
+begin
+  -- Gate/family before component row; do not invert Move's native lock order.
+  select component.* into v_component from public.candidate_expense_components component
+    where component.expense_component_id=p_expense_component_id;
+  if not found then raise exception 'CANDIDATE_EXPENSE_COMPONENT_NOT_FOUND' using errcode='P0002';end if;
+  v_initial_workflow_id:=v_component.workflow_id;
+  v_initial_owner_id:=v_component.owning_timesheet_id;
+  perform private.timesheet_contract_expense_family_enter_v1(w.environment,w.id,null,null)
+    from public.candidate_submission_workflows w where w.id=v_component.workflow_id;
+  select component.* into v_component
+  from public.candidate_expense_components component
+  where component.expense_component_id=p_expense_component_id
+  for update;
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_NOT_FOUND' using errcode='P0002';
+  end if;
+  -- A concurrent ownership refresh must retry from its actual family gate;
+  -- a component lock cannot silently substitute for that earlier authority.
+  if v_component.workflow_id is distinct from v_initial_workflow_id
+    or v_component.owning_timesheet_id is distinct from v_initial_owner_id then
+    raise exception 'CANDIDATE_EXPENSE_CURRENT_PLACEMENT_CHANGED' using errcode='40001';
+  end if;
+  if private.timesheet_contract_claim_pending_v1(v_component.workflow_id,v_component.owning_timesheet_id,p_expense_component_id) is not null then
+    return null; -- Genuine unallocated owner; retain the immutable component owner/history.
+  end if;
+  v_timesheet_id:=coalesce(private.timesheet_contract_claim_placement_v1(
+    v_component.workflow_id,v_component.owning_timesheet_id,p_expense_component_id),
+    private._candidate_expense_owned_timesheet_id_v1(v_component.workflow_id,v_component.owning_timesheet_id));
+  if v_timesheet_id is null then return null; end if;
+
+  perform 1 from public.timesheets timesheet
+  where timesheet.timesheet_id=v_timesheet_id for update;
+  perform 1 from public.timesheets_financials financial
+  where financial.timesheet_id=v_timesheet_id
+  order by financial.id for update;
+  perform 1 from public.timesheet_evidence evidence
+  where evidence.timesheet_id=v_timesheet_id
+  order by evidence.id for update;
+  perform 1 from public.candidate_expense_components component
+  where component.owning_timesheet_id=v_timesheet_id
+  order by component.expense_component_id for update;
+  perform 1 from public.candidate_submission_components evidence
+  where evidence.workflow_id=v_component.workflow_id
+  order by evidence.id for update;
+  -- Re-read through the same exact component/member/H103/rotation owner after
+  -- actual native row locks. No lock result manufactures a placement receipt.
+  if coalesce(private.timesheet_contract_claim_placement_v1(
+      v_component.workflow_id,v_component.owning_timesheet_id,p_expense_component_id),
+      private._candidate_expense_owned_timesheet_id_v1(v_component.workflow_id,v_component.owning_timesheet_id))
+      is distinct from v_timesheet_id then
+    raise exception 'CANDIDATE_EXPENSE_CURRENT_PLACEMENT_CHANGED' using errcode='40001';
+  end if;
+  return v_timesheet_id;
+end;
+$function$;
+alter function private._candidate_expense_owner_context_lock_v1(uuid) owner to postgres;
+revoke all on function private._candidate_expense_owner_context_lock_v1(uuid) from public,anon,authenticated,service_role;
