@@ -1,0 +1,14 @@
+do $block$
+declare c record;
+begin
+  for c in select conname from pg_catalog.pg_constraint where conrelid='public.weekly_source_billing_movements'::regclass and contype='c'
+    and (pg_catalog.pg_get_constraintdef(oid) like '%transition_id%'
+      or pg_catalog.pg_get_constraintdef(oid) like '%nhsp_upload_row_id%'
+      or pg_catalog.pg_get_constraintdef(oid) like '%expense_authority_generation_id%'
+      or pg_catalog.pg_get_constraintdef(oid) like '%source_profile_kind%'
+      or pg_catalog.pg_get_constraintdef(oid) like '%source_line_kind%'
+      or pg_catalog.pg_get_constraintdef(oid) like '%movement_role%'
+      or pg_catalog.pg_get_constraintdef(oid) like '%price_check_result%')
+  loop execute format('alter table public.weekly_source_billing_movements drop constraint %I',c.conname); end loop;
+end;
+$block$;

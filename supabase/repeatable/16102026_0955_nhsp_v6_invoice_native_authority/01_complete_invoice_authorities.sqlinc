@@ -6290,7 +6290,7 @@ begin
   raise exception 'DAILY_RATE_ACTUAL_FINANCE_NOT_CURRENT_APPROVED' using errcode='55000';end if;
  select array_agg(key order by key) into v_keys from jsonb_object_keys(snap) key where key<>'rate_source_refs_json';
  select jsonb_object_agg(key,to_jsonb(f)->key) into actual from unnest(v_keys) key;
- refs:=snap->'rate_source_refs_json'||coalesce(r.manifest_json#>'{daily,rate_provenance}','{}'::jsonb)
+ refs:=(snap->'rate_source_refs_json')||coalesce(r.manifest_json#>'{daily,rate_provenance}','{}'::jsonb)
   ||jsonb_build_object('approval_purpose','RATE_CORRECTION','correction_operation_id',o.id,'accepted_review_id',r.id,
    'approved_by_user_id',f.authorised_by_user_id,'approved_at_utc',f.authorised_at_utc,'original_financial_id',m.from_financial_id,
    'calculation_context_sha256',r.manifest_json#>>'{daily,context,context_digest}',

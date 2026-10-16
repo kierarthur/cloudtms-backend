@@ -6574,5 +6574,20 @@
     "invoiceAdminGates": "UNCHANGED",
     "dailyAdminGates": "UNCHANGED",
     "original92ObjectsPreserved": true
+  },
+  "invoice_operand_grouping_source_continuation_20261016": {
+    "status": "SOURCE_INTEGRATED_NOT_RELEASE_READY",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/F23_JOINED_CLASSIFIER_INTEGRATION.json",
+    "target": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+    "completeFunction": "private.invoice_daily_rate_actual_revision_assert_v1(uuid)",
+    "leafSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+    "root": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+    "currentClosureSha256": "e0c488daa9bffc3362c2eb8f3c786427f691806c70026ea9190724e7ef2571bf",
+    "oneExactGroupingOnly": true,
+    "wholeFunctionAndWholeLeafReverseEquality": true,
+    "pg17ExpressionAstEqual": true,
+    "runtimeValueBugClaim": false,
+    "oldRecordRetainedHistorical": true,
+    "native": "NOT_RUN"
   }
 }

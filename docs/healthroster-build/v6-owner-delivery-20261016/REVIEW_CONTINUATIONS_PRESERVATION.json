@@ -1,0 +1,69 @@
+{
+  "version": "HEALTH_REVIEW_CONTINUATIONS_PRESERVATION_V1",
+  "rootPrerequisite": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+  "status": "INDEPENDENT_SOURCE_REVIEW_AND_PREREQUISITES_ONLY",
+  "files": [
+    {
+      "commit": "416e0592aeafa8ddcec99bffe06719dbfd945214",
+      "source": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/audit-frozen-contact.mjs",
+      "destination": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_SOURCE_REVIEW_20261016/audit-frozen-contact.mjs",
+      "sha256": "14e8ddc13e00ad30c1d8c5fd6dcce88f04bcde461fa35459bc380122fc47771f",
+      "bytes": 14303
+    },
+    {
+      "commit": "416e0592aeafa8ddcec99bffe06719dbfd945214",
+      "source": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/FROZEN_SOURCE_REVIEW.json",
+      "destination": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_SOURCE_REVIEW_20261016/FROZEN_SOURCE_REVIEW.json",
+      "sha256": "2ceb868704ed271c2edb7240f1d39d4f58a204f4e6da5400f3f53bfd76e1e2d4",
+      "bytes": 201282
+    },
+    {
+      "commit": "416e0592aeafa8ddcec99bffe06719dbfd945214",
+      "source": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md",
+      "destination": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_SOURCE_REVIEW_20261016/REVIEW.md",
+      "sha256": "46755d6ee3a62884fb025a733defc5aa2f4b390d4de69c87424dec837d90f86b",
+      "bytes": 17648
+    },
+    {
+      "commit": "416e0592aeafa8ddcec99bffe06719dbfd945214",
+      "source": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/SOURCE_MANIFEST.json",
+      "destination": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_SOURCE_REVIEW_20261016/SOURCE_MANIFEST.json",
+      "sha256": "68943eda8aacb55867d7706aadc2e5d3e09592ba51ef0f2f9937333f95a2b224",
+      "bytes": 1363
+    },
+    {
+      "commit": "fade418e18bce0c121ede3d0298c81377cec8f52",
+      "source": "docs/healthroster-build/proposals/v6-health-completeness-read-audit-20261016/PUBLIC_COMPOSER_PREREQUISITES.md",
+      "destination": "docs/healthroster-build/v6-owner-delivery-20261016/PUBLIC_COMPOSER_AND_ASSEMBLY_CONTINUATION_20261016/PUBLIC_COMPOSER_PREREQUISITES.md",
+      "sha256": "5076547d59ebbf5193e4d110dd22bddfe795ae54f3dab2f60c31ab1783423907",
+      "bytes": 14119
+    },
+    {
+      "commit": "fade418e18bce0c121ede3d0298c81377cec8f52",
+      "source": "docs/healthroster-build/proposals/v6-health-completeness-read-audit-20261016/PUBLIC_COMPOSER_PREREQUISITES.json",
+      "destination": "docs/healthroster-build/v6-owner-delivery-20261016/PUBLIC_COMPOSER_AND_ASSEMBLY_CONTINUATION_20261016/PUBLIC_COMPOSER_PREREQUISITES.json",
+      "sha256": "52c1b18475b20b1600ce5147bdd55e02774cf1b018ef69aedcb1edffd372f791",
+      "bytes": 50011
+    },
+    {
+      "commit": "fade418e18bce0c121ede3d0298c81377cec8f52",
+      "source": "docs/healthroster-build/proposals/v6-health-completeness-read-audit-20261016/SOURCE_ASSEMBLY_REVIEW.json",
+      "destination": "docs/healthroster-build/v6-owner-delivery-20261016/PUBLIC_COMPOSER_AND_ASSEMBLY_CONTINUATION_20261016/SOURCE_ASSEMBLY_REVIEW.json",
+      "sha256": "030f14063c6c7123dcd6ab7cfc08ac55b3e98b40dcc52b7659161f3689fbeea0",
+      "bytes": 258858
+    },
+    {
+      "commit": "fade418e18bce0c121ede3d0298c81377cec8f52",
+      "source": "docs/healthroster-build/proposals/v6-health-completeness-read-audit-20261016/SOURCE_ASSEMBLY_REVIEW.md",
+      "destination": "docs/healthroster-build/v6-owner-delivery-20261016/PUBLIC_COMPOSER_AND_ASSEMBLY_CONTINUATION_20261016/SOURCE_ASSEMBLY_REVIEW.md",
+      "sha256": "e3376b234418f454abdca9dc8b8cb50bfd359adb087298d208773d81282ec34e",
+      "bytes": 16482
+    }
+  ],
+  "olderCompletenessAuditRetainedUnchanged": true,
+  "contactGuardCorrection": "650f736b80474576dcfc72ffba5eecbbb0aac954b893e3fb2e1cc81c3d83d796",
+  "nativeQualification": "NOT_RUN",
+  "finalPartBCritics": "NOT_RUN",
+  "bankingBodiesMounted": 0,
+  "rootImplementationAltered": false
+}

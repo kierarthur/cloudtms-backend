@@ -1,0 +1,37 @@
+{
+  "version": "HEALTH_DYNAMIC_EXACT_INVOICE_GROUPING_SUCCESSOR_V1",
+  "native": "NOT_RUN",
+  "sourceProposalCommit": "128c8da0a97ea1a86bd83ef62a6c1e508df086d1",
+  "groupingProposalCommit": "eca0f2b521c082bdd4e95fe8c932248b59e5e1e6",
+  "target": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+  "beforeSha256": "a8c57548c911fb11140be3b3d2256aba876995fb196396850b6fe38e2f0797f4",
+  "afterSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+  "exactReplacement": {
+    "before": "refs:=snap->'rate_source_refs_json'||",
+    "after": "refs:=(snap->'rate_source_refs_json')||",
+    "count": 1
+  },
+  "completeFunctionSignature": "private.invoice_daily_rate_actual_revision_assert_v1(uuid)",
+  "completeBeforeSha256": "d26b6decb7a16e61110c915dd74011649b288a83ea96ed1270525717b32fc4db",
+  "completeAfterSha256": "b18fe2cd908e27cfe8fb52156406b661b3961f1d2bc924781eff01271e60ac82",
+  "completeFunctionAndWholeLeafReverse": true,
+  "dynamicRawKeys": 3,
+  "dynamicKeysEqual": true,
+  "completeDynamicProducers": 2,
+  "completeDynamicProducerBytesEqual": true,
+  "originalClassificationPreserved": true,
+  "scope": "Only exact one non-dynamic grouping edit is reversed for historical source provenance; all enumerated dynamic whole bodies/keys remain byte equal. No changed dynamic point or generic waiver.",
+  "lexicalExecuteContainingPartsCompared": 13,
+  "dynamicProducerProofs": [
+    {
+      "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "bodySha256": "ec83cffa2199324a20beea31ac7230edf26c3fc1fcc656459af3358d599429cb",
+      "unchanged": true
+    },
+    {
+      "signature": "public.invoice_issue_one(uuid,uuid)",
+      "bodySha256": "b3245fc741374087e053e2ef553264165faf9f4cec2cb73e105addbe07cfe76a",
+      "unchanged": true
+    }
+  ]
+}

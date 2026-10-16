@@ -1,0 +1,168 @@
+{
+  "version": "HEALTHROSTER_JOINED_FINITE_CLASSIFIER_INTEGRATION_TEST_RESULTS_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "sourceCommit": "c1ebb691feb6a11324060e0c28210e2bd735624a",
+  "helperSha256": "18937e1bad9001d36a7f81ae6e102cb1664e33c1ef6b8dce9ea5c810df047ec5",
+  "classificationSha256": "6f66d839660fff83046838763cf111d79ac41ce6f0834d32f62f16c4634777da",
+  "tests": [
+    {
+      "name": "all95 finite points across complete files, preserved unrelated baseline",
+      "status": "PASS"
+    },
+    {
+      "name": "unknown file and same signature cannot borrow approval",
+      "status": "PASS"
+    },
+    {
+      "name": "caller-controlled identifier substituted for literal registry is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "unquoted caller target concatenated into real Candidate effect is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "changed financial write target is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "changed fixed effect callee is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "removed current-source claim admission is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "Candidate auth removal outside EXECUTE is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "extra effect appended to an otherwise exact file is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "unknown dynamic key in exact file stays refused",
+      "status": "PASS"
+    },
+    {
+      "name": "duplicate occurrence is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "edited masked body with original source and key is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "ambiguous enclosing body is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "unclassified enclosing producer is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "all three1430 points remain outside proposal allowance",
+      "status": "PASS"
+    },
+    {
+      "name": "capability0400 native census gap remains outside allowance",
+      "status": "PASS"
+    },
+    {
+      "name": "three inherited baseline keys gain no new approval",
+      "status": "PASS"
+    },
+    {
+      "name": "callee dependency edit is refused in reused process, exact restore recovers",
+      "status": "PASS"
+    },
+    {
+      "name": "approval tampering is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "evidence tampering is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "offline AST tampering is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "rollback fixture arbitrary-text executor cannot move to runtime path",
+      "status": "PASS"
+    },
+    {
+      "name": "all37 exact tuple/scalar/cardinality points and original baseline retained",
+      "status": "PASS"
+    },
+    {
+      "name": "unknown joined-path cannot borrow identical known tuple source",
+      "status": "PASS"
+    },
+    {
+      "name": "whole-row SELECT changed to mismatched relation refuses",
+      "status": "PASS"
+    },
+    {
+      "name": "UUID ambiguity guard cannot be removed",
+      "status": "PASS"
+    },
+    {
+      "name": "scalar aggregate input cannot become UUID",
+      "status": "PASS"
+    },
+    {
+      "name": "removed actor authority outside reviewed tuple refuses",
+      "status": "PASS"
+    },
+    {
+      "name": "missing exact reviewed statement refuses",
+      "status": "PASS"
+    },
+    {
+      "name": "duplicate reviewed tuple occurrence refuses",
+      "status": "PASS"
+    },
+    {
+      "name": "ambiguous complete containing body refuses",
+      "status": "PASS"
+    },
+    {
+      "name": "edited containing body refuses",
+      "status": "PASS"
+    },
+    {
+      "name": "arbitrary new UUID and JSON hazards receive no finite allowance",
+      "status": "PASS"
+    },
+    {
+      "name": "same-process native binding source drift refuses: supabase/release/current-contract.json",
+      "status": "PASS"
+    },
+    {
+      "name": "same-process native binding source drift refuses: supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "status": "PASS"
+    },
+    {
+      "name": "same-process native binding source drift refuses: supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "status": "PASS"
+    },
+    {
+      "name": "finite source-review tamper refuses in reused process",
+      "status": "PASS"
+    },
+    {
+      "name": "unreviewed source grouping successor refuses",
+      "status": "PASS"
+    },
+    {
+      "name": "dynamic successor metadata tamper refuses",
+      "status": "PASS"
+    }
+  ],
+  "passed": 39,
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}

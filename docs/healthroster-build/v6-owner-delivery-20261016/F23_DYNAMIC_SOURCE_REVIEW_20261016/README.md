@@ -1,0 +1,32 @@
+# Exact current dynamic SQL source proposal
+
+This independent review is pinned to integrator `c1ebb691feb6a11324060e0c28210e2bd735624a` and census SHA256 `509162ee4b70e223473b17e065ec6d3ac84c8c9cf8e7fef300ce5fcbe17346a6`. Root is the sole integrator. No root, Bank, database, lock, Docker, runtime or release action was performed.
+
+The 99 reported diagnostics correspond to 99 real EXECUTE source statements in 38 file/signature groups, 35 physical files and 44 enclosing complete producers. Those 44 producers contain 100 EXECUTE AST nodes: the Candidate ELSE call is already inherited from the exact frozen baseline. Across all 35 files there are 102 raw dynamic points in 45 complete dynamic producers; two additional unchanged `public.invoice_issue_one` updates also belong to the frozen baseline. All three inherited keys are proved against their actual original files at `a6f7423eb71e6e7cd173e705c2290e5408a1d077`; this proposal creates no allowance for them. These are source occurrences, never counts of runtime executions.
+
+All 95 prior Money points have exact statement and enclosing body equality. Four points are new: the two Daily ACL statements, the joined Invoice constant credit query and the joined Candidate PAPER branch. `REVIEW.json` records each statement, whole producer, identifier provenance, data-only USING operands, real effects, checks and source dependencies. Complete actual CREATE FUNCTION/DO statements are preserved under `producers/`; comments-masked bodies under `bodies/` reproduce the source-gate hashes.
+
+The joined Invoice complete statement `655b8fcfa012b52efba3c52b629a6c5b5ae153d9424111bfc0b02aa7735a33ac` equals the actual frozen c86a `070_generation_native.sqlinc` statement, with whole body `ec83cffa2199324a20beea31ac7230edf26c3fc1fcc656459af3358d599429cb`. Its constant query equals both historical credit statements, while the complete newer owner is separately pinned. The Candidate complete statement `71110183272885f700a1a0b5813dc1734c5abdcab8a25b5bed4b86593cf616a6` equals the actual 975 native pending owner; the entire joined file also equals frozen f566. No counterpart approval is borrowed. Both calls have real effects: credit financial writes and held mail enqueue respectively. No effect was invoked.
+
+Daily's two statements use exactly 52 literal private signatures. Every full definition and the actual earlier Physical and Daily include order are pinned. `%s` receives only a registry signature; `%I` receives CURRENT_USER. These statements alter ownership and revoke privileges, without invoking those bodies. Native owner/role/ACL verification remains required.
+
+The proposed classifier adds 95 finite construction allowances: 91 prior points plus the four additions. It withholds every 1430 point (three) and the capability 0400 point (one). The exact 1430 predecessor proposal exists at adbb, but c1ebb does not bind an integrated companion receipt; this historical proposal grants none. Capability 0400 requires its separately reviewed actual pending-prefix native census and a successor companion. A newer root census is not silently substituted into this c1ebb review. The historical capture's approval flags stay false.
+
+The helper binds 33 admitted complete source files, exact keys/counts/statements/signatures/body hashes, 32 full dependency inputs and sealed review/prior/AST evidence. It rechecks dependencies even in a reused process. Unknown files gain no allowance; edited or additional points in a known file refuse. Arbitrary-text pg_temp executors are bounded only by their entire exact rollback verification files and all fixed caller constructors. No generic EXECUTE, format, dollar body, optional helper, native catalogue or pg_temp exception is introduced. The existing chosen-detail Banking producer gap, original writer/context/ledger/policy/monetary/ACL/native-callee gates and fixture/rollback qualification remain independent.
+
+One prior dependency changed: 1134 explicitly groups the static `before_values` JSONB extraction before concatenation. The exact single before/after source amendment is preserved separately and the current complete file pinned; no old/new runtime-equivalence claim is made. All other 13 previous callee/constructor inputs are unchanged. Detector/extractor/scanner definitions used here were verified exact in c1ebb source even though independent gate hooks may have advanced in the working tree.
+
+`MOUNT.json` describes 98 complete proposed files under `forward/`, including the full c1ebb source gate replacement, one helper and preservation-ready evidence. Its only existing-source changes are one import and one outer finite-classifier hook. Exact reverse equality is proved. Root must independently reconstruct these edits around its newer source; copying the historical full gate over newer changes is not authorized.
+
+Validation: 22 meaningful source tests PASS, including unknown/edited/caller-identifier/changed-effect/removed-authorization/duplicate/body/callee/evidence refusals, inherited and withheld boundaries, and same-process dependency changes. Offline PG17.7 parsing counts every complete producer; declaration-only ROWTYPE-to-record parser aliases are labelled and do not prove native types/fields. Native, provider, concurrency, financial, role, API, rollback and final Part B qualification are **NOT_RUN** in this lane.
+
+Reproduction uses the saved scripts in this folder, the exact source commits and the pinned c1ebb analysis functions. `extract.mjs` additionally refuses saved census-source drift; run against a suitable exact source checkout rather than discarding newer integrator work. `check_ast.py C:/tmp/healthroster-v6-physical-parser` uses the already-present offline parser. `build-review.mjs`, `seal-helper.mjs`, `test-classifier.mjs` and `build-mount.mjs` write only this proposal and temporary, safely removed proposal-local source fixtures. No SQL is sent anywhere.
+
+Sealed key hashes:
+
+- REVIEW: `cae4974a5686868d23acc92a28b455d4cffbce5db15530b08a0640fe6cec19b3`
+- CLASSIFICATION: `6f66d839660fff83046838763cf111d79ac41ce6f0834d32f62f16c4634777da`
+- helper: `c34ae4b2c0596577cb93664ee84a61c86f2ff35323baab27e8e9210348d5fd41`
+- AST: `e14a9a785cb98b0661c292e07ebdb6653ff9627e8c16fae818cd801a38d89f67`
+- TEST_RESULTS: `7eba85b6c0ccd83a4f1dc5d221ffdc8e7e9f73ea88fd9b1dcd8fc251ab643eae`
+- MOUNT: `8dcc43e7e6cdd67a5b8c898f02f8f0e360b8bf478c9fb2cf66f8bd01ffc47ebd`

@@ -1,0 +1,23 @@
+{
+  "version": "HEALTH_EPHEMERAL_SIGNING_TEST_PEM_EXPORTER_CORRECTION_V1",
+  "status": "PASS_TEST_FIXTURE_AND_UNCHANGED_SECRET_SCANNER",
+  "file": "tests/weekly-source/push-timing-internal.test.mjs",
+  "sourcePredecessorCommit": "86b7c7ad7db62d0ba80dd22c83ddfbc246026793",
+  "beforeSha256": "c32002ac0e648351c81dd4bed491a38b55b84a7dd7f965cd36ee45e20d15db07",
+  "afterSha256": "f5847ff67a4a6ba2a0988d347b9af32404ce3ff7127d4fa8adb47267e2aeb704",
+  "reason": "Secret scanner correctly refuses literal PEM private-key markers; existing fixture generated the body only at runtime and no operational key was present. Use standard runtime key exporter, preserving all assertions.",
+  "wholeFileReverse": true,
+  "changes": "One node:crypto import and replacement of runtime generate/export/manual PEM encoding with runtime P-256 PKCS8 PEM export",
+  "secretScannerChanged": false,
+  "actualCredentialReadPrintedChanged": false,
+  "externalCalls": 0,
+  "focusedTests": {
+    "tests": 31,
+    "pass": 31,
+    "fail": 0
+  },
+  "unchangedSecretScanner": {
+    "status": "PASS",
+    "trackedFiles": 10140
+  }
+}

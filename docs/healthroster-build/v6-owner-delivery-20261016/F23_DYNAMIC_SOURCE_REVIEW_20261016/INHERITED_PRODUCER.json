@@ -1,0 +1,7 @@
+{
+  "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+  "signature": "public.invoice_issue_one(uuid,uuid)",
+  "producerFile": "INHERITED_INVOICE_ISSUE_COMPLETE.sqlinc",
+  "producerSha256": "4ed1bea255fb61c98ebc3e7bb2694a0d0244b715990b61604d24c9833fdc2990",
+  "purpose": "Raw35-file coverage only; two existing frozen baseline points, no new allowance."
+}

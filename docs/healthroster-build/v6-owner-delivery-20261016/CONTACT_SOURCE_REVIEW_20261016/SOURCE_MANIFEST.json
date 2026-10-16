@@ -1,0 +1,44 @@
+{
+  "version": "HEALTH_CONTACT_INDEPENDENT_REVIEW_SOURCE_MANIFEST_V1",
+  "status": "SOURCE_REVIEW_ONLY_NOT_NATIVE_ACCEPTANCE",
+  "reportBase": "1808fbad03a93abe0ac414938c6e8785e673bae3",
+  "producerCommit": "e4661d28219b85c66b854d99c6522b55aae33139",
+  "rootPrerequisiteCheckpoint": "5623005b91e4bc425e79587a88b1c5cad168d5eb",
+  "files": [
+    {
+      "path": "REVIEW.md",
+      "bytes": 17648,
+      "sha256": "46755d6ee3a62884fb025a733defc5aa2f4b390d4de69c87424dec837d90f86b"
+    },
+    {
+      "path": "audit-frozen-contact.mjs",
+      "bytes": 14303,
+      "sha256": "14e8ddc13e00ad30c1d8c5fd6dcce88f04bcde461fa35459bc380122fc47771f"
+    },
+    {
+      "path": "FROZEN_SOURCE_REVIEW.json",
+      "bytes": 201282,
+      "sha256": "2ceb868704ed271c2edb7240f1d39d4f58a204f4e6da5400f3f53bfd76e1e2d4"
+    }
+  ],
+  "excludesSelf": true,
+  "managedPayload": false,
+  "validation": {
+    "independentSourceAudit": "PASS",
+    "frozenSourceRuntimeSuites": 46,
+    "frozenSourceRuntimeFailures": 0,
+    "nativeExecution": "NOT_RUN",
+    "installedAcl": "NOT_RUN",
+    "concurrency": "NOT_RUN",
+    "api": "NOT_RUN",
+    "provider": "NOT_RUN",
+    "partB": "NOT_RUN"
+  },
+  "preservation": {
+    "producer": "UNCHANGED",
+    "invoiceAssemblyAndDuty": "FROZEN",
+    "rootEdits": false,
+    "databaseActions": false,
+    "unrelatedPreexistingUntracked": "PRESERVED"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "version": "F23_CURRENT_SOURCE_FAILURE_CENSUS_V1",
+  "status": "FAILED_CLOSED_REVIEW_REQUIRED",
+  "workingTreeAmendments": true,
+  "sourceCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+  "diagnosticSha256": "96d0eedd80863cdc2f1d1823ee7f0c8bdea7ff5d332e6099dc38eb94e273c596",
+  "count": 4,
+  "byCode": {
+    "BPAY_NEXT_SQL_DYNAMIC_SQL_UNCLASSIFIED": 4
+  },
+  "byFile": {
+    "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql": 3,
+    "supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql": 1
+  },
+  "diagnostics": [
+    "BPAY_NEXT_SQL_DYNAMIC_SQL_UNCLASSIFIED: supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql (outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql)",
+    "BPAY_NEXT_SQL_DYNAMIC_SQL_UNCLASSIFIED: supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql (outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql)",
+    "BPAY_NEXT_SQL_DYNAMIC_SQL_UNCLASSIFIED: supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql (outer:supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql)",
+    "BPAY_NEXT_SQL_DYNAMIC_SQL_UNCLASSIFIED: supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql (outer:supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql)"
+  ],
+  "unparsedLines": 0,
+  "native": "NOT_RUN",
+  "classificationApproval": false
+}

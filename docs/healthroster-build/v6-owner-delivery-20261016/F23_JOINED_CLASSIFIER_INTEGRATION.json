@@ -1,0 +1,125 @@
+{
+  "version": "HEALTH_JOINED_FINITE_SOURCE_CLASSIFIER_INTEGRATION_V1",
+  "status": "SOURCE_INTEGRATED_FAILED_CLOSED_FOUR_PREBODY_POINTS",
+  "rootBase": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+  "nonDynamic": {
+    "producerCommit": "eca0f2b521c082bdd4e95fe8c932248b59e5e1e6",
+    "map": "docs/healthroster-build/v6-owner-delivery-20261016/F23_JOINED_NON_DYNAMIC_REVIEW_20261016/EXTENSION_MAP.json",
+    "sha256": "660d83da88bf88054106e4f407cc43bfe5b455cc82727dc5c705448641f6ab0e",
+    "finitePoints": 37,
+    "tuple": 26,
+    "aggregateStatements": 7,
+    "scalarInputs": 64,
+    "uuidStatements": 4,
+    "uuidCasts": 7,
+    "helper": "scripts/healthroster-joined-nondynamic-review.mjs",
+    "helperSha256": "24bfb353bef9b1ea7808df8f75ff9d633a43fb2f5f5c4d29425abdf9ba6d9b28",
+    "native": "NOT_RUN"
+  },
+  "dynamic": {
+    "producerCommit": "128c8da0a97ea1a86bd83ef62a6c1e508df086d1",
+    "map": "docs/healthroster-build/v6-owner-delivery-20261016/F23_DYNAMIC_SOURCE_REVIEW_20261016/CLASSIFICATION.json",
+    "mapSha256": "6f66d839660fff83046838763cf111d79ac41ce6f0834d32f62f16c4634777da",
+    "finitePoints": 95,
+    "withheld1430": 3,
+    "withheld0400": 1,
+    "originalHelperSha256": "c34ae4b2c0596577cb93664ee84a61c86f2ff35323baab27e8e9210348d5fd41",
+    "currentHelperSha256": "18937e1bad9001d36a7f81ae6e102cb1664e33c1ef6b8dce9ea5c810df047ec5",
+    "groupingSuccessor": "docs/healthroster-build/v6-owner-delivery-20261016/F23_DYNAMIC_SOURCE_REVIEW_20261016/INVOICE_GROUPING_SUCCESSOR.json",
+    "groupingSuccessorSha256": "3f8aae697e6bea64dd41157379101bd8a84ad43c97e6ea9aaae19dd8fd1738d5",
+    "native": "NOT_RUN"
+  },
+  "grouping": {
+    "correctionRecord": "docs/healthroster-build/v6-owner-delivery-20261016/F23_JOINED_NON_DYNAMIC_REVIEW_20261016/CORRECTION_RECEIPT.json",
+    "target": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+    "signature": "private.invoice_daily_rate_actual_revision_assert_v1(uuid)",
+    "completeBeforeSha256": "d26b6decb7a16e61110c915dd74011649b288a83ea96ed1270525717b32fc4db",
+    "completeAfterSha256": "b18fe2cd908e27cfe8fb52156406b661b3961f1d2bc924781eff01271e60ac82",
+    "beforeSha256": "a8c57548c911fb11140be3b3d2256aba876995fb196396850b6fe38e2f0797f4",
+    "afterSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+    "wholeFunctionAndWholeLeafReverseEquality": true,
+    "pg17ExpressionAstEqual": true,
+    "runtimeValueBugClaim": false,
+    "invoiceRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+    "currentClosureSha256": "e0c488daa9bffc3362c2eb8f3c786427f691806c70026ea9190724e7ef2571bf",
+    "onlyOneGroupingChanged": true,
+    "ownerAclUnchanged": true
+  },
+  "gate": {
+    "file": "scripts/bpay-next-source-gates.mjs",
+    "beforeSha256": "b53bee775fd09448d92389a835ffd325822476c7a0798c855d2a9f30c100f6fb",
+    "afterSha256": "4c5a4ad0f2174217a247aa031b930a8339cd92053226f9a660071821249fbc07",
+    "fullReverseEquality": true,
+    "genericFencesUnchanged": true,
+    "rawBeforeSha256": "576b2945b38b7917268bf52b83fb7b631504ee86028a16119813ebe731ee5687",
+    "rawAfterSha256": "4317692f8696f8f008d7f08f1533a4a661aaa364a71f30f3b933b5c2432d3caa",
+    "newlineProfilePreserved": "Existing mixed LF/CRLF bytes preserved; inserted import uses surrounding line ending",
+    "fullReverseEqualityIncludingLineEndings": true,
+    "exactEdits": [
+      {
+        "before": "import {reviewedHealthAggregateHazards} from './healthroster-aggregate-type-review.mjs';",
+        "after": "import {reviewedHealthDynamicHazards} from './healthroster-dynamic-source-review.mjs';\r\nimport {reviewedHealthAggregateHazards} from './healthroster-aggregate-type-review.mjs';"
+      },
+      {
+        "before": "      } else assertSpecialConstructs(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,baselineHazards)),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}",
+        "after": "      } else assertSpecialConstructs(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,baselineHazards)),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}"
+      },
+      {
+        "before": "import {reviewedHealthDynamicHazards} from './healthroster-dynamic-source-review.mjs';",
+        "after": "import {reviewedJoinedNonDynamicHazards} from './healthroster-joined-nondynamic-review.mjs';\r\nimport {reviewedHealthDynamicHazards} from './healthroster-dynamic-source-review.mjs';"
+      },
+      {
+        "before": "assertSpecialConstructs(source,file,reviewedHealthDynamicHazards(source,file,",
+        "after": "assertSpecialConstructs(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,"
+      },
+      {
+        "before": "specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority",
+        "after": "specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority"
+      }
+    ]
+  },
+  "tests": {
+    "file": "tests/healthroster-joined-finite-source-classifiers.test.mjs",
+    "sha256": "06f54e3a5c6dbce3221f5f3ddc0abbc1686eb5db0f4b2f6e1c88f557205332c9",
+    "passed": 39,
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CLASSIFIER_INTEGRATION_TEST_RESULTS.json",
+    "recordSha256": "c154b77665c0945f2256ad50a8c4e6229ec9c3017758e28555c3c98fb010b292"
+  },
+  "fullF23": {
+    "status": "FAILED_CLOSED",
+    "workingTreeAmendments": true,
+    "base": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+    "count": 4,
+    "files": 2,
+    "diagnosticSha256": "96d0eedd80863cdc2f1d1823ee7f0c8bdea7ff5d332e6099dc38eb94e273c596",
+    "byCode": {
+      "BPAY_NEXT_SQL_DYNAMIC_SQL_UNCLASSIFIED": 4
+    },
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CURRENT_SOURCE_CENSUS_WORKING_FINITE_32EE.json",
+    "recordSha256": "2816b5a84b2f6a3e7494ff8e571afa83e59ff6487a53b31de1df297faf2aeca1",
+    "notReleaseQualification": true
+  },
+  "sourceIntegrity": {
+    "migrations": 408,
+    "repeatables": 1079,
+    "status": "PASS"
+  },
+  "nativeWorkflowAndFullRehearsal": "NOT_RUN",
+  "install2": "NOT_RUN",
+  "finalPartB": "NOT_RUN",
+  "preservation": {
+    "completeExistingSourceGateReverse": true,
+    "allEarlierCompanionAndRegistryMetadataPreserved": true,
+    "immutableMigrationBytesUnchanged": true,
+    "bankingOwnedBodiesChanged": 0,
+    "original92SchemaObjectsSha256": "dd9547b6ddde9ed0316030f84b9ec6d24275c4914bd7651a0a1366e97c0baac3"
+  },
+  "focusedBoundarySuite": {
+    "tests": 34,
+    "pass": 33,
+    "fail": 1,
+    "failedTest": "FullF23 exact frozen/writer/containment/RPC gate",
+    "failedBecause": "The same three1430+one0400 unclassified dynamic points; no other focused failure",
+    "gateFailureNotPass": true
+  }
+}

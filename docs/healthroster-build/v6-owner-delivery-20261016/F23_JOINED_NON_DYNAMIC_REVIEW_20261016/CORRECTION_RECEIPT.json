@@ -1,0 +1,23 @@
+{
+  "version": "JOINED_INVOICE_DAILY_JSON_GROUPING_CORRECTION_V1",
+  "sourceCommit": "c1ebb691feb6a11324060e0c28210e2bd735624a",
+  "target": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+  "signature": "private.invoice_daily_rate_actual_revision_assert_v1(uuid)",
+  "target_before_sha256": "a8c57548c911fb11140be3b3d2256aba876995fb196396850b6fe38e2f0797f4",
+  "target_after_exact_replacement_sha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+  "exactReplacement": {
+    "before": "refs:=snap->'rate_source_refs_json'||",
+    "after": "refs:=(snap->'rate_source_refs_json')||",
+    "count": 1
+  },
+  "complete_successor": "forward/01_complete_invoice_daily_actual_revision_assert.sqlinc",
+  "complete_before_sha256": "22a9546916b9d829d285aeb1aff66e21181e8a9b45de53e87bcd5a8521682e62",
+  "complete_successor_sha256": "420085e76ac9611551d489e3eae468874e89f15d2b7d8056ce9a246a083887f2",
+  "reverse_whole_function_equal": true,
+  "sql_create_statement_pg17_parse": "PASS",
+  "original_and_grouped_expression_ast_equal": true,
+  "expression_ast_sha256": "9b98465c7c9450b1de13d38e91e4c848aea618d2552cf3921b7344abb076175b",
+  "qualification": "EXPLICIT_OPERAND_GROUPING_SOURCE_FENCE_CORRECTION_NO_NATIVE_VALUE_CHANGE_PROVED",
+  "native": "NOT_RUN",
+  "acl": "CREATE OR REPLACE retains current exact owner/ACL; existing joined final ACL must remain current. No new grants, no body outside this exact function."
+}

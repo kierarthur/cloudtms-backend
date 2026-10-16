@@ -1,0 +1,39 @@
+create or replace function private.timesheet_correction_cancel_capability_v1(p_timesheet_id uuid,p_actor_user_id uuid default null)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_cap jsonb; v_request private.timesheet_correction_requests%rowtype; v_p public.timesheets%rowtype;
+begin
+  if to_regclass('pg_temp.timesheet_correction_cancel_capability_v1') is null
+    or not exists(select 1 from pg_class c where c.oid=to_regclass('pg_temp.timesheet_correction_cancel_capability_v1')
+      and c.relowner=(select p.proowner from pg_proc p where p.oid='private.timesheet_correction_cancel_capability_v1(uuid,uuid)'::regprocedure)) then
+    return null;
+  end if;
+  execute 'select to_jsonb(cap) from pg_temp.timesheet_correction_cancel_capability_v1 cap where cap.timesheet_id=$1 and cap.backend_pid=pg_backend_pid() and cap.transaction_id=txid_current()'
+    into v_cap using p_timesheet_id;
+  if v_cap is null or (p_actor_user_id is not null and v_cap->>'actor_user_id' is distinct from p_actor_user_id::text) then return null; end if;
+  select request.* into v_request from private.timesheet_correction_requests request where request.id=(v_cap->>'request_id')::uuid;
+  select t.* into v_p from public.timesheets t where t.timesheet_id=p_timesheet_id;
+  if v_request.state is distinct from 'WAITING' or v_request.state_revision::text is distinct from v_cap->>'state_revision'
+    or v_request.replacement_timesheet_id is distinct from p_timesheet_id
+    or v_p.timesheet_id is null or not v_p.is_current or v_p.authorised_at_server is not null
+    or v_p.booking_id is distinct from v_request.replacement_booking_id
+    or v_p.contract_id is distinct from v_request.contract_id
+    or v_p.week_ending_date is distinct from v_request.week_ending_date
+    or v_p.parent_timesheet_id is distinct from v_request.root_timesheet_id
+    or v_p.correction_id is distinct from v_request.correction_id
+    or v_p.correction_kind is distinct from 'WHOLE_TIMESHEET_REPLACEMENT'
+    or v_p.candidate_workflow_id::text is distinct from v_cap->>'workflow_id'
+    or v_p.candidate_workflow_generation::text is distinct from v_cap->>'workflow_generation'
+    or exists(select 1 from public.invoice_lines l where l.timesheet_id=p_timesheet_id)
+    or exists(select 1 from public.timesheets_financials tf where tf.timesheet_id=p_timesheet_id
+      and (tf.authorised_at_utc is not null or tf.paid_at_utc is not null or tf.locked_by_invoice_id is not null
+        or tf.unlocked_by_credit_note_id is not null or tf.processed_at_utc is not null
+        or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(tf.invoice_breakdown_json->'segments')='array'
+          then tf.invoice_breakdown_json->'segments' else '[]'::jsonb end) s
+          where nullif(s->>'invoice_locked_invoice_id','') is not null or nullif(s->>'invoice_locked_at_utc','') is not null
+            or s->>'pay_locked'='true' or nullif(s->>'pay_locked_at_utc','') is not null)))
+    or private.timesheet_correction_actor_allowed_v1((v_cap->>'actor_user_id')::uuid) is distinct from true then return null; end if;
+  return v_cap;
+end;
+$function$;

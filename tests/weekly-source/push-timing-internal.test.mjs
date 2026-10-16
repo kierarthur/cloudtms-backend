@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { generateKeyPairSync } from 'node:crypto';
 import { signWeeklySourceDeliveryRequest } from '../../broker/src/weekly-source/delivery-auth.mjs';
 import { createPushTimingInternalHandler, decodePushTimingServiceReply, PUSH_TIMING_INTERNAL_PATH } from '../../broker/src/weekly-source/push-timing-internal.mjs';
 import { weeklySourceDeploymentContext } from '../../broker/src/weekly-source/routes.js';
@@ -90,9 +91,8 @@ test('broker uses only configured private binding with actual signed endpoint; n
   await assert.rejects(()=>consumeWeeklyPushAdmission(env,consume().request));
 });
 async function apnsFixture(native) {
-  const keys=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
-  const bytes=Buffer.from(await crypto.subtle.exportKey('pkcs8',keys.privateKey));
-  const pem=`-----BEGIN PRIVATE KEY-----\n${bytes.toString('base64')}\n-----END PRIVATE KEY-----`;
+  const {privateKey:pem}=generateKeyPairSync('ec',{namedCurve:'prime256v1',
+    privateKeyEncoding:{type:'pkcs8',format:'pem'},publicKeyEncoding:{type:'spki',format:'pem'}});
   const f=fixture(native);let calls=0;
   const source={env:{...env,MYTMS_IDENTITY_DELIVERY:{fetch:req=>f.handler(req,env)},APNS_KEY_ID:'TEST',APNS_TEAM_ID:'TEST',
     APNS_PRIVATE_KEY_P8:pem,APNS_TOPIC:'net.cloudtms.mytms.test',APNS_ENVIRONMENT:'sandbox'},

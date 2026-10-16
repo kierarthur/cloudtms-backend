@@ -1,0 +1,237 @@
+declare
+  v_contract_count integer;
+  v_distinct_contract_count integer;
+  v_table record;
+  v_unexpected text;
+  v_lifecycle_columns text;
+begin
+  select count(*),count(distinct table_name)
+    into v_contract_count,v_distinct_contract_count
+  from private._weekly_source_acl_table_contract_v1();
+
+  if v_contract_count<>105
+     or v_distinct_contract_count<>105 then
+    raise exception 'WEEKLY_SOURCE_ACL_CONTRACT_INVALID'
+      using errcode='55000',
+            detail='The table ACL contract must contain exactly 105 unique relations.';
+  end if;
+
+   
+   
+   
+   
+  if exists(
+    select 1
+    from private._weekly_source_acl_private_helper_contract_v1() helper
+    join private._weekly_source_acl_service_rpc_contract_v1() service
+      on service.function_signature=helper.function_signature
+  ) then
+    raise exception 'WEEKLY_SOURCE_ACL_PRIVATE_HELPER_IN_SERVICE_CONTRACT'
+      using errcode='55000',
+            detail='A registered private helper must not appear in the service RPC contract.';
+  end if;
+
+  if exists(
+    select 1
+    from private._weekly_source_acl_private_helper_contract_v1()
+    group by function_signature
+    having count(*)<>1
+  ) then
+    raise exception 'WEEKLY_SOURCE_ACL_PRIVATE_HELPER_DUPLICATE' using errcode='55000';
+  end if;
+
+  if exists(
+    select 1
+    from private._weekly_source_acl_table_contract_v1()
+    where record_class not in (
+      'IMMUTABLE_APPEND_ONLY',
+      'IMMUTABLE_FACTS_WITH_LIFECYCLE',
+      'STATEFUL_SERVER_OWNED'
+    )
+  ) then
+    raise exception 'WEEKLY_SOURCE_ACL_CLASS_INVALID' using errcode='55000';
+  end if;
+
+  if (
+    select count(*)
+    from private._weekly_source_acl_lifecycle_column_contract_v1()
+  )<>67
+  or (
+    select count(distinct (table_name,column_name))
+    from private._weekly_source_acl_lifecycle_column_contract_v1()
+  )<>67 then
+     
+     
+    raise exception 'WEEKLY_SOURCE_ACL_LIFECYCLE_CONTRACT_INVALID'
+      using errcode='55000',detail='The lifecycle contract must contain exactly 67 unique table/column pairs.';
+  end if;
+
+  if exists(
+    select 1
+    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+    left join private._weekly_source_acl_table_contract_v1() expected
+      on expected.table_name=allowed.table_name
+    where expected.record_class is distinct from 'IMMUTABLE_FACTS_WITH_LIFECYCLE'
+  )
+  or exists(
+    select 1
+    from private._weekly_source_acl_table_contract_v1() expected
+    where expected.record_class='IMMUTABLE_FACTS_WITH_LIFECYCLE'
+      and not exists(
+        select 1
+        from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+        where allowed.table_name=expected.table_name
+      )
+  ) then
+    raise exception 'WEEKLY_SOURCE_ACL_LIFECYCLE_CLASS_MISMATCH' using errcode='55000';
+  end if;
+
+  if exists(
+    select 1
+    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+    left join pg_catalog.pg_attribute a
+      on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))
+     and a.attname=allowed.column_name
+     and a.attnum>0
+     and not a.attisdropped
+    where a.attrelid is null
+  )
+  or exists(
+    select 1
+    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+    group by allowed.table_name
+    having pg_catalog.min(allowed.column_ordinal)<>1
+       or pg_catalog.max(allowed.column_ordinal)<>count(*)
+       or count(distinct allowed.column_ordinal)<>count(*)
+  ) then
+    raise exception 'WEEKLY_SOURCE_ACL_LIFECYCLE_COLUMN_INVALID' using errcode='55000';
+  end if;
+
+  select pg_catalog.string_agg(c.table_name,',' order by c.table_name)
+    into v_unexpected
+  from private._weekly_source_acl_table_contract_v1() c
+  where pg_catalog.to_regclass(pg_catalog.format('public.%I',c.table_name)) is null;
+  if v_unexpected is not null then
+    raise exception 'WEEKLY_SOURCE_ACL_TABLE_MISSING'
+      using errcode='55000',detail=v_unexpected;
+  end if;
+
+  select pg_catalog.string_agg(c.relname,',' order by c.relname)
+    into v_unexpected
+  from pg_catalog.pg_class c
+  join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+  where n.nspname='public'
+    and c.relkind in ('r','p')
+    and (
+      pg_catalog.left(c.relname,7)='weekly_'
+      or c.relname='office_action_notifications'
+    )
+    and not exists(
+      select 1
+      from private._weekly_source_acl_table_contract_v1() expected
+      where expected.table_name=c.relname
+    );
+  if v_unexpected is not null then
+    raise exception 'WEEKLY_SOURCE_ACL_TABLE_UNCLASSIFIED'
+      using errcode='55000',detail=v_unexpected;
+  end if;
+
+  for v_table in
+    select c.table_name,c.record_class
+    from private._weekly_source_acl_table_contract_v1() c
+    order by c.table_name
+  loop
+    execute pg_catalog.format('alter table public.%I enable row level security',v_table.table_name);
+    execute pg_catalog.format('alter table public.%I force row level security',v_table.table_name);
+    execute pg_catalog.format(
+      'revoke all on table public.%I from public,anon,authenticated,service_role',
+      v_table.table_name
+    );
+    if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then
+      execute pg_catalog.format('revoke all on table public.%I from authenticator',v_table.table_name);
+    end if;
+    if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then
+      execute pg_catalog.format('revoke all on table public.%I from supabase_admin',v_table.table_name);
+    end if;
+
+    if exists(
+      select 1
+      from pg_catalog.pg_class c
+      where c.oid=pg_catalog.to_regclass(pg_catalog.format('public.%I',v_table.table_name))
+        and (
+          c.relowner<>(current_user::pg_catalog.regrole)::oid
+          or exists(
+            select 1
+            from pg_catalog.aclexplode(
+              coalesce(c.relacl,pg_catalog.acldefault('r',c.relowner))
+            ) acl
+            where acl.grantee<>c.relowner
+          )
+          or exists(
+            select 1
+            from pg_catalog.pg_attribute a
+            cross join lateral pg_catalog.aclexplode(a.attacl) acl
+            where a.attrelid=c.oid
+              and a.attnum>0
+              and not a.attisdropped
+              and acl.grantee<>c.relowner
+          )
+        )
+    ) then
+      raise exception 'WEEKLY_SOURCE_ACL_UNEXPECTED_TABLE_GRANTEE: %',v_table.table_name
+        using errcode='55000';
+    end if;
+
+    if exists(
+      select 1
+      from pg_catalog.pg_policy p
+      where p.polrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',v_table.table_name))
+        and p.polname<>'cloudtms_miget_service_owner_all'
+    ) then
+      raise exception 'WEEKLY_SOURCE_ACL_UNEXPECTED_POLICY: %',v_table.table_name
+        using errcode='55000';
+    end if;
+    execute pg_catalog.format(
+      'drop policy if exists cloudtms_miget_service_owner_all on public.%I',
+      v_table.table_name
+    );
+    execute pg_catalog.format(
+      'create policy cloudtms_miget_service_owner_all on public.%I for all to %I, service_role using (true) with check (true)',
+      v_table.table_name,current_user
+    );
+
+    execute pg_catalog.format(
+      'drop trigger if exists weekly_source_immutable_record_guard on public.%I',
+      v_table.table_name
+    );
+    execute pg_catalog.format(
+      'drop trigger if exists weekly_source_immutable_fact_guard on public.%I',
+      v_table.table_name
+    );
+    execute pg_catalog.format(
+      'drop trigger if exists weekly_source_immutable_truncate_guard on public.%I',
+      v_table.table_name
+    );
+    if v_table.record_class='IMMUTABLE_APPEND_ONLY' then
+      execute pg_catalog.format(
+        'create trigger weekly_source_immutable_record_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_record_guard_v1()',
+        v_table.table_name
+      );
+    elsif v_table.record_class='IMMUTABLE_FACTS_WITH_LIFECYCLE' then
+      select pg_catalog.string_agg(pg_catalog.format('%L',allowed.column_name),',' order by allowed.column_ordinal)
+        into v_lifecycle_columns
+      from private._weekly_source_acl_lifecycle_column_contract_v1() allowed
+      where allowed.table_name=v_table.table_name;
+      execute pg_catalog.format(
+        'create trigger weekly_source_immutable_fact_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_fact_guard_v1(%s)',
+        v_table.table_name,v_lifecycle_columns
+      );
+    end if;
+    if v_table.record_class in ('IMMUTABLE_APPEND_ONLY','IMMUTABLE_FACTS_WITH_LIFECYCLE') then
+      execute pg_catalog.format(
+        'create trigger weekly_source_immutable_truncate_guard before truncate on public.%I for each statement execute function private._weekly_source_immutable_record_guard_v1()',
+        v_table.table_name
+      );
+    end if;
+  end loop;
+end;

@@ -1,0 +1,684 @@
+{
+  "version": "F23_JOINED_NON_DYNAMIC_COMPLETE_PROVENANCE_V1",
+  "sourceCommit": "c1ebb691feb6a11324060e0c28210e2bd735624a",
+  "qualification": "EXACT_SOURCE_PROVENANCE_AND_COMPARISON_NOT_BEHAVIORAL_APPROVAL",
+  "manifestPins": [
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_SOURCE_ASSEMBLY_20261016/ASSEMBLY_MANIFEST.json",
+      "sha256": "f7261f85c3d409ed00e78e0f7a7508038752d1e09128b7c8224e0608677b960f"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_SOURCE_COMPOSITION_20261016/JOINED_SQL_MAP.json",
+      "sha256": "99de61228ff4893d46765311db974a32eaab7dd66f4fa25fee2a0b9d7abf3ec1"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+      "sha256": "5b5a3dba3a65e2be56844eeec6a5ad5fbc582a7b423b7fcc01151e3a51d68fcc"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json",
+      "sha256": "7a836fe81fa0bf9b60ee9f553dd26eb01ea6dc8290a063ea3be2ac8b5ebf3412"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json",
+      "sha256": "22f8ade4e2dd6bde62e559c6b75f363e71f04935540e012c3a05d2a44008c4da"
+    }
+  ],
+  "counts": {
+    "completeFunctions": 16,
+    "exactProducerWholeFunctions": 16,
+    "functionsWithOldCounterparts": 5,
+    "exactOldWholeFunctions": 0,
+    "diagnosticsWithExactPriorKey": 14
+  },
+  "functions": [
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "line": 1066,
+      "routineSha256": "f837fc330938f43a9484ee21efd4a10d909858c8dcfe0a937e99146ca5cec390",
+      "bodySha256": "bce492c3f1c0534e5c50e48843ef1b0d0441edcafe562fff202dd10b5fa45c15",
+      "producer": {
+        "kind": "INVOICE_COMPLETE_FUNCTION",
+        "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+        "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/021a_source_duty.sqlinc",
+        "fileSha256": "0e74042257973b6ee0507f7f2168b5bad6f5f3f11a73f0c48673b70aaebecc99",
+        "completeFunctionSha256": "f837fc330938f43a9484ee21efd4a10d909858c8dcfe0a937e99146ca5cec390",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [
+        {
+          "file": "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_invoice_duty.sqlinc",
+          "sourceSha256": "6dcaf79339c8ed3139b9d4bc0ca6641bf803fdb402af3b87e118c1b71ca3f36e",
+          "completeFunctionSha256": "6bbf294a956d0e2d9ac8076442831580e27aba360edcdad9b071eb24e2dee9be",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "2915089cedadd43ff27914b6ab9b7da6ea25cd080e29da6d41588ea9927d6e23",
+            "4d3614dc9e62829a5d8149a12e95f90c1d22357949ea47c5f32b86d1d8eb6acc",
+            "940725e087d4d0313dfe45f524c9fef2bf62821401a5b298395daecf6be38d12",
+            "9bf51c18fabc43a96bac435a1478d526cc6649de578bd8217c1782c6e4e2f7bb",
+            "c21b02ed13cbcbd7dfa324fbd3514d772776e73949c51f4d0ee4489b42293370",
+            "f0a4fec442921a653d10fbaec3f5279ada71504b7bab8eaa3bebeae4944550fe"
+          ],
+          "exactCurrentKeyMatches": [
+            1
+          ],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+          "sourceSha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+          "completeFunctionSha256": "eca8d5720fd78c53c4d764aeea5b758b44e5ab3aa04cdc5b07b2969a9138b359",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "2915089cedadd43ff27914b6ab9b7da6ea25cd080e29da6d41588ea9927d6e23",
+            "4d3614dc9e62829a5d8149a12e95f90c1d22357949ea47c5f32b86d1d8eb6acc",
+            "940725e087d4d0313dfe45f524c9fef2bf62821401a5b298395daecf6be38d12",
+            "9bf51c18fabc43a96bac435a1478d526cc6649de578bd8217c1782c6e4e2f7bb",
+            "c21b02ed13cbcbd7dfa324fbd3514d772776e73949c51f4d0ee4489b42293370",
+            "f0a4fec442921a653d10fbaec3f5279ada71504b7bab8eaa3bebeae4944550fe"
+          ],
+          "exactCurrentKeyMatches": [
+            1
+          ],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        }
+      ],
+      "priorCounterpartStatus": "COMPARED_NOT_TRANSFERRED",
+      "currentReviewIds": [
+        1
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "private._invoice_presentation_snapshot_batch(jsonb,timestamp with time zone)",
+      "line": 1558,
+      "routineSha256": "3b1c1eaa2a591a89d63909e0224fdc874b95bd66935e452bc0dbc22d8bd5a2b4",
+      "bodySha256": "cd60ed46c77bf1c6e2d2b9736901b84ba78ee688a568292de81b084bbd3f94d4",
+      "producer": {
+        "kind": "INVOICE_COMPLETE_FUNCTION",
+        "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+        "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/022_source_presentation.sqlinc",
+        "fileSha256": "052a8b6d0451160c510aa378d8a4759d077a80e4f171e49caf7b8d8b1e769ac0",
+        "completeFunctionSha256": "3b1c1eaa2a591a89d63909e0224fdc874b95bd66935e452bc0dbc22d8bd5a2b4",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [
+        {
+          "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/14_complete_native_snapshot_assembler.sqlinc",
+          "sourceSha256": "5b69a18ce5c94d090c42ce7b81761856e37943a0863f4fc841d71978e5f1cf79",
+          "completeFunctionSha256": "c6b738e69a84b66083582592b09d386721f2b2a8c0515edd31f6adcffc9dd0f4",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json",
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "451af16869f4bf1662fe8c29155a6f8638881251b26c166c90736b18435742a4",
+            "afd641f6f19ae5d7176d551d2ad1e4b1b4fa87e8b03b978203b106bdf7e41daf",
+            "d2e6cad06137759c5d1061aed8cda066e3d975c305d90ba4e2ae9e0fd8fdb7b6",
+            "dbf541538c699ab6983764e3c336c4749ad3ae545366a0e6cf3006b853c9aa17",
+            "918c8765711e7eeeb5cbd45ec75fdaff46ac9a1eb8b686ca588fa53f4a060d6c"
+          ],
+          "exactCurrentKeyMatches": [
+            2,
+            3,
+            4
+          ],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        },
+        {
+          "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_snapshot.sqlinc",
+          "sourceSha256": "af1dad3fac315f0ad87256b1ad5f22f703537a166ed0d4e522a51b0ceaf6d101",
+          "completeFunctionSha256": "2fffbf2931e587dd1b7f5071415aff8dad8add2cf4ebe779038ede792087ce02",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json",
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "0a2177fe675723834fbdba5060a11dc5a96a85c34d37350a641a9fb047121940",
+            "d28217620175462340ab421775fab507a1148eac3c8b1ec7688bde6b223fa309"
+          ],
+          "exactCurrentKeyMatches": [],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/11_complete_native_snapshot_assembler.sqlinc",
+          "sourceSha256": "55ebc821a6a25a3c6ad4fdfb9815e41a754245848938ae3ca67e27272050e279",
+          "completeFunctionSha256": "139950e1bb4abf290715c0095930fa54443ef26d19c8bafb2ce0838d7fb87271",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json",
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "d78b3046ef3989ecbceee6f9644680243efd9cd8ea8fce27965675958bb1a53d",
+            "aad84e78ab2321e0960f086f7a3c5ff84ff7ab5d39464e963302be60e9e0f777"
+          ],
+          "exactCurrentKeyMatches": [],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        }
+      ],
+      "priorCounterpartStatus": "COMPARED_NOT_TRANSFERRED",
+      "currentReviewIds": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "line": 4133,
+      "routineSha256": "49e4f533f41134b00e7826a90e9787b726b3b56bef4611859a0ab344dcbbf78a",
+      "bodySha256": "4d0aa185fa002fff2a468103a28a5f28ded12a792dbea42dcebe3fb24ce19df3",
+      "producer": {
+        "kind": "INVOICE_COMPLETE_FUNCTION",
+        "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+        "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/024a_source_native_admission.sqlinc",
+        "fileSha256": "bc1ce152c05c7ab726503f67bdb8e84f7af8046ad767b34de9c334f70135ab60",
+        "completeFunctionSha256": "49e4f533f41134b00e7826a90e9787b726b3b56bef4611859a0ab344dcbbf78a",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [
+        {
+          "file": "supabase/repeatable/13102026_1434_weekly_source_invoice_money_admission_v1.sql",
+          "sourceSha256": "46f214acc1482d08b031fe4c3752d77528bbca6cef69e6e6aa42e8687b94ac23",
+          "completeFunctionSha256": "72ee952489e5d95b6807965277dc2425b81ee22e89905400551cfc3f247ba1ff",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json",
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "1e2293d8eab0d7c721081eefff3a9cae71d9c81293beeefeb30810903dcdab61",
+            "203ffdf75ee93b9f916fdc84819f7688f3614f0055719feeb6bb35189431124e",
+            "2a0b3186726327ec4284dbff0d075a8b44d233e5a8d5a5129a99e38e69cb9c40",
+            "3a68318535f6ad3c6f8e83ec357d5ec31efb0ce411fa794dcbf89051c3405d66",
+            "603da96f37d038a9b3943dc6fd31021a58ba4ca156dab18de4183cecc38f2082",
+            "665f5b4bbb07e69e54ded55106bb38ee7eeff9dc261e2bce445d966428a8df73",
+            "6ff30e6144ebdbbfe7d46ff641328cc4cc2973b5ed9c380ac3226bd27e20b67b",
+            "9413a00597917c55d965477d91d4e1fea3f71ae20f08626c098162bbafd5b341",
+            "c2122b5ba6e3451289df5d12aac8bae43a67c27d5a39f64c05e60a1934899574",
+            "daeb248fa8638a24aaccd86d62fabd78fa22dcf498224711ac5a714f65a97610",
+            "ffc5db7b73ee0774e11f43c61b75b96765a3243c1870c516f279321181442076",
+            "bb844467abcdc471f122da9d4adc90612d87f2a85fb4483a83083bdd93bfe283",
+            "7639d9326e07e1ff83a97cd2a32b24c805abe6751f4c8f70e2980b7c7505530e",
+            "220fefb889842de4991fa3350e3b02b17d6465eb1c4f74b1ab7de10f1b7d1915"
+          ],
+          "exactCurrentKeyMatches": [
+            12,
+            15
+          ],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        },
+        {
+          "file": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/05_complete_admission.sqlinc",
+          "sourceSha256": "7bd9be79a97d9b9dc746d109d1ea20380ec98bf8e5da001a12d905fcb9a9691d",
+          "completeFunctionSha256": "430aaba86ed5249da0819ab27a9f1fdcd8016fb1a4f6bfdcdc1b90b4b67506f7",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json",
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "1e2293d8eab0d7c721081eefff3a9cae71d9c81293beeefeb30810903dcdab61",
+            "23a69df0c58c249635d1a25a14c532b96d88234e8aec00f009c3605f1b6bd049",
+            "26c691db1aa5797da7d834942bf43a342d709dc522235613604f9d477f31adea",
+            "2a0b3186726327ec4284dbff0d075a8b44d233e5a8d5a5129a99e38e69cb9c40",
+            "3a68318535f6ad3c6f8e83ec357d5ec31efb0ce411fa794dcbf89051c3405d66",
+            "603da96f37d038a9b3943dc6fd31021a58ba4ca156dab18de4183cecc38f2082",
+            "665f5b4bbb07e69e54ded55106bb38ee7eeff9dc261e2bce445d966428a8df73",
+            "6ff30e6144ebdbbfe7d46ff641328cc4cc2973b5ed9c380ac3226bd27e20b67b",
+            "9413a00597917c55d965477d91d4e1fea3f71ae20f08626c098162bbafd5b341",
+            "9c1e93b8bd8a7e84bf60f6540ad32d8fb1d1fe027ef91633d9e72dd4f3e53926",
+            "c2122b5ba6e3451289df5d12aac8bae43a67c27d5a39f64c05e60a1934899574",
+            "daeb248fa8638a24aaccd86d62fabd78fa22dcf498224711ac5a714f65a97610",
+            "ffc5db7b73ee0774e11f43c61b75b96765a3243c1870c516f279321181442076",
+            "bb844467abcdc471f122da9d4adc90612d87f2a85fb4483a83083bdd93bfe283",
+            "7639d9326e07e1ff83a97cd2a32b24c805abe6751f4c8f70e2980b7c7505530e",
+            "3a0ce926d98f5930e3792f67f4bf38060e5d6fcc7907138c2f02b5ddb6774d0a"
+          ],
+          "exactCurrentKeyMatches": [
+            7,
+            8,
+            11,
+            12,
+            15
+          ],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        },
+        {
+          "file": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+          "sourceSha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e",
+          "completeFunctionSha256": "6e92047a29a0b08ad3cdb41edf1695956172c4379b48ee7b192153a3a33a7ec0",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/ROWTYPE_TUPLE_TYPE_REVIEW.json",
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json",
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_UUID_CARDINALITY_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "075341923a505383deb309ebfaa45676108da785791265425675e4b005ccc912",
+            "1e2293d8eab0d7c721081eefff3a9cae71d9c81293beeefeb30810903dcdab61",
+            "23a69df0c58c249635d1a25a14c532b96d88234e8aec00f009c3605f1b6bd049",
+            "26c691db1aa5797da7d834942bf43a342d709dc522235613604f9d477f31adea",
+            "2a0b3186726327ec4284dbff0d075a8b44d233e5a8d5a5129a99e38e69cb9c40",
+            "3a68318535f6ad3c6f8e83ec357d5ec31efb0ce411fa794dcbf89051c3405d66",
+            "603da96f37d038a9b3943dc6fd31021a58ba4ca156dab18de4183cecc38f2082",
+            "665f5b4bbb07e69e54ded55106bb38ee7eeff9dc261e2bce445d966428a8df73",
+            "6ff30e6144ebdbbfe7d46ff641328cc4cc2973b5ed9c380ac3226bd27e20b67b",
+            "78a0d849149dd33e0a0491bf0c10372a0a16a8488a640c454b510751e2dbc693",
+            "85fe39e238f95f58e1cff9fa647d39c4cd3f34c13a1fcd5ba6a3256256d02463",
+            "9413a00597917c55d965477d91d4e1fea3f71ae20f08626c098162bbafd5b341",
+            "9c1e93b8bd8a7e84bf60f6540ad32d8fb1d1fe027ef91633d9e72dd4f3e53926",
+            "c2122b5ba6e3451289df5d12aac8bae43a67c27d5a39f64c05e60a1934899574",
+            "c3a1481020cefde062632a517bb3d812746031d2411b163b88319bb9ad5a4855",
+            "daeb248fa8638a24aaccd86d62fabd78fa22dcf498224711ac5a714f65a97610",
+            "ffc5db7b73ee0774e11f43c61b75b96765a3243c1870c516f279321181442076",
+            "bb844467abcdc471f122da9d4adc90612d87f2a85fb4483a83083bdd93bfe283",
+            "7639d9326e07e1ff83a97cd2a32b24c805abe6751f4c8f70e2980b7c7505530e",
+            "966de9f253b95a02722689251d76d53d357e8a6b6b093a5b8b9a3c0c8128adc2"
+          ],
+          "exactCurrentKeyMatches": [
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16
+          ],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        }
+      ],
+      "priorCounterpartStatus": "COMPARED_NOT_TRANSFERRED",
+      "currentReviewIds": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "private.timesheet_contract_claim_placement_v1(uuid,uuid,uuid)",
+      "line": 5539,
+      "routineSha256": "a08d222b91c84d23438cb2523e1dd235734c8bc35384091cfae98fff35d807c0",
+      "bodySha256": "80fe57045bdca8307e5bfb016dc0fe86c7b7dcbb9a05b42dd431a87fc5b65b1a",
+      "producer": {
+        "kind": "INVOICE_COMPLETE_FUNCTION",
+        "commit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+        "path": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/025_claim_placement.sqlinc",
+        "fileSha256": "c92466618483af23f5db63e18c6a60f5468cc1cbf3bb0f9e53660b1281d9e725",
+        "completeFunctionSha256": "a08d222b91c84d23438cb2523e1dd235734c8bc35384091cfae98fff35d807c0",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        17
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "private._candidate_expense_components_sync_v1(uuid,timestamp with time zone)",
+      "line": 5869,
+      "routineSha256": "91b8a4c8c8ff85037a4d142b84c4a9fa420c291ab369bb7583c21db72d708483",
+      "bodySha256": "34a4e59cca02e80412359aa987816e8a31861ffb484b1c9f4c9e2381e993968a",
+      "producer": {
+        "kind": "INVOICE_COMPLETE_FUNCTION",
+        "commit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+        "path": "docs/healthroster-build/proposals/v6-claim-native-pending-20261016/forward/030_claim_sync.sqlinc",
+        "fileSha256": "81e2c35db983e53636817e07fd41730c52f747ca126748672ff2aef644b60292",
+        "completeFunctionSha256": "91b8a4c8c8ff85037a4d142b84c4a9fa420c291ab369bb7583c21db72d708483",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        18,
+        19,
+        20,
+        21,
+        22
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "private.invoice_daily_rate_actual_revision_assert_v1(uuid)",
+      "line": 6255,
+      "routineSha256": "d26b6decb7a16e61110c915dd74011649b288a83ea96ed1270525717b32fc4db",
+      "bodySha256": "821ad879131a33828d55b0938afcbb5749a9acc48c9d9ff3817f98ee074e17b4",
+      "producer": {
+        "kind": "INVOICE_COMPLETE_FUNCTION",
+        "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+        "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/032a_daily_native_basis.sqlinc",
+        "fileSha256": "ae71613414162b317cb3de0b21492e92cf7fc7c529cd554b5340d96142d85bda",
+        "completeFunctionSha256": "d26b6decb7a16e61110c915dd74011649b288a83ea96ed1270525717b32fc4db",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        23
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamp with time zone)",
+      "line": 6306,
+      "routineSha256": "8f7db6be417adabd2b7d027486a8c68c845f049ddeb435a0c32ada898a783cf4",
+      "bodySha256": "bdca06db3c3a99507fbc38c7aba10964a2840b8030bb6da8d1f7de2c3027f010",
+      "producer": {
+        "kind": "INVOICE_COMPLETE_FUNCTION",
+        "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+        "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033_native_grouping.sqlinc",
+        "fileSha256": "8427f61568b3a5fa978134b424fbbd04b2adae1f3c3d224e91ec2db85c49d6e6",
+        "completeFunctionSha256": "8f7db6be417adabd2b7d027486a8c68c845f049ddeb435a0c32ada898a783cf4",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [
+        {
+          "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_resolver.sqlinc",
+          "sourceSha256": "0dab38012e7c5e29f84a2addd9544a83f9f23b4c51a8451feda62ab8232b744f",
+          "completeFunctionSha256": "644edd29f38136e25d15e3f089eac524b4ae404b000e751e8ad9d203ba69e8a7",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "7ab9468d2ae83d4cd556c564d0cc87c7961f42e6bb6c0ac4238a294712cd74f8"
+          ],
+          "exactCurrentKeyMatches": [],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        },
+        {
+          "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_resolver.sqlinc",
+          "sourceSha256": "71a3f9e6caa47248894478bdf33fb4f07d172449de39554c80890a3e5b351cd8",
+          "completeFunctionSha256": "bcb8555937926ea86dd23daaa70c22f239a99894f5fa28cd6044a4dc0aae9055",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "3b7333f7b352042eb1b6fa56ddcd99c28807299744a7dca86326913e59ea3dcb"
+          ],
+          "exactCurrentKeyMatches": [],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        }
+      ],
+      "priorCounterpartStatus": "COMPARED_NOT_TRANSFERRED",
+      "currentReviewIds": [
+        24
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "private._invoice_batch_generate_classification_v2(boolean,text[],timestamp with time zone)",
+      "line": 7028,
+      "routineSha256": "5befe18b4535c445134b6c6ace3928e0a7158779c6307232f18bc15a46b52041",
+      "bodySha256": "c2a20748aed3bf3078f2ddf0d23959256fe73794416862b2b0c6949faa48c9fe",
+      "producer": {
+        "kind": "INVOICE_COMPLETE_FUNCTION",
+        "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+        "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033a_native_collection.sqlinc",
+        "fileSha256": "12662ec29d0fe31ce338f8a40c4cbe6a27883fe15e398ff8a66d70e0ff104c19",
+        "completeFunctionSha256": "5befe18b4535c445134b6c6ace3928e0a7158779c6307232f18bc15a46b52041",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        25
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "private._invoice_source_reference_validate_batch(jsonb)",
+      "line": 8225,
+      "routineSha256": "dbcf55a03396b821cf36a0cc8aeb67e83f92ac45aac1aaaed14b53a12ec0e5b3",
+      "bodySha256": "6c91898032f9dc01b3d4d3c6bddc910671c306931ed7c53e434204789ac6e2c4",
+      "producer": {
+        "kind": "INVOICE_COMPLETE_FUNCTION",
+        "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+        "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/033b_native_references.sqlinc",
+        "fileSha256": "71698ead9aa3a773c857ba9551424f80323804601753895445d23a1a4dfb29ba",
+        "completeFunctionSha256": "dbcf55a03396b821cf36a0cc8aeb67e83f92ac45aac1aaaed14b53a12ec0e5b3",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        26
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "signature": "private._invoice_generation_advance_core_v8(jsonb,timestamp with time zone)",
+      "line": 13782,
+      "routineSha256": "655b8fcfa012b52efba3c52b629a6c5b5ae153d9424111bfc0b02aa7735a33ac",
+      "bodySha256": "ec83cffa2199324a20beea31ac7230edf26c3fc1fcc656459af3358d599429cb",
+      "producer": {
+        "kind": "INVOICE_COMPLETE_FUNCTION",
+        "commit": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+        "path": "docs/healthroster-build/proposals/v6-invoice-native-20261016/forward/070_generation_native.sqlinc",
+        "fileSha256": "c8524ad717b322439f767c70ec46e038645878580157d1037c89f4f93400563f",
+        "completeFunctionSha256": "655b8fcfa012b52efba3c52b629a6c5b5ae153d9424111bfc0b02aa7735a33ac",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [
+        {
+          "file": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_generation.sqlinc",
+          "sourceSha256": "a4d821ec7d49c46677340e32c403d264d7add4327e9e7106b179c791fb487603",
+          "completeFunctionSha256": "b6ea3f14341e59545c0c2b358c4b0b3e2fe7a52cf6a057e2ae51b2e9f589bafd",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "e184cd2239b73768e136ad97d148674dcdb6f84409de13fa0877bb9a2af91b34",
+            "7699d5e3da594b24a5adbcc4ba54b46650c6bb77c2b37de72013ad18997dd7a2"
+          ],
+          "exactCurrentKeyMatches": [],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        },
+        {
+          "file": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+          "sourceSha256": "f43014ce6cafe2c3a193b827cefdc72b7548215d4abf0d29db387158da71ae12",
+          "completeFunctionSha256": "6b9ed8b6c4c345d34afb5ae45a22a0917153740b448400c3d533f79b5bdd6730",
+          "completeFunctionEqual": false,
+          "priorReviewPaths": [
+            "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json"
+          ],
+          "priorReviewedKeys": [
+            "e184cd2239b73768e136ad97d148674dcdb6f84409de13fa0877bb9a2af91b34",
+            "7699d5e3da594b24a5adbcc4ba54b46650c6bb77c2b37de72013ad18997dd7a2"
+          ],
+          "exactCurrentKeyMatches": [],
+          "approvalLimit": "Exact statement/key equality is recorded separately. A changed complete function receives no inherited whole-function approval."
+        }
+      ],
+      "priorCounterpartStatus": "COMPARED_NOT_TRANSFERRED",
+      "currentReviewIds": [
+        27,
+        28
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "signature": "public.candidate_app_timesheet_page_v1(uuid,text,text,text,integer,timestamp with time zone)",
+      "line": 296,
+      "routineSha256": "d3fc93c0731d7a671bf52b27738d482e4823bbecf8c93e1cba526ff278503bce",
+      "bodySha256": "045aac353dd4b50750af91644877a0769f2e2159f8691d083bec7ba5c84ac3d0",
+      "producer": {
+        "kind": "CANDIDATE_COMPLETE_FUNCTION",
+        "commit": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+        "path": "docs/healthroster-build/proposals/candidate-contract-move-native-20261016/forward/06_page_successor.sqlinc",
+        "fileSha256": "10284ab645fc39e248a49c063f52f49da99211c5479714b933e1f1ec565e4ec7",
+        "completeFunctionSha256": "d3fc93c0731d7a671bf52b27738d482e4823bbecf8c93e1cba526ff278503bce",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        29
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "signature": "public.candidate_paper_manifest_v2_promote_v1(uuid,text,uuid,integer,text,timestamp with time zone)",
+      "line": 1781,
+      "routineSha256": "02c6b6fe06191772c599956e620883fef77a03686af6bd32f69a560cf83fa317",
+      "bodySha256": "e7ca01c10d81ae080de126673faa1dd94f5cf8781e5ac80a8980568bb5651a70",
+      "producer": {
+        "kind": "CANDIDATE_COMPLETE_FUNCTION",
+        "commit": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+        "path": "docs/healthroster-build/proposals/candidate-move-paper-draft-20261016/forward/05_original_paper_promote.sqlinc",
+        "fileSha256": "43f408456a69b4975dacb938a1e0dc6fe21fd86ede58c0516e5ca66871737da1",
+        "completeFunctionSha256": "02c6b6fe06191772c599956e620883fef77a03686af6bd32f69a560cf83fa317",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        30
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "signature": "public.candidate_paper_return_proof_validate_v2(uuid,text,uuid,integer,text,text,jsonb,timestamp with time zone)",
+      "line": 4780,
+      "routineSha256": "de26cc4615f6850b20695032a6397493cce01ecb5d57b1d1ab4fba1e34e78480",
+      "bodySha256": "6b4763111cb30c6334285f0c79f31989c36692bfacc295afe20e6c986fc4fb9b",
+      "producer": {
+        "kind": "CANDIDATE_COMPLETE_FUNCTION",
+        "commit": "a10f080f2272155c423991ffc81de8670d3c756b",
+        "path": "docs/healthroster-build/proposals/candidate-move-qr-paper-20261016/forward/09_captured_paper_proof_v2.sqlinc",
+        "fileSha256": "19d9d06c9b333fc1158cdaba97018c55341ef849d2fab88d97d30db75d168b27",
+        "completeFunctionSha256": "de26cc4615f6850b20695032a6397493cce01ecb5d57b1d1ab4fba1e34e78480",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        31
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "signature": "public.candidate_paper_return_proof_validate_v1(uuid,text,uuid,integer,text,text,text,text,timestamp with time zone)",
+      "line": 4924,
+      "routineSha256": "98e46612184f908420a28a865019f157fd49e7c831a8a3ead56566fd810f4e8f",
+      "bodySha256": "961ee6d74b0da4b695ca8f77cbb6c13637c938bc71bda34a0058e8fe02dd46a1",
+      "producer": {
+        "kind": "CANDIDATE_COMPLETE_FUNCTION",
+        "commit": "a10f080f2272155c423991ffc81de8670d3c756b",
+        "path": "docs/healthroster-build/proposals/candidate-move-qr-paper-20261016/forward/10_captured_paper_proof_v1.sqlinc",
+        "fileSha256": "d55861e390418f334ec9e33833494b31df8b568b4823c22b307beb9bde63e539",
+        "completeFunctionSha256": "98e46612184f908420a28a865019f157fd49e7c831a8a3ead56566fd810f4e8f",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        32
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
+      "line": 8403,
+      "routineSha256": "71110183272885f700a1a0b5813dc1734c5abdcab8a25b5bed4b86593cf616a6",
+      "bodySha256": "6217908cb29d9edd13b79c6f2cd9a57417c081b55a8cf960c0bcf84661ccd268",
+      "producer": {
+        "kind": "CANDIDATE_COMPLETE_FUNCTION",
+        "commit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+        "path": "docs/healthroster-build/proposals/candidate-native-pending-20261016/forward/10_native_workflow_admission.sqlinc",
+        "fileSha256": "3f9f6fbde4afe49b79c52317a1b5307c0c9de47572da1d534c30b42dff12c41b",
+        "completeFunctionSha256": "71110183272885f700a1a0b5813dc1734c5abdcab8a25b5bed4b86593cf616a6",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        33,
+        34,
+        35,
+        36
+      ]
+    },
+    {
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "signature": "public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamp with time zone)",
+      "line": 13022,
+      "routineSha256": "08c4e78fe13245c94ca3c31e4323e4bc5577e5d63629173bcde2737d046e77b9",
+      "bodySha256": "778a199ee9e7750ab1f502be2904bcd456ff6d5bc232091c1a201f2cbd699f44",
+      "producer": {
+        "kind": "CANDIDATE_COMPLETE_FUNCTION",
+        "commit": "2b5f58431df26561b1423d40c48bef15209494fd",
+        "path": "docs/healthroster-build/proposals/candidate-move-expense-preparation-20261016/forward/00_expense_draft_policy.sqlinc",
+        "fileSha256": "ababca1a94ddb878804c9cd0b1ae89ed2718f3accc0ebff40a0213853a34302d",
+        "completeFunctionSha256": "08c4e78fe13245c94ca3c31e4323e4bc5577e5d63629173bcde2737d046e77b9",
+        "completeFunctionByteEqual": true
+      },
+      "oldReviewedCounterparts": [],
+      "priorCounterpartStatus": "NO_PRIOR_REVIEWED_SAME_SIGNATURE_COUNTERPART",
+      "currentReviewIds": [
+        37,
+        38
+      ]
+    }
+  ],
+  "nativeBindingDependencies": [
+    {
+      "signature": "private._invoice_generation_vat_policy_batch(jsonb)",
+      "role": "numeric VAT-policy output",
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sourceSha256": "a8c57548c911fb11140be3b3d2256aba876995fb196396850b6fe38e2f0797f4",
+      "completeFunctionSha256": "b84138660bd7751057ccb84f7817af7048c24a5b4ad41dcb38bb59d68944871d",
+      "declaration": "create function private._invoice_generation_vat_policy_batch(\n  p_sources jsonb\n) returns table(\n  source_member_key text,\n  source_type text,\n  source_id uuid,\n  timesheet_id uuid,\n  segment_id text,\n  vat_rate numeric,\n  policy_source text,\n  effective_date date,\n  policy_identity text,\n  valid boolean,\n  blocker_code text,\n  detail_json jsonb\n)\nlanguage sql\nstable\nsecurity definer\nset search_path to 'public','private','extensions','pg_temp'\n",
+      "qualification": "Exact declaration/body pin supporting only the current finite binding/cardinality proof; no new whole-function approval"
+    },
+    {
+      "signature": "private._invoice_reference_rows_batch(uuid[])",
+      "role": "text row_key/ref_target/day_ymd reference output",
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sourceSha256": "a8c57548c911fb11140be3b3d2256aba876995fb196396850b6fe38e2f0797f4",
+      "completeFunctionSha256": "c7ed58c718510f303e97366502cf85efc6a9f1c9a6027bc71c16210405e24d61",
+      "declaration": "create or replace function private._invoice_reference_rows_batch(\n  p_invoice_ids uuid[]\n) returns table(\n  invoice_id uuid,\n  timesheet_id uuid,\n  sheet_scope text,\n  submission_mode text,\n  ref_target text,\n  segment_id text,\n  day_ymd text,\n  start_utc text,\n  end_utc text,\n  current_reference text,\n  is_required boolean,\n  row_key text\n)\nlanguage sql\nstable\nsecurity definer\nset search_path to 'public','private','extensions','pg_temp'\n",
+      "qualification": "Exact declaration/body pin supporting only the current finite binding/cardinality proof; no new whole-function approval"
+    },
+    {
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "role": "single JSONB H103 actual-current placement output",
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "sourceSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "completeFunctionSha256": "c5bed2df9b498cfbe27695ec4a67ef390d2250e04efe6f4d375faad97dbc7827",
+      "declaration": "create or replace function private.timesheet_contract_current_placement_v1(p_timesheet_id uuid)\nreturns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'\n",
+      "qualification": "Exact declaration/body pin supporting only the current finite binding/cardinality proof; no new whole-function approval"
+    }
+  ],
+  "native": "NOT_RUN"
+}
