@@ -1,0 +1,88 @@
+{
+  "version": "HEALTH_REVIEWED_PRODUCER_READINESS_CHECKPOINT_V1",
+  "observedAt": "2026-10-16T10:53:44.458Z",
+  "candidate": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "scope": "Fixed read-only account-specific agency TEST catalogue plus only two permitted Banking install records",
+  "sourceCutRoutineProbes": [
+    {
+      "search": "bpay_next_source_pay_decision_cut_v1",
+      "total": 0,
+      "functions": []
+    },
+    {
+      "search": "bpay_next_source_pay_decision_acceptance_begin_v1",
+      "total": 0,
+      "functions": []
+    },
+    {
+      "search": "bpay_next_source_pay_decision_stage_v1",
+      "total": 0,
+      "functions": []
+    },
+    {
+      "search": "bpay_next_source_pay_decision_publish_v1",
+      "total": 0,
+      "functions": []
+    },
+    {
+      "search": "bpay_next_source_decision_native_status_v1",
+      "total": 0,
+      "functions": []
+    }
+  ],
+  "contractMoveRoutineCount": 0,
+  "dailyRateCorrectionRoutineCount": 0,
+  "relations": [
+    {
+      "schema": "private",
+      "relation": "bpay_next_source_pay_decision_cut",
+      "present": false
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_work",
+      "present": true
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_work_revision",
+      "present": true
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_source_pay_decision_publication_member",
+      "present": false
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_worker_pay_disposition_subject_binding",
+      "present": false
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_worker_pay_disposition",
+      "present": false
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_move_publication_member",
+      "present": false
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_protected_source_receipt",
+      "present": true
+    }
+  ],
+  "bankingPublishedInstallRecord": {
+    "path": "docs/bpay-next/TEST_INSTALLS.md",
+    "lastPathCommit": "157206dcda568d740dc80b411e112ffc9c22132e",
+    "firstInstall": "COMPLETE_DISABLED_FIRST",
+    "source": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+    "module": "LEGACY:1",
+    "laterSwitchOn": "NO_INSTALL_RECORDED"
+  },
+  "qualification": "Installed TEST only. Not an audit of unpublished Banking code; absent functions/relations cannot be fabricated or bypassed. Same-install genuine source/contract prerequisites may later resolve these holds.",
+  "actions": "No Banking message/edit, provider/payment/email/business mutation or deployment. Continue Health source and Office independently.",
+  "fullReleaseReady": false
+}

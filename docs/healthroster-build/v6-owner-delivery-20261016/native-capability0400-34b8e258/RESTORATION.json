@@ -1,0 +1,107 @@
+{
+  "version": "HEALTH_CAPABILITY0400_RESTORATION_V1",
+  "attempt": "R3",
+  "before": {
+    "module": "LEGACY:1",
+    "identityTest": true,
+    "markerAbsent": true,
+    "applyingCount": 0,
+    "latestRelease": {
+      "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+      "status": "VERIFIED",
+      "releaseId": "20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537",
+      "completedAt": "2026-10-14T15:47:03.075975+00:00",
+      "installedContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+      "repositoryContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6"
+    },
+    "relationCensus": "da66a60f0f0130fbd590b14f7187fb5c401e63b92a3fac5b0380e556295633a5",
+    "customerKeyNull": true,
+    "physicalDatabase": "cloudtms_test_clone",
+    "businessRelations": [
+      {
+        "hash": "94d39a584a2907fbdaba0670043cfc12be7e9efdcb6d926fa6bd4076001f0df4",
+        "count": 4,
+        "relation": "public.weekly_source_billing_movements"
+      },
+      {
+        "hash": "f5f8fc02efab12eae0878e8fe0b190a715e9f13cb608bd9e16c92d91a3563528",
+        "count": 17,
+        "relation": "public.weekly_source_charge_checks"
+      },
+      {
+        "hash": "1f1a2b32fa68535d2647a515d62d717d294bcae7731224426b00cab6577dddd1",
+        "count": 2,
+        "relation": "public.weekly_source_final_revisions"
+      },
+      {
+        "hash": "59b0f14465b5dd91d4aa9eb45de10d456e8520687f2900068e468d7f466adb9d",
+        "count": 2,
+        "relation": "public.weekly_source_invoice_presentation_lines"
+      }
+    ],
+    "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+    "otherActivityCount": 0,
+    "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+    "businessRowsFingerprint": "dc301793b6fe13cc620da2abcdd4a01b2bffd1374ee072612198dd2622ffecc2",
+    "businessCountsFingerprint": "f0da9e6a01206a1c68411883d37f3180bb5a3d5b5f923766e5d4b49315699ec6"
+  },
+  "after": {
+    "module": "LEGACY:1",
+    "identityTest": true,
+    "markerAbsent": true,
+    "applyingCount": 0,
+    "latestRelease": {
+      "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+      "status": "VERIFIED",
+      "releaseId": "20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537",
+      "completedAt": "2026-10-14T15:47:03.075975+00:00",
+      "installedContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+      "repositoryContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6"
+    },
+    "relationCensus": "da66a60f0f0130fbd590b14f7187fb5c401e63b92a3fac5b0380e556295633a5",
+    "customerKeyNull": true,
+    "physicalDatabase": "cloudtms_test_clone",
+    "businessRelations": [
+      {
+        "hash": "94d39a584a2907fbdaba0670043cfc12be7e9efdcb6d926fa6bd4076001f0df4",
+        "count": 4,
+        "relation": "public.weekly_source_billing_movements"
+      },
+      {
+        "hash": "f5f8fc02efab12eae0878e8fe0b190a715e9f13cb608bd9e16c92d91a3563528",
+        "count": 17,
+        "relation": "public.weekly_source_charge_checks"
+      },
+      {
+        "hash": "1f1a2b32fa68535d2647a515d62d717d294bcae7731224426b00cab6577dddd1",
+        "count": 2,
+        "relation": "public.weekly_source_final_revisions"
+      },
+      {
+        "hash": "59b0f14465b5dd91d4aa9eb45de10d456e8520687f2900068e468d7f466adb9d",
+        "count": 2,
+        "relation": "public.weekly_source_invoice_presentation_lines"
+      }
+    ],
+    "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+    "otherActivityCount": 0,
+    "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+    "businessRowsFingerprint": "dc301793b6fe13cc620da2abcdd4a01b2bffd1374ee072612198dd2622ffecc2",
+    "businessCountsFingerprint": "f0da9e6a01206a1c68411883d37f3180bb5a3d5b5f923766e5d4b49315699ec6"
+  },
+  "equalFingerprints": {
+    "ledgerFingerprint": true,
+    "catalogueFingerprint": true,
+    "relationCensus": true,
+    "businessRowsFingerprint": true,
+    "businessCountsFingerprint": true
+  },
+  "fresh": true,
+  "absence": {
+    "markerAbsent": true,
+    "migrationCount": 389,
+    "repeatableCount": 1019,
+    "physicalDatabase": "cloudtms_test_clone",
+    "allSevenPrefixRelationsAbsent": true
+  }
+}

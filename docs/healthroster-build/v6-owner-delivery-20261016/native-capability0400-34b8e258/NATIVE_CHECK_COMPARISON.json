@@ -1,0 +1,353 @@
+{
+  "derivedFrom": "R3 final assertion SELECT; CHECK catalogue only, no business data",
+  "status": "PASS_CAPABILITY_PREDECESSOR_BODY_TRUTHS_AND_REFUSALS",
+  "driftCases": 6,
+  "nativeChecksAfter": [
+    {
+      "key": [
+        13
+      ],
+      "oid": 37706346,
+      "name": "weekly_source_assignment_feature_purpose_v2",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text, 'PROTECTED_SOURCE'::text])))",
+      "expression": "(feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text, 'PROTECTED_SOURCE'::text]))"
+    },
+    {
+      "key": [
+        13,
+        3
+      ],
+      "oid": 37706347,
+      "name": "weekly_source_assignment_feature_version_v2",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((feature_purpose IS NULL) OR ((rule_set_version_id IS NULL) = (feature_purpose = ANY (ARRAY['SIGNED_CHECK_ONLY'::text, 'PROTECTED_SOURCE'::text])))))",
+      "expression": "((feature_purpose IS NULL) OR ((rule_set_version_id IS NULL) = (feature_purpose = ANY (ARRAY['SIGNED_CHECK_ONLY'::text, 'PROTECTED_SOURCE'::text]))))"
+    },
+    {
+      "key": [
+        8
+      ],
+      "oid": 37706091,
+      "name": "weekly_source_group_rule_assign_assignment_request_sha256_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((assignment_request_sha256 ~ '^[0-9a-f]{64}$'::text))",
+      "expression": "(assignment_request_sha256 ~ '^[0-9a-f]{64}$'::text)"
+    },
+    {
+      "key": [
+        9
+      ],
+      "oid": 37706092,
+      "name": "weekly_source_group_rule_assignme_assignment_receipt_json_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((jsonb_typeof(assignment_receipt_json) = 'object'::text))",
+      "expression": "(jsonb_typeof(assignment_receipt_json) = 'object'::text)"
+    },
+    {
+      "key": [
+        19
+      ],
+      "oid": 37706095,
+      "name": "weekly_source_group_rule_assignmen_feature_request_sha256_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((feature_request_sha256 IS NULL) OR (feature_request_sha256 ~ '^[0-9a-f]{64}$'::text)))",
+      "expression": "((feature_request_sha256 IS NULL) OR (feature_request_sha256 ~ '^[0-9a-f]{64}$'::text))"
+    },
+    {
+      "key": [
+        16
+      ],
+      "oid": 37706094,
+      "name": "weekly_source_group_rule_assignment_feature_change_reason_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((feature_change_reason IS NULL) OR ((char_length(btrim(feature_change_reason)) >= 1) AND (char_length(btrim(feature_change_reason)) <= 500))))",
+      "expression": "((feature_change_reason IS NULL) OR ((char_length(btrim(feature_change_reason)) >= 1) AND (char_length(btrim(feature_change_reason)) <= 500)))"
+    },
+    {
+      "key": [
+        5,
+        4
+      ],
+      "oid": 37706097,
+      "name": "weekly_source_group_rule_assignments_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((effective_to_week_ending IS NULL) OR ((effective_to_week_ending >= effective_from_week_ending) AND (((effective_to_week_ending - effective_from_week_ending) % 7) = 0))))",
+      "expression": "((effective_to_week_ending IS NULL) OR ((effective_to_week_ending >= effective_from_week_ending) AND (((effective_to_week_ending - effective_from_week_ending) % 7) = 0)))"
+    },
+    {
+      "key": [
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "oid": 37706098,
+      "name": "weekly_source_group_rule_assignments_check1",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((NOT feature_enabled) OR ((feature_purpose IS NOT NULL) AND (feature_changed_by_user_id IS NOT NULL) AND (feature_changed_at_utc IS NOT NULL) AND (feature_change_reason IS NOT NULL) AND (feature_release_id IS NOT NULL) AND (feature_request_id IS NOT NULL) AND (feature_request_sha256 IS NOT NULL) AND (feature_receipt_json IS NOT NULL))))",
+      "expression": "((NOT feature_enabled) OR ((feature_purpose IS NOT NULL) AND (feature_changed_by_user_id IS NOT NULL) AND (feature_changed_at_utc IS NOT NULL) AND (feature_change_reason IS NOT NULL) AND (feature_release_id IS NOT NULL) AND (feature_request_id IS NOT NULL) AND (feature_request_sha256 IS NOT NULL) AND (feature_receipt_json IS NOT NULL)))"
+    },
+    {
+      "key": [
+        20
+      ],
+      "oid": 37706096,
+      "name": "weekly_source_group_rule_assignments_feature_receipt_json_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((feature_receipt_json IS NULL) OR (jsonb_typeof(feature_receipt_json) = 'object'::text)))",
+      "expression": "((feature_receipt_json IS NULL) OR (jsonb_typeof(feature_receipt_json) = 'object'::text))"
+    },
+    {
+      "key": [
+        6
+      ],
+      "oid": 37706090,
+      "name": "weekly_source_group_rule_assignments_version_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((version >= 1))",
+      "expression": "(version >= 1)"
+    }
+  ],
+  "truthClassesAfter": 10,
+  "nativeChecksBefore": [
+    {
+      "key": [
+        8
+      ],
+      "oid": 37706091,
+      "name": "weekly_source_group_rule_assign_assignment_request_sha256_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((assignment_request_sha256 ~ '^[0-9a-f]{64}$'::text))",
+      "expression": "(assignment_request_sha256 ~ '^[0-9a-f]{64}$'::text)"
+    },
+    {
+      "key": [
+        9
+      ],
+      "oid": 37706092,
+      "name": "weekly_source_group_rule_assignme_assignment_receipt_json_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((jsonb_typeof(assignment_receipt_json) = 'object'::text))",
+      "expression": "(jsonb_typeof(assignment_receipt_json) = 'object'::text)"
+    },
+    {
+      "key": [
+        19
+      ],
+      "oid": 37706095,
+      "name": "weekly_source_group_rule_assignmen_feature_request_sha256_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((feature_request_sha256 IS NULL) OR (feature_request_sha256 ~ '^[0-9a-f]{64}$'::text)))",
+      "expression": "((feature_request_sha256 IS NULL) OR (feature_request_sha256 ~ '^[0-9a-f]{64}$'::text))"
+    },
+    {
+      "key": [
+        16
+      ],
+      "oid": 37706094,
+      "name": "weekly_source_group_rule_assignment_feature_change_reason_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((feature_change_reason IS NULL) OR ((char_length(btrim(feature_change_reason)) >= 1) AND (char_length(btrim(feature_change_reason)) <= 500))))",
+      "expression": "((feature_change_reason IS NULL) OR ((char_length(btrim(feature_change_reason)) >= 1) AND (char_length(btrim(feature_change_reason)) <= 500)))"
+    },
+    {
+      "key": [
+        5,
+        4
+      ],
+      "oid": 37706097,
+      "name": "weekly_source_group_rule_assignments_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((effective_to_week_ending IS NULL) OR ((effective_to_week_ending >= effective_from_week_ending) AND (((effective_to_week_ending - effective_from_week_ending) % 7) = 0))))",
+      "expression": "((effective_to_week_ending IS NULL) OR ((effective_to_week_ending >= effective_from_week_ending) AND (((effective_to_week_ending - effective_from_week_ending) % 7) = 0)))"
+    },
+    {
+      "key": [
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "oid": 37706098,
+      "name": "weekly_source_group_rule_assignments_check1",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((NOT feature_enabled) OR ((feature_purpose IS NOT NULL) AND (feature_changed_by_user_id IS NOT NULL) AND (feature_changed_at_utc IS NOT NULL) AND (feature_change_reason IS NOT NULL) AND (feature_release_id IS NOT NULL) AND (feature_request_id IS NOT NULL) AND (feature_request_sha256 IS NOT NULL) AND (feature_receipt_json IS NOT NULL))))",
+      "expression": "((NOT feature_enabled) OR ((feature_purpose IS NOT NULL) AND (feature_changed_by_user_id IS NOT NULL) AND (feature_changed_at_utc IS NOT NULL) AND (feature_change_reason IS NOT NULL) AND (feature_release_id IS NOT NULL) AND (feature_request_id IS NOT NULL) AND (feature_request_sha256 IS NOT NULL) AND (feature_receipt_json IS NOT NULL)))"
+    },
+    {
+      "key": [
+        13,
+        3
+      ],
+      "oid": 37706099,
+      "name": "weekly_source_group_rule_assignments_check2",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((feature_purpose IS NULL) OR ((rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text))))",
+      "expression": "((feature_purpose IS NULL) OR ((rule_set_version_id IS NULL) = (feature_purpose = 'SIGNED_CHECK_ONLY'::text)))"
+    },
+    {
+      "key": [
+        13
+      ],
+      "oid": 37706093,
+      "name": "weekly_source_group_rule_assignments_feature_purpose_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text])))",
+      "expression": "(feature_purpose = ANY (ARRAY['RULE_SET'::text, 'SIGNED_CHECK_ONLY'::text]))"
+    },
+    {
+      "key": [
+        20
+      ],
+      "oid": 37706096,
+      "name": "weekly_source_group_rule_assignments_feature_receipt_json_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK (((feature_receipt_json IS NULL) OR (jsonb_typeof(feature_receipt_json) = 'object'::text)))",
+      "expression": "((feature_receipt_json IS NULL) OR (jsonb_typeof(feature_receipt_json) = 'object'::text))"
+    },
+    {
+      "key": [
+        6
+      ],
+      "oid": 37706090,
+      "name": "weekly_source_group_rule_assignments_version_check",
+      "local": true,
+      "parent": 0,
+      "deferred": false,
+      "inhcount": 0,
+      "noinherit": false,
+      "validated": true,
+      "deferrable": false,
+      "definition": "CHECK ((version >= 1))",
+      "expression": "(version >= 1)"
+    }
+  ],
+  "truthClassesBefore": 10,
+  "alreadyExtendedRefusals": 1,
+  "retainedChecksUnchanged": 8
+}

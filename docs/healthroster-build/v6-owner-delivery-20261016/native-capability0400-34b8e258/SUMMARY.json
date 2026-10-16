@@ -1,0 +1,160 @@
+{
+  "version": "HEALTH_CAPABILITY0400_NATIVE_TARGETED_PROOF_V1",
+  "candidate": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "status": "PASS_TARGETED_NOT_FULL_REHEARSAL",
+  "physicalDatabase": "cloudtms_test_clone",
+  "serverVersion": "PostgreSQL17.11",
+  "accepted": true,
+  "rolledBack": true,
+  "connectedFresh": true,
+  "sqlSha256": "94d3e20d138ee36c079519b86004f99eaf3740a88ec69e3ab9b8c9f0463c83da",
+  "sqlBytes": 205881,
+  "statements": 110,
+  "driftRefusals": 6,
+  "alreadyExtendedRefusals": 1,
+  "truthClassesBefore": 10,
+  "truthClassesAfter": 10,
+  "retainedChecksUnchanged": 8,
+  "restorationFingerprints": {
+    "ledgerFingerprint": true,
+    "catalogueFingerprint": true,
+    "relationCensus": true,
+    "businessRowsFingerprint": true,
+    "businessCountsFingerprint": true
+  },
+  "absence": {
+    "markerAbsent": true,
+    "migrationCount": 389,
+    "repeatableCount": 1019,
+    "physicalDatabase": "cloudtms_test_clone",
+    "allSevenPrefixRelationsAbsent": true
+  },
+  "turnRecords": [
+    {
+      "chat": "HealthRoster",
+      "task": "HEALTH_CAPABILITY0400_NATIVE_34B8E258",
+      "status": "TAKEN",
+      "takenAt": "2026-10-16T10:48:46.595Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "HEALTH_CAPABILITY0400_NATIVE_34B8E258",
+      "status": "RELEASED",
+      "takenAt": "2026-10-16T10:48:46.595Z",
+      "releasedAt": "2026-10-16T10:48:46.763Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "HEALTH_CAPABILITY0400_NATIVE_34B8E258",
+      "status": "TAKEN",
+      "takenAt": "2026-10-16T10:48:53.513Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "HEALTH_CAPABILITY0400_NATIVE_34B8E258",
+      "status": "RELEASED",
+      "takenAt": "2026-10-16T10:48:53.513Z",
+      "releasedAt": "2026-10-16T10:49:45.686Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "HEALTH_CAPABILITY0400_NATIVE_34B8E258",
+      "status": "TAKEN",
+      "takenAt": "2026-10-16T10:49:56.745Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "HEALTH_CAPABILITY0400_NATIVE_34B8E258",
+      "status": "RELEASED",
+      "takenAt": "2026-10-16T10:49:56.745Z",
+      "releasedAt": "2026-10-16T10:50:32.918Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "HEALTH_CAPABILITY0400_NATIVE_34B8E258",
+      "status": "TAKEN",
+      "takenAt": "2026-10-16T10:50:45.939Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "HEALTH_CAPABILITY0400_NATIVE_34B8E258",
+      "status": "RELEASED",
+      "takenAt": "2026-10-16T10:50:45.939Z",
+      "releasedAt": "2026-10-16T10:51:16.886Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    }
+  ],
+  "attempts": [
+    {
+      "id": "R1",
+      "status": "HARNESS_ERROR_BEFORE_CAPABILITY_BODY",
+      "statement": 102,
+      "sqlstate": "22P02",
+      "reason": "SQL NULL expected boolean was quoted as text; source unchanged",
+      "restored": true
+    },
+    {
+      "id": "R2",
+      "status": "HARNESS_ERROR_BEFORE_CAPABILITY_BODY",
+      "statement": 102,
+      "sqlstate": "XX000",
+      "reason": "SQL NULL synthetic purpose was quoted as text; source unchanged",
+      "restored": true
+    },
+    {
+      "id": "R3",
+      "status": "PASS",
+      "elapsedMs": 7784
+    }
+  ],
+  "trialFixtureRows": "Only owned marker evidence row; no business fixture",
+  "backgroundJobs": "RUNNING_UNCHANGED",
+  "contention0400": "NOT_RUN: assignment table is created inside this rollback transaction and is not durably visible to an independent session",
+  "fullRehearsal": "NOT_RUN",
+  "install2": "NOT_RUN",
+  "finalPartB": "NOT_RUN",
+  "rawToolOutputsCommitted": false
+}
