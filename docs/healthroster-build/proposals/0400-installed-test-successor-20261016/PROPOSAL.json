@@ -1,0 +1,60 @@
+{
+  "version": "HEALTHROSTER_CAPABILITY0400_INSTALLED_TEST_SUCCESSOR_V1",
+  "baseProposalCommit": "7fbafccff632603e9d5e59ac960296353195e5b5",
+  "frozenBaselineCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+  "target": "tests/healthroster-capability-predecessor-boundary.test.mjs",
+  "beforeSha256": "10088697a6d05230d3d3dd357633d9fe8e335ae699a9297aa794bf7578d96fa6",
+  "afterSha256": "5def4dd476a24755a03650c0182775f6968bb54e579eb6faebf626f7993e853a",
+  "preservedProposalPath": "docs/healthroster-build/v6-owner-delivery-20261016/CAPABILITY_PREDECESSOR_COMPILER_SOURCE_20261016/PROPOSAL.json",
+  "edits": [
+    {
+      "from": "import test from'node:test';",
+      "to": "import{execFileSync}from'node:child_process';\nimport{createRequire}from'node:module';\nimport test from'node:test';",
+      "count": 1
+    },
+    {
+      "from": "const baseCompiler=await import(pathToFileURL(path.join(sourceRoot,'scripts/cloudtms-managed-release.mjs'))),baseHarness=await import(pathToFileURL(path.join(sourceRoot,'scripts/healthroster-install1-full-rehearsal.mjs')));",
+      "to": "const preservedProposalPath='docs/healthroster-build/v6-owner-delivery-20261016/CAPABILITY_PREDECESSOR_COMPILER_SOURCE_20261016/PROPOSAL.json';\nconst compilerProposal=JSON.parse(fs.readFileSync(path.join(targetRoot,preservedProposalPath)));\nassert.equal(compilerProposal.rootCommit,'32ee8711f54829b5a13a0c59dabc9c29a39a2aa3');\nconst frozenCommit=compilerProposal.rootCommit,gitRoot=process.env.HEALTHROSTER_FROZEN_BASELINE_GIT_ROOT||sourceRoot;\nasync function frozenBaselineGraph(){\n const root=fs.mkdtempSync(path.join(os.tmpdir(),'hr0400-frozen32ee-')),sources=new Map(),barePackageRewrites=[],executedFiles=[],packageRootRequire=createRequire(path.join(gitRoot,'package.json'));\n function dispose(){const at=fs.realpathSync(root);assert.equal(path.dirname(at),fs.realpathSync(os.tmpdir()));assert(path.basename(at).startsWith('hr0400-frozen32ee-'));fs.rmSync(at,{recursive:true,force:false});}\n function collect(file){\n  assert(!file.startsWith('../')&&!path.posix.isAbsolute(file)&&/\\.(?:[cm]?js|json|sql)$/.test(file));if(sources.has(file))return;\n  const bytes=execFileSync('git',['show',frozenCommit+':'+file],{cwd:gitRoot,maxBuffer:10e6}),text=bytes.toString();sources.set(file,text);\n  const to=path.join(root,file);fs.mkdirSync(path.dirname(to),{recursive:true});fs.writeFileSync(to,bytes);\n  if(!/\\.[cm]?js$/.test(file))return;\n  const imports=[...text.matchAll(/(?:^|[;\\n])[ \\t]*(?:import\\b[^;]*?\\bfrom\\s*|export[ \\t]+\\{[^}]*\\}[ \\t]+from\\s*|import[ \\t]+)(['\"])([^'\"]+)\\1/g),...text.matchAll(/\\bimport\\(\\s*(['\"])([^'\"]+)\\1/g)];let executable=text;const changes=[];\n  for(const match of imports){const spec=match[2];if(spec.startsWith('.')){collect(path.posix.normalize(path.posix.join(path.posix.dirname(file),spec)));continue;}if(spec.startsWith('node:'))continue;\n   assert.equal(spec,'xlsx','Only the existing exact locked bare package may resolve outside the frozen graph');collect('package.json');collect('package-lock.json');\n   const locked=JSON.parse(sources.get('package-lock.json')).packages['node_modules/xlsx'];assert(locked?.version);\n   assert.equal(digest(canonical(fs.readFileSync(path.join(gitRoot,'package-lock.json'),'utf8'))),digest(sources.get('package-lock.json')),'Current dependency lock must equal32ee');\n   const entry=packageRootRequire.resolve(spec);let packageDir=path.dirname(entry);while(!fs.existsSync(path.join(packageDir,'package.json'))){const parent=path.dirname(packageDir);assert.notEqual(parent,packageDir);packageDir=parent;}const installed=JSON.parse(fs.readFileSync(path.join(packageDir,'package.json')));assert.equal(installed.name,spec);assert.equal(installed.version,locked.version);\n   const esm=installed.exports?.['.']?.import;assert.equal(esm,'./xlsx.mjs');const esmEntry=path.resolve(packageDir,esm);assert(esmEntry.startsWith(packageDir+path.sep));\n   const from=match[0],url=pathToFileURL(esmEntry).href,toToken=from.replace(match[1]+spec+match[1],match[1]+url+match[1]);assert.equal(executable.split(from).length,2);executable=executable.replace(from,toToken);changes.push({from,to:toToken});barePackageRewrites.push({file,kind:'BARE_PACKAGE_SPECIFIER_ONLY',package:spec,version:locked.version,entrySha256:digest(fs.readFileSync(esmEntry)),lockSha256:digest(sources.get('package-lock.json')),from,to:toToken});\n  }\n  let reversed=executable;for(const change of changes.toReversed()){assert.equal(reversed.split(change.to).length,2);reversed=reversed.replace(change.to,change.from);}assert.equal(reversed,text);fs.writeFileSync(to,executable);executedFiles.push({file,originalSha256:digest(text),executedSha256:digest(executable),fullReverseEquality:true});\n }\n try{\n  for(const p of compilerProposal.pins){collect(p.file);assert.equal(digest(sources.get(p.file)),p.beforeSha256,'Exact frozen critical baseline '+p.file);}collect('supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql');\n  const compiler=await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release.mjs'))),harness=await import(pathToFileURL(path.join(root,'scripts/healthroster-install1-full-rehearsal.mjs'))),lib=await import(pathToFileURL(path.join(root,'scripts/cloudtms-db-release-lib.mjs'))),sql=await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs'))),policy=await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-execution-policy.mjs')));\n  const files=[...sources].map(([file,text])=>({file,sha256:digest(text)})).sort((a,b)=>a.file.localeCompare(b.file));\n  console.log('HR_CAPABILITY_FROZEN_BASELINE '+JSON.stringify({commit:frozenCommit,completeFiles:files.length,relativeImportRewrites:0,currentBackendModulesBorrowed:0,barePackageRewrites,graphSha256:digest(JSON.stringify(files)),executedGraphSha256:digest(JSON.stringify(executedFiles.sort((a,b)=>a.file.localeCompare(b.file)))),allReverseEquality:executedFiles.every(f=>f.fullReverseEquality),criticalFiles:compilerProposal.pins.map(p=>({file:p.file,sha256:p.beforeSha256}))}));\n  return{root,sources,compiler,harness,lib,sql,policy,files,dispose};\n }catch(error){dispose();throw error;}\n}\nconst frozenBaseline=await frozenBaselineGraph(),baseCompiler=frozenBaseline.compiler,baseHarness=frozenBaseline.harness;\ntest.after(()=>frozenBaseline.dispose());\n// Installed runs use their real repository inventory. The isolated default-path\n// simulation may enumerate the real Git source through the exact unchanged lib;\n// this never supplies a baseline compiler/harness or invents an inventory count.\nconst repoInventory=path.resolve(gitRoot)===path.resolve(sourceRoot)?inventory:(await import(pathToFileURL(path.join(gitRoot,'scripts/cloudtms-db-release-lib.mjs')))).inventory;\nassert.equal(digest(canonical(fs.readFileSync(path.join(gitRoot,'scripts/cloudtms-db-release-lib.mjs'),'utf8'))),digest(frozenBaseline.sources.get('scripts/cloudtms-db-release-lib.mjs')));\nconst inventoryForSource=()=>repoInventory();",
+      "count": 1
+    },
+    {
+      "from": "old=JSON.parse(fs.readFileSync(path.join(sourceRoot,file)))",
+      "to": "old=JSON.parse(fs.readFileSync(path.join(frozenBaseline.root,file)))",
+      "count": 1
+    },
+    {
+      "from": "const proposal=JSON.parse(fs.readFileSync(path.resolve(targetRoot,'../PROPOSAL.json')));",
+      "to": "const proposal=JSON.parse(fs.readFileSync(path.join(targetRoot,preservedProposalPath)));",
+      "count": 1
+    },
+    {
+      "from": "assert.equal(value,canonical(fs.readFileSync(path.join(sourceRoot,p.file),'utf8')));",
+      "to": "assert.equal(value,frozenBaseline.sources.get(p.file));",
+      "count": 1
+    },
+    {
+      "from": "const current=inventory(),release=",
+      "to": "const current=inventoryForSource(),release=",
+      "count": 1
+    },
+    {
+      "from": "const current=inventory(),review=",
+      "to": "const current=inventoryForSource(),review=",
+      "count": 1
+    },
+    {
+      "from": "const i={path:MONEY_PREDECESSOR_MIGRATION.path,sha256:MONEY_PREDECESSOR_MIGRATION.contentSha256},before=baseCompiler.compileManagedUnit(i,'migration',{root:sourceRoot,mapSource:mapExecutableSqlSource})",
+      "to": "const i={path:MONEY_PREDECESSOR_MIGRATION.path,sha256:MONEY_PREDECESSOR_MIGRATION.contentSha256},before=baseCompiler.compileManagedUnit(i,'migration',{root:sourceRoot,mapSource:frozenBaseline.lib.mapExecutableSqlSource})",
+      "count": 1
+    },
+    {
+      "from": "const i={path:CONTACT_CLAIM_MIGRATION.path,sha256:CONTACT_CLAIM_MIGRATION.contentSha256},before=baseCompiler.compileManagedUnit(i,'migration',{root:sourceRoot,mapSource:mapExecutableSqlSource})",
+      "to": "const i={path:CONTACT_CLAIM_MIGRATION.path,sha256:CONTACT_CLAIM_MIGRATION.contentSha256},before=baseCompiler.compileManagedUnit(i,'migration',{root:sourceRoot,mapSource:frozenBaseline.lib.mapExecutableSqlSource})",
+      "count": 1
+    }
+  ],
+  "appendedTest": "\ntest('installed preservation baseline is exact original Git32ee code and cannot borrow current compiler/harness',()=>{\n assert.notEqual(baseCompiler.compileManagedUnit,compileManagedUnit);assert.notEqual(baseCompiler.unitCheckpointSql,unitCheckpointSql);assert.notEqual(baseHarness.compiledAtomicRehearsalUnit,compiledAtomicRehearsalUnit);\n assert(!baseCompiler.compileManagedUnit.toString().includes('capabilityPredecessorCompanion'));assert(!baseHarness.compiledAtomicRehearsalUnit.toString().includes('capabilityPrebody'));\n for(const p of compilerProposal.pins){assert.equal(digest(frozenBaseline.sources.get(p.file)),p.beforeSha256);assert.equal(digest(canonical(fs.readFileSync(path.join(targetRoot,p.file),'utf8'))),p.afterSha256);}\n assert(frozenBaseline.sources.has('scripts/healthroster-money-predecessor-boundary.mjs'));assert(frozenBaseline.sources.has('scripts/healthroster-contact-claim-boundary.mjs'));assert.equal(frozenBaseline.sources.has('scripts/healthroster-capability-predecessor-boundary.mjs'),false);\n});\n",
+  "fullReverseEquality": true,
+  "native": "NOT_RUN",
+  "rootEdits": 0
+}

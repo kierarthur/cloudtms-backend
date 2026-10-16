@@ -1,0 +1,43 @@
+{
+  "version": "HEALTHROSTER_CAPABILITY0400_INSTALLED_TEST_PAYLOADS_V1",
+  "files": [
+    {
+      "file": "forward/tests/healthroster-capability-predecessor-boundary.test.mjs",
+      "target": "tests/healthroster-capability-predecessor-boundary.test.mjs",
+      "sha256": "5def4dd476a24755a03650c0182775f6968bb54e579eb6faebf626f7993e853a"
+    },
+    {
+      "file": "PROPOSAL.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CAPABILITY_PREDECESSOR_INSTALLED_TEST_SOURCE_20261016/PROPOSAL.json",
+      "sha256": "901e4f12b6e1bd3c8e33905e63a4f14d29dc6bde1cf56f73063671c3e37491e3"
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CAPABILITY_PREDECESSOR_INSTALLED_TEST_SOURCE_20261016/TEST_RESULTS.json",
+      "sha256": "f069825215e6da0934ba2b6b5293e873f83679ef503d49637bd58d467cebbb23"
+    },
+    {
+      "file": "build-test.mjs",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CAPABILITY_PREDECESSOR_INSTALLED_TEST_SOURCE_20261016/build-test.mjs",
+      "sha256": "6be407a6a5ce102dfa2bcb55ed78334572c3158c30cc2de2b5c6d5639c5d5cc0"
+    },
+    {
+      "file": "fixture-loader.mjs",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CAPABILITY_PREDECESSOR_INSTALLED_TEST_SOURCE_20261016/fixture-loader.mjs",
+      "sha256": "bc27e197fb09bd488256fb345f5385b76a658582ba079afd96e7645a02981779"
+    },
+    {
+      "file": "test-installed.mjs",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CAPABILITY_PREDECESSOR_INSTALLED_TEST_SOURCE_20261016/test-installed.mjs",
+      "sha256": "38e455390507b3fea4d6f9db176a2b6b25f0d9d596ac1f4043de0b911f9011fe"
+    },
+    {
+      "file": "MOUNT.md",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/CAPABILITY_PREDECESSOR_INSTALLED_TEST_SOURCE_20261016/MOUNT.md",
+      "sha256": "0ea3e0d2e17b1bb1b182c56e123f4ba5597fd65dce6e8ebdadbf6f46eba42aca"
+    }
+  ],
+  "rootEdits": 0,
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}
