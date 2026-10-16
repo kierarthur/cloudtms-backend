@@ -1,0 +1,33 @@
+{
+  "version": "CONTACT_MAPPED_LOCK_GROUPING_PG17_SOURCE_CHECK_V1",
+  "qualification": "OFFLINE_GRAMMAR_AST_ONLY",
+  "library": "v7.20",
+  "postgres": [
+    17,
+    7
+  ],
+  "rows": [
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "newLockStatements": 2,
+      "allNowait": true,
+      "beforeAllOriginalChecks": true,
+      "allOriginalStatementsAstEqual": true
+    },
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "newLockStatements": 4,
+      "allNowait": true,
+      "beforeAllOriginalChecks": true,
+      "allOriginalStatementsAstEqual": true
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "fullBeforeAndAfterSqlGrammar": true,
+      "entireForQuerySqlAstEqualIgnoringLocations": true,
+      "exactOneParenthesisChange": true
+    }
+  ],
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}

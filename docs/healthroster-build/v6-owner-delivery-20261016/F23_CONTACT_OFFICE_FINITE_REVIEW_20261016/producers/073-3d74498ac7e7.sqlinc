@@ -1,0 +1,100 @@
+declare candidates jsonb;routes jsonb;followups jsonb;overdue jsonb;collapse_ids jsonb;
+begin
+ select coalesce(jsonb_agg(to_jsonb(native)order by native.reminder_due_at_utc,native.id),'[]')into candidates from(
+select generation.*
+    from public.weekly_candidate_outreach_generations generation
+    where generation.state='ACTIVE' and generation.reminder_due_at_utc<=v_now
+      and exists(
+        select 1 from public.weekly_message_intents intent
+        where intent.candidate_generation_id=generation.id
+          and intent.tranche_kind in ('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL')
+      )
+      and not exists(
+        select 1 from public.weekly_message_intents intent
+        where intent.candidate_generation_id=generation.id
+          and intent.tranche_kind in ('CANDIDATE_REMINDER_6H','TIMESHEET_SUBMISSION_REMINDER_6H')
+      )
+      and (
+        (generation.request_kind='CHECK_HOURS' and exists(
+          select 1 from public.weekly_candidate_outreach_memberships membership
+          join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+          where membership.candidate_generation_id=generation.id and membership.state='ACTIONABLE'
+            and incident.state='OPEN'
+            and not private.weekly_source_covered_hours_incident_v1(incident.id)
+        ))
+        or
+        (generation.request_kind='SUBMIT_TIMESHEET' and exists(
+          select 1 from public.weekly_timesheet_submission_requests submission
+          where submission.candidate_cohort_id=generation.candidate_cohort_id
+            and submission.source_cycle_id=generation.source_cycle_id and submission.candidate_id=generation.candidate_id
+            and submission.request_generation=generation.generation_number and submission.membership_hash=generation.membership_hash
+            and submission.state in ('ACTIVE','PARTLY_SUBMITTED')
+        ))
+      )
+    order by generation.reminder_due_at_utc,generation.id
+    limit v_limit
+ )native;
+ select coalesce(jsonb_agg(to_jsonb(native)order by native.first_due,native.route_id,native.event_kind),'[]')into routes from(
+select route.id as route_id,generation.id as generation_id,event.event_kind,
+           pg_catalog.min(event.due_at_utc) as first_due
+    from public.weekly_manager_recipient_routes route
+    join public.weekly_manager_recipient_generations generation
+      on generation.id=route.current_generation_id and generation.state='ACTIVE'
+    join public.weekly_manager_cohort_due_events event
+      on event.recipient_generation_id=generation.id
+     and event.state='PENDING' and event.due_at_utc<=v_now
+    group by route.id,generation.id,event.event_kind
+    order by pg_catalog.min(event.due_at_utc),route.id,event.event_kind
+    limit v_limit
+ )native;
+ select coalesce(jsonb_agg(to_jsonb(native)order by(native.state->>'due_at_utc')::timestamptz nulls last,native.id),'[]')into followups from(
+with current_candidates as materialized(
+      select incident.id,private.weekly_contact_source_followup_candidate_v1(incident.id,v_now) state
+      from public.weekly_discrepancy_incidents incident
+      where incident.state='OPEN' and incident.manager_potential_state='AVAILABLE'
+        and incident.manager_action_state not in('RESPONDED','NOT_REQUIRED')
+        and(exists(select 1 from public.weekly_contact_delivery_memberships member
+          where member.incident_id=incident.id and member.incident_episode=incident.episode_number
+            and member.audience='MANAGER' and member.accepted_at_utc is not null)
+          or exists(select 1 from public.weekly_manager_review_items item join public.weekly_manager_review_batches batch on batch.id=item.review_batch_id
+            join public.weekly_message_dispatch_commands command on command.message_render_id=batch.message_render_id
+            where item.incident_id=incident.id and item.incident_episode=incident.episode_number and(
+              command.provider_accepted_at_utc is not null
+              or exists(select 1 from public.weekly_message_provider_attempts attempt where attempt.dispatch_command_id=command.id
+                and attempt.outcome='ACCEPTED' and attempt.completed_at_utc is not null)
+              or exists(select 1 from public.weekly_message_dispatch_targets target join public.weekly_message_target_attempts attempt
+                on attempt.dispatch_target_id=target.id where target.dispatch_command_id=command.id
+                  and attempt.outcome='ACCEPTED' and attempt.completed_at_utc is not null))))
+    )
+    select candidate.* from current_candidates candidate where candidate.state->>'reason'='HELD_DEPENDENCY'
+      or(candidate.state->>'reason'='SCHEDULED' and candidate.state->>'mode'='AUTOMATIC'
+        and(candidate.state->>'due_at_utc')::timestamptz<=v_now and not exists(
+          select 1 from public.weekly_contact_source_ordinal_owners owner join public.weekly_message_intents intent on intent.id=owner.message_intent_id
+          where owner.logical_contact_key=decode(candidate.state->>'logical_contact_key','hex') and intent.state in('DUE','RENDERED')
+            and not exists(select 1 from public.weekly_contact_delivery_memberships accepted where accepted.logical_contact_key=owner.logical_contact_key
+              and accepted.send_ordinal=owner.send_ordinal and accepted.accepted_at_utc is not null)))
+    order by(candidate.state->>'due_at_utc')::timestamptz nulls last,candidate.id limit v_limit
+ )native;
+  
+  
+  
+ select coalesce(jsonb_agg(to_jsonb(native)order by native.deadline_at_utc,native.id),'[]')into overdue from(
+  select submission.* from public.weekly_timesheet_submission_requests submission
+   where submission.state in('ACTIVE','PARTLY_SUBMITTED')and submission.deadline_at_utc<=v_now
+   order by submission.deadline_at_utc,submission.id limit v_limit
+ )native;
+  
+  
+ select coalesce(jsonb_agg(to_jsonb(native)order by native.id),'[]')into collapse_ids from(
+  select earlier.* from public.weekly_message_intents earlier where earlier.audience_kind='CANDIDATE'
+   and earlier.state in('DUE','RENDERED')and earlier.tranche_kind in('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL')
+   and earlier.due_at_utc<=v_now and(
+    exists(select 1 from public.weekly_message_intents later where later.candidate_generation_id=earlier.candidate_generation_id
+     and later.tranche_kind in('CANDIDATE_REMINDER_6H','TIMESHEET_SUBMISSION_REMINDER_6H')and later.due_at_utc<=v_now
+     and later.state in('DUE','RENDERED','DISPATCHED'))
+    or exists(select 1 from jsonb_array_elements(candidates)selected where(selected->>'id')::uuid=earlier.candidate_generation_id))
+   order by earlier.id limit v_limit
+ )native;
+ return jsonb_build_object('version','CONTACT_NATIVE_SCHEDULER_SELECTION_V1','candidate_generations',candidates,'manager_routes',routes,
+  'followups',followups,'overdue_requests',overdue,'collapse_intents',collapse_ids);
+end;

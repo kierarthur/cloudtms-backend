@@ -1,0 +1,91 @@
+declare
+  v_candidate_id uuid;
+  v_generation_id uuid;
+  v_publication_id uuid;
+  v_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_items jsonb;
+  v_submission public.weekly_timesheet_submission_requests%rowtype;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in ('candidate_id','candidate_generation_id','projection_publication_id')) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_QUERY_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_candidate_id:=(p_request->>'candidate_id')::uuid;
+    v_generation_id:=(p_request->>'candidate_generation_id')::uuid;
+    v_publication_id:=(p_request->>'projection_publication_id')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_QUERY_REQUEST_INVALID' using errcode='22023';
+  end;
+  select * into strict v_generation from public.weekly_candidate_outreach_generations
+  where id=v_generation_id and candidate_id=v_candidate_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
+  select * into strict v_group from public.weekly_source_groups where id=v_cycle.source_group_id;
+  perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication_id);
+  if v_generation.request_kind='SUBMIT_TIMESHEET' then
+    select * into strict v_submission from public.weekly_timesheet_submission_requests
+    where id=private.weekly_contact_submission_request_for_generation_v1(v_generation.id)
+      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED');
+    select coalesce(pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'request_membership_id',membership.id,'week_ending',membership.week_ending,
+        'client_name',client.name,'contract_id',membership.contract_id
+      ) order by membership.week_ending,private.weekly_source_query_ascii_fold_v1(client.name) collate C,membership.id
+    ),'[]'::jsonb) into v_items
+    from public.weekly_timesheet_submission_request_memberships membership
+    join public.clients client on client.id=membership.client_id
+    where membership.submission_request_id=v_submission.id and membership.state='WAITING';
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'request_kind','SUBMIT_TIMESHEET','title','Submit your Timesheet',
+      'submission_request_id',v_submission.id,'deadline_at_utc',v_submission.deadline_at_utc,
+      'overdue',v_submission.state='OVERDUE','items',v_items
+    );
+  end if;
+  if v_generation.state<>'ACTIVE' or pg_catalog.transaction_timestamp()>v_generation.deadline_at_utc then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_QUERY_UNAVAILABLE' using errcode='42501';
+  end if;
+  select coalesce(pg_catalog.jsonb_agg(
+    pg_catalog.jsonb_build_object(
+      'incident_id',incident.id,
+      'current_fact_version',pg_catalog.encode(comparison.material_comparison_fingerprint,'hex'),
+      'expected_timesheet_hash',pg_catalog.encode(
+        private.weekly_source_query_candidate_timesheet_hash_v1(comparison.candidate_timesheet_id),'hex'
+      ),
+      'client_name',client.name,'work_date',work_event.work_date,
+      'candidate_start',to_char(comparison.candidate_start_at_local,'HH24:MI'),
+      'candidate_end',to_char(comparison.candidate_end_at_local,'HH24:MI'),
+      'candidate_break_minutes',comparison.candidate_break_minutes,
+      'system_start',case when comparison.source_presence='PRESENT' then to_char(comparison.system_start_at_local,'HH24:MI') end,
+      'system_end',case when comparison.source_presence='PRESENT' then to_char(comparison.system_end_at_local,'HH24:MI') end,
+      'system_break_minutes',case when comparison.source_presence='PRESENT' then comparison.system_break_minutes end,
+      'system_hours_text',case
+        when comparison.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED' and v_group.source_family='NHSP'
+          then 'Missing or not yet authorised'
+        when comparison.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED' then 'Not shown in system'
+        when comparison.issue_family='HEALTHROSTER_NOT_FINALISED' then 'Not finalised - no actual hours'
+        else null end,
+      'response_options',pg_catalog.jsonb_build_array(
+        pg_catalog.jsonb_build_object('value','CANDIDATE_WRONG','label','My hours are wrong. The client is correct.'),
+        pg_catalog.jsonb_build_object('value','CANDIDATE_CORRECT','label','My hours are correct.'),
+        pg_catalog.jsonb_build_object('value','NEITHER_CORRECT','label','Both sets of hours are wrong.')
+      ),
+      'contact_manager_message','Please contact your manager urgently if the system hours need to be changed.'
+    ) order by work_event.work_date,coalesce(comparison.candidate_start_at_local,comparison.system_start_at_local),incident.id
+  ),'[]'::jsonb) into v_items
+  from public.weekly_candidate_outreach_memberships membership
+  join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+  join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+  join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+  join public.clients client on client.id=incident.client_id
+  where membership.candidate_generation_id=v_generation.id and membership.state='ACTIONABLE'
+    and incident.state='OPEN'
+    and not private.weekly_source_covered_hours_incident_v1(incident.id);
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'request_kind','CHECK_HOURS','title','Check your Timesheet hours',
+    'deadline_at_utc',v_generation.deadline_at_utc,'items',v_items
+  );
+end;

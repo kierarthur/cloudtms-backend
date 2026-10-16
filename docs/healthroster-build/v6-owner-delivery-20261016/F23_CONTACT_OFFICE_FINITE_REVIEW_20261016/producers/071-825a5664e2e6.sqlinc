@@ -1,0 +1,13 @@
+declare intent public.weekly_message_intents%rowtype;facts jsonb;pair jsonb;
+begin
+ select * into strict intent from public.weekly_message_intents where id=p_intent;
+ perform private.weekly_contact_deployment_lock_v1(intent.agency_id,intent.environment);
+ perform private.weekly_contact_context_v1(intent.agency_id,intent.environment);
+ facts:=private.weekly_contact_source_intent_composition_scope_facts_v1(intent.id);
+ if(facts->'intent'->>'agency_id',facts->'intent'->>'environment')is distinct from(intent.agency_id::text,intent.environment) then
+  raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+ for pair in select value from jsonb_array_elements(facts->'pairs')order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+  perform private.weekly_contact_scope_lock_v1(intent.agency_id,intent.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ if private.weekly_contact_source_intent_composition_scope_facts_v1(intent.id)is distinct from facts then
+  raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+end;

@@ -1,0 +1,35 @@
+declare saved public.weekly_contact_manual_reviews%rowtype;accepted public.weekly_contact_manual_acceptances%rowtype;
+ request_hash bytea;manifest jsonb;result jsonb;review_id uuid;review_hash bytea;at_utc timestamptz;expires timestamptz;
+begin
+ perform private.weekly_contact_manual_request_assert_v1(p_request,false);
+ perform private.weekly_contact_manual_scopes_lock_v1(p_request);
+ request_hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_REQUEST_V1',p_request);
+ select * into saved from public.weekly_contact_manual_reviews where request_id=(p_request->>'request_id')::uuid;
+ if found then
+  if saved.actor_user_id<>(p_request->>'actor_user_id')::uuid or saved.request_digest<>request_hash then
+   raise exception 'CONTACT_MANUAL_ENQUIRY_IDEMPOTENCY_CONFLICT' using errcode='40001';end if;
+  return saved.preview_json;
+ end if;
+ at_utc:=clock_timestamp();
+ manifest:=private.weekly_contact_manual_manifest_v1(p_request,at_utc);
+ if manifest->'cas_matches'='true'::jsonb and jsonb_array_length(manifest->'groups')>0 then
+  review_id:=gen_random_uuid();expires:=at_utc+interval '10 minutes';
+  review_hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_REVIEW_V1',jsonb_build_object('review_id',review_id,
+   'request',p_request,'manifest',private.weekly_contact_manual_manifest_seal_v1(manifest),
+   'expires_at_utc',to_char(expires at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')));
+ end if;
+ result:=jsonb_build_object('ok',true,'version','CONTACT_MANUAL_ENQUIRY_REVIEW_V1','request_id',p_request->'request_id',
+  'review_id',review_id,'review_digest',case when review_hash is null then null else encode(review_hash,'hex') end,
+  'audience',p_request->'audience','reason',p_request->'reason','can_accept',review_id is not null,
+  'scope_results',manifest->'scope_results','groups',manifest->'groups','expires_at_utc',
+  case when expires is null then null else to_char(expires at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end);
+ if review_id is not null then
+  insert into public.weekly_contact_manual_reviews(id,request_id,actor_user_id,agency_id,environment,audience,reason,
+   request_digest,review_digest,request_json,manifest_json,preview_json,created_at_utc,expires_at_utc)
+  values(review_id,(p_request->>'request_id')::uuid,(p_request->>'actor_user_id')::uuid,(p_request->>'agency_id')::uuid,
+   p_request->>'environment',p_request->>'audience',p_request->>'reason',request_hash,review_hash,p_request,manifest,result,at_utc,expires);
+ end if;
+ return result;
+exception when others then
+ perform private.weekly_contact_manual_raise_public_v1(SQLERRM,SQLSTATE);return null;
+end;

@@ -1,0 +1,41 @@
+declare
+  v_route public.weekly_manager_recipient_routes%rowtype;
+  v_generation public.weekly_manager_recipient_generations%rowtype;
+  v_intent public.weekly_message_intents%rowtype;
+  v_events uuid[];
+  v_key bytea;
+begin
+  if p_tranche_kind not in (
+    'MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED','MANAGER_T12_REMAINDER',
+    'MANAGER_MANUAL_SELECTED','MANAGER_MANUAL_RESEND','MANAGER_AUTOMATIC_FOLLOWUP'
+  ) or p_tranche_sequence<1 or p_due_at_utc is null then
+    raise exception 'WEEKLY_SOURCE_MANAGER_INTENT_INVALID' using errcode='22023';
+  end if;
+  select * into strict v_route
+  from public.weekly_manager_recipient_routes where id=p_recipient_route_id;
+  select * into strict v_generation
+  from public.weekly_manager_recipient_generations
+  where id=p_recipient_generation_id and recipient_route_id=v_route.id and state='ACTIVE';
+  select coalesce(pg_catalog.array_agg(event_id order by event_id),'{}'::uuid[]) into v_events
+  from pg_catalog.unnest(coalesce(p_due_event_ids,'{}'::uuid[])) event_id;
+  v_key:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_MESSAGE_INTENT_V1',
+    pg_catalog.jsonb_build_object(
+      'environment',v_route.environment,'agency_id',v_route.agency_id,
+      'source_cycle_id',v_route.source_cycle_id,'recipient_route_id',v_route.id,
+      'recipient_generation_id',v_generation.id,'due_event_ids',v_events,
+      'tranche_kind',p_tranche_kind,'tranche_sequence',p_tranche_sequence,
+      'membership_hash',pg_catalog.encode(v_generation.membership_hash,'hex')
+    )
+  );
+  insert into public.weekly_message_intents(
+    environment,agency_id,source_cycle_id,audience_kind,recipient_route_id,
+    recipient_generation_id,sorted_due_event_ids,tranche_kind,tranche_sequence,
+    logical_key,state,due_at_utc
+  ) values (
+    v_route.environment,v_route.agency_id,v_route.source_cycle_id,'MANAGER',v_route.id,
+    v_generation.id,v_events,p_tranche_kind,p_tranche_sequence,v_key,'DUE',p_due_at_utc
+  ) on conflict (logical_key) do nothing;
+  select * into strict v_intent from public.weekly_message_intents where logical_key=v_key;
+  return v_intent.id;
+end;

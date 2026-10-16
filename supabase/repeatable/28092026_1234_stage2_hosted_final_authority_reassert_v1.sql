@@ -20,3 +20,4 @@
 \ir 22092026_1226_client_initial_settings_baseline_v1.sql
 \ir 24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql
 \ir 26092026_0202_banking_pay_stage2_source_authorisation_v1.sql
+notify pgrst, 'reload schema';

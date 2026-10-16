@@ -1,0 +1,3 @@
+create or replace function private.timesheet_contract_move_row_hash_v1(p_row jsonb)
+returns bytea language sql immutable strict security definer set search_path='pg_catalog','extensions','pg_temp'
+as $function$ select extensions.digest(p_row::text,'sha256'); $function$;

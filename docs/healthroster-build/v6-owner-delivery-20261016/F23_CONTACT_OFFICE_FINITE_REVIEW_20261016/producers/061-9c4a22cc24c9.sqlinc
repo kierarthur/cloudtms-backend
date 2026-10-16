@@ -1,0 +1,38 @@
+declare intent public.weekly_message_intents%rowtype;after_intent public.weekly_message_intents%rowtype;pairs jsonb;pair jsonb;
+ discovered_agency uuid;discovered_environment text;
+begin
+ select * into strict intent from public.weekly_message_intents where id=p_intent;
+ discovered_agency:=intent.agency_id;discovered_environment:=intent.environment;
+ perform private.weekly_contact_deployment_lock_v1(intent.agency_id,intent.environment);
+ perform private.weekly_contact_context_v1(intent.agency_id,intent.environment);
+ select * into strict intent from public.weekly_message_intents where id=p_intent;
+ if(intent.agency_id,intent.environment) is distinct from(discovered_agency,discovered_environment) then
+  raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+ if intent.audience_kind='CANDIDATE' then
+  perform private.weekly_contact_source_generation_lock_v1(intent.candidate_generation_id,
+   (select candidate_id from public.weekly_candidate_outreach_generations where id=intent.candidate_generation_id));
+ elsif intent.audience_kind='MANAGER' then
+  if exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=intent.id) then
+   pairs:=private.weekly_contact_source_capture_pairs_v1(intent.id);
+  elsif exists(select 1 from public.weekly_message_renders render join public.weekly_manager_review_batches batch on batch.message_render_id=render.id
+    where render.message_intent_id=intent.id and render.state in('CURRENT','SUBMISSION_STARTED','ACCEPTED','AMBIGUOUS')
+     and batch.state in('ACTIVE','COMPLETE')) then
+   select coalesce(jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id) order by candidate_id,client_id),'[]') into pairs from(
+    select distinct incident.candidate_id,incident.client_id from public.weekly_message_renders render
+    join public.weekly_manager_review_batches batch on batch.message_render_id=render.id
+    join public.weekly_manager_review_items item on item.review_batch_id=batch.id join public.weekly_discrepancy_incidents incident on incident.id=item.incident_id
+    where render.message_intent_id=intent.id and render.state in('CURRENT','SUBMISSION_STARTED','ACCEPTED','AMBIGUOUS')
+     and batch.state in('ACTIVE','COMPLETE'))actual;
+  else
+   select coalesce(jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id) order by candidate_id,client_id),'[]') into pairs from(
+    select distinct incident.candidate_id,incident.client_id from public.weekly_manager_recipient_memberships member
+    join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id
+    where member.recipient_generation_id=intent.recipient_generation_id)actual;
+  end if;
+  for pair in select value from jsonb_array_elements(pairs) order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+   perform private.weekly_contact_scope_lock_v1(intent.agency_id,intent.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ else raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ select * into strict after_intent from public.weekly_message_intents where id=intent.id;
+ if to_jsonb(after_intent) is distinct from to_jsonb(intent) then
+  raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+end;

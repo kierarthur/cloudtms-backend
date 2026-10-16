@@ -1,0 +1,37 @@
+{
+  "version": "HEALTH_CONTACT_NATIVE_PREFIX_ATTEMPT_V1",
+  "caseId": "contact20-lock1",
+  "harnessSourceCommit": "6f131e34e2b4ae93f801bc0cc9420f95b38b9398",
+  "status": "HOLD_TRANSPORT_FRAME_NOT_PASS",
+  "database": "cloudtms_test_clone",
+  "serverRolledBack": true,
+  "freshVerificationConnected": true,
+  "observedError": {
+    "statementIndex": 13,
+    "sqlstate": "55P03"
+  },
+  "canonicalSnapshotTransport": {
+    "truncatedCellCharacters": 20001,
+    "metadataRowsTruncated": false,
+    "completeReassembly": false,
+    "restorationQualified": false
+  },
+  "holder": {
+    "pid": 188659,
+    "sharedTurnTakenAt": "2026-10-16T11:46:39.252Z",
+    "sharedTurnReleasedAt": "2026-10-16T11:48:19.469Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "witnessLocksGone": true,
+    "canonicalSharedTurnHelperCompleted": true,
+    "completion": "HOLD_ABORTED_WITHOUT_NATIVE_QUALIFICATION"
+  },
+  "backgroundJobsPaused": false,
+  "migrationBodyRun": false,
+  "businessDml": false,
+  "temporaryFixtureCreated": false,
+  "rawResultsCommitted": false,
+  "followup": "Transport-only bounded chunks with exact complete canonical snapshot and hash/order/count checks; independent review before retry",
+  "nativeContentionPass": false,
+  "install2": "NOT_RUN"
+}

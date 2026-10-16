@@ -1,0 +1,9 @@
+{
+  "version": "CONTACT_FINITE_SOURCE_PAYLOAD_VERIFICATION_V1",
+  "allManifestHashesAndUniqueTargets": true,
+  "sourceCredentialScan": "PASS",
+  "scannedFiles": 509,
+  "rootEdits": 0,
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}

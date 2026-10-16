@@ -1,0 +1,117 @@
+create or replace function private.weekly_contact_source_admission_v1(p_request jsonb) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_keys text[]:=array['version','owner_kind','dispatch_target_id','lease_token','worker_id','agency_id','environment'];
+ v_target_id uuid;v_lease uuid;v_agency uuid;v_environment text;v_worker text;
+ v_target public.weekly_message_dispatch_targets%rowtype;v_command public.weekly_message_dispatch_commands%rowtype;
+ v_policy public.candidate_push_timing_policy%rowtype;v_context jsonb;v_before jsonb;v_after jsonb;
+ v_pair jsonb;v_guard jsonb;v_scopes jsonb:='[]';v_scope uuid;v_until timestamptz;
+ v_at timestamptz;v_witness jsonb;v_decision jsonb;v_admission jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ perform private.weekly_contact_assert_closed_v1(p_request,v_keys,v_keys,'CONTACT_REQUEST_INVALID');
+ if p_request->>'version' is distinct from 'CONTACT_START_V1'
+  or p_request->>'owner_kind' is distinct from 'WEEKLY_SOURCE_TARGET'
+  or jsonb_typeof(p_request->'worker_id') is distinct from 'string'
+  or char_length(p_request->>'worker_id') not between 1 and 200
+  or p_request->>'environment' is null or p_request->>'environment' not in('TEST','LIVE') then
+  raise exception 'CONTACT_REQUEST_INVALID' using errcode='22023';end if;
+ v_target_id:=private.weekly_contact_uuid_v1(p_request->'dispatch_target_id');
+ v_lease:=private.weekly_contact_uuid_v1(p_request->'lease_token');
+ v_agency:=private.weekly_contact_uuid_v1(p_request->'agency_id');
+ v_worker:=p_request->>'worker_id';v_environment:=p_request->>'environment';
+ -- The preliminary reads discover native IDs only; they grant no admission.
+ perform private.weekly_contact_deployment_lock_v1(v_agency,v_environment);
+ perform private.weekly_contact_context_v1(v_agency,v_environment);
+ select * into strict v_target from public.weekly_message_dispatch_targets where id=v_target_id;
+ select * into strict v_command from public.weekly_message_dispatch_commands where id=v_target.dispatch_command_id;
+ if v_command.agency_id is distinct from v_agency or v_command.environment is distinct from v_environment then
+  raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ if v_target.channel='PUSH' then
+  select * into v_policy from public.candidate_push_timing_policy
+   where agency_id=v_agency and environment=v_environment for update;
+  if not found then raise exception 'PUSH_TIMING_DEPLOYMENT_UNAVAILABLE' using errcode='P0001';end if;
+  perform private.candidate_push_timing_policy_validate_v1(v_policy.policy_json);
+  if v_policy.policy_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('PUSH_TIMING_POLICY_V1',v_policy.policy_json) then
+   raise exception 'PUSH_TIMING_DEPENDENCY_UNAVAILABLE' using errcode='P0001';end if;
+ end if;
+ v_before:=private.weekly_contact_source_membership_v1(v_target_id,v_agency,v_environment);
+ for v_pair in select value from jsonb_array_elements(v_before->'scope_pairs')
+  order by value->>'candidate_id',value->>'client_id' loop
+  perform private.weekly_contact_scope_lock_v1(v_agency,v_environment,
+   (v_pair->>'candidate_id')::uuid,(v_pair->>'client_id')::uuid);
+ end loop;
+ if v_target.channel='PUSH' and (v_policy.policy_json->>'enabled')::boolean
+  and v_policy.policy_json->'bank_holiday_rule'->>'mode'<>'INHERIT' then
+  -- The existing effective owner derives holidays solely from this actual
+  -- defaults row's bh_list UNION bh_feed_list. A stable row lock excludes its
+  -- actual feed/editor writers; unrelated client/rate rows are not locked.
+  perform 1 from public.settings_defaults where id=1 for share;
+  if not found then raise exception 'PUSH_TIMING_DEPENDENCY_UNAVAILABLE' using errcode='P0001';end if;
+ end if;
+ -- Only now acquire the existing native relative target -> command locks.
+ select * into strict v_target from public.weekly_message_dispatch_targets where id=v_target_id for update;
+ select * into strict v_command from public.weekly_message_dispatch_commands where id=v_target.dispatch_command_id for update;
+ v_after:=private.weekly_contact_source_membership_v1(v_target_id,v_agency,v_environment);
+ if (v_before-'current') is distinct from (v_after-'current') then
+  raise exception 'CONTACT_DISPATCH_MEMBERSHIP_CHANGED' using errcode='40001';end if;
+ -- Re-read the genuine clock and current scope expiry after every possible wait.
+ v_at:=clock_timestamp();
+ if v_target.state<>'LEASED' or v_target.lease_token is distinct from v_lease
+  or v_target.lease_owner is distinct from v_worker or v_target.lease_expires_at_utc<=v_at then
+  raise exception 'WEEKLY_SOURCE_TARGET_LEASE_STALE' using errcode='40001';end if;
+ if v_after->'current' is distinct from 'true'::jsonb then
+  return jsonb_build_object('ok',false,'version','CONTACT_START_RESULT_V1','owner_kind','WEEKLY_SOURCE_TARGET',
+   'channel',v_target.channel,'reason','OBSOLETE','dispatch_target_id',v_target.id,'next_eligible_at_utc',null);end if;
+ for v_pair in select value from jsonb_array_elements(v_after->'scope_pairs')
+  order by value->>'candidate_id',value->>'client_id' loop
+  v_guard:=private.weekly_contact_scope_guard_v1((v_pair->>'candidate_id')::uuid,
+   (v_pair->>'client_id')::uuid,v_after->>'audience',v_at);
+  v_scope:=(v_guard->>'scope_id')::uuid;
+  if v_scope is null or jsonb_typeof(v_guard->'allow') is distinct from 'boolean'
+   or jsonb_typeof(v_guard->'revision') is distinct from 'string'
+   or v_guard->>'revision' !~ '^(0|[1-9][0-9]*)$' then
+   raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+  v_scopes:=v_scopes||jsonb_build_array(jsonb_build_object('scope_id',v_scope,
+   'candidate_id',v_pair->'candidate_id','client_id',v_pair->'client_id',
+   'audience',v_after->>'audience','revision',v_guard->>'revision'));
+  if v_guard->'allow' is distinct from 'true'::jsonb then
+   if v_guard->>'next_allowed_utc' is null then
+    raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+   v_until:=greatest(v_until,(v_guard->>'next_allowed_utc')::timestamptz);end if;
+ end loop;
+ if v_until is not null then
+  return jsonb_build_object('ok',false,'version','CONTACT_START_RESULT_V1','owner_kind','WEEKLY_SOURCE_TARGET',
+   'channel',v_target.channel,'reason','NOT_STARTED_PAUSED','dispatch_target_id',v_target.id,
+   'next_eligible_at_utc',to_char(v_until at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));end if;
+ if not (private.weekly_contact_source_budget_v1(v_command.id)->>'allowed')::boolean then
+  return jsonb_build_object('ok',false,'version','CONTACT_START_RESULT_V1','owner_kind','WEEKLY_SOURCE_TARGET',
+   'channel',v_target.channel,'reason','OBSOLETE','dispatch_target_id',v_target.id,'next_eligible_at_utc',null);end if;
+ v_admission:=jsonb_build_object('scope_revisions',v_scopes,'content_hash',v_after->>'content_hash',
+  'admitted_at_utc',to_char(v_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));
+ if v_target.channel='PUSH' then
+  v_context:=private.weekly_contact_push_dispatch_context_v1(v_target.id,v_command.id,v_target.provider,
+   v_target.target_snapshot_hash,v_agency,v_environment);
+  v_witness:=private.weekly_contact_push_calendar_witness_v1(v_context,v_policy.policy_json,v_at);
+  v_at:=clock_timestamp();
+  if v_target.lease_expires_at_utc<=v_at then
+   raise exception 'WEEKLY_SOURCE_TARGET_LEASE_STALE' using errcode='40001';end if;
+  v_decision:=private.weekly_contact_push_timing_decision_v1(v_policy.policy_json,v_at,
+   (v_context->>'expires_at_utc')::timestamptz,v_witness->'dates');
+  if v_decision->'allowed_now' is distinct from 'true'::jsonb then
+   return jsonb_build_object('ok',false,'version','CONTACT_START_RESULT_V1','owner_kind','WEEKLY_SOURCE_TARGET',
+    'channel','PUSH','reason',case v_decision->>'reason' when 'QUIET' then 'NOT_STARTED_QUIET' else v_decision->>'reason' end,
+    'dispatch_target_id',v_target.id,'next_eligible_at_utc',v_decision->'next_allowed_utc');end if;
+  v_admission:=v_admission||jsonb_build_object('policy_revision',v_policy.revision::text,
+   'policy_sha256',encode(v_policy.policy_sha256,'hex'),'calendar_digest',v_witness->>'calendar_digest',
+   'target_snapshot_hash',encode(v_target.target_snapshot_hash,'hex'),'provider',v_target.provider,
+   'admitted_at_utc',to_char(v_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+   'consume_before_utc',to_char((v_at+interval '30 seconds') at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));
+ else
+  v_admission:=v_admission||jsonb_build_object('recipient_hash',v_after->>'recipient_hash');
+ end if;
+ return jsonb_build_object('ok',true,'version','CONTACT_START_RESULT_V1','owner_kind','WEEKLY_SOURCE_TARGET',
+  'channel',v_target.channel,'dispatch_target_id',v_target.id,'admission',v_admission);
+end;
+$function$;

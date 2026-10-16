@@ -1,0 +1,41 @@
+declare task public.weekly_contact_recheck_tasks%rowtype;scope public.weekly_contact_pause_scopes%rowtype;
+ progress public.weekly_contact_recheck_progress%rowtype;checking jsonb;phase text;after_id uuid;native uuid;facts jsonb;
+ pairs jsonb;delivery public.hr_issue_email_deliveries%rowtype;items jsonb;
+begin
+ select * into strict task from public.weekly_contact_recheck_tasks where id=p_task;
+ select * into strict scope from public.weekly_contact_pause_scopes where id=task.scope_id;
+ checking:=private.weekly_contact_manual_enquiry_read_v1(scope.agency_id,scope.environment,scope.candidate_id,scope.client_id);
+ select * into progress from public.weekly_contact_recheck_progress where task_id=task.id;
+ if progress.task_id is null or progress.phase='COMPLETE' or(progress.scope_revision,progress.checking_revision)
+  is distinct from(scope.revision,(checking->>'checking_revision')::bigint) then phase:='SOURCE_ACTIVATION';after_id:=null;
+ else phase:=progress.phase;after_id:=progress.last_native_id;end if;
+ if task.state='DONE' or task.due_at_utc>p_at or(task.state='LEASED' and task.lease_expires_at_utc>p_at)then phase:='COMPLETE';end if;
+ loop
+  exit when phase='COMPLETE';
+  select native_id into native from private.weekly_contact_recheck_native_ids_v1(scope.id,phase,after_id)order by native_id limit 1;
+  exit when native is not null;
+  phase:=case phase when 'SOURCE_ACTIVATION' then 'SOURCE_WORKER' when 'SOURCE_WORKER' then 'SOURCE_MANAGER'
+   when 'SOURCE_MANAGER' then 'LEGACY_OUTBOX' else 'COMPLETE' end;after_id:=null;
+ end loop;
+ if native is not null then
+  if phase='SOURCE_ACTIVATION' then facts:=private.weekly_contact_source_activation_scope_facts_v1(scope.id,native);
+  elsif phase in('SOURCE_WORKER','SOURCE_MANAGER')then facts:=private.weekly_contact_source_intent_composition_scope_facts_v1(native);
+  elsif phase='LEGACY_OUTBOX' then
+   select * into strict delivery from public.hr_issue_email_deliveries where id=native and original_delivery_id=id;
+   select coalesce(jsonb_agg(jsonb_build_object('item_id',item.id,'action_id',action.action_id,'candidate_id',action.candidate_id,
+    'client_id',action.client_id)order by item.id),'[]')into items from public.hr_issue_email_delivery_items item
+    join public.import_review_decisions action on action.action_id=item.action_id where item.delivery_id=delivery.id;
+   if exists(select 1 from jsonb_array_elements(items)item where item->>'candidate_id'is null or item->>'client_id'is null)then
+    raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
+   select coalesce(jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id)order by candidate_id,client_id),'[]')into pairs
+    from(select distinct(item->>'candidate_id')::uuid candidate_id,(item->>'client_id')::uuid client_id from jsonb_array_elements(items)item)actual;
+   facts:=jsonb_build_object('version','CONTACT_LEGACY_QUERY_SCOPE_FACTS_V1','delivery',to_jsonb(delivery),'items',items,'pairs',pairs);
+  end if;
+ end if;
+ select jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id)order by candidate_id,client_id)into pairs from(
+  select scope.candidate_id candidate_id,scope.client_id client_id union
+  select(value->>'candidate_id')::uuid,(value->>'client_id')::uuid from jsonb_array_elements(coalesce(facts->'pairs','[]')))actual;
+ return jsonb_build_object('version','CONTACT_RECHECK_SELECTION_SCOPE_FACTS_V1','task',to_jsonb(task),'progress',to_jsonb(progress),
+  'scope_revision',scope.revision::text,'checking_revision',checking->'checking_revision','checking_facts_sha256',checking->'checking_facts_sha256',
+  'phase',phase,'native_id',native,'native_facts',facts,'pairs',pairs);
+end;

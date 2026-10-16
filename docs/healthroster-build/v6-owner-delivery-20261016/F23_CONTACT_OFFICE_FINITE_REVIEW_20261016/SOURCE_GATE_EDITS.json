@@ -1,0 +1,25 @@
+{
+  "file": "scripts/bpay-next-source-gates.mjs",
+  "rootCommittedCheckpoint": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "beforeSha256": "50a7de7aa554fe192432a6de17d91ef1db0afa7d9519e52e9e1dd9edc840361d",
+  "afterSha256": "3c402fa53b9c42ae40946f7d5ffc50ea1adb5360f2779b559aeda27316901c98",
+  "beforeLfSha256": "9c3bfc1f294216ecab1f428337e724891a519a39840040edb47e97acb8a6da09",
+  "afterLfSha256": "6a9521841de1d85c88568f93592f3bbf7e20f00372a2dac5e6519600a433c519",
+  "edits": [
+    {
+      "from": "import {createHash} from 'node:crypto';",
+      "to": "import {reviewedContactFiniteHazards} from './healthroster-contact-finite-review.mjs';\nimport {createHash} from 'node:crypto';",
+      "count": 1
+    },
+    {
+      "from": "firstInstallIncomingHazards(source,file,baselineHazards)",
+      "to": "firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))",
+      "count": 1
+    }
+  ],
+  "fullRawReverseEquality": true,
+  "fullLfReverseEquality": true,
+  "genericFenceEdits": false,
+  "independentOfSourceOuterWrapper": true,
+  "installation": "APPLY_EXACT_TWO_UNIQUE_EDITS_AND_COMPOSE_WITH_SOURCE_DELEGATION_CONTRIBUTION_NO_WHOLE_STALE_GATE_REPLACEMENT"
+}

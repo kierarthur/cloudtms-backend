@@ -1,0 +1,10 @@
+alter function private.weekly_contact_source_candidate_render_assert_v1(uuid) owner to postgres;
+revoke all on function private.weekly_contact_source_candidate_render_assert_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_manager_initial_owned_v1(uuid) owner to postgres;
+revoke all on function private.weekly_contact_source_manager_initial_owned_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamptz) owner to postgres;
+revoke all on function private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamptz) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamptz) owner to postgres;
+revoke all on function private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamptz) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_render_attempted_v1(uuid) owner to postgres;
+revoke all on function private.weekly_contact_source_render_attempted_v1(uuid) from public,anon,authenticated,service_role;

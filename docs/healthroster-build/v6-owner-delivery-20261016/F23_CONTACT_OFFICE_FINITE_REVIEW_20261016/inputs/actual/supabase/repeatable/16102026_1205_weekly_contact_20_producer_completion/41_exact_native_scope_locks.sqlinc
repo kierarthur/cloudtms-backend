@@ -1,0 +1,138 @@
+-- Internal factual scope projection. A single question is never a cycle-wide
+-- pause lock. Legacy mixed-client SUBMIT retains its real complete membership.
+create or replace function private.weekly_contact_source_generation_scope_facts_v1(p_generation uuid,p_candidate uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare generation public.weekly_candidate_outreach_generations%rowtype;source_group public.weekly_source_groups%rowtype;
+ request_id uuid;members jsonb;pairs jsonb;
+begin
+ select * into strict generation from public.weekly_candidate_outreach_generations where id=p_generation and candidate_id=p_candidate;
+ select groups.* into strict source_group from public.weekly_source_cycles cycle join public.weekly_source_groups groups
+  on groups.id=cycle.source_group_id where cycle.id=generation.source_cycle_id;
+ if generation.request_kind='CHECK_HOURS' then
+  select coalesce(jsonb_agg(jsonb_build_object('membership_id',member.id,'incident_id',incident.id,'candidate_id',incident.candidate_id,
+   'client_id',incident.client_id,'comparison_revision_id',member.comparison_revision_id) order by member.id),'[]') into members
+  from public.weekly_candidate_outreach_memberships member join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id
+  where member.candidate_generation_id=generation.id and incident.candidate_id=generation.candidate_id
+   and incident.client_id=generation.client_id and incident.source_cycle_id=generation.source_cycle_id;
+ elsif generation.request_kind='SUBMIT_TIMESHEET' then
+  request_id:=private.weekly_contact_submission_request_for_generation_v1(generation.id);
+  select coalesce(jsonb_agg(jsonb_build_object('membership_id',member.id,'candidate_id',generation.candidate_id,
+   'client_id',member.client_id,'contract_id',member.contract_id,'week_ending',member.week_ending,
+   'expected_source_fingerprint',encode(member.expected_source_fingerprint,'hex')) order by member.id),'[]') into members
+  from public.weekly_timesheet_submission_request_memberships member where member.submission_request_id=request_id;
+ else raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+ if jsonb_array_length(members)<1 then raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+ select jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id) order by candidate_id,client_id) into pairs
+  from(select distinct(member->>'candidate_id')::uuid candidate_id,(member->>'client_id')::uuid client_id from jsonb_array_elements(members)member)actual;
+ return jsonb_build_object('version','CONTACT_NATIVE_GENERATION_SCOPE_FACTS_V1','generation',to_jsonb(generation),
+  'agency_id',source_group.agency_id,'environment',source_group.environment,'submission_request_id',request_id,'members',members,'pairs',pairs);
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_route_scope_facts_v1(p_route uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare route public.weekly_manager_recipient_routes%rowtype;publication uuid;pairs jsonb;
+begin
+ select * into strict route from public.weekly_manager_recipient_routes where id=p_route;
+ select current_projection_publication_id into strict publication from public.weekly_source_cycles where id=route.source_cycle_id;
+ select coalesce(jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id) order by candidate_id,client_id),'[]') into pairs from(
+  -- Actual current native generation and unsubmitted bodies are the work this
+  -- route composition can change. Closed unrelated route history is excluded.
+  select incident.candidate_id,incident.client_id from public.weekly_manager_recipient_memberships member
+   join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id where member.recipient_generation_id=route.current_generation_id
+  union select incident.candidate_id,incident.client_id from public.weekly_message_intents intent
+   join public.weekly_manager_recipient_memberships member on member.recipient_generation_id=intent.recipient_generation_id
+   join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id
+   where intent.recipient_route_id=route.id and intent.state in('DUE','RENDERED')
+  union select query.candidate_id,query.client_id from private.weekly_source_office_query_groups_v1(route.source_cycle_id,publication,'{}')query
+   where query.manager_recipient_route_key=route.normalised_recipient_hash and query.manager_eligible and cardinality(query.incident_ids)>0
+ )actual;
+ return jsonb_build_object('version','CONTACT_NATIVE_ROUTE_SCOPE_FACTS_V1','route_id',route.id,
+  'agency_id',route.agency_id,'environment',route.environment,'generation_id',route.current_generation_id,'pairs',pairs);
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_route_lock_v1(p_route uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare route public.weekly_manager_recipient_routes%rowtype;facts jsonb;pair jsonb;
+begin
+ select * into strict route from public.weekly_manager_recipient_routes where id=p_route;
+ perform private.weekly_contact_deployment_lock_v1(route.agency_id,route.environment);
+ perform private.weekly_contact_context_v1(route.agency_id,route.environment);
+ facts:=private.weekly_contact_source_route_scope_facts_v1(route.id);
+ if(facts->>'agency_id',facts->>'environment') is distinct from(route.agency_id::text,route.environment) then
+  raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+ for pair in select value from jsonb_array_elements(facts->'pairs') order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+  perform private.weekly_contact_scope_lock_v1(route.agency_id,route.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ if private.weekly_contact_source_route_scope_facts_v1(route.id) is distinct from facts then
+  raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_intent_lock_v1(p_intent uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare intent public.weekly_message_intents%rowtype;after_intent public.weekly_message_intents%rowtype;pairs jsonb;pair jsonb;
+ discovered_agency uuid;discovered_environment text;
+begin
+ select * into strict intent from public.weekly_message_intents where id=p_intent;
+ discovered_agency:=intent.agency_id;discovered_environment:=intent.environment;
+ perform private.weekly_contact_deployment_lock_v1(intent.agency_id,intent.environment);
+ perform private.weekly_contact_context_v1(intent.agency_id,intent.environment);
+ select * into strict intent from public.weekly_message_intents where id=p_intent;
+ if(intent.agency_id,intent.environment) is distinct from(discovered_agency,discovered_environment) then
+  raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+ if intent.audience_kind='CANDIDATE' then
+  perform private.weekly_contact_source_generation_lock_v1(intent.candidate_generation_id,
+   (select candidate_id from public.weekly_candidate_outreach_generations where id=intent.candidate_generation_id));
+ elsif intent.audience_kind='MANAGER' then
+  if exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=intent.id) then
+   pairs:=private.weekly_contact_source_capture_pairs_v1(intent.id);
+  elsif exists(select 1 from public.weekly_message_renders render join public.weekly_manager_review_batches batch on batch.message_render_id=render.id
+    where render.message_intent_id=intent.id and render.state in('CURRENT','SUBMISSION_STARTED','ACCEPTED','AMBIGUOUS')
+     and batch.state in('ACTIVE','COMPLETE')) then
+   select coalesce(jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id) order by candidate_id,client_id),'[]') into pairs from(
+    select distinct incident.candidate_id,incident.client_id from public.weekly_message_renders render
+    join public.weekly_manager_review_batches batch on batch.message_render_id=render.id
+    join public.weekly_manager_review_items item on item.review_batch_id=batch.id join public.weekly_discrepancy_incidents incident on incident.id=item.incident_id
+    where render.message_intent_id=intent.id and render.state in('CURRENT','SUBMISSION_STARTED','ACCEPTED','AMBIGUOUS')
+     and batch.state in('ACTIVE','COMPLETE'))actual;
+  else
+   select coalesce(jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id) order by candidate_id,client_id),'[]') into pairs from(
+    select distinct incident.candidate_id,incident.client_id from public.weekly_manager_recipient_memberships member
+    join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id
+    where member.recipient_generation_id=intent.recipient_generation_id)actual;
+  end if;
+  for pair in select value from jsonb_array_elements(pairs) order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+   perform private.weekly_contact_scope_lock_v1(intent.agency_id,intent.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ else raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ select * into strict after_intent from public.weekly_message_intents where id=intent.id;
+ if to_jsonb(after_intent) is distinct from to_jsonb(intent) then
+  raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_generation_lock_v1(p_generation uuid,p_candidate uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare source_group public.weekly_source_groups%rowtype;facts jsonb;pair jsonb;
+begin
+ select groups.* into strict source_group from public.weekly_candidate_outreach_generations generation
+  join public.weekly_source_cycles cycle on cycle.id=generation.source_cycle_id join public.weekly_source_groups groups on groups.id=cycle.source_group_id
+  where generation.id=p_generation and generation.candidate_id=p_candidate;
+ perform private.weekly_contact_deployment_lock_v1(source_group.agency_id,source_group.environment);
+ perform private.weekly_contact_context_v1(source_group.agency_id,source_group.environment);
+ -- Complete discovery happens after deployment serialization, before scopes.
+ facts:=private.weekly_contact_source_generation_scope_facts_v1(p_generation,p_candidate);
+ if(facts->>'agency_id',facts->>'environment') is distinct from(source_group.agency_id::text,source_group.environment) then
+  raise exception 'WEEKLY_SOURCE_CANDIDATE_REQUEST_STALE' using errcode='40001';end if;
+ for pair in select value from jsonb_array_elements(facts->'pairs') order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+  perform private.weekly_contact_scope_lock_v1(source_group.agency_id,source_group.environment,
+   (pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ if private.weekly_contact_source_generation_scope_facts_v1(p_generation,p_candidate) is distinct from facts then
+  raise exception 'WEEKLY_SOURCE_CANDIDATE_REQUEST_STALE' using errcode='40001';end if;
+end;
+$function$;

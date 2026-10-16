@@ -1,3 +1,4 @@
+import {reviewedSourceClassifierDelegates} from './healthroster-source-classifier-delegation-review.mjs';
 import {reviewedSource13Hazards} from './healthroster-source13-finite-review.mjs';
 import {reviewedPrebodyDynamicHazards} from './healthroster-prebody-dynamic-review.mjs';
 import {reviewedJoinedNonDynamicHazards} from './healthroster-joined-nondynamic-review.mjs';
@@ -5,6 +6,7 @@ import {reviewedHealthDynamicHazards} from './healthroster-dynamic-source-review
 import {reviewedHealthAggregateHazards} from './healthroster-aggregate-type-review.mjs';
 import {reviewedHealthUuidHazards} from './healthroster-uuid-cardinality-review.mjs';
 import {reviewedHealthRowtypeHazards} from './healthroster-rowtype-type-review.mjs';
+import {reviewedContactFiniteHazards} from './healthroster-contact-finite-review.mjs';
 import {createHash} from 'node:crypto';
 // F-23 source-only release checks. No database, fixture or runtime execution.
 import fs from 'node:fs';
@@ -1587,7 +1589,7 @@ export function assertRoutineHistoryPoints(source,file,signature){
   const tokens=scanManagedSql(body).statements.flatMap(row=>row.tokens).join(' ').toLowerCase();
   if(/\b(?:bpay_next_payment_history_page_v1|audit_events_list|pay_finance_case_audit_actor_index)\s*\(/.test(tokens))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_READER: ${signature}`);
   if(/\bexecute\b/.test(tokens))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_DYNAMIC: ${signature}`);
-  const approved=new Set([...(ROUTINE_WORK_CALLEES[signature]??[]),...(DR05_ROUTINE_WORK_CALLEES[signature]??[]),...(DR09_ROUTINE_WORK_CALLEES[signature]??[]),...(DR11_ROUTINE_WORK_CALLEES[signature]??[]),...(WB29_CAPTURED_WORK_CALLEES[signature]??[])]);
+  const approved=new Set([...(ROUTINE_WORK_CALLEES[signature]??[]),...(DR05_ROUTINE_WORK_CALLEES[signature]??[]),...(DR09_ROUTINE_WORK_CALLEES[signature]??[]),...(DR11_ROUTINE_WORK_CALLEES[signature]??[]),...(WB29_CAPTURED_WORK_CALLEES[signature]??[]),...reviewedSourceClassifierDelegates(source,file,signature,parts[0])]);
   const native=new Set(['and','any','as','bool_and','btrim','coalesce','conflict','convert_to','count','decode',
     'else','elsif','encode','exists','extract','from','greatest','if','in','jsonb_array_elements',
     'jsonb_array_length','jsonb_build_array','jsonb_build_object','jsonb_typeof','least','materialized',
@@ -2517,7 +2519,7 @@ export function verifyBpayNextSourceGates(){
           const isReadyReader=routineDefinitions(text,file).includes(readyReaderSignature);
           assertSpecialConstructs(text,file,baselineHazards,isReadyReader?readyPrefixColumns:new Map());
         }
-      } else assertSpecialConstructs(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,baselineHazards)),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
+      } else assertSpecialConstructs(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
       catch(error){sourceFailures.push(error.message);}
     }
   }

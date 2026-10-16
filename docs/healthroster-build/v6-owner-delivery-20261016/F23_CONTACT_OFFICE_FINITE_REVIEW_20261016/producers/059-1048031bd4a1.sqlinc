@@ -1,0 +1,19 @@
+declare route public.weekly_manager_recipient_routes%rowtype;publication uuid;pairs jsonb;
+begin
+ select * into strict route from public.weekly_manager_recipient_routes where id=p_route;
+ select current_projection_publication_id into strict publication from public.weekly_source_cycles where id=route.source_cycle_id;
+ select coalesce(jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id) order by candidate_id,client_id),'[]') into pairs from(
+   
+   
+  select incident.candidate_id,incident.client_id from public.weekly_manager_recipient_memberships member
+   join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id where member.recipient_generation_id=route.current_generation_id
+  union select incident.candidate_id,incident.client_id from public.weekly_message_intents intent
+   join public.weekly_manager_recipient_memberships member on member.recipient_generation_id=intent.recipient_generation_id
+   join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id
+   where intent.recipient_route_id=route.id and intent.state in('DUE','RENDERED')
+  union select query.candidate_id,query.client_id from private.weekly_source_office_query_groups_v1(route.source_cycle_id,publication,'{}')query
+   where query.manager_recipient_route_key=route.normalised_recipient_hash and query.manager_eligible and cardinality(query.incident_ids)>0
+ )actual;
+ return jsonb_build_object('version','CONTACT_NATIVE_ROUTE_SCOPE_FACTS_V1','route_id',route.id,
+  'agency_id',route.agency_id,'environment',route.environment,'generation_id',route.current_generation_id,'pairs',pairs);
+end;

@@ -1,0 +1,49 @@
+-- Complete connected native manager work for the exact selected incidents.
+-- This never treats a recipient address as a pause key or selects unrelated
+-- historical workers. Native route IDs come from the existing factual owner.
+create or replace function private.weekly_contact_source_manager_selection_scope_facts_v1(p_incidents uuid[])
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare issue_id uuid;fact jsonb;selected jsonb:='[]';routes jsonb:='[]';pairs jsonb;route_id uuid;
+begin
+ for issue_id in select distinct id from unnest(p_incidents)id order by id loop
+  fact:=private.weekly_contact_manual_member_facts_v1(issue_id,'MANAGER',clock_timestamp());
+  selected:=selected||jsonb_build_array(jsonb_build_object('issue_id',fact->'issue_id','candidate_id',fact->'candidate_id',
+   'client_id',fact->'client_id','source_cycle_id',fact->'source_cycle_id','comparison_revision_id',fact->'comparison_revision_id',
+   'recipient_route_id',fact->'recipient_route_id'));
+ end loop;
+ for route_id in select distinct(value->>'recipient_route_id')::uuid from jsonb_array_elements(selected)
+  where value->>'recipient_route_id' is not null order by 1 loop
+  routes:=routes||jsonb_build_array(private.weekly_contact_source_route_scope_facts_v1(route_id));end loop;
+ select coalesce(jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id)order by candidate_id,client_id),'[]') into pairs from(
+  select(value->>'candidate_id')::uuid candidate_id,(value->>'client_id')::uuid client_id from jsonb_array_elements(selected)
+  union select(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid from jsonb_array_elements(routes)route
+   cross join lateral jsonb_array_elements(route->'pairs')pair
+ )actual;
+ return jsonb_build_object('version','CONTACT_MANAGER_SELECTION_SCOPE_FACTS_V1','selected_issues',selected,'route_facts',routes,'pairs',pairs);
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_manager_selection_lock_v1(p_incidents uuid[],p_extra_pairs jsonb)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare source_group public.weekly_source_groups%rowtype;facts jsonb;pair record;
+begin
+ if p_incidents is null or cardinality(p_incidents)not between 1 and 500 or jsonb_typeof(p_extra_pairs)is distinct from 'array' then
+  raise exception 'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID' using errcode='22023';end if;
+ select groups.* into strict source_group from public.weekly_discrepancy_incidents incident
+  join public.weekly_source_groups groups on groups.id=incident.source_group_id where incident.id=p_incidents[1];
+ if exists(select 1 from unnest(p_incidents)selected(id) left join public.weekly_discrepancy_incidents incident on incident.id=selected.id
+  left join public.weekly_source_groups groups on groups.id=incident.source_group_id where incident.id is null
+   or(groups.agency_id,groups.environment)is distinct from(source_group.agency_id,source_group.environment)) then
+  raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+ perform private.weekly_contact_deployment_lock_v1(source_group.agency_id,source_group.environment);
+ perform private.weekly_contact_context_v1(source_group.agency_id,source_group.environment);
+ facts:=private.weekly_contact_source_manager_selection_scope_facts_v1(p_incidents);
+ for pair in select distinct(value->>'candidate_id')::uuid candidate_id,(value->>'client_id')::uuid client_id
+  from jsonb_array_elements((facts->'pairs')||p_extra_pairs)order by 1,2 loop
+  perform private.weekly_contact_scope_lock_v1(source_group.agency_id,source_group.environment,pair.candidate_id,pair.client_id);end loop;
+ if private.weekly_contact_source_manager_selection_scope_facts_v1(p_incidents)is distinct from facts then
+  raise exception 'CONTACT_MANUAL_ENQUIRY_REVIEW_STALE' using errcode='40001';end if;
+end;
+$function$;

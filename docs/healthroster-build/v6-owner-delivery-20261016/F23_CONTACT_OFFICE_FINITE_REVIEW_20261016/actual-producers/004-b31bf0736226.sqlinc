@@ -1,0 +1,24 @@
+declare facts jsonb;hash bytea;scope public.weekly_contact_pause_scopes%rowtype;
+ saved public.weekly_contact_checking_scope_versions%rowtype;prospective bigint;issues jsonb;commands jsonb;
+begin
+ facts:=private.weekly_contact_checking_pair_facts_v1(p_agency,p_environment,p_candidate,p_client);
+ hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_CHECKING_SCOPE_FACTS_V1',facts);
+ select * into scope from public.weekly_contact_pause_scopes where agency_id=p_agency and environment=p_environment
+  and candidate_id=p_candidate and client_id=p_client;
+ select * into saved from public.weekly_contact_checking_scope_versions where scope_id=scope.id;
+ prospective:=coalesce(saved.revision,0);
+ if saved.scope_id is not null and saved.facts_sha256<>hash then
+  if prospective=9223372036854775807 then raise exception 'CONTACT_CHECKING_REVISION_EXHAUSTED' using errcode='54000';end if;
+  prospective:=prospective+1;
+ end if;
+ select coalesce(jsonb_agg(x.value->'incident'->'id' order by x.value->'incident'->>'id'),'[]') into issues
+  from jsonb_array_elements(facts->'issues')x(value);
+ commands:=jsonb_build_array(
+  jsonb_build_object('operation','CONTACT_MANUAL_ENQUIRY_PREVIEW','audience','WORKER','label','New enquiry',
+   'enabled',jsonb_array_length(issues)>0,'disabled_reason',case when jsonb_array_length(issues)=0 then 'NO_OPEN_SOURCE_ISSUES' else null end),
+  jsonb_build_object('operation','CONTACT_MANUAL_ENQUIRY_PREVIEW','audience','MANAGER','label','New enquiry',
+   'enabled',jsonb_array_length(issues)>0,'disabled_reason',case when jsonb_array_length(issues)=0 then 'NO_OPEN_SOURCE_ISSUES' else null end));
+ return jsonb_build_object('version','CONTACT_MANUAL_ENQUIRY_ROW_V1','candidate_id',p_candidate,'client_id',p_client,
+  'scope_revision',coalesce(scope.revision,0)::text,'checking_revision',prospective::text,
+  'checking_facts_sha256',encode(hash,'hex'),'available_issue_ids',issues,'actions',commands);
+end;

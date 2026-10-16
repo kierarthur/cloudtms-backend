@@ -1,0 +1,45 @@
+{
+  "version": "SOURCE_CLASSIFIER_DELEGATION_GATE_CONTRIBUTION_V1",
+  "sourceCheckpoint": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "gatePath": "scripts/bpay-next-source-gates.mjs",
+  "old": {
+    "bytes": 279252,
+    "crlf": 1715,
+    "loneLf": 825,
+    "sha256": "50a7de7aa554fe192432a6de17d91ef1db0afa7d9519e52e9e1dd9edc840361d"
+  },
+  "proposed": {
+    "bytes": 279427,
+    "crlf": 1715,
+    "loneLf": 826,
+    "sha256": "fa09c5e5f70b2c40bec6ff1342d9aa4ad3eacf44859976fd89cb3d103c5c8b8a"
+  },
+  "edits": [
+    {
+      "id": "finite-delegation-import",
+      "before": "import {reviewedSource13Hazards} from './healthroster-source13-finite-review.mjs';",
+      "after": "import {reviewedSourceClassifierDelegates} from './healthroster-source-classifier-delegation-review.mjs';\nimport {reviewedSource13Hazards} from './healthroster-source13-finite-review.mjs';"
+    },
+    {
+      "id": "finite-delegation-approved-set",
+      "before": "...(WB29_CAPTURED_WORK_CALLEES[signature]??[])]);",
+      "after": "...(WB29_CAPTURED_WORK_CALLEES[signature]??[]),...reviewedSourceClassifierDelegates(source,file,signature,parts[0])]);"
+    }
+  ],
+  "reverseByteEqual": true,
+  "mergeInstruction": "Apply each unique bounded before/after edit to the current gate; do not replace the full gate over another reviewed contribution. Reverse both independent contributions to this checkpoint for the combined proof. The whole mutable gate is not a runtime helper approval pin.",
+  "constantClassifierMapStillEmpty": true,
+  "helperPath": "scripts/healthroster-source-classifier-delegation-review.mjs",
+  "helperSha256": "df301590ae3f8e44b782e8e667c70ce6688d2717768ee59598e117493a0f4555",
+  "classificationPath": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/CLASSIFICATION.json",
+  "classificationSha256": "abe64516babd46100709f45baaa815c7a6c1070f47fd5b9c655e87d09971c14a",
+  "reviewManifestSha256": "252d2c2f3f2d4acfe88bdfecf16f07345c3646e649c1a5856188ecf3295b0c92",
+  "counts": {
+    "completeBodies": 13,
+    "filePins": 37,
+    "definitionEvents": 17,
+    "aclEvents": 75
+  },
+  "sqlChanges": 0,
+  "native": "NOT_RUN"
+}

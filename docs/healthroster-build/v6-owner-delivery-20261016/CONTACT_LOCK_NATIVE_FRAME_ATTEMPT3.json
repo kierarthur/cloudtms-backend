@@ -1,0 +1,53 @@
+{
+  "version": "HEALTH_CONTACT_NATIVE_FRAME_ATTEMPT_V1",
+  "caseId": "contact20-lock1",
+  "sourceCommit": "737b82cadea8d9e73b73421de1d4f36565e5b29e",
+  "sourceManifestSha256": "74740bd3045faf6c25258c17ca8de60c3bfbfbb8ad485e07bf4c8c54d2852b11",
+  "sourcePeerCommit": "0bf2c099554406bfaf5664243c42038c2604366d",
+  "sourcePeerVerdict": "NO_SOURCE_BLOCKER",
+  "status": "HOLD_MCP_FRAME_TOTALS_REFUSED_NOT_PASS",
+  "physicalDatabase": "cloudtms_test_clone",
+  "serverRolledBack": true,
+  "freshVerificationConnected": true,
+  "expectedLockError": {
+    "statement": 13,
+    "code": "55P03"
+  },
+  "canonicalFrame": {
+    "beforeCharacters": 27961220,
+    "afterCharacters": 27961603,
+    "beforeTotalParts": 3496,
+    "afterTotalParts": 3496,
+    "returnedParts": 100,
+    "eof": false,
+    "transportRejectedIncompleteFrame": true,
+    "completeRestorationQualified": false
+  },
+  "holder": {
+    "pid": 189510,
+    "sharedTurnTakenAt": "2026-10-16T11:59:45.443Z",
+    "sharedTurnReleasedAt": "2026-10-16T12:01:04.163Z",
+    "witnessLocksGone": true,
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "canonicalSharedTurnHelperCompleted": true
+  },
+  "precedingHolderOnlyAttempt2": {
+    "status": "CLOSED_STDIN_EOF_SAFE_ABORT",
+    "mcpCalled": false,
+    "sharedTurnReleasedAt": "2026-10-16T11:59:37.548Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true
+  },
+  "inputAndRawNativeResultsCommitted": false,
+  "frameDataPrinted": false,
+  "backgroundJobsPaused": false,
+  "migrationBodyRun": false,
+  "businessDml": false,
+  "fixtureCreated": false,
+  "connectorChanged": false,
+  "followup": "Review practical lossless complete native proof transport against actual28MB bound before retry; no blind cap increase or weaker restoration",
+  "nativeContentionPass": false,
+  "install2": "NOT_RUN",
+  "partB": "NOT_RUN"
+}

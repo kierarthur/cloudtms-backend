@@ -1,0 +1,38 @@
+declare intent public.weekly_message_intents%rowtype;generation public.weekly_candidate_outreach_generations%rowtype;
+ link public.weekly_candidate_message_notifications%rowtype;params jsonb;count_members integer;client_names text;week_labels text;
+begin
+ select * into strict intent from public.weekly_message_intents where id=p_intent;
+ if intent.audience_kind<>'CANDIDATE' then return;end if;
+ select * into strict generation from public.weekly_candidate_outreach_generations where id=intent.candidate_generation_id;
+ select * into strict link from public.weekly_candidate_message_notifications where message_intent_id=intent.id;
+ if link.candidate_generation_id<>generation.id or link.candidate_id<>generation.candidate_id then
+  raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ if generation.request_kind='SUBMIT_TIMESHEET' then
+  select count(*)::integer into count_members from public.weekly_contact_source_intent_capture_members
+   where message_intent_id=intent.id and native_member_kind='SUBMISSION_MEMBER';
+  select string_agg(name,', ' order by name collate C) into client_names from(
+   select distinct client.name from public.weekly_contact_source_intent_capture_members member
+    join public.clients client on client.id=member.client_id where member.message_intent_id=intent.id)x;
+  select string_agg(label,', ' order by week_ending) into week_labels from(
+   select distinct (member.native_basis_json->>'week_ending')::date week_ending,
+    to_char((member.native_basis_json->>'week_ending')::date,'FMDD FMMonth YYYY') label
+   from public.weekly_contact_source_intent_capture_members member where member.message_intent_id=intent.id)x;
+  if count_members<1 or client_names is null or week_labels is null then
+   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  params:=jsonb_build_object('timesheet_count',count_members,'client_name',client_names,'week_ending_label',week_labels);
+  update public.candidate_notifications set template_params=template_params||params where id=link.notification_id;
+ end if;
+  
+  
+  
+ if exists(select 1 from public.candidate_notifications current_notification where current_notification.id=link.notification_id
+   and private.candidate_notification_visible_v1(current_notification,clock_timestamp())) then
+  update public.candidate_notifications notification set
+   state=case when notification.state='UNREAD' then 'DISMISSED' else notification.state end,
+   dismissed_at_utc=case when notification.state='UNREAD' then clock_timestamp() else notification.dismissed_at_utc end,
+   deep_link_json=notification.deep_link_json||jsonb_build_object('obsolete',true)
+  from public.weekly_candidate_message_notifications old_link join public.weekly_message_intents old_intent
+   on old_intent.id=old_link.message_intent_id where old_link.candidate_generation_id=generation.id
+    and old_intent.state='RETIRED' and old_link.message_intent_id<>intent.id and notification.id=old_link.notification_id;
+ end if;
+end;

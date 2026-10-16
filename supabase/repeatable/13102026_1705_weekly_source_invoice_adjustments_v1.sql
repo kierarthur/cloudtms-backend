@@ -9,4 +9,5 @@ begin;
 \ir 13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc
 \ir 13102026_1705_weekly_source_invoice_adjustments/06_native_acl.sqlinc
 \ir 13102026_1705_weekly_source_invoice_adjustments/07_new_owner_acl.sqlinc
+notify pgrst, 'reload schema';
 commit;

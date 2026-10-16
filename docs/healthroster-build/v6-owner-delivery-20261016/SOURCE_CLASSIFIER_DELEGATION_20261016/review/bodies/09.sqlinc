@@ -1,0 +1,38 @@
+create or replace function private.timesheet_contract_native_rotation_binding_v1(
+ p_placement jsonb,p_same_transaction boolean default false)
+returns boolean language sql stable security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+ select count(*)=1 from public.audit_events ae
+ join private.timesheet_contract_current_placements actual
+  on actual.family_root_id=(p_placement->>'family_root_id')::uuid and actual.member_key=p_placement->>'member_key'
+ join private.timesheet_contract_move_operations o on o.id=(p_placement->>'operation_id')::uuid
+  and o.state='COMPLETE' and o.receipt_json is not null and o.purpose='CONTRACT_CORRECTION'
+ join private.timesheet_contract_move_members m on m.operation_id=o.id and m.member_key=p_placement->>'member_key'
+ join public.timesheets old_t on old_t.timesheet_id=(ae.before_json->>'old_timesheet_id')::uuid
+ join public.timesheets new_t on new_t.timesheet_id=(p_placement->>'current_timesheet_id')::uuid
+ join public.contract_weeks cw on cw.timesheet_id=new_t.timesheet_id and cw.contract_id=new_t.contract_id
+  and cw.week_ending_date=new_t.week_ending_date
+ where ae.object_type='timesheet' and ae.object_id_text=new_t.timesheet_id::text
+  and ae.action in('CANDIDATE_ELECTRONIC_REJECTED_VERSION_ROTATED','QR_HOURS_REFUSED') and ae.actor_user_id is not null
+  and ae.after_json#>>'{native_contract_placement,version}'='CANDIDATE_NATIVE_ROTATION_PLACEMENT_V1'
+  and ae.after_json#>'{native_contract_placement,placement}'=p_placement
+  and m.role='WORK' and p_placement->>'role'=m.role and m.family_root_id=(p_placement->>'family_root_id')::uuid
+  and o.candidate_id=(p_placement->>'candidate_id')::uuid and o.actual_client_id=(p_placement->>'actual_client_id')::uuid
+  and m.to_contract_id=new_t.contract_id and p_placement->>'current_contract_id'=new_t.contract_id::text
+  and o.placement_receipt_json->>'receipt_id'=p_placement->>'placement_receipt_id'
+  and new_t.is_current and new_t.archived_at_utc is null and (new_t.booking_id=m.current_booking_id or private.timesheet_contract_native_booking_bound_v1(o.id,m.member_key,new_t.booking_id,new_t.contract_id,new_t.week_ending_date))
+  and old_t.booking_id=new_t.booking_id and old_t.contract_id=new_t.contract_id and old_t.week_ending_date=new_t.week_ending_date
+  and not old_t.is_current and old_t.archived_at_utc is null and old_t.status='REVOKED'
+  and ae.before_json->>'old_version'=old_t.version::text and ae.after_json->>'new_version'=new_t.version::text
+  and new_t.version=old_t.version+1
+  and ae.before_json#>>'{native_contract_placement,placement,current_timesheet_id}'=old_t.timesheet_id::text
+  and (ae.before_json#>>'{native_contract_placement,placement,placement_revision}')::bigint+1=(p_placement->>'placement_revision')::bigint
+  and (ae.before_json#>'{native_contract_placement,placement}')-array['current_timesheet_id','placement_revision']
+      =p_placement-array['current_timesheet_id','placement_revision']
+  and (case when p_same_transaction then
+    ae.after_json#>>'{native_contract_placement,backend_pid}'=pg_backend_pid()::text
+    and ae.after_json#>>'{native_contract_placement,transaction_id}'=pg_current_xact_id_if_assigned()::text
+    and to_jsonb(actual) in(p_placement,ae.before_json#>'{native_contract_placement,placement}')
+   else to_jsonb(actual)=p_placement end)
+$function$;

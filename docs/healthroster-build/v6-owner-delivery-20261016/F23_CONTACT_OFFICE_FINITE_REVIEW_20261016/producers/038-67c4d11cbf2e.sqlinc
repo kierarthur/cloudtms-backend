@@ -1,0 +1,76 @@
+declare v_target public.weekly_message_dispatch_targets%rowtype;
+ v_command public.weekly_message_dispatch_commands%rowtype;v_intent public.weekly_message_intents%rowtype;
+ v_render public.weekly_message_renders%rowtype;v_generation public.weekly_candidate_outreach_generations%rowtype;
+ v_safe jsonb;v_pairs jsonb;v_current boolean;v_notification_current boolean;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ select * into v_target from public.weekly_message_dispatch_targets where id=p_target_id;
+ if not found or v_target.channel<>'PUSH' or v_target.target_kind<>'CANDIDATE_DEVICE'
+  or v_target.dispatch_command_id is distinct from p_command_id or v_target.provider is distinct from p_provider
+  or v_target.target_snapshot_hash is distinct from p_snapshot_hash then
+  raise exception 'PUSH_TIMING_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ select * into v_command from public.weekly_message_dispatch_commands where id=v_target.dispatch_command_id;
+ if not found or v_command.agency_id is distinct from p_agency or v_command.environment is distinct from p_environment
+  or v_command.tranche_kind not in('CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',
+    'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H') then
+  raise exception 'PUSH_TIMING_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ select * into v_intent from public.weekly_message_intents where id=v_command.message_intent_id;
+ if not found or v_intent.audience_kind<>'CANDIDATE' then raise exception 'PUSH_TIMING_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ select * into v_render from public.weekly_message_renders where id=v_command.message_render_id;
+ if not found or v_render.message_intent_id is distinct from v_intent.id
+  or v_target.rendered_content_hash is distinct from v_command.rendered_content_hash
+  or v_target.rendered_content_hash is distinct from v_render.rendered_content_hash then
+  raise exception 'PUSH_TIMING_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ select * into v_generation from public.weekly_candidate_outreach_generations where id=v_command.candidate_generation_id;
+ if not found or v_generation.source_cycle_id is distinct from v_command.source_cycle_id then
+  raise exception 'PUSH_TIMING_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ v_safe:=v_target.safe_target_snapshot_json;
+ perform private.weekly_contact_assert_closed_v1(v_safe,
+  array['control_plane_snapshot_id','snapshot_device_id','provider','target_revision_hash'],
+  array['control_plane_snapshot_id','snapshot_device_id','provider','target_revision_hash'],'PUSH_TIMING_DISPATCH_SCOPE_INVALID');
+ if v_safe->>'control_plane_snapshot_id' is distinct from v_command.control_plane_snapshot_id::text
+  or v_safe->>'snapshot_device_id' is distinct from v_target.external_target_id::text
+  or v_safe->>'provider' is distinct from v_target.provider
+  or v_safe->>'target_revision_hash' is distinct from encode(v_target.target_snapshot_hash,'hex') then
+  raise exception 'PUSH_TIMING_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ if exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=v_intent.id) then
+  v_pairs:=private.weekly_contact_source_capture_pairs_v1(v_intent.id);
+ else
+ select coalesce(jsonb_agg(jsonb_build_object('candidate_id',x.candidate_id,'client_id',x.client_id)
+  order by x.candidate_id,x.client_id),'[]'::jsonb) into v_pairs from(
+  select distinct i.candidate_id,i.client_id from public.weekly_candidate_outreach_memberships m
+   join public.weekly_discrepancy_incidents i on i.id=m.incident_id
+   where m.candidate_generation_id=v_generation.id and m.state='ACTIONABLE' and i.state='OPEN'
+    and i.candidate_id=v_generation.candidate_id
+  union
+  select distinct r.candidate_id,m.client_id from public.weekly_timesheet_submission_requests r
+   join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id
+   where v_generation.request_kind='SUBMIT_TIMESHEET' and r.candidate_cohort_id=v_generation.candidate_cohort_id
+    and r.candidate_id=v_generation.candidate_id and r.source_cycle_id=v_command.source_cycle_id
+    and r.membership_hash=v_generation.membership_hash and r.request_generation=v_generation.generation_number
+    and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and m.state='WAITING'
+ )x;
+ end if;
+ if jsonb_array_length(v_pairs)>500 then raise exception 'PUSH_TIMING_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ v_current:=v_target.state in('READY','LEASED','TRANSIENT_FAILURE') and v_intent.state='RENDERED'
+  and v_render.state='CURRENT' and v_generation.state='ACTIVE' and jsonb_array_length(v_pairs)>0;
+ if v_current and exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=v_intent.id) then
+  v_current:=private.weekly_contact_source_capture_current_v1(v_intent.id,clock_timestamp(),false);
+ end if;
+ if v_current then
+  v_current:=private.weekly_source_candidate_generation_current_v1(v_generation.id);
+  begin perform private.weekly_source_query_current_publication_v1(v_command.source_cycle_id,v_command.projection_publication_id);
+  exception when sqlstate '55000' or no_data_found then v_current:=false;end;
+ end if;
+ select exists(select 1 from public.weekly_candidate_message_notifications mn
+  join public.candidate_notifications n on n.id=mn.notification_id
+  where mn.message_intent_id=v_intent.id and mn.candidate_generation_id=v_generation.id
+   and mn.candidate_id=v_generation.candidate_id and n.state='UNREAD'
+   and private.candidate_notification_visible_v1(n,statement_timestamp())) into v_notification_current;
+ return jsonb_build_object('dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id,
+  'agency_id',v_command.agency_id,'environment',v_command.environment,'candidate_id',v_generation.candidate_id,
+  'provider',v_target.provider,'target_snapshot_hash',encode(v_target.target_snapshot_hash,'hex'),
+  'content_hash',encode(v_target.rendered_content_hash,'hex'),'safe_target_snapshot',v_safe,
+  'scope_pairs',v_pairs,'expires_at_utc',v_generation.deadline_at_utc,
+  'current',coalesce(v_current and v_notification_current,false));
+end;

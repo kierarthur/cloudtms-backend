@@ -1,0 +1,17 @@
+declare m public.weekly_contact_delivery_memberships%rowtype;i public.weekly_discrepancy_incidents%rowtype;
+ sg public.weekly_source_groups%rowtype;keys jsonb;state jsonb;
+begin
+ select * into strict m from public.weekly_contact_delivery_memberships where id=p_accepted_membership_id;
+ if m.audience<>'MANAGER' or m.accepted_at_utc is null or m.incident_id is null or m.purpose<>'CHECK_HOURS' then
+  raise exception 'WEEKLY_SOURCE_MANAGER_ACCEPTED_SCOPE_INVALID' using errcode='42501';end if;
+ select * into strict i from public.weekly_discrepancy_incidents where id=m.incident_id;
+ select * into strict sg from public.weekly_source_groups where id=i.source_group_id;
+ keys:=private.weekly_contact_source_identity_v1(sg.agency_id,sg.environment,i.candidate_id,i.client_id,'CHECK_HOURS','MANAGER',
+  jsonb_build_object('work_event_id',i.work_event_id,'incident_id',i.id,'incident_episode',i.episode_number));
+ if m.candidate_id<>i.candidate_id or m.client_id<>i.client_id or m.work_event_id is distinct from i.work_event_id
+  or m.incident_episode is distinct from i.episode_number or encode(m.logical_contact_key,'hex')<>keys->>'logical_contact_key'
+  or encode(m.budget_owner_key,'hex')<>keys->>'budget_owner_key' then
+  raise exception 'WEEKLY_SOURCE_MANAGER_ACCEPTED_SCOPE_INVALID' using errcode='42501';end if;
+ state:=private.weekly_contact_source_manager_followup_state_v1(i.id,p_at_utc);
+ return(state-array['routine_sequence','basis_accepted_membership_id'])||jsonb_build_object('version','MANAGER_FOLLOWUP_TIMING_V1');
+end;

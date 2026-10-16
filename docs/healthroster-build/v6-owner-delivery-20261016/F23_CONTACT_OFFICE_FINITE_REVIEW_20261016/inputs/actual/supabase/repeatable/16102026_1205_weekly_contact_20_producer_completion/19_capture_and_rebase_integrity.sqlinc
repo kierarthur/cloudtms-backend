@@ -1,0 +1,40 @@
+create or replace function private.weekly_contact_source_capture_deferred_v1()
+returns trigger language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ perform private.weekly_contact_source_capture_assert_v1(new.message_intent_id);
+ return new;
+end;
+$function$;
+drop trigger if exists weekly_contact_source_intent_captures_lineage on public.weekly_contact_source_intent_captures;
+create constraint trigger weekly_contact_source_intent_captures_lineage after insert on public.weekly_contact_source_intent_captures
+ deferrable initially deferred for each row execute function private.weekly_contact_source_capture_deferred_v1();
+drop trigger if exists weekly_contact_source_intent_capture_members_lineage on public.weekly_contact_source_intent_capture_members;
+create constraint trigger weekly_contact_source_intent_capture_members_lineage after insert on public.weekly_contact_source_intent_capture_members
+ deferrable initially deferred for each row execute function private.weekly_contact_source_capture_deferred_v1();
+
+create or replace function private.weekly_contact_source_due_rebase_assert_v1()
+returns trigger language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare original public.weekly_manager_cohort_due_events%rowtype;rebased public.weekly_manager_cohort_due_events%rowtype;expected jsonb;hash bytea;
+begin
+ select * into strict original from public.weekly_manager_cohort_due_events where id=new.original_event_id;
+ select * into strict rebased from public.weekly_manager_cohort_due_events where id=new.rebased_event_id;
+ expected:=jsonb_build_object('original_event_id',original.id,'original_trigger_hash',encode(original.trigger_hash,'hex'),
+  'recipient_generation_id',new.recipient_generation_id,'candidate_cohort_id',original.candidate_cohort_id,'event_kind',original.event_kind,
+  'cohort_started_at_utc',to_char(original.cohort_started_at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'due_at_utc',to_char(original.due_at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'requested_week_membership_id',original.requested_week_membership_id);
+ hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_RETAINED_DUE_EVENT_V1',expected);
+ if new.source_json is distinct from expected or new.source_sha256 is distinct from hash or rebased.trigger_hash is distinct from hash
+  or rebased.recipient_generation_id is distinct from new.recipient_generation_id
+  or(rebased.candidate_cohort_id,rebased.event_kind,rebased.cohort_started_at_utc,rebased.due_at_utc,rebased.requested_week_membership_id)
+    is distinct from(original.candidate_cohort_id,original.event_kind,original.cohort_started_at_utc,original.due_at_utc,original.requested_week_membership_id)
+  or original.recipient_generation_id=new.recipient_generation_id then
+  raise exception 'CONTACT_SOURCE_RECOMPOSITION_DUE_PROVENANCE_INVALID' using errcode='23514';end if;
+ return new;
+end;
+$function$;
+drop trigger if exists weekly_contact_source_due_event_rebases_lineage on public.weekly_contact_source_due_event_rebases;
+create constraint trigger weekly_contact_source_due_event_rebases_lineage after insert on public.weekly_contact_source_due_event_rebases
+ deferrable initially deferred for each row execute function private.weekly_contact_source_due_rebase_assert_v1();

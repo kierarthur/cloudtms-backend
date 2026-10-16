@@ -1,0 +1,14 @@
+declare relation text;
+begin
+ foreach relation in array array['weekly_contact_manual_reviews','weekly_contact_manual_acceptances',
+  'weekly_contact_source_intent_captures','weekly_contact_source_intent_capture_members','weekly_contact_recheck_steps','weekly_contact_source_due_event_rebases'] loop
+  execute format('create trigger %I before update or delete on public.%I for each row execute function private.weekly_contact_producer_immutable_v1()',
+   relation||'_immutable',relation);
+ end loop;
+ foreach relation in array array['weekly_contact_checking_scope_versions','weekly_contact_manual_reviews','weekly_contact_manual_acceptances',
+  'weekly_contact_source_intent_captures','weekly_contact_source_intent_capture_members','weekly_contact_source_ordinal_owners',
+  'weekly_contact_recheck_progress','weekly_contact_recheck_steps','weekly_contact_source_due_event_rebases'] loop
+  execute format('create trigger %I before truncate on public.%I for each statement execute function private.weekly_contact_producer_immutable_v1()',
+   relation||'_no_truncate',relation);
+ end loop;
+end;

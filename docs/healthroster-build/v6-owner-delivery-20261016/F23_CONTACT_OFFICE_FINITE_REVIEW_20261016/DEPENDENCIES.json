@@ -1,0 +1,113 @@
+{
+  "version": "CONTACT_FINITE_NATIVE_SOURCE_INPUTS_V1",
+  "dependencies": [
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "bytes": 7865503
+    },
+    {
+      "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+      "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673",
+      "bytes": 11366
+    },
+    {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "bytes": 229113
+    }
+  ],
+  "baselineCommit": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+  "baselinePins": [
+    {
+      "file": "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b"
+    },
+    {
+      "file": "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+      "sha256": "91972ea67ab5c4898ff513a970a4cb63fa8a333a599ebcee4634977662f58511"
+    },
+    {
+      "file": "supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "sha256": "3682178b5da113aac0587a08b0f07cab893a61b6d5c9332fd1d3925a8361967b"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sha256": "5cae1d5dafd9fce93d8a3d9f5ee008e67abe14e099087388d656ae7e21956da5"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "sha256": "dace15a8df0b37decf261beb3cd99ac5c59ea362f22114b382c1c0148d4bf0e4"
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b"
+    },
+    {
+      "file": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "sha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6"
+    },
+    {
+      "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "sha256": "2623374220b3c7ebb14699428a280bf8bbbd1f87dce5371072fe9e1cf35d62e6"
+    },
+    {
+      "file": "supabase/repeatable/17092026_0700_weekly_source_pending_entitlement_release_v1.sql",
+      "sha256": "177400e1d5f1be23e789ef4cd3596cdac1f9860fe94602a5a031bdd1142488c6"
+    },
+    {
+      "file": "supabase/repeatable/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "sha256": "077e1f34271adfb97ee6d5d3d2d718ce21186f0c1a9d99e221c51d94dd02b77a"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sha256": "3fbde7575ae33a04207224b6acbe4295c47f2b77f13396853474f2aab05086f9"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_finalisation_v1.sql",
+      "sha256": "17274f274bf7ca2b4510f2f6f8313559fea58678b3f0442ace13ba1f846ba66e"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256": "2f8603d7abb04c84737f294101ae5b78e05a46652a5006db2c341297e1b0557d"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_read_projections_v1.sql",
+      "sha256": "14be3691add62d1851ed28d7ee53c60a5b7418ef9342bcd12132fbe6f9cf880f"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_upload_context_v1.sql",
+      "sha256": "840215eb7ab94d2094a606834a06f80a311ec160a77ef241325b08a6d614353c"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "sha256": "b00ca0d3214f8fe23e27a98f031bd62ad6bfbc30a6ab0aac0b90785e1fbe76ba"
+    },
+    {
+      "file": "supabase/verification/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "sha256": "3ec090d8f862faafc38d40b7e24342dbdc6e1df80ded73c75f0f941c78785b1e"
+    },
+    {
+      "file": "supabase/verification/15092026_2312_weekly_source_delivery_targets_v1.sql",
+      "sha256": "5a97fc8588ff265008a4f41a4dcd80bbeafc4f193c3d5d14845a277af9d28f0f"
+    },
+    {
+      "file": "supabase/verification/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "sha256": "81b8c4e4ffc9cd6ccacc1aa12d0533f7d454ae3f7b0cf14a028b492c4c24056c"
+    },
+    {
+      "file": "supabase/verification/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "sha256": "2cae976df85977013190868f89ea965b88951132adb7a3ee8153cc65c2485988"
+    },
+    {
+      "file": "supabase/verification/24092026_1800_weekly_source_invoice_evidence_component_v1.sql",
+      "sha256": "941c5cac1af67c66667de3643f7a47abc46a5f4218168aecc77691fd7bec3b66"
+    }
+  ],
+  "native": "NOT_RUN",
+  "databaseCalls": 0
+}

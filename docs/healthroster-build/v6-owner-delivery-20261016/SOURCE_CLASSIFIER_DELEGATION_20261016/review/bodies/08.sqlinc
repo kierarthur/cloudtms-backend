@@ -1,0 +1,30 @@
+create or replace function private.timesheet_contract_native_allocation_alias_v1(p_alias jsonb)
+returns boolean language sql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+ select count(*)=1 from public.audit_events a
+ join public.timesheets t on t.timesheet_id=(p_alias->>'timesheet_id')::uuid
+ join private.timesheet_contract_move_operations o on o.id=(p_alias->>'accepted_operation_id')::uuid and o.state in('COMPLETE','SUPERSEDED') and o.receipt_json is not null and o.purpose='CONTRACT_CORRECTION'
+ join private.timesheet_contract_move_members m on m.operation_id=o.id and m.member_key=p_alias->>'member_key'
+ where a.object_type='timesheet' and a.object_id_text=t.timesheet_id::text and a.action='CONTRACT_WEEK_NATIVE_TIMESHEET_ALLOCATED'
+  and a.after_json#>>'{native_contract_placement,version}'='CANDIDATE_NATIVE_ALLOCATION_PLACEMENT_V1'
+  and (a.after_json#>'{native_contract_placement,alias}')-'accepted_at_utc'=p_alias-'accepted_at_utc'
+  and (a.after_json#>>'{native_contract_placement,alias,accepted_at_utc}')::timestamptz=(p_alias->>'accepted_at_utc')::timestamptz
+  and a.after_json#>>'{native_contract_placement,placement,operation_id}'=o.id::text
+  and a.after_json#>>'{native_contract_placement,placement,placement_receipt_id}'=o.placement_receipt_json->>'receipt_id'
+  and m.family_root_id=(p_alias->>'family_root_id')::uuid and m.role='WORK' and m.role=p_alias->>'member_role'
+  and m.to_contract_id=t.contract_id and a.after_json->>'booking_id'=t.booking_id
+  and a.after_json->>'timesheet_id'=t.timesheet_id::text
+  and a.actor_user_id is not null
+  and exists(select 1 from private.timesheet_contract_family_aliases original where original.timesheet_id=(p_alias->>'original_timesheet_id')::uuid
+    and original.original_timesheet_id=original.timesheet_id and original.family_root_id=m.family_root_id and original.member_key=m.member_key)
+  and (exists(select 1 from public.audit_events processed where processed.object_type='contract_week'
+    and processed.object_id_text=a.after_json->>'contract_week_id'
+    and processed.action='CONTRACT_WEEK_MANUAL_TIMESHEET_CREATED_PROCESSED'
+    and processed.after_json->>'native_allocation_audit_id'=a.id::text
+    and processed.after_json->>'timesheet_id'=t.timesheet_id::text and processed.after_json->'created_now'='true'::jsonb
+    and processed.actor_user_id=a.actor_user_id)
+   or (a.after_json#>>'{native_contract_placement,backend_pid}'=pg_backend_pid()::text
+    and a.after_json#>>'{native_contract_placement,transaction_id}'=pg_current_xact_id_if_assigned()::text
+    and exists(select 1 from private.timesheet_contract_current_placements p where p.current_timesheet_id=t.timesheet_id
+      and private.timesheet_contract_native_allocation_binding_v1(to_jsonb(p),true))))
+$function$;

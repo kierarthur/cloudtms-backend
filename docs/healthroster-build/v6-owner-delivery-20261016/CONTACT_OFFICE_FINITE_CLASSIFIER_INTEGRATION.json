@@ -1,0 +1,107 @@
+{
+  "version": "HEALTH_CONTACT_OFFICE_FINITE_CLASSIFIER_INTEGRATION_V1",
+  "status": "FINITE_SOURCE_FULL_GATE_PASS_NOT_NATIVE_APPROVAL",
+  "baseRootCommit": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "proposalCommit": "9b5a99be502309d95fb55438c6ecf16812f61f75",
+  "sourceAssemblyCommit": "bf7a321429969f2c43345ce05ad2679ce3dbe83c",
+  "lockGroupingSuccessorCommit": "bdb86a015c343b685f94682e5ae644f63fab7468",
+  "classification": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/CLASSIFICATION.json",
+    "sha256": "7933b038a43220baf9c36d5dc465b591e3889703b28bacc9dea17a278f9bb33c"
+  },
+  "helper": {
+    "path": "scripts/healthroster-contact-finite-review.mjs",
+    "sha256": "bd40ff7fc3b22851b0525ea245bb67231b74e42cb52f6fd797018acc3437695b"
+  },
+  "counts": {
+    "boundOutputs": 65,
+    "sqlFiles": 63,
+    "completeFlaggedProducers": 80,
+    "rawOccurrences": 305,
+    "inheritedOccurrences": 118,
+    "newOccurrences": 187,
+    "newKeys": 184,
+    "dynamicDdl": 8,
+    "aggregateSpans": 15,
+    "tupleSpans": 164,
+    "newUuidOrJson": 0
+  },
+  "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/PAYLOADS.json",
+  "gate": {
+    "path": "scripts/bpay-next-source-gates.mjs",
+    "beforeRawSha256": "50a7de7aa554fe192432a6de17d91ef1db0afa7d9519e52e9e1dd9edc840361d",
+    "combinedRawSha256": "20cd8fbdce5112988c853384bdd374d7660640a752a53d23414237a414b5d578",
+    "contactEdits": [
+      {
+        "from": "import {createHash} from 'node:crypto';",
+        "to": "import {reviewedContactFiniteHazards} from './healthroster-contact-finite-review.mjs';\nimport {createHash} from 'node:crypto';",
+        "count": 1
+      },
+      {
+        "from": "firstInstallIncomingHazards(source,file,baselineHazards)",
+        "to": "firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))",
+        "count": 1
+      }
+    ],
+    "sourceEdits": [
+      {
+        "id": "finite-delegation-import",
+        "before": "import {reviewedSource13Hazards} from './healthroster-source13-finite-review.mjs';",
+        "after": "import {reviewedSourceClassifierDelegates} from './healthroster-source-classifier-delegation-review.mjs';\nimport {reviewedSource13Hazards} from './healthroster-source13-finite-review.mjs';"
+      },
+      {
+        "id": "finite-delegation-approved-set",
+        "before": "...(WB29_CAPTURED_WORK_CALLEES[signature]??[])]);",
+        "after": "...(WB29_CAPTURED_WORK_CALLEES[signature]??[]),...reviewedSourceClassifierDelegates(source,file,signature,parts[0])]);"
+      }
+    ],
+    "allFourEditsFullyReverseToOriginal": true,
+    "independentEditsCommute": true,
+    "genericFencesUnchanged": true
+  },
+  "tests": {
+    "actualInstalled": 17,
+    "failed": 0,
+    "sourceDelegationIndependent": 48,
+    "finalGenericSuite": {
+      "pass": 14,
+      "fail": 0,
+      "includesActualFullF23": true
+    }
+  },
+  "initialFullGateAfterBothClassifiers": {
+    "status": "FAILED_CLOSED_RELOAD_MISSING",
+    "diagnostics": 1,
+    "code": "BPAY_NEXT_RPC_RELOAD_MISSING",
+    "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+    "diagnosticSha256": "a57446d4d8d029dc830b62c3b392c9e2c1530e06b14a163132de27310b6b6b0a"
+  },
+  "sqlChangedByClassification": false,
+  "bankingBodiesChanged": false,
+  "native": "NOT_RUN",
+  "install2": "NOT_RUN",
+  "partB": "NOT_APPROVED",
+  "fullGate": {
+    "status": "PASS",
+    "gateRawSha256": "20cd8fbdce5112988c853384bdd374d7660640a752a53d23414237a414b5d578",
+    "result": {
+      "frozenFiles": 7,
+      "frozenTriggers": 18,
+      "frozenTables": 45,
+      "protectedSignatures": 24,
+      "sqlSources": 2078,
+      "rpcRoots": 73,
+      "routineWorkSignatures": 183,
+      "typedTransportSignatures": 41
+    },
+    "workingTreeAmendments": true,
+    "sourceBaseCommit": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+    "nativeApproval": false
+  },
+  "finalDefiners": {
+    "status": "PASS",
+    "signatures": 2960,
+    "registered": 1562,
+    "roots": 1085
+  }
+}

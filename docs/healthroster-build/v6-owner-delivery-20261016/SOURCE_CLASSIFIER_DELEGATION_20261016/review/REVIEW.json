@@ -1,0 +1,778 @@
+{
+  "version": "SOURCE_CLASSIFIER_EXACT_IDENTITY_DELEGATION_REVIEW_V1",
+  "qualification": "BOUNDED_SOURCE_RECOMMENDATION_NOT_NATIVE_HISTORY_OR_EFFECT_QUALIFICATION",
+  "rootCommit": "1f2824aa954ae81ec348777ac533858e700c0aa0",
+  "sourceCallerCommit": "e8cc61559dd4a16fc9c9dd088fc5ad96f48af342",
+  "extractionSha256": "fe7989d90221195a74c5986a2d96540df665506d58f63b52f8834f66de78b879",
+  "gate": {
+    "path": "scripts/bpay-next-source-gates.mjs",
+    "sourceSha256": "c88dc8fe8df78e377f1c45483103676f8a4d5c54045625c84e21352d01b63616",
+    "oldExactEntry": "\"private._candidate_expense_source_family_v1(uuid)\": []",
+    "recommendedExactEntry": "\"private._candidate_expense_source_family_v1(uuid)\": [\"private.timesheet_contract_native_pending_for_v1\",\"private.timesheet_contract_current_placement_v1\",\"private.timesheet_contract_source_original_eligible_v1\",\"private.timesheet_contract_move_accepting_v1\"]",
+    "scope": "Only this caller signature and these four exact complete delegate bodies; no name prefix, relation scan exclusion, arbitrary audit reader or Banking body is approved."
+  },
+  "callerPin": {
+    "index": 1,
+    "signature": "private._candidate_expense_source_family_v1(uuid)",
+    "physical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+    "root": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+    "physicalFileSha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c",
+    "completeStatementSha256": "fd6730649d8ac7d81408f646ebd64b782eff068e910d323aeff0afa1e0524bd9",
+    "bodySha256": "38653d08ae9e85b003eeb1eb675c95b834355ed9fdc4b39ab8cbcdeb465c18e7",
+    "callees": [
+      {
+        "name": "private.timesheet_contract_native_pending_for_v1",
+        "signatures": [
+          "private.timesheet_contract_native_pending_for_v1(uuid)"
+        ]
+      },
+      {
+        "name": "private.timesheet_contract_current_placement_v1",
+        "signatures": [
+          "private.timesheet_contract_current_placement_v1(uuid)"
+        ]
+      },
+      {
+        "name": "private.timesheet_contract_source_original_eligible_v1",
+        "signatures": [
+          "private.timesheet_contract_source_original_eligible_v1(uuid)"
+        ]
+      },
+      {
+        "name": "private.timesheet_contract_move_accepting_v1",
+        "signatures": [
+          "private.timesheet_contract_move_accepting_v1(uuid)"
+        ]
+      }
+    ],
+    "readRelations": [
+      "private.timesheet_contract_family_aliases",
+      "private.timesheet_contract_move_operations",
+      "private.timesheet_contract_move_members",
+      "public.timesheets",
+      "public.contracts",
+      "public.weekly_source_row_timesheet_lineages",
+      "public.contract_weeks",
+      "public.candidate_expense_components"
+    ],
+    "bodyPath": "bodies/01.sqlinc",
+    "chain": {
+      "signature": "private._candidate_expense_source_family_v1(uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+        "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql"
+      ],
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    }
+  },
+  "directDelegatePins": [
+    {
+      "index": 2,
+      "signature": "private.timesheet_contract_native_pending_for_v1(uuid)",
+      "physical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "root": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "physicalFileSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "completeStatementSha256": "25332e7ab236f9daffdeb5331f2d9ed4211f7ce93713558418c9f28b85374afc",
+      "bodySha256": "123377fb1d790ab0672772f2c1ecdaf065b44288ba64112132107aac01203cfc",
+      "callees": [
+        {
+          "name": "private.timesheet_contract_current_placement_v1",
+          "signatures": [
+            "private.timesheet_contract_current_placement_v1(uuid)"
+          ]
+        },
+        {
+          "name": "private.timesheet_contract_native_pending_v1",
+          "signatures": [
+            "private.timesheet_contract_native_pending_v1(jsonb,boolean)"
+          ]
+        }
+      ],
+      "readRelations": [
+        "private.timesheet_contract_current_placements",
+        "private.timesheet_contract_family_aliases"
+      ],
+      "bodyPath": "bodies/02.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_native_pending_for_v1(uuid)",
+        "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+        ],
+        "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+        "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+        "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+      }
+    },
+    {
+      "index": 3,
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "physical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "root": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "physicalFileSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "completeStatementSha256": "c5bed2df9b498cfbe27695ec4a67ef390d2250e04efe6f4d375faad97dbc7827",
+      "bodySha256": "2425b7f9200014c54b87a0cf7c325ec2a86a9f25c7b4088663e91151375737f5",
+      "callees": [
+        {
+          "name": "private.timesheet_contract_native_pending_v1",
+          "signatures": [
+            "private.timesheet_contract_native_pending_v1(jsonb,boolean)"
+          ]
+        },
+        {
+          "name": "private.timesheet_contract_native_rotation_alias_v1",
+          "signatures": [
+            "private.timesheet_contract_native_rotation_alias_v1(jsonb)"
+          ]
+        },
+        {
+          "name": "private.timesheet_contract_native_allocation_alias_v1",
+          "signatures": [
+            "private.timesheet_contract_native_allocation_alias_v1(jsonb)"
+          ]
+        },
+        {
+          "name": "private.timesheet_contract_move_accepting_v1",
+          "signatures": [
+            "private.timesheet_contract_move_accepting_v1(uuid)"
+          ]
+        },
+        {
+          "name": "private.timesheet_contract_native_rotation_binding_v1",
+          "signatures": [
+            "private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)"
+          ]
+        },
+        {
+          "name": "private.timesheet_contract_native_allocation_binding_v1",
+          "signatures": [
+            "private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)"
+          ]
+        },
+        {
+          "name": "public.timesheet_correction_chain_scope_v1",
+          "signatures": [
+            "public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)"
+          ]
+        }
+      ],
+      "readRelations": [
+        "private.timesheet_contract_family_aliases",
+        "private.timesheet_contract_current_placements",
+        "private.timesheet_contract_move_operations",
+        "private.timesheet_contract_move_members",
+        "public.timesheets"
+      ],
+      "bodyPath": "bodies/03.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+        "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+        ],
+        "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
+        "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e",
+        "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+      }
+    },
+    {
+      "index": 4,
+      "signature": "private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "physical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "root": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "physicalFileSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "completeStatementSha256": "12f9a9be4423695464d4011c7beaed0d06715f9c26526e4c68fe63bbea77936c",
+      "bodySha256": "3433fdde8348a4f6643b04cad815ee11043bf8a7f14a406641e6782d3cb55e3a",
+      "callees": [
+        {
+          "name": "private.timesheet_contract_move_accepting_v1",
+          "signatures": [
+            "private.timesheet_contract_move_accepting_v1(uuid)"
+          ]
+        },
+        {
+          "name": "private.timesheet_contract_current_placement_v1",
+          "signatures": [
+            "private.timesheet_contract_current_placement_v1(uuid)"
+          ]
+        }
+      ],
+      "readRelations": [
+        "private.timesheet_contract_family_aliases",
+        "private.timesheet_contract_move_operations",
+        "private.timesheet_contract_move_reviews",
+        "private.timesheet_contract_move_members",
+        "public.weekly_source_row_timesheet_lineages",
+        "public.nhsp_shifts",
+        "public.hr_imports"
+      ],
+      "bodyPath": "bodies/04.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_source_original_eligible_v1(uuid)",
+        "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql"
+        ],
+        "owner": "Health V6 exact complete Invoice source composition; native/catalogue/effect qualification required",
+        "baselineSource": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
+        "healthV6InvoiceSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+      }
+    },
+    {
+      "index": 5,
+      "signature": "private.timesheet_contract_move_accepting_v1(uuid)",
+      "physical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "root": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "physicalFileSha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346",
+      "completeStatementSha256": "a2a91e9d0782ce4a3e4d6dc6f08ce3ab6ac190e172dd476e62e1b230418b7a3d",
+      "bodySha256": "4dccd1b6fd09b92566f0694351e2cc09aeb84db3fc7ae7ef57659ec27aa123f9",
+      "callees": [
+        {
+          "name": "private.timesheet_contract_move_row_hash_v1",
+          "signatures": [
+            "private.timesheet_contract_move_row_hash_v1(jsonb)"
+          ]
+        }
+      ],
+      "readRelations": [
+        "private.timesheet_contract_move_operations",
+        "private.timesheet_contract_move_reviews",
+        "private.timesheet_contract_move_members",
+        "public.timesheets",
+        "private.timesheet_contract_current_placements",
+        "private.timesheet_contract_move_row_hash_v1",
+        "private.timesheet_contract_move_capability_consumptions"
+      ],
+      "bodyPath": "bodies/05.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_move_accepting_v1(uuid)",
+        "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+        "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
+        ],
+        "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
+        "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+      }
+    }
+  ],
+  "transitiveCompleteBodyPins": [
+    {
+      "index": 6,
+      "signature": "private.timesheet_contract_native_pending_v1(jsonb,boolean)",
+      "physical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "root": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "physicalFileSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "completeStatementSha256": "60b488513bda549fef0735f5a808ec031c471c3a2afb0ca274c0911785a566da",
+      "bodySha256": "02d7e26f5696cece4b3808c6e4e127b028b4346f70b70c3858cb0298314076e8",
+      "callees": [
+        {
+          "name": "private.timesheet_contract_native_rotation_alias_v1",
+          "signatures": [
+            "private.timesheet_contract_native_rotation_alias_v1(jsonb)"
+          ]
+        },
+        {
+          "name": "private.timesheet_contract_native_allocation_alias_v1",
+          "signatures": [
+            "private.timesheet_contract_native_allocation_alias_v1(jsonb)"
+          ]
+        }
+      ],
+      "readRelations": [
+        "public.audit_events",
+        "private.timesheet_contract_current_placements",
+        "private.timesheet_contract_move_operations",
+        "private.timesheet_contract_move_members",
+        "public.timesheets",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.candidate_submission_workflows",
+        "private.timesheet_contract_family_aliases"
+      ],
+      "bodyPath": "bodies/06.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_native_pending_v1(jsonb,boolean)",
+        "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+        ],
+        "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+        "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+        "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+      }
+    },
+    {
+      "index": 7,
+      "signature": "private.timesheet_contract_native_rotation_alias_v1(jsonb)",
+      "physical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "root": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "physicalFileSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "completeStatementSha256": "9c267a99a6fe6689b05fbb329d3ba3494a35288bfd2e8d56ec5ba4898ab20471",
+      "bodySha256": "be33876de84957d6860e988c871b2343019af86ad759509b3ed530636c780c68",
+      "callees": [
+        {
+          "name": "private.timesheet_contract_native_booking_bound_v1",
+          "signatures": [
+            "private.timesheet_contract_native_booking_bound_v1(uuid,text,text,uuid,date)"
+          ]
+        }
+      ],
+      "readRelations": [
+        "public.audit_events",
+        "public.timesheets",
+        "private.timesheet_contract_move_operations",
+        "private.timesheet_contract_move_members",
+        "private.timesheet_contract_family_aliases"
+      ],
+      "bodyPath": "bodies/07.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_native_rotation_alias_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+        ],
+        "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+        "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+        "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+      }
+    },
+    {
+      "index": 8,
+      "signature": "private.timesheet_contract_native_allocation_alias_v1(jsonb)",
+      "physical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "root": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "physicalFileSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "completeStatementSha256": "bcb32945da668dda80c7f912583a23102491f8d45bb02d319e109e91ec082994",
+      "bodySha256": "4a02d1a84fb703d22c37f4d666f172fd9de74c29ba8bbeae813a96819e91aa90",
+      "callees": [
+        {
+          "name": "private.timesheet_contract_native_allocation_binding_v1",
+          "signatures": [
+            "private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)"
+          ]
+        }
+      ],
+      "readRelations": [
+        "public.audit_events",
+        "public.timesheets",
+        "private.timesheet_contract_move_operations",
+        "private.timesheet_contract_move_members",
+        "private.timesheet_contract_family_aliases",
+        "private.timesheet_contract_current_placements"
+      ],
+      "bodyPath": "bodies/08.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_native_allocation_alias_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+        ],
+        "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+        "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+        "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+      }
+    },
+    {
+      "index": 9,
+      "signature": "private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)",
+      "physical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "root": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "physicalFileSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "completeStatementSha256": "a5f001cd6970312dd8efa17acf6fee35c976f0b90d10436b763f5d5862b54f0f",
+      "bodySha256": "4b600621a7e2519a9d860428026c27924357aead11a490f24ffa3354ddb2f73e",
+      "callees": [
+        {
+          "name": "private.timesheet_contract_native_booking_bound_v1",
+          "signatures": [
+            "private.timesheet_contract_native_booking_bound_v1(uuid,text,text,uuid,date)"
+          ]
+        }
+      ],
+      "readRelations": [
+        "public.audit_events",
+        "private.timesheet_contract_current_placements",
+        "private.timesheet_contract_move_operations",
+        "private.timesheet_contract_move_members",
+        "public.timesheets",
+        "public.contract_weeks"
+      ],
+      "bodyPath": "bodies/09.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)",
+        "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+        ],
+        "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+        "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+        "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+      }
+    },
+    {
+      "index": 10,
+      "signature": "private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)",
+      "physical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "root": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "physicalFileSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "completeStatementSha256": "e90e88934dfb3bfd4cb4ef710aa4fa6a1470ecae1954c210dd7bf578cabdd38c",
+      "bodySha256": "89a48c439e8d63869e19cf917b5464b0cc099d34f1785b1300d380d2edc38903",
+      "callees": [],
+      "readRelations": [
+        "public.audit_events",
+        "private.timesheet_contract_current_placements",
+        "private.timesheet_contract_move_operations",
+        "private.timesheet_contract_move_members",
+        "public.timesheets",
+        "public.contract_weeks",
+        "public.contracts"
+      ],
+      "bodyPath": "bodies/10.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)",
+        "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+        ],
+        "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+        "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+        "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+      }
+    },
+    {
+      "index": 11,
+      "signature": "public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)",
+      "physical": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_chain.sqlinc",
+      "root": "supabase/repeatable/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "physicalFileSha256": "d75971649d2bf35e2bb4aea8a645aa9eec1fd17977172681662ff81144e87a62",
+      "completeStatementSha256": "92f875ecc237fd1c09a078dc6c90dc3bf4781ab8067f67e61924a6fec8d1b4c6",
+      "bodySha256": "11916cd322b09b681b6a4f07dab8eeea2adcb69619c78e40a3a5eb02d217ed60",
+      "callees": [
+        {
+          "name": "public._ctms_import_correction_classify_v1",
+          "signatures": []
+        },
+        {
+          "name": "public._ctms_correction_policy_envelope_read_v1",
+          "signatures": []
+        }
+      ],
+      "readRelations": [
+        "public.timesheets",
+        "private.timesheet_correction_requests",
+        "public.timesheets_financials"
+      ],
+      "bodyPath": "bodies/11.sqlinc",
+      "chain": {
+        "signature": "public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)",
+        "finalRoot": "supabase/repeatable/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+        "finalPhysical": "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_chain.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/21072026_1235_05_timesheet_correction_chain_scope_v1.sql",
+          "supabase/repeatable/13102026_1127_healthroster_correction_requests/13102026_1127_chain.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/21072026_1235_05_timesheet_correction_chain_scope_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/13102026_1127_healthroster_timesheet_correction_requests_v1.sql"
+        ],
+        "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json"
+      }
+    },
+    {
+      "index": 12,
+      "signature": "private.timesheet_contract_move_row_hash_v1(jsonb)",
+      "physical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "root": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "physicalFileSha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346",
+      "completeStatementSha256": "fd0e50a3f5288a106540bd4fcd0900df94b6707496f94d71b3f7e4835a703eef",
+      "bodySha256": "476dca6715438bbb1e8673023bb8b0dc8f1397a243eac3106908db43aca88baf",
+      "callees": [],
+      "readRelations": [],
+      "bodyPath": "bodies/12.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_move_row_hash_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+        "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
+        ],
+        "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
+        "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+      }
+    },
+    {
+      "index": 13,
+      "signature": "private.timesheet_contract_native_booking_bound_v1(uuid,text,text,uuid,date)",
+      "physical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "root": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "physicalFileSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "completeStatementSha256": "51a7507f6afeb410d24854d44b3b3982ca906c8db549d4d2f4471f941594619d",
+      "bodySha256": "a85b61f3b1ea198aada0e07e53a86cc78b7fa542145a392a9581653ee89508cb",
+      "callees": [
+        {
+          "name": "private.timesheet_contract_native_allocation_alias_v1",
+          "signatures": [
+            "private.timesheet_contract_native_allocation_alias_v1(jsonb)"
+          ]
+        }
+      ],
+      "readRelations": [
+        "public.timesheets",
+        "private.timesheet_contract_family_aliases"
+      ],
+      "bodyPath": "bodies/13.sqlinc",
+      "chain": {
+        "signature": "private.timesheet_contract_native_booking_bound_v1(uuid,text,text,uuid,date)",
+        "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+        ],
+        "predecessors": [],
+        "finalClosures": [
+          "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+        ],
+        "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+        "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+        "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+      }
+    }
+  ],
+  "acl": [
+    {
+      "signature": "private._candidate_expense_source_family_v1(uuid)",
+      "file": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sourceSha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c",
+      "statement": "alter function private._candidate_expense_source_family_v1(uuid) owner to postgres;",
+      "statementSha256": "53c09a59d4e92be3be7dbf95350be7663bbd984bb6b31d8fe39b659dda388891"
+    },
+    {
+      "signature": "private._candidate_expense_source_family_v1(uuid)",
+      "file": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sourceSha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c",
+      "statement": "revoke all on function private._candidate_expense_source_family_v1(uuid) from public,anon,authenticated,service_role;",
+      "statementSha256": "bbb2a760f5f17175d7c24e05f656c031f48b46f4314c0cc0b11b5f015e840270"
+    },
+    {
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/03_final_acl.sqlinc",
+      "sourceSha256": "2489d92c14804bd04a95bc9a90781264f947787478133c188d96f547e076551f",
+      "statement": "alter function private.timesheet_contract_current_placement_v1(uuid) owner to postgres;",
+      "statementSha256": "c24e9232914d9780539082680c2c5fde7c7246f50556deef73732ba64639a6ea"
+    },
+    {
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/03_final_acl.sqlinc",
+      "sourceSha256": "2489d92c14804bd04a95bc9a90781264f947787478133c188d96f547e076551f",
+      "statement": "revoke all on function private.timesheet_contract_current_placement_v1(uuid) from public,anon,authenticated,service_role;",
+      "statementSha256": "aadbab8111094a08125687043f52f3244aa93490b34b349331964d952f968b75"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_for_v1(uuid)",
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/03_final_acl.sqlinc",
+      "sourceSha256": "2489d92c14804bd04a95bc9a90781264f947787478133c188d96f547e076551f",
+      "statement": "alter function private.timesheet_contract_native_pending_for_v1(uuid) owner to postgres;",
+      "statementSha256": "02f3a23d2a0f7a954e155dd60f37ff82c75163382adf4cbac3ab5e48d02d2a68"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_for_v1(uuid)",
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/03_final_acl.sqlinc",
+      "sourceSha256": "2489d92c14804bd04a95bc9a90781264f947787478133c188d96f547e076551f",
+      "statement": "revoke all on function private.timesheet_contract_native_pending_for_v1(uuid) from public,anon,authenticated,service_role;",
+      "statementSha256": "22a1406b673e08f4c46e3eec6aa2a50e92b8346fae3967550b4fc0f2d4b0b0f7"
+    },
+    {
+      "signature": "private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sourceSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "statement": "alter function private.timesheet_contract_source_original_eligible_v1(uuid) owner to postgres;",
+      "statementSha256": "1434ca962b566ea279f46703fd19e420835907f8d66310117f33686ebed05da8"
+    },
+    {
+      "signature": "private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sourceSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "statement": "revoke all on function private.timesheet_contract_source_original_eligible_v1(uuid) from public,anon,authenticated,service_role;",
+      "statementSha256": "04eea45be9064551deb3799fc8517545225e7d8e7f3d02dab675b7b336daefc1"
+    },
+    {
+      "signature": "private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sourceSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "statement": "alter function private.timesheet_contract_source_original_eligible_v1(uuid) owner to postgres;",
+      "statementSha256": "1434ca962b566ea279f46703fd19e420835907f8d66310117f33686ebed05da8"
+    },
+    {
+      "signature": "private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sourceSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "statement": "revoke all on function private.timesheet_contract_source_original_eligible_v1(uuid) from public,anon,authenticated,service_role;",
+      "statementSha256": "04eea45be9064551deb3799fc8517545225e7d8e7f3d02dab675b7b336daefc1"
+    },
+    {
+      "signature": "private.timesheet_contract_move_accepting_v1(uuid)",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_contract_final_acl.sqlinc",
+      "sourceSha256": "01871c5ad2433ee52ffecdfcee73e696847574490bf8eb4adea1e76edcd9b944",
+      "statement": "alter function private.timesheet_contract_move_accepting_v1(uuid) owner to current_user;",
+      "statementSha256": "ca415b8c75b555143f35c27afb353e12de4f430ab1eb730c9bdf316a74e0ad13"
+    },
+    {
+      "signature": "private.timesheet_contract_move_accepting_v1(uuid)",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_contract_final_acl.sqlinc",
+      "sourceSha256": "01871c5ad2433ee52ffecdfcee73e696847574490bf8eb4adea1e76edcd9b944",
+      "statement": "revoke all on function private.timesheet_contract_move_accepting_v1(uuid) from public,anon,authenticated,service_role;",
+      "statementSha256": "defd7268948685f4b49e4612929b6d3d02cd7c03270af11702067859b4efe290"
+    },
+    {
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_contract_final_acl.sqlinc",
+      "sourceSha256": "01871c5ad2433ee52ffecdfcee73e696847574490bf8eb4adea1e76edcd9b944",
+      "statement": "alter function private.timesheet_contract_current_placement_v1(uuid) owner to current_user;",
+      "statementSha256": "7477bece69ca9c0ad043c53dde7a00657d49e4577471555ff10f57d5209f81dc"
+    },
+    {
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_contract_final_acl.sqlinc",
+      "sourceSha256": "01871c5ad2433ee52ffecdfcee73e696847574490bf8eb4adea1e76edcd9b944",
+      "statement": "revoke all on function private.timesheet_contract_current_placement_v1(uuid) from public,anon,authenticated,service_role;",
+      "statementSha256": "aadbab8111094a08125687043f52f3244aa93490b34b349331964d952f968b75"
+    }
+  ],
+  "checks": {
+    "passed": 55,
+    "failed": 0,
+    "names": [
+      "complete-body:private._candidate_expense_source_family_v1(uuid)",
+      "complete-body:private.timesheet_contract_native_pending_for_v1(uuid)",
+      "complete-body:private.timesheet_contract_current_placement_v1(uuid)",
+      "complete-body:private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "complete-body:private.timesheet_contract_move_accepting_v1(uuid)",
+      "complete-body:private.timesheet_contract_native_pending_v1(jsonb,boolean)",
+      "complete-body:private.timesheet_contract_native_rotation_alias_v1(jsonb)",
+      "complete-body:private.timesheet_contract_native_allocation_alias_v1(jsonb)",
+      "complete-body:private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)",
+      "complete-body:private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)",
+      "complete-body:public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)",
+      "complete-body:private.timesheet_contract_move_row_hash_v1(jsonb)",
+      "complete-body:private.timesheet_contract_native_booking_bound_v1(uuid,text,text,uuid,date)",
+      "exact-four-direct-delegates",
+      "read-only-body:private._candidate_expense_source_family_v1(uuid)",
+      "read-only-body:private.timesheet_contract_native_pending_for_v1(uuid)",
+      "read-only-body:private.timesheet_contract_current_placement_v1(uuid)",
+      "read-only-body:private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "read-only-body:private.timesheet_contract_move_accepting_v1(uuid)",
+      "read-only-body:private.timesheet_contract_native_pending_v1(jsonb,boolean)",
+      "read-only-body:private.timesheet_contract_native_rotation_alias_v1(jsonb)",
+      "read-only-body:private.timesheet_contract_native_allocation_alias_v1(jsonb)",
+      "read-only-body:private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)",
+      "read-only-body:private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)",
+      "read-only-body:private.timesheet_contract_move_row_hash_v1(jsonb)",
+      "read-only-body:private.timesheet_contract_native_booking_bound_v1(uuid,text,text,uuid,date)",
+      "caller-keeps-pending-before-ordinary-predicate",
+      "caller-current-placement-only-under-registered-alias",
+      "caller-revoked-nonoriginal-pending-refusal",
+      "caller-original-A-exact-member-and-placement-proof",
+      "caller-preserves-full-original-source-predicate-and-component-refusal",
+      "pending-accessor-never-guesses-missing-current",
+      "H103-registered-alias-returns-or-raises-before-legacy-chain",
+      "native-pending-full-audit-is-current-exact-certificate-not-audit-feed",
+      "accepting-is-exact-current-transaction-capability-not-caller-GUC",
+      "private-owner:private._candidate_expense_source_family_v1(uuid)",
+      "private-revoke:private._candidate_expense_source_family_v1(uuid)",
+      "no-new-service-browser-grant:private._candidate_expense_source_family_v1(uuid)",
+      "private-owner:private.timesheet_contract_native_pending_for_v1(uuid)",
+      "private-revoke:private.timesheet_contract_native_pending_for_v1(uuid)",
+      "no-new-service-browser-grant:private.timesheet_contract_native_pending_for_v1(uuid)",
+      "private-owner:private.timesheet_contract_current_placement_v1(uuid)",
+      "private-revoke:private.timesheet_contract_current_placement_v1(uuid)",
+      "no-new-service-browser-grant:private.timesheet_contract_current_placement_v1(uuid)",
+      "private-owner:private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "private-revoke:private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "no-new-service-browser-grant:private.timesheet_contract_source_original_eligible_v1(uuid)",
+      "private-owner:private.timesheet_contract_move_accepting_v1(uuid)",
+      "private-revoke:private.timesheet_contract_move_accepting_v1(uuid)",
+      "no-new-service-browser-grant:private.timesheet_contract_move_accepting_v1(uuid)",
+      "actual-old-gate-refuses-new-first-delegate",
+      "exact-four-delegate-map-suffices-current-complete-caller",
+      "unchanged-refusal:unknown-helper",
+      "unchanged-refusal:history-reader",
+      "unchanged-refusal:dynamic-execution"
+    ]
+  },
+  "boundedHistoryEvidence": "Candidate native audit_events reads are exact placement/accepted-operation/member/native withdrawal/rotation/allocation certificate correlations with singleton count/row equality, not an audit-feed or financial-ledger read. The caller reaches H103 only after registered-alias presence, so the public legacy correction-chain branch is outside this classifier call path. Its full body is retained as context, not a new history delegation approval.",
+  "native": "NOT_RUN",
+  "requiredNative": [
+    "Real pendingA/B/current/withdrawal/original-A Source cases and malformed/revoked non-originalB negatives",
+    "Effective mapped owner/private/browser/service ACL",
+    "No arbitrary helper/body drift: re-review or fail exact body pins before admission"
+  ],
+  "rootEdits": 0,
+  "bankingEdits": 0,
+  "dbConnections": 0
+}

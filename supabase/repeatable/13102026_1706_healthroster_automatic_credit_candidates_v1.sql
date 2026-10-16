@@ -97,4 +97,5 @@ alter function public.timesheet_correction_credit_candidates_v1(jsonb) owner to 
 revoke all on function public.timesheet_correction_credit_candidates_v1(jsonb) from public,anon,authenticated,service_role;
 grant execute on function public.timesheet_correction_credit_candidates_v1(jsonb) to service_role;
 
+notify pgrst, 'reload schema';
 commit;

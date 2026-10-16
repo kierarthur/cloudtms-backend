@@ -1,0 +1,23 @@
+create or replace function private.timesheet_contract_native_rotation_alias_v1(p_alias jsonb)
+returns boolean language sql stable security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+ select count(*)=1 from public.audit_events ae
+ join public.timesheets t on t.timesheet_id=(p_alias->>'timesheet_id')::uuid
+ join private.timesheet_contract_move_operations o on o.id=(p_alias->>'accepted_operation_id')::uuid
+  and o.state in('COMPLETE','SUPERSEDED') and o.receipt_json is not null
+ join private.timesheet_contract_move_members m on m.operation_id=o.id and m.member_key=p_alias->>'member_key'
+ where ae.object_type='timesheet' and ae.object_id_text=t.timesheet_id::text
+  and ae.action in('CANDIDATE_ELECTRONIC_REJECTED_VERSION_ROTATED','QR_HOURS_REFUSED') and ae.actor_user_id is not null
+  and ae.after_json#>>'{native_contract_placement,version}'='CANDIDATE_NATIVE_ROTATION_PLACEMENT_V1'
+  and (ae.after_json#>'{native_contract_placement,alias}')-'accepted_at_utc'=p_alias-'accepted_at_utc'
+  and (ae.after_json#>>'{native_contract_placement,alias,accepted_at_utc}')::timestamptz=(p_alias->>'accepted_at_utc')::timestamptz
+  and ae.after_json#>>'{native_contract_placement,placement,current_timesheet_id}'=t.timesheet_id::text
+  and ae.after_json#>>'{native_contract_placement,placement,operation_id}'=o.id::text
+  and ae.after_json#>>'{native_contract_placement,placement,placement_receipt_id}'=o.placement_receipt_json->>'receipt_id'
+  and m.role='WORK' and m.role=p_alias->>'member_role' and m.family_root_id=(p_alias->>'family_root_id')::uuid
+  and (m.current_booking_id=t.booking_id or private.timesheet_contract_native_booking_bound_v1(o.id,m.member_key,t.booking_id,t.contract_id,t.week_ending_date)) and m.to_contract_id=t.contract_id
+  and exists(select 1 from private.timesheet_contract_family_aliases original
+   where original.timesheet_id=(p_alias->>'original_timesheet_id')::uuid and original.family_root_id=m.family_root_id
+    and original.member_key=m.member_key and original.original_timesheet_id=original.timesheet_id)
+$function$;

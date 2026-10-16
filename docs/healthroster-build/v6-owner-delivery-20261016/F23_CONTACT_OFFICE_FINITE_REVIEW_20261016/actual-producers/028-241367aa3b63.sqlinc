@@ -1,0 +1,38 @@
+declare scope public.weekly_contact_pause_scopes%rowtype;next_due timestamptz;incident record;state jsonb;
+begin
+ select * into strict scope from public.weekly_contact_pause_scopes where id=p_scope;
+ select min(value) into next_due from(
+  select scope.worker_paused_until_utc value union all select scope.manager_paused_until_utc
+  union all select generation.reminder_due_at_utc from public.weekly_candidate_outreach_generations generation
+   join public.weekly_source_cycles cycle on cycle.id=generation.source_cycle_id join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+   where source_group.agency_id=scope.agency_id and source_group.environment=scope.environment and generation.candidate_id=scope.candidate_id
+    and generation.state='ACTIVE' and private.weekly_source_candidate_generation_current_v1(generation.id)
+    and(generation.client_id=scope.client_id or exists(select 1 from public.weekly_timesheet_submission_requests request
+     join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+     where request.candidate_cohort_id=generation.candidate_cohort_id and request.request_generation=generation.generation_number
+      and request.membership_hash=generation.membership_hash and member.client_id=scope.client_id))
+  union all select generation.deadline_at_utc from public.weekly_candidate_outreach_generations generation
+   join public.weekly_source_cycles cycle on cycle.id=generation.source_cycle_id join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+   where source_group.agency_id=scope.agency_id and source_group.environment=scope.environment and generation.candidate_id=scope.candidate_id
+    and generation.client_id=scope.client_id and generation.state='ACTIVE' and private.weekly_source_candidate_generation_current_v1(generation.id)
+  union all select event.due_at_utc from public.weekly_manager_cohort_due_events event
+   join public.weekly_manager_recipient_generations generation on generation.id=event.recipient_generation_id and generation.state='ACTIVE'
+   join public.weekly_manager_recipient_routes route on route.current_generation_id=generation.id
+   where route.agency_id=scope.agency_id and route.environment=scope.environment and event.state='PENDING'
+    and exists(select 1 from public.weekly_manager_recipient_memberships member join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id
+     where member.recipient_generation_id=generation.id and member.candidate_cohort_id=event.candidate_cohort_id
+      and incident.candidate_id=scope.candidate_id and incident.client_id=scope.client_id)
+  union all select mail.next_attempt_at_utc from public.hr_issue_email_deliveries delivery join public.mail_outbox mail on mail.id=delivery.mail_outbox_id
+   where delivery.original_delivery_id=delivery.id and delivery.status in('QUEUED','RETIRED')
+    and exists(select 1 from public.hr_issue_email_delivery_items item join public.import_review_decisions action on action.action_id=item.action_id
+     where item.delivery_id=delivery.id and action.candidate_id=scope.candidate_id and action.client_id=scope.client_id)
+ )actual where value>p_at;
+ for incident in select incident.id from public.weekly_discrepancy_incidents incident join public.weekly_source_groups source_group
+  on source_group.id=incident.source_group_id where incident.candidate_id=scope.candidate_id and incident.client_id=scope.client_id
+   and incident.state='OPEN' and source_group.agency_id=scope.agency_id and source_group.environment=scope.environment order by incident.id loop
+  state:=private.weekly_contact_source_manager_followup_state_v1(incident.id,p_at);
+  if state->>'reason'='SCHEDULED' and state->>'mode'='AUTOMATIC' and(state->>'due_at_utc')::timestamptz>p_at then
+   next_due:=least(next_due,(state->>'due_at_utc')::timestamptz);end if;
+ end loop;
+ return next_due;
+end;

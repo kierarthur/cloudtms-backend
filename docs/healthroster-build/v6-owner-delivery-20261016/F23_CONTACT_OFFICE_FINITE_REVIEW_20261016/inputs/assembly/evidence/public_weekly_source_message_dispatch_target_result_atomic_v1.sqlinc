@@ -1,0 +1,190 @@
+create or replace function public.weekly_source_message_dispatch_target_result_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','extensions','pg_catalog','pg_temp'
+as $function$
+declare
+  v_attempt_id uuid;
+  v_outcome text;
+  v_provider_message_id text;
+  v_receipt jsonb;
+  v_error jsonb;
+  v_attempt public.weekly_message_target_attempts%rowtype;
+  v_target public.weekly_message_dispatch_targets%rowtype;
+  v_result_hash bytea;
+  v_delay_seconds integer;
+  v_error_code text;
+  v_retirement_recorded boolean;
+  v_aggregate jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in (
+                 'provider_attempt_id','outcome','provider_message_id',
+                 'bounded_provider_receipt','bounded_error'
+               )) then
+    raise exception 'WEEKLY_SOURCE_TARGET_RESULT_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_attempt_id:=(p_request->>'provider_attempt_id')::uuid;
+    v_outcome:=pg_catalog.upper(pg_catalog.btrim(p_request->>'outcome'));
+    v_provider_message_id:=nullif(pg_catalog.btrim(p_request->>'provider_message_id'),'');
+    v_receipt:=coalesce(p_request->'bounded_provider_receipt','{}'::jsonb);
+    v_error:=coalesce(p_request->'bounded_error','{}'::jsonb);
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_TARGET_RESULT_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_outcome not in (
+       'ACCEPTED','DEFINITELY_REJECTED','TRANSIENT_FAILURE','AMBIGUOUS'
+     )
+     or pg_catalog.jsonb_typeof(v_receipt)<>'object'
+     or pg_catalog.jsonb_typeof(v_error)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(v_receipt) key
+               where key not in ('provider_status','provider_request_id','retirement_recorded','proved_no_network'))
+     or exists(select 1 from pg_catalog.jsonb_object_keys(v_error) key
+               where key not in ('error_code','provider_status','retry_after_seconds'))
+     or pg_catalog.char_length(coalesce(v_provider_message_id,''))>500
+     or pg_catalog.char_length(coalesce(v_receipt->>'provider_request_id',''))>500
+     or pg_catalog.char_length(coalesce(v_error->>'error_code',''))>120 then
+    raise exception 'WEEKLY_SOURCE_TARGET_RESULT_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    if v_receipt ? 'provider_status' then
+      perform (v_receipt->>'provider_status')::integer;
+    end if;
+    if v_error ? 'provider_status' then
+      perform (v_error->>'provider_status')::integer;
+    end if;
+    if v_error ? 'retry_after_seconds' then
+      perform (v_error->>'retry_after_seconds')::integer;
+    end if;
+    if v_receipt ? 'retirement_recorded' then
+      v_retirement_recorded:=(v_receipt->>'retirement_recorded')::boolean;
+    end if;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_TARGET_RESULT_REQUEST_INVALID' using errcode='22023';
+  end;
+  v_error_code:=nullif(pg_catalog.upper(v_error->>'error_code'),'');
+  if v_error_code is not null and v_error_code!~'^[A-Z][A-Z0-9_]{1,119}$' then
+    raise exception 'WEEKLY_SOURCE_TARGET_RESULT_REQUEST_INVALID' using errcode='22023';
+  end if;
+  v_result_hash:=extensions.digest(pg_catalog.convert_to(
+    pg_catalog.jsonb_build_object(
+      'provider_attempt_id',v_attempt_id,'outcome',v_outcome,
+      'provider_message_id',v_provider_message_id,
+      'bounded_provider_receipt',v_receipt,'bounded_error',v_error
+    )::text,'UTF8'),'sha256');
+
+  select * into strict v_attempt from public.weekly_message_target_attempts
+  where id=v_attempt_id for update;
+  select * into strict v_target from public.weekly_message_dispatch_targets
+  where id=v_attempt.dispatch_target_id for update;
+  if v_attempt.completed_at_utc is not null then
+    if v_attempt.result_hash<>v_result_hash then
+      raise exception 'WEEKLY_SOURCE_TARGET_RESULT_REPLAY_CONFLICT' using errcode='23505';
+    end if;
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'replay',true,'target_state',v_target.state,
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_target.dispatch_command_id
+    );
+  end if;
+  if v_target.state<>'SUBMISSION_STARTED' or v_target.attempt_count<>v_attempt.attempt_number then
+    raise exception 'WEEKLY_SOURCE_TARGET_RESULT_STALE' using errcode='40001';
+  end if;
+
+  perform private.weekly_contact_source_result_v1(
+    v_attempt.id,v_outcome,v_provider_message_id,v_receipt,v_error
+  );
+
+  update public.weekly_message_target_attempts
+  set completed_at_utc=pg_catalog.transaction_timestamp(),outcome=v_outcome,
+      provider_message_id=v_provider_message_id,
+      bounded_provider_receipt_json=v_receipt,bounded_error_json=v_error,
+      result_hash=v_result_hash
+  where id=v_attempt.id;
+
+  if v_outcome='ACCEPTED' then
+    update public.weekly_message_dispatch_targets
+    set state='ACCEPTED',provider_message_id=v_provider_message_id,
+        provider_accepted_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_at_utc=pg_catalog.transaction_timestamp(),terminal_reason='PROVIDER_ACCEPTED',
+        next_attempt_at_utc=null,lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+  elsif v_outcome='AMBIGUOUS' then
+    update public.weekly_message_dispatch_targets
+    set state='AMBIGUOUS',provider_message_id=v_provider_message_id,
+        terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason=coalesce(v_error_code,'PROVIDER_OUTCOME_UNKNOWN'),
+        next_attempt_at_utc=null,lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    insert into public.weekly_message_delivery_failures(
+      dispatch_command_id,dispatch_target_id,failure_class,safe_failure_code,safe_context_json
+    ) values (
+      v_target.dispatch_command_id,v_target.id,'PROVIDER_AMBIGUOUS',
+      coalesce(v_error_code,'PROVIDER_OUTCOME_UNKNOWN'),
+      pg_catalog.jsonb_build_object('target_id',v_target.id,'attempt_number',v_attempt.attempt_number)
+    ) on conflict do nothing;
+  elsif v_outcome='TRANSIENT_FAILURE' and v_attempt.attempt_number<v_target.maximum_attempts then
+    v_delay_seconds:=case v_attempt.attempt_number
+      when 1 then 30 when 2 then 120 when 3 then 600 else 1800 end;
+    if v_error ? 'retry_after_seconds' then
+      v_delay_seconds:=greatest(
+        v_delay_seconds,least((v_error->>'retry_after_seconds')::integer,3600)
+      );
+    end if;
+    update public.weekly_message_dispatch_targets
+    set state='TRANSIENT_FAILURE',next_attempt_at_utc=pg_catalog.transaction_timestamp()
+          +pg_catalog.make_interval(secs=>v_delay_seconds),
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+  else
+    update public.weekly_message_dispatch_targets
+    set state='DEFINITELY_REJECTED',terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason=case when v_outcome='TRANSIENT_FAILURE'
+          then 'RETRIES_EXHAUSTED' else coalesce(v_error_code,'PROVIDER_REJECTED') end,
+        next_attempt_at_utc=null,lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    if v_outcome='TRANSIENT_FAILURE' then
+      insert into public.weekly_message_delivery_failures(
+        dispatch_command_id,dispatch_target_id,failure_class,safe_failure_code,safe_context_json
+      ) values (
+        v_target.dispatch_command_id,v_target.id,'RETRIES_EXHAUSTED','RETRIES_EXHAUSTED',
+        pg_catalog.jsonb_build_object('target_id',v_target.id,'attempt_count',v_attempt.attempt_number)
+      ) on conflict do nothing;
+    elsif v_error_code='INVALID_TARGET' then
+      insert into public.weekly_message_delivery_failures(
+        dispatch_command_id,dispatch_target_id,failure_class,safe_failure_code,safe_context_json
+      ) values (
+        v_target.dispatch_command_id,v_target.id,'INVALID_TARGET','INVALID_TARGET',
+        pg_catalog.jsonb_build_object('target_id',v_target.id,'retirement_recorded',coalesce(v_retirement_recorded,false))
+      ) on conflict do nothing;
+      if not coalesce(v_retirement_recorded,false) then
+        insert into public.weekly_message_delivery_failures(
+          dispatch_command_id,dispatch_target_id,failure_class,safe_failure_code,safe_context_json
+        ) values (
+          v_target.dispatch_command_id,v_target.id,'TARGET_RETIREMENT_FAILED',
+          'TARGET_RETIREMENT_NOT_RECORDED',pg_catalog.jsonb_build_object('target_id',v_target.id)
+        ) on conflict do nothing;
+      end if;
+    elsif v_error_code='PROVIDER_NOT_READY' then
+      insert into public.weekly_message_delivery_failures(
+        dispatch_command_id,dispatch_target_id,failure_class,safe_failure_code,safe_context_json
+      ) values (
+        v_target.dispatch_command_id,v_target.id,'PROVIDER_CONFIGURATION','PROVIDER_NOT_READY',
+        pg_catalog.jsonb_build_object('target_id',v_target.id,'provider',v_target.provider)
+      ) on conflict do nothing;
+    end if;
+  end if;
+
+  v_aggregate:=private.weekly_source_delivery_aggregate_command_v1(v_target.dispatch_command_id);
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'replay',false,'dispatch_target_id',v_target.id,
+    'dispatch_command_id',v_target.dispatch_command_id,'outcome',v_outcome,
+    'aggregate',v_aggregate
+  );
+end;
+$function$;

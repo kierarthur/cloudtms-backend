@@ -1,0 +1,19 @@
+{
+  "version": "CONTACT_OFFICE_FINITE_CLASSIFIER_SOURCE_TESTS_V1",
+  "status": "FAIL_SOURCE_ONLY",
+  "tests": 1,
+  "passed": 0,
+  "failed": 1,
+  "failureStage": "FIXTURE_IMPORT_BEFORE_ANY_OF_THE_17_SOURCE_TESTS",
+  "failureReason": "Fixture omitted supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql required at import by genuine final-definers module. The child reported one file-level failure; zero classifier tests ran.",
+  "correctedBy": "Copy the actual baseline into the owned fixture; no classifier or application source changed.",
+  "installedCompatibleProved": false,
+  "proposalPathOverride": false,
+  "actualModuleGraphFiles": 65,
+  "all65SourceBindingsProved": false,
+  "sourceGateFullRawReverse": true,
+  "sourceGateSyntax": true,
+  "rootEdits": 0,
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,222 @@
+create or replace function private.weekly_contact_source_capture_pairs_v1(p_intent_id uuid)
+returns jsonb language sql stable security definer set search_path='pg_catalog','public','pg_temp'
+as $function$
+ select coalesce(jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id) order by candidate_id,client_id),'[]'::jsonb)
+ from(select distinct candidate_id,client_id from public.weekly_contact_source_intent_capture_members where message_intent_id=p_intent_id)x
+$function$;
+
+-- Immutable capture/intent/generation lineage is checked independently from
+-- current need. Result recording uses the former after replies/pause/updates.
+create or replace function private.weekly_contact_source_capture_assert_v1(p_intent_id uuid)
+returns void language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare cap public.weekly_contact_source_intent_captures%rowtype;i public.weekly_message_intents%rowtype;
+ m public.weekly_contact_source_intent_capture_members%rowtype;keys jsonb;identity jsonb;expected jsonb;actual jsonb;n integer:=0;
+begin
+ select * into strict cap from public.weekly_contact_source_intent_captures where message_intent_id=p_intent_id;
+ select * into strict i from public.weekly_message_intents where id=cap.message_intent_id;
+ if (i.agency_id,i.environment,i.source_cycle_id) is distinct from(cap.agency_id,cap.environment,cap.source_cycle_id)
+  or cap.manifest_json->>'version' is distinct from 'CONTACT_SOURCE_INTENT_CAPTURE_V1'
+  or cap.manifest_json->>'membership_hash' is distinct from encode(cap.membership_hash,'hex')
+  or cap.manifest_json->>'original_generation_membership_hash' is distinct from encode(cap.original_generation_membership_hash,'hex')
+  or jsonb_typeof(cap.manifest_json->'members') is distinct from 'array'
+  or jsonb_typeof(cap.manifest_json->'current_facts') is distinct from 'array'
+  or(cap.capture_kind in('EXPLICIT_MANUAL','MANUAL_RECOMPOSITION'))<>(cap.manual_request_id is not null)
+  or(cap.manual_request_id is not null and cap.accepted_actor_user_id is null) then
+  raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ if i.audience_kind='CANDIDATE' then
+  if not exists(select 1 from public.weekly_candidate_outreach_generations g where g.id=i.candidate_generation_id
+   and g.candidate_cohort_id=i.candidate_cohort_id and g.source_cycle_id=i.source_cycle_id
+   and g.membership_hash=cap.original_generation_membership_hash) or cap.membership_hash<>
+    private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_CAPTURE_MEMBERSHIP_V1',cap.manifest_json->'members') then
+   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ elsif i.audience_kind='MANAGER' then
+  if not exists(select 1 from public.weekly_manager_recipient_generations g where g.id=i.recipient_generation_id
+   and g.recipient_route_id=i.recipient_route_id and g.membership_hash=cap.original_generation_membership_hash)
+   or jsonb_typeof(cap.manifest_json->'manager_members') is distinct from 'array' or cap.membership_hash<>
+    private.weekly_source_sha256_jsonb_v1('WEEKLY_MANAGER_REVIEW_BATCH_MEMBERSHIP_V1',cap.manifest_json->'manager_members') then
+   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ else raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ for m in select * from public.weekly_contact_source_intent_capture_members where message_intent_id=cap.message_intent_id order by logical_contact_key loop
+  n:=n+1;if n>500 then raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  if array_position(m.selected_issue_ids,null)is not null
+   or cardinality(m.selected_issue_ids)<>(select count(distinct id)from unnest(m.selected_issue_ids)id)
+   or(m.purpose='CHECK_HOURS'and m.selected_issue_ids is distinct from array[m.incident_id])
+   or(m.native_member_kind='SUBMISSION_MEMBER')<>(m.purpose='SUBMIT_TIMESHEET')
+   or(cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION')and(
+    m.audience<>'MANAGER'or m.purpose<>'CHECK_HOURS'or m.routine_step is null or m.routine_step<1))
+   or(cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and(
+    m.audience<>'MANAGER'or m.purpose<>'CHECK_HOURS'or(m.routine_step is not null and m.routine_step<1)
+    or i.tranche_kind<>'MANAGER_MANUAL_RESEND'))
+   or(cap.capture_kind in('EXPLICIT_MANUAL','MANUAL_RECOMPOSITION')and m.routine_step is not null)then
+   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID'using errcode='23514';end if;
+  if m.purpose='CHECK_HOURS' then
+   identity:=jsonb_build_object('work_event_id',m.work_event_id,'incident_id',m.incident_id,'incident_episode',m.incident_episode);
+   if not exists(select 1 from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=m.comparison_revision_id and comparison.incident_id=incident.id
+    where incident.id=m.incident_id and incident.candidate_id=m.candidate_id and incident.client_id=m.client_id
+     and incident.work_event_id=m.work_event_id and incident.source_cycle_id=cap.source_cycle_id
+     and comparison.material_comparison_fingerprint=m.comparison_fingerprint) then
+    raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  else identity:=jsonb_build_object('contract_id',m.native_basis_json->'contract_id','week_ending',m.native_basis_json->'week_ending');end if;
+  keys:=private.weekly_contact_source_identity_v1(cap.agency_id,cap.environment,m.candidate_id,m.client_id,m.purpose,m.audience,identity);
+  if keys->>'logical_contact_key'<>encode(m.logical_contact_key,'hex') or keys->>'budget_owner_key'<>encode(m.budget_owner_key,'hex')
+   or (i.audience_kind='CANDIDATE')<>(m.audience='WORKER')
+   or not exists(select 1 from public.weekly_contact_pause_scopes scope where scope.id=m.scope_id
+    and(scope.agency_id,scope.environment,scope.candidate_id,scope.client_id)=(cap.agency_id,cap.environment,m.candidate_id,m.client_id)) then
+   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  if m.native_member_kind='OUTREACH_MEMBER' then
+   if not exists(select 1 from public.weekly_candidate_outreach_memberships native where native.id=m.native_member_id
+    and native.candidate_generation_id=i.candidate_generation_id and native.incident_id=m.incident_id
+    and native.comparison_revision_id=m.comparison_revision_id) then
+    raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  elsif m.native_member_kind='SUBMISSION_MEMBER' then
+   if not exists(select 1 from public.weekly_timesheet_submission_request_memberships native
+    join public.weekly_timesheet_submission_requests request on request.id=native.submission_request_id
+    join public.weekly_candidate_outreach_generations g on g.id=i.candidate_generation_id
+     and request.candidate_cohort_id=g.candidate_cohort_id and request.request_generation=g.generation_number
+     and request.membership_hash=g.membership_hash and request.candidate_id=g.candidate_id and request.source_cycle_id=g.source_cycle_id
+    where native.id=m.native_member_id and native.client_id=m.client_id and request.candidate_id=m.candidate_id
+     and m.native_basis_json->>'submission_request_id'=request.id::text and m.native_basis_json->>'contract_id'=native.contract_id::text
+     and m.native_basis_json->>'week_ending'=native.week_ending::text
+     and m.native_basis_json->>'expected_source_fingerprint'=encode(native.expected_source_fingerprint,'hex')) then
+    raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+   -- Original selected issue aliases are immutable evidence for the genuine
+   -- expected Contract/week member. Result recording never depends on a later
+   -- current comparison: an actual retained comparison supplies that lineage.
+   if exists(select 1 from unnest(m.selected_issue_ids)alias(id)where not exists(
+    select 1 from public.weekly_discrepancy_incidents incident join public.weekly_work_events work on work.id=incident.work_event_id
+     where incident.id=alias.id and incident.candidate_id=m.candidate_id and incident.client_id=m.client_id
+      and incident.source_cycle_id=cap.source_cycle_id
+      and work.work_date+(7-extract(isodow from work.work_date)::integer)=(m.native_basis_json->>'week_ending')::date
+      and exists(select 1 from public.weekly_issue_comparison_revisions comparison where comparison.incident_id=incident.id
+       and comparison.contract_id=(m.native_basis_json->>'contract_id')::uuid)))then
+    raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID'using errcode='23514';end if;
+  elsif m.native_member_kind='MANAGER_MEMBER' then
+   if not exists(select 1 from public.weekly_manager_recipient_memberships native where native.id=m.native_member_id
+    and native.recipient_generation_id=i.recipient_generation_id and native.incident_id=m.incident_id
+    and native.comparison_revision_id=m.comparison_revision_id) then
+    raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  else raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  expected:=jsonb_build_object('logical_contact_key',encode(m.logical_contact_key,'hex'),'budget_owner_key',encode(m.budget_owner_key,'hex'),
+   'native_member_kind',m.native_member_kind,'native_member_id',m.native_member_id,'selected_issue_ids',to_jsonb(m.selected_issue_ids),
+   'candidate_id',m.candidate_id,'client_id',m.client_id,'scope_id',m.scope_id,'scope_revision',m.scope_revision::text,
+   'checking_revision',m.checking_revision::text,'audience',m.audience,'purpose',m.purpose,'incident_id',m.incident_id,
+   'incident_episode',m.incident_episode,'work_event_id',m.work_event_id,'comparison_revision_id',m.comparison_revision_id,
+   'comparison_fingerprint',encode(m.comparison_fingerprint,'hex'),'send_ordinal',m.send_ordinal,'routine_step',m.routine_step,
+   'basis_accepted_membership_id',m.basis_accepted_membership_id,'native_basis',m.native_basis_json);
+  select value into strict actual from jsonb_array_elements(cap.manifest_json->'members') where value->>'logical_contact_key'=encode(m.logical_contact_key,'hex');
+  if actual is distinct from expected then raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  if cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and m.routine_step is null and exists(
+   select 1 from jsonb_array_elements(cap.manifest_json->'current_facts')fact
+    where fact->>'logical_contact_key'=encode(m.logical_contact_key,'hex')and fact->'last_accepted_send'is distinct from 'null'::jsonb)then
+   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID'using errcode='23514';end if;
+ end loop;
+ if n not between 1 and 500 or n<>jsonb_array_length(cap.manifest_json->'members') then
+  raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ if exists(select alias.id from public.weekly_contact_source_intent_capture_members member
+  cross join lateral unnest(member.selected_issue_ids)alias(id)where member.message_intent_id=cap.message_intent_id
+  group by alias.id having count(*)>1)then raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID'using errcode='23514';end if;
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_capture_current_v1(p_intent_id uuid,p_at timestamptz,p_check_pause boolean)
+returns boolean language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare cap public.weekly_contact_source_intent_captures%rowtype;i public.weekly_message_intents%rowtype;
+ m public.weekly_contact_source_intent_capture_members%rowtype;incident public.weekly_discrepancy_incidents%rowtype;
+ c public.weekly_issue_comparison_revisions%rowtype;w public.weekly_work_events%rowtype;policy jsonb;guard jsonb;request record;
+ manual_actor uuid;sealed_fact jsonb;followup jsonb;history jsonb;
+begin
+ perform private.weekly_contact_source_capture_assert_v1(p_intent_id);
+ select * into strict cap from public.weekly_contact_source_intent_captures where message_intent_id=p_intent_id;
+ select * into strict i from public.weekly_message_intents where id=p_intent_id;
+ if p_at is null or not isfinite(p_at) or p_check_pause is null then raise exception 'CONTACT_SOURCE_TIME_INVALID' using errcode='22023';end if;
+ if not exists(select 1 from public.weekly_source_cycles cycle where cycle.id=cap.source_cycle_id
+  and cycle.current_projection_publication_id=cap.projection_publication_id and cycle.projection_state='CURRENT') then return false;end if;
+ perform private.weekly_source_query_current_publication_v1(cap.source_cycle_id,cap.projection_publication_id);
+ if i.audience_kind='CANDIDATE' then
+  if not exists(select 1 from public.weekly_candidate_outreach_generations g where g.id=i.candidate_generation_id
+   and g.state='ACTIVE' and g.deadline_at_utc>p_at and private.weekly_source_candidate_generation_current_v1(g.id)) then return false;end if;
+  if i.tranche_kind in('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL') and exists(
+   select 1 from public.weekly_message_intents later where later.candidate_generation_id=i.candidate_generation_id
+    and later.tranche_kind in('CANDIDATE_REMINDER_6H','TIMESHEET_SUBMISSION_REMINDER_6H') and later.due_at_utc<=p_at) then
+   return false;end if;
+ else
+  if not exists(select 1 from public.weekly_manager_recipient_generations g join public.weekly_manager_recipient_routes route
+    on route.id=g.recipient_route_id and route.current_generation_id=g.id where g.id=i.recipient_generation_id and g.state='ACTIVE'
+    and route.id=i.recipient_route_id and route.environment=cap.environment and route.agency_id=cap.agency_id
+    and private.weekly_source_query_normalise_recipient_v1(route.protected_recipient_address)=cap.manifest_json->'recipient'->>'manager_address') then return false;end if;
+ end if;
+ if cap.manual_request_id is not null then
+  select actor_user_id into strict manual_actor from public.weekly_contact_manual_acceptances where request_id=cap.manual_request_id;
+  if manual_actor is distinct from cap.accepted_actor_user_id then raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ end if;
+ if cap.accepted_actor_user_id is not null then
+  manual_actor:=cap.accepted_actor_user_id;
+  begin perform private.weekly_source_office_authority_v1(manual_actor,'ASK_CANDIDATES',null,null,null);
+  exception when insufficient_privilege then return false;end;
+ end if;
+ for m in select * from public.weekly_contact_source_intent_capture_members where message_intent_id=i.id order by logical_contact_key loop
+  if not exists(select 1 from public.weekly_contact_source_ordinal_owners owner where owner.logical_contact_key=m.logical_contact_key
+   and owner.send_ordinal=m.send_ordinal and owner.message_intent_id=i.id) then return false;end if;
+  history:=private.weekly_contact_source_logical_history_v1(cap.agency_id,cap.environment,m.candidate_id,m.client_id,m.logical_contact_key);
+  if exists(select 1 from jsonb_array_elements(history->'events')event
+   join public.weekly_message_dispatch_commands command on command.id=(event->>'dispatch_command_id')::uuid
+   where command.message_intent_id<>i.id and(
+    (event->>'accepted_at_utc' is null and(event->'unknown'='true'::jsonb or event->'original_retry_pending'='true'::jsonb))
+    or(event->>'accepted_at_utc' is not null and(event->>'send_ordinal')::integer>=m.send_ordinal))) then return false;end if;
+  if p_check_pause then
+   guard:=private.weekly_contact_scope_guard_v1(m.candidate_id,m.client_id,m.audience,p_at);
+   if guard->'allow' is distinct from 'true'::jsonb then return false;end if;
+  end if;
+  if m.purpose='CHECK_HOURS' then
+   select * into strict incident from public.weekly_discrepancy_incidents where id=m.incident_id;
+   select * into strict c from public.weekly_issue_comparison_revisions where id=incident.current_comparison_revision_id;
+   select * into strict w from public.weekly_work_events where id=incident.work_event_id;
+   if incident.state<>'OPEN' or incident.episode_number<>m.incident_episode or c.id<>m.comparison_revision_id
+    or c.material_comparison_fingerprint<>m.comparison_fingerprint or private.weekly_source_covered_hours_incident_v1(incident.id)
+    or(m.audience='WORKER' and incident.candidate_action_state in('RESPONDED','NOT_REQUIRED'))
+    or(m.audience='MANAGER' and(incident.manager_action_state in('RESPONDED','NOT_REQUIRED') or incident.manager_potential_state<>'AVAILABLE')) then return false;end if;
+   policy:=private._weekly_source_effective_policy_v1(m.client_id,c.contract_id,w.work_date);
+   if cap.capture_kind not in('EXPLICIT_MANUAL','MANUAL_RECOMPOSITION') and m.audience='MANAGER'
+    and(private.weekly_contact_source_cutoff_classification_v1(incident.id,p_at))->'routine'->'in_scope' is distinct from 'true'::jsonb then return false;end if;
+  else
+   select native.*,r.current_projection_publication_id into strict request
+    from public.weekly_timesheet_submission_request_memberships native join public.weekly_timesheet_submission_requests r on r.id=native.submission_request_id
+    where native.id=m.native_member_id and native.state='WAITING' and r.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED');
+   if not private.weekly_source_missing_scope_unchanged_v1(request.current_projection_publication_id,cap.projection_publication_id,
+     m.candidate_id,m.client_id,request.contract_id,request.week_ending)
+    or exists(select 1 from public.timesheets t where t.contract_id=request.contract_id and t.week_ending_date=request.week_ending
+     and t.is_current and t.revoked_at is null and t.archived_at_utc is null and t.sheet_scope='WEEKLY' and t.line_type='HOURS'
+     and t.r2_nurse_key is not null and t.img_sha256_nurse is not null) then return false;end if;
+   policy:=private._weekly_source_effective_policy_v1(m.client_id,request.contract_id,request.week_ending);
+  end if;
+  if policy->>'authority_mode' is distinct from 'SOURCE_AUTHORITY' or policy->>'document_mode' is distinct from 'CHECK_ONLY'
+   or(m.audience='WORKER' and policy->'candidate_queries_enabled' is distinct from 'true'::jsonb)
+   or(m.audience='MANAGER' and(policy->'manager_queries_enabled' is distinct from 'true'::jsonb
+    or private.weekly_source_query_normalise_recipient_v1(policy->>'manager_query_recipient') is distinct from cap.manifest_json->'recipient'->>'manager_address')) then return false;end if;
+  select value into strict sealed_fact from jsonb_array_elements(cap.manifest_json->'current_facts')
+   where value->>'logical_contact_key'=encode(m.logical_contact_key,'hex') order by value->>'issue_id' limit 1;
+  if sealed_fact->>'policy_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_EFFECTIVE_SOURCE_POLICY_V1',policy),'hex')
+   or(m.audience='MANAGER' and sealed_fact->'manager_row' is distinct from private.weekly_contact_source_manager_row_v1(m.incident_id)) then return false;end if;
+  if coalesce(sealed_fact->'cutoff'->'routine'->>'policy_revision',sealed_fact->>'global_policy_revision')
+   is distinct from(select version::text from public.weekly_source_global_settings where singleton) then return false;end if;
+  if cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and m.routine_step is null
+   and history->'last_accepted_send'is distinct from 'null'::jsonb then return false;end if;
+  if cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION')
+   or(cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and m.routine_step is not null)then
+   followup:=private.weekly_contact_source_manager_followup_state_v1(m.incident_id,p_at);
+   if history->'last_accepted_send' is distinct from sealed_fact->'last_accepted_send'
+    or followup->>'reason' is distinct from 'SCHEDULED'
+    or followup->>'mode' is distinct from (case when i.tranche_kind='MANAGER_AUTOMATIC_FOLLOWUP' then 'AUTOMATIC' else 'MANUAL' end)
+    or(followup->>'due_at_utc')::timestamptz>p_at
+    or(followup->>'routine_sequence')::integer is distinct from m.routine_step
+    or followup->>'last_accepted_at_utc' is distinct from sealed_fact->'followup_state'->>'last_accepted_at_utc'
+    or followup->>'policy_revision' is distinct from sealed_fact->'followup_state'->>'policy_revision' then return false;end if;
+  end if;
+ end loop;
+ return true;
+exception when no_data_found then return false;
+end;
+$function$;

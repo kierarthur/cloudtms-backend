@@ -1,0 +1,136 @@
+-- Same actual pre-existing domains as0403. No new publication/generation/clock
+-- participates in the original logical/budget identity.
+create or replace function private.weekly_contact_source_identity_v1(p_agency uuid,p_environment text,
+ p_candidate uuid,p_client uuid,p_purpose text,p_audience text,p_identity jsonb)
+returns jsonb language plpgsql immutable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare logical bytea;budget bytea;
+begin
+ if p_agency is null or p_environment is null or p_environment not in('TEST','LIVE') or p_candidate is null or p_client is null
+  or p_purpose is null or p_purpose not in('CHECK_HOURS','SUBMIT_TIMESHEET') or p_audience is null or p_audience not in('WORKER','MANAGER') then
+  raise exception 'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID' using errcode='23514';end if;
+ if p_purpose='CHECK_HOURS' then
+  perform private.weekly_contact_assert_closed_v1(p_identity,array['work_event_id','incident_id','incident_episode'],
+   array['work_event_id','incident_id','incident_episode'],'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID');
+  perform private.weekly_contact_uuid_v1(p_identity->'work_event_id');perform private.weekly_contact_uuid_v1(p_identity->'incident_id');
+  if jsonb_typeof(p_identity->'incident_episode') is distinct from 'number' or p_identity->>'incident_episode' !~ '^[1-9][0-9]*$'
+   or (p_identity->>'incident_episode')::numeric>2147483647 then
+   raise exception 'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID' using errcode='23514';end if;
+ else
+  perform private.weekly_contact_assert_closed_v1(p_identity,array['contract_id','week_ending'],array['contract_id','week_ending'],
+   'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID');
+  perform private.weekly_contact_uuid_v1(p_identity->'contract_id');
+  if jsonb_typeof(p_identity->'week_ending') is distinct from 'string' or p_identity->>'week_ending' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+   or (p_identity->>'week_ending')::date::text<>p_identity->>'week_ending' then
+   raise exception 'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID' using errcode='23514';end if;
+ end if;
+ logical:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_LOGICAL_V1',jsonb_build_object('environment',p_environment,
+  'agency_id',p_agency,'candidate_id',p_candidate,'client_id',p_client,'purpose',p_purpose,'audience',p_audience,'identity',p_identity));
+ budget:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_BUDGET_V1',jsonb_build_object('logical_contact_key',encode(logical,'hex')));
+ return jsonb_build_object('logical_contact_key',encode(logical,'hex'),'budget_owner_key',encode(budget,'hex'));
+end;
+$function$;
+
+create or replace function private.weekly_contact_source_logical_history_v1(p_agency uuid,p_environment text,
+ p_candidate uuid,p_client uuid,p_logical bytea)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare c record;facts jsonb;member jsonb;events jsonb:='[]';n integer:=0;ordinal integer;max_ordinal integer:=0;
+ accepted timestamptz;last_accepted timestamptz;last_ordinal integer;unknown boolean;retry_pending boolean;
+ accepted_ordinals integer[]:='{}';
+begin
+ perform private.weekly_source_query_require_service_v1();
+ perform private._weekly_source_settings_deployment_v1(p_agency,p_environment);
+ if p_logical is null or octet_length(p_logical)<>32 then raise exception 'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID' using errcode='23514';end if;
+ for c in select command.* from public.weekly_message_dispatch_commands command
+  where command.agency_id=p_agency and command.environment=p_environment and(
+   exists(select 1 from public.weekly_candidate_outreach_generations g where g.id=command.candidate_generation_id
+    and g.candidate_id=p_candidate and(g.client_id=p_client or exists(
+     select 1 from public.weekly_timesheet_submission_requests r join public.weekly_timesheet_submission_request_memberships m
+      on m.submission_request_id=r.id where r.candidate_cohort_id=g.candidate_cohort_id and r.request_generation=g.generation_number
+       and r.membership_hash=g.membership_hash and m.client_id=p_client)))
+   or exists(select 1 from public.weekly_manager_review_batches b join public.weekly_manager_review_items m on m.review_batch_id=b.id
+    join public.weekly_discrepancy_incidents i on i.id=m.incident_id where b.message_render_id=command.message_render_id
+     and i.candidate_id=p_candidate and i.client_id=p_client))
+   and(exists(select 1 from public.weekly_contact_delivery_memberships bridge where bridge.delivery_id=command.id and bridge.logical_contact_key=p_logical)
+    or exists(select 1 from public.weekly_contact_source_intent_capture_members captured where captured.message_intent_id=command.message_intent_id
+     and captured.logical_contact_key=p_logical)
+    or exists(select 1 from public.weekly_candidate_outreach_generations generation
+     join public.weekly_candidate_outreach_memberships native on native.candidate_generation_id=generation.id
+     join public.weekly_discrepancy_incidents incident on incident.id=native.incident_id
+     where generation.id=command.candidate_generation_id and generation.request_kind='CHECK_HOURS'
+      and private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_LOGICAL_V1',jsonb_build_object('environment',p_environment,'agency_id',p_agency,
+       'candidate_id',p_candidate,'client_id',p_client,'purpose','CHECK_HOURS','audience','WORKER','identity',jsonb_build_object(
+        'work_event_id',incident.work_event_id,'incident_id',incident.id,'incident_episode',incident.episode_number)))=p_logical)
+    or exists(select 1 from public.weekly_candidate_outreach_generations generation
+     join public.weekly_timesheet_submission_requests request on request.candidate_cohort_id=generation.candidate_cohort_id
+      and request.request_generation=generation.generation_number and request.membership_hash=generation.membership_hash
+     join public.weekly_timesheet_submission_request_memberships native on native.submission_request_id=request.id
+     where generation.id=command.candidate_generation_id and generation.request_kind='SUBMIT_TIMESHEET'
+      and private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_LOGICAL_V1',jsonb_build_object('environment',p_environment,'agency_id',p_agency,
+       'candidate_id',p_candidate,'client_id',p_client,'purpose','SUBMIT_TIMESHEET','audience','WORKER','identity',jsonb_build_object(
+        'contract_id',native.contract_id,'week_ending',native.week_ending)))=p_logical)
+    or exists(select 1 from public.weekly_manager_review_batches batch join public.weekly_manager_review_items native on native.review_batch_id=batch.id
+     join public.weekly_discrepancy_incidents incident on incident.id=native.incident_id where batch.message_render_id=command.message_render_id
+      and private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_LOGICAL_V1',jsonb_build_object('environment',p_environment,'agency_id',p_agency,
+       'candidate_id',p_candidate,'client_id',p_client,'purpose','CHECK_HOURS','audience','MANAGER','identity',jsonb_build_object(
+        'work_event_id',incident.work_event_id,'incident_id',incident.id,'incident_episode',native.incident_episode)))=p_logical))
+   and(command.attempt_count>0 or command.provider_accepted_at_utc is not null or command.state in('SUBMISSION_STARTED','ACCEPTED','AMBIGUOUS')
+    or exists(select 1 from public.weekly_message_provider_attempts a where a.dispatch_command_id=command.id)
+    or exists(select 1 from public.weekly_message_dispatch_targets t join public.weekly_message_target_attempts a on a.dispatch_target_id=t.id
+     where t.dispatch_command_id=command.id)) order by command.id
+ loop
+  -- The real immutable mapper validates each original native lineage. Unsupported
+  -- historical producers refuse; no guessed max-generation ordinal is admitted.
+  facts:=private.weekly_contact_source_logical_members_v1(c.id);
+  select value into member from jsonb_array_elements(facts->'members') where value->>'logical_contact_key'=encode(p_logical,'hex');
+  if member is null then continue;end if;
+  ordinal:=(member->>'send_ordinal')::integer;max_ordinal:=greatest(max_ordinal,ordinal);
+  select min(x.accepted_at) into accepted from(
+   select m.accepted_at_utc accepted_at from public.weekly_contact_delivery_memberships m
+    where m.delivery_id=c.id and m.logical_contact_key=p_logical and m.send_ordinal=ordinal and m.accepted_at_utc is not null
+   union all select c.provider_accepted_at_utc where c.provider_accepted_at_utc is not null
+   union all select a.completed_at_utc from public.weekly_message_provider_attempts a
+    where a.dispatch_command_id=c.id and a.outcome='ACCEPTED' and a.completed_at_utc is not null
+   union all select a.completed_at_utc from public.weekly_message_dispatch_targets t join public.weekly_message_target_attempts a
+    on a.dispatch_target_id=t.id where t.dispatch_command_id=c.id and a.outcome='ACCEPTED' and a.completed_at_utc is not null
+  )x;
+  if c.state='ACCEPTED' and accepted is null then
+   raise exception 'CONTACT_SOURCE_NATIVE_ACCEPTED_HISTORY_UNRESOLVED' using errcode='55000';end if;
+  unknown:=c.state='AMBIGUOUS' or exists(select 1 from public.weekly_message_provider_attempts a
+    where a.dispatch_command_id=c.id and(a.completed_at_utc is null or a.outcome='AMBIGUOUS'))
+   or exists(select 1 from public.weekly_message_dispatch_targets t join public.weekly_message_target_attempts a on a.dispatch_target_id=t.id
+    where t.dispatch_command_id=c.id and(a.completed_at_utc is null or a.outcome='AMBIGUOUS'));
+  retry_pending:=c.state in('READY','LEASED','FAILED') and exists(select 1 from public.weekly_message_dispatch_targets t
+   where t.dispatch_command_id=c.id and t.state in('READY','LEASED','TRANSIENT_FAILURE'));
+  if accepted is not null then
+   -- A command owns all of its actual device siblings once. Two different
+   -- commands that both actually accepted the same native ordinal are not an
+   -- evidenced recomposition (the original side had to be unsubmitted).
+   -- No shared-original proof exists for pre-install generation-reset sends;
+   -- refuse rather than collapsing two genuine contacts into one allowance.
+   if ordinal=any(accepted_ordinals) then
+    raise exception 'CONTACT_SOURCE_NATIVE_ACCEPTED_HISTORY_UNRESOLVED' using errcode='55000';end if;
+   accepted_ordinals:=array_append(accepted_ordinals,ordinal);
+   if last_accepted is null or accepted>last_accepted or(accepted=last_accepted and ordinal>last_ordinal) then
+    last_ordinal:=ordinal;last_accepted:=accepted;end if;
+  end if;
+  events:=events||jsonb_build_array(jsonb_build_object('dispatch_command_id',c.id,'send_ordinal',ordinal,
+   'accepted_at_utc',case when accepted is null then null else to_char(accepted at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end,
+   'unknown',unknown,'original_retry_pending',retry_pending));
+ end loop;
+ select greatest(max_ordinal,coalesce(max(send_ordinal),0)) into max_ordinal from public.weekly_contact_source_ordinal_owners where logical_contact_key=p_logical;
+ if max_ordinal=2147483647 then raise exception 'CONTACT_SOURCE_ORDINAL_EXHAUSTED' using errcode='54000';end if;
+ return jsonb_build_object('version','CONTACT_SOURCE_LOGICAL_HISTORY_V1','logical_contact_key',encode(p_logical,'hex'),
+  'next_send_ordinal',max_ordinal+1,'last_accepted_send',case when last_ordinal is null then null else
+   jsonb_build_object('accepted_at_utc',to_char(last_accepted at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'send_ordinal',last_ordinal) end,
+  -- Acceptance of another command under the same ordinal is not evidence of
+  -- this command's outcome. Only actual siblings of this original command can
+  -- resolve its uncertainty/retry ownership.
+  'unknown_original',exists(select 1 from jsonb_array_elements(events)e
+   where e->>'accepted_at_utc' is null and e->'unknown'='true'::jsonb),
+  'original_retry_pending',exists(select 1 from jsonb_array_elements(events)e
+   where e->>'accepted_at_utc' is null and e->'original_retry_pending'='true'::jsonb),
+  'events',events);
+end;
+$function$;

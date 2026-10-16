@@ -1,0 +1,83 @@
+{
+  "version": "HEALTH_INVOICE_RPC_RELOAD_CONTINUATION_V1",
+  "status": "THREE_SOURCE_RELOAD_TAILS_CORRECTED_NOT_DEPLOYED",
+  "root": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+  "beforeRawSha256": "60bdf030e045ffc523efb727ec23adb11a65fd1a4ca2faca7ba4ab97f9f9fae6",
+  "afterRawSha256": "82a4edda0a81355c75a0a74d1b4494d991c6be8ea6d5ebf0e8f10c9a901bcd15",
+  "beforeClosureSha256": "c03f440043b54ffddfea70f6885f9defe2b38e20c728faa999a9fccd6a82ac68",
+  "afterClosureSha256": "1c60ee3b880836c9fb1660fe4fcf272b2e3abb60c09082e08e72de1715ef65f9",
+  "exactAddition": "notify pgrst, 'reload schema';",
+  "placement": "After all existing definitions and06/07grants; immediately before existing COMMIT",
+  "wholeRawReverseEquality": true,
+  "allEightIncludedFilesUnchanged": true,
+  "allFunctionStatementsAndTransactionsOtherwiseUnchanged": true,
+  "reason": "Actual fullF23 RPC reload rule and nearest AGENTS PostgREST runtime requirement",
+  "sourceGate": {
+    "status": "PASS",
+    "gateRawSha256": "20cd8fbdce5112988c853384bdd374d7660640a752a53d23414237a414b5d578",
+    "result": {
+      "frozenFiles": 7,
+      "frozenTriggers": 18,
+      "frozenTables": 45,
+      "protectedSignatures": 24,
+      "sqlSources": 2078,
+      "rpcRoots": 73,
+      "routineWorkSignatures": 183,
+      "typedTransportSignatures": 41
+    },
+    "workingTreeAmendments": true,
+    "sourceBaseCommit": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+    "nativeApproval": false
+  },
+  "peerReview": "IN_PROGRESS",
+  "nativeAndApi": "NOT_RUN",
+  "protectedInstall2": "NOT_RUN",
+  "additionalRoots": [
+    {
+      "root": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "beforeRawSha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c",
+      "afterRawSha256": "b7b5dc446ee62b11818362ce5880667acef4f1e4b02b1d3c32962ae637a10b3c",
+      "beforeClosureSha256": "4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53",
+      "afterClosureSha256": "3b276d4fe9cdd614aa10d5779c299f233ffae59e792b47e155a89a831e8d923c",
+      "exactAddition": "notify pgrst, 'reload schema';",
+      "placement": "After all five unchanged authority includes; no new transaction boundary",
+      "wholeRawReverseEquality": true,
+      "allIncludesAndFunctionStatementsUnchanged": true
+    },
+    {
+      "root": "supabase/repeatable/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+      "beforeRawSha256": "25adbc44ae6579662134de37a40e02725f56ab7e3177165c95a3a186f633beca",
+      "afterRawSha256": "aa77a2c396b0b7c5c26edb4b80159cd76b5182b2edbb7d6debe975a73f167c61",
+      "beforeClosureSha256": "e2a2011d2455bfd081eb4b9e83544c6874522c88a6afeb3869b3863e23037052",
+      "afterClosureSha256": "d714e72181ffef10619223ca67b18658aede1ea29930aaa251c2411b67e5d17d",
+      "exactAddition": "notify pgrst, 'reload schema';",
+      "placement": "After all existing definition/owner/grants; immediately before existing COMMIT",
+      "wholeRawReverseEquality": true,
+      "allIncludesAndFunctionStatementsUnchanged": true
+    }
+  ],
+  "rpcTailCensus": {
+    "roots": 73,
+    "failures": 0,
+    "method": "Exact existing product RPC-root selector and unchanged assertRpcReload; source-only"
+  },
+  "firstCorrectionPeer": {
+    "commit": "227174db23baffc18d72b41e9a6e1301ec3a0dc0",
+    "verdict": "NO_SOURCE_BLOCKER",
+    "record": "docs/healthroster-build/proposals/v6-invoice-adjustment-reload-review-20261016",
+    "completeIncludesUnchanged": 8,
+    "completeFunctionStatementsUnchanged": 9
+  },
+  "remainingPeer": {
+    "commit": "fb3aac4d163c1b7a4520e0ff42120fc484cf4f46",
+    "verdict": "NO_SOURCE_BLOCKER",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/RPC_RELOAD_THREE_ROOT_PEER_REVIEW_20261016",
+    "roots": 3,
+    "includedOccurrencesUnchanged": 13,
+    "completeFunctionStatementsUnchanged": 74
+  },
+  "regressionSuite": {
+    "pass": 14,
+    "fail": 0
+  }
+}

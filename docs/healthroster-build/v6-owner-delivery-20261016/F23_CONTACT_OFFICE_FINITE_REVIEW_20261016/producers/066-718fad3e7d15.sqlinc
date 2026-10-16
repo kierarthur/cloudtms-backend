@@ -1,0 +1,30 @@
+declare r public.weekly_manager_recipient_routes%rowtype;i public.weekly_message_intents%rowtype;
+ render public.weekly_message_renders%rowtype;b public.weekly_manager_review_batches%rowtype;
+ members jsonb;hash bytea;n integer:=0;publication uuid;
+begin
+ select * into strict r from public.weekly_manager_recipient_routes where id=p_route_id;
+ perform private.weekly_contact_source_route_lock_v1(r.id);
+ for i in select x.* from public.weekly_message_intents x where x.recipient_route_id=r.id
+  and x.recipient_generation_id=r.current_generation_id and x.state='RENDERED' order by x.id
+ loop
+   
+  perform t.id from public.weekly_message_dispatch_targets t join public.weekly_message_dispatch_commands c on c.id=t.dispatch_command_id
+   where c.message_intent_id=i.id order by t.id for update of t;
+  perform id from public.weekly_message_dispatch_commands where message_intent_id=i.id order by id for update;
+  select * into strict render from public.weekly_message_renders where message_intent_id=i.id order by render_sequence desc limit 1;
+  if private.weekly_contact_source_render_attempted_v1(render.id) then continue;end if;
+  select * into strict b from public.weekly_manager_review_batches where message_render_id=render.id;
+  members:=private.weekly_contact_source_manager_members_v1(i.id);
+  hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_MANAGER_REVIEW_BATCH_MEMBERSHIP_V1',members);
+  select current_projection_publication_id into strict publication from public.weekly_source_cycles where id=i.source_cycle_id;
+  perform private.weekly_source_query_current_publication_v1(i.source_cycle_id,publication);
+  if render.state='CURRENT' and render.membership_hash=hash and render.projection_publication_id=publication
+   and b.state='ACTIVE' and b.expires_at_utc>clock_timestamp() then continue;end if;
+  if private.weekly_contact_source_retire_unsubmitted_v1(i.id) then
+    
+    
+   update public.weekly_message_intents set state='DUE' where id=i.id and state='RETIRED';n:=n+1;
+  end if;
+ end loop;
+ return n;
+end;

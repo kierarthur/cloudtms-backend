@@ -1,0 +1,18 @@
+declare guard jsonb;source_group public.weekly_source_groups%rowtype;facts jsonb;pair jsonb;
+begin
+ guard:=private.weekly_source_query_current_publication_v1((p_request->>'source_cycle_id')::uuid,(p_request->>'projection_publication_id')::uuid);
+ if p_request->>'action' not in('ASK_CANDIDATES','SEND_MANAGER_NOW') then
+  raise exception 'WEEKLY_SOURCE_BULK_REQUEST_INVALID' using errcode='22023';end if;
+ perform private.weekly_source_office_authority_v1((p_request->>'actor_user_id')::uuid,
+  case p_request->>'action' when 'ASK_CANDIDATES' then 'ASK_CANDIDATES' else 'SEND_MANAGER' end,
+  (guard->>'source_group_id')::uuid,null,(guard->>'finalisation_week_ending')::date);
+ select * into strict source_group from public.weekly_source_groups where id=(guard->>'source_group_id')::uuid;
+ perform private.weekly_contact_deployment_lock_v1(source_group.agency_id,source_group.environment);
+ perform private.weekly_contact_context_v1(source_group.agency_id,source_group.environment);
+ perform private.weekly_source_query_current_publication_v1((p_request->>'source_cycle_id')::uuid,(p_request->>'projection_publication_id')::uuid);
+ facts:=private.weekly_contact_source_bulk_scope_facts_v1(p_request);
+ for pair in select value from jsonb_array_elements(facts->'pairs') order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+  perform private.weekly_contact_scope_lock_v1(source_group.agency_id,source_group.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ if private.weekly_contact_source_bulk_scope_facts_v1(p_request) is distinct from facts then
+  raise exception 'WEEKLY_SOURCE_BULK_SELECTION_STALE' using errcode='40001';end if;
+end;

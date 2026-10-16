@@ -1,0 +1,221 @@
+create or replace function private.weekly_contact_producer_immutable_v1()
+returns trigger language plpgsql volatile security definer set search_path='pg_catalog','pg_temp'
+as $function$
+begin raise exception 'CONTACT_PRODUCER_IMMUTABLE_HISTORY' using errcode='23514';end;
+$function$;
+create or replace trigger weekly_contact_manual_reviews_immutable before update or delete on public.weekly_contact_manual_reviews
+ for each row execute function private.weekly_contact_producer_immutable_v1();
+create or replace trigger weekly_contact_manual_acceptances_immutable before update or delete on public.weekly_contact_manual_acceptances
+ for each row execute function private.weekly_contact_producer_immutable_v1();
+create or replace trigger weekly_contact_source_intent_captures_immutable before update or delete on public.weekly_contact_source_intent_captures
+ for each row execute function private.weekly_contact_producer_immutable_v1();
+create or replace trigger weekly_contact_source_intent_capture_members_immutable before update or delete on public.weekly_contact_source_intent_capture_members
+ for each row execute function private.weekly_contact_producer_immutable_v1();
+create or replace trigger weekly_contact_recheck_steps_immutable before update or delete on public.weekly_contact_recheck_steps
+ for each row execute function private.weekly_contact_producer_immutable_v1();
+
+-- New checking revision comes from actual native checking facts, independently
+-- from pause revision. No timestamp, publication counter or browser cache is a
+-- substitute for this source-owned fact revision.
+create or replace function private.weekly_contact_checking_pair_facts_v1(p_agency uuid,p_environment text,p_candidate uuid,p_client uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp' set timezone='UTC'
+as $function$
+declare i record;issues jsonb:='[]';history jsonb;requests jsonb;dispatches jsonb;reservations jsonb;
+ n integer:=0;policy jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ perform private._weekly_source_settings_deployment_v1(p_agency,p_environment);
+ if not exists(select 1 from public.candidates where id=p_candidate) or not exists(select 1 from public.clients where id=p_client) then
+  raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+ for i in select incident.*,to_jsonb(comparison) comparison_json,to_jsonb(work) work_json,
+   comparison.contract_id,cycle.current_projection_publication_id,cycle.cutoff_at_utc report_cutoff_at_utc,
+   jsonb_build_object('timesheet_id',sheet.timesheet_id,'version',sheet.version,'contract_id',sheet.contract_id,
+    'is_current',sheet.is_current,'revoked_at',sheet.revoked_at,'archived_at_utc',sheet.archived_at_utc,
+    'r2_nurse_key',sheet.r2_nurse_key,'img_sha256_nurse',sheet.img_sha256_nurse) evidence_control_json
+  from public.weekly_discrepancy_incidents incident
+  join public.weekly_source_groups source_group on source_group.id=incident.source_group_id
+  join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+  join public.weekly_work_events work on work.id=incident.work_event_id
+  join public.weekly_source_cycles cycle on cycle.id=incident.source_cycle_id
+  left join public.timesheets sheet on sheet.timesheet_id=comparison.candidate_timesheet_id
+  where incident.candidate_id=p_candidate and incident.client_id=p_client and incident.state='OPEN'
+   and source_group.agency_id=p_agency and source_group.environment=p_environment
+  order by incident.id limit 1001
+ loop
+  n:=n+1;if n>1000 then raise exception 'CONTACT_CHECKING_SCOPE_CAPACITY_EXCEEDED' using errcode='54000';end if;
+  perform private.weekly_source_query_current_publication_v1(i.source_cycle_id,i.current_projection_publication_id);
+  policy:=private._weekly_source_effective_policy_v1(p_client,i.contract_id,(i.work_json->>'work_date')::date);
+  issues:=issues||jsonb_build_array(jsonb_build_object('incident',to_jsonb(i)-array['comparison_json','work_json','evidence_control_json'],
+   'comparison',i.comparison_json,'work',i.work_json,'evidence_control',i.evidence_control_json,'source_policy',policy));
+ end loop;
+ select jsonb_build_object('count',count(*),'sha256',encode(private.weekly_source_sha256_jsonb_v1('CONTACT_CURRENT_ACCEPTED_HISTORY_V1',
+  coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb)),'hex')) into history from(
+  select m.id,m.logical_contact_key,m.budget_owner_key,m.send_ordinal,m.audience,m.purpose,m.incident_id,m.incident_episode,
+   m.delivery_id,m.accepted_at_utc,m.payload_revision,m.content_hash from public.weekly_contact_delivery_memberships m
+  join public.weekly_message_dispatch_commands command on command.id=m.delivery_id
+  where m.candidate_id=p_candidate and m.client_id=p_client and command.agency_id=p_agency and command.environment=p_environment
+   and exists(select 1 from private.weekly_contact_checking_logical_keys_v1(p_agency,p_environment,p_candidate,p_client)k
+    where k.logical_contact_key=m.logical_contact_key)
+ )x;
+ select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]') into requests from(
+  select r.id,r.source_cycle_id,r.candidate_cohort_id,r.request_generation,r.current_projection_publication_id,r.membership_hash,
+   r.state,r.started_at_utc,r.reminder_due_at_utc,r.deadline_at_utc,
+   coalesce((select jsonb_agg(to_jsonb(m) order by m.id) from public.weekly_timesheet_submission_request_memberships m
+    where m.submission_request_id=r.id and m.client_id=p_client),'[]') members
+  from public.weekly_timesheet_submission_requests r where r.candidate_id=p_candidate and r.agency_id=p_agency
+   and r.environment=p_environment and r.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+   and exists(select 1 from public.weekly_timesheet_submission_request_memberships m where m.submission_request_id=r.id and m.client_id=p_client)
+  order by r.id limit 1001
+ )x;
+ if jsonb_array_length(requests)>1000 then raise exception 'CONTACT_CHECKING_SCOPE_CAPACITY_EXCEEDED' using errcode='54000';end if;
+ select jsonb_build_object('count',count(*),'sha256',encode(private.weekly_source_sha256_jsonb_v1('CONTACT_CURRENT_NATIVE_DISPATCH_HISTORY_V1',
+  coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb)),'hex')) into dispatches from(
+  select command.id,command.message_intent_id,command.state,command.membership_hash,command.rendered_content_hash,
+   command.attempt_count,command.provider_accepted_at_utc,
+   coalesce((select jsonb_agg(jsonb_build_object('target_id',target.id,'attempt_id',attempt.id,
+     'attempt_number',attempt.attempt_number,'started_at_utc',attempt.started_at_utc,
+     'completed_at_utc',attempt.completed_at_utc,'outcome',attempt.outcome) order by attempt.id)
+    from public.weekly_message_dispatch_targets target join public.weekly_message_target_attempts attempt
+     on attempt.dispatch_target_id=target.id where target.dispatch_command_id=command.id),'[]') target_attempts,
+   coalesce((select jsonb_agg(jsonb_build_object('attempt_id',attempt.id,'attempt_number',attempt.attempt_number,
+     'started_at_utc',attempt.started_at_utc,'completed_at_utc',attempt.completed_at_utc,'outcome',attempt.outcome) order by attempt.id)
+    from public.weekly_message_provider_attempts attempt where attempt.dispatch_command_id=command.id),'[]') original_provider_attempts
+  from public.weekly_message_dispatch_commands command
+  join public.weekly_message_intents intent on intent.id=command.message_intent_id
+  where command.agency_id=p_agency and command.environment=p_environment and(
+   exists(select 1 from public.weekly_candidate_outreach_generations generation
+    where generation.id=command.candidate_generation_id and generation.candidate_id=p_candidate and(
+     (generation.request_kind='CHECK_HOURS' and generation.client_id=p_client and exists(
+      select 1 from public.weekly_candidate_outreach_memberships native join public.weekly_discrepancy_incidents incident on incident.id=native.incident_id
+       where native.candidate_generation_id=generation.id and incident.state='OPEN' and incident.candidate_id=p_candidate and incident.client_id=p_client))
+     or exists(select 1 from public.weekly_timesheet_submission_requests request
+      join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+      where request.candidate_cohort_id=generation.candidate_cohort_id and request.request_generation=generation.generation_number
+       and request.membership_hash=generation.membership_hash and member.client_id=p_client
+       and request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED'))))
+   or exists(select 1 from public.weekly_manager_review_batches batch
+    join public.weekly_manager_review_items member on member.review_batch_id=batch.id
+    join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id
+    where batch.message_render_id=command.message_render_id and incident.candidate_id=p_candidate and incident.client_id=p_client
+     and incident.state='OPEN' and member.incident_episode=incident.episode_number))
+ )x;
+ select jsonb_build_object('count',count(*),'sha256',encode(private.weekly_source_sha256_jsonb_v1('CONTACT_CURRENT_ORDINAL_OWNERS_V1',
+  coalesce(jsonb_agg(to_jsonb(x) order by x.message_intent_id,x.send_ordinal),'[]'::jsonb)),'hex')) into reservations from(
+  select member.message_intent_id,member.logical_contact_key,member.send_ordinal,member.native_member_kind,member.native_member_id,
+   capture.capture_kind,capture.manual_request_id,owner.revision owner_revision,owner.message_intent_id current_owner_intent_id
+  from public.weekly_contact_source_intent_capture_members member
+  join public.weekly_contact_source_intent_captures capture on capture.message_intent_id=member.message_intent_id
+  join public.weekly_contact_source_ordinal_owners owner on owner.logical_contact_key=member.logical_contact_key and owner.send_ordinal=member.send_ordinal
+   and owner.message_intent_id=member.message_intent_id
+  where member.candidate_id=p_candidate and member.client_id=p_client and capture.agency_id=p_agency and capture.environment=p_environment
+   and exists(select 1 from private.weekly_contact_checking_logical_keys_v1(p_agency,p_environment,p_candidate,p_client)k
+    where k.logical_contact_key=member.logical_contact_key)
+ )x;
+ return jsonb_build_object('version','CONTACT_CHECKING_SCOPE_FACTS_V1',
+  'agency_id',p_agency,'environment',p_environment,'candidate_id',p_candidate,'client_id',p_client,
+  'issues',issues,'accepted_history',history,'submission_requests',requests,'native_dispatches',dispatches,'reservations',reservations,
+  'global_contact_policy',(select to_jsonb(settings) from public.weekly_source_global_settings settings where singleton));
+end;
+$function$;
+
+create or replace function private.weekly_contact_checking_scope_facts_v1(p_scope_id uuid)
+returns jsonb language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select private.weekly_contact_checking_pair_facts_v1(s.agency_id,s.environment,s.candidate_id,s.client_id)
+ from public.weekly_contact_pause_scopes s where s.id=p_scope_id
+$function$;
+
+-- Read-only contribution to the EXISTING bounded combined row owner. This does
+-- not create a scope/revision, change a journal or accept a browser issue list.
+create or replace function private.weekly_contact_manual_enquiry_read_v1(p_agency uuid,p_environment text,p_candidate uuid,p_client uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare facts jsonb;hash bytea;scope public.weekly_contact_pause_scopes%rowtype;
+ saved public.weekly_contact_checking_scope_versions%rowtype;prospective bigint;issues jsonb;commands jsonb;
+begin
+ facts:=private.weekly_contact_checking_pair_facts_v1(p_agency,p_environment,p_candidate,p_client);
+ hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_CHECKING_SCOPE_FACTS_V1',facts);
+ select * into scope from public.weekly_contact_pause_scopes where agency_id=p_agency and environment=p_environment
+  and candidate_id=p_candidate and client_id=p_client;
+ select * into saved from public.weekly_contact_checking_scope_versions where scope_id=scope.id;
+ prospective:=coalesce(saved.revision,0);
+ if saved.scope_id is not null and saved.facts_sha256<>hash then
+  if prospective=9223372036854775807 then raise exception 'CONTACT_CHECKING_REVISION_EXHAUSTED' using errcode='54000';end if;
+  prospective:=prospective+1;
+ end if;
+ select coalesce(jsonb_agg(x.value->'incident'->'id' order by x.value->'incident'->>'id'),'[]') into issues
+  from jsonb_array_elements(facts->'issues')x(value);
+ commands:=jsonb_build_array(
+  jsonb_build_object('operation','CONTACT_MANUAL_ENQUIRY_PREVIEW','audience','WORKER','label','New enquiry',
+   'enabled',jsonb_array_length(issues)>0,'disabled_reason',case when jsonb_array_length(issues)=0 then 'NO_OPEN_SOURCE_ISSUES' else null end),
+  jsonb_build_object('operation','CONTACT_MANUAL_ENQUIRY_PREVIEW','audience','MANAGER','label','New enquiry',
+   'enabled',jsonb_array_length(issues)>0,'disabled_reason',case when jsonb_array_length(issues)=0 then 'NO_OPEN_SOURCE_ISSUES' else null end));
+ return jsonb_build_object('version','CONTACT_MANUAL_ENQUIRY_ROW_V1','candidate_id',p_candidate,'client_id',p_client,
+  'scope_revision',coalesce(scope.revision,0)::text,'checking_revision',prospective::text,
+  'checking_facts_sha256',encode(hash,'hex'),'available_issue_ids',issues,'actions',commands);
+end;
+$function$;
+
+create or replace function private.weekly_contact_checking_scope_revision_v1(p_scope_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare s public.weekly_contact_pause_scopes%rowtype;saved public.weekly_contact_checking_scope_versions%rowtype;
+ facts jsonb;hash bytea;
+begin
+ select * into strict s from public.weekly_contact_pause_scopes where id=p_scope_id;
+ perform private.weekly_contact_deployment_lock_v1(s.agency_id,s.environment);
+ perform private.weekly_contact_context_v1(s.agency_id,s.environment);
+ perform private.weekly_contact_scope_lock_v1(s.agency_id,s.environment,s.candidate_id,s.client_id);
+ facts:=private.weekly_contact_checking_scope_facts_v1(s.id);
+ hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_CHECKING_SCOPE_FACTS_V1',facts);
+ insert into public.weekly_contact_checking_scope_versions(scope_id,revision,facts_sha256,facts_json,recorded_at_utc)
+  values(s.id,0,hash,facts,clock_timestamp()) on conflict(scope_id) do nothing;
+ select * into strict saved from public.weekly_contact_checking_scope_versions where scope_id=s.id for update;
+ if saved.facts_sha256<>hash then
+  if saved.revision=9223372036854775807 then raise exception 'CONTACT_CHECKING_REVISION_EXHAUSTED' using errcode='54000';end if;
+  update public.weekly_contact_checking_scope_versions set revision=revision+1,facts_sha256=hash,facts_json=facts,
+   recorded_at_utc=clock_timestamp() where scope_id=s.id returning * into saved;
+ end if;
+ return jsonb_build_object('version','CONTACT_CHECKING_REVISION_V1','scope_id',s.id,'revision',saved.revision::text,
+  'facts_sha256',encode(saved.facts_sha256,'hex'),'facts',saved.facts_json);
+end;
+$function$;
+
+create or replace function private.weekly_contact_checking_version_guard_v1()
+returns trigger language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ if TG_OP='DELETE' or NEW.scope_id<>OLD.scope_id or NEW.revision<>OLD.revision+1 or NEW.facts_sha256=OLD.facts_sha256
+  or NEW.facts_sha256<>private.weekly_source_sha256_jsonb_v1('CONTACT_CHECKING_SCOPE_FACTS_V1',NEW.facts_json)
+  or not exists(select 1 from public.weekly_contact_pause_scopes s where s.id=NEW.scope_id
+   and NEW.facts_json->>'agency_id'=s.agency_id::text and NEW.facts_json->>'environment'=s.environment
+   and NEW.facts_json->>'candidate_id'=s.candidate_id::text and NEW.facts_json->>'client_id'=s.client_id::text) then
+  raise exception 'CONTACT_CHECKING_REVISION_INVALID' using errcode='23514';end if;
+ return NEW;
+end;
+$function$;
+create or replace trigger weekly_contact_checking_version_guard before update or delete on public.weekly_contact_checking_scope_versions
+ for each row execute function private.weekly_contact_checking_version_guard_v1();
+
+create or replace function private.weekly_contact_source_ordinal_owner_guard_v1()
+returns trigger language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare cap public.weekly_contact_source_intent_captures%rowtype;
+begin
+ if TG_OP='DELETE' then raise exception 'CONTACT_SOURCE_ORDINAL_IMMUTABLE' using errcode='23514';end if;
+ select * into strict cap from public.weekly_contact_source_intent_captures where message_intent_id=NEW.message_intent_id;
+ if not exists(select 1 from public.weekly_contact_source_intent_capture_members m where m.message_intent_id=cap.message_intent_id
+  and m.logical_contact_key=NEW.logical_contact_key and m.send_ordinal=NEW.send_ordinal) then
+  raise exception 'CONTACT_SOURCE_ORDINAL_SCOPE_INVALID' using errcode='23514';end if;
+ if TG_OP='UPDATE' and(NEW.logical_contact_key<>OLD.logical_contact_key or NEW.send_ordinal<>OLD.send_ordinal
+  or NEW.revision<>OLD.revision+1 or cap.capture_kind not in('ROUTINE_RECOMPOSITION','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION')
+  or cap.original_message_intent_id is distinct from OLD.message_intent_id
+  or exists(select 1 from public.weekly_message_renders r where r.message_intent_id=OLD.message_intent_id
+    and private.weekly_contact_source_render_attempted_v1(r.id))) then
+  raise exception 'CONTACT_SOURCE_ORIGINAL_ATTEMPT_OWNER' using errcode='23514';end if;
+ if TG_OP='INSERT' and NEW.revision<>1 then raise exception 'CONTACT_SOURCE_ORDINAL_SCOPE_INVALID' using errcode='23514';end if;
+ return NEW;
+end;
+$function$;
+create or replace trigger weekly_contact_source_ordinal_owner_guard before insert or update or delete on public.weekly_contact_source_ordinal_owners
+ for each row execute function private.weekly_contact_source_ordinal_owner_guard_v1();

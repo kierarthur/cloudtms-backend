@@ -1,0 +1,58 @@
+{
+  "version": "THREE_ROOT_RPC_NOTIFY_SOURCE_PEER_MANIFEST_V1",
+  "files": [
+    {
+      "path": "EVIDENCE.json",
+      "sha256": "577addd482abdc73ea69ee5007ac40d25ab1bf99381ac4f2fe16303538487bba",
+      "bytes": 14128
+    },
+    {
+      "path": "REVIEW.md",
+      "sha256": "550073a1254d31e282b711d03785261e540a9e0bfb0b1db720011cdd49ba8c56",
+      "bytes": 1307
+    },
+    {
+      "path": "review.mjs",
+      "sha256": "2fa9f46b04f6987c1fc3b62b6607dadbd933ce51573f48d288ad45a1809ead40",
+      "bytes": 6591
+    },
+    {
+      "path": "roots/after/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+      "sha256": "82a4edda0a81355c75a0a74d1b4494d991c6be8ea6d5ebf0e8f10c9a901bcd15",
+      "bytes": 792
+    },
+    {
+      "path": "roots/after/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+      "sha256": "aa77a2c396b0b7c5c26edb4b80159cd76b5182b2edbb7d6debe975a73f167c61",
+      "bytes": 8448
+    },
+    {
+      "path": "roots/after/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "sha256": "b7b5dc446ee62b11818362ce5880667acef4f1e4b02b1d3c32962ae637a10b3c",
+      "bytes": 1679
+    },
+    {
+      "path": "roots/before/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+      "sha256": "60bdf030e045ffc523efb727ec23adb11a65fd1a4ca2faca7ba4ab97f9f9fae6",
+      "bytes": 761
+    },
+    {
+      "path": "roots/before/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+      "sha256": "25adbc44ae6579662134de37a40e02725f56ab7e3177165c95a3a186f633beca",
+      "bytes": 8417
+    },
+    {
+      "path": "roots/before/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "sha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c",
+      "bytes": 1648
+    }
+  ],
+  "completeRootReverses": 3,
+  "expandedClosureReverses": 3,
+  "unchangedIncludedOccurrences": 13,
+  "unchangedCompleteFunctionStatements": 74,
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "I2Edits": 0,
+  "BankingBodyEdits": 0
+}

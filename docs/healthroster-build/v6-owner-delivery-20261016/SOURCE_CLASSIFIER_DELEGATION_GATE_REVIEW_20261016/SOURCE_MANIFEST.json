@@ -1,0 +1,167 @@
+{
+  "version": "SOURCE_CLASSIFIER_DELEGATION_GATE_PROPOSAL_MANIFEST_V1",
+  "sourceCheckpoint": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "reviewCommit": "9bb4deecdc3503585148ab0542e92b13ff943f65",
+  "files": [
+    {
+      "path": "baseline/bpay-next-source-gates.mjs",
+      "bytes": 279252,
+      "sha256": "50a7de7aa554fe192432a6de17d91ef1db0afa7d9519e52e9e1dd9edc840361d"
+    },
+    {
+      "path": "build.mjs",
+      "bytes": 6325,
+      "sha256": "1dbd938907e035728c38da300fbce278cba897c8f3a4b3af4a3e4ef3ccafb67e"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/CLASSIFICATION.json",
+      "bytes": 84476,
+      "sha256": "abe64516babd46100709f45baaa815c7a6c1070f47fd5b9c655e87d09971c14a"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/01.sqlinc",
+      "bytes": 4412,
+      "sha256": "83c869d2060148612b66c9f4d185a3e4e6ffeeb85373c46a482199fd4303615e"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/02.sqlinc",
+      "bytes": 991,
+      "sha256": "82410ac3e78553759094c6299f9a3c374f036a3db3415b16152fc4259f3c03fa"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/03.sqlinc",
+      "bytes": 6657,
+      "sha256": "cbc671065fefa41025ce7b850b477206422221f33c186fa444a9264a33b1a7da"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/04.sqlinc",
+      "bytes": 1845,
+      "sha256": "63a34ba045063ccd8054df0b60693a9857893b00476febd396ab6d1bafb84ea4"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/05.sqlinc",
+      "bytes": 3316,
+      "sha256": "9b0a833310d116efa11be4d81a413b90dd51fcd8fc7da30521cbd22f1d4d7961"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/06.sqlinc",
+      "bytes": 5167,
+      "sha256": "53fa48ae17e1b71fb0d756d76532ba8885e737ec058108fc3a50a2efb67d2a02"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/07.sqlinc",
+      "bytes": 2080,
+      "sha256": "f2979d2ce68d24c9d8d95f5d73b3644042cff3160f69b591f9726d81e911d2b5"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/08.sqlinc",
+      "bytes": 2804,
+      "sha256": "2b9a6416e07aac0653109256f507718259b47633cc03d18013f4a664d7b1dc76"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/09.sqlinc",
+      "bytes": 3344,
+      "sha256": "ad18772fc0655671cb8f7bd1aa9d51c3e4d8be1f00f1cf23d26bd554336607e3"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/10.sqlinc",
+      "bytes": 3931,
+      "sha256": "85ef5f1709ae9b0c67cc9d8c6b33b89e77acce62070d5fe421ed6b0369b559c4"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/11.sqlinc",
+      "bytes": 13531,
+      "sha256": "d75971649d2bf35e2bb4aea8a645aa9eec1fd17977172681662ff81144e87a62"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/12.sqlinc",
+      "bytes": 271,
+      "sha256": "caf17343e5b3728fcb795b667b2fa70e1e1c4802d43237804ef91ded3c5f3b7b"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/bodies/13.sqlinc",
+      "bytes": 717,
+      "sha256": "80d90af64421f44ec05a66f713b68df1be77329e7de74021bfce7e864f62667b"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/extract.mjs",
+      "bytes": 3545,
+      "sha256": "d0d79bc42722a637175b3ad21e7796db29a26085ae0ad17d27bd96c757fcc906"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/EXTRACTION.json",
+      "bytes": 30210,
+      "sha256": "fe7989d90221195a74c5986a2d96540df665506d58f63b52f8834f66de78b879"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/README.md",
+      "bytes": 4317,
+      "sha256": "559cc71e1cb452b2cdc13327cf1753e45f569230346913567620ca8bf4c59cdd"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/REVIEW.json",
+      "bytes": 43012,
+      "sha256": "5d68b3e1c95547efc2b35b301dcd00c65763b0f836dc03946601bad42f58223a"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/review.mjs",
+      "bytes": 10384,
+      "sha256": "cbbf91e816c0e35c574a0dd214bbfa263ba9568cbe553e3fd2e81eab3873995b"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/seal.mjs",
+      "bytes": 1317,
+      "sha256": "7feb65665d3690e98f583da60365df8118f6fc81aa152279e0fab977248aa40c"
+    },
+    {
+      "path": "forward/docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/review/SOURCE_MANIFEST.json",
+      "bytes": 3271,
+      "sha256": "252d2c2f3f2d4acfe88bdfecf16f07345c3646e649c1a5856188ecf3295b0c92"
+    },
+    {
+      "path": "forward/scripts/bpay-next-source-gates.mjs",
+      "bytes": 279427,
+      "sha256": "fa09c5e5f70b2c40bec6ff1342d9aa4ad3eacf44859976fd89cb3d103c5c8b8a"
+    },
+    {
+      "path": "forward/scripts/healthroster-source-classifier-delegation-review.mjs",
+      "bytes": 8620,
+      "sha256": "df301590ae3f8e44b782e8e667c70ce6688d2717768ee59598e117493a0f4555"
+    },
+    {
+      "path": "GATE_CONTRIBUTION.json",
+      "bytes": 2159,
+      "sha256": "dfe12de04c24a2129afc883f66dd1a47cf86b5f2e2a496c4ae484d62d339e2a8"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3921,
+      "sha256": "5dae321419c1af2b8af4d23a824f7b71ae94ae3129389fdc54affa15f3b85562"
+    },
+    {
+      "path": "seal.mjs",
+      "bytes": 1379,
+      "sha256": "496d40ed2fb549359e9131bb343385c10f68da6852863e545674330307d88fbd"
+    },
+    {
+      "path": "TEST_RESULTS.json",
+      "bytes": 3691,
+      "sha256": "8cb1452c1eda3df74f275c9808206ba5bf204df8cd6beb99dca9389d6110ed97"
+    },
+    {
+      "path": "test.mjs",
+      "bytes": 11085,
+      "sha256": "b57cedbc40fed46c4bb1ccb966e1bbeedcdf224b3c686b90a83267b1d14cf4b1"
+    }
+  ],
+  "excludesSelf": true,
+  "tests": {
+    "passed": 48,
+    "failed": 0
+  },
+  "rootEdits": 0,
+  "sqlChanges": 0,
+  "bankingEdits": 0,
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}

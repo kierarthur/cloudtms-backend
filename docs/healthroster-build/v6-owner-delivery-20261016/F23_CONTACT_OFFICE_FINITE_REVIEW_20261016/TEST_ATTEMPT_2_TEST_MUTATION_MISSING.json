@@ -1,0 +1,23 @@
+{
+  "version": "CONTACT_OFFICE_FINITE_CLASSIFIER_SOURCE_TESTS_V1",
+  "status": "FAIL_SOURCE_ONLY",
+  "tests": 17,
+  "passed": 16,
+  "failed": 1,
+  "failureReason": "One tuple refusal test attempted to replace where id=p_scope in the selected manifest function, where that text does not occur. The explicit assert.notEqual correctly caught the no-op mutation. Sixteen other tests passed.",
+  "correctedBy": "Use the actual manifest agency_id predicate as the mutation anchor. No classifier or application source changed.",
+  "installedCompatible": true,
+  "proposalPathOverride": false,
+  "actualModuleGraphFiles": 65,
+  "all65SourceBindings": true,
+  "rawOccurrences": 305,
+  "inheritedOccurrences": 118,
+  "newOccurrences": 187,
+  "newKeys": 184,
+  "completeProducers": 80,
+  "sourceGateFullRawReverse": true,
+  "sourceGateSyntax": true,
+  "rootEdits": 0,
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}

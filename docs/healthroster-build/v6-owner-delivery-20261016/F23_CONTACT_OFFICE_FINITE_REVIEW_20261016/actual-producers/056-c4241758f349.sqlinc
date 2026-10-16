@@ -1,0 +1,102 @@
+declare
+  v_actor uuid;
+  v_contact_pair record;
+  v_contact_guard jsonb;
+  v_generation_id uuid;
+  v_publication_id uuid;
+  v_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_settings public.weekly_source_global_settings%rowtype;
+  v_intent_id uuid;
+  v_tranche text;
+  v_sequence integer;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in ('actor_user_id','candidate_generation_id','projection_publication_id')) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REMINDER_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_generation_id:=(p_request->>'candidate_generation_id')::uuid;
+    v_publication_id:=(p_request->>'projection_publication_id')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REMINDER_REQUEST_INVALID' using errcode='22023';
+  end;
+   
+  select * into strict v_generation from public.weekly_candidate_outreach_generations where id=v_generation_id;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
+  perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication_id);
+  perform private.weekly_source_office_authority_v1(v_actor,'ASK_CANDIDATES',v_cycle.source_group_id,
+    v_generation.client_id,v_cycle.finalisation_week_ending);
+  perform private.weekly_contact_source_generation_lock_v1(v_generation.id,v_generation.candidate_id);
+   
+  select * into strict v_generation from public.weekly_candidate_outreach_generations
+  where id=v_generation_id for update;
+  select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
+  perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication_id);
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'ASK_CANDIDATES',v_cycle.source_group_id,v_generation.client_id,
+    v_cycle.finalisation_week_ending
+  );
+  if not private.weekly_source_candidate_generation_current_v1(v_generation.id)
+    or pg_catalog.transaction_timestamp()<v_generation.manual_reminder_available_at_utc
+    or (v_generation.request_kind='CHECK_HOURS' and not exists(
+      select 1 from public.weekly_candidate_outreach_memberships membership
+      join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+      where membership.candidate_generation_id=v_generation.id and membership.state='ACTIONABLE'
+        and incident.state='OPEN' and incident.candidate_action_state='ASKED'
+        and not private.weekly_source_covered_hours_incident_v1(incident.id)
+        and membership.comparison_revision_id=incident.current_comparison_revision_id))
+    or (v_generation.request_kind='SUBMIT_TIMESHEET' and not exists(
+      select 1 from public.weekly_timesheet_submission_requests request
+      join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id
+      where request.candidate_cohort_id=v_generation.candidate_cohort_id
+        and request.request_generation=v_generation.generation_number and request.membership_hash=v_generation.membership_hash
+        and request.source_cycle_id=v_generation.source_cycle_id and request.candidate_id=v_generation.candidate_id
+        and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and membership.state='WAITING')) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REMINDER_UNAVAILABLE' using errcode='55000';
+  end if;
+  for v_contact_pair in
+    select v_generation.candidate_id candidate_id,v_generation.client_id client_id where v_generation.request_kind='CHECK_HOURS'
+    union select request.candidate_id,member.client_id from public.weekly_timesheet_submission_requests request
+      join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+      where v_generation.request_kind='SUBMIT_TIMESHEET'
+        and request.candidate_cohort_id=v_generation.candidate_cohort_id and request.request_generation=v_generation.generation_number
+        and request.candidate_id=v_generation.candidate_id and request.source_cycle_id=v_generation.source_cycle_id
+        and request.membership_hash=v_generation.membership_hash and request.state in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and member.state='WAITING'
+    order by candidate_id,client_id
+  loop
+    v_contact_guard:=private.weekly_contact_scope_guard_v1(v_contact_pair.candidate_id,v_contact_pair.client_id,'WORKER',clock_timestamp());
+    if v_contact_guard->'allow' is distinct from 'true'::jsonb then
+      raise exception 'CONTACT_PAUSED' using errcode='55000',detail=jsonb_build_object('version','CONTACT_PAUSE_REFUSAL_V1',
+        'candidate_id',v_contact_pair.candidate_id,'client_id',v_contact_pair.client_id,'audience','WORKER',
+        'next_allowed_utc',v_contact_guard->'next_allowed_utc',
+        'next_allowed_local',to_char((v_contact_guard->>'next_allowed_utc')::timestamptz at time zone 'Europe/London',
+          'YYYY-MM-DD HH24:MI')||' Europe/London')::text;
+    end if;
+  end loop;
+  select * into strict v_settings from public.weekly_source_global_settings where singleton;
+  select coalesce(pg_catalog.max(tranche_sequence),0)+1 into v_sequence
+  from public.weekly_message_intents
+  where candidate_generation_id=v_generation.id
+    and tranche_kind in ('CANDIDATE_MANUAL_REMINDER','TIMESHEET_SUBMISSION_REMINDER_6H');
+  v_tranche:=case when v_generation.request_kind='SUBMIT_TIMESHEET'
+    then 'TIMESHEET_SUBMISSION_REMINDER_6H' else 'CANDIDATE_MANUAL_REMINDER' end;
+  v_intent_id:=private.weekly_source_query_candidate_intent_v1(
+    v_generation.id,v_tranche,v_sequence,pg_catalog.transaction_timestamp()
+  );
+  update public.weekly_candidate_outreach_generations
+  set manual_reminder_available_at_utc=pg_catalog.transaction_timestamp()+v_settings.candidate_manual_reminder_cooldown
+  where id=v_generation.id;
+  perform public._audit_insert(
+    'weekly_source_candidate_reminder',v_intent_id::text,'WEEKLY_SOURCE_CANDIDATE_REMINDER_STAGED',
+    null,pg_catalog.jsonb_build_object('candidate_generation_id',v_generation.id),
+    'Candidate reminder staged',v_actor
+  );
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'message_intent_id',v_intent_id,
+    'next_manual_reminder_at_utc',pg_catalog.transaction_timestamp()+v_settings.candidate_manual_reminder_cooldown
+  );
+end;

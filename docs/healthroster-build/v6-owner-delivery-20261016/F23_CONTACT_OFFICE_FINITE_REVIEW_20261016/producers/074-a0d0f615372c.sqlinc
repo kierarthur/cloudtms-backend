@@ -1,0 +1,33 @@
+declare cycle_id uuid;agency uuid;deployment_environment text;facts jsonb;pairs jsonb;generation uuid;candidate uuid;
+ request public.weekly_timesheet_submission_requests%rowtype;incident public.weekly_discrepancy_incidents%rowtype;followup jsonb;
+begin
+ if p_kind='GENERATION'then
+  select source_cycle_id,candidate_id into strict cycle_id,candidate from public.weekly_candidate_outreach_generations where id=p_id;
+  facts:=private.weekly_contact_source_generation_scope_facts_v1(p_id,candidate);pairs:=facts->'pairs';
+ elsif p_kind='REQUEST'then
+  select * into strict request from public.weekly_timesheet_submission_requests where id=p_id;
+  cycle_id:=request.source_cycle_id;
+  perform private.weekly_contact_submission_request_assert_v1(request.id);
+  select id into strict generation from public.weekly_candidate_outreach_generations where candidate_cohort_id=request.candidate_cohort_id
+   and generation_number=request.request_generation and request_kind='SUBMIT_TIMESHEET';
+  facts:=jsonb_build_object('request',to_jsonb(request),'generation',private.weekly_contact_source_generation_scope_facts_v1(generation,request.candidate_id));
+  pairs:=facts->'generation'->'pairs';
+ elsif p_kind='ROUTE'then
+  select source_cycle_id into strict cycle_id from public.weekly_manager_recipient_routes where id=p_id;
+  facts:=private.weekly_contact_source_route_scope_facts_v1(p_id);pairs:=facts->'pairs';
+ elsif p_kind='INTENT'then
+  select source_cycle_id into strict cycle_id from public.weekly_message_intents where id=p_id;
+  facts:=private.weekly_contact_source_intent_composition_scope_facts_v1(p_id);pairs:=facts->'pairs';
+ elsif p_kind='FOLLOWUP'then
+  select * into strict incident from public.weekly_discrepancy_incidents where id=p_id;cycle_id:=incident.source_cycle_id;
+  followup:=private.weekly_contact_source_followup_candidate_v1(incident.id,statement_timestamp());
+  if followup->>'reason'='HELD_DEPENDENCY'then
+   facts:=jsonb_build_object('incident',to_jsonb(incident),'held',true);
+   pairs:=jsonb_build_array(jsonb_build_object('candidate_id',incident.candidate_id,'client_id',incident.client_id));
+  else facts:=private.weekly_contact_source_manager_selection_scope_facts_v1(array[incident.id]);pairs:=facts->'pairs';end if;
+ else raise exception 'CONTACT_SOURCE_SCHEDULER_SELECTION_INVALID' using errcode='22023';end if;
+ select source_group.agency_id,source_group.environment into strict agency,deployment_environment from public.weekly_source_cycles cycle
+  join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id where cycle.id=cycle_id;
+ return jsonb_build_object('version','CONTACT_SCHEDULER_WORK_SCOPE_FACTS_V1','kind',p_kind,'native_id',p_id,
+  'agency_id',agency,'environment',deployment_environment,'facts',facts,'pairs',pairs);
+end;

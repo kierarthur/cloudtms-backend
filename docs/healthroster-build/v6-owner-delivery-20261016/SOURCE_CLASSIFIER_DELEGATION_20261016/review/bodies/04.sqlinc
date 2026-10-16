@@ -1,0 +1,25 @@
+create or replace function private.timesheet_contract_source_original_eligible_v1(p_original_timesheet_id uuid)
+returns boolean language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare a private.timesheet_contract_family_aliases%rowtype;o private.timesheet_contract_move_operations%rowtype;
+ r private.timesheet_contract_move_reviews%rowtype;p jsonb;
+begin
+ select v.* into a from private.timesheet_contract_family_aliases v
+  where v.timesheet_id=p_original_timesheet_id and v.original_timesheet_id=p_original_timesheet_id;
+ if not found then return false;end if;
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=a.accepted_operation_id;
+ if (o.state not in('COMPLETE','SUPERSEDED') and not private.timesheet_contract_move_accepting_v1(o.id))
+  or o.invoice_authority not in('SOURCE_FINANCIAL','MIXED') then return false;end if;
+ select v.* into r from private.timesheet_contract_move_reviews v where v.id=o.accepted_review_id and v.operation_id=o.id;
+ if (not exists(select 1 from private.timesheet_contract_move_members m
+  join public.weekly_source_row_timesheet_lineages l on l.id=any(m.source_lineage_ids)
+  where m.operation_id=o.id and m.member_key=a.member_key and m.from_timesheet_id=p_original_timesheet_id
+   and l.timesheet_id=p_original_timesheet_id)
+  and not exists(select 1 from public.nhsp_shifts s join public.hr_imports h on h.id=s.latest_import_id
+   where s.timesheet_id=p_original_timesheet_id and h.applied_at is not null and h.source_system=s.source_system
+    and h.client_id=s.client_id and s.charge_amount_snapshot is not null)) or r.id is null then return false;end if;
+ p:=private.timesheet_contract_current_placement_v1(p_original_timesheet_id);
+ return p->>'family_root_id'=a.family_root_id::text;
+end;
+$function$;

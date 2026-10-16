@@ -1,0 +1,45 @@
+declare
+  v_timesheet_id uuid:=(p_context->>'timesheet_id')::uuid;
+  v_candidate_id uuid:=(p_context->>'candidate_id')::uuid;
+  v_contract_id uuid:=(p_context->>'contract_id')::uuid;
+  v_week date:=(p_context->>'week_ending_date')::date;
+  v_request_id uuid;
+  v_scope_id uuid;
+  v_kind text;
+begin
+  select generation.id,
+         pg_catalog.min(membership.id::text)::uuid
+    into v_request_id,v_scope_id
+  from public.weekly_candidate_outreach_generations generation
+  join public.weekly_candidate_outreach_memberships membership
+    on membership.candidate_generation_id=generation.id
+  join public.weekly_discrepancy_incidents incident
+    on incident.id=membership.incident_id
+  join public.weekly_issue_comparison_revisions comparison
+    on comparison.id=incident.current_comparison_revision_id
+  where generation.candidate_id=v_candidate_id
+    and generation.request_kind='CHECK_HOURS'
+    and generation.state not in ('SUPERSEDED','CANCELLED')
+    and membership.state<>'SUPERSEDED'
+    and comparison.candidate_timesheet_id=v_timesheet_id
+  group by generation.id
+  order by generation.id
+  limit 1;
+  if v_request_id is not null then
+    return pg_catalog.jsonb_build_object(
+      'request_id',v_request_id,'scope_id',v_scope_id,'request_kind','CHECK_HOURS');
+  end if;
+
+   
+   
+  select result->>'request_id',result->>'scope_id',result->>'request_kind'
+    into v_request_id,v_scope_id,v_kind
+  from (select private.weekly_contact_submission_view_request_v1(v_candidate_id,v_contract_id,v_week,v_timesheet_id) result) exact;
+  if v_request_id is not null then
+    return pg_catalog.jsonb_build_object(
+      'request_id',v_request_id,'scope_id',v_scope_id,'request_kind',v_kind);
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'request_id',null,'scope_id',null,'request_kind',null);
+end;
