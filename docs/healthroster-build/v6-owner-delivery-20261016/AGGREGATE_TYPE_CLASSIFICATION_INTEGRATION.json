@@ -1,0 +1,102 @@
+{
+  "version": "HEALTHROSTER_AGGREGATE_SCALAR_TYPE_INTEGRATION_V1",
+  "status": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "sourceParent": "82a81a4d97f881f4ebca490ae9cff0612e84e405",
+  "classification": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/AGGREGATE_TYPE_CLASSIFICATION.json",
+    "sha256": "26dc83bb7ad2ccf6881b8c75de806e24cae018f7e4086e827c81c7522b188127"
+  },
+  "sourceReview": {
+    "authorCommit": "b80c947686a2ff22361b5d185c633b13e4ed5020",
+    "files": [
+      {
+        "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/AGGREGATE_REVIEW.json",
+        "sha256": "7a836fe81fa0bf9b60ee9f553dd26eb01ea6dc8290a063ea3be2ac8b5ebf3412",
+        "bytes": 1326400
+      },
+      {
+        "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/discover.mjs",
+        "sha256": "f9ea8dadb6bdaccdac64e82e12bfdfd4428db41c97ee6f83d97794ec83a4ab51",
+        "bytes": 3687
+      },
+      {
+        "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/EXPRESSION_INDEX.json",
+        "sha256": "a5433727f874da5d5e991f1f953bd5f07fba1995b8233358f948b84179ed7d95",
+        "bytes": 60817
+      },
+      {
+        "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/README.md",
+        "sha256": "fad313cf07dd4ad0d2b949d9fb41ad88ff4311c5fc3d9f96f010ead04e5a496e",
+        "bytes": 2820
+      },
+      {
+        "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/review.py",
+        "sha256": "85c661cd0b41b402000d837914045e54e2cbd4c58d2797753eced309482f0f37",
+        "bytes": 32923
+      },
+      {
+        "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/SOURCE_MANIFEST.json",
+        "sha256": "f6b8469023831907b22078f76bbdc4e79b248773e4daa378c7251b87086b3e2e",
+        "bytes": 692
+      },
+      {
+        "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_AGGREGATE_SOURCE_REVIEW_20261016/verify.py",
+        "sha256": "63377b3f74ae5cd16b889daa40089142f4e8cf4944942328f87553ee730b040c",
+        "bytes": 3006
+      }
+    ]
+  },
+  "rootReview": {
+    "files": 51,
+    "exactStatementKeys": 74,
+    "aggregateOccurrences": 356,
+    "distinctInputs": 146,
+    "completeSourceBodyHashesAndCounts": true,
+    "nativeColumnObjects": 77,
+    "exactDdlColumnDeclarations": 4,
+    "ddlNote": "One private manual-review column has both sourceDDL timestamptz and exported timestamp-with-time-zone proof; representation metadata is not a schema difference.",
+    "routeScope": "Expression119 is scalarTEXT only: missing Contract/week representative does not certify one recipient or all route-policy facts. Complete current manager/work-date/CAS and publication owners stay mandatory."
+  },
+  "integration": {
+    "helper": "scripts/healthroster-aggregate-type-review.mjs",
+    "gate": "scripts/bpay-next-source-gates.mjs",
+    "finiteHook": "One exact wrapper around existing UUID/tuple/baseline classification; every original generic hazard, frozen-authority, write, ACL, dynamic SQL and executable-source/RPC check remains required.",
+    "sqlChanged": false
+  },
+  "validation": {
+    "independentReportIntegrityTests": {
+      "passed": 7,
+      "failed": 0
+    },
+    "aggregateTupleUuidFocused": {
+      "passed": 55,
+      "failed": 0
+    },
+    "wholeF23AtWorkingSourceBeforeDailyGrouping": {
+      "status": "FAILED_CLOSED",
+      "sourceBase": "82a81a4d97f881f4ebca490ae9cff0612e84e405",
+      "diagnosticSha256": "32ec186de6985047befaeed6b5cf6d8642574b0c7e4b76e6c315ba665ff593da",
+      "count": 99,
+      "byCode": {
+        "BPAY_NEXT_SQL_DYNAMIC_SQL_UNCLASSIFIED": 97,
+        "BPAY_NEXT_SQL_JSON_CONCAT": 2
+      },
+      "interpretation": "69previousaggregate diagnostics cleared. Added Dailyroot exposes2JSONgroupings and2closedACLdynamic statements. Later executable-source/RPC stages remain unreached."
+    },
+    "dailyJsonGrouping": "Separate AST-identical two-operand correction recorded in DAILY_JSON_OPERAND_GROUPING.json; no full97diagnostic run claimed yet.",
+    "sourceIntegrity": "PASS407migrations1077repeatables",
+    "exactPushedFullF23": "PENDING_NEXT_CHECKPOINT"
+  },
+  "native": "NOT_RUN",
+  "generatedContract": "PENDING_FINAL_COMPOSITION",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_COMPLETE",
+  "effects": {
+    "databaseSessionHeld": false,
+    "sharedLockHeld": false,
+    "testMutation": false,
+    "deployment": false,
+    "bankingChatMessage": false,
+    "secretsPrinted": false
+  }
+}

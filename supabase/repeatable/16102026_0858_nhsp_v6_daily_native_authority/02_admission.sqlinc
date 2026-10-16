@@ -259,7 +259,7 @@ begin
  new_f.paid_at_utc:=null;new_f.paid_by_user_id:=null;new_f.payment_reference:=null;
  new_f.pay_vat_rate_pct_snapshot:=null;new_f.pay_vat_amount_snapshot:=null;new_f.pay_total_inc_vat_snapshot:=null;
  new_f.remittance_last_sent_at_utc:=null;new_f.remittance_send_count:=0;
- new_f.rate_source_refs_json:=snap->'rate_source_refs_json'||case when jsonb_typeof(r.manifest_json#>'{daily,rate_provenance}')='object' then r.manifest_json#>'{daily,rate_provenance}' else '{}'::jsonb end
+ new_f.rate_source_refs_json:=(snap->'rate_source_refs_json')||case when jsonb_typeof(r.manifest_json#>'{daily,rate_provenance}')='object' then r.manifest_json#>'{daily,rate_provenance}' else '{}'::jsonb end
   ||jsonb_build_object('approval_purpose','RATE_CORRECTION','correction_operation_id',o.id,'accepted_review_id',r.id,
     'approved_by_user_id',c.actor_user_id,'approved_at_utc',now_utc,'original_financial_id',old_f.id,
     'calculation_context_sha256',context->>'context_digest','worked_facts_sha256',context->>'unchanged_work_sha256');
@@ -350,7 +350,7 @@ begin
  foreach key in array (select array_agg(k) from jsonb_object_keys(snap) k where k<>'rate_source_refs_json') loop
   if to_jsonb(new_f)->key is distinct from snap->key then raise exception 'DAILY_RATE_APPROVED_CALCULATION_CHANGED' using errcode='23514';end if;
  end loop;
- expected_refs:=snap->'rate_source_refs_json'||case when jsonb_typeof(r.manifest_json#>'{daily,rate_provenance}')='object'
+ expected_refs:=(snap->'rate_source_refs_json')||case when jsonb_typeof(r.manifest_json#>'{daily,rate_provenance}')='object'
   then r.manifest_json#>'{daily,rate_provenance}' else '{}'::jsonb end
   ||jsonb_build_object('approval_purpose','RATE_CORRECTION','correction_operation_id',o.id,'accepted_review_id',r.id,
    'approved_by_user_id',o.created_by_user_id,'approved_at_utc',new_f.authorised_at_utc,'original_financial_id',old_f.id,

@@ -6493,6 +6493,8 @@
     "functions": 15,
     "sourceOnly": true,
     "native": "NOT_RUN",
-    "bankingInterface": "DEPENDENCY_HELD"
+    "bankingInterface": "DEPENDENCY_HELD",
+    "currentClosureSha256": "9b7df19ef7df0dfa4d50adb2b223ba171c02bfecb7d87f4b838d881af78512de",
+    "operandGroupingRecord": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_JSON_OPERAND_GROUPING.json"
   }
 }

@@ -1,0 +1,1394 @@
+[
+  {
+    "index": 1,
+    "expression": "MIN(s.economic_target_week)",
+    "inputType": "date",
+    "role": "GROUP_DATE_BOUNDARY",
+    "bindingProof": "s is source_rows/source_rows_base through settings_resolved: economic_target_week is CASE of explicit ::date and natural_week_start; settings_date COALESCE of those dates and London effective date. MIN chooses the earliest date in the native invoice group.",
+    "nativeColumnRefs": [
+      "public.timesheets.week_ending_date"
+    ]
+  },
+  {
+    "index": 2,
+    "expression": "MIN(s.settings_date)",
+    "inputType": "date",
+    "role": "GROUP_DATE_BOUNDARY",
+    "bindingProof": "s is source_rows/source_rows_base through settings_resolved: economic_target_week is CASE of explicit ::date and natural_week_start; settings_date COALESCE of those dates and London effective date. MIN chooses the earliest date in the native invoice group.",
+    "nativeColumnRefs": [
+      "public.timesheets.week_ending_date"
+    ]
+  },
+  {
+    "index": 3,
+    "expression": "MIN(s.canonical_blocker)",
+    "inputType": "text",
+    "role": "BLOCKER_PRIORITY",
+    "bindingProof": "s.canonical_blocker is the CASE/literal-text blocker carried through canonical_sources. MIN is a deterministic blocker-code representative; no row UUID or valuation is selected.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 4,
+    "expression": "SUM(coalesce(tf.total_pay_ex_vat,0))",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "tf is public.timesheets_financials, joined on reviewed member Timesheet/current finance. COALESCE(numeric,0) stays numeric.",
+    "nativeColumnRefs": [
+      "public.timesheets_financials.total_pay_ex_vat"
+    ]
+  },
+  {
+    "index": 5,
+    "expression": "SUM(coalesce(tf.total_charge_ex_vat,0))",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "tf is the same current native finance binding; COALESCE(numeric,0) stays numeric.",
+    "nativeColumnRefs": [
+      "public.timesheets_financials.total_charge_ex_vat"
+    ]
+  },
+  {
+    "index": 6,
+    "expression": "MAX(c.payload_json->>'consolidation_mode')",
+    "inputType": "text",
+    "role": "NATIVE_GROUP_LABEL",
+    "bindingProof": "c is public.invoice_operation_chunks through claim_ids/normal_chunks. payload_json ->> yields text; UPPER/COALESCE preserve text. The existing native chunk/group owns selection; this aggregate introduces no UUID selection.",
+    "nativeColumnRefs": [
+      "public.invoice_operation_chunks.payload_json"
+    ]
+  },
+  {
+    "index": 7,
+    "expression": "MAX(c.payload_json->>'invoice_stream')",
+    "inputType": "text",
+    "role": "NATIVE_GROUP_LABEL",
+    "bindingProof": "c is public.invoice_operation_chunks through claim_ids/normal_chunks. payload_json ->> yields text; UPPER/COALESCE preserve text. The existing native chunk/group owns selection; this aggregate introduces no UUID selection.",
+    "nativeColumnRefs": [
+      "public.invoice_operation_chunks.payload_json"
+    ]
+  },
+  {
+    "index": 8,
+    "expression": "MAX(c.payload_json->>'target_invoice_week')",
+    "inputType": "text",
+    "role": "NATIVE_GROUP_LABEL",
+    "bindingProof": "c is public.invoice_operation_chunks through claim_ids/normal_chunks. payload_json ->> yields text; UPPER/COALESCE preserve text. The existing native chunk/group owns selection; this aggregate introduces no UUID selection.",
+    "nativeColumnRefs": [
+      "public.invoice_operation_chunks.payload_json"
+    ]
+  },
+  {
+    "index": 9,
+    "expression": "MAX(cl.name)",
+    "inputType": "text",
+    "role": "HEADER_DISPLAY",
+    "bindingProof": "cl is public.clients joined by tf.client_id; MAX carries a native Client header display field across members.",
+    "nativeColumnRefs": [
+      "public.clients.name"
+    ]
+  },
+  {
+    "index": 10,
+    "expression": "MAX(cl.payment_terms_days)",
+    "inputType": "integer",
+    "role": "HEADER_TERMS",
+    "bindingProof": "cl is public.clients joined by current TF client_id; MAX is integer payment terms, not a UUID.",
+    "nativeColumnRefs": [
+      "public.clients.payment_terms_days"
+    ]
+  },
+  {
+    "index": 11,
+    "expression": "MAX(cl.primary_invoice_email)",
+    "inputType": "text",
+    "role": "HEADER_RECIPIENT",
+    "bindingProof": "cl is public.clients, native plan header recipient display/routing text.",
+    "nativeColumnRefs": [
+      "public.clients.primary_invoice_email"
+    ]
+  },
+  {
+    "index": 12,
+    "expression": "SUM(l.total_pay_ex_vat)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "l is public.invoice_lines joined to the exact credit source invoice in credit_plans.",
+    "nativeColumnRefs": [
+      "public.invoice_lines.total_pay_ex_vat"
+    ]
+  },
+  {
+    "index": 13,
+    "expression": "MIN(m.payload_json::text)",
+    "inputType": "text",
+    "role": "SEALED_PAYLOAD_REPRESENTATIVE",
+    "bindingProof": "m is members derived from actual chunk canonical members; vc is valid_chunks derived from public.invoice_operation_chunks. Explicit payload_json::text makes MIN text; result is parsed back to jsonb as an existing native group payload representative, never min(jsonb). Native source-revision/group re-resolution precedes writes.",
+    "nativeColumnRefs": [
+      "public.invoice_operation_chunks.payload_json"
+    ]
+  },
+  {
+    "index": 14,
+    "expression": "MAX(cl.invoice_address)",
+    "inputType": "text",
+    "role": "HEADER_DISPLAY",
+    "bindingProof": "cl is public.clients in header_source, joined by tf.client_id.",
+    "nativeColumnRefs": [
+      "public.clients.invoice_address"
+    ]
+  },
+  {
+    "index": 15,
+    "expression": "MAX(a.authority_json#>>'{values,client_primary_invoice_email}')",
+    "inputType": "text",
+    "role": "HEADER_RECIPIENT",
+    "bindingProof": "a is the lateral private._timesheet_settings_authority_frozen_v1(ts.timesheet_id) authority_json. #>> yields text; existing frozen settings remain the owner.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 16,
+    "expression": "MAX((a.authority_json#>>'{values,client_payment_terms_days}')::integer)",
+    "inputType": "integer",
+    "role": "HEADER_TERMS",
+    "bindingProof": "Same frozen authority a; the #>> extraction is explicitly ::integer before MAX.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 17,
+    "expression": "MAX(sd.agency_name)",
+    "inputType": "text",
+    "role": "HEADER_DISPLAY",
+    "bindingProof": "sd is public.settings_defaults CROSS JOIN constrained by sd.id=1 in header_source. MAX repeats that one native settings row across joined members.",
+    "nativeColumnRefs": [
+      "public.settings_defaults.agency_name"
+    ]
+  },
+  {
+    "index": 18,
+    "expression": "MAX(sd.agency_logo)",
+    "inputType": "text",
+    "role": "HEADER_DISPLAY",
+    "bindingProof": "sd is public.settings_defaults CROSS JOIN constrained by sd.id=1 in header_source. MAX repeats that one native settings row across joined members.",
+    "nativeColumnRefs": [
+      "public.settings_defaults.agency_logo"
+    ]
+  },
+  {
+    "index": 19,
+    "expression": "MAX(sd.registered_address)",
+    "inputType": "text",
+    "role": "HEADER_DISPLAY",
+    "bindingProof": "sd is public.settings_defaults CROSS JOIN constrained by sd.id=1 in header_source. MAX repeats that one native settings row across joined members.",
+    "nativeColumnRefs": [
+      "public.settings_defaults.registered_address"
+    ]
+  },
+  {
+    "index": 20,
+    "expression": "MAX(sd.company_reg_number)",
+    "inputType": "text",
+    "role": "HEADER_DISPLAY",
+    "bindingProof": "sd is public.settings_defaults CROSS JOIN constrained by sd.id=1 in header_source. MAX repeats that one native settings row across joined members.",
+    "nativeColumnRefs": [
+      "public.settings_defaults.company_reg_number"
+    ]
+  },
+  {
+    "index": 21,
+    "expression": "MAX(sd.bank_name)",
+    "inputType": "text",
+    "role": "HEADER_DISPLAY",
+    "bindingProof": "sd is public.settings_defaults CROSS JOIN constrained by sd.id=1 in header_source. MAX repeats that one native settings row across joined members.",
+    "nativeColumnRefs": [
+      "public.settings_defaults.bank_name"
+    ]
+  },
+  {
+    "index": 22,
+    "expression": "MAX(sd.bank_sort_code)",
+    "inputType": "text",
+    "role": "HEADER_DISPLAY",
+    "bindingProof": "sd is public.settings_defaults CROSS JOIN constrained by sd.id=1 in header_source. MAX repeats that one native settings row across joined members.",
+    "nativeColumnRefs": [
+      "public.settings_defaults.bank_sort_code"
+    ]
+  },
+  {
+    "index": 23,
+    "expression": "MAX(sd.bank_account_number)",
+    "inputType": "text",
+    "role": "HEADER_DISPLAY",
+    "bindingProof": "sd is public.settings_defaults CROSS JOIN constrained by sd.id=1 in header_source. MAX repeats that one native settings row across joined members.",
+    "nativeColumnRefs": [
+      "public.settings_defaults.bank_account_number"
+    ]
+  },
+  {
+    "index": 24,
+    "expression": "MAX(sd.vat_registration_number)",
+    "inputType": "text",
+    "role": "HEADER_DISPLAY",
+    "bindingProof": "sd is public.settings_defaults CROSS JOIN constrained by sd.id=1 in header_source. MAX repeats that one native settings row across joined members.",
+    "nativeColumnRefs": [
+      "public.settings_defaults.vat_registration_number"
+    ]
+  },
+  {
+    "index": 25,
+    "expression": "SUM(s.segment_hours_day)",
+    "inputType": "numeric",
+    "role": "MONEY_OR_HOURS_TOTAL",
+    "bindingProof": "s is segment_entries. segment_hours_day is CASE of validated segment JSON text explicitly ::numeric ELSE 0. Both segment_daily_lines and segment_weekly_lines sum this exact native expression.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 26,
+    "expression": "SUM(s.segment_hours_night)",
+    "inputType": "numeric",
+    "role": "MONEY_OR_HOURS_TOTAL",
+    "bindingProof": "s is segment_entries. segment_hours_night is CASE of validated segment JSON text explicitly ::numeric ELSE 0. Both segment_daily_lines and segment_weekly_lines sum this exact native expression.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 27,
+    "expression": "SUM(s.segment_hours_sat)",
+    "inputType": "numeric",
+    "role": "MONEY_OR_HOURS_TOTAL",
+    "bindingProof": "s is segment_entries. segment_hours_sat is CASE of validated segment JSON text explicitly ::numeric ELSE 0. Both segment_daily_lines and segment_weekly_lines sum this exact native expression.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 28,
+    "expression": "SUM(s.segment_hours_sun)",
+    "inputType": "numeric",
+    "role": "MONEY_OR_HOURS_TOTAL",
+    "bindingProof": "s is segment_entries. segment_hours_sun is CASE of validated segment JSON text explicitly ::numeric ELSE 0. Both segment_daily_lines and segment_weekly_lines sum this exact native expression.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 29,
+    "expression": "SUM(s.segment_hours_bh)",
+    "inputType": "numeric",
+    "role": "MONEY_OR_HOURS_TOTAL",
+    "bindingProof": "s is segment_entries. segment_hours_bh is CASE of validated segment JSON text explicitly ::numeric ELSE 0. Both segment_daily_lines and segment_weekly_lines sum this exact native expression.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 30,
+    "expression": "SUM(s.segment_pay_ex)",
+    "inputType": "numeric",
+    "role": "MONEY_OR_HOURS_TOTAL",
+    "bindingProof": "s is segment_entries. segment_pay_ex is CASE of validated segment JSON text explicitly ::numeric ELSE 0. Both segment_daily_lines and segment_weekly_lines sum this exact native expression.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 31,
+    "expression": "SUM(s.segment_charge_ex)",
+    "inputType": "numeric",
+    "role": "MONEY_OR_HOURS_TOTAL",
+    "bindingProof": "s is segment_entries. segment_charge_ex is CASE of validated segment JSON text explicitly ::numeric ELSE 0. Both segment_daily_lines and segment_weekly_lines sum this exact native expression.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 32,
+    "expression": "MAX(s.vat_rate)",
+    "inputType": "numeric",
+    "role": "VAT_RATE",
+    "bindingProof": "s is segment_entries -> source_rows -> vat_policy. v.vat_rate is the numeric return column of existing _invoice_generation_vat_policy_batch, joined by source_member_key and v.valid; it is not the raw JSON value.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 33,
+    "expression": "MAX(s.charge_day)",
+    "inputType": "numeric",
+    "role": "SAME_TIMESHEET_FINANCE_FIELD",
+    "bindingProof": "s is segment_entries carrying source_rows_base tf.* from public.timesheets_financials. Groups include the exact physical timesheet_id; segment expansion repeats its current native finance values.",
+    "nativeColumnRefs": [
+      "public.timesheets_financials.charge_day"
+    ]
+  },
+  {
+    "index": 34,
+    "expression": "MAX(s.charge_night)",
+    "inputType": "numeric",
+    "role": "SAME_TIMESHEET_FINANCE_FIELD",
+    "bindingProof": "s is segment_entries carrying source_rows_base tf.* from public.timesheets_financials. Groups include the exact physical timesheet_id; segment expansion repeats its current native finance values.",
+    "nativeColumnRefs": [
+      "public.timesheets_financials.charge_night"
+    ]
+  },
+  {
+    "index": 35,
+    "expression": "MAX(s.charge_sat)",
+    "inputType": "numeric",
+    "role": "SAME_TIMESHEET_FINANCE_FIELD",
+    "bindingProof": "s is segment_entries carrying source_rows_base tf.* from public.timesheets_financials. Groups include the exact physical timesheet_id; segment expansion repeats its current native finance values.",
+    "nativeColumnRefs": [
+      "public.timesheets_financials.charge_sat"
+    ]
+  },
+  {
+    "index": 36,
+    "expression": "MAX(s.charge_sun)",
+    "inputType": "numeric",
+    "role": "SAME_TIMESHEET_FINANCE_FIELD",
+    "bindingProof": "s is segment_entries carrying source_rows_base tf.* from public.timesheets_financials. Groups include the exact physical timesheet_id; segment expansion repeats its current native finance values.",
+    "nativeColumnRefs": [
+      "public.timesheets_financials.charge_sun"
+    ]
+  },
+  {
+    "index": 37,
+    "expression": "MAX(s.charge_bh)",
+    "inputType": "numeric",
+    "role": "SAME_TIMESHEET_FINANCE_FIELD",
+    "bindingProof": "s is segment_entries carrying source_rows_base tf.* from public.timesheets_financials. Groups include the exact physical timesheet_id; segment expansion repeats its current native finance values.",
+    "nativeColumnRefs": [
+      "public.timesheets_financials.charge_bh"
+    ]
+  },
+  {
+    "index": 38,
+    "expression": "MAX(s.timesheet_version)",
+    "inputType": "integer",
+    "role": "SAME_TIMESHEET_FINANCE_FIELD",
+    "bindingProof": "s is segment_entries carrying source_rows_base tf.* from public.timesheets_financials. Groups include the exact physical timesheet_id; segment expansion repeats its current native finance values.",
+    "nativeColumnRefs": [
+      "public.timesheets_financials.timesheet_version"
+    ]
+  },
+  {
+    "index": 39,
+    "expression": "MAX(s.contract_role)",
+    "inputType": "text",
+    "role": "SAME_TIMESHEET_CONTRACT_DISPLAY",
+    "bindingProof": "s is segment_entries carrying ct.role from source_rows_base; ct is public.contracts on COALESCE(ts.contract_id,cw.contract_id). Group includes the same physical Timesheet.",
+    "nativeColumnRefs": [
+      "public.contracts.role"
+    ]
+  },
+  {
+    "index": 40,
+    "expression": "MAX(s.contract_display_site)",
+    "inputType": "text",
+    "role": "SAME_TIMESHEET_CONTRACT_DISPLAY",
+    "bindingProof": "s is segment_entries carrying ct.display_site from source_rows_base; ct is public.contracts on COALESCE(ts.contract_id,cw.contract_id). Group includes the same physical Timesheet.",
+    "nativeColumnRefs": [
+      "public.contracts.display_site"
+    ]
+  },
+  {
+    "index": 41,
+    "expression": "MAX(s.contract_ward_hint)",
+    "inputType": "text",
+    "role": "SAME_TIMESHEET_CONTRACT_DISPLAY",
+    "bindingProof": "s is segment_entries carrying ct.ward_hint from source_rows_base; ct is public.contracts on COALESCE(ts.contract_id,cw.contract_id). Group includes the same physical Timesheet.",
+    "nativeColumnRefs": [
+      "public.contracts.ward_hint"
+    ]
+  },
+  {
+    "index": 42,
+    "expression": "MIN(vc.payload_json::text)",
+    "inputType": "text",
+    "role": "SEALED_PAYLOAD_REPRESENTATIVE",
+    "bindingProof": "m is members derived from actual chunk canonical members; vc is valid_chunks derived from public.invoice_operation_chunks. Explicit payload_json::text makes MIN text; result is parsed back to jsonb as an existing native group payload representative, never min(jsonb). Native source-revision/group re-resolution precedes writes.",
+    "nativeColumnRefs": [
+      "public.invoice_operation_chunks.payload_json"
+    ]
+  },
+  {
+    "index": 43,
+    "expression": "SUM(round(l.charge_ex,2))",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "l is line_union of native segment/nonsegment/additional/expense line CTEs. Every charge_ex/pay/rate arm is native numeric; ROUND(numeric,2) and numeric VAT arithmetic stay numeric. Exact existing rounding order is retained.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 44,
+    "expression": "SUM(round(l.charge_ex*l.vat_rate/100,2))",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "l is line_union of native segment/nonsegment/additional/expense line CTEs. Every charge_ex/pay/rate arm is native numeric; ROUND(numeric,2) and numeric VAT arithmetic stay numeric. Exact existing rounding order is retained.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 45,
+    "expression": "SUM(round(l.charge_ex+(l.charge_ex*l.vat_rate/100),2))",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "l is line_union of native segment/nonsegment/additional/expense line CTEs. Every charge_ex/pay/rate arm is native numeric; ROUND(numeric,2) and numeric VAT arithmetic stay numeric. Exact existing rounding order is retained.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 46,
+    "expression": "SUM(l.total_charge_ex_vat)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "l is all_target_lines/inserted_lines carrying actual public.invoice_lines stored numeric totals. Native aggregate is unchanged.",
+    "nativeColumnRefs": [
+      "public.invoice_lines.total_charge_ex_vat"
+    ]
+  },
+  {
+    "index": 47,
+    "expression": "SUM(l.vat_amount)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "l is all_target_lines/inserted_lines carrying actual public.invoice_lines stored numeric totals. Native aggregate is unchanged.",
+    "nativeColumnRefs": [
+      "public.invoice_lines.vat_amount"
+    ]
+  },
+  {
+    "index": 48,
+    "expression": "SUM(l.total_inc_vat)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "l is all_target_lines/inserted_lines carrying actual public.invoice_lines stored numeric totals. Native aggregate is unchanged.",
+    "nativeColumnRefs": [
+      "public.invoice_lines.total_inc_vat"
+    ]
+  },
+  {
+    "index": 49,
+    "expression": "MAX(upper(coalesce(c.payload_json->>'invoice_stream','NORMAL')))",
+    "inputType": "text",
+    "role": "NATIVE_GROUP_LABEL",
+    "bindingProof": "c is public.invoice_operation_chunks through claim_ids/normal_chunks. payload_json ->> yields text; UPPER/COALESCE preserve text. The existing native chunk/group owns selection; this aggregate introduces no UUID selection.",
+    "nativeColumnRefs": [
+      "public.invoice_operation_chunks.payload_json"
+    ]
+  },
+  {
+    "index": 50,
+    "expression": "MAX(w.additional_seq)",
+    "inputType": "integer",
+    "role": "NATIVE_SEQUENCE",
+    "bindingProof": "w/v is public.contract_weeks, exact Contract+week predicate. MAX(additional_seq)+1 allocates the next native additional sequence; this is an ordinal, not an identity UUID.",
+    "nativeColumnRefs": [
+      "public.contract_weeks.additional_seq"
+    ]
+  },
+  {
+    "index": 51,
+    "expression": "MIN(gc.valid_from)",
+    "inputType": "date",
+    "role": "SETTINGS_SCOPE_DATE",
+    "bindingProof": "gc is public.weekly_source_group_clients, grouped by gc.client_id after the exact valid-date overlap predicate. MIN(valid_from) is used in GREATEST(v_from-6,...) to measure that Client settings scope.",
+    "nativeColumnRefs": [
+      "public.weekly_source_group_clients.valid_from"
+    ]
+  },
+  {
+    "index": 52,
+    "expression": "MIN(m.client_id::text)",
+    "inputType": "text",
+    "role": "IDENTITY_SINGLETON",
+    "bindingProof": "m is members through all_current, client_id is COALESCE(f.client_id,c.client_id). It is explicitly cast to text before MIN and back to uuid. rollup client_count=count(distinct m.client_id); final blocker requires client_count=1 before valid output.",
+    "nativeColumnRefs": [
+      "public.timesheets_financials.client_id",
+      "public.contracts.client_id"
+    ]
+  },
+  {
+    "index": 53,
+    "expression": "MIN(m.contract_id::text)",
+    "inputType": "text",
+    "role": "IDENTITY_SINGLETON",
+    "bindingProof": "m is members through all_current t.contract_id; explicit ::text before MIN then ::uuid. rollup contract_count and final blocker require one Contract.",
+    "nativeColumnRefs": [
+      "public.timesheets.contract_id"
+    ]
+  },
+  {
+    "index": 54,
+    "expression": "MIN(m.week_ending_date)",
+    "inputType": "date",
+    "role": "CORRECTION_SCOPE_WEEK",
+    "bindingProof": "m is members through all_current t.week_ending_date; rollup week_count and final scope checks verify one natural source week.",
+    "nativeColumnRefs": [
+      "public.timesheets.week_ending_date"
+    ]
+  },
+  {
+    "index": 55,
+    "expression": "MIN(case when m.import_declared then m.envelope->>'invoice_stream' else m.current_invoice_stream end)",
+    "inputType": "text",
+    "role": "CORRECTION_STREAM",
+    "bindingProof": "m.import_declared chooses envelope->>invoice_stream text or current_invoice_stream derived from text CASE; scalar text on both branches. Native stream mismatch blockers remain.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 56,
+    "expression": "MAX(m.expected_member_count)",
+    "inputType": "integer",
+    "role": "EXPECTED_CARDINALITY",
+    "bindingProof": "m.expected_member_count derives from checked envelope JSON text cast ::integer; MAX carries declared expected member count alongside count(distinct expected_member_count) and the existing correction cardinality blockers.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 57,
+    "expression": "MIN(m.correction_shape)",
+    "inputType": "text",
+    "role": "CORRECTION_SHAPE",
+    "bindingProof": "m.correction_shape derives from checked envelope ->> text; shape count is validated by the original final blockers.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 58,
+    "expression": "MIN(m.expected_member_roles::text)",
+    "inputType": "text",
+    "role": "DECLARED_ROLE_SET",
+    "bindingProof": "m.expected_member_roles is JSONB from the checked correction envelope, explicitly ::text before MIN then ::jsonb. This is a declared role-set representative; distinct role-set validation remains, not min(jsonb).",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 59,
+    "expression": "MIN(u.ordinal)",
+    "inputType": "bigint",
+    "role": "BLOCKER_ORDER",
+    "bindingProof": "u is WITH ORDINALITY from unnest(mr.blocker_codes), so ordinal is bigint. MIN selects earliest declared blocker priority, not a business UUID.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 60,
+    "expression": "MIN(m.timesheet_id::text)",
+    "inputType": "text",
+    "role": "IDENTITY_SINGLETON",
+    "bindingProof": "CASE count(distinct m.timesheet_id)=1 THEN MIN(m.timesheet_id::text)::uuid END is explicit in scope_summary. m Timesheet comes from members/member_results.",
+    "nativeColumnRefs": [
+      "public.timesheets.timesheet_id"
+    ]
+  },
+  {
+    "index": 61,
+    "expression": "MIN(m.correction_id)",
+    "inputType": "text",
+    "role": "CORRECTION_IDENTITY_SINGLETON",
+    "bindingProof": "m.correction_id is the native text correction ID, guarded by CASE count(distinct m.correction_id)=1 THEN MIN(...) END.",
+    "nativeColumnRefs": [
+      "public.timesheets.correction_id"
+    ]
+  },
+  {
+    "index": 62,
+    "expression": "MIN(request_no)",
+    "inputType": "integer",
+    "role": "REQUEST_ORDER",
+    "bindingProof": "request_no is x.ordinality::integer in raw_requests. MIN chooses the first request occurrence for duplicate-key results, not a physical entity identity.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 63,
+    "expression": "MIN(x.reference_source)",
+    "inputType": "text",
+    "role": "REFERENCE_DISPLAY",
+    "bindingProof": "x is reference_scope rows projected by _invoice_reference_rows_batch. reference_source/reference_scope originate from text CASE/COALESCE labels, propagated through fixed lateral alias x; this is reference display metadata.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 64,
+    "expression": "MIN(x.reference_scope)",
+    "inputType": "text",
+    "role": "REFERENCE_DISPLAY",
+    "bindingProof": "x is reference_scope rows projected by _invoice_reference_rows_batch. reference_source/reference_scope originate from text CASE/COALESCE labels, propagated through fixed lateral alias x; this is reference display metadata.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 65,
+    "expression": "MIN(r.row_key)",
+    "inputType": "text",
+    "role": "DISPLAY_ROW_KEY",
+    "bindingProof": "r is reference_scope, row_key is its declared text return. MIN selects deterministic row-key ordering/display reference metadata; it is not a uuid cast or a financial row owner.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 66,
+    "expression": "MIN(case when r.ref_target='SEGMENT' then 'SEGMENT' when r.day_ymd is not null then 'DAY' else 'TIMESHEET' end)",
+    "inputType": "text",
+    "role": "REFERENCE_DISPLAY",
+    "bindingProof": "CASE branches are literal text SEGMENT/DAY/TIMESHEET or EXACT_SEGMENT/EXACT_DAY/WHOLE_TIMESHEET. MIN is scalar label display metadata.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 67,
+    "expression": "MIN(case when r.ref_target='SEGMENT' then 'EXACT_SEGMENT' when r.day_ymd is not null then 'EXACT_DAY' else 'WHOLE_TIMESHEET' end)",
+    "inputType": "text",
+    "role": "REFERENCE_DISPLAY",
+    "bindingProof": "CASE branches are literal text SEGMENT/DAY/TIMESHEET or EXACT_SEGMENT/EXACT_DAY/WHOLE_TIMESHEET. MIN is scalar label display metadata.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 68,
+    "expression": "SUM(round(r.net_raw,2))",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "r is invoice_line_component_ranked. net_raw is numeric rate*hours/other native line totals; raw_vat is numeric stored line_vat multiplied/divided by numeric net_raw or bigint count. ROUND(...,2) remains numeric. Existing residual rounding line formula is unchanged.",
+    "nativeColumnRefs": [
+      "public.invoice_lines.total_charge_ex_vat",
+      "public.invoice_lines.vat_amount"
+    ]
+  },
+  {
+    "index": 69,
+    "expression": "SUM(round(coalesce(r.raw_vat,0),2))",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "r is invoice_line_component_ranked. net_raw is numeric rate*hours/other native line totals; raw_vat is numeric stored line_vat multiplied/divided by numeric net_raw or bigint count. ROUND(...,2) remains numeric. Existing residual rounding line formula is unchanged.",
+    "nativeColumnRefs": [
+      "public.invoice_lines.total_charge_ex_vat",
+      "public.invoice_lines.vat_amount"
+    ]
+  },
+  {
+    "index": 70,
+    "expression": "SUM(c.net_amount)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "c is invoice_line_components after native numeric rounding/residual allocation. net_amount/vat_amount/gross_amount remain numeric. These sum stored/projection components for exact invoice total reconciliation.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 71,
+    "expression": "SUM(c.vat_amount)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "c is invoice_line_components after native numeric rounding/residual allocation. net_amount/vat_amount/gross_amount remain numeric. These sum stored/projection components for exact invoice total reconciliation.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 72,
+    "expression": "SUM(c.gross_amount)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "c is invoice_line_components after native numeric rounding/residual allocation. net_amount/vat_amount/gross_amount remain numeric. These sum stored/projection components for exact invoice total reconciliation.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 73,
+    "expression": "SUM(case when coalesce(v,'')~ '^[+-]?(?:[0-9]+(?:\\.[0-9]+)?|\\.[0-9]+)$' then v::numeric else 0 end)",
+    "inputType": "numeric",
+    "role": "FACTUAL_UNITS",
+    "bindingProof": "v is jsonb_each_text value in additional-unit display arithmetic. Validated numeric-looking text is explicitly ::numeric ELSE 0, so SUM input is numeric, not jsonb.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 74,
+    "expression": "SUM( (r.shift_model->>'paid_minutes')::numeric)",
+    "inputType": "numeric",
+    "role": "FACTUAL_MINUTES",
+    "bindingProof": "r is timesheet_schedule_rows; shift_model->>paid_minutes is text, explicitly ::numeric before SUM.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 75,
+    "expression": "MIN(ranked.match_priority)",
+    "inputType": "integer",
+    "role": "MATCH_PRIORITY",
+    "bindingProof": "ranked/candidates match_priority is literal 1,2,3 in UNION ALL candidate matches over native nhsp_shifts. MIN and window MIN select winning integer priority, not identity.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 76,
+    "expression": "MIN(ranked.ref_num)",
+    "inputType": "text",
+    "role": "MATCHED_DISPLAY_SINGLETON",
+    "bindingProof": "ranked carries ns.ref_num from nhsp_shifts. CASE count(*)=1 THEN MIN(...) END only exposes the matched reference/external key at singleton winning priority.",
+    "nativeColumnRefs": [
+      "public.nhsp_shifts.ref_num"
+    ]
+  },
+  {
+    "index": 77,
+    "expression": "MIN(ranked.external_row_key)",
+    "inputType": "text",
+    "role": "MATCHED_DISPLAY_SINGLETON",
+    "bindingProof": "ranked carries ns.external_row_key from nhsp_shifts. CASE count(*)=1 THEN MIN(...) END only exposes the matched reference/external key at singleton winning priority.",
+    "nativeColumnRefs": [
+      "public.nhsp_shifts.external_row_key"
+    ]
+  },
+  {
+    "index": 78,
+    "expression": "MIN(ranked.shift_id::text)",
+    "inputType": "text",
+    "role": "IDENTITY_SINGLETON",
+    "bindingProof": "ranked.shift_id is ns.id from each exact native match arm. CASE count(*)=1 THEN MIN(ranked.shift_id::text)::uuid END after winning-priority filtering; ambiguity returns NULL and reference_match_count/AMBIGUOUS.",
+    "nativeColumnRefs": [
+      "public.nhsp_shifts.id"
+    ]
+  },
+  {
+    "index": 79,
+    "expression": "MIN(candidates.match_priority)",
+    "inputType": "integer",
+    "role": "MATCH_PRIORITY",
+    "bindingProof": "ranked/candidates match_priority is literal 1,2,3 in UNION ALL candidate matches over native nhsp_shifts. MIN and window MIN select winning integer priority, not identity.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 80,
+    "expression": "SUM(coalesce(total_charge_ex_vat,0))",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "Unqualified column is from the sole public.invoice_lines VAT-breakdown subquery. COALESCE(numeric,0) stays numeric.",
+    "nativeColumnRefs": [
+      "public.invoice_lines.total_charge_ex_vat"
+    ]
+  },
+  {
+    "index": 81,
+    "expression": "SUM(coalesce(vat_amount,0))",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "Unqualified column is from the sole public.invoice_lines VAT-breakdown subquery. COALESCE(numeric,0) stays numeric.",
+    "nativeColumnRefs": [
+      "public.invoice_lines.vat_amount"
+    ]
+  },
+  {
+    "index": 82,
+    "expression": "SUM(coalesce(total_inc_vat,coalesce(total_charge_ex_vat,0)+coalesce(vat_amount,0)))",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "Sole public.invoice_lines VAT-breakdown relation; all three stored money columns are numeric and COALESCE/numeric addition preserves that type.",
+    "nativeColumnRefs": [
+      "public.invoice_lines.total_inc_vat",
+      "public.invoice_lines.total_charge_ex_vat",
+      "public.invoice_lines.vat_amount"
+    ]
+  },
+  {
+    "index": 83,
+    "expression": "MIN(presentation)",
+    "inputType": "text",
+    "role": "CONTROLLED_LEGACY_SETTING_SINGLETON",
+    "bindingProof": "eligible.presentation is movement.source_facts_json->>correction_presentation text. Dense-rank origin=1 is followed by exact movement_count=1 and presentation_count=1 plus closed allowed presentation values before returning it.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.source_facts_json"
+    ]
+  },
+  {
+    "index": 84,
+    "expression": "MIN(first_week)",
+    "inputType": "date",
+    "role": "COVERAGE_BOUNDARY",
+    "bindingProof": "history.first_week UNION ALL comprises date GREATEST(assignment date+integer,group-client date+integer) and source_cycle.finalisation_week_ending. MIN(first_week)-6 is the earliest coverage date.",
+    "nativeColumnRefs": [
+      "public.weekly_source_group_rule_assignments.effective_from_week_ending",
+      "public.weekly_source_group_clients.valid_from",
+      "public.weekly_source_cycles.finalisation_week_ending"
+    ]
+  },
+  {
+    "index": 85,
+    "expression": "MIN(event.work_date)",
+    "inputType": "date",
+    "role": "OLDEST_PROTECTED_DATE",
+    "bindingProof": "event is public.weekly_exceptional_pay_family_events joined to actual approval; MIN is earliest WAIT work date after floor.",
+    "nativeColumnRefs": [
+      "public.weekly_exceptional_pay_family_events.work_date"
+    ]
+  },
+  {
+    "index": 86,
+    "expression": "MAX(latest.event_sequence)",
+    "inputType": "bigint",
+    "role": "LATEST_FAMILY_EVENT_SEQUENCE",
+    "bindingProof": "latest is same native weekly_exceptional_pay_family_events relation, correlated on family_id and durable_work_event_id; MAX picks BIGINT ordinal event_sequence, not UUID.",
+    "nativeColumnRefs": [
+      "public.weekly_exceptional_pay_family_events.event_sequence"
+    ]
+  },
+  {
+    "index": 87,
+    "expression": "MAX(week.week_ending_date)",
+    "inputType": "date",
+    "role": "LATEST_COMPLETED_WEEK",
+    "bindingProof": "week is public.contract_weeks joined to contracts; status excludes CANCELLED and week is strictly before native current London date.",
+    "nativeColumnRefs": [
+      "public.contract_weeks.week_ending_date"
+    ]
+  },
+  {
+    "index": 88,
+    "expression": "SUM(m.invoice_presentation_charge_pence)",
+    "inputType": "bigint",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "m/movement is public.weekly_source_billing_movements, exact revision/client/window or selected movement-ID scope. SUM(bigint) returns numeric; no rate/rounding rewrite.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.invoice_presentation_charge_pence"
+    ]
+  },
+  {
+    "index": 89,
+    "expression": "SUM(m.vat_amount*100)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "m is public.weekly_source_billing_movements. Stored numeric vat_amount * integer 100 remains numeric; SUM remains numeric.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.vat_amount"
+    ]
+  },
+  {
+    "index": 90,
+    "expression": "MIN(m.vat_rate_pct)",
+    "inputType": "numeric",
+    "role": "VAT_RATE_SINGLETON",
+    "bindingProof": "m/movement binds actual weekly_source_billing_movements. MIN(vat_rate_pct) scalar numeric is accompanied by rate_count/count(distinct VAT rate) or exact native adjustment authority validation. Inspect per-row cardinality note; no arbitrary movement identity.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.vat_rate_pct"
+    ]
+  },
+  {
+    "index": 91,
+    "expression": "MIN(m.source_profile_kind)",
+    "inputType": "text",
+    "role": "SOURCE_PROFILE_REPRESENTATIVE",
+    "bindingProof": "m is actual weekly_source_billing_movements. MIN(source_profile_kind) is text provenance classification carried by the rounding movement, not a money amount or UUID. Rate-count guard is separate; no profile-count guard is asserted by this review.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.source_profile_kind"
+    ]
+  },
+  {
+    "index": 92,
+    "expression": "MAX(prior.cutoff_at_utc)",
+    "inputType": "timestamp with time zone",
+    "role": "PREVIOUS_NATIVE_CUTOFF",
+    "bindingProof": "prior/previous is public.weekly_source_cycles, exact same source_group_id and strictly earlier cutoff. MAX obtains latest earlier cutoff boundary, not revision identity.",
+    "nativeColumnRefs": [
+      "public.weekly_source_cycles.cutoff_at_utc"
+    ]
+  },
+  {
+    "index": 93,
+    "expression": "MIN(created_at_utc)",
+    "inputType": "timestamp with time zone",
+    "role": "PRESENTATION_ORDER",
+    "bindingProof": "Unqualified created_at_utc is from the single public.weekly_source_billing_movements input grouped by presentation_group. MIN appears only in ORDER BY after fixed-expense ordering.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.created_at_utc"
+    ]
+  },
+  {
+    "index": 94,
+    "expression": "SUM((movement.canonical_pay_vector_json#>>'{hours,day}')::numeric)",
+    "inputType": "numeric",
+    "role": "HOURS_TOTAL",
+    "bindingProof": "movement is public.weekly_source_billing_movements; each canonical_pay_vector_json #>> hours extraction is explicitly ::numeric before SUM.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.canonical_pay_vector_json"
+    ]
+  },
+  {
+    "index": 95,
+    "expression": "SUM((movement.canonical_pay_vector_json#>>'{hours,night}')::numeric)",
+    "inputType": "numeric",
+    "role": "HOURS_TOTAL",
+    "bindingProof": "movement is public.weekly_source_billing_movements; each canonical_pay_vector_json #>> hours extraction is explicitly ::numeric before SUM.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.canonical_pay_vector_json"
+    ]
+  },
+  {
+    "index": 96,
+    "expression": "SUM((movement.canonical_pay_vector_json#>>'{hours,sat}')::numeric)",
+    "inputType": "numeric",
+    "role": "HOURS_TOTAL",
+    "bindingProof": "movement is public.weekly_source_billing_movements; each canonical_pay_vector_json #>> hours extraction is explicitly ::numeric before SUM.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.canonical_pay_vector_json"
+    ]
+  },
+  {
+    "index": 97,
+    "expression": "SUM((movement.canonical_pay_vector_json#>>'{hours,sun}')::numeric)",
+    "inputType": "numeric",
+    "role": "HOURS_TOTAL",
+    "bindingProof": "movement is public.weekly_source_billing_movements; each canonical_pay_vector_json #>> hours extraction is explicitly ::numeric before SUM.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.canonical_pay_vector_json"
+    ]
+  },
+  {
+    "index": 98,
+    "expression": "SUM((movement.canonical_pay_vector_json#>>'{hours,bh}')::numeric)",
+    "inputType": "numeric",
+    "role": "HOURS_TOTAL",
+    "bindingProof": "movement is public.weekly_source_billing_movements; each canonical_pay_vector_json #>> hours extraction is explicitly ::numeric before SUM.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.canonical_pay_vector_json"
+    ]
+  },
+  {
+    "index": 99,
+    "expression": "SUM(movement.total_pay_ex_vat)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "movement is public.weekly_source_billing_movements restricted by the exact native selected v_ids. No amount is chosen by MIN/MAX; SUM retains original money owner.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.total_pay_ex_vat"
+    ]
+  },
+  {
+    "index": 100,
+    "expression": "SUM(movement.invoice_presentation_charge_pence)",
+    "inputType": "bigint",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "m/movement is public.weekly_source_billing_movements, exact revision/client/window or selected movement-ID scope. SUM(bigint) returns numeric; no rate/rounding rewrite.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.invoice_presentation_charge_pence"
+    ]
+  },
+  {
+    "index": 101,
+    "expression": "SUM(movement.calculated_comparison_charge_pence)",
+    "inputType": "bigint",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "movement is public.weekly_source_billing_movements restricted by the exact native selected v_ids. No amount is chosen by MIN/MAX; SUM retains original money owner.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.calculated_comparison_charge_pence"
+    ]
+  },
+  {
+    "index": 102,
+    "expression": "SUM(movement.source_validation_charge_pence)",
+    "inputType": "bigint",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "movement is public.weekly_source_billing_movements restricted by the exact native selected v_ids. No amount is chosen by MIN/MAX; SUM retains original money owner.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.source_validation_charge_pence"
+    ]
+  },
+  {
+    "index": 103,
+    "expression": "SUM(movement.vat_amount)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "movement is public.weekly_source_billing_movements restricted by the exact native selected v_ids. No amount is chosen by MIN/MAX; SUM retains original money owner.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.vat_amount"
+    ]
+  },
+  {
+    "index": 104,
+    "expression": "SUM(movement.total_inc_vat)",
+    "inputType": "numeric",
+    "role": "MONEY_TOTAL",
+    "bindingProof": "movement is public.weekly_source_billing_movements restricted by the exact native selected v_ids. No amount is chosen by MIN/MAX; SUM retains original money owner.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.total_inc_vat"
+    ]
+  },
+  {
+    "index": 105,
+    "expression": "MIN(movement.vat_rate_pct)",
+    "inputType": "numeric",
+    "role": "VAT_RATE_SINGLETON",
+    "bindingProof": "m/movement binds actual weekly_source_billing_movements. MIN(vat_rate_pct) scalar numeric is accompanied by rate_count/count(distinct VAT rate) or exact native adjustment authority validation. Inspect per-row cardinality note; no arbitrary movement identity.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.vat_rate_pct"
+    ]
+  },
+  {
+    "index": 106,
+    "expression": "MIN(movement.price_check_result)",
+    "inputType": "text",
+    "role": "PRICE_CHECK_SINGLETON",
+    "bindingProof": "movement.price_check_result is text; CASE count(distinct movement.price_check_result)=1 THEN MIN(...) ELSE NOT_APPLICABLE END.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.price_check_result"
+    ]
+  },
+  {
+    "index": 107,
+    "expression": "MAX(state.actual_net_minutes)",
+    "inputType": "integer",
+    "role": "CURRENT_SOURCE_MINUTES",
+    "bindingProof": "state is current_state: ranked ROW_NUMBER partition by transition.work_event_id, then event_rank=1 and exact candidate/Contract/week predicates. actual_net_minutes is snapshot.actual_net_minutes integer; selected v_event filter makes this one current state.",
+    "nativeColumnRefs": [
+      "public.weekly_source_final_snapshot_lines.actual_net_minutes"
+    ]
+  },
+  {
+    "index": 108,
+    "expression": "MAX(pg_catalog.encode(coalesce(state.snapshot_line_hash,state.transition_fingerprint),'hex'))",
+    "inputType": "text",
+    "role": "CURRENT_SOURCE_HASH",
+    "bindingProof": "Same single current_state per work event. snapshot_line_hash and transition_fingerprint are bytea; COALESCE bytea -> pg_catalog.encode(...,hex) text -> MAX text. This is a selected current evidence digest, not max(bytea).",
+    "nativeColumnRefs": [
+      "public.weekly_source_final_snapshot_lines.snapshot_line_hash",
+      "public.weekly_source_state_transitions.transition_fingerprint"
+    ]
+  },
+  {
+    "index": 109,
+    "expression": "MAX(row_state.final_revision_id::text)",
+    "inputType": "text",
+    "role": "IDENTITY_SINGLETON",
+    "bindingProof": "row_state derives scope distinct work_event + exact active movement owner. MAX(final_revision_id::text) FILTER exact v_event and source_present; count of live_count>1 raises WEEKLY_PROTECTED_AMBIGUOUS_SOURCE_HEAD before returning either UUID/text representative. Source ladder head is separately counted.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.final_revision_id"
+    ]
+  },
+  {
+    "index": 110,
+    "expression": "MAX( (row_state.source_facts_json->>'actual_net_minutes')::integer)",
+    "inputType": "integer",
+    "role": "CURRENT_SOURCE_MINUTES",
+    "bindingProof": "Same row_state singleton/ambiguity refusal. source_facts_json->>actual_net_minutes explicitly ::integer.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.source_facts_json"
+    ]
+  },
+  {
+    "index": 111,
+    "expression": "MAX(pg_catalog.encode(row_state.movement_economic_hash,'hex'))",
+    "inputType": "text",
+    "role": "CURRENT_SOURCE_HASH",
+    "bindingProof": "Same row_state singleton/ambiguity refusal. movement_economic_hash bytea -> encode(hex) text before MAX.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.movement_economic_hash"
+    ]
+  },
+  {
+    "index": 112,
+    "expression": "MAX(episode_number)",
+    "inputType": "integer",
+    "role": "NATIVE_EPISODE_SEQUENCE",
+    "bindingProof": "Sole FROM public.weekly_discrepancy_incidents, exact source group/work event predicate; MAX(episode_number)+1.",
+    "nativeColumnRefs": [
+      "public.weekly_discrepancy_incidents.episode_number"
+    ]
+  },
+  {
+    "index": 113,
+    "expression": "MAX(revision_number)",
+    "inputType": "integer",
+    "role": "NATIVE_REVISION_SEQUENCE",
+    "bindingProof": "Sole FROM public.weekly_issue_comparison_revisions, exact incident predicate; MAX(revision_number)+1.",
+    "nativeColumnRefs": [
+      "public.weekly_issue_comparison_revisions.revision_number"
+    ]
+  },
+  {
+    "index": 114,
+    "expression": "MAX(x.send_ordinal)",
+    "inputType": "integer",
+    "role": "ACCEPTED_SEND_SEQUENCE",
+    "bindingProof": "x is public.weekly_contact_delivery_memberships filtered exact logical_contact_key+accepted_at_utc IS NOT NULL. MAX send_ordinal is checked against accepted_count and exact last ordinal timestamp re-read.",
+    "nativeColumnRefs": [
+      "public.weekly_contact_delivery_memberships.send_ordinal"
+    ]
+  },
+  {
+    "index": 115,
+    "expression": "MIN(expected.week_ending_date)",
+    "inputType": "date",
+    "role": "FIRST_EXPECTED_WEEK_SINGLETON",
+    "bindingProof": "expected is public.contract_weeks, exact Contract, additional_seq=0, nonadjustment, allowed status and work_date within week. SELECT count(*),MIN(week_ending_date) then v_count<>1 refusal; date is not a UUID.",
+    "nativeColumnRefs": [
+      "public.contract_weeks.week_ending_date"
+    ]
+  },
+  {
+    "index": 116,
+    "expression": "MIN(command.provider_accepted_at_utc)",
+    "inputType": "timestamp with time zone",
+    "role": "FIRST_ACCEPTED_CONTACT_TIME",
+    "bindingProof": "command is public.weekly_message_dispatch_commands joined through actual candidate/manager memberships and state=ACCEPTED; MIN is factual first provider acceptance time.",
+    "nativeColumnRefs": [
+      "public.weekly_message_dispatch_commands.provider_accepted_at_utc"
+    ]
+  },
+  {
+    "index": 117,
+    "expression": "MIN(missing_rows.work_date)",
+    "inputType": "date",
+    "role": "MISSING_SCOPE_FIRST_WORK_DATE",
+    "bindingProof": "missing_rows.work_date derives row.work_date from weekly_source_upload_rows; grouped exact source cycle/candidate/client/Contract/week.",
+    "nativeColumnRefs": [
+      "public.weekly_source_upload_rows.work_date"
+    ]
+  },
+  {
+    "index": 118,
+    "expression": "MIN(missing_rows.created_at_utc)",
+    "inputType": "timestamp with time zone",
+    "role": "MISSING_SCOPE_FIRST_SEEN",
+    "bindingProof": "missing_rows.created_at_utc derives row.created_at_utc from weekly_source_upload_rows.",
+    "nativeColumnRefs": [
+      "public.weekly_source_upload_rows.created_at_utc"
+    ]
+  },
+  {
+    "index": 119,
+    "expression": "MIN(missing_rows.route_context->>'route_key')",
+    "inputType": "text",
+    "role": "ROUTE_IDENTITY_REPRESENTATIVE_REQUIRES_REVIEW",
+    "bindingProof": "missing_rows.route_context comes from weekly_source_office_route_key_v1(cycle,candidate,client,Contract,row.work_date). ->>route_key is text. MIN selects a hex route identity before native grouping; no count(distinct route_key) exists here. The route producer hashes effective manager recipient, which can vary by row work date: this is a concrete cardinality review boundary, not approved as mere display metadata.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 120,
+    "expression": "MIN(incident_facts.created_at_utc)",
+    "inputType": "timestamp with time zone",
+    "role": "INCIDENT_FIRST_SEEN",
+    "bindingProof": "incident_facts.created_at_utc is incident.created_at_utc from public.weekly_discrepancy_incidents.",
+    "nativeColumnRefs": [
+      "public.weekly_discrepancy_incidents.created_at_utc"
+    ]
+  },
+  {
+    "index": 121,
+    "expression": "MIN(manual.opened_at_utc)",
+    "inputType": "timestamp with time zone",
+    "role": "MANUAL_FIRST_SEEN",
+    "bindingProof": "manual is manual_facts carrying review.* from private.weekly_source_manual_reviews; opened_at_utc is native timestamptz.",
+    "nativeColumnRefs": [
+      "private.weekly_source_manual_reviews.opened_at_utc"
+    ]
+  },
+  {
+    "index": 122,
+    "expression": "MIN(scope.first_seen_at_utc)",
+    "inputType": "timestamp with time zone",
+    "role": "MISSING_GROUP_FIRST_SEEN",
+    "bindingProof": "scope is missing_scopes: first_seen_at_utc=MIN(missing_rows.created_at_utc), native timestamptz; outer MIN finds earliest across grouped scopes.",
+    "nativeColumnRefs": [
+      "public.weekly_source_upload_rows.created_at_utc"
+    ]
+  },
+  {
+    "index": 123,
+    "expression": "MAX(pr.invoice_date)",
+    "inputType": "date",
+    "role": "PRIOR_REPORT_INVOICE_DATE",
+    "bindingProof": "pr is public.weekly_source_self_bill_reports in the existing prior-binding lookup; MAX(invoice_date) is a date boundary.",
+    "nativeColumnRefs": [
+      "public.weekly_source_self_bill_reports.invoice_date"
+    ]
+  },
+  {
+    "index": 124,
+    "expression": "MAX(ep.published_at_utc)",
+    "inputType": "timestamp with time zone",
+    "role": "LATEST_PROJECTION_PUBLICATION",
+    "bindingProof": "ep is public.weekly_source_projection_publications joined through actual current upload and resolved source rows. MAX published time is a freshness boundary; original v_event_count separately checks work-event identity.",
+    "nativeColumnRefs": [
+      "public.weekly_source_projection_publications.published_at_utc"
+    ]
+  },
+  {
+    "index": 125,
+    "expression": "MAX(previous.cutoff_at_utc)",
+    "inputType": "timestamp with time zone",
+    "role": "PREVIOUS_NATIVE_CUTOFF",
+    "bindingProof": "prior/previous is public.weekly_source_cycles, exact same source_group_id and strictly earlier cutoff. MAX obtains latest earlier cutoff boundary, not revision identity.",
+    "nativeColumnRefs": [
+      "public.weekly_source_cycles.cutoff_at_utc"
+    ]
+  },
+  {
+    "index": 126,
+    "expression": "MIN(binding.invoice_line_id::text)",
+    "inputType": "text",
+    "role": "IDENTITY_SINGLETON",
+    "bindingProof": "binding is public.weekly_source_invoice_line_bindings, CURRENT selected invoice, grouped presentation_line_id. Root finite guard before result refuses count(distinct invoice_line_id)<>1. Explicit text input and uuid cast; review preserves that guard.",
+    "nativeColumnRefs": [
+      "public.weekly_source_invoice_line_bindings.invoice_line_id"
+    ]
+  },
+  {
+    "index": 127,
+    "expression": "MIN(source_row.bounded_raw_columns_json->>'reference_number')",
+    "inputType": "text",
+    "role": "SOURCE_DISPLAY_SINGLETON",
+    "bindingProof": "source_row is weekly_source_upload_rows LEFT JOIN movement.nhsp_upload_row_id. JSON ->> yields text; CASE count(distinct source_row.id)=1 before field display, else documented fallback/NULL.",
+    "nativeColumnRefs": [
+      "public.weekly_source_upload_rows.bounded_raw_columns_json"
+    ]
+  },
+  {
+    "index": 128,
+    "expression": "MIN(source_row.bounded_raw_columns_json->>'ward')",
+    "inputType": "text",
+    "role": "SOURCE_DISPLAY_SINGLETON",
+    "bindingProof": "source_row is weekly_source_upload_rows LEFT JOIN movement.nhsp_upload_row_id. JSON ->> yields text; CASE count(distinct source_row.id)=1 before field display, else documented fallback/NULL.",
+    "nativeColumnRefs": [
+      "public.weekly_source_upload_rows.bounded_raw_columns_json"
+    ]
+  },
+  {
+    "index": 129,
+    "expression": "MIN(source_row.bounded_raw_columns_json->>'trust')",
+    "inputType": "text",
+    "role": "SOURCE_DISPLAY_SINGLETON",
+    "bindingProof": "source_row is weekly_source_upload_rows LEFT JOIN movement.nhsp_upload_row_id. JSON ->> yields text; CASE count(distinct source_row.id)=1 before field display, else documented fallback/NULL.",
+    "nativeColumnRefs": [
+      "public.weekly_source_upload_rows.bounded_raw_columns_json"
+    ]
+  },
+  {
+    "index": 130,
+    "expression": "MIN(source_row.bounded_raw_columns_json->>'hospital')",
+    "inputType": "text",
+    "role": "SOURCE_DISPLAY_SINGLETON",
+    "bindingProof": "source_row is weekly_source_upload_rows LEFT JOIN movement.nhsp_upload_row_id. JSON ->> yields text; CASE count(distinct source_row.id)=1 before field display, else documented fallback/NULL.",
+    "nativeColumnRefs": [
+      "public.weekly_source_upload_rows.bounded_raw_columns_json"
+    ]
+  },
+  {
+    "index": 131,
+    "expression": "MIN(source_row.role_band_source)",
+    "inputType": "text",
+    "role": "SOURCE_DISPLAY_SINGLETON",
+    "bindingProof": "Same exact source_row join and CASE count(distinct source_row.id)=1; role_band_source is native text.",
+    "nativeColumnRefs": [
+      "public.weekly_source_upload_rows.role_band_source"
+    ]
+  },
+  {
+    "index": 132,
+    "expression": "MIN(movement.invoice_timesheet_id::text)",
+    "inputType": "text",
+    "role": "IDENTITY_SINGLETON",
+    "bindingProof": "movement is weekly_source_billing_movements joined binding.billing_movement_id; CASE count(distinct movement.invoice_timesheet_id)=1 THEN MIN(...::text)::uuid ELSE NULL.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.invoice_timesheet_id"
+    ]
+  },
+  {
+    "index": 133,
+    "expression": "MAX(m.created_at_utc)",
+    "inputType": "timestamp with time zone",
+    "role": "RENDER_SOURCE_TIMESTAMP",
+    "bindingProof": "m is public.weekly_source_billing_movements in the actual legacy invoice render metadata query. MAX(created_at_utc) is a source-created display timestamp.",
+    "nativeColumnRefs": [
+      "public.weekly_source_billing_movements.created_at_utc"
+    ]
+  },
+  {
+    "index": 134,
+    "expression": "MIN(admitted.week_ending_date)",
+    "inputType": "date",
+    "role": "MISSING_CHECK_WEEK_SINGLETON",
+    "bindingProof": "admitted is actual CTE carrying t.* from public.timesheets after actual signed-submission admission. LATERAL MIN(admitted.week_ending_date) has HAVING count(distinct admitted.week_ending_date)=1 and hr.date_local within that week.",
+    "nativeColumnRefs": [
+      "public.timesheets.week_ending_date"
+    ]
+  },
+  {
+    "index": 135,
+    "expression": "MAX(week_ending_date)",
+    "inputType": "date",
+    "role": "CHECKLIST_LATEST_WEEK",
+    "bindingProof": "Unqualified week_ending_date is counted/scoped CTE t.week_ending_date from sole native public.timesheets t; MAX is latest factual eligible Timesheet week.",
+    "nativeColumnRefs": [
+      "public.timesheets.week_ending_date"
+    ]
+  },
+  {
+    "index": 136,
+    "expression": "MAX(revision.revision_number)",
+    "inputType": "integer",
+    "role": "FINAL_REVISION_SEQUENCE",
+    "bindingProof": "revision is public.weekly_source_final_revisions, exact cycle/authority scope/report scope; MAX(revision_number)+1.",
+    "nativeColumnRefs": [
+      "public.weekly_source_final_revisions.revision_number"
+    ]
+  },
+  {
+    "index": 137,
+    "expression": "MAX(expense.generation)",
+    "inputType": "integer",
+    "role": "EXPENSE_GENERATION_SEQUENCE",
+    "bindingProof": "expense is public.weekly_expense_authority_generations, exact work_event_id; MAX(generation)+1.",
+    "nativeColumnRefs": [
+      "public.weekly_expense_authority_generations.generation"
+    ]
+  },
+  {
+    "index": 138,
+    "expression": "MAX(completion.completion_generation)",
+    "inputType": "integer",
+    "role": "COMPLETION_SEQUENCE",
+    "bindingProof": "completion is public.weekly_source_client_cycle_completions, exact cycle+Client; MAX(completion_generation)+1.",
+    "nativeColumnRefs": [
+      "public.weekly_source_client_cycle_completions.completion_generation"
+    ]
+  },
+  {
+    "index": 139,
+    "expression": "MIN(allowed.column_ordinal)",
+    "inputType": "integer",
+    "role": "CLOSED_COLUMN_CENSUS",
+    "bindingProof": "allowed is private._weekly_source_acl_lifecycle_column_contract_v1() RETURNS TABLE(table_name text,column_name text,column_ordinal integer). MIN=1,MAX=count(*),count(distinct ordinal)=count(*) prove contiguous, unique declared column ordinals.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 140,
+    "expression": "MAX(allowed.column_ordinal)",
+    "inputType": "integer",
+    "role": "CLOSED_COLUMN_CENSUS",
+    "bindingProof": "allowed is private._weekly_source_acl_lifecycle_column_contract_v1() RETURNS TABLE(table_name text,column_name text,column_ordinal integer). MIN=1,MAX=count(*),count(distinct ordinal)=count(*) prove contiguous, unique declared column ordinals.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 141,
+    "expression": "MAX(last_row.source_row_ordinal)",
+    "inputType": "integer",
+    "role": "RENDER_SOURCE_ROW_ORDER",
+    "bindingProof": "last_row is public.weekly_source_upload_rows restricted revision.upload_id; input to MAX is INTEGER source_row_ordinal, then result is explicitly ::bigint+1 for display order after actual report rows. Not an invented row UUID.",
+    "nativeColumnRefs": [
+      "public.weekly_source_upload_rows.source_row_ordinal"
+    ]
+  },
+  {
+    "index": 142,
+    "expression": "MAX(x.instant)",
+    "inputType": "timestamp with time zone",
+    "role": "LONDON_BOUNDARY",
+    "bindingProof": "x.instant VALUES are v_guess timestamptz plus/minus intervals, or generate_series(timestamptz,timestamptz,interval). v_guess/v_result declared timestamptz; MIN/MAX choose actual matching instants across DST overlap or first real instant after gap.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 143,
+    "expression": "MIN(x.instant)",
+    "inputType": "timestamp with time zone",
+    "role": "LONDON_BOUNDARY",
+    "bindingProof": "x.instant VALUES are v_guess timestamptz plus/minus intervals, or generate_series(timestamptz,timestamptz,interval). v_guess/v_result declared timestamptz; MIN/MAX choose actual matching instants across DST overlap or first real instant after gap.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 144,
+    "expression": "MIN(route->>'recipient_scope')",
+    "inputType": "text",
+    "role": "RECIPIENT_SCOPE_SINGLETON",
+    "bindingProof": "route is the native pg_temp.query_email_issues route JSONB; ->>recipient_scope text. CASE count(distinct route->>recipient_scope_key)=1 THEN MIN(...) ELSE CONTRACT_OVERRIDE; native routing labels only.",
+    "nativeColumnRefs": []
+  },
+  {
+    "index": 145,
+    "expression": "MAX(coalesce(e.sent_count,0))",
+    "inputType": "integer",
+    "role": "LEGACY_REMINDER_SEQUENCE",
+    "bindingProof": "e is public.hr_issue_emails joined q.issue_id. COALESCE(sent_count,0) integer, MAX plus existing EMAIL_REMINDER increment derives native reminder sequence.",
+    "nativeColumnRefs": [
+      "public.hr_issue_emails.sent_count"
+    ]
+  },
+  {
+    "index": 146,
+    "expression": "MAX(v.additional_seq)",
+    "inputType": "integer",
+    "role": "NATIVE_SEQUENCE",
+    "bindingProof": "w/v is public.contract_weeks, exact Contract+week predicate. MAX(additional_seq)+1 allocates the next native additional sequence; this is an ordinal, not an identity UUID.",
+    "nativeColumnRefs": [
+      "public.contract_weeks.additional_seq"
+    ]
+  }
+]

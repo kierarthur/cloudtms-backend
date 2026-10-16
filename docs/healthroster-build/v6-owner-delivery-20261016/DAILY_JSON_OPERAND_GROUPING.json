@@ -1,0 +1,34 @@
+{
+  "version": "HEALTHROSTER_DAILY_JSON_OPERAND_GROUPING_V1",
+  "status": "SOURCE_EQUIVALENT_GRAMMAR_CORRECTION_NATIVE_NOT_RUN",
+  "sourceParent": "82a81a4d97f881f4ebca490ae9cff0612e84e405",
+  "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+  "beforeSha256": "6c419edd7a1fe95cb5dfd7a501a3d1a4c8cd105917664eb3563d60e495695025",
+  "afterSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+  "exactReplacement": {
+    "before": "snap->'rate_source_refs_json'||case",
+    "after": "(snap->'rate_source_refs_json')||case",
+    "count": 2
+  },
+  "proof": {
+    "parser": "PostgreSQL17/pglast7.20",
+    "checks": [
+      {
+        "signature": "private.daily_rate_correction_revision_admit_v1(uuid,text)",
+        "pg17_expression_ast_unchanged": true
+      },
+      {
+        "signature": "private.daily_rate_correction_assert_v1(uuid,uuid)",
+        "pg17_expression_ast_unchanged": true
+      }
+    ],
+    "database_execution": false
+  },
+  "reason": "Explicitly group the extracted JSONB before provenance concatenation. Both actual PostgreSQL17 expression trees are identical; this is not a changed monetary or provenance rule.",
+  "root": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+  "currentClosureSha256": "9b7df19ef7df0dfa4d50adb2b223ba171c02bfecb7d87f4b838d881af78512de",
+  "native": "NOT_RUN",
+  "priorIntegrationRecord": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_SQL_SOURCE_INTEGRATION.json",
+  "priorFrozenPayloadRetainedAtCommit": "82a81a4d97f881f4ebca490ae9cff0612e84e405",
+  "sourceGateJsonHazardsRemaining": 0
+}
