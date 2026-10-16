@@ -1,7 +1,9 @@
 // Source-authoring only: refresh the two owned samples after verifying every old byte.
 // Operational users generate a fresh nonce/new directory with build.mjs instead.
 import fs from'node:fs';import path from'node:path';import{here,hash,buildPacket,preflightPacket}from'./component.mjs';import{buildDiscoveryPackets}from'./discovery.mjs';
-for(const mode of['session-context','protected-owner-request']){
+import{writePacketDirectory}from'./build.mjs';
+for(const mode of['session-context','protected-owner-request','service-owner-request']){
+ if(!fs.existsSync(path.join(here,'packets',mode))){console.log(JSON.stringify(writePacketDirectory(path.join(here,'packets',mode),mode)));continue;}
  const dir=path.join(here,'packets',mode),old=JSON.parse(fs.readFileSync(path.join(dir,'INPUT_RECEIPT.json')));
  for(const f of old.files){const b=fs.readFileSync(path.join(dir,f.path));if(b.length!==f.bytes||hash(b)!==f.sha256)throw Error('OWNED_SAMPLE_CHANGED:'+f.path);}
  const packet=buildPacket({mode,marker:old.marker}),d=buildDiscoveryPackets(),p=preflightPacket();

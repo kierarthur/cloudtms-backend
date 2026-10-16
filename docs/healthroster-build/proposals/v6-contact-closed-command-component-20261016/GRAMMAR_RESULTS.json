@@ -1,7 +1,7 @@
 {
   "version": "CONTACT_CLOSED_COMPONENT_OUTER_GRAMMAR_V1",
   "postgresqlParser": "17.7",
-  "passed": 17,
+  "passed": 22,
   "checks": [
     {
       "file": "packets/session-context/COMPONENT.sql",
@@ -52,6 +52,32 @@
     },
     {
       "file": "packets/protected-owner-request/DISCOVERY.sql",
+      "statements": 3,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/service-owner-request/COMPONENT.sql",
+      "statements": 18,
+      "outerGrammar": "PASS",
+      "offlinePlpgsqlSyntaxBodies": 7
+    },
+    {
+      "file": "packets/service-owner-request/FRESH_VERIFY.sql",
+      "statements": 1,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/service-owner-request/READINESS_PREFLIGHT.sql",
+      "statements": 1,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/service-owner-request/DISCOVERY_PREFLIGHT.sql",
+      "statements": 1,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/service-owner-request/DISCOVERY.sql",
       "statements": 3,
       "outerGrammar": "PASS"
     },

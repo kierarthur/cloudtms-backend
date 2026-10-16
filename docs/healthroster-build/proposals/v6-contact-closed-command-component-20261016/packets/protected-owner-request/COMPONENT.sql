@@ -9,6 +9,8 @@ with expected(signature)as(values ('private.weekly_source_query_require_service_
  'repeatable_ledger',(select jsonb_build_object('count',count(*),'md5',md5(coalesce(jsonb_agg(to_jsonb(l)order by to_jsonb(l)::text),'[]'::jsonb)::text))from private.cloudtms_repeatable_ledger l),
  'roles',(select jsonb_object_agg(rolname,jsonb_build_array(rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin,rolreplication,rolbypassrls))from pg_roles where rolname in('anon','authenticated','service_role')),
  'identity_relation_present',to_regclass('private.cloudtms_database_identity')is not null,
+ 'identity_test',exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST'),
+ 'module',(select active_owner||':'||owner_epoch::text from private.bpay_next_module_control where id=1),
  'marker_absent',to_regprocedure('private.hr_contact_closed_4bf03ef2c9057f1c3f7db169f6c529dc()')is null)as contact_component_snapshot;
 
 do $contact_preflight$
@@ -33,8 +35,8 @@ do $contact_preflight$
 
 do $contact_owner_request$ begin
  -- Existing reviewed owner request dialect, transaction-local component test only.
- -- The preceding guard proved actual session_user/current_user equals the unchanged
- -- installed protected owner. No role, actor, writer or capability is manufactured.
+ -- The preceding guard proved session_user/current_user equals the unchanged
+ -- installed native owner. No role, actor, writer or capability is manufactured.
  perform set_config('request.jwt.claim.role','service_role',true);
  perform private.weekly_source_protected_qualification_owner_v1();
  end $contact_owner_request$;

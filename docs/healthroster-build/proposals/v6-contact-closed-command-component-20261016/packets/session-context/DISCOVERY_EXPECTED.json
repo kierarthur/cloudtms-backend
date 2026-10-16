@@ -1,5 +1,6 @@
 {
   "version": "CONTACT_BOUNDED_READONLY_DISCOVERY_EXPECTED_V1",
+  "databaseTarget": "agency_test",
   "preflightSqlSha256": "8ed8f47d05bcb6a3e5a94f3027d9615dcc49d15340b63a9dadd9def9d9dae452",
   "sqlSha256": "0a9b7baefd54851d716e4b49a6a9f47493aca7e60af1adec4e8f59fdc0854210",
   "statementCount": 3,

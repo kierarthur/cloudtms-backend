@@ -6,7 +6,7 @@ from pglast import parse_sql, parser
 root=Path(__file__).resolve().parent
 assert parser.get_postgresql_version()==(17,7)
 checks=[]
-for mode in ('session-context','protected-owner-request'):
+for mode in ('session-context','protected-owner-request','service-owner-request'):
     d=root/'packets'/mode
     expected=json.loads((d/'EXPECTED.json').read_text())
     for name in ('COMPONENT.sql','FRESH_VERIFY.sql','READINESS_PREFLIGHT.sql','DISCOVERY_PREFLIGHT.sql','DISCOVERY.sql'):

@@ -1,0 +1,79 @@
+{
+  "version": "CONTACT_CLOSED_COMMAND_COMPONENT_EXPECTED_V1",
+  "sourceInputsSha256": "24ef002dd779b88b21bbf648dfb677be58bfa6d4960fedd7367eb5788bf0b6d0",
+  "sourceCheckpoint": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "databaseTarget": "agency_test",
+  "mode": "service-owner-request",
+  "marker": "hr_contact_closed_ed4f6a463d28e29e006cf283eb0ec595",
+  "sqlSha256": "db31053d338e5c4f5f08a777fd26d1fb54b755885884bd4a8494eccda7402a31",
+  "verificationSqlSha256": "e2ae53d2a049b02aa90ca1e35d089ef13ae6da6c7e4ed87838212299c2666246",
+  "statementCount": 18,
+  "sourceFunctions": 3,
+  "protectedHelperPreexistingRequired": false,
+  "heldBeforeOverlayStatement": 2,
+  "beforeSnapshotStatement": 1,
+  "proofStatement": 18,
+  "scope": "CLOSED_COMMAND_COMPONENT_ONLY",
+  "apiRoleProof": "NOT_RUN",
+  "native": "NOT_RUN",
+  "files": [
+    {
+      "path": "COMPONENT.sql",
+      "bytes": 14841,
+      "sha256": "db31053d338e5c4f5f08a777fd26d1fb54b755885884bd4a8494eccda7402a31"
+    },
+    {
+      "path": "DISCOVERY.sql",
+      "bytes": 2243,
+      "sha256": "0a9b7baefd54851d716e4b49a6a9f47493aca7e60af1adec4e8f59fdc0854210"
+    },
+    {
+      "path": "DISCOVERY_EXPECTED.json",
+      "bytes": 831,
+      "sha256": "5de853e3a880b8c9a04d1f0b3cd4638beb6ddf8c67694b624e1d1cbe62d53076"
+    },
+    {
+      "path": "DISCOVERY_PREFLIGHT.sql",
+      "bytes": 1568,
+      "sha256": "8ed8f47d05bcb6a3e5a94f3027d9615dcc49d15340b63a9dadd9def9d9dae452"
+    },
+    {
+      "path": "DISCOVERY_PREFLIGHT_REQUEST.json",
+      "bytes": 1767,
+      "sha256": "60998309584be7c8c4bbe7855e59908d96a12147e954a1c9a0e78e72c08532eb"
+    },
+    {
+      "path": "DISCOVERY_REQUEST.json",
+      "bytes": 2460,
+      "sha256": "1209c57074e0748763a1183d06e270b7079b6a8a3f1a6fc9da8256cdcd882a83"
+    },
+    {
+      "path": "EXPECTED.json",
+      "bytes": 818,
+      "sha256": "e5386b9a3a32462c7195eebd5a9217501f724e999bea6fe402827ebfa4424c97"
+    },
+    {
+      "path": "FRESH_VERIFY.sql",
+      "bytes": 2155,
+      "sha256": "e2ae53d2a049b02aa90ca1e35d089ef13ae6da6c7e4ed87838212299c2666246"
+    },
+    {
+      "path": "PREFLIGHT_REQUEST.json",
+      "bytes": 3633,
+      "sha256": "b4fda901099529975ed75e2871c66e09cbfa6dc644295cfd973b75bde12615f4"
+    },
+    {
+      "path": "READINESS_PREFLIGHT.sql",
+      "bytes": 3419,
+      "sha256": "8c25ff3475cde9761d5a0330200135ed3cfbac23c28eb28b681c1e0cfa779f95"
+    },
+    {
+      "path": "REQUEST.json",
+      "bytes": 17351,
+      "sha256": "16acd921455a61b6b03017d832aedb7da912b20fca97947a94ef20601fd3b9ec"
+    }
+  ],
+  "sourceOnlyBuilt": true,
+  "caller": "ROOT_ONLY_KIER_ROLLBACK_TOOL",
+  "locks": "ROOT_OWNS_EXISTING_SHARED_PROTOCOL_NOT_ACQUIRED_BY_BUILDER"
+}

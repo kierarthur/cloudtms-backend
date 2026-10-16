@@ -1,0 +1,19 @@
+{
+  "version": "CONTACT_CLOSED_COMMAND_COMPONENT_EXPECTED_V1",
+  "sourceInputsSha256": "24ef002dd779b88b21bbf648dfb677be58bfa6d4960fedd7367eb5788bf0b6d0",
+  "sourceCheckpoint": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "databaseTarget": "agency_test",
+  "mode": "service-owner-request",
+  "marker": "hr_contact_closed_ed4f6a463d28e29e006cf283eb0ec595",
+  "sqlSha256": "db31053d338e5c4f5f08a777fd26d1fb54b755885884bd4a8494eccda7402a31",
+  "verificationSqlSha256": "e2ae53d2a049b02aa90ca1e35d089ef13ae6da6c7e4ed87838212299c2666246",
+  "statementCount": 18,
+  "sourceFunctions": 3,
+  "protectedHelperPreexistingRequired": false,
+  "heldBeforeOverlayStatement": 2,
+  "beforeSnapshotStatement": 1,
+  "proofStatement": 18,
+  "scope": "CLOSED_COMMAND_COMPONENT_ONLY",
+  "apiRoleProof": "NOT_RUN",
+  "native": "NOT_RUN"
+}
