@@ -1,0 +1,168 @@
+{
+  "version": "SOURCE13_LOCAL_RELEASE_CARDINALITY_REVIEW_V1",
+  "rootCommit": "c29f10c4286f6140b8cbd29a61913d4b83fa3c0d",
+  "status": "NO_REACHABLE_DUPLICATE_FROM_REVIEWED_AUTHORISED_PRODUCER_PATH_SOURCE_ONLY",
+  "sqlCorrectionRequiredByThisReview": false,
+  "inputs": [
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "rawSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "lfSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b"
+    },
+    {
+      "path": "supabase/migrations/04102026_1257_weekly_source_local_protected_decision_receipts_v1.sql",
+      "rawSha256": "922970716a88115ff592a0d3f4c6bd900d4b32c35f8f99ecec05d18a1a3812b1",
+      "lfSha256": "922970716a88115ff592a0d3f4c6bd900d4b32c35f8f99ecec05d18a1a3812b1"
+    },
+    {
+      "path": "supabase/migrations/05102026_0155_weekly_source_local_publication_origin_v2.sql",
+      "rawSha256": "2c065e71ed09ef1d393f30f6518776379c1ea14e43e50c861d624a69ba7391e1",
+      "lfSha256": "2c065e71ed09ef1d393f30f6518776379c1ea14e43e50c861d624a69ba7391e1"
+    },
+    {
+      "path": "supabase/migrations/05102026_0355_weekly_source_local_flat_origin_cutover_v1.sql",
+      "rawSha256": "0d74a542023102d246fedbf26cceda01c4b88f94c79cf1dbb01eb7eea35be98f",
+      "lfSha256": "0d74a542023102d246fedbf26cceda01c4b88f94c79cf1dbb01eb7eea35be98f"
+    },
+    {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "rawSha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+      "lfSha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0155_weekly_source_local_publication_origin_guard_v2.sql",
+      "rawSha256": "87ada3dcd6e1f33484acc2d09f67e7b164a23ccaf94689479f6e43c816a5e70b",
+      "lfSha256": "87ada3dcd6e1f33484acc2d09f67e7b164a23ccaf94689479f6e43c816a5e70b"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0201_weekly_source_local_origin_canonical_v2.sql",
+      "rawSha256": "641e417ad4fb2669f5bb59af583e3a18373c80bbf0cb3431c77d4df225aa1812",
+      "lfSha256": "641e417ad4fb2669f5bb59af583e3a18373c80bbf0cb3431c77d4df225aa1812"
+    },
+    {
+      "path": "supabase/repeatable/05102026_0224_weekly_source_local_entitlement_proposal_v2.sql",
+      "rawSha256": "bdfcf633afa089d5307ca66b1ea70f51ff7b5b2dba9b086596bd136fb2c4e81f",
+      "lfSha256": "bdfcf633afa089d5307ca66b1ea70f51ff7b5b2dba9b086596bd136fb2c4e81f"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "rawSha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "lfSha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "path": "supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "rawSha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade",
+      "lfSha256": "fa4676d00888c5bc400f2df86eeb4c2fcd6bb159462522d16836faefa1108ade"
+    }
+  ],
+  "completeCurrentFunctions": [
+    {
+      "name": "private.weekly_exceptional_pay_complete_local_impl_v1",
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "firstLine": 4203,
+      "completeStatementSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "completeBytes": 36202,
+      "lfStartBytes": 291645,
+      "lfEndBytes": 327847
+    },
+    {
+      "name": "public.weekly_exceptional_pay_complete_local_v1",
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "firstLine": 4708,
+      "completeStatementSha256": "6f3e0f10892d8a9ad217d42ede1d65e6a7f37ae3d3994473aee56d3a19cbd260",
+      "completeBytes": 291,
+      "lfStartBytes": 327983,
+      "lfEndBytes": 328274
+    },
+    {
+      "name": "private.weekly_source_local_protected_pending_released_v1",
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "firstLine": 5046,
+      "completeStatementSha256": "358a7ce6409d7f56350e7c75d584808f979421250a14f524069c7859f3eba885",
+      "completeBytes": 6663,
+      "lfStartBytes": 361095,
+      "lfEndBytes": 367758
+    },
+    {
+      "name": "private.weekly_source_local_publication_context_v2",
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "firstLine": 5921,
+      "completeStatementSha256": "34020c0d1669dc00998ec4007e0d3bb15beba92cc66d13baaaf32518f86a9384",
+      "completeBytes": 17313,
+      "lfStartBytes": 429494,
+      "lfEndBytes": 446807
+    }
+  ],
+  "facts": [
+    {
+      "id": 1,
+      "source": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "lines": [
+        4270,
+        4322,
+        4449
+      ],
+      "fact": "Receipt replay by publication_request PK occurs before and after native lock; original receipt actor/hash/idempotency checked. A fresh receipt insert names exactly one request/generation/family/root."
+    },
+    {
+      "id": 2,
+      "source": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "lines": [
+        4557,
+        4562,
+        4569,
+        4584,
+        4599
+      ],
+      "fact": "Closed original local origin includes publication_request_id and generation_id. v_bundle_id comes from gen_random_uuid, revision is fixed1, typed receipt and native result JSON both use that same local variable; proposal is single-root."
+    },
+    {
+      "id": 3,
+      "source": "supabase/repeatable/05102026_0224_weekly_source_local_entitlement_proposal_v2.sql",
+      "fact": "Proposal reconstructs actual receipt by unique publication_request PK, verifies typed bundle/revision/origin digest/qualification/snapshot, and returns member_root_ids=[p_root_timesheet_id]."
+    },
+    {
+      "id": 4,
+      "source": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "lines": [
+        1954,
+        1992,
+        2019,
+        2031,
+        2178,
+        2284
+      ],
+      "fact": "Common recorder canonicalises and hashes complete Local source origin, rebuilds same exact single-root proposal, and requires exact equality before inserting bundle. Same digest is replay; different origin/digest attempts insert into actual(bundle,revision)PK."
+    },
+    {
+      "id": 5,
+      "source": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "fact": "Decision bundle PK(bundle,revision), unique request_digest; pending bundle unique(bundle,revision), unique request_digest, one live row perbundle. These are genuine schema constraints, not a local JSON-key uniqueness constraint."
+    },
+    {
+      "id": 6,
+      "source": "supabase/repeatable/05102026_0155_weekly_source_local_publication_origin_guard_v2.sql",
+      "fact": "After PREPARING, typed bundle/revision/origin and approved snapshot immutable; result cannot change while state unchanged; only PENDING_FREEZE->COMPLETE is allowed, with original completion time. DELETE/TRUNCATE refuse. Private receipt table revokes all ordinary/service roles."
+    },
+    {
+      "id": 7,
+      "source": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "lines": [
+        5060,
+        5062,
+        5105,
+        5146
+      ],
+      "fact": "Callback intentionally matches pending Local receipt JSON bundle ID, checks actual publication receipt bundle/revision/digest/member-root then strict family/generation/event identities, completes retained receipt/run/request and invokes exact Source release proof. It does not create or reassign a bundle."
+    }
+  ],
+  "conclusion": "Given the reviewed genuine writer/guard chain, two distinct completed Local receipt inserts cannot successfully seal the same bundle/revision: requests/generations have distinct identities, canonical source origin binds the unique request identity, and common PK rejects differing canonical requests for samebundle/revision even if UUID generation collides. All Local producers use revision1. Same-request replay returns its existing receipt. The JSON lookup is not independently schema-unique or STRICT; unrelated corrupted/owner-authored data could violate its assumption, but no such authorised write path was found. This is not installed-data proof.",
+  "postgresSemantics": {
+    "source": "https://www.postgresql.org/docs/17/plpgsql-statements.html#PLPGSQL-STATEMENTS-SQL-ONEROW",
+    "claim": "Non-STRICT SELECT INTO chooses one returned row and discards later rows; it does not raise TOO_MANY_ROWS. No claim is made here about duplicate-row lock execution semantics."
+  },
+  "native": "NOT_RUN",
+  "catalogueAndHistoricalData": "NOT_INSPECTED",
+  "PartB": "NOT_RUN",
+  "changes": "Review artifacts only; no SQL correction/I2/Bank edits."
+}
