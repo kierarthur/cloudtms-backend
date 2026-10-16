@@ -1,0 +1,197 @@
+{
+  "baseline": {
+    "accepted": true,
+    "databaseTarget": "agency_test",
+    "database": "cloudtms_test_clone",
+    "label": "HR_FACTUAL_529ECC_BASELINE",
+    "sqlSha256": "f6e76ff4e26e0c747c4577c112290e076fa5da79fe61250da52156e2173ce7a6",
+    "statementCount": 1,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "signatures": [
+                {
+                  "acl": null,
+                  "owner": null,
+                  "present": false,
+                  "signature": "private.candidate_workflow_factual_snapshot_assert_v1(jsonb)",
+                  "definition_md5": null
+                }
+              ]
+            }
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "jsonb_build_object"
+          ],
+          "rows": [
+            {
+              "jsonb_build_object": {
+                "signatures": [
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.candidate_workflow_factual_snapshot_assert_v1(jsonb)",
+                    "definition_md5": null
+                  }
+                ]
+              }
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+    ]
+  },
+  "result": {
+    "accepted": true,
+    "databaseTarget": "agency_test",
+    "database": "cloudtms_test_clone",
+    "label": "HR_FACTUAL_529ECC_PURE_28_VECTORS",
+    "sqlSha256": "62f9b0370fae2bce82188fecb728b554077674b4b65d0f7b38b05ad5c13b188a",
+    "statementCount": 5,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "jsonb_build_object"
+          ],
+          "rows": [
+            {
+              "jsonb_build_object": {
+                "signatures": [
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.candidate_workflow_factual_snapshot_assert_v1(jsonb)",
+                    "definition_md5": null
+                  }
+                ]
+              }
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+    ]
+  },
+  "before": {
+    "signatures": [
+      {
+        "acl": null,
+        "owner": null,
+        "present": false,
+        "signature": "private.candidate_workflow_factual_snapshot_assert_v1(jsonb)",
+        "definition_md5": null
+      }
+    ]
+  },
+  "after": {
+    "signatures": [
+      {
+        "acl": null,
+        "owner": null,
+        "present": false,
+        "signature": "private.candidate_workflow_factual_snapshot_assert_v1(jsonb)",
+        "definition_md5": null
+      }
+    ]
+  },
+  "status": "PASS_28_COMPLETE_DATA_FREE_VECTORS",
+  "scope": "One pure helper only; no lifecycle/API/financial/full-rehearsal qualification",
+  "sharedTurn": {
+    "key": [
+      20261013,
+      1
+    ],
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 164580,
+    "cliSessionId": 96447,
+    "releaseConfirmed": true,
+    "processExitCode": 0
+  },
+  "sourceUnitCommit": "97154d734a7e0d4e702ed80c57f7a01b835ee349",
+  "route": "cloudtms-miget-operations-kier-codex",
+  "signedInAccount": "kier@arthur-rai.co.uk"
+}
