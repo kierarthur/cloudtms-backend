@@ -180,6 +180,7 @@ test('Candidate mileage upload accepts ordinary JPEG evidence and forbids the re
   };
   const deps = {
     async rpc(name) {
+      if (name === 'timesheet_correction_workflow_projection_v1') return null;
       if (name === 'candidate_component_prepare_atomic_v1') {
         return {
           ok: true, component_id: componentId, workflow_generation: 2,

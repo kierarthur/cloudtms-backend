@@ -1,3 +1,4 @@
+import { decodeCandidateContractMove } from './candidate-contract-move.mjs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import QRCode from 'qrcode';
 import {
@@ -5636,9 +5637,77 @@ function safeExpensePlacement(value) {
   };
 }
 
+function validateCandidateWorkflowFactualSnapshot(value) {
+  const fail=()=>{throw new CandidateHttpError(400,'CANDIDATE_WORKFLOW_PAYLOAD_INVALID');};
+  const object=(v,keys,required=[])=>{
+    if (!v || typeof v!=='object' || Array.isArray(v)
+        || Object.keys(v).some(k=>!keys.includes(k)) || required.some(k=>!Object.hasOwn(v,k))) fail();
+  };
+  const string=(v,max,nullable=false)=>{if (!(nullable&&v===null) && (typeof v!=='string'||v.length>max)) fail();};
+  const number=v=>{if (typeof v!=='number'||!Number.isFinite(v)||v<0||v>1000000) fail();};
+  const date=v=>{
+    if (typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)||v.startsWith('0000-')) fail();
+    const d=new Date(v+'T00:00:00Z');if (!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==v) fail();
+  };
+  const clock=v=>{if (typeof v!=='string'||!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(v)) fail();};
+  const stable=v=>Array.isArray(v)?'['+v.map(stable).join(',')+']':v&&typeof v==='object'
+    ?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}':JSON.stringify(v);
+  const unitMap=v=>{
+    if (!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).length>1000) fail();
+    for(const [k,n] of Object.entries(v)) {if(!/^[A-Z0-9_]{1,40}$/.test(k))fail();number(n);}
+  };
+  object(value,['actual_schedule_json','additional_units_week','additional_units_per_day','timesheet_patch_json','break_entry_context','expense_claim']);
+  const hours=Object.hasOwn(value,'actual_schedule_json');
+  if (!hours&&!Object.hasOwn(value,'expense_claim')) fail();
+  if (['additional_units_week','additional_units_per_day','timesheet_patch_json','break_entry_context'].some(k=>Object.hasOwn(value,k))&&!hours) fail();
+  if(hours) {
+    if(!['additional_units_week','additional_units_per_day','timesheet_patch_json'].every(k=>Object.hasOwn(value,k)))fail();
+    if(!Array.isArray(value.actual_schedule_json)||value.actual_schedule_json.length>112)fail();
+    for(const s of value.actual_schedule_json) {
+      object(s,['row_key','segment_id','date','work_date','start_time','end_time','ref_num','reference','booking_reference','band','break_entry'],['date','work_date','start_time','end_time']);
+      date(s.date);date(s.work_date);clock(s.start_time);clock(s.end_time);
+      for(const k of ['row_key','segment_id'])if(Object.hasOwn(s,k))string(s[k],200);
+      for(const k of ['ref_num','reference','booking_reference','band'])if(Object.hasOwn(s,k))string(s[k],200,true);
+      if(Object.hasOwn(s,'break_entry')) {
+        const e=s.break_entry;
+        if(e?.kind==='NO_BREAK') {object(e,['kind','no_break','break_minutes'],['kind','no_break','break_minutes']);if(e.no_break!==true||e.break_minutes!==0)fail();}
+        else if(e?.kind==='DURATION_MINUTES') {object(e,['kind','break_minutes'],['kind','break_minutes']);if(!Number.isInteger(e.break_minutes)||e.break_minutes<1||e.break_minutes>1440)fail();}
+        else if(e?.kind==='START_END_TIMES') {
+          object(e,['kind','break_start','break_end','calculated_break_minutes'],['kind','break_start','break_end','calculated_break_minutes']);clock(e.break_start);clock(e.break_end);
+          const minutes=t=>Number(t.slice(0,2))*60+Number(t.slice(3));const duration=(minutes(e.break_end)-minutes(e.break_start)+1440)%1440;
+          if(!duration||!Number.isInteger(e.calculated_break_minutes)||e.calculated_break_minutes!==duration)fail();
+        } else fail();
+      }
+    }
+    unitMap(value.additional_units_week);
+    const days=value.additional_units_per_day;if(!days||typeof days!=='object'||Array.isArray(days)||Object.keys(days).length>7)fail();
+    for(const [d,m] of Object.entries(days)){date(d);unitMap(m);}
+    object(value.timesheet_patch_json,['actual_schedule_json','additional_units_week','additional_units_per_day'],['actual_schedule_json','additional_units_week','additional_units_per_day']);
+    for(const k of ['actual_schedule_json','additional_units_week','additional_units_per_day'])if(stable(value[k])!==stable(value.timesheet_patch_json[k]))fail();
+    if(Object.hasOwn(value,'break_entry_context')) {
+      const c=value.break_entry_context;object(c,['context_version','context_token','mode'],['context_version','context_token','mode']);
+      if(c.context_version!=='CANDIDATE_BREAK_ENTRY_V1'||typeof c.context_token!=='string'||!/^([0-9a-f]{64})$/.test(c.context_token)
+          ||!['START_END_TIMES','DURATION_MINUTES'].includes(c.mode))fail();
+    }
+  }
+  if(Object.hasOwn(value,'expense_claim')) {
+    const e=value.expense_claim;object(e,['mileage_units','mileage_total_confirmed','travel_amount','accommodation_amount','other_amount','description']);
+    for(const k of ['mileage_units','travel_amount','accommodation_amount','other_amount'])if(Object.hasOwn(e,k))number(e[k]);
+    if(Object.hasOwn(e,'mileage_total_confirmed')&&typeof e.mileage_total_confirmed!=='boolean')fail();
+    if(Object.hasOwn(e,'description'))string(e.description,2000);
+  }
+  return value;
+}
+
 function normaliseCandidateWorkflowCreatePayload(value) {
   const supplied = isObject(value) ? value : {};
   const workflowKind = upper(supplied.workflow_kind);
+  if(Object.hasOwn(supplied,'input_snapshot')) {
+    if(upper(supplied.scope)!=='WEEKLY' || !['CONTRACT_HOURS','CONTRACT_COMBINED','CONTRACT_EXPENSE'].includes(workflowKind)) {
+      throw new CandidateHttpError(400,'CANDIDATE_WORKFLOW_PAYLOAD_INVALID');
+    }
+    validateCandidateWorkflowFactualSnapshot(supplied.input_snapshot);
+  }
   const timesheetId = UUID_RE.test(text(supplied.timesheet_id))
     ? text(supplied.timesheet_id) : null;
   if (Object.hasOwn(supplied, 'daily_source')) {
@@ -6601,9 +6670,13 @@ async function handleWorkflowResubmit(request, env, deps, workflowId) {
   const body = await readJson(request);
   const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
   const idempotencyKey = requireUuid(body.idempotency_key, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  const payload = {};
+  if (Object.prototype.hasOwnProperty.call(body, 'input_snapshot')) {
+    payload.input_snapshot = validateCandidateWorkflowFactualSnapshot(body.input_snapshot);
+  }
   await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
-    access, env, workflowId, 'RESUBMIT_REJECTED', generation, {}, idempotencyKey
+    access, env, workflowId, 'RESUBMIT_REJECTED', generation, payload, idempotencyKey
   ));
   return jsonResponse(201, {
     ...result,
@@ -6690,13 +6763,61 @@ function mergePendingExpenseUpdateFacts(workflow, supplied) {
   };
 }
 
-async function prepareImmutableSubmission(env, deps, workflow, body, mutationKey) {
+async function prepareImmutableSubmission(env, deps, workflow, body, mutationKey, access = null) {
   const supplied = isObject(body.immutable_submission) ? structuredClone(body.immutable_submission) : {};
   const forbidden = forbiddenFinancialKeys(supplied);
   if (forbidden.length) throw new CandidateHttpError(400, 'CANDIDATE_FINANCIAL_AUTHORITY_FORBIDDEN', { fields: forbidden.slice(0, 20) });
+  let calculationWorkflow = workflow;
+  if (workflow.scope === 'WEEKLY' && access) {
+    const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+      p_timesheet_id: null, p_contract_week_id: null, p_workflow_id: workflow.id
+    }));
+    if (detail?.contract_move != null) {
+      const move = decodeCandidateContractMove(detail.contract_move);
+      const week = detail.contract_week;
+      if (!week || !UUID_RE.test(text(week.id)) || !UUID_RE.test(text(week.contract_id))
+          || !isObject(detail.capabilities?.policy)
+          || detail.timesheet?.id !== move.current_mutable_timesheet_id
+          || !(Array.isArray(detail.workflows) ? detail.workflows : []).some(w =>
+            w.workflow_id === workflow.id && Number(w.generation) === Number(workflow.generation))) {
+        throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+      }
+      // Transient calculation input only. The stored workflow identity and the
+      // original official-presentation/signed body below remain original A.
+      if (workflow.workflow_kind === 'CONTRACT_EXPENSE') {
+        // The worked anchor and server-resolved expense carrier are different
+        // native identities. A targetless draft stays targetless; the existing
+        // canonical producer retains its normal prospective create payload.
+        let calculationWeek = week;
+        let calculationTarget = null;
+        if (workflow.target_timesheet_id) {
+          const carrier = await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+            p_timesheet_id: workflow.target_timesheet_id, p_contract_week_id: null, p_workflow_id: null
+          }));
+          const carrierMove = decodeCandidateContractMove(carrier?.contract_move);
+          if (carrierMove.family_root_id !== move.family_root_id || carrierMove.operation_id !== move.operation_id
+              || carrier.timesheet?.id !== carrierMove.current_mutable_timesheet_id
+              || carrier.contract_week?.contract_id !== week.contract_id || !UUID_RE.test(text(carrier.contract_week?.id))
+              || !(Array.isArray(carrier.workflows) ? carrier.workflows : []).some(w =>
+                w.workflow_id === workflow.id && Number(w.generation) === Number(workflow.generation))) {
+            throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+          }
+          calculationWeek = carrier.contract_week;
+          calculationTarget = carrierMove.current_mutable_timesheet_id;
+        }
+        calculationWorkflow = { ...workflow, contract_id: week.contract_id, contract_week_id: calculationWeek.id,
+          target_timesheet_id: calculationTarget, anchor_timesheet_id: move.current_mutable_timesheet_id,
+          policy_snapshot_json: detail.capabilities.policy, _contract_move_current: calculationTarget != null,
+          _contract_move_expense_anchor: { timesheet_id: move.current_mutable_timesheet_id, contract_week_id: week.id } };
+      } else {
+        calculationWorkflow = { ...workflow, contract_id: week.contract_id, contract_week_id: week.id,
+          target_timesheet_id: move.current_mutable_timesheet_id, policy_snapshot_json: detail.capabilities.policy, _contract_move_current: true };
+      }
+    }
+  }
   const authoritySubmission = workflow.workflow_kind === 'DAILY'
     ? await deps.buildDailySubmission({ workflow, factualSubmission: supplied, mutationKey })
-    : await deps.buildWeeklySubmission({ workflow, factualSubmission: supplied, mutationKey });
+    : await deps.buildWeeklySubmission({ workflow: calculationWorkflow, factualSubmission: supplied, mutationKey });
   const presentation = await buildOfficialPresentationSnapshot(env, workflow);
   const id = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
   const rawCorrection = await correctionProjection(deps, id, workflow.candidate_id);
@@ -8658,7 +8779,7 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     payload = {
       ...payload,
       immutable_submission: await prepareImmutableSubmission(
-        env, deps, workflow, { ...body, immutable_submission: normalisedSubmissionFacts }, mutationKey
+        env, deps, workflow, { ...body, immutable_submission: normalisedSubmissionFacts }, mutationKey, access
       ),
       submission_request_identity: submissionRequestIdentity,
       ...(breakContext ? { break_entry_context: breakContext } : {}),
@@ -9132,7 +9253,9 @@ function managerStartResult(result, routeAuthority) {
       || reviewedCount > components.length) {
     throw new CandidateHttpError(409, 'MANAGER_REVIEW_DOCUMENT_NOT_READY');
   }
+  const move = result?.contract_move == null ? null : decodeCandidateContractMove(result.contract_move);
   return {
+    ...(move ? { contract_move: move } : {}),
     ok: true,
     workflow_id: requireUuid(result?.workflow_id, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
     workflow_generation: requireInteger(
@@ -10213,8 +10336,13 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
       && pages.some((page) => upper(page.component_kind) === 'HOURS_TIMESHEET')) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
   }
+  const immutableOriginalSource=version?.source_kind==='WORKFLOW_IMMUTABLE_SUBMISSION'
+    && SHA256_RE.test(text(version?.sha256)) && pages.every(page=>page.manifest_version===2);
+  if (!targetlessExpense && version?.source_kind==='WORKFLOW_IMMUTABLE_SUBMISSION' && !immutableOriginalSource) {
+    throw new CandidateHttpError(409,'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
   let base = null;
-  if (!targetlessExpense) {
+  if (!targetlessExpense && !immutableOriginalSource) {
     try {
       base = await r2Bytes(env, version.r2_key, text(version.sha256) || null);
     } catch (error) {
@@ -10335,19 +10463,56 @@ function candidatePaperPackComponentForPage(components, expected) {
 
 async function candidatePaperPackContext(request, env, deps, timesheetId) {
   const access = await verifyCandidateAccess(request, env);
-  const id = requireUuid(timesheetId, 'CANDIDATE_TIMESHEET_NOT_FOUND');
+  const requestedId = requireUuid(timesheetId, 'CANDIDATE_TIMESHEET_NOT_FOUND');
+  let id = requestedId;
 
   // Reuse the Candidate-safe detail authority as the ownership/capability gate.
   // The subsequent service reads resolve only the already-authorised current row;
   // neither a raw R2 identity nor a database document identity is exposed.
-  await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
-    p_timesheet_id: id,
+  const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+    p_timesheet_id: requestedId,
     p_contract_week_id: null,
     p_workflow_id: null
   }));
 
+  const move = detail?.contract_move == null ? null : decodeCandidateContractMove(detail.contract_move);
+  let capturedWorkflows = null;
+  if (move) {
+    if (![move.original_timesheet_id, move.current_timesheet_id].includes(requestedId) && move.is_history !== true) {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+    // Only native closed detail membership may select a workflow captured on
+    // intermediate B. A family label or original-A assumption is insufficient.
+    const paperMembers=(Array.isArray(detail.workflows)?detail.workflows:[]).filter(w=>
+      upper(w.route)==='PAPER'&&upper(w.state)==='AWAITING_PAPER_RETURN');
+    if (paperMembers.length!==1) throw new CandidateHttpError(409,
+      paperMembers.length?'CANDIDATE_PAPER_WORKFLOW_CONFLICT':'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
+    const nativeWorkflow=await workflowRow(env,requireUuid(paperMembers[0].workflow_id,'CANDIDATE_WORKFLOW_NOT_FOUND'));
+    id=requireUuid(nativeWorkflow.target_timesheet_id||nativeWorkflow.anchor_timesheet_id,'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+    if (nativeWorkflow.environment!==environmentName(env)
+       || nativeWorkflow.candidate_id!==access.selected_candidate_id
+       || nativeWorkflow.account_id!==access.account_id
+       || nativeWorkflow.id!==paperMembers[0].workflow_id
+       || Number(nativeWorkflow.generation)!==Number(paperMembers[0].generation)
+       || upper(nativeWorkflow.route)!=='PAPER'||upper(nativeWorkflow.state)!=='AWAITING_PAPER_RETURN') {
+      throw new CandidateHttpError(409,'CANDIDATE_CONTEXT_STALE');
+    }
+    const capturedDetail=await rpcCall(deps,'candidate_app_timesheet_detail_v1',candidateRpcArgs(access,env,{
+      p_timesheet_id:id,p_contract_week_id:null,p_workflow_id:nativeWorkflow.id}));
+    const capturedMove=decodeCandidateContractMove(capturedDetail?.contract_move);
+    if (capturedMove.operation_id!==move.operation_id||capturedMove.family_root_id!==move.family_root_id
+      || capturedMove.placement_revision!==move.placement_revision
+      || !(Array.isArray(capturedDetail.workflows)?capturedDetail.workflows:[]).some(w=>
+        w.workflow_id===nativeWorkflow.id&&Number(w.generation)===Number(nativeWorkflow.generation)
+        && text(w.target_timesheet_id||w.anchor_timesheet_id)===id)) {
+      throw new CandidateHttpError(409,'CANDIDATE_CONTEXT_STALE');
+    }
+    capturedWorkflows=[nativeWorkflow];
+  }
+  // A moved original is an immutable source. The preceding native detail proof
+  // authorises this exact source ID; ordinary requests retain the current-only read.
   const timesheet = await restOne(env, 'timesheets',
-    `timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true`
+    `timesheet_id=eq.${encodeURIComponent(id)}${move ? '' : '&is_current=eq.true'}`
     + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
     + 'document_revision,document_state,current_document_version_id,'
     + 'active_document_operation_id,manual_pdf_r2_key');
@@ -10356,12 +10521,14 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
   if (!timesheet || upper(timesheet.sheet_scope) !== 'WEEKLY') {
     throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
   }
-  const workflows = await activePaperWorkflowsForTimesheet(env, id);
+  const workflows = capturedWorkflows || await activePaperWorkflowsForTimesheet(env, id);
   if (workflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
   if (!workflows.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
   const targetlessExpense = upper(workflows[0].workflow_kind) === 'CONTRACT_EXPENSE'
     && !text(workflows[0].target_timesheet_id);
-  if (!qrRoute && !targetlessExpense) {
+  const inheritedOriginalPages=move?safePaperReturnPages(parseJson(workflows[0].paper_return_manifest_json,{})||{}):[];
+  const inheritedOriginalPaper=move && inheritedOriginalPages.length>0 && inheritedOriginalPages.every(page=>page.manifest_version===2);
+  if (!qrRoute && !targetlessExpense && !inheritedOriginalPaper) {
     throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
   }
 
@@ -10405,6 +10572,27 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
     complete = await readyPaperPackReceiptFromOutbox(
       env, workflows[0], timesheet, outbox
     );
+  }
+  // An accepted original paper workflow's v2 pages already use the native
+  // immutable workflow renderer. No generic document/archived TS write is needed.
+  if (!complete && !version && move) {
+    const originalWorkflow=workflows[0];
+    const originalPages=safePaperReturnPages(parseJson(originalWorkflow.paper_return_manifest_json,{})||{});
+    const bodySha=text(originalWorkflow.immutable_submission_sha256).replace(/^\\x/i,'').toLowerCase();
+    if (!SHA256_RE.test(bodySha) || !originalPages.length || originalPages.some(page=>page.manifest_version!==2)
+        || text(originalWorkflow.target_timesheet_id||originalWorkflow.anchor_timesheet_id)!==id) {
+      throw new CandidateHttpError(409,'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+    }
+    const sourceDetail=await rpcCall(deps,'candidate_app_timesheet_detail_v1',candidateRpcArgs(access,env,{
+      p_timesheet_id:id,p_contract_week_id:null,p_workflow_id:originalWorkflow.id}));
+    const sourceMove=decodeCandidateContractMove(sourceDetail?.contract_move);
+    if (sourceMove.family_root_id!==move.family_root_id || sourceMove.operation_id!==move.operation_id
+       || sourceMove.placement_revision!==move.placement_revision
+       || !(Array.isArray(sourceDetail.workflows)?sourceDetail.workflows:[]).some(w=>
+          w.workflow_id===originalWorkflow.id&&Number(w.generation)===Number(originalWorkflow.generation))) {
+      throw new CandidateHttpError(409,'CANDIDATE_CONTEXT_STALE');
+    }
+    version={id:null,r2_key:null,sha256:bodySha,status:'READY',source_kind:'WORKFLOW_IMMUTABLE_SUBMISSION'};
   }
   if (!complete && version?.sha256) {
     const verifiedPack = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
@@ -10498,6 +10686,9 @@ async function resumeCandidatePaperPackFromStatus(env, deps, context) {
 }
 
 async function restartCandidatePaperSourceDocumentFromStatus(env, deps, context, ctx) {
+  if (context?.version?.source_kind==='WORKFLOW_IMMUTABLE_SUBMISSION') {
+    return {ok:true,skipped:true,reason:'WORKFLOW_SOURCE_READY'};
+  }
   const documentState = upper(context?.timesheet?.document_state);
   const activeOperationId = text(context?.timesheet?.active_document_operation_id);
   if (context?.state !== 'PREPARING' || documentState !== 'STALE'
@@ -10529,7 +10720,7 @@ async function restartCandidatePaperSourceDocumentFromStatus(env, deps, context,
 async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null) {
   const context = await candidatePaperPackContext(request, env, deps, timesheetId);
   const documentOperationId = text(context.timesheet.active_document_operation_id);
-  if (context.state === 'PREPARING'
+  if (context.version?.source_kind !== 'WORKFLOW_IMMUTABLE_SUBMISSION' && context.state === 'PREPARING'
       && upper(context.timesheet.document_state) === 'STALE'
       && !UUID_RE.test(documentOperationId)) {
     const work = restartCandidatePaperSourceDocumentFromStatus(
@@ -10553,7 +10744,7 @@ async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null
     });
     if (deferred !== true) await deferred;
   }
-  if (context.state === 'PREPARING' && UUID_RE.test(documentOperationId) && deps.nudgeQrPack) {
+  if (context.version?.source_kind !== 'WORKFLOW_IMMUTABLE_SUBMISSION' && context.state === 'PREPARING' && UUID_RE.test(documentOperationId) && deps.nudgeQrPack) {
     const work = deps.nudgeQrPack({
       pack: {
         document_operation_id: documentOperationId,

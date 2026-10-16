@@ -6536,5 +6536,32 @@
     "original92BaselineObjectsPreserved": true,
     "workerSource": "PENDING_ROOT_INTEGRATION",
     "native": "NOT_RUN"
+  },
+  "candidate_worker_source_continuation_20261016": {
+    "status": "SOURCE_INTEGRATED_NATIVE_API_DEVICE_NOT_RUN",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_WORKER_SOURCE_INTEGRATION.json",
+    "producerCommit": "f5668bf45854ca36b47e713c0e8f3dd3ae4b852b",
+    "completeFunctions": 10,
+    "modules": [
+      {
+        "path": "broker/src/candidate-app-backend.js",
+        "beforeSha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd",
+        "afterSha256": "f6eec2278d521c5a6504b943b6113df27fac323311362c15d5d6be44e7985241"
+      },
+      {
+        "path": "broker/src/index.js",
+        "beforeSha256": "f5bff8ca19712b957eea1e51a1732d54b4f8584d79fe4f57a3a018b782b1b21f",
+        "afterSha256": "640645a70afa96e0d88bbb407666d854d8ddd8d5477e5919562b591cce727335"
+      }
+    ],
+    "decoder": {
+      "path": "broker/src/candidate-contract-move.mjs",
+      "sha256": "172e9f0e1c513751c9713c7581fa869c4055f6342195fcd8e523b0308d7ef6b3"
+    },
+    "publicOperations": 72,
+    "moveProperties": 17,
+    "unchangedMethodPathOperationSecurity": true,
+    "original92ObjectsPreserved": true,
+    "install2": "NOT_INSTALLED"
   }
 }

@@ -28454,6 +28454,33 @@ async function buildCandidateWeeklySubmissionThroughCanonicalAuthority(
       : Promise.resolve(null)
   ]);
 
+  if (workflow._contract_move_current === true && (!existingTimesheet
+      || String(existingTimesheet.timesheet_id) !== targetTimesheetId
+      || String(existingTimesheet.contract_id) !== String(contract.id)
+      || String(cw.timesheet_id) !== targetTimesheetId)) {
+    throw new Error('CANDIDATE_CONTEXT_STALE');
+  }
+  if (workflow._contract_move_expense_anchor) {
+    const anchor = workflow._contract_move_expense_anchor;
+    const [anchorTimesheet, anchorWeek] = await Promise.all([
+      sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(anchor.timesheet_id)}&is_current=eq.true&select=*`),
+      String(anchor.contract_week_id) === String(cw.id) ? Promise.resolve(cw)
+        : sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(anchor.contract_week_id)}&select=*`)
+    ]);
+    if (workflow.workflow_kind !== 'CONTRACT_EXPENSE' || !anchorTimesheet || !anchorWeek
+        || String(anchorTimesheet.timesheet_id) !== String(anchor.timesheet_id)
+        || String(anchorWeek.id) !== String(anchor.contract_week_id)
+        || anchorTimesheet.is_current !== true || anchorTimesheet.archived_at_utc != null
+        || String(anchorTimesheet.contract_id) !== String(contract.id) || anchorTimesheet.sheet_scope !== 'WEEKLY'
+        || ['EXPENSES', 'MILEAGE'].includes(String(anchorTimesheet.line_type || '').toUpperCase())
+        || String(anchorWeek.contract_id) !== String(contract.id) || String(anchorWeek.timesheet_id) !== String(anchor.timesheet_id)
+        || String(anchorWeek.week_ending_date) !== String(cw.week_ending_date)
+        || (workflow.target_timesheet_id && (!existingTimesheet
+          || !['EXPENSES', 'MILEAGE'].includes(String(existingTimesheet.line_type || '').toUpperCase())
+          || Number(cw.additional_seq) <= 0))) {
+      throw new Error('CANDIDATE_CONTEXT_STALE');
+    }
+  }
   const schedule = Array.isArray(factual.actual_schedule_json)
     ? factual.actual_schedule_json.map(normaliseCandidateBreakInput)
     : Array.isArray(factual.timesheet_patch_json?.actual_schedule_json)

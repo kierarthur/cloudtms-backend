@@ -1,0 +1,182 @@
+{
+  "version": "HEALTHROSTER_CANDIDATE_WORKER_FINITE_COMPOSITION_V1",
+  "status": "SOURCE_ONLY_NOT_DEPLOYED",
+  "sourceParent": "5383434d29d39d994476da36a7c514a7b28690f2",
+  "producerCommit": "f5668bf45854ca36b47e713c0e8f3dd3ae4b852b",
+  "modules": [
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "beforeSha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd",
+      "afterSha256": "f6eec2278d521c5a6504b943b6113df27fac323311362c15d5d6be44e7985241"
+    },
+    {
+      "path": "broker/src/index.js",
+      "beforeSha256": "f5bff8ca19712b957eea1e51a1732d54b4f8584d79fe4f57a3a018b782b1b21f",
+      "afterSha256": "640645a70afa96e0d88bbb407666d854d8ddd8d5477e5919562b591cce727335"
+    }
+  ],
+  "functions": [
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "handlePaperPackStatus",
+      "beforeSha256": "33cb5a1ff46182e4068cc4be17f313956bf98647ff6248ea5b212bf7d1f767da",
+      "afterSha256": "2d6a4b018387b3dc580adebec49f6c30b600c4c916d62153e03a94bb8de56713",
+      "addedPureHelper": null
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "restartCandidatePaperSourceDocumentFromStatus",
+      "beforeSha256": "e741dc4f1a587e6ce46052b710576c79ca5b70e8882e432039f5b2feff7ecc6e",
+      "afterSha256": "9f68fd9dd6dd4163180fd320bde480b660b1e8dc324fa998c7ec212c223b0ef0",
+      "addedPureHelper": null
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "candidatePaperPackContext",
+      "beforeSha256": "58fc70541d6ef5f50c413a7d434fe520922589ced9e7829e434fdeb5f0d0c7ab",
+      "afterSha256": "0ac7ea1061f73ebf41f1130f6a17d985de7a6ed320b5c8996fc9f0469ff6b99c",
+      "addedPureHelper": null
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "assembleCandidatePaperPack",
+      "beforeSha256": "3afeb37ea88db52eff93b4ba3aea6430f7e0eff43a041e46071440232b1ed259",
+      "afterSha256": "9b3a3014479e86b85fb1ca9adab33ddc9feb7aa7868829c7d3e258b8a742c5a5",
+      "addedPureHelper": null
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "managerStartResult",
+      "beforeSha256": "135e74481bf743631e0a37fa0bff0c7477c05f8aadcbe23c458e1fff13faf3e6",
+      "afterSha256": "5737a75c5fc4defcbd58be0603374040c0fb2bd8db4bab51953af8bffbfd7c5f",
+      "addedPureHelper": null
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "prepareImmutableSubmission",
+      "beforeSha256": "8614e93944ab0adf2d6a8ee1ab8cd2294db65cbd0cf3e44b3c36e8bcee4f6222",
+      "afterSha256": "ad4ca6edd1174c24cf8e41940e5b3b35027ef1d99150bcb76896bc4f259100b9",
+      "addedPureHelper": null
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "handleWorkflowResubmit",
+      "beforeSha256": "8efebd5299ea19e68fbd81731d748f2311fb6512a438d18a4d163754d5897604",
+      "afterSha256": "22f118e843120c1bd8c40b2c6a3d6e768fb13c3c910a5bbb35f8b24d39e6e3a0",
+      "addedPureHelper": null
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "normaliseCandidateWorkflowCreatePayload",
+      "beforeSha256": "86f86a0fd02fbbb24858fac797ec6f42e1ed6e2dedc4c65c0a2f1784a9153b0d",
+      "afterSha256": "c639ed5f0840513ad7fc4ac63d197cd5aeea51e8bf0a0bf2f6185f99ee5b17ab",
+      "addedPureHelper": "validateCandidateWorkflowFactualSnapshot"
+    },
+    {
+      "module": "broker/src/index.js",
+      "name": "buildCandidateWeeklySubmissionThroughCanonicalAuthority",
+      "beforeSha256": "079335098bbe4e3854976c4ce86da37916a71b247631fcd9b5350918cfe76d3d",
+      "afterSha256": "1453149cf787966300c41a054283ca28f945607ff87112bf7ffcb0daa8e298ad",
+      "addedPureHelper": null
+    }
+  ],
+  "addedPureHelper": "validateCandidateWorkflowFactualSnapshot",
+  "decoder": {
+    "path": "broker/src/candidate-contract-move.mjs",
+    "sha256": "172e9f0e1c513751c9713c7581fa869c4055f6342195fcd8e523b0308d7ef6b3"
+  },
+  "caller": {
+    "path": "broker/src/candidate-app-backend.js",
+    "exactOld": "env, deps, workflow, { ...body, immutable_submission: normalisedSubmissionFacts }, mutationKey",
+    "exactNew": "env, deps, workflow, { ...body, immutable_submission: normalisedSubmissionFacts }, mutationKey, access"
+  },
+  "unrelatedModuleBytesPreserved": true,
+  "noRouteOrBindingConfigurationChange": true,
+  "native": "NOT_RUN",
+  "api": "NOT_RUN",
+  "deployment": false,
+  "record": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_WORKER_SOURCE_INTEGRATION.json",
+  "finiteProvenance": {
+    "recipeSha256": "e4ae5b059060aca1a9318e0c447c5530a1f6100eef79af6f1094a0beef0a9c44",
+    "workerMapSha256": "9655a0af572f2808630b95cc0d7ee5e32eb8a71220c4eaa0aa530579a74829a9",
+    "full10FrozenGitSourceAndSpanHashes": "PASS",
+    "completeFunctionReplacement": "9 existing +1 new pure helper; all10 final bodies equal payload",
+    "unrelatedModuleBytesReverseProof": "PASS before sole exact caller argument and import"
+  },
+  "validation": {
+    "syntaxChecks": {
+      "modules": 3,
+      "status": "PASS"
+    },
+    "focusedExistingSuite": {
+      "files": 11,
+      "passed": 312,
+      "failed": 0
+    },
+    "selectedAuthorBehaviorSuites": {
+      "files": 5,
+      "passed": 76,
+      "failed": 0,
+      "scope": "Frozen complete payload behavior; every final mounted function separately byte-equal"
+    },
+    "dataPlaneRegistry": "PASS2entries",
+    "publicBoundary": {
+      "operations": 72,
+      "policyMatchesAll72": true,
+      "methodPathOperationSecurityUnchangedFrom": "b2fed43f6805a309783dd87d1ccf408f833935c8",
+      "ownSerializationSha256": "147708b82b05bc203fc40a6c5fb35e97235d9ebc4723eca6708188745ed2ed98",
+      "serializationKeys": [
+        "path",
+        "method",
+        "operationId",
+        "security"
+      ],
+      "moveProperties": 17,
+      "moveSchemaExactlyUnchanged": true,
+      "rootPolicySha256": "389c83f7b1c1931a89d44ca675893a702f333372414b505643042ccee361c937"
+    },
+    "fixtureCorrections": [
+      {
+        "path": "tests/candidate-app-backend.test.js",
+        "beforeSha256": "d411c8b3453e1abbbfc3c91d5510bccb9aaf29f242eb88ee78bda0d5d456cf10",
+        "reason": "New genuine authenticated workflow-detail read; ordinary no-move fixture remains unchanged."
+      },
+      {
+        "path": "tests/candidate-paper-qr-pack-v2.test.js",
+        "beforeSha256": "3f73f7cfc1332af67f1264fbddf59b57cd5f0472885ed4d51788fc01d8d7e5fa",
+        "reason": "Baseline same-source failure: ordinary fixture lacked existing correction-projection read; explicit null preserves no correction owner."
+      }
+    ],
+    "baselineComparison": {
+      "sourceCommit": "5383434d29d39d994476da36a7c514a7b28690f2",
+      "sourceSha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd",
+      "combinedPaperRemoval": "PASS prior source; added exact workflow-detail no-move mock, preserving existing assertions",
+      "mileageUpload": "Same correction-projection failure prior source; added explicit null ordinary-workflow mock, preserving every upload/QR/metadata assertion"
+    }
+  },
+  "review": {
+    "workerBindingsOrRoutesChanged": false,
+    "latestWorkersTypes": "5.20261016.1",
+    "officialTypesIndexSha256": "dd24c1870cb19c1b9337cca57bbc0bd9a7ae9b14098dacd81ae7a712196ab5ca",
+    "retrieval": "Official npm registry tarball read in memory; no dependency/config files changed",
+    "outerManagerStartCorrectionEnrichment": "Preserved by exact unrelated-byte reverse proof",
+    "moveExpenseActualFinalizer": "Real Banking dependency remains controlled refusal, not acceptance"
+  },
+  "qualification": {
+    "native": "NOT_RUN",
+    "api": "NOT_RUN",
+    "physicalPhone": "NOT_RUN",
+    "generatedContract": "PENDING_FINAL_COMPOSITION",
+    "fullRehearsal": "NOT_RUN",
+    "install2": "NOT_INSTALLED",
+    "finalCritics": "NOT_COMPLETE"
+  },
+  "effects": {
+    "databaseSessions": 0,
+    "sharedLockHeld": false,
+    "testMutation": false,
+    "deployment": false,
+    "bankingMessage": false,
+    "secretsPrinted": false
+  }
+}

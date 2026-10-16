@@ -2840,6 +2840,12 @@ test('combined PAPER removal submit restores frozen hours, untouched expenses an
         if (name === 'candidate_break_entry_context_get_v1') {
           throw new Error('unchanged frozen hours requested a new break context');
         }
+        if (name === 'candidate_app_timesheet_detail_v1') {
+          assert.equal(args.p_workflow_id, workflowId);
+          assert.equal(args.p_timesheet_id, null);
+          assert.equal(args.p_contract_week_id, null);
+          return { contract_move: null }; // Ordinary workflow has no contract move.
+        }
         if (name === 'timesheet_correction_request_projection_v1') return null;
         if (name === 'candidate_expense_update_submit_atomic_v1') {
           return {
