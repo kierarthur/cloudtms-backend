@@ -1,0 +1,80 @@
+{
+  "scope": "OFFLINE_POSTGRES17_SOURCE_GRAMMAR_ONLY",
+  "postgresql": [
+    17,
+    7
+  ],
+  "pglast": "v7.20",
+  "cases": [
+    {
+      "caseId": "contact20-lock1",
+      "firstBFinalLockIndex": 12,
+      "firstBAllRetainedStatementASTUnchanged": true,
+      "secondMainStatements": 2,
+      "secondFreshVerificationStatements": 2,
+      "canonicalFixtureAndHeldAPairRawIdentical": true,
+      "secondMainAndFreshASTIdentical": true,
+      "secondMainSha256": "babf73f90d57c7f120e96acccf9813314f6e320592c335d64c5a468ae319dabd",
+      "secondFreshVerificationSha256": "babf73f90d57c7f120e96acccf9813314f6e320592c335d64c5a468ae319dabd"
+    },
+    {
+      "caseId": "contact20-lock2",
+      "firstBFinalLockIndex": 14,
+      "firstBAllRetainedStatementASTUnchanged": true,
+      "secondMainStatements": 2,
+      "secondFreshVerificationStatements": 2,
+      "canonicalFixtureAndHeldAPairRawIdentical": true,
+      "secondMainAndFreshASTIdentical": true,
+      "secondMainSha256": "e0560d3dbfbe1fafc24683b045bd5be0ce61055d1cb6184857b91a5882777771",
+      "secondFreshVerificationSha256": "e0560d3dbfbe1fafc24683b045bd5be0ce61055d1cb6184857b91a5882777771"
+    },
+    {
+      "caseId": "contact30-lock1",
+      "firstBFinalLockIndex": 12,
+      "firstBAllRetainedStatementASTUnchanged": true,
+      "secondMainStatements": 2,
+      "secondFreshVerificationStatements": 2,
+      "canonicalFixtureAndHeldAPairRawIdentical": true,
+      "secondMainAndFreshASTIdentical": true,
+      "secondMainSha256": "5576c00105a5974af6a720db8e6b8be5c3ced336176d611930ed437a85e4d272",
+      "secondFreshVerificationSha256": "5576c00105a5974af6a720db8e6b8be5c3ced336176d611930ed437a85e4d272"
+    },
+    {
+      "caseId": "contact30-lock2",
+      "firstBFinalLockIndex": 14,
+      "firstBAllRetainedStatementASTUnchanged": true,
+      "secondMainStatements": 2,
+      "secondFreshVerificationStatements": 2,
+      "canonicalFixtureAndHeldAPairRawIdentical": true,
+      "secondMainAndFreshASTIdentical": true,
+      "secondMainSha256": "1f8e8f791cab55b8a6bdfa82b484611eb7085f4566a8723af50d1cf26b09993d",
+      "secondFreshVerificationSha256": "1f8e8f791cab55b8a6bdfa82b484611eb7085f4566a8723af50d1cf26b09993d"
+    },
+    {
+      "caseId": "contact30-lock3",
+      "firstBFinalLockIndex": 16,
+      "firstBAllRetainedStatementASTUnchanged": true,
+      "secondMainStatements": 2,
+      "secondFreshVerificationStatements": 2,
+      "canonicalFixtureAndHeldAPairRawIdentical": true,
+      "secondMainAndFreshASTIdentical": true,
+      "secondMainSha256": "c0e48495f2388fff7005195d9b063771549306854392d08c96d1f118c8295a77",
+      "secondFreshVerificationSha256": "c0e48495f2388fff7005195d9b063771549306854392d08c96d1f118c8295a77"
+    },
+    {
+      "caseId": "contact30-lock4",
+      "firstBFinalLockIndex": 18,
+      "firstBAllRetainedStatementASTUnchanged": true,
+      "secondMainStatements": 2,
+      "secondFreshVerificationStatements": 2,
+      "canonicalFixtureAndHeldAPairRawIdentical": true,
+      "secondMainAndFreshASTIdentical": true,
+      "secondMainSha256": "e06b7d442223329625bf84f54055a14e1277b9b197ec07442296fb34a1c7ae28",
+      "secondFreshVerificationSha256": "e06b7d442223329625bf84f54055a14e1277b9b197ec07442296fb34a1c7ae28"
+    }
+  ],
+  "canonicalSqlChanged": false,
+  "databaseCalls": 0,
+  "native": "NOT_RUN",
+  "PartB": "NOT_RUN"
+}

@@ -1,0 +1,59 @@
+{
+  "scope": "COMPLETE_SOURCE_UNIQUE_REVERSAL_NOT_NATIVE",
+  "sourceCommit": "bf11b6f2c4dbdcba4d381f02a302922ea510b755",
+  "changes": [
+    {
+      "file": "result-validator.mjs",
+      "predecessor": "../v6-contact-local-metadata-mcp-adapter-20261016/result-validator.mjs",
+      "beforeSha256": "c57b76397101565b48e4cd8330b435135091f0f56b56bc2f050479a03e4177fb",
+      "afterSha256": "e879b5ef77c1acc61d2f12ef03f62d8dae1770386e3e5ec25a2cbefc3817570a",
+      "hunks": [
+        {
+          "before": "from './input-builder.mjs'",
+          "after": "from '../v6-contact-local-metadata-mcp-adapter-20261016/input-builder.mjs'"
+        },
+        {
+          "before": "continue_on_error:false,max_rows_per_statement:1,statement_timeout_ms:30000,lock_timeout_ms:2000};",
+          "after": "verification_sql:text,continue_on_error:false,max_rows_per_statement:1,statement_timeout_ms:30000,lock_timeout_ms:2000};"
+        },
+        {
+          "before": "qualificationResult.sqlSha256===sha(qualificationInput.sql)\n",
+          "after": "qualificationResult.sqlSha256===sha(qualificationInput.sql)&&qualificationResult.statementCount===2\n"
+        },
+        {
+          "before": " requireThat(qualificationResult.rollbackVerification?.connectedFresh===true&&qualificationResult.rollbackVerification.database==='cloudtms_test_clone','MCP_SECOND_FRESH_ROLLBACK_REQUIRED');\n const fixtureProof=oneRow(qualificationResult.statements[0]),held=oneRow(qualificationResult.statements[1]);\n requireThat(held.holderGranted===true&&held.holderPid===receipt.holderIdentity.backendPid&&held.precedingGranted===true&&held.precedingCount===0\n  &&held.writerPid===fixtureProof.backendPid,'MCP_FIXTURE_PROOF_HOLDER_REQUIRED');\n",
+          "after": " // The main tool session may legitimately reuse original B's pool PID. It\n // is only execution evidence, never the fresh fixture/restoration authority.\n const mainFixture=oneRow(qualificationResult.statements[0]),mainHeld=oneRow(qualificationResult.statements[1]);\n requireThat(Number.isSafeInteger(mainFixture.backendPid)&&mainFixture.backendPid>0\n  &&mainHeld.holderGranted===true&&mainHeld.holderPid===receipt.holderIdentity.backendPid\n  &&mainHeld.precedingGranted===true&&mainHeld.precedingCount===0&&mainHeld.writerPid===mainFixture.backendPid,'MCP_SECOND_MAIN_PROOF_REQUIRED');\n const fresh=qualificationResult.rollbackVerification;\n requireThat(fresh?.connectedFresh===true&&fresh.database==='cloudtms_test_clone'\n  &&statementSequence(fresh.statements,2)&&fresh.statements.every(s=>!s.error),'MCP_SECOND_FRESH_ROLLBACK_REQUIRED');\n const fixtureProof=oneRow(fresh.statements[0]),held=oneRow(fresh.statements[1]);\n requireThat(held.holderGranted===true&&held.holderPid===receipt.holderIdentity.backendPid&&held.precedingGranted===true&&held.precedingCount===0\n  &&held.writerPid===fixtureProof.backendPid,'MCP_FIXTURE_PROOF_HOLDER_REQUIRED');\n requireThat(fixtureProof.connectedFresh===true&&Number.isSafeInteger(fixtureProof.backendPid)&&fixtureProof.backendPid>0\n  &&![stage.transaction.backendPid,receipt.holderIdentity.backendPid,beforePacket.peer.readerPid,afterPacket.peer.readerPid,\n    mainFixture.backendPid].includes(fixtureProof.backendPid),'MCP_SECOND_VERIFICATION_PID_NOT_FRESH');\n"
+        },
+        {
+          "before": "version:'CONTACT_FIXED_LOCAL_METADATA_MCP_QUALIFICATION_V1'",
+          "after": "version:'CONTACT_FIXED_LOCAL_METADATA_MCP_FRESH_VERIFICATION_V2'"
+        },
+        {
+          "before": "  readerPids:{before:beforePacket.peer.readerPid,after:afterPacket.peer.readerPid,nativeB:stage.transaction.backendPid,holder:receipt.holderIdentity.backendPid},",
+          "after": "  readerPids:{before:beforePacket.peer.readerPid,after:afterPacket.peer.readerPid,nativeB:stage.transaction.backendPid,holder:receipt.holderIdentity.backendPid,qualificationMain:mainFixture.backendPid,qualificationFresh:fixtureProof.backendPid},\n  qualificationVerificationSqlSha256:sha(qualificationInput.verification_sql),fixtureQualificationSource:'SECOND_MCP_FRESH_READ_ONLY_VERIFICATION_ONLY',"
+        }
+      ]
+    },
+    {
+      "file": "hold-case.mjs",
+      "predecessor": "../v6-contact-local-metadata-mcp-adapter-20261016/hold-case.mjs",
+      "beforeSha256": "97458ca1ce02ab60e2a5952a84ccb2e44b551bfaa529e0e9749bc2b7d3750bf6",
+      "afterSha256": "f3b62df9025eb6be0a6459c16dcbd9d464b24116470736709676c5043997a4a3",
+      "hunks": [
+        {
+          "before": "from './input-builder.mjs'",
+          "after": "from '../v6-contact-local-metadata-mcp-adapter-20261016/input-builder.mjs'"
+        },
+        {
+          "before": "from './control.mjs'",
+          "after": "from '../v6-contact-local-metadata-mcp-adapter-20261016/control.mjs'"
+        },
+        {
+          "before": "await import('./input-builder.mjs')",
+          "after": "await import('../v6-contact-local-metadata-mcp-adapter-20261016/input-builder.mjs')"
+        }
+      ]
+    }
+  ],
+  "unchangedHolderLifecycleAndCleanup": true
+}

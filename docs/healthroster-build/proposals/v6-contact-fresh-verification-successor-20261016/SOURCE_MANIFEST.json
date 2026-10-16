@@ -1,0 +1,127 @@
+{
+  "version": "CONTACT_FRESH_READ_ONLY_VERIFICATION_SUCCESSOR_V2",
+  "sourceParentCommit": "bf11b6f2c4dbdcba4d381f02a302922ea510b755",
+  "files": [
+    {
+      "file": "AUTHORITY.json",
+      "bytes": 3633,
+      "sha256": "4ae051c9cabd0bce60209b954556992754cb2e96246d4c5e3a98edc17e820581"
+    },
+    {
+      "file": "DELTA.json",
+      "bytes": 4996,
+      "sha256": "06de8a5a9e080cc3d0b75a71a835c95ba5237fe665357012cbd618323a353a47"
+    },
+    {
+      "file": "GRAMMAR_RESULT.json",
+      "bytes": 3412,
+      "sha256": "1b87561403d9ec726c0fa5bd331a675a36cc179cf8fccc1cca5bb7075656f9cb"
+    },
+    {
+      "file": "NATIVE_POOL_SHAPE.json",
+      "bytes": 1276,
+      "sha256": "bd8826aefde02b109f024c995f8d1f4beb75994e7476106297537ffd071f6fab"
+    },
+    {
+      "file": "OFFLINE_QUALIFICATION_INPUTS.json",
+      "bytes": 21974,
+      "sha256": "23259ad1c7a6c07ff3c9e8c7e9abbe3c0427f58d5af68af1663d374039daa313"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4816,
+      "sha256": "754450213a4c8d0457ae42c3a9020fb12523f9acc5348d4c4957592311b7278a"
+    },
+    {
+      "file": "SOURCE_CHECKS.json",
+      "bytes": 594,
+      "sha256": "50cc78778922b17ead724dd952a2518f285ad6851516a08894d0c0e318f0dde8"
+    },
+    {
+      "file": "adapter.test.mjs",
+      "bytes": 21406,
+      "sha256": "28fba031b1e92724c8535528f90898126e7c2287453e02a8d9b685d18c45c148"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 4366,
+      "sha256": "a235bba0b37425c79aacb991d7ee556a8e064ac3f4b40b065b49062ec18bf666"
+    },
+    {
+      "file": "grammar-review.py",
+      "bytes": 2419,
+      "sha256": "e9996b6c086b43c9ce7cd6c3c5b9f0d892c5833bc54d13a4b57e892b8c3941a1"
+    },
+    {
+      "file": "hold-case.mjs",
+      "bytes": 10474,
+      "sha256": "f3b62df9025eb6be0a6459c16dcbd9d464b24116470736709676c5043997a4a3"
+    },
+    {
+      "file": "result-validator.mjs",
+      "bytes": 11422,
+      "sha256": "e879b5ef77c1acc61d2f12ef03f62d8dae1770386e3e5ec25a2cbefc3817570a"
+    }
+  ],
+  "pinnedPredecessorFiles": [
+    {
+      "file": "../v6-contact-large-frame-feasibility-20261016/fixed-metadata-reader.mjs",
+      "sha256": "9e0bce9e142266e28ed24a777ae97d26fcc54eab52f4e5b7656344228a18b556"
+    },
+    {
+      "file": "../v6-contact-large-frame-feasibility-20261016/SOURCE_PINS.json",
+      "sha256": "d05359d8b43c8197b4f33f4953d3c1baf3673a07575f1e21c1cc2f175249abd8"
+    },
+    {
+      "file": "../v6-contact-large-frame-feasibility-20261016/SOURCE_MANIFEST.json",
+      "sha256": "8e7fa5632e2ef84940042c9ae623429c3ff68dba618cdb3f9b5991c3c07e2f00"
+    },
+    {
+      "file": "../v6-contact-large-frame-feasibility-20261016/GRAMMAR_RESULT.json",
+      "sha256": "4be2a4cc248ff18d0ebdb0955ac038bad375b209c77799a52422a2e62b6966f1"
+    },
+    {
+      "file": "../v6-contact-six-lock-mcp-successor-20261016/input-builder.mjs",
+      "sha256": "15ab65b9e1253b207b393d696de77dd4cf4c2fbe9e1847b282991bf2d00e31cf"
+    },
+    {
+      "file": "../v6-contact-six-lock-mcp-successor-20261016/AUTHORITY.json",
+      "sha256": "832055c9bc87adb9cb60ad25d2c778404348b83316614a5b3b5f9a5aa16e83b9"
+    },
+    {
+      "file": "../v6-contact-six-lock-contention-20261016/prepare.mjs",
+      "sha256": "3f8008b3bb0fda7bc62ba7ab17442a1c21681d82279e64f09b31a72eec8f96ce"
+    },
+    {
+      "file": "../v6-contact-six-lock-contention-20261016/PLAN.json",
+      "sha256": "156718044e8bb5b4fdeb19eb1ad650dcfbb391f9fe42e429c7ba0306cb182e13"
+    },
+    {
+      "file": "../v6-contact-local-metadata-mcp-adapter-20261016/SOURCE_MANIFEST.json",
+      "sha256": "f44c56b51d85ee4c63099d1c233004ae78307c438c573fa7fc435daa2ac58d4d"
+    },
+    {
+      "file": "../v6-contact-local-metadata-mcp-adapter-20261016/input-builder.mjs",
+      "sha256": "6ba358c7890d80c1b821a7bde7ed594723c5c1273d0f677b4315e8fd321ffcf6"
+    },
+    {
+      "file": "../v6-contact-local-metadata-mcp-adapter-20261016/control.mjs",
+      "sha256": "42d86828a85fcb22606c9e691571424f126e8beafea2af1df4e5e38e108bf548"
+    },
+    {
+      "file": "../v6-contact-local-metadata-mcp-adapter-20261016/result-validator.mjs",
+      "sha256": "c57b76397101565b48e4cd8330b435135091f0f56b56bc2f050479a03e4177fb"
+    },
+    {
+      "file": "../v6-contact-local-metadata-mcp-adapter-20261016/hold-case.mjs",
+      "sha256": "97458ca1ce02ab60e2a5952a84ccb2e44b551bfaa529e0e9749bc2b7d3750bf6"
+    },
+    {
+      "file": "../v6-contact-local-metadata-mcp-adapter-20261016/OFFLINE_INPUTS.json",
+      "sha256": "beb823174f7a7124837eb5057fde846735b805b473a9fd64935f53db7f3bf06a"
+    }
+  ],
+  "sourceVerdict": "BOUNDED_SOURCE_READY_FOR_ROOT_REVIEW_NATIVE_NOT_RUN",
+  "native": "NOT_RUN",
+  "PartB": "NOT_RUN"
+}

@@ -1,0 +1,56 @@
+{
+  "scope": "HISTORICAL_HELD_ATTEMPT_SAFE_FRAME_SHAPE_ONLY",
+  "path": ".codex-tmp/contact-six-local-mcp-20261016-contact20-lock2-attempt1",
+  "nativeResultSha256": "40a16e5adf48fcb4298ec5a236e97e68851cbfa92bfafb59192d05c9d9320da2",
+  "qualificationResultSha256": "5c4aa770a0d34f15a1cfbcb22f9747e41f04a8545ae5041c609d6100578d9b39",
+  "qualificationResultBytes": 1488,
+  "mainToolKeys": [
+    "accepted",
+    "databaseTarget",
+    "database",
+    "label",
+    "sqlSha256",
+    "statementCount",
+    "statements",
+    "rolledBack",
+    "rollbackVerification",
+    "warnings"
+  ],
+  "mainStatementKeys": [
+    [
+      "statement",
+      "command",
+      "rowCount",
+      "fields",
+      "rows",
+      "rowsTruncated"
+    ],
+    [
+      "statement",
+      "command",
+      "rowCount",
+      "fields",
+      "rows",
+      "rowsTruncated"
+    ]
+  ],
+  "mainFixtureKeys": [
+    "database",
+    "relations",
+    "backendPid",
+    "parentStatus",
+    "rehearsalXid",
+    "connectedFresh",
+    "rehearsalBackendPid"
+  ],
+  "mainPidReusedOriginalB": true,
+  "mainFixtureConnectedFresh": true,
+  "verificationKeys": [
+    "connectedFresh",
+    "database",
+    "statements"
+  ],
+  "verificationStatements": 0,
+  "qualification": "HELD_NOT_PASS",
+  "rawPidsRowsOrFramesRetained": false
+}

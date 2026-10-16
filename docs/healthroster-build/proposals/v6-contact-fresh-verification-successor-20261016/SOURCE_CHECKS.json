@@ -1,0 +1,25 @@
+{
+  "scope": "OFFLINE_SOURCE_SYNTHETIC_EVIDENCE_ONLY",
+  "adapterTests": 40,
+  "unchangedFixedReaderTests": 10,
+  "pass": 50,
+  "fail": 0,
+  "pg17Cases": 6,
+  "firstBFinalIndices": [
+    12,
+    14,
+    12,
+    14,
+    16,
+    18
+  ],
+  "firstBAndCanonicalSqlUnchanged": true,
+  "wholeHolderLifecycleAndCleanupUnchanged": true,
+  "completeMapsPersisted": false,
+  "canonicalWeakMapFixtureAndAttributionChecksUnchanged": true,
+  "historicalPoolPidReuseAcceptedOnlyForFreshCurrentTransaction": true,
+  "databaseCalls": 0,
+  "credentialFilesRead": 0,
+  "native": "NOT_RUN",
+  "PartB": "NOT_RUN"
+}
