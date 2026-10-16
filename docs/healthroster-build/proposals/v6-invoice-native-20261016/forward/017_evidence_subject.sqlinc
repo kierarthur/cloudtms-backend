@@ -1,0 +1,12 @@
+-- A read/render subject only. This never grants invoice-line admission or
+-- rewrites current B's signature, approval, financial or physical columns.
+create or replace function private.invoice_contract_move_original_evidence_eligible_v1(p_timesheet_id uuid)
+returns boolean language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare s jsonb;
+begin
+ s:=private.timesheet_contract_move_evidence_source_v1(p_timesheet_id);
+ return s is not null and s->>'original_timesheet_id'=p_timesheet_id::text;
+end;
+$function$;

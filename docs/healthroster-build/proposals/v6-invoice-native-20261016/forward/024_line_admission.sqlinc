@@ -3,7 +3,7 @@ returns boolean language plpgsql stable security definer
 set search_path to 'pg_catalog','public','private','pg_temp'
 as $function$
 declare v_invoice public.invoices%rowtype;v_original public.invoice_lines%rowtype;v_line private.timesheet_contract_move_invoice_scope_lines%rowtype;
- v_scope private.timesheet_contract_move_invoice_scopes%rowtype;v_p public.weekly_source_invoice_presentation_lines%rowtype;
+ v_scope private.timesheet_contract_move_invoice_scopes%rowtype;
 begin
  select i.* into v_invoice from public.invoices i where i.id=(p_new->>'invoice_id')::uuid;
  if v_invoice.type='CREDIT_NOTE' and v_invoice.header_snapshot_json#>>'{credit_scope,kind}'='CONTRACT_MOVE' then
@@ -24,16 +24,10 @@ begin
   return private.invoice_source_original_line_allowed_v1(p_new);end if;
  if not private.timesheet_contract_source_original_eligible_v1((p_new->>'timesheet_id')::uuid)
   or v_invoice.header_snapshot_json->>'schema_version'<>'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'
-  or p_new#>>'{meta_json,line_type}'<>'WEEKLY_FINAL_SOURCE'
-  or coalesce(current_setting('cloudtms.weekly_source_invoice_owner',true),'') not in('ADMIT_SOURCE_INVOICE','MOVE_SOURCE_INVOICE') then return false;end if;
- select p.* into v_p from public.weekly_source_invoice_presentation_lines p
-  where p.id=(p_new#>>'{meta_json,presentation_line_id}')::uuid
-   and p.client_manifest_id::text=v_invoice.header_snapshot_json#>>'{meta,client_manifest_id}'
-   and p.client_id=v_invoice.client_id;
- return v_p.id is not null and (p_new->>'total_charge_ex_vat')::numeric=v_p.total_charge_ex_vat
-  and (p_new->>'vat_amount')::numeric=v_p.vat_amount and (p_new->>'total_inc_vat')::numeric=v_p.total_inc_vat
-  and exists(select 1 from public.weekly_source_billing_movements m where m.id=v_p.billing_movement_id
-    and m.invoice_timesheet_id::text=p_new->>'timesheet_id');
+  or p_new#>>'{meta_json,line_type}'<>'WEEKLY_FINAL_SOURCE' then return false;end if;
+ if v_invoice.header_snapshot_json?'source_original_native_admission' then
+  return private.invoice_source_admission_line_allowed_v1(p_new);end if;
+ return private.invoice_source_allocation_line_allowed_v1(p_new);
 end;
 $function$;
 

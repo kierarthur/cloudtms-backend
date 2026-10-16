@@ -1,0 +1,114 @@
+-- Existing deliberate Source allocation remains one native UPDATE of the
+-- complete selected presentation set. No Contract Move execution phase.
+create or replace function private.invoice_source_allocation_claim_v1(p_destination_invoice_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare source public.invoices%rowtype;destination public.invoices%rowtype;s jsonb;line jsonb;p public.weekly_source_invoice_presentation_lines%rowtype;
+ v_members jsonb;manifest public.weekly_source_client_manifests%rowtype;
+begin
+ select i.* into strict destination from public.invoices i where i.id=p_destination_invoice_id;
+ s:=destination.header_snapshot_json->'source_original_native_allocation';
+ if jsonb_typeof(s) is distinct from 'object' or s->>'version' is distinct from 'SOURCE_ORIGINAL_NATIVE_ALLOCATION_V1'
+  or s->>'destination_invoice_id' is distinct from destination.id::text
+  or s->>'backend_pid' is distinct from pg_backend_pid()::text or s->>'transaction_id' is distinct from pg_current_xact_id()::text
+  or s->>'sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('SOURCE_ORIGINAL_NATIVE_ALLOCATION_V1',s-'sha256'),'hex') then
+  raise exception 'SOURCE_ORIGINAL_ALLOCATION_OWNER_STALE' using errcode='40001';end if;
+ select i.* into strict source from public.invoices i where i.id=(s->>'source_invoice_id')::uuid;
+ if source.id=destination.id or source.client_id is distinct from destination.client_id
+  or exists(select 1 from public.invoices i where i.id in(source.id,destination.id)
+   and (i.status<>'DRAFT' or i.type<>'INVOICE' or i.issued_at_utc is not null or i.paid_at_utc is not null
+    or i.active_issue_operation_id is not null or i.active_document_operation_id is not null
+    or upper(coalesce(i.issue_state,'')) in('VALIDATING','PREPARING_DOCUMENT','READY_TO_FINALISE')
+    or i.header_snapshot_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'
+    or i.header_snapshot_json#>>'{meta,source}' is distinct from 'WEEKLY_FINAL_SOURCE'
+    or i.header_snapshot_json#>>'{meta,self_bill}' is distinct from 'true'))
+  or exists(select 1 from public.invoice_operation_chunks c where c.entity_type='INVOICE' and c.entity_id in(source.id,destination.id)
+    and c.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')) then
+  raise exception 'SOURCE_ORIGINAL_ALLOCATION_IDLE_DRAFTS_CHANGED' using errcode='40001';end if;
+ for manifest in select m.* from public.weekly_source_client_manifests m
+  where m.id in((source.header_snapshot_json#>>'{meta,client_manifest_id}')::uuid,
+    (destination.header_snapshot_json#>>'{meta,client_manifest_id}')::uuid) loop
+  if manifest.client_id<>source.client_id or not exists(select 1 from jsonb_array_elements(s->'manifests') original
+    where original is not distinct from to_jsonb(manifest)) then
+   raise exception 'SOURCE_ORIGINAL_ALLOCATION_MANIFEST_CHANGED' using errcode='40001';end if;
+ end loop;
+ select coalesce(jsonb_agg(to_jsonb(b) order by b.id),'[]'::jsonb) into v_members from public.weekly_source_invoice_line_bindings b
+ where b.invoice_line_id in(select (value->>'id')::uuid from jsonb_array_elements(s->'lines')) and b.state='CURRENT';
+ if v_members is distinct from s->'bindings' then raise exception 'SOURCE_ORIGINAL_ALLOCATION_BINDING_CHANGED' using errcode='40001';end if;
+ for line in select value from jsonb_array_elements(s->'lines') loop
+  select x.* into strict p from public.weekly_source_invoice_presentation_lines x where x.id=(line#>>'{meta_json,presentation_line_id}')::uuid;
+  perform private.weekly_source_office_authority_v1((s->>'actor_user_id')::uuid,'MOVE_SOURCE_INVOICE',
+    (select m.source_group_id from public.weekly_source_client_manifests m where m.id=(source.header_snapshot_json#>>'{meta,client_manifest_id}')::uuid),source.client_id,p.work_date);
+  if not exists(select 1 from jsonb_array_elements(s->'presentations') original where original is not distinct from to_jsonb(p))
+   or p.client_id<>source.client_id or not exists(select 1 from public.weekly_source_invoice_line_bindings b
+    join public.weekly_source_billing_movements movement on movement.id=b.billing_movement_id
+    join public.weekly_source_invoice_placements placement on placement.billing_movement_id=movement.id and placement.is_current
+    where b.invoice_line_id=(line->>'id')::uuid and b.invoice_id=source.id and b.state='CURRENT'
+     and b.presentation_line_id=p.id and movement.placement_state='PLACED' and placement.invoice_id=source.id)
+   or (private.timesheet_contract_source_original_eligible_v1((line->>'timesheet_id')::uuid)
+    and not exists(select 1 from jsonb_array_elements(s->'origins') original where original is not distinct from
+      private.invoice_source_admission_origin_v1((line->>'timesheet_id')::uuid))) then
+   raise exception 'SOURCE_ORIGINAL_ALLOCATION_PRESENTATION_CHANGED' using errcode='40001';end if;
+ end loop;
+ return s;
+end;
+$function$;
+
+create or replace function private.invoice_source_allocation_enter_v1(p_source uuid,p_destination uuid,p_actor uuid,p_line_ids uuid[])
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare s jsonb;lines jsonb;presentations jsonb;bindings jsonb;origins jsonb;manifests jsonb;
+begin
+ select jsonb_agg(to_jsonb(l)||jsonb_build_object('invoice_id',p_destination) order by l.id) into lines from public.invoice_lines l
+  where l.invoice_id=p_source and l.id=any(p_line_ids);
+ if jsonb_array_length(lines) is distinct from cardinality(p_line_ids) then raise exception 'SOURCE_ORIGINAL_ALLOCATION_LINES_CHANGED' using errcode='40001';end if;
+ select jsonb_agg(to_jsonb(p) order by p.id) into presentations from public.weekly_source_invoice_presentation_lines p
+  where p.id in(select (value#>>'{meta_json,presentation_line_id}')::uuid from jsonb_array_elements(lines));
+ select jsonb_agg(to_jsonb(b) order by b.id) into bindings from public.weekly_source_invoice_line_bindings b where b.invoice_line_id=any(p_line_ids) and b.state='CURRENT';
+ select jsonb_agg(private.invoice_source_admission_origin_v1(id) order by id) into origins from
+  (select distinct (value->>'timesheet_id')::uuid id from jsonb_array_elements(lines) where private.timesheet_contract_source_original_eligible_v1((value->>'timesheet_id')::uuid)) ids;
+ select jsonb_agg(to_jsonb(m) order by m.id) into manifests from public.weekly_source_client_manifests m where m.id in
+  (select (i.header_snapshot_json#>>'{meta,client_manifest_id}')::uuid from public.invoices i where i.id in(p_source,p_destination));
+ s:=jsonb_build_object('version','SOURCE_ORIGINAL_NATIVE_ALLOCATION_V1','source_invoice_id',p_source,'destination_invoice_id',p_destination,
+  'actor_user_id',p_actor,'lines',lines,'presentations',presentations,'bindings',bindings,'origins',origins,'manifests',manifests,
+  'backend_pid',pg_backend_pid(),'transaction_id',pg_current_xact_id()::text);
+ s:=s||jsonb_build_object('sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_ORIGINAL_NATIVE_ALLOCATION_V1',s),'hex'));
+ update public.invoices set header_snapshot_json=jsonb_set(header_snapshot_json,'{source_original_native_allocation}',s,true)
+  where id=p_destination and not(header_snapshot_json?'source_original_native_allocation');
+ if not found then raise exception 'SOURCE_ORIGINAL_ALLOCATION_HEADER_BUSY' using errcode='55000';end if;
+ perform private.invoice_source_allocation_claim_v1(p_destination);
+end;
+$function$;
+
+create or replace function private.invoice_source_allocation_line_allowed_v1(p_new jsonb)
+returns boolean language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare s jsonb;
+begin
+ s:=private.invoice_source_allocation_claim_v1((p_new->>'invoice_id')::uuid);
+ if not exists(select 1 from jsonb_array_elements(s->'lines') expected where expected is not distinct from p_new)
+  or not exists(select 1 from public.invoice_lines old where old.id=(p_new->>'id')::uuid
+    and old.invoice_id=(s->>'source_invoice_id')::uuid and (to_jsonb(old)||jsonb_build_object('invoice_id',(p_new->>'invoice_id')::uuid)) is not distinct from p_new)
+  or exists(select 1 from public.invoice_lines duplicate where duplicate.invoice_id=(p_new->>'invoice_id')::uuid
+    and (duplicate.id=(p_new->>'id')::uuid or duplicate.source_key=p_new->>'source_key')) then
+  raise exception 'SOURCE_ORIGINAL_ALLOCATION_LINE_CHANGED_OR_DUPLICATE' using errcode='40001';end if;
+ return true;
+end;
+$function$;
+
+create or replace function private.invoice_source_allocation_finish_v1(p_destination uuid)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare s jsonb;
+begin
+ s:=private.invoice_source_allocation_claim_v1(p_destination);
+ if exists(select 1 from jsonb_array_elements(s->'lines') expected where not exists(select 1 from public.invoice_lines l
+    where l.id=(expected->>'id')::uuid and to_jsonb(l) is not distinct from expected)) then
+  raise exception 'SOURCE_ORIGINAL_ALLOCATION_RESULT_UNPROVED' using errcode='55000';end if;
+ update public.invoices set header_snapshot_json=header_snapshot_json-'source_original_native_allocation' where id=p_destination;
+end;
+$function$;

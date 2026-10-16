@@ -198,16 +198,18 @@ base_sources as materialized (
   from resolved_ids r
   left join public.timesheets ts on ts.timesheet_id=r.timesheet_id
   left join lateral (
-    select private.invoice_contract_move_prospective_source_v1(
-      (r.command_json->>'invoice_contract_correction_id')::uuid,r.timesheet_id,p_actor_user_id) fact
+    select private.invoice_contract_correction_prospective_source_v1(
+      (r.command_json->>'invoice_contract_correction_id')::uuid,r.timesheet_id,p_actor_user_id,
+      r.command_json->'invoice_contract_correction_daily') fact
   ) prospective on true
   left join lateral (
     select coalesce(prospective.fact->'settings_authority',private._timesheet_settings_authority_frozen_v1(ts.timesheet_id))
       authority_json
     where ts.timesheet_id is not null
   ) a on true
-  left join public.timesheets_financials tf
-    on tf.timesheet_id=r.timesheet_id and tf.is_current
+  left join public.timesheets_financials original_tf
+    on original_tf.timesheet_id=r.timesheet_id and original_tf.is_current
+  left join lateral jsonb_populate_record(original_tf,coalesce(prospective.fact->'financial_snapshot','{}'::jsonb)) tf on true
   left join lateral (
     select w.contract_id from public.contract_weeks w
     where w.timesheet_id=r.timesheet_id
@@ -490,7 +492,7 @@ reference_results as materialized (
   select distinct on (r.source_member_key) r.*
   from private._invoice_source_reference_validate_batch(coalesce((
     select jsonb_agg(jsonb_build_object(
-      'source_member_key',b.source_member_key,'invoice_contract_correction_id',b.command_json->'invoice_contract_correction_id',
+      'source_member_key',b.source_member_key,'invoice_contract_correction_id',b.command_json->'invoice_contract_correction_id','invoice_contract_correction_daily',b.command_json->'invoice_contract_correction_daily',
       'source_type',b.resolved_source_type,
       'source_id',b.timesheet_id,
       'related_timesheet_id',b.timesheet_id,

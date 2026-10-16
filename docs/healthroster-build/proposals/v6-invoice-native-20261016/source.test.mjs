@@ -176,3 +176,65 @@ test('native Source witness rejects stale owner, changed line/value, duplicate c
  assert.match(guard,/SOURCE_ORIGINAL_REPLAY_LINE_CHANGED/);
  assert.doesNotMatch(guard,/set_config|current_setting|INVOICE_SOURCE_ORIGINAL|config_json/);
 });
+
+test('synchronous Source admission preserves its native projection and proves one real header transaction',()=>{
+ const proof=JSON.parse(read('SOURCE_PARSE_RESULT.json')).source_admission_projection;
+ assert.equal(proof.unchanged_native_projection,true);assert.equal(proof.operand_count,27);
+ const owner=sql('024a_source_native_admission.sqlinc'),guard=sql('019a_source_admission_witness.sqlinc');
+ assert.ok(owner.indexOf('invoice_source_admission_line_enter_v1')<owner.indexOf('insert into public.invoice_lines('));
+ assert.ok(owner.indexOf('invoice_source_admission_line_finish_v1')>owner.indexOf('returning id into v_invoice_line_id;'));
+ for(const condition of ['SOURCE_ORIGINAL_ADMISSION_OWNER_STALE','SOURCE_ORIGINAL_ADMISSION_AUTHORITY_CHANGED',
+  'SOURCE_ORIGINAL_ADMISSION_FINAL_STALE','SOURCE_ORIGINAL_ADMISSION_MOVEMENT_CHANGED',
+  'SOURCE_ORIGINAL_ADMISSION_LINE_CHANGED','SOURCE_ORIGINAL_ADMISSION_DUPLICATE_LINE','SOURCE_ORIGINAL_ADMISSION_RESULT_UNPROVED'])assert.ok(guard.includes(condition));
+ assert.match(guard,/s->>'backend_pid' is distinct from pg_backend_pid\(\)::text/);
+ assert.match(guard,/s->>'transaction_id' is distinct from pg_current_xact_id\(\)::text/);
+ assert.match(guard,/header_snapshot_json=header_snapshot_json-'source_original_native_admission'/);
+ assert.doesNotMatch(guard,/set_config|current_setting|service_role|INVOICE_SOURCE_ORIGINAL/);
+ assert.doesNotMatch(sql('024_line_admission.sqlinc'),/current_setting/);
+});
+
+test('native Source allocation retains exact whole rows except native invoice placement',()=>{
+ const owner=sql('024b_source_native_allocation.sqlinc'),guard=sql('019b_source_allocation_witness.sqlinc');
+ assert.match(owner,/perform private\.invoice_source_allocation_enter_v1/);
+ assert.match(owner,/set invoice_id=v_destination_invoice_id/);
+ assert.ok(owner.indexOf('invoice_source_allocation_finish_v1')<owner.indexOf('for v_binding in'));
+ assert.match(guard,/SOURCE_ORIGINAL_ALLOCATION_IDLE_DRAFTS_CHANGED/);
+ assert.match(guard,/SOURCE_ORIGINAL_ALLOCATION_BINDING_CHANGED/);
+ assert.match(guard,/SOURCE_ORIGINAL_ALLOCATION_LINE_CHANGED_OR_DUPLICATE/);
+ assert.match(guard,/to_jsonb\(old\)\|\|jsonb_build_object\('invoice_id'/);
+ assert.match(guard,/header_snapshot_json=header_snapshot_json-'source_original_native_allocation'/);
+ assert.doesNotMatch(guard,/set_config|current_setting|INVOICE_SOURCE_ORIGINAL|new_final/);
+});
+
+test('Daily native overlay keeps actual identity and compares real approved finance, without Contract aliases',()=>{
+ const basis=sql('032a_daily_native_basis.sqlinc'),prepare=sql('040_prepare.sqlinc');
+ assert.match(basis,/daily_rate_correction_normalized_snapshot_v1\(v_context,p_daily->'calculation_snapshot',p_daily->'rate_provenance',p_actor_user_id\)/);
+ assert.match(basis,/DAILY_RATE_NORMALIZED_SNAPSHOT_MISMATCH/);
+ assert.match(basis,/daily_rate_correction_accepting_v1\(o.id\)/);
+ assert.match(basis,/m.from_timesheet_id is distinct from m.to_timesheet_id/);
+ assert.match(basis,/m.to_financial_id is distinct from private.daily_rate_correction_financial_id_v1/);
+ assert.match(basis,/DAILY_RATE_ACCEPTED_NATIVE_VALUATION_CHANGED/);
+ assert.match(prepare,/o.purpose='CONTRACT_CORRECTION' and not exists/);
+ assert.match(prepare,/slice->>'original_financial_id' is distinct from member.from_financial_id::text/);
+ assert.doesNotMatch(basis,/insert into|create table|gen_random_uuid|daily_rate_calculator_round/);
+ assert.match(sql('033_native_grouping.sqlinc'),/jsonb_populate_record\(original_tf,coalesce\(prospective.fact->'financial_snapshot'/);
+ assert.match(sql('074_current_billing.sqlinc'),/f.rate_source_refs_json->>'correction_operation_id'=o.id::text/);
+ const reserve=sql('045_preparation_native.sqlinc');
+ assert.match(reserve,/current_finance.id=m.current_financial_id and current_finance.is_current/);
+ assert.match(reserve,/m.current_timesheet_id::text\|\|':'\|\|m.current_financial_id::text/);
+});
+
+test('replacement documents read original signed evidence and keep current attachment policy',()=>{
+ const snapshot=sql('022_source_presentation.sqlinc'),issue=sql('079_native_issue_admission.sqlinc');
+ assert.match(snapshot,/invoice_evidence_subjects as materialized/);
+ assert.match(snapshot,/original.source->>'original_timesheet_id'/);
+ assert.match(snapshot,/v_ts_invoice_precheck pc on pc.timesheet_id=il.current_timesheet_id/);
+ assert.match(snapshot,/current_policy on current_policy.timesheet_id=il.current_timesheet_id/);
+ assert.match(issue,/timesheet_contract_move_evidence_source_v1\(s.timesheet_id\)/);
+ assert.match(issue,/timesheet_contract_move_evidence_source_v1\(r.timesheet_id\)/);
+ assert.match(sql('023a_native_document_source.sqlinc'),/invoice_contract_move_original_evidence_eligible_v1/);
+ const known=sql('034a_document_preflight.sqlinc');
+ for(const blocker of ['MANUAL_TIMESHEET_SOURCE_MISSING','QR_TIMESHEET_UNSIGNED','ASSET_WORKFLOW_MISSING','REQUIRED_ASSET_FAILED','TIMESHEET_DOCUMENT_FAILED'])assert.ok(known.includes(blocker));
+ assert.doesNotMatch(known,/raise exception .*NOT_READY|TIMESHEET_DOCUMENT_NOT_READY|insert into|update public/);
+ assert.match(known,/purpose','TIMESHEET'/);
+});

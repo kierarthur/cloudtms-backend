@@ -30,7 +30,7 @@ begin
       message='Active administrator actor and matching authenticated/service caller required';
   end if;
 
-  if exists(select 1 from jsonb_array_elements(p_commands) command where command?'invoice_contract_correction_id' or exists(select 1 from jsonb_object_keys(command) key where key like 'source_original_%')) then raise exception 'CONTRACT_MOVE_PROSPECTIVE_INPUT_OWNER_ONLY' using errcode='42501';end if;
+  if exists(select 1 from jsonb_array_elements(p_commands) command where command?'invoice_contract_correction_id' or command?'invoice_contract_correction_daily' or exists(select 1 from jsonb_object_keys(command) key where key like 'source_original_%')) then raise exception 'CONTRACT_MOVE_PROSPECTIVE_INPUT_OWNER_ONLY' using errcode='42501';end if;
   p_commands:=private.invoice_contract_move_issue_commands_v1(p_commands,p_actor_user_id);
 
   with raw as materialized (

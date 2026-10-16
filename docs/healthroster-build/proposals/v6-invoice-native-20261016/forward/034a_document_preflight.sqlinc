@@ -1,0 +1,58 @@
+-- Known native input failures precede Ready. Queueable rendering/normalisation
+-- is an input state, never a requirement to wait for all PDFs during placement.
+create or replace function private.invoice_contract_correction_document_preflight_v1(
+ p_physical jsonb,p_daily jsonb,p_actor_user_id uuid,p_slices jsonb
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare member jsonb;fact jsonb;original jsonb;t public.timesheets%rowtype;a public.invoice_document_assets%rowtype;
+ d public.invoice_document_versions%rowtype;model record;v_asset uuid;v_status text;v_code text;v_required boolean;
+ v_inputs jsonb:='[]';v_blockers jsonb:='[]';v_fact jsonb;v_model_hash text;
+begin
+ for member in select m.value from jsonb_array_elements(p_physical->'members') m(value) where exists(select 1 from jsonb_array_elements(p_slices) s
+   where s->>'member_key'=m.value->>'member_key' and s->>'disposition' in('EDIT_DRAFT','RELOCATE_DRAFT','REPLACE_ISSUED')) order by m.value->>'member_key' loop
+  fact:=private.invoice_contract_correction_prospective_source_v1((p_physical->>'operation_id')::uuid,
+    (member->>'from_timesheet_id')::uuid,p_actor_user_id,p_daily);
+  v_required:=coalesce((fact#>>'{settings_authority,values,ts_attach_to_invoice}')::boolean,true)
+    and not coalesce((fact#>>'{settings_authority,values,no_timesheet_required}')::boolean,false)
+    and not coalesce((fact#>>'{settings_authority,values,is_nhsp}')::boolean,false);
+  original:=private.timesheet_contract_move_evidence_source_v1((member->>'from_timesheet_id')::uuid);
+  select x.* into strict t from public.timesheets x where x.timesheet_id=coalesce((original->>'original_timesheet_id')::uuid,(member->>'original_timesheet_id')::uuid);
+  v_code:=null;v_asset:=null;a:=null;d:=null;v_status:=null;v_model_hash:=null;
+  if v_required then
+   select * into strict model from private._invoice_presentation_snapshot_batch(jsonb_build_array(jsonb_build_object(
+    'request_key','CORRECTION_INPUT:'||(member->>'member_key'),'entity_type','TIMESHEET','entity_id',t.timesheet_id,
+    'purpose','TIMESHEET','template_version','timesheet-professional-v1')),transaction_timestamp());
+   v_model_hash:=model.snapshot_hash;
+   if not model.valid then v_code:=coalesce(model.error_code,'DOCUMENT_PRESENTATION_INVALID');end if;
+   if upper(coalesce(t.submission_mode::text,''))='QR' and (nullif(t.qr_signed_hash,'') is null or t.qr_signed_at_utc is null) then v_code:='QR_TIMESHEET_UNSIGNED';end if;
+   if upper(coalesce(t.submission_mode::text,'')) in('MANUAL','QR') then
+    select coalesce(t.manual_document_asset_id,ev.document_asset_id) into v_asset from (select 1) anchor
+     left join lateral(select e.document_asset_id from public.timesheet_evidence e left join public.invoice_document_assets registered on registered.id=e.document_asset_id
+      where e.timesheet_id=t.timesheet_id and upper(coalesce(e.kind,''))='TIMESHEET' and coalesce(e.processing_state,'')<>'SUPERSEDED'
+      order by (e.document_asset_id=t.manual_document_asset_id) desc,(registered.status='READY') desc,e.created_at desc nulls last,e.id desc limit 1) ev on true;
+    select x.* into a from public.invoice_document_assets x where x.id=v_asset;
+    select op.status into v_status from public.invoice_operations op where op.id=a.operation_id;
+    if v_asset is null then v_code:='MANUAL_TIMESHEET_SOURCE_MISSING';
+    elsif a.id is null then v_code:='ASSET_NOT_REGISTERED';
+    elsif a.status in('UNSUPPORTED','CORRUPT','MISSING','FAILED','SUPERSEDED') or v_status='DEAD_LETTER' then v_code:='REQUIRED_ASSET_FAILED';
+    elsif a.status in('DISCOVERED','INSPECTING','NORMALISING') and coalesce(v_status,'') not in('QUEUED','RUNNING','WAITING','RETRY_WAIT') then v_code:='ASSET_WORKFLOW_MISSING';end if;
+   end if;
+   select x.* into d from public.invoice_document_versions x where x.entity_type='TIMESHEET' and x.entity_id=t.timesheet_id
+    and x.purpose='TIMESHEET' and x.source_revision=t.document_revision::text and x.template_version='timesheet-professional-v1'
+    order by (x.status='READY') desc,(x.status in('PLANNING','WAITING_FOR_INPUTS','RENDERING','ASSEMBLING','VERIFYING')) desc,x.created_at_utc desc,x.id desc limit 1;
+   if d.status in('FAILED','SUPERSEDED','CANCELLED') and not exists(select 1 from public.invoice_operations op where op.id=d.operation_id
+    and op.status in('QUEUED','RUNNING','WAITING','RETRY_WAIT')) then v_code:='TIMESHEET_DOCUMENT_FAILED';end if;
+  end if;
+  v_fact:=jsonb_build_object('member_key',member->>'member_key','original_timesheet_id',t.timesheet_id,
+   'required',v_required,'original_evidence_hash',member->>'immutable_evidence_hash','document_revision',t.document_revision,
+   'document_version',case when v_required then to_jsonb(d) else null end,'manual_asset',case when v_required then to_jsonb(a) else null end,
+   'manual_asset_operation_status',v_status,'presentation_snapshot_hash',v_model_hash);
+  v_inputs:=v_inputs||jsonb_build_array(v_fact);
+  if v_code is not null then v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code',v_code,'native_owner','HEALTH',
+    'field_key',member->>'member_key','permitted_action',null));end if;
+ end loop;
+ return jsonb_build_object('version','CONTRACT_CORRECTION_DOCUMENT_INPUTS_V1','inputs',v_inputs,'known_blockers',v_blockers,
+  'digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_CORRECTION_DOCUMENT_INPUTS_V1',v_inputs),'hex'));
+end;
+$function$;

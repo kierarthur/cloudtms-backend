@@ -1,0 +1,149 @@
+-- Synchronous Source admission has no generation chunk or lease. Its existing
+-- validated actor + locked manifest own one exact Draft header and native line.
+-- The transient SQL PID/xid stamp is removed in that same native transaction.
+create or replace function private.invoice_source_admission_origin_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare result jsonb;
+begin
+ if not private.timesheet_contract_source_original_eligible_v1(p_timesheet_id) then
+  raise exception 'SOURCE_ORIGINAL_ADMISSION_ORIGIN_REQUIRED' using errcode='55000';end if;
+ select jsonb_build_object('timesheet_id',a.timesheet_id,'operation_id',o.id,'review_id',r.id,'member_key',a.member_key,
+   'review_digest',encode(r.review_digest,'hex'),'source_certificate',r.manifest_json#>'{invoice,source_certificate}') into strict result
+ from private.timesheet_contract_family_aliases a
+ join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id
+ join private.timesheet_contract_move_reviews r on r.operation_id=o.id and r.id=o.accepted_review_id
+ where a.timesheet_id=p_timesheet_id and a.original_timesheet_id=p_timesheet_id
+  and r.manifest_json#>'{invoice,source_certificate,original_invoice_timesheet_ids}'?p_timesheet_id::text;
+ return result;
+end;
+$function$;
+
+create or replace function private.invoice_source_admission_line_claim_v1(p_invoice_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare i public.invoices%rowtype;m public.weekly_source_client_manifests%rowtype;
+ p public.weekly_source_invoice_presentation_lines%rowtype;r public.weekly_source_final_revisions%rowtype;
+ c public.weekly_source_cycles%rowtype;w public.weekly_source_cycles%rowtype;s jsonb;v_members jsonb;
+begin
+ select x.* into strict i from public.invoices x where x.id=p_invoice_id;
+ s:=i.header_snapshot_json->'source_original_native_admission';
+ if jsonb_typeof(s) is distinct from 'object' or s->>'version' is distinct from 'SOURCE_ORIGINAL_NATIVE_ADMISSION_V1'
+  or s->>'invoice_id' is distinct from i.id::text or s->>'backend_pid' is distinct from pg_backend_pid()::text
+  or s->>'transaction_id' is distinct from pg_current_xact_id()::text
+  or s->>'sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1('SOURCE_ORIGINAL_NATIVE_ADMISSION_V1',s-'sha256'),'hex')
+  or i.type<>'INVOICE' or i.status<>'DRAFT' or i.issued_at_utc is not null or i.paid_at_utc is not null
+  or i.header_snapshot_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'
+  or i.header_snapshot_json#>>'{meta,client_manifest_id}' is distinct from s->>'manifest_id' then
+  raise exception 'SOURCE_ORIGINAL_ADMISSION_OWNER_STALE' using errcode='40001';end if;
+ select x.* into strict m from public.weekly_source_client_manifests x where x.id=(s->>'manifest_id')::uuid;
+ select x.* into strict p from public.weekly_source_invoice_presentation_lines x where x.id=(s->>'presentation_id')::uuid;
+ select x.* into strict r from public.weekly_source_final_revisions x where x.id=m.final_revision_id;
+ select x.* into strict c from public.weekly_source_cycles x where x.id=m.source_cycle_id;
+ select x.* into strict w from public.weekly_source_cycles x where x.id=coalesce(m.invoice_window_cycle_id,m.source_cycle_id);
+ perform private.weekly_source_office_authority_v1((s->>'actor_user_id')::uuid,'ADMIT_SOURCE_INVOICE',m.source_group_id,m.client_id,m.finalisation_week_ending);
+ if m.invoice_state<>'READY' or m.client_id<>i.client_id or p.client_manifest_id<>m.id or p.final_revision_id<>r.id
+  or r.state<>'CURRENT' or r.source_cycle_id<>c.id or c.source_group_id<>m.source_group_id
+  or w.source_group_id<>m.source_group_id or w.finalisation_week_ending<>m.finalisation_week_ending
+  or (w.scope_client_id is not null and w.scope_client_id<>m.client_id)
+  or encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(m)),'hex') is distinct from s->>'manifest_sha256'
+  or encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(p)),'hex') is distinct from s->>'presentation_sha256'
+  or private.invoice_source_admission_origin_v1((s#>>'{line,timesheet_id}')::uuid) is distinct from s->'origin' then
+  raise exception 'SOURCE_ORIGINAL_ADMISSION_AUTHORITY_CHANGED' using errcode='40001';end if;
+ if r.authority_scope_kind='SELF_BILL_REPORT_SCOPE' then
+  if not exists(select 1 from public.weekly_source_report_scopes scope join public.weekly_source_self_bill_reports report on report.id=scope.self_bill_report_id
+   where scope.id=r.report_scope_id and scope.current_final_revision_id=r.id and scope.source_cycle_id=c.id
+    and scope.source_group_id=m.source_group_id and scope.client_id=m.client_id and scope.current_complete_upload_id=r.upload_id
+    and scope.state='FINALISED' and report.source_cycle_id=c.id and report.source_group_id=m.source_group_id
+    and report.client_id=m.client_id and r.reason='INITIAL_FINALISATION' and w.id=c.id) then
+   raise exception 'SOURCE_ORIGINAL_ADMISSION_FINAL_STALE' using errcode='40001';end if;
+ elsif not exists(select 1 from public.weekly_source_client_cycle_completions completion where completion.source_cycle_id=c.id
+  and completion.client_id=m.client_id and completion.final_revision_id=r.id and completion.completion_kind='FINAL_SOURCE' and completion.state='CURRENT') then
+  raise exception 'SOURCE_ORIGINAL_ADMISSION_FINAL_STALE' using errcode='40001';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('id',movement.id,'movement_hash',encode(mm.movement_hash,'hex'),
+   'economic_hash',encode(movement.movement_economic_hash,'hex'),'placement_state',movement.placement_state,
+   'invoice_timesheet_id',movement.invoice_timesheet_id) order by movement.id),'[]'::jsonb) into v_members
+ from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id
+ where mm.client_manifest_id=m.id;
+ if v_members is distinct from s->'manifest_movements' or jsonb_array_length(v_members)<>m.movement_count
+  or exists(select 1 from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id
+    where mm.client_manifest_id=m.id and (mm.movement_hash is distinct from movement.movement_economic_hash
+     or movement.final_revision_id<>r.id or movement.finalisation_cycle_id<>c.id or movement.actual_client_id<>m.client_id
+     or private.weekly_source_invoice_movement_window_id_v1(movement.id)<>w.id))
+  or not exists(select 1 from public.weekly_source_billing_movements movement where movement.id=p.billing_movement_id
+    and movement.invoice_timesheet_id::text=s#>>'{line,timesheet_id}' and movement.final_revision_id=r.id)
+  or exists(select 1 from jsonb_array_elements_text(s#>'{line,meta_json,movement_ids}') id
+    left join public.weekly_source_manifest_movements mm on mm.client_manifest_id=m.id and mm.billing_movement_id=id::uuid
+    left join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id
+    where movement.id is null or movement.placement_state<>'UNPLACED'
+     or exists(select 1 from public.weekly_source_invoice_line_bindings b where b.billing_movement_id=movement.id and b.state='CURRENT')) then
+  raise exception 'SOURCE_ORIGINAL_ADMISSION_MOVEMENT_CHANGED' using errcode='40001';end if;
+ return s;
+end;
+$function$;
+
+create or replace function private.invoice_source_admission_line_enter_v1(p_invoice_id uuid,p_actor_user_id uuid,p_manifest_id uuid,p_line jsonb)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare m public.weekly_source_client_manifests%rowtype;p public.weekly_source_invoice_presentation_lines%rowtype;s jsonb;v_members jsonb;
+begin
+ select x.* into strict m from public.weekly_source_client_manifests x where x.id=p_manifest_id;
+ select x.* into strict p from public.weekly_source_invoice_presentation_lines x where x.id=(p_line#>>'{meta_json,presentation_line_id}')::uuid;
+ perform private.weekly_source_office_authority_v1(p_actor_user_id,'ADMIT_SOURCE_INVOICE',m.source_group_id,m.client_id,m.finalisation_week_ending);
+ if p_line->>'invoice_id' is distinct from p_invoice_id::text or p_line#>>'{meta_json,line_type}' is distinct from 'WEEKLY_FINAL_SOURCE'
+  or p_line->>'source_key' is distinct from 'WEEKLY_SOURCE:'||p.id::text or p.client_manifest_id<>m.id
+  or p.total_charge_ex_vat is distinct from (p_line->>'total_charge_ex_vat')::numeric
+  or p.vat_amount is distinct from (p_line->>'vat_amount')::numeric or p.total_inc_vat is distinct from (p_line->>'total_inc_vat')::numeric then
+  raise exception 'SOURCE_ORIGINAL_ADMISSION_INTENDED_LINE_INVALID' using errcode='23514';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('id',movement.id,'movement_hash',encode(mm.movement_hash,'hex'),
+   'economic_hash',encode(movement.movement_economic_hash,'hex'),'placement_state',movement.placement_state,
+   'invoice_timesheet_id',movement.invoice_timesheet_id) order by movement.id),'[]'::jsonb) into v_members
+ from public.weekly_source_manifest_movements mm join public.weekly_source_billing_movements movement on movement.id=mm.billing_movement_id
+ where mm.client_manifest_id=m.id;
+ s:=jsonb_build_object('version','SOURCE_ORIGINAL_NATIVE_ADMISSION_V1','invoice_id',p_invoice_id,'actor_user_id',p_actor_user_id,
+  'manifest_id',m.id,'manifest_sha256',encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(m)),'hex'),
+  'presentation_id',p.id,'presentation_sha256',encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(p)),'hex'),
+  'manifest_movements',v_members,'origin',private.invoice_source_admission_origin_v1((p_line->>'timesheet_id')::uuid),
+  'line',p_line,'backend_pid',pg_backend_pid(),'transaction_id',pg_current_xact_id()::text);
+ s:=s||jsonb_build_object('sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_ORIGINAL_NATIVE_ADMISSION_V1',s),'hex'));
+ update public.invoices set header_snapshot_json=jsonb_set(header_snapshot_json,'{source_original_native_admission}',s,true)
+  where id=p_invoice_id and not(header_snapshot_json?'source_original_native_admission');
+ if not found then raise exception 'SOURCE_ORIGINAL_ADMISSION_HEADER_BUSY' using errcode='55000';end if;
+ perform private.invoice_source_admission_line_claim_v1(p_invoice_id);
+end;
+$function$;
+
+create or replace function private.invoice_source_admission_line_allowed_v1(p_new jsonb)
+returns boolean language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare s jsonb;actual jsonb;
+begin
+ s:=private.invoice_source_admission_line_claim_v1((p_new->>'invoice_id')::uuid);
+ select jsonb_object_agg(key,p_new->key) into actual from jsonb_object_keys(s->'line') key;
+ if actual is distinct from s->'line' then raise exception 'SOURCE_ORIGINAL_ADMISSION_LINE_CHANGED' using errcode='40001';end if;
+ if exists(select 1 from public.invoice_lines l where l.invoice_id=(p_new->>'invoice_id')::uuid
+  and (l.source_key=p_new->>'source_key' or l.meta_json->>'presentation_line_id'=s->>'presentation_id')) then
+  raise exception 'SOURCE_ORIGINAL_ADMISSION_DUPLICATE_LINE' using errcode='23505';end if;
+ return true;
+end;
+$function$;
+
+create or replace function private.invoice_source_admission_line_finish_v1(p_invoice_id uuid,p_invoice_line_id uuid)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare s jsonb;actual jsonb;
+begin
+ s:=private.invoice_source_admission_line_claim_v1(p_invoice_id);
+ select jsonb_object_agg(key,to_jsonb(l)->key) into actual from public.invoice_lines l cross join lateral jsonb_object_keys(s->'line') key
+  where l.id=p_invoice_line_id and l.invoice_id=p_invoice_id;
+ if actual is distinct from s->'line' or (select count(*) from public.invoice_lines l where l.invoice_id=p_invoice_id
+  and (l.source_key=s#>>'{line,source_key}' or l.meta_json->>'presentation_line_id'=s->>'presentation_id'))<>1 then
+  raise exception 'SOURCE_ORIGINAL_ADMISSION_RESULT_UNPROVED' using errcode='55000';end if;
+ update public.invoices set header_snapshot_json=header_snapshot_json-'source_original_native_admission' where id=p_invoice_id;
+end;
+$function$;

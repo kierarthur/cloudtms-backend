@@ -122,6 +122,20 @@
       "sha256": "242a0f7913398f0b1dceeb7caf803d0ecf6326052bc2e612ceeb0b223ef628a4"
     },
     {
+      "name": "private._invoice_dispatch_advance_batch",
+      "path": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_dispatcher.sqlinc",
+      "signature": "p_claims jsonb, p_now_utc timestamptz",
+      "file": "reference/private__invoice_dispatch_advance_batch.sqlinc",
+      "sha256": "c8d7717a353eb4f7a44ee3db01004a284707a9e4bf525f6aa616b6fcf71b94e2"
+    },
+    {
+      "name": "private._invoice_document_advance_batch",
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_planner.sqlinc",
+      "signature": "p_claims jsonb, p_now_utc timestamptz",
+      "file": "reference/private__invoice_document_advance_batch.sqlinc",
+      "sha256": "73544cdf6bcfec83a671e8279e7fdb730e7d74d598aeeb50253dfba98f00d705"
+    },
+    {
       "name": "private._invoice_generation_advance_batch",
       "path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_advance_batch.sql",
       "signature": "p_claims jsonb, p_now_utc timestamptz",
@@ -318,6 +332,13 @@
       "sha256": "6e92047a29a0b08ad3cdb41edf1695956172c4379b48ee7b192153a3a33a7ec0"
     },
     {
+      "name": "public.weekly_source_invoice_move_atomic_v1",
+      "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+      "signature": "p_request jsonb",
+      "file": "reference/public_weekly_source_invoice_move_atomic_v1.sqlinc",
+      "sha256": "d0f6a3db517ddd975cd21a8484f044d535902338b5dd8580fb60adf9505050fb"
+    },
+    {
       "name": "private.weekly_source_invoice_batch_rows_v1",
       "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
       "signature": "p_filters jsonb default '{}'::jsonb, p_selection jsonb default pg_catalog.jsonb_build_object( 'contract_version','INVOICE_BATCH_SELECTION_V2', 'mode','IMPLICIT_ALL','default_selected',true,'rules','[]'::jsonb )",
@@ -410,6 +431,7 @@
     }
   ],
   "missing": [
+    "private._invoice_document_advance_core_v8",
     "public.invoice_unissue",
     "public.invoice_batch_generate_candidates_v2"
   ]

@@ -4,11 +4,24 @@ create or replace function private.invoice_contract_move_current_billing_operati
 returns uuid[] language sql stable security definer
 set search_path to 'pg_catalog','public','private','pg_temp'
 as $function$
- select coalesce(array_agg(distinct s.operation_id order by s.operation_id),'{}'::uuid[])
+ select coalesce(array_agg(distinct current_owner.operation_id order by current_owner.operation_id),'{}'::uuid[]) from (
+ select s.operation_id
  from private.timesheet_contract_move_billing_slices s
  join private.timesheet_contract_move_operations o on o.id=s.operation_id and o.state='COMPLETE' and o.billing_revision=s.billing_revision
  join private.timesheet_contract_current_placements p on p.operation_id=o.id and p.member_key=s.member_key
   and p.placement_receipt_id=(o.placement_receipt_json->>'receipt_id')::uuid
  join public.invoice_lines l on l.invoice_id=p_invoice_id and l.timesheet_id=p.current_timesheet_id
- where s.original_invoice_id=p_invoice_id and s.disposition='EDIT_DRAFT';
+ where s.original_invoice_id=p_invoice_id and s.disposition='EDIT_DRAFT'
+ union
+ select s.operation_id from private.timesheet_contract_move_billing_slices s
+ join private.timesheet_contract_move_operations o on o.id=s.operation_id and o.state='COMPLETE'
+  and o.purpose='DAILY_RATE_CORRECTION' and o.billing_revision=s.billing_revision
+ join private.timesheet_contract_move_members m on m.operation_id=o.id and m.member_key=s.member_key
+ join public.timesheets_financials f on f.id=m.to_financial_id and f.timesheet_id=m.to_timesheet_id and f.is_current
+  and f.rate_source_refs_json->>'correction_operation_id'=o.id::text
+ join public.invoice_lines l on l.invoice_id=p_invoice_id and l.timesheet_id=m.to_timesheet_id
+ where s.original_invoice_id=p_invoice_id and s.disposition='EDIT_DRAFT'
+  and o.placement_receipt_json->>'version'='DAILY_RATE_REVISION_RECEIPT_V1'
+  and o.placement_receipt_json->>'current_financial_id'=f.id::text
+ ) current_owner;
 $function$;

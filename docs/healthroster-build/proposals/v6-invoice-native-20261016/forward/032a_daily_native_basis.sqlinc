@@ -1,0 +1,93 @@
+-- Daily consumes the existing canonical calculator and genuine selector owner.
+-- Preview never allocates a finance/physical row or installs a Contract alias.
+create or replace function private.invoice_contract_correction_scope_v1(p_operation_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_purpose text;
+begin
+ select o.purpose into strict v_purpose from private.timesheet_contract_move_operations o where o.id=p_operation_id;
+ if v_purpose='DAILY_RATE_CORRECTION' then return private.daily_rate_correction_scope_v1(p_operation_id,p_lock);end if;
+ return private.timesheet_contract_move_scope_v1(p_operation_id,p_lock);
+end;
+$function$;
+
+create or replace function private.invoice_contract_correction_prospective_source_v1(
+ p_operation_id uuid,p_timesheet_id uuid,p_actor_user_id uuid,p_daily jsonb
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;v_context jsonb;v_snapshot jsonb;v_scope jsonb;v_member jsonb;
+begin
+ if p_operation_id is null then return null;end if;
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ if o.purpose='CONTRACT_CORRECTION' then
+  if p_daily is not null and p_daily<>'null'::jsonb then raise exception 'CONTRACT_MOVE_DAILY_INPUT_FORBIDDEN' using errcode='22023';end if;
+  return private.invoice_contract_move_prospective_source_v1(p_operation_id,p_timesheet_id,p_actor_user_id);
+ end if;
+ if o.purpose<>'DAILY_RATE_CORRECTION' or o.state<>'REVIEWED' or o.created_by_user_id<>p_actor_user_id
+  or o.placement_receipt_json is not null or o.from_timesheet_id<>p_timesheet_id
+  or o.from_contract_id is not null or o.to_contract_id is not null
+  or not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN')
+  or jsonb_typeof(p_daily) is distinct from 'object'
+  or not(p_daily ?& array['context','calculation_snapshot','normalized_snapshot','rate_provenance'])
+  or p_daily-array['context','calculation_snapshot','normalized_snapshot','rate_provenance']<>'{}'::jsonb then
+  raise exception 'DAILY_RATE_PROSPECTIVE_OWNER_UNBOUND' using errcode='42501';end if;
+ v_context:=private.daily_rate_correction_context_v1(p_timesheet_id,p_actor_user_id,false);
+ if p_daily->'context' is distinct from v_context then raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ v_snapshot:=private.daily_rate_correction_normalized_snapshot_v1(v_context,p_daily->'calculation_snapshot',p_daily->'rate_provenance',p_actor_user_id);
+ if p_daily->'normalized_snapshot' is distinct from v_snapshot then raise exception 'DAILY_RATE_NORMALIZED_SNAPSHOT_MISMATCH' using errcode='23514';end if;
+ v_scope:=private.daily_rate_correction_scope_v1(o.id,false);
+ select value into strict v_member from jsonb_array_elements(v_scope->'members') where value->>'from_timesheet_id'=p_timesheet_id::text;
+ return jsonb_build_object('operation_id',o.id,'member_key',v_member->>'member_key','contract_id',null,
+  'settings_authority',private._timesheet_settings_authority_frozen_v1(p_timesheet_id),'financial_snapshot',v_snapshot);
+end;
+$function$;
+
+create or replace function private.invoice_daily_rate_actual_revision_assert_v1(p_operation_id uuid)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;r private.timesheet_contract_move_reviews%rowtype;
+ m private.timesheet_contract_move_members%rowtype;f public.timesheets_financials%rowtype;snap jsonb;actual jsonb;refs jsonb;v_keys text[];
+begin
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ if o.purpose<>'DAILY_RATE_CORRECTION' then raise exception 'DAILY_RATE_PURPOSE_INVALID' using errcode='22023';end if;
+ if not(o.state='COMPLETE' or private.daily_rate_correction_accepting_v1(o.id)) then
+  raise exception 'DAILY_RATE_ACTUAL_REVISION_UNBOUND' using errcode='55000';end if;
+ select x.* into strict r from private.timesheet_contract_move_reviews x where x.operation_id=o.id and x.id=o.accepted_review_id;
+ select x.* into strict m from private.timesheet_contract_move_members x where x.operation_id=o.id;
+ snap:=r.manifest_json#>'{daily,calculation_snapshot}';
+ if o.accepted_review_digest is distinct from r.review_digest or r.manifest_json#>>'{physical,version}'<>'DAILY_RATE_SCOPE_V1'
+  or o.placement_receipt_json->>'version' is distinct from 'DAILY_RATE_REVISION_RECEIPT_V1'
+  or o.placement_receipt_json->>'operation_id' is distinct from o.id::text
+  or o.placement_receipt_json->>'review_id' is distinct from r.id::text
+  or o.placement_receipt_json->>'current_timesheet_id' is distinct from o.from_timesheet_id::text
+  or o.placement_receipt_json->>'previous_financial_id' is distinct from m.from_financial_id::text
+  or o.placement_receipt_json->>'current_financial_id' is distinct from m.to_financial_id::text
+  or m.from_timesheet_id is distinct from m.to_timesheet_id or m.from_timesheet_id is distinct from o.from_timesheet_id
+  or m.from_version is distinct from m.to_version or m.from_financial_id is not distinct from m.to_financial_id
+  or m.to_financial_id is distinct from private.daily_rate_correction_financial_id_v1(o.id,m.member_key)
+  or o.from_contract_id is not null or o.to_contract_id is not null
+  or m.from_contract_id is not null or m.to_contract_id is not null
+  or jsonb_typeof(snap) is distinct from 'object'
+  or r.manifest_json#>>'{daily,normalized_snapshot,id}' is distinct from m.from_financial_id::text
+  or r.manifest_json#>>'{daily,normalized_snapshot,timesheet_id}' is distinct from m.from_timesheet_id::text then
+  raise exception 'DAILY_RATE_ACTUAL_REVISION_UNBOUND' using errcode='55000';end if;
+ select x.* into strict f from public.timesheets_financials x where x.id=m.to_financial_id;
+ if not f.is_current or f.is_stale or f.timesheet_id<>m.to_timesheet_id or f.timesheet_version<>m.to_version
+  or f.authorised_at_utc is null or f.authorised_by_user_id is distinct from o.created_by_user_id
+  or not exists(select 1 from public.timesheets t where t.timesheet_id=m.to_timesheet_id and t.is_current
+    and t.archived_at_utc is null and t.contract_id is null) then
+  raise exception 'DAILY_RATE_ACTUAL_FINANCE_NOT_CURRENT_APPROVED' using errcode='55000';end if;
+ select array_agg(key order by key) into v_keys from jsonb_object_keys(snap) key where key<>'rate_source_refs_json';
+ select jsonb_object_agg(key,to_jsonb(f)->key) into actual from unnest(v_keys) key;
+ refs:=snap->'rate_source_refs_json'||coalesce(r.manifest_json#>'{daily,rate_provenance}','{}'::jsonb)
+  ||jsonb_build_object('approval_purpose','RATE_CORRECTION','correction_operation_id',o.id,'accepted_review_id',r.id,
+   'approved_by_user_id',f.authorised_by_user_id,'approved_at_utc',f.authorised_at_utc,'original_financial_id',m.from_financial_id,
+   'calculation_context_sha256',r.manifest_json#>>'{daily,context,context_digest}',
+   'worked_facts_sha256',r.manifest_json#>>'{daily,context,unchanged_work_sha256}');
+ if actual is distinct from snap-'rate_source_refs_json' or f.rate_source_refs_json is distinct from refs then
+  raise exception 'DAILY_RATE_ACCEPTED_NATIVE_VALUATION_CHANGED' using errcode='40001';end if;
+end;
+$function$;

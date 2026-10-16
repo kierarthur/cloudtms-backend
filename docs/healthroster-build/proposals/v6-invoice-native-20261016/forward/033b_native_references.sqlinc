@@ -84,9 +84,10 @@ authoritative as materialized (
   left join public.timesheets_financials f
     on f.timesheet_id=s.timesheet_id and f.is_current
   left join lateral (
-    select coalesce(private.invoice_contract_move_prospective_source_v1(
+    select coalesce(private.invoice_contract_correction_prospective_source_v1(
       (s.member->>'invoice_contract_correction_id')::uuid,t.timesheet_id,
-      (select o.created_by_user_id from private.timesheet_contract_move_operations o where o.id=(s.member->>'invoice_contract_correction_id')::uuid))->'settings_authority',
+      (select o.created_by_user_id from private.timesheet_contract_move_operations o where o.id=(s.member->>'invoice_contract_correction_id')::uuid),
+      s.member->'invoice_contract_correction_daily')->'settings_authority',
       private._timesheet_settings_authority_frozen_v1(t.timesheet_id)) authority_json
     where t.timesheet_id is not null
   ) a on true

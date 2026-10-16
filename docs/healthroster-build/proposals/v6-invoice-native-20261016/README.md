@@ -12,8 +12,8 @@ is self-contained; the unchanged paused preservation predecessor is retained in
 uncommitted file. All prior paused invoice, Agency and Source work is preserved.
 
 `node build.mjs` regenerates full owner definitions using unique-hunk assertions.
-`node --test source.test.mjs` passes 17 source regression checks. `parse-source.py`
-passes SQL, PL/pgSQL and inner SQL grammar checks for all 45 files using pglast
+`node --test source.test.mjs` passes 21 source regression checks. `parse-source.py`
+passes SQL, PL/pgSQL and inner SQL grammar checks for all 53 files using pglast
 7.20 installed only in `C:/tmp/healthroster-v6-invoice-parser-20261016`.
 These checks do not prove catalog binding, monetary output, ACL execution,
 concurrency, rendered documents, installed API behavior or phone acceptance.
@@ -23,6 +23,10 @@ The second source checkpoint also proves PostgreSQL AST equality for all 28
 operands of the original native invoice-line projection, ignoring only source
 locations. Native generation factors that one projection into
 `native_planned_lines`; it does not calculate an alternative price or rounding.
+The synchronous weekly Source admission also factors its one existing native
+projection; AST equality proves all 27 operands unchanged. Offline PL grammar
+uses RECORD declarations for catalog-dependent %ROWTYPE parsing only, recorded
+per file; executable SQL is unchanged and catalog binding remains unproved.
 
 Implemented source includes immutable original Source facts/certificate,
 before-first-final handling, original-A admission and presentation, exact
@@ -104,14 +108,16 @@ service_role; existing native function ACLs are preserved):
 Integration still required: the newest physical owner source/schema (including
 the actual financial guard and accepting_v1 predicate) before these bodies;
 genuine Banking accepted valuation/current financial cut and publisher;
-replacement B document/evidence consumption of the physical owner's certified
-original-evidence source; Daily same-ID native revision integration; and native
+Daily review/accept composition with its actual paid/frozen Summary/freeze
+preflight and Banking publisher (not implemented by this invoice lane); and native
 catalog/ACL/security/financial/document/concurrency proof. Ordinary preflight
 reports INVOICE_CONTEXT_UNAVAILABLE specifically when the genuine accepted
 native valuation is absent. Native selected Draft/repeated Unissue logic,
 operation-wide entitlement partition, prospective grouping/reference adapters,
 Source original-A collection, B PAY-only exclusion and the legacy intended-line
-witness are implemented source and remain unqualified until native execution.
+witness, B evidence/document consumer and Daily invoice adapters are implemented
+source and remain unqualified until native execution. The six billing stores
+are unchanged from checkpoint 367c60bb; no successor schema change is required.
 `NATIVE_QUALIFICATION_CASES.md` records the actual required hostile/retry cases;
 none is reported as a database pass.
 
@@ -119,3 +125,36 @@ The existing worktree `npm run db:check` baseline rejects the prior unrecorded
 `13102026_1344_weekly_source_self_bill_report_schema.sql`; no whole-worktree lock
 refresh was used to bless unrelated prior migrations. Root owns integration and
 the protected commit-bound release process.
+
+Third checkpoint additions:
+
+- `invoice_contract_move_inspect_v1(jsonb,jsonb,uuid,boolean)` is the initial
+  Daily review overload. Its second argument is exactly the native Daily
+  `{context,calculation_snapshot,normalized_snapshot,rate_provenance}` result.
+  It revalidates through the physical owner's genuine selector/calculator
+  validator and normalized overlay, keeping original actual TF/TS IDs for
+  prospective native grouping. Public generation rejects internal markers.
+- `invoice_source_admission_line_enter_v1(uuid,uuid,uuid,jsonb)` receives the
+  exact synchronous native projection after existing actor/manifest/group/cycle
+  locks and checks. It stamps that actual Draft header with the validated actor,
+  SQL PID/xid, current manifest/presentation, original Source certificate and
+  intended row. The guard rechecks current owner facts and duplicates, verifies
+  the result once, then removes the stamp. No GUC authorizes this original-A arm.
+- Native deliberate Source allocation between unissued Drafts uses the same
+  bounded existing-header protocol for its exact whole old-to-new line rows.
+  It changes only invoice_id through the existing native UPDATE, rechecks actual
+  same-client idle headers/current bindings/placements/Source permission and
+  retains original presentation/economics. Original replay logic remains.
+- Replacement native presentation/document/Issue consumers resolve original A
+  through `timesheet_contract_move_evidence_source_v1(uuid)`. Original signed
+  Timesheet/document/expense assets keep their actual identity; current B still
+  owns price, group and attachment policy. No signature or approval is copied
+  to B. Known missing/failed assets, unsigned QR or failed document workflows
+  block preflight; queueable native rendering does not require all PDFs ready.
+- `invoice_daily_rate_actual_revision_assert_v1(uuid)` requires the real
+  same-transaction Daily acceptance receipt/consumption or completed operation,
+  same physical TS, actual new approved finance and exact canonical calculation
+  plus native approval provenance. Original billing slices freeze old finance.
+  Daily creates no Contract placement/alias. Direct current finance provenance
+  identifies edited Daily invoices. Exclusive replacement scope includes actual
+  finance identity, preserving retained credits across same-ID Daily revisions.

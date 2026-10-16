@@ -191,8 +191,9 @@ timesheet_state as materialized (
       and(nullif(t.qr_signed_hash,'') is null
         or t.qr_signed_at_utc is null) qr_unsigned
   from source_requirements s
-  left join public.timesheets t
-    on t.timesheet_id=s.timesheet_id and (t.is_current or private.timesheet_contract_source_original_eligible_v1(t.timesheet_id))
+  left join lateral (select private.timesheet_contract_move_evidence_source_v1(s.timesheet_id) source) original on true
+  left join public.timesheets t on t.timesheet_id=coalesce((original.source->>'original_timesheet_id')::uuid,s.timesheet_id)
+    and (t.is_current or private.invoice_contract_move_original_evidence_eligible_v1(t.timesheet_id))
   left join public.v_ts_invoice_precheck pc on pc.timesheet_id=s.timesheet_id
   left join public.v_timesheets_summary_base summary
     on summary.timesheet_id=s.timesheet_id
@@ -419,12 +420,13 @@ evidence_state as materialized (
   select r.*,e.id evidence_id,e.document_asset_id,
     a.status asset_status,op.status asset_operation_status
   from evidence_requirements r
+  left join lateral (select private.timesheet_contract_move_evidence_source_v1(r.timesheet_id) source) original on true
   left join lateral (
     select ev.*
     from public.timesheet_evidence ev
     left join public.invoice_document_assets candidate_asset
       on candidate_asset.id=ev.document_asset_id
-    where ev.timesheet_id=r.timesheet_id
+    where ev.timesheet_id=coalesce((original.source->>'original_timesheet_id')::uuid,r.timesheet_id)
       and(
         upper(coalesce(ev.kind,''))=r.requirement
         or r.requirement='GENERAL_EXPENSE'

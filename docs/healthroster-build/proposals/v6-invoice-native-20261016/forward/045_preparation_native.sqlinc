@@ -8,6 +8,8 @@ begin
  select x.* into strict r from private.timesheet_contract_move_reviews x where x.operation_id=o.id and x.id=o.accepted_review_id;
  if o.billing_revision<>p_billing_revision or o.placement_receipt_json->>'operation_id' is distinct from o.id::text then
   raise exception 'CONTRACT_MOVE_BILLING_OBLIGATION_UNBOUND' using errcode='55000';end if;
+ if o.purpose='DAILY_RATE_CORRECTION' and o.state='REVIEWED' then
+  perform private.invoice_daily_rate_actual_revision_assert_v1(o.id);end if;
  v_expected:=jsonb_array_length(r.manifest_json#>'{invoice,slices}');
  if v_expected is null or (select count(*) from private.timesheet_contract_move_billing_slices s
   where s.operation_id=o.id and s.billing_revision=p_billing_revision)<>v_expected then
@@ -104,11 +106,18 @@ returns void language plpgsql stable security definer
 set search_path to 'pg_catalog','public','private','pg_temp'
 as $function$
 begin
+ if exists(select 1 from public.invoices i where i.id=(p_new->>'invoice_id')::uuid
+  and i.type='CREDIT_NOTE' and i.header_snapshot_json#>>'{credit_scope,kind}'='CONTRACT_MOVE') then
+  if not private.invoice_contract_move_line_allowed_v1(p_new) then
+   raise exception 'CONTRACT_MOVE_ORIGINAL_CREDIT_LINE_UNPROVED' using errcode='55000';end if;
+  return;
+ end if;
  if exists(select 1 from private.timesheet_contract_move_replacement_members m
   join private.timesheet_contract_move_replacement_groups g using(operation_id,billing_revision,group_key)
   join private.timesheet_contract_move_scope_fences f on f.operation_id=m.operation_id and f.billing_revision=m.billing_revision
+  join public.timesheets_financials current_finance on current_finance.id=m.current_financial_id and current_finance.is_current
   where m.current_timesheet_id=(p_new->>'timesheet_id')::uuid and f.retired_by_native_receipt_id is null
-   and f.scope_key='REPLACEMENT:'||m.current_timesheet_id::text||':'||m.component_key
+   and f.scope_key='REPLACEMENT:'||m.current_timesheet_id::text||':'||m.current_financial_id::text||':'||m.component_key
    and (p_new->>'invoice_id')::uuid is distinct from coalesce(g.invoice_id,g.planned_invoice_id)) then
   raise exception 'CONTRACT_MOVE_EXCLUSIVE_BILLING_OBLIGATION' using errcode='55000';end if;
 end;

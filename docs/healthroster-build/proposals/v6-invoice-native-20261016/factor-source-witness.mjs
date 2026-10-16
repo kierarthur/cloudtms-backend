@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 // Split SQL select operands without evaluating or rewriting their expressions.
-function splitSql(s){
+export function splitSql(s){
  const out=[];let depth=0,quoted=false,start=0;
  for(let i=0;i<s.length;i++){
   const c=s[i];
@@ -9,6 +9,35 @@ function splitSql(s){
   else if(!quoted){if(c==='(')depth++;else if(c===')')depth--;else if(c===','&&depth===0){out.push(s.slice(start,i).trim());start=i+1;}}
  }
  assert.equal(depth,0);assert.equal(quoted,false);out.push(s.slice(start).trim());return out;
+}
+
+export function factorWeeklySourceAdmission(source,replace){
+ const start=source.indexOf('    insert into public.invoice_lines(');
+ const end=source.indexOf('    ) returning id into v_invoice_line_id;',start)+'    ) returning id into v_invoice_line_id;'.length;
+ assert.ok(start>0&&end>start);
+ const original=source.slice(start,end),valuesStart=original.indexOf('    ) values (');
+ const columns=original.slice(original.indexOf('invoice_lines(')+14,valuesStart).split(',').map(s=>s.trim());
+ const values=splitSql(original.slice(valuesStart+'    ) values ('.length,original.lastIndexOf('    ) returning')));
+ assert.equal(columns.length,values.length);assert.equal(columns[0],'invoice_id');assert.equal(columns.at(-1),'source_key');
+ source=replace(source,'  v_is_report boolean:=false;', '  v_native_line jsonb;\n  v_is_report boolean:=false;');
+ source=replace(source,original,`    select pg_catalog.jsonb_build_object(
+      ${columns.map((col,i)=>`'${col}',${values[i]}`).join(',\n      ')}) into v_native_line;
+    if private.timesheet_contract_source_original_eligible_v1(v_movement.invoice_timesheet_id) then
+      perform private.invoice_source_admission_line_enter_v1(v_invoice_id,v_actor,v_manifest.id,v_native_line);
+    end if;
+    insert into public.invoice_lines(${columns.join(',')})
+    select ${columns.map(col=>'planned.'+col).join(',')}
+    from pg_catalog.jsonb_populate_record(null::public.invoice_lines,v_native_line) planned
+    returning id into v_invoice_line_id;
+    if private.timesheet_contract_source_original_eligible_v1(v_movement.invoice_timesheet_id) then
+      perform private.invoice_source_admission_line_finish_v1(v_invoice_id,v_invoice_line_id);
+    end if;`);
+ source=replace(source,`  return pg_catalog.jsonb_build_object(
+    'ok',true,'status','ADMITTED','idempotent',false,`,`  if exists(select 1 from public.invoices i where i.id=v_invoice_id and i.header_snapshot_json?'source_original_native_admission') then
+    raise exception 'SOURCE_ORIGINAL_ADMISSION_STAMP_SURVIVED' using errcode='55000';end if;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'status','ADMITTED','idempotent',false,`);
+ return source;
 }
 
 export function factorSourceWitness(generation,replace){

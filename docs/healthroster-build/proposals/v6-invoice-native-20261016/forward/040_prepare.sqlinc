@@ -19,6 +19,7 @@ begin
   raise exception 'CONTRACT_MOVE_INVOICE_PREFLIGHT_NOT_READY' using errcode='55000';end if;
  if v_plan->'source_certificate'<>'null'::jsonb then
   perform private.weekly_source_invoice_certificate_assert_v1(v_plan->'source_certificate',true);end if;
+ if o.purpose='DAILY_RATE_CORRECTION' then perform private.invoice_daily_rate_actual_revision_assert_v1(o.id);end if;
  if o.preparation_operation_id is not null then
   select x.result_json into v_result from public.invoice_operations x where x.id=o.preparation_operation_id
    and x.input_json->>'correction_id'=o.id::text and x.input_json->>'billing_revision'=o.billing_revision::text;
@@ -30,9 +31,12 @@ begin
  end if;
  for slice in select x from jsonb_array_elements(v_plan->'slices') x loop
   select x.* into strict member from private.timesheet_contract_move_members x where x.operation_id=o.id and x.member_key=slice->>'member_key';
-  if member.to_timesheet_id is null or not exists(select 1 from private.timesheet_contract_current_placements p
+  if member.to_timesheet_id is null or (o.purpose='CONTRACT_CORRECTION' and not exists(select 1 from private.timesheet_contract_current_placements p
    where p.operation_id=o.id and p.member_key=member.member_key and p.current_timesheet_id=member.to_timesheet_id
-    and p.placement_receipt_id=(o.placement_receipt_json->>'receipt_id')::uuid) then
+    and p.placement_receipt_id=(o.placement_receipt_json->>'receipt_id')::uuid))
+   or (o.purpose='DAILY_RATE_CORRECTION' and (member.to_timesheet_id is distinct from member.from_timesheet_id
+    or member.to_financial_id is null or member.to_financial_id is not distinct from member.from_financial_id
+    or slice->>'original_financial_id' is distinct from member.from_financial_id::text)) then
    raise exception 'CONTRACT_MOVE_ACTUAL_PLACEMENT_REQUIRED' using errcode='55000';end if;
   insert into private.timesheet_contract_move_billing_slices(operation_id,member_key,slice_key,scope_kind,scope_id,
    authority,disposition,original_invoice_id,original_financial_id,issued_at,original_state_json,original_group_json,hold_purpose_json,source_sha256,billing_revision)
@@ -133,7 +137,7 @@ begin
   where s.operation_id=o.id and s.disposition in('REPLACE_ISSUED','RELOCATE_DRAFT') and m.to_timesheet_id=any(v_group.canonical_source_ids)
    and s.original_group_json->>'entitlement_digest'=(private.invoice_contract_move_group_facts_v1(o.id,jsonb_build_array(to_jsonb(v_group)),false)#>>'{groups,0,entitlement_digest}');
   insert into private.timesheet_contract_move_scope_fences(operation_id,billing_revision,scope_key,scope_sha256,authority_receipt_id)
-  select distinct o.id,o.billing_revision,'REPLACEMENT:'||m.current_timesheet_id::text||':'||m.component_key,
+  select distinct o.id,o.billing_revision,'REPLACEMENT:'||m.current_timesheet_id::text||':'||m.current_financial_id::text||':'||m.component_key,
    m.member_sha256,(o.placement_receipt_json->>'receipt_id')::uuid from private.timesheet_contract_move_replacement_members m
   where m.operation_id=o.id and m.billing_revision=o.billing_revision and m.group_key=v_group.group_key;
   insert into public.invoice_operation_chunks(operation_id,chunk_type,phase,sequence_no,work_key,entity_type,entity_id,status,priority,

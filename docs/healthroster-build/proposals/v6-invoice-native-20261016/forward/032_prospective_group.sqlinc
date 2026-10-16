@@ -33,7 +33,7 @@ begin
   v_members:='[]';
   for v_member in select value from jsonb_array_elements(g->'canonical_source_members') loop
    if p_preview then
-    select m->>'member_key' into strict v_key from jsonb_array_elements(private.timesheet_contract_move_scope_v1(o.id,false)->'members') m
+    select m->>'member_key' into strict v_key from jsonb_array_elements(private.invoice_contract_correction_scope_v1(o.id,false)->'members') m
      where m->>'from_timesheet_id'=v_member->>'source_id';
    else
     select m.member_key into strict v_key from private.timesheet_contract_move_members m where m.operation_id=o.id

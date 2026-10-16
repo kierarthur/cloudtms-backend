@@ -30,3 +30,19 @@ reconciled with the physical owner; no new Move phase or Source config/GUC
 authority was added. Native qualification cases, current B evidence/document
 consumer, Daily integration and genuine Bank valuation/publisher are still
 required. See the proposal README and NATIVE_QUALIFICATION_CASES.md.
+
+16 October V6 invoice third source checkpoint: replacement document/Issue
+consumers now resolve original immutable evidence while current B owns invoice
+price/group/attachment policy. Known failed/missing native document inputs block
+preflight without an all-PDF placement wait. Synchronous new Source admission
+and native between-Draft Source allocation have exact same-header SQL PID/xid,
+validated actor/current native manifest/presentation/binding witnesses and remove
+their stamps before return. No new Move phase/store/GUC authority. Daily invoice
+adapters consume the genuine canonical snapshot/normalized original-finance
+overlay and actual same-ID approved revision; no Contract alias is fabricated.
+All 53 SQL/PLpgSQL/inner grammar files and 21 source regressions pass; AST equality
+proves 28 legacy plus 27 synchronous Source native projection operands unchanged.
+The six billing stores are unchanged from 367c60bb. No database execution or
+installed publication is claimed. Actual Banking valuation/cut/publish, Daily
+Review/Accept/Summary/freeze composition, native security/finance/document and
+concurrency proof remain required; Agency NX-AI6 remains pending.

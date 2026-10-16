@@ -430,12 +430,18 @@ begin
     where cn.type='CREDIT_NOTE' and cn.header_snapshot_json?'credit_scope'
     group by cn.id
   ),
+  invoice_evidence_subjects as materialized (
+    select distinct il.invoice_id,il.timesheet_id current_timesheet_id,
+      coalesce((original.source->>'original_timesheet_id')::uuid,il.timesheet_id) timesheet_id
+    from public.invoice_lines il
+    left join lateral (select private.timesheet_contract_move_evidence_source_v1(il.timesheet_id) source) original on true
+    where il.invoice_id in(select invoice_id from requested_invoices) and il.timesheet_id is not null
+  ),
   timesheet_targets as materialized (
     select distinct il.invoice_id,t.timesheet_id
-    from requested_invoices ri
-    join public.invoice_lines il on il.invoice_id=ri.invoice_id
-      and il.timesheet_id is not null
-    join public.timesheets t on t.timesheet_id=il.timesheet_id and (t.is_current or private.timesheet_contract_source_original_eligible_v1(t.timesheet_id))
+    from invoice_evidence_subjects il
+    join public.timesheets t on t.timesheet_id=il.timesheet_id
+      and (t.is_current or private.invoice_contract_move_original_evidence_eligible_v1(t.timesheet_id))
     union
     select null::uuid,vr.entity_id
     from valid_requests vr
@@ -531,7 +537,7 @@ begin
         temporary_worker_declaration,
       coalesce(sd.client_declaration_json,'{}'::jsonb) client_declaration
     from timesheet_targets target
-    join public.timesheets t on t.timesheet_id=target.timesheet_id and (t.is_current or private.timesheet_contract_source_original_eligible_v1(t.timesheet_id))
+    join public.timesheets t on t.timesheet_id=target.timesheet_id and (t.is_current or private.invoice_contract_move_original_evidence_eligible_v1(t.timesheet_id))
     left join public.v_timesheets_summary_base vs on vs.timesheet_id=t.timesheet_id
     left join public.contracts ct on ct.id=t.contract_id
     left join public.candidates cand on cand.id=coalesce(vs.candidate_id,ct.candidate_id)
@@ -1191,20 +1197,19 @@ begin
         'template_version','timesheet-professional-v1'
       )) render_model,
       t.submission_mode::text submission_mode,t.document_revision,t.manual_document_asset_id,
-      coalesce(vs.client_is_nhsp,false) client_is_nhsp,
-      coalesce(vs.client_no_timesheet_required,false) no_timesheet_required,
+      coalesce(current_policy.client_is_nhsp,false) client_is_nhsp,
+      coalesce(current_policy.client_no_timesheet_required,false) no_timesheet_required,
       coalesce(pc.effective_ts_attach_to_invoice,true) attach_timesheet
     from (
-      select distinct il.invoice_id, il.timesheet_id
-      from public.invoice_lines il
-      where il.invoice_id in(select invoice_id from requested_invoices)
-        and il.timesheet_id is not null
+      select distinct invoice_id,timesheet_id,current_timesheet_id from invoice_evidence_subjects
     ) il
-    join public.timesheets t on t.timesheet_id=il.timesheet_id and (t.is_current or private.timesheet_contract_source_original_eligible_v1(t.timesheet_id))
+    join public.timesheets t on t.timesheet_id=il.timesheet_id
+      and (t.is_current or private.invoice_contract_move_original_evidence_eligible_v1(t.timesheet_id))
     left join public.v_timesheets_summary_base vs on vs.timesheet_id=t.timesheet_id
     left join timesheet_v2_models v2
       on v2.invoice_id=il.invoice_id and v2.timesheet_id=t.timesheet_id
-    left join public.v_ts_invoice_precheck pc on pc.timesheet_id=t.timesheet_id
+    left join public.v_ts_invoice_precheck pc on pc.timesheet_id=il.current_timesheet_id
+    left join public.v_timesheets_summary_base current_policy on current_policy.timesheet_id=il.current_timesheet_id
   ),
   invoice_timesheets_agg as materialized (
     select invoice_id,jsonb_agg(jsonb_build_object(
@@ -1517,7 +1522,8 @@ begin
         a.normalised_size_bytes asset_size_bytes,
         a.normalised_page_count asset_page_count,e.created_at
       from public.invoice_lines il
-      join public.timesheet_evidence e on e.timesheet_id=il.timesheet_id
+      join invoice_evidence_subjects original on original.invoice_id=il.invoice_id and original.current_timesheet_id=il.timesheet_id
+      join public.timesheet_evidence e on e.timesheet_id=original.timesheet_id
       left join public.invoice_document_assets a on a.id=e.document_asset_id
       where il.invoice_id in(select invoice_id from requested_invoices)
         and il.timesheet_id is not null
@@ -1531,7 +1537,7 @@ begin
         and exists(
           select 1 from public.invoice_lines expense_line
           where expense_line.invoice_id=il.invoice_id
-            and expense_line.timesheet_id=e.timesheet_id
+            and expense_line.timesheet_id=il.timesheet_id
             and(
               upper(coalesce(expense_line.meta_json->>'line_type','')) in('MILEAGE','EXPENSES')
               or upper(coalesce(expense_line.meta_json->>'line_type','')) like '%EXPENSE%'
@@ -1848,7 +1854,7 @@ begin
       '[]'::jsonb supporting_sources,
       jsonb_build_object('schema_version','HIGHER_RATE_PRESENTATION_V1','rows','[]'::jsonb) higher_rate_support
     from valid_requests vr
-    join public.timesheets t on vr.entity_type='TIMESHEET' and t.timesheet_id=vr.entity_id and (t.is_current or private.timesheet_contract_source_original_eligible_v1(t.timesheet_id))
+    join public.timesheets t on vr.entity_type='TIMESHEET' and t.timesheet_id=vr.entity_id and (t.is_current or private.invoice_contract_move_original_evidence_eligible_v1(t.timesheet_id))
     left join public.v_timesheets_summary_base vs on vs.timesheet_id=t.timesheet_id
     left join timesheet_v2_models v2
       on v2.invoice_id is null and v2.timesheet_id=t.timesheet_id

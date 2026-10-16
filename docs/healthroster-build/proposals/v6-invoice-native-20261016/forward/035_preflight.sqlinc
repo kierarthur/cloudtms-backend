@@ -1,4 +1,4 @@
-create or replace function private.invoice_contract_move_inspect_v1(p_physical jsonb,p_actor_user_id uuid,p_lock boolean)
+create or replace function private.invoice_contract_move_inspect_v1(p_physical jsonb,p_daily jsonb,p_actor_user_id uuid,p_lock boolean)
 returns jsonb language plpgsql volatile security definer
 set search_path to 'pg_catalog','public','private','pg_temp'
 as $function$
@@ -6,11 +6,17 @@ declare member jsonb;line record;v_original uuid;v_current uuid;v_ids uuid[]:='{
  v_slices jsonb:='[]';v_blockers jsonb:='[]';v_invoice jsonb;v_disposition text;v_source boolean;v_known boolean;
  v_partition jsonb:='[]';v_entitlement jsonb;v_slice jsonb;
  v_group_manifest jsonb;v_group_facts jsonb;v_invoice_certificate jsonb;v_ordinary_ids uuid[];
- v_facts jsonb;v_certificate jsonb;v_requires_admin boolean:=false;v_native record;v_digest text;
+ v_facts jsonb;v_certificate jsonb;v_requires_admin boolean:=false;v_native record;v_digest text;v_document_inputs jsonb;
 begin
- if p_physical->>'version'<>'CONTRACT_MOVE_SCOPE_V1' or jsonb_typeof(p_physical->'members')<>'array'
+ if not coalesce(p_physical->>'version' in('CONTRACT_MOVE_SCOPE_V1','DAILY_RATE_SCOPE_V1'),false) or jsonb_typeof(p_physical->'members') is distinct from 'array'
   or jsonb_array_length(p_physical->'members') not between 1 and 500 or p_lock is null then
   raise exception 'CONTRACT_MOVE_INVOICE_SCOPE_INVALID' using errcode='22023';end if;
+ if p_physical->>'version'='DAILY_RATE_SCOPE_V1' then
+  if p_physical is distinct from private.daily_rate_correction_scope_v1((p_physical->>'operation_id')::uuid,p_lock) then
+   raise exception 'REVIEW_STALE' using errcode='40001';end if;
+  perform private.invoice_contract_correction_prospective_source_v1((p_physical->>'operation_id')::uuid,
+    (p_physical#>>'{current_placement,timesheet_id}')::uuid,p_actor_user_id,p_daily);
+ elsif p_daily is not null and p_daily<>'null'::jsonb then raise exception 'CONTRACT_MOVE_DAILY_INPUT_FORBIDDEN' using errcode='22023';end if;
  for member in select value from jsonb_array_elements(p_physical->'members') order by value->>'member_key' loop
   v_current:=(member->>'from_timesheet_id')::uuid;v_original:=(member->>'original_timesheet_id')::uuid;
   v_ids:=array_append(v_ids,v_current);
@@ -76,7 +82,8 @@ begin
  if cardinality(v_ordinary_ids)>0 and exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
   select jsonb_agg(to_jsonb(g) order by g.group_key) into v_group_manifest
   from private._invoice_generation_resolve_command_groups(jsonb_build_array(jsonb_build_object('command_type','GENERATE_SELECTED',
-   'source_ids',to_jsonb(v_ordinary_ids),'allow_early',true,'invoice_contract_correction_id',p_physical->>'operation_id')),p_actor_user_id,now()) g;
+   'source_ids',to_jsonb(v_ordinary_ids),'allow_early',true,'invoice_contract_correction_id',p_physical->>'operation_id',
+   'invoice_contract_correction_daily',p_daily)),p_actor_user_id,now()) g;
   v_group_facts:=private.invoice_contract_move_group_facts_v1((p_physical->>'operation_id')::uuid,v_group_manifest,true);
   for v_native in select value g from jsonb_array_elements(v_group_manifest) where value->>'blocker_code' is not null loop
    v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code',v_native.g->>'blocker_code',
@@ -103,6 +110,8 @@ begin
    else v_partition:=v_partition||jsonb_build_array(v_slice);end if;
   end loop;
   v_slices:=v_partition;
+  v_document_inputs:=private.invoice_contract_correction_document_preflight_v1(p_physical,p_daily,p_actor_user_id,v_slices);
+  v_blockers:=v_blockers||(v_document_inputs->'known_blockers');
   -- Genuine accepted B valuation is owned by the Banking/native bridge. The
   -- grouping facts above are executable and sealed; they are not a price quote.
   if not exists(select 1 from private.timesheet_contract_move_operations o where o.id=(p_physical->>'operation_id')::uuid
@@ -117,15 +126,33 @@ begin
   select array_agg(distinct id order by id) into v_sources from unnest(v_sources) id;
   v_certificate:=private.weekly_source_invoice_certificate_v1(v_sources,'{}'::uuid[],p_lock);
  end if;
- v_facts:=jsonb_build_object('physical_scope_sha256',p_physical->>'scope_sha256','source_certificate',v_certificate,
+ v_facts:=jsonb_build_object('physical_scope_sha256',p_physical->>'scope_sha256','source_certificate',v_certificate,'document_inputs',v_document_inputs,
   'native_group_manifest',v_group_manifest,'native_group_facts',v_group_facts,'slices',v_slices,'required_capabilities',case when v_requires_admin then jsonb_build_array('INVOICE_PREPARE') else '[]'::jsonb end,
   'known_blockers',v_blockers);
  v_digest:=encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_CORRECTION_INVOICE_PREFLIGHT_V1',v_facts),'hex');
  if p_lock then
-  if (private.invoice_contract_move_inspect_v1(p_physical,p_actor_user_id,false)->>'certificate_digest') is distinct from v_digest then
+  if (private.invoice_contract_move_inspect_v1(p_physical,p_daily,p_actor_user_id,false)->>'certificate_digest') is distinct from v_digest then
    raise exception 'REVIEW_STALE' using errcode='40001';end if;
  end if;
  return v_facts||jsonb_build_object('certificate_digest',v_digest);
+end;
+$function$;
+
+-- Existing Contract ABI remains unchanged. Daily initial review calls the
+-- four-argument owner with its genuine canonical calculation output.
+create or replace function private.invoice_contract_move_inspect_v1(p_physical jsonb,p_actor_user_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_daily jsonb;
+begin
+ if p_physical->>'version'='DAILY_RATE_SCOPE_V1' then
+  select r.manifest_json->'daily' into strict v_daily from private.timesheet_contract_move_reviews r
+   join private.timesheet_contract_move_operations o on o.id=r.operation_id
+   where o.id=(p_physical->>'operation_id')::uuid and (o.accepted_review_id is null or r.id=o.accepted_review_id)
+   order by r.review_no desc limit 1;
+ end if;
+ return private.invoice_contract_move_inspect_v1(p_physical,v_daily,p_actor_user_id,p_lock);
 end;
 $function$;
 
@@ -136,7 +163,7 @@ as $function$
 declare r private.timesheet_contract_move_reviews%rowtype;v_facts jsonb;v_hash text;v_invoice_certificate jsonb;
 begin
  select v.* into strict r from private.timesheet_contract_move_reviews v where v.id=p_review_id;
- v_facts:=private.invoice_contract_move_inspect_v1(r.manifest_json->'physical',p_actor_user_id,p_lock);
+ v_facts:=private.invoice_contract_move_inspect_v1(r.manifest_json->'physical',r.manifest_json->'daily',p_actor_user_id,p_lock);
  if p_lock and v_facts is distinct from r.manifest_json->'invoice' then
   raise exception 'REVIEW_STALE' using errcode='40001';end if;
  v_invoice_certificate:=private.timesheet_contract_move_invoice_certificate_v1(r.operation_id,p_lock);
@@ -147,7 +174,7 @@ begin
  return jsonb_build_object('version','CONTRACT_CORRECTION_PREFLIGHT_V1','review_id',r.id,
   'ready_to_confirm',jsonb_array_length(v_facts->'known_blockers')=0,'required_capabilities',v_facts->'required_capabilities',
   'source_digest',coalesce(v_facts#>>'{source_certificate,hash}',encode(private.weekly_source_sha256_jsonb_v1('EMPTY_SOURCE_INVOICE_V1','[]'::jsonb),'hex')),'group_digest',coalesce(v_facts#>>'{native_group_facts,digest}',v_hash),'reference_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_NATIVE_REFERENCE_V1',coalesce(v_facts->'native_group_manifest','[]'::jsonb)),'hex'),
-  'evidence_digest',v_invoice_certificate->>'current_evidence_digest','document_input_digest',v_invoice_certificate->>'document_input_digest','known_blockers',v_facts->'known_blockers','certificate_digest',v_hash);
+  'evidence_digest',v_invoice_certificate->>'current_evidence_digest','document_input_digest',coalesce(v_facts#>>'{document_inputs,digest}',v_invoice_certificate->>'document_input_digest'),'known_blockers',v_facts->'known_blockers','certificate_digest',v_hash);
 end;
 $function$;
 alter function private.invoice_contract_move_inspect_v1(jsonb,uuid,boolean) owner to postgres;
