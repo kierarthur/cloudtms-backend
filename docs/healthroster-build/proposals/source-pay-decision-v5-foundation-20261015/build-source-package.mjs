@@ -19,7 +19,8 @@ const stages = [
   { id: 'HEALTH_BRIDGE_AFTER_BANK_PUBLICATION', requires: [
     'Banking canonical Source publication parent and exact per-component publication member schema'], files: [
     'one-time/04_complete_canonical_publication_bridge.sqlinc',
-    'one-time/05_complete_owner_only_rls.sqlinc'] },
+    'one-time/05_complete_owner_only_rls.sqlinc',
+    'one-time/06_native_source_contact_resolution.sqlinc'] },
   { id: 'HEALTH_OWNERS', requires: [
     'All eleven Health tables and real Banking cut/publication owners',
     'Physical H103 direct alias/placement/evidence/archive-consumption owners and genuine Banking move publication schema',
@@ -54,7 +55,18 @@ const stages = [
     'forward/28_current_native_entitlement_projection.sqlinc',
     'forward/29_current_local_native_context.sqlinc',
     'forward/30_native_saved_placement_proof.sqlinc',
-    'forward/31_current_financial_native_source.sqlinc'] },
+    'forward/31_current_financial_native_source.sqlinc',
+    'forward/32_source_request_and_scope_guards.sqlinc',
+    'forward/33_genuine_source_subject_and_scope.sqlinc',
+    'forward/34_atomic_preview_assembly.sqlinc',
+    'forward/35_native_preview_quote_registration.sqlinc',
+    'forward/36_exact_source_review_and_seal.sqlinc',
+    'forward/37_selected_contact_retirement.sqlinc',
+    'forward/38_source_owned_saved_result.sqlinc',
+    'forward/39_actual_native_dependency_rollback.sqlinc',
+    'forward/40_actual_publication_and_source_binding.sqlinc',
+    'forward/41_atomic_source_acceptance.sqlinc',
+    'forward/42_native_contact_reimport_match.sqlinc'] },
   { id: 'CURRENT_NATIVE_ENTRY_FENCES', requires: [
     'private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)',
     'Complete current native bodies pinned by NATIVE_ENTRY_RECEIPT.json; root final owner composition'], files: [
@@ -71,17 +83,21 @@ const manifest = {
   stages: [],
   runtime: [],
   open_health_owners: [
-    'Public preview begin/quote/ready/seal/abandon and accept/read/resume implementation',
-    'Actual preexisting immutable native receipt adoption and whitelisted native dependency rollback composition',
+    'Public Source preview/accept owners are authored; genuine PostgreSQL/native effects remain REQUIRED_NOT_RUN',
+    'ADOPTED_EXISTING exact prevalidated native-receipt inventory needs genuine Banking producer schema; one actual native dependency rollback is authored, REQUIRED_NOT_RUN',
     'Current-B NEXT wrapper/producer integration beyond actual current Local writer/context consumers',
     'Full current-B Source Local native writer/qualification effects and historical read qualification remain REQUIRED_NOT_RUN',
-    'Full binding/selected contact orchestration and final canonical Source receipt integration',
+    'Actual Source binding/contact/canonical receipt orchestration is authored; native producer effects/qualification remain REQUIRED_NOT_RUN',
+    'Exact final B051 public READ_RESULT current-financial wrapper/child projection remains genuine producer dependency',
   ],
   external_dependencies: [
     { owner: 'Banking', abi: 'private.bpay_next_source_pay_decision_cut_v1(uuid,uuid,uuid,boolean)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
     { owner: 'Banking', abi: 'private.bpay_next_source_pay_decision_acceptance_begin_v1(uuid,uuid,uuid,bytea)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
     { owner: 'Banking', abi: 'private.bpay_next_source_pay_decision_stage_v1(uuid,uuid,bytea,uuid)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
     { owner: 'Banking', abi: 'private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)', state: 'REQUIRE_GENUINE_PRODUCER_RECEIPT' },
+    { owner: 'Banking B051', abi: 'Final public Source READ_RESULT wrapper/current financial child schema', state: 'NO_PUBLISHED_EXACT_PRODUCER_SHAPE' },
+    { owner: 'Banking native Source component binding', abi: 'private.bpay_next_source_binding_components_v1(uuid)+private.bpay_next_source_component_bind_v1(uuid,uuid)',
+      state: 'REQUIRE_GENUINE_SOURCE_PROOF_ARM_PUBLICATION_RECEIPT' },
     { owner: 'Banking existing protected producer', abi: 'private.bpay_next_stage_protected_source_v1(uuid,uuid,uuid,jsonb)',
       source: 'supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql',
       case: 'Accepted A-to-B move: producer still validates original family/root Contract A; caller current-B qualification alone cannot satisfy that invariant.',
@@ -102,6 +118,10 @@ const manifest = {
     'Later B-to-C retains genuine accepted native Local B receipt via immutable stage/physical operation/member proof',
   ] },
   database_actions: 'NONE',
+  shared_action_decoder: { owner: 'Physical', source_commit: '00f25571ac7fb65f443a51a52beced0710211138e',
+    source: 'docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/forward/contracts/contract-correction-v3.mjs',
+    mount: 'broker/src/contract-correction-v3.mjs', sha256: '57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087',
+    used_export: 'validateAction', state: 'EXACT_PUBLISHED_DEPENDENCY_COPY_NO_COMPETING_BODY' },
 };
 const declarations = new Set();
 for (const stage of stages) {
@@ -130,6 +150,9 @@ for (const relative of [
   'broker/src/weekly-source/source-native-economic.mjs',
   'broker/src/weekly-source/source-unprotect-worker.mjs',
   'broker/src/weekly-source/source-current-financial.mjs',
+  'broker/src/contract-correction-v3.mjs',
+  'broker/src/weekly-source/source-pay-decision-contract.mjs',
+  'broker/src/weekly-source/source-pay-decision-worker.mjs',
   'broker/src/banking-pay/weekly-source-c1-components.mjs',
   'tests/weekly-source/protected-action-orchestrator.test.mjs',
   'tests/weekly-source/source-native-contract.test.mjs',
@@ -141,6 +164,7 @@ for (const relative of [
   'tests/weekly-source/source-unprotect-worker.test.mjs',
   'tests/weekly-source/source-native-generators.test.mjs',
   'tests/weekly-source/source-current-financial.test.mjs',
+  'tests/weekly-source/source-pay-decision-worker.test.mjs',
 ]) {
   const text = readFileSync(path.join(root, relative), 'utf8');
   manifest.runtime.push({ path: relative, sha256: sha(text), bytes: Buffer.byteLength(text) });

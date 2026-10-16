@@ -1,0 +1,64 @@
+-- Source-owned internal current projection. The final public READ_RESULT
+-- wrapper and Banking financial-status child remain the exact B051 producer
+-- seam. This private projection does not claim that unconsumed shape.
+create or replace function private.weekly_source_pay_decision_read_source_v1(p_decision uuid,p_request uuid,p_actor uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+declare d private.weekly_source_pay_decisions%rowtype;j private.weekly_source_pay_decision_requests%rowtype;
+ r private.weekly_source_pay_decision_reviews%rowtype;m jsonb;applications jsonb;native jsonb;cut jsonb;
+begin
+ if p_actor is null or not private.weekly_source_pay_actor_allowed_v1(p_actor) then raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';end if;
+ select x.* into strict d from private.weekly_source_pay_decisions x where x.id=p_decision and x.accept_request_id is not null and x.receipt_json is not null;
+ select x.* into strict j from private.weekly_source_pay_decision_requests x where x.request_id=p_request and x.decision_id=d.id
+  and x.request_kind in('ACCEPT','RESUME_FINANCIAL') and x.metadata_state='COMMITTED' and x.receipt_json is not null;
+ select x.* into strict r from private.weekly_source_pay_decision_reviews x where x.id=j.review_id and x.decision_id=d.id;
+ for m in select value from jsonb_array_elements(r.private_manifest_json->'selection') loop
+  perform private.weekly_source_pay_decision_scope_access_v1(p_actor,(m->>'source_group_id')::uuid,(m->>'actual_client_id')::uuid,(m->>'scope_date')::date);
+ end loop;
+ if j.receipt_json->>'version' is distinct from 'SOURCE_PAY_DECISION_RECEIPT_V1'
+  or j.receipt_json->>'decision_id' is distinct from d.id::text or j.receipt_json->>'request_id' is distinct from j.request_id::text
+  or j.receipt_json->>'review_id' is distinct from r.id::text then raise exception 'SOURCE_PAY_DECISION_SAVED_RECEIPT_INVALID' using errcode='23514';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('application_id',a.id,'request_id',a.request_id,'review_id',a.review_id,'cut_id',a.cut_id,
+   'state',a.state,'application_sha256',encode(a.application_sha256,'hex'),'completed_at_utc',a.completed_at_utc) order by c.cut_no),'[]'::jsonb)
+   into applications from private.weekly_source_pay_decision_acceptance_applications a
+   join private.bpay_next_source_pay_decision_cut c on c.id=a.cut_id and c.decision_id=a.decision_id and c.review_id=a.review_id
+   where a.decision_id=d.id and a.state='COMMITTED';
+ if not exists(select 1 from private.weekly_source_pay_decision_acceptance_applications a where a.request_id=j.request_id and a.decision_id=d.id
+   and a.review_id=j.review_id and a.state='COMMITTED' and a.application_sha256 is not null) then raise exception 'SOURCE_PAY_DECISION_SAVED_APPLICATION_INVALID' using errcode='23514';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('application_id',a.id,'request_id',a.request_id,'member_key',n.member_key,'preparation_id',n.preparation_id,
+  'route',n.route,'origin',n.origin,'orchestration_run_id',n.orchestration_run_id,'native_result_sha256',encode(n.native_result_sha256,'hex'),
+  'original_native_result',n.native_result_json,'failure_code',n.failure_code,
+  'current_local_release_proof',case when n.route='SOURCE_LOCAL' and n.origin<>'NOT_APPLIED_DEPENDENCY'
+    then private.weekly_source_pay_decision_local_release_proof_v1(n.preparation_id) else null end)
+  order by c.cut_no,n.member_key),'[]'::jsonb) into native
+  from private.weekly_source_pay_decision_native_adoptions n
+   join private.weekly_source_pay_decision_acceptance_applications a on a.id=n.application_id and a.decision_id=d.id and a.state='COMMITTED'
+   join private.bpay_next_source_pay_decision_cut c on c.id=a.cut_id
+  where n.native_result_sha256 is null or n.native_result_sha256=private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_COMPOSED_RESULT_V1',n.native_result_json);
+ if exists(select 1 from private.weekly_source_pay_decision_native_adoptions n join private.weekly_source_pay_decision_acceptance_applications a
+   on a.id=n.application_id where a.decision_id=d.id and (a.state<>'COMMITTED' or n.native_result_sha256 is distinct from
+    case when n.native_result_json is null then null else private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_COMPOSED_RESULT_V1',n.native_result_json) end)) then
+  raise exception 'SOURCE_PAY_DECISION_SAVED_NATIVE_RESULT_INVALID' using errcode='23514';end if;
+ select jsonb_build_object('cut_id',c.id,'cut_no',c.cut_no::text,'review_id',c.review_id,'qualification_state',c.qualification_state,
+  'pay_cut_sha256',encode(c.pay_cut_sha256,'hex'),'source_invoice_sha256',encode(c.source_invoice_sha256,'hex'),'issue_set_sha256',encode(c.issue_set_sha256,'hex'))
+  into strict cut from private.bpay_next_source_pay_decision_cut c where c.id=d.current_financial_cut_id and c.decision_id=d.id and c.review_id is not null;
+ return jsonb_build_object('version','SOURCE_PAY_DECISION_INTERNAL_SOURCE_READ_V1','decision_id',d.id,'request_id',j.request_id,
+  'accepted_receipt',d.receipt_json,'request_receipt',j.receipt_json,'state_revision',d.state_revision::text,'current_cut',cut,'applications',applications,'native_members',native);
+exception when no_data_found or too_many_rows then raise exception 'SOURCE_PAY_DECISION_SAVED_RESULT_NOT_FOUND' using errcode='22023';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;
+
+create or replace function public.weekly_source_pay_decision_read_source_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','actor_user_id','decision_id','request_id'])
+  or not(p_request ?& array['version','actor_user_id','decision_id','request_id'])
+  or p_request->>'version' is distinct from 'SOURCE_PAY_DECISION_INTERNAL_SOURCE_READ_V1' then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ return private.weekly_source_pay_decision_read_source_v1((p_request->>'decision_id')::uuid,(p_request->>'request_id')::uuid,(p_request->>'actor_user_id')::uuid);
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_read_source_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_read_source_v1(jsonb) to service_role;
+notify pgrst,'reload schema';

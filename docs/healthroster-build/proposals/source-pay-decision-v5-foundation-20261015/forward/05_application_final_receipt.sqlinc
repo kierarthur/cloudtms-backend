@@ -5,7 +5,7 @@ declare
  v_app private.weekly_source_pay_decision_acceptance_applications%rowtype;
  v_request private.weekly_source_pay_decision_requests%rowtype;
  v_decision private.weekly_source_pay_decisions%rowtype;
- v_member jsonb;v_member_row private.weekly_source_pay_decision_members%rowtype;
+ v_member jsonb;v_member_row private.weekly_source_pay_decision_members%rowtype;v_review_member jsonb;
  v_issue uuid;v_native jsonb;v_publications jsonb;v_links jsonb;v_contact jsonb;v_hash bytea;
 begin
  select a.* into strict v_app from private.weekly_source_pay_decision_acceptance_applications a
@@ -53,7 +53,13 @@ begin
  for v_member in select m.value from jsonb_array_elements(v_request.receipt_json->'members') m loop
   select m.* into strict v_member_row from private.weekly_source_pay_decision_members m
    where m.decision_id=v_app.decision_id and m.member_key=v_member->>'member_key';
-  if v_member->'invoice_certificate' is distinct from v_member_row.source_invoice_certificate_json then
+  select selected.value into strict v_review_member from private.weekly_source_pay_decision_reviews review,
+    lateral jsonb_array_elements(review.private_manifest_json->'selection') selected
+   where review.id=v_app.review_id and review.decision_id=v_app.decision_id and selected.value->>'member_key'=v_member_row.member_key;
+  -- A fresh RESUME may follow a legitimate original Source invoice lifecycle.
+  -- Keep the first accepted member/receipt immutable; this exact request's
+  -- fresh reviewed certificate is independently asserted unchanged atomically.
+  if v_member->'invoice_certificate' is distinct from v_review_member->'invoice_certificate' then
    raise exception 'SOURCE_PAY_DECISION_FINAL_INVOICE_CERTIFICATE_INVALID' using errcode='23514';
   end if;
   -- The invoice owner reads original immutable allocation/amount/document facts.

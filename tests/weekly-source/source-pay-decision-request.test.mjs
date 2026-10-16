@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { decodeSourcePayDecisionBrowserRequest as decode } from '../../broker/src/weekly-source/source-pay-decision-request.mjs';
+
+test('Source-row overlap is rejected across scope labels, while disjoint real component selections stay separate',()=>{
+ const base=request('PREVIEW');const first={...base.selection[0],scope_mode:'COMPONENT_QUANTITIES',component_keys:['actual:one']};
+ const second={...first,component_keys:['actual:two']};decode({...base,selection:[first,second]},'PREVIEW');
+ assert.throws(()=>decode({...base,selection:[first,{...second,component_keys:['actual:one']}]},'PREVIEW'));
+ assert.throws(()=>decode({...base,selection:[base.selection[0],{...first,scope_kind:'TIMESHEET_FAMILY',family_root_id:id(7)}]},'PREVIEW'));
+});
 const id = (n) => `91000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const hash = 'a'.repeat(64);
 const common = { version: 'SOURCE_PAY_DECISION_V1', decision_id: id(1), request_id: id(2) };

@@ -1,0 +1,177 @@
+-- Source public projections read native typed cut columns, never revalue cash.
+create or replace function private.weekly_source_pay_decision_quantity_union_v1(p_values jsonb,p_mode text)
+returns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,public as $function$
+declare q jsonb;s jsonb;slices jsonb:='[]';state text;keys text[];
+begin
+ if jsonb_typeof(p_values)<>'array' or jsonb_array_length(p_values)=0 then raise exception 'SOURCE_PAY_DECISION_QUANTITY_INVALID' using errcode='23514';end if;
+ for q in select value from jsonb_array_elements(p_values) loop
+  keys:=array['version','mode','quantity_state','slices'];
+  if not private.weekly_exceptional_json_keys_exact_v1(q,keys) or not(q ?& keys) or q->>'version' is distinct from 'PAY_DISPOSITION_QUANTITY_V1'
+   or q->>'mode' is distinct from p_mode or coalesce(q->>'quantity_state','') not in('PRE_FINANCIAL','QUALIFIED')
+   or jsonb_typeof(q->'slices') is distinct from 'array' then raise exception 'SOURCE_PAY_DECISION_QUANTITY_INVALID' using errcode='23514';end if;
+  if state is null then state:=q->>'quantity_state';elsif state is distinct from q->>'quantity_state' then
+   raise exception 'SOURCE_PAY_DECISION_QUANTITY_INVALID' using errcode='23514';end if;
+  if state='PRE_FINANCIAL' and (p_mode<>'WHOLE_SHIFT' or jsonb_array_length(q->'slices')<>0) then
+   raise exception 'SOURCE_PAY_DECISION_QUANTITY_INVALID' using errcode='23514';end if;
+  for s in select value from jsonb_array_elements(q->'slices') loop
+   keys:=array['approved_line_id','component_key','segment_id','segment_key','work_date','unit_label','bucket','additional_code','quantity'];
+   if not private.weekly_exceptional_json_keys_exact_v1(s,keys) or not(s ?& keys) or (s->>'approved_line_id')::uuid is null
+    or char_length(coalesce(s->>'component_key','')) not between 1 and 512 or char_length(coalesce(s->>'unit_label','')) not between 1 and 200
+    or (s->'bucket'<>'null'::jsonb and s->>'bucket' not in('DAY','NIGHT','SAT','SUN','BH'))
+    or jsonb_typeof(s->'quantity') is distinct from 'string' or coalesce(s->>'quantity','') !~ '^-?(0|[1-9][0-9]*)([.][0-9]+)?$'
+    or to_char((s->>'work_date')::date,'YYYY-MM-DD') is distinct from s->>'work_date' then
+    raise exception 'SOURCE_PAY_DECISION_QUANTITY_INVALID' using errcode='23514';end if;
+   perform (s->>'segment_id')::uuid;
+   slices:=slices||jsonb_build_array(s);
+  end loop;
+ end loop;
+ select coalesce(jsonb_agg(x.value order by x.value::text),'[]'::jsonb) into slices from (select distinct value from jsonb_array_elements(slices)) x;
+ return jsonb_build_object('version','PAY_DISPOSITION_QUANTITY_V1','mode',p_mode,'quantity_state',state,'slices',slices);
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_quantity_union_v1(jsonb,text) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_pay_decision_public_actions_v1(p_decision uuid,p_member jsonb,p_cut uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+declare cm record;result jsonb:='[]';action jsonb;caption text;route text;cycle public.weekly_source_cycles%rowtype;
+begin
+ for cm in select distinct m.next_action,m.next_target_kind,m.next_target_id from private.bpay_next_source_pay_decision_cut_member m
+   where m.cut_id=p_cut and m.member_key=p_member->>'member_key' and m.next_action is not null order by 1,2,3 loop
+  caption:=case cm.next_action when 'OPEN_TIMESHEET' then 'Open Timesheet' when 'OPEN_DRAFT' then 'Open Draft'
+    when 'CHECK_PAYMENT_RESULT' then 'Open payment' when 'REVIEW_EARLIER_PAYMENT' then 'Review earlier payment'
+    when 'REVIEW_RECOVERY' then 'Review recovery' when 'REVIEW_RATES' then 'Review rates' when 'WAIT_FOR_FINAL_REPORT' then 'Open Imports'
+    when 'OPEN_SOURCE_REVIEW' then 'Review shift' else null end;
+  if caption is null then raise exception 'SOURCE_PAY_DECISION_ACTION_PRODUCER_INVALID' using errcode='23514';end if;
+  if cm.next_action='WAIT_FOR_FINAL_REPORT' then
+   select c.* into strict cycle from public.weekly_source_cycles c where c.id=(p_member->>'source_cycle_id')::uuid;
+   if cm.next_target_kind<>'SOURCE_REPORT_PERIOD' or cm.next_target_id is not null then raise exception 'SOURCE_PAY_DECISION_ACTION_PRODUCER_INVALID' using errcode='23514';end if;
+   action:=jsonb_build_object('kind',cm.next_action,'target_type','SOURCE_REPORT_PERIOD','target_id',null,'caption',caption,
+    'url','/api/weekly-source/v1/workspace',
+    'enabled',true,'disabled_reason',null,'client_id',p_member->'actual_client_id',
+    'period_start',cycle.finalisation_week_ending-6,'period_end',cycle.finalisation_week_ending);
+  else
+   -- These are existing authorised read/command resources, not guessed GET
+   -- /runs/:id or /transfers/:id endpoints. Office resolves each closed named
+   -- native target through its existing modal; it never navigates arbitrary URL.
+   route:=case when cm.next_action in('OPEN_TIMESHEET','REVIEW_RATES') and cm.next_target_kind='TIMESHEET'
+      then '/api/weekly-source/v1/timesheets/'||cm.next_target_id::text||'/presentation'
+     when cm.next_action='OPEN_DRAFT' and cm.next_target_kind='BANKING_RUN' then '/api/banking/pay/next/history-page'
+     when cm.next_action='CHECK_PAYMENT_RESULT' and cm.next_target_kind='NATIVE_TRANSFER' then '/api/banking/pay/next/history-page'
+     when cm.next_action='REVIEW_EARLIER_PAYMENT' and cm.next_target_kind='SOURCE_PAY_DECISION_HISTORY' then '/api/banking/pay/next/history-page'
+     when cm.next_action='REVIEW_RECOVERY' and cm.next_target_kind='FINANCE_CASE' then '/api/banking/pay/next/history-page'
+     when cm.next_action='OPEN_SOURCE_REVIEW' and cm.next_target_kind='SOURCE_ROW' then '/api/weekly-source/v1/commands' else null end;
+   if route is null or cm.next_target_id is null then raise exception 'SOURCE_PAY_DECISION_ACTION_PRODUCER_INVALID' using errcode='23514';end if;
+   action:=jsonb_build_object('kind',cm.next_action,'target_type',cm.next_target_kind,'target_id',cm.next_target_id,'caption',caption,
+    'url',route,'enabled',true,'disabled_reason',null);
+  end if;
+  result:=result||jsonb_build_array(action);
+ end loop;
+ return result;
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_public_actions_v1(uuid,jsonb,uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_pay_decision_review_projection_v1(p_review uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+declare r private.weekly_source_pay_decision_reviews%rowtype;a private.weekly_source_pay_decision_preview_assemblies%rowtype;
+ d private.weekly_source_pay_decisions%rowtype;c private.bpay_next_source_pay_decision_cut%rowtype;
+ m jsonb;members jsonb:='[]';actions jsonb;retained jsonb;support jsonb;exclude jsonb;branch text;qualification text;
+begin
+ select x.* into strict r from private.weekly_source_pay_decision_reviews x where x.id=p_review;
+ select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=r.preview_assembly_id and x.decision_id=r.decision_id;
+ select x.* into strict d from private.weekly_source_pay_decisions x where x.id=r.decision_id;
+ select x.* into strict c from private.bpay_next_source_pay_decision_cut x where x.decision_id=r.decision_id and x.preview_assembly_id=a.id
+  and x.id=(a.draft_scope_json->>'cut_id')::uuid and x.review_id=r.id and x.pay_cut_sha256=r.pay_cut_hash;
+ for m in select value from jsonb_array_elements(r.private_manifest_json->'selection') order by value->>'member_key' loop
+  select private.weekly_source_pay_decision_quantity_union_v1(jsonb_agg(cm.supported_quantity_json order by cm.member_no),m->>'scope_mode'),
+   private.weekly_source_pay_decision_quantity_union_v1(jsonb_agg(cm.excluded_quantity_json order by cm.member_no),m->>'scope_mode'),
+   case when bool_or(cm.branch='RETAINED_FINANCIAL') then 'RETAINED_FINANCIAL' when bool_or(cm.branch='SIGNED_FINANCIAL') then 'SIGNED_FINANCIAL' else 'FUTURE_UNSIGNED' end,
+   case when bool_or(cm.qualification_state='REVIEW_REQUIRED') then 'REVIEW_REQUIRED' when bool_or(cm.qualification_state='QUALIFIED') then 'QUALIFIED' else 'NOT_APPROVED' end
+   into support,exclude,branch,qualification from private.bpay_next_source_pay_decision_cut_member cm where cm.cut_id=c.id and cm.member_key=m->>'member_key';
+  select coalesce(jsonb_agg(jsonb_build_object('cut_id',f.cut_id,'member_no',f.member_no::text,'artifact_kind',f.artifact_kind,'artifact_id',f.artifact_id,
+   'effect_id',f.effect_id,'work_hold_id',f.work_hold_id,'recovery_hold_id',f.recovery_hold_id,'case_event_id',f.case_event_id,
+   'run_line_id',f.run_line_id,'transfer_id',f.transfer_id,'outcome_id',f.outcome_id,'original_work_id',f.original_work_id,
+   'original_component_key',f.original_component_key,'original_run_line_id',f.original_run_line_id,'native_status',f.native_status,
+   'source_amount',f.source_amount::text,'target_ex',f.target_ex::text,'target_vat',f.target_vat::text,'target_inc',f.target_inc::text,
+   'artifact_digest',encode(f.artifact_digest,'hex')) order by f.member_no,f.artifact_kind,f.artifact_id),'[]'::jsonb) into retained
+   from private.bpay_next_source_pay_decision_artifact f join private.bpay_next_source_pay_decision_cut_member cm
+    on cm.cut_id=f.cut_id and cm.member_no=f.member_no where cm.cut_id=c.id and cm.member_key=m->>'member_key';
+  actions:=private.weekly_source_pay_decision_public_actions_v1(d.id,m,c.id);
+  members:=members||jsonb_build_array(jsonb_build_object('member_key',m->'member_key','scope_kind',m->'scope_kind','scope_mode',m->'scope_mode',
+   'family_root_id',m->'family_root_id','candidate_id',m->'candidate_id','actual_client_id',m->'actual_client_id',
+   'source_row_id',m->'source_row_id','source_work_event_id',m->'source_work_event_id','component_keys',m->'component_keys','work_dates',m->'work_dates',
+   'expected_work_revision',m->'expected_work_revision','branch',branch,'qualification',qualification,'supported_quantities',support,
+   'excluded_quantities',exclude,'retained_commitments',retained,'invoice_certificate',m->'invoice_certificate','selected_issue_ids',m->'selected_issue_ids','next_actions',actions));
+ end loop;
+ return jsonb_build_object('version','SOURCE_PAY_DECISION_REVIEW_V1','decision_id',d.id,'request_id',r.preview_request_id,'review_id',r.id,
+  'review_digest',encode(r.review_digest,'hex'),'state_revision',(r.private_manifest_json->>'state_revision'),
+  'expected_pay_cut_hash',encode(r.pay_cut_hash,'hex'),'expected_source_invoice_hash',encode(r.source_invoice_hash,'hex'),
+  'expected_issue_set_hash',encode(r.issue_set_hash,'hex'),'decision',a.decision_kind,'supersedes_decision_id',r.private_manifest_json->'supersedes_decision_id',
+  'prior_dispositions',r.private_manifest_json->'prior_dispositions','prior_dispositions_sha256',r.private_manifest_json->'prior_dispositions_sha256',
+  'members',members,'next_actions','[]'::jsonb);
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_review_projection_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function public.weekly_source_pay_decision_preview_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' as $function$
+declare actor uuid;body jsonb;ref jsonb;fingerprint bytea;manifest jsonb;private_manifest jsonb;result jsonb;
+ a private.weekly_source_pay_decision_preview_assemblies%rowtype;d private.weekly_source_pay_decisions%rowtype;
+ r private.weekly_source_pay_decision_reviews%rowtype;j private.weekly_source_pay_decision_requests%rowtype;
+ c private.bpay_next_source_pay_decision_cut%rowtype;review_id uuid;review_no bigint;review_hash bytea;scope jsonb;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not(p_request ?& array['actor_user_id','preview_assembly_ref','unprotect_preparations']) or p_request->'unprotect_preparations' is distinct from '[]'::jsonb then
+  raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;ref:=p_request->'preview_assembly_ref';
+ body:=private.weekly_source_pay_decision_request_v1(p_request-array['actor_user_id','preview_assembly_ref','unprotect_preparations'],'PREVIEW');
+ if not private.weekly_exceptional_json_keys_exact_v1(ref,array['assembly_id','assembly_sha256']) or not(ref ?& array['assembly_id','assembly_sha256'])
+   or coalesce(ref->>'assembly_sha256','') !~ '^[0-9a-f]{64}$' then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ fingerprint:=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_PREVIEW_REQUEST_V1',body);
+ select x.* into strict j from private.weekly_source_pay_decision_requests x where x.request_id=(body->>'request_id')::uuid
+  and x.decision_id=(body->>'decision_id')::uuid and x.request_kind='PREVIEW' and x.actor_user_id=actor;
+ if j.request_hash is distinct from fingerprint or j.request_json is distinct from body then raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';end if;
+ select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=(ref->>'assembly_id')::uuid and x.preview_request_id=j.request_id
+  and x.decision_id=j.decision_id and x.actor_user_id=actor and x.assembly_sha256=decode(ref->>'assembly_sha256','hex');
+ if a.state='SEALED' then
+  for scope in select value from jsonb_array_elements(a.draft_scope_json->'selection') loop
+   perform private.weekly_source_pay_decision_scope_access_v1(actor,(scope->>'source_group_id')::uuid,(scope->>'actual_client_id')::uuid,(scope->>'scope_date')::date);
+  end loop;
+  if j.metadata_state<>'SEALED' or j.receipt_json is null or j.review_id is distinct from a.review_id then raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='23514';end if;
+  return j.receipt_json;
+ end if;
+ manifest:=private.weekly_source_pay_decision_assembly_assert_v1(a.id,actor);
+ if a.state<>'READY' or private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_ASSEMBLY_MANIFEST_V1',manifest) is distinct from a.assembly_sha256 then
+  raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+ select x.* into strict d from private.weekly_source_pay_decisions x where x.id=a.decision_id for update;
+ select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=a.id and x.state='READY' for update;
+ select x.* into strict c from private.bpay_next_source_pay_decision_cut x where x.id=(a.draft_scope_json->>'cut_id')::uuid and x.preview_assembly_id=a.id and x.review_id is null;
+ if d.accept_request_id is not null and (d.decision_kind<>a.decision_kind or encode(d.accepted_selection_sha256,'hex')<>a.draft_scope_json->>'selection_sha256') then
+  raise exception 'SOURCE_PAY_DECISION_ACCEPTED_SELECTION_IMMUTABLE' using errcode='40001';end if;
+ review_id:=gen_random_uuid();
+ select coalesce(max(x.review_no),0)+1 into review_no from private.weekly_source_pay_decision_reviews x where x.decision_id=d.id;
+ private_manifest:=a.draft_scope_json||jsonb_build_object('state_revision',d.state_revision::text,'assembly_manifest',manifest,'quote_manifest',manifest->'quote_manifest');
+ review_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_REVIEW_V1',jsonb_build_object(
+  'review_id',review_id,'decision_id',d.id,'preview_request_id',j.request_id,'preview_request_hash',encode(j.request_hash,'hex'),
+  'assembly_id',a.id,'assembly_sha256',encode(a.assembly_sha256,'hex'),'cut_id',c.id,'manifest',private_manifest));
+ insert into private.weekly_source_pay_decision_reviews(id,decision_id,preview_assembly_id,review_no,preview_request_id,preview_request_hash,
+  review_digest,pay_cut_hash,source_invoice_hash,issue_set_hash,private_manifest_json,financial_history_refs_json,financial_history_manifest_sha256,history_qualification_json)
+ values(review_id,d.id,a.id,review_no,j.request_id,j.request_hash,review_hash,c.pay_cut_sha256,c.source_invoice_sha256,c.issue_set_sha256,
+  private_manifest,body->'financial_history_refs',private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_HISTORY_REFERENCE_MANIFEST_V1',body->'financial_history_refs'),
+  jsonb_build_object('qualification_state',c.qualification_state,'issue_code',c.issue_code,'cut_id',c.id)) returning * into r;
+ update private.bpay_next_source_pay_decision_cut x set review_id=r.id where x.id=c.id and x.review_id is null and x.preview_assembly_id=a.id and x.decision_id=d.id;
+ if not found then raise exception 'SOURCE_PAY_DECISION_CUT_SEAL_CAS_FAILED' using errcode='40001';end if;
+ update private.weekly_source_pay_decision_preview_assemblies x set state='SEALED',review_id=r.id where x.id=a.id and x.state='READY' and x.review_id is null;
+ if not found then raise exception 'SOURCE_PAY_DECISION_ASSEMBLY_CAS_FAILED' using errcode='40001';end if;
+ result:=private.weekly_source_pay_decision_review_projection_v1(r.id);
+ update private.weekly_source_pay_decision_requests x set review_id=r.id,metadata_state='SEALED',receipt_json=result
+  where x.request_id=j.request_id and x.metadata_state='ASSEMBLING' and x.receipt_json is null;
+ if not found then raise exception 'SOURCE_PAY_DECISION_REQUEST_CAS_FAILED' using errcode='40001';end if;
+ return result;
+exception when no_data_found or too_many_rows or invalid_text_representation then raise exception 'SOURCE_PAY_DECISION_PREVIEW_INVALID' using errcode='22023';
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_preview_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_preview_v1(jsonb) to service_role;
+notify pgrst,'reload schema';

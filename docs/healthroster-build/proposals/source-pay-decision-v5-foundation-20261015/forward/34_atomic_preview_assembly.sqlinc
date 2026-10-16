@@ -1,0 +1,190 @@
+-- Public metadata protocol. Every native gate/cut call precedes existing
+-- metadata row locks. No run, financial row, publication or contact write here.
+create or replace function private.weekly_source_pay_decision_assembly_assert_v1(p_assembly uuid,p_actor uuid)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public as $function$
+declare a private.weekly_source_pay_decision_preview_assemblies%rowtype;r private.weekly_source_pay_decision_requests%rowtype;
+ c private.bpay_next_source_pay_decision_cut%rowtype;scope jsonb;quotes jsonb;required jsonb;actual jsonb;q record;
+begin
+ select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=p_assembly and x.actor_user_id=p_actor;
+ select x.* into strict r from private.weekly_source_pay_decision_requests x where x.request_id=a.preview_request_id
+  and x.decision_id=a.decision_id and x.actor_user_id=p_actor and x.request_kind='PREVIEW' and x.request_hash=a.preview_request_hash;
+ if a.state not in('ASSEMBLING','READY') then raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+ if a.expires_at_utc<=transaction_timestamp() then raise exception 'SOURCE_PAY_DECISION_PREVIEW_EXPIRED' using errcode='55000';end if;
+ scope:=private.weekly_source_pay_decision_resolved_scope_v1(r.request_json,p_actor,true);
+ if scope is distinct from a.draft_scope_json-array['cut_id','cut_no','pay_cut_hash'] then
+  raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+ perform private.bpay_next_source_pay_decision_cut_v1(a.decision_id,a.id,null,true);
+ select x.* into strict c from private.bpay_next_source_pay_decision_cut x where x.id=(a.draft_scope_json->>'cut_id')::uuid
+  and x.decision_id=a.decision_id and x.preview_assembly_id=a.id and x.review_id is null
+  and x.cut_no::text=a.draft_scope_json->>'cut_no' and encode(x.pay_cut_sha256,'hex')=a.draft_scope_json->>'pay_cut_hash';
+ if a.draft_scope_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_DRAFT_SCOPE_V1',a.draft_scope_json)
+  or exists(select 1 from private.bpay_next_source_pay_decision_cut_member cm where cm.cut_id=c.id
+   and not exists(select 1 from jsonb_array_elements(scope->'selection') s where s.value->>'member_key'=cm.member_key
+    and (s.value->>'candidate_id')::uuid=cm.candidate_id and (s.value->>'actual_client_id')::uuid=cm.actual_client_id
+    and (s.value->>'source_row_id')::uuid=cm.original_source_row_id and (s.value->>'family_root_id')::uuid is not distinct from cm.family_root_id
+    and (s.value->>'source_work_event_id')::uuid is not distinct from cm.source_work_event_id
+    and s.value->>'scope_kind'=cm.scope_kind and s.value->>'scope_mode'=cm.scope_mode))
+  or exists(select 1 from jsonb_array_elements(scope->'selection') s where not exists(
+    select 1 from private.bpay_next_source_pay_decision_cut_member cm where cm.cut_id=c.id and cm.member_key=s.value->>'member_key')) then
+  raise exception 'SOURCE_PAY_DECISION_CUT_SCOPE_INVALID' using errcode='23514';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('member_key',q.member_key,'quote_id',q.id,
+   'quote_sha256',encode(q.quote_sha256,'hex'),'economic_target_sha256',encode(q.economic_target_sha256,'hex'))
+   order by q.member_key),'[]'::jsonb) into quotes from private.weekly_source_pay_decision_preview_quotes q where q.assembly_id=a.id;
+ if exists(select 1 from private.weekly_source_pay_decision_preview_quotes q where q.assembly_id=a.id
+  and (q.quote_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_PREVIEW_QUOTE_V1',q.quote_json)
+   or q.economic_target_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_ECONOMIC_TARGET_V1',q.quote_json->'economic_target')
+   or not exists(select 1 from jsonb_array_elements(scope->'required_quote_members') req
+     where req.value->>'member_key'=q.member_key and req.value->>'family_id'=q.quote_json#>>'{economic_target,family_id}'
+      and req.value->>'work_event_id'=q.quote_json#>>'{economic_target,work_event_id}'))) then
+  raise exception 'SOURCE_PAY_DECISION_QUOTE_MANIFEST_INVALID' using errcode='23514';end if;
+ for q in select x.* from private.weekly_source_pay_decision_preview_quotes x where x.assembly_id=a.id order by x.member_key loop
+  actual:=public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb_build_object(
+   'version','SOURCE_UNPROTECT_REVIEW_CONTEXT_V1','assembly_id',a.id,'decision_id',a.decision_id,'member_key',q.member_key,'actor_user_id',p_actor));
+  if actual->>'context_sha256' is distinct from q.quote_json->>'context_sha256'
+    or actual->>'source_observation_sha256' is distinct from q.quote_json->>'source_observation_sha256' then
+   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+ end loop;
+ return jsonb_build_object('version','SOURCE_PAY_DECISION_ASSEMBLY_MANIFEST_V1','decision_id',a.decision_id,
+  'assembly_id',a.id,'preview_request_id',a.preview_request_id,'preview_request_hash',encode(a.preview_request_hash,'hex'),
+  'draft_scope_sha256',encode(a.draft_scope_sha256,'hex'),'draft_scope',a.draft_scope_json,
+  'cut_id',c.id,'cut_no',c.cut_no::text,'pay_cut_hash',encode(c.pay_cut_sha256,'hex'),'quote_manifest',quotes);
+exception when no_data_found or too_many_rows then raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_assembly_assert_v1(uuid,uuid) from public,anon,authenticated,service_role;
+
+create or replace function public.weekly_source_pay_decision_preview_begin_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' as $function$
+declare actor uuid;body jsonb;fingerprint bytea;scope jsonb;d private.weekly_source_pay_decisions%rowtype;
+ r private.weekly_source_pay_decision_requests%rowtype;a private.weekly_source_pay_decision_preview_assemblies%rowtype;
+ c private.bpay_next_source_pay_decision_cut%rowtype;uniform_candidate uuid;manifest jsonb;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','actor_user_id','browser_request'])
+  or not(p_request ?& array['version','actor_user_id','browser_request']) or p_request->>'version' is distinct from 'SOURCE_PAY_DECISION_PREVIEW_BEGIN_V1' then
+  raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;body:=private.weekly_source_pay_decision_request_v1(p_request->'browser_request','PREVIEW');
+ fingerprint:=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_PREVIEW_REQUEST_V1',body);
+ if actor is null or not private.weekly_source_pay_actor_allowed_v1(actor) then raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';end if;
+ select x.* into r from private.weekly_source_pay_decision_requests x where x.request_id=(body->>'request_id')::uuid;
+ if found then
+  if r.decision_id is distinct from (body->>'decision_id')::uuid or r.actor_user_id<>actor or r.request_kind<>'PREVIEW'
+    or r.request_hash<>fingerprint or r.request_json<>body then raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';end if;
+  select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.preview_request_id=r.request_id;
+  -- Exact sealed replay checks current access but never revalues later facts.
+  if a.state='SEALED' then
+   for scope in select value from jsonb_array_elements(a.draft_scope_json->'selection') loop
+    perform private.weekly_source_pay_decision_scope_access_v1(actor,(scope->>'source_group_id')::uuid,
+     (scope->>'actual_client_id')::uuid,(scope->>'scope_date')::date);
+   end loop;
+  else
+   if a.state='CANCELLED' then raise exception 'SOURCE_PAY_DECISION_PREVIEW_CANCELLED' using errcode='55000';
+   elsif a.state='STALE' then raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';
+   elsif a.state='EXPIRED' or a.expires_at_utc<=transaction_timestamp() then raise exception 'SOURCE_PAY_DECISION_PREVIEW_EXPIRED' using errcode='55000';end if;
+   manifest:=private.weekly_source_pay_decision_assembly_assert_v1(a.id,actor);
+  end if;
+ else
+  scope:=private.weekly_source_pay_decision_resolved_scope_v1(body,actor,true);
+  select x.* into d from private.weekly_source_pay_decisions x where x.id=(body->>'decision_id')::uuid;
+  if found then
+   if d.actual_client_id is distinct from (scope->>'actual_client_id')::uuid
+    or (d.accept_request_id is not null and (d.decision_kind is distinct from body->>'decision'
+      or encode(d.accepted_selection_sha256,'hex') is distinct from scope->>'selection_sha256')) then
+    raise exception 'SOURCE_PAY_DECISION_ACCEPTED_SELECTION_IMMUTABLE' using errcode='40001';end if;
+  else
+   select case when count(distinct x.value->>'candidate_id')=1 then (array_agg((x.value->>'candidate_id')::uuid))[1] end into uniform_candidate
+    from jsonb_array_elements(scope->'selection') x;
+   insert into private.weekly_source_pay_decisions(id,candidate_id,actual_client_id,created_by_user_id)
+    values((body->>'decision_id')::uuid,uniform_candidate,(scope->>'actual_client_id')::uuid,actor) returning * into d;
+  end if;
+  insert into private.weekly_source_pay_decision_requests(request_id,decision_id,request_kind,request_hash,request_json,actor_user_id,metadata_state)
+   values((body->>'request_id')::uuid,d.id,'PREVIEW',fingerprint,body,actor,'ASSEMBLING') returning * into r;
+  insert into private.weekly_source_pay_decision_preview_assemblies(id,decision_id,preview_request_id,preview_request_hash,
+   actor_user_id,decision_kind,state,draft_scope_json,draft_scope_sha256,expires_at_utc)
+   values(gen_random_uuid(),d.id,r.request_id,fingerprint,actor,body->>'decision','ASSEMBLING',scope,
+    private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_DRAFT_SCOPE_V1',scope),transaction_timestamp()+interval '15 minutes') returning * into a;
+  perform private.bpay_next_source_pay_decision_cut_v1(d.id,a.id,null,true);
+  select x.* into strict c from private.bpay_next_source_pay_decision_cut x where x.decision_id=d.id and x.preview_assembly_id=a.id and x.review_id is null;
+  scope:=scope||jsonb_build_object('cut_id',c.id,'cut_no',c.cut_no::text,'pay_cut_hash',encode(c.pay_cut_sha256,'hex'));
+  update private.weekly_source_pay_decision_preview_assemblies x set draft_scope_json=scope,
+   draft_scope_sha256=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_DRAFT_SCOPE_V1',scope)
+   where x.id=a.id and x.state='ASSEMBLING' and not(x.draft_scope_json ? 'cut_id') returning * into strict a;
+  manifest:=private.weekly_source_pay_decision_assembly_assert_v1(a.id,actor);
+ end if;
+ select x.* into strict c from private.bpay_next_source_pay_decision_cut x where x.id=(a.draft_scope_json->>'cut_id')::uuid
+  and x.preview_assembly_id=a.id and x.decision_id=a.decision_id;
+ return jsonb_build_object('version','SOURCE_PAY_DECISION_PREVIEW_BEGIN_RESULT_V1','decision_id',a.decision_id,
+  'request_id',a.preview_request_id,'assembly_id',a.id,'assembly_state',a.state,'cut_id',c.id,'cut_no',c.cut_no::text,
+  'expected_pay_cut_hash',encode(c.pay_cut_sha256,'hex'),'draft_scope_sha256',encode(a.draft_scope_sha256,'hex'),
+  'expires_at_utc',a.expires_at_utc,'required_quote_members',a.draft_scope_json->'required_quote_members',
+  'sealed_review',case when a.state='SEALED' then r.receipt_json else null end);
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'SOURCE_PAY_DECISION_PREVIEW_INVALID' using errcode='22023';
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_preview_begin_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_preview_begin_v1(jsonb) to service_role;
+
+create or replace function public.weekly_source_pay_decision_preview_ready_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' as $function$
+declare actor uuid;a private.weekly_source_pay_decision_preview_assemblies%rowtype;manifest jsonb;hash bytea;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','assembly_id','actor_user_id','expected_draft_scope_sha256'])
+  or not(p_request ?& array['version','assembly_id','actor_user_id','expected_draft_scope_sha256'])
+  or p_request->>'version' is distinct from 'SOURCE_PAY_DECISION_PREVIEW_READY_V1' then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;
+ manifest:=private.weekly_source_pay_decision_assembly_assert_v1((p_request->>'assembly_id')::uuid,actor);
+ select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=(p_request->>'assembly_id')::uuid and x.actor_user_id=actor for update;
+ if encode(a.draft_scope_sha256,'hex') is distinct from p_request->>'expected_draft_scope_sha256'
+   or (select coalesce(jsonb_agg(x.value->>'member_key' order by x.value->>'member_key'),'[]'::jsonb)
+     from jsonb_array_elements(a.draft_scope_json->'required_quote_members') x)
+    is distinct from (select coalesce(jsonb_agg(q.member_key order by q.member_key),'[]'::jsonb)
+     from private.weekly_source_pay_decision_preview_quotes q where q.assembly_id=a.id) then
+  raise exception 'SOURCE_PAY_DECISION_QUOTE_MANIFEST_INCOMPLETE' using errcode='40001';end if;
+ hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_ASSEMBLY_MANIFEST_V1',manifest);
+ if a.state='READY' then
+  if a.assembly_sha256 is distinct from hash then raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+ else
+  update private.weekly_source_pay_decision_preview_assemblies x set state='READY',assembly_sha256=hash where x.id=a.id and x.state='ASSEMBLING';
+  if not found then raise exception 'SOURCE_PAY_DECISION_ASSEMBLY_CAS_FAILED' using errcode='40001';end if;
+ end if;
+ return jsonb_build_object('version','SOURCE_PAY_DECISION_PREVIEW_READY_RESULT_V1','assembly_id',a.id,'assembly_sha256',encode(hash,'hex'));
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_preview_ready_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_preview_ready_v1(jsonb) to service_role;
+
+create or replace function public.weekly_source_pay_decision_preview_abandon_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' as $function$
+declare actor uuid;a private.weekly_source_pay_decision_preview_assemblies%rowtype;s jsonb;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','assembly_id','actor_user_id'])
+  or not(p_request ?& array['version','assembly_id','actor_user_id'])
+  or p_request->>'version' is distinct from 'SOURCE_PAY_DECISION_PREVIEW_ABANDON_V1' then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;
+ select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=(p_request->>'assembly_id')::uuid and x.actor_user_id=actor;
+ for s in select value from jsonb_array_elements(a.draft_scope_json->'selection') loop
+  perform private.weekly_source_pay_decision_scope_access_v1(actor,(s->>'source_group_id')::uuid,(s->>'actual_client_id')::uuid,(s->>'scope_date')::date);
+ end loop;
+ if a.state<>'SEALED' then
+  -- Metadata-only cancellation takes no native mutation path. Parent lock
+  -- serializes against atomic READY/seal; preserve any already-sealed review.
+  select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=a.id for update;
+  if a.state in('ASSEMBLING','READY') then
+   update private.weekly_source_pay_decision_preview_assemblies x set state='CANCELLED' where x.id=a.id and x.state in('ASSEMBLING','READY') returning * into strict a;
+   update private.weekly_source_pay_decision_requests x set metadata_state='CANCELLED'
+    where x.request_id=a.preview_request_id and x.metadata_state='ASSEMBLING';
+  elsif a.state='EXPIRED' then raise exception 'SOURCE_PAY_DECISION_PREVIEW_EXPIRED' using errcode='55000';
+  elsif a.state='STALE' then raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+ end if;
+ return jsonb_build_object('version','SOURCE_PAY_DECISION_PREVIEW_ABANDON_RESULT_V1','assembly_id',a.id,'state',a.state);
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_preview_abandon_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_preview_abandon_v1(jsonb) to service_role;
+notify pgrst,'reload schema';

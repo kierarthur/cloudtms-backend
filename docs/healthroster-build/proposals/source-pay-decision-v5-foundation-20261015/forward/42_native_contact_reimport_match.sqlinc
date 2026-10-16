@@ -1,0 +1,27 @@
+create or replace function private.weekly_source_query_resolved_decision_matches_v1(
+  p_source_group_id uuid,p_work_event_id uuid,p_issue jsonb
+) returns boolean language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  with latest as (
+    select incident.state,incident.resolution_kind,incident.current_comparison_revision_id
+    from public.weekly_discrepancy_incidents incident
+    where incident.source_group_id=p_source_group_id and incident.work_event_id=p_work_event_id
+    order by incident.episode_number desc,incident.id desc limit 1
+  )
+  select private.weekly_source_pay_decision_contact_suppressed_v1(p_source_group_id,p_work_event_id,p_issue)
+    or coalesce((select latest.state='RESOLVED'
+    and latest.resolution_kind in ('OFFICE_ACCEPTED_SYSTEM_HOURS','MANAGER_CONFIRMED_SYSTEM_HOURS','CANDIDATE_CORRECTED')
+    and comparison.contract_id is not distinct from nullif(p_issue->>'contract_id','')::uuid
+    and comparison.issue_family is not distinct from upper(btrim(p_issue->>'issue_family'))
+    and comparison.source_presence is not distinct from upper(btrim(p_issue->>'source_presence'))
+    and comparison.candidate_start_at_local is not distinct from nullif(p_issue->>'candidate_start_at_local','')::timestamp
+    and comparison.candidate_end_at_local is not distinct from nullif(p_issue->>'candidate_end_at_local','')::timestamp
+    and comparison.candidate_break_minutes is not distinct from nullif(p_issue->>'candidate_break_minutes','')::integer
+    and comparison.system_start_at_local is not distinct from nullif(p_issue->>'system_start_at_local','')::timestamp
+    and comparison.system_end_at_local is not distinct from nullif(p_issue->>'system_end_at_local','')::timestamp
+    and comparison.system_break_minutes is not distinct from nullif(p_issue->>'system_break_minutes','')::integer
+    from latest join public.weekly_issue_comparison_revisions comparison
+      on comparison.id=latest.current_comparison_revision_id),false);
+$function$;
+revoke all on function private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;

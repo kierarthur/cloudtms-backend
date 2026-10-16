@@ -95,7 +95,7 @@ export function decodeSourcePayDecisionBrowserRequest(value, mode) {
   if (mode === 'PREVIEW' || mode === 'ACCEPT') { if (!decisions.includes(value.decision)) fail(); }
   if (mode === 'PREVIEW') {
     if (!Array.isArray(value.selection) || !value.selection.length) fail();
-    const seen = new Set();
+    const seen = new Set();const subjects = new Map();
     for (const member of value.selection) {
       if (!sourceNativeClosed(member, ['scope_kind', 'scope_mode', 'family_root_id', 'source_work_event_id',
         'source_row_id', 'component_keys', 'work_dates', 'expected_work_revision'])
@@ -111,6 +111,10 @@ export function decodeSourcePayDecisionBrowserRequest(value, mode) {
       const identity = JSON.stringify([member.scope_kind, member.scope_mode, member.family_root_id,
         member.source_work_event_id, member.source_row_id, member.component_keys, member.work_dates]);
       if (seen.has(identity)) fail();seen.add(identity);
+      const siblings=subjects.get(member.source_row_id)??[];
+      if(siblings.some(prior=>prior.scope_mode==='WHOLE_SHIFT'||member.scope_mode==='WHOLE_SHIFT'
+        ||prior.component_keys.some(key=>member.component_keys.includes(key))))fail();
+      siblings.push(member);subjects.set(member.source_row_id,siblings);
     }
     evidence(value.evidence_refs ?? []);history(value.financial_history_refs ?? []);
     return { ...value, evidence_refs: value.evidence_refs ?? [], financial_history_refs: value.financial_history_refs ?? [] };

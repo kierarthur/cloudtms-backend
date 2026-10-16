@@ -1,0 +1,142 @@
+-- Health request validation and access: browser facts never grant money/actor authority.
+create or replace function private.weekly_source_pay_decision_request_v1(p_body jsonb,p_kind text)
+returns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,public as $function$
+declare keys text[];entry jsonb;ref jsonb;k text[];seen text[]:='{}';identity text;d text;components text[];
+begin
+ if p_kind='PREVIEW' then
+  keys:=array['version','decision_id','request_id','decision','selection','evidence_refs','financial_history_refs'];
+  if not(p_body ?& array['version','decision_id','request_id','decision','selection']) then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+  p_body:=jsonb_build_object('evidence_refs','[]'::jsonb,'financial_history_refs','[]'::jsonb)||p_body;
+ elsif p_kind='ACCEPT' then
+  keys:=array['version','action','decision_id','request_id','review_id','review_digest','decision','supersedes_decision_id',
+   'expected_prior_dispositions','expected_prior_dispositions_sha256','invoice_policy','contact_policy','reason','evidence_refs',
+   'expected_pay_cut_hash','expected_source_invoice_hash','expected_issue_set_hash'];
+ elsif p_kind='RESUME_FINANCIAL' then
+  keys:=array['version','action','decision_id','request_id','expected_state_revision','review_id','review_digest','expected_pay_cut_hash',
+   'evidence_refs','expected_prior_dispositions','expected_prior_dispositions_sha256'];
+ elsif p_kind='READ_RESULT' then keys:=array['version','action','decision_id','request_id'];
+ else raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_body,keys) or not(p_body ?& keys)
+  or p_body->>'version' is distinct from 'SOURCE_PAY_DECISION_V1' or (p_body->>'decision_id')::uuid is null
+  or (p_body->>'request_id')::uuid is null or (p_kind<>'PREVIEW' and p_body->>'action' is distinct from p_kind) then
+  raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ if p_kind='READ_RESULT' then return p_body;end if;
+ if p_kind in('PREVIEW','ACCEPT') and coalesce(p_body->>'decision','') not in('EXCLUDE_FUTURE_WORK_PAY','ACCEPT_FINAL_SOURCE_PAY') then
+  raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ if jsonb_typeof(p_body->'evidence_refs') is distinct from 'array' or jsonb_array_length(p_body->'evidence_refs')>250 then
+  raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ for ref in select value from jsonb_array_elements(p_body->'evidence_refs') loop
+  if not private.weekly_exceptional_json_keys_exact_v1(ref,array['kind','id','version','sha256']) or not(ref ?& array['kind','id','version','sha256'])
+   or coalesce(ref->>'kind','') not in('SOURCE_ROW','WORKER_RESPONSE','SIGNED_DOCUMENT','OFFICE_NOTE') or (ref->>'id')::uuid is null
+   or (ref->'version'<>'null'::jsonb and (jsonb_typeof(ref->'version')<>'string' or char_length(ref->>'version') not between 1 and 512))
+   or (ref->'sha256'<>'null'::jsonb and (jsonb_typeof(ref->'sha256')<>'string' or coalesce(ref->>'sha256','') !~ '^[0-9a-f]{64}$')) then
+   raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+  identity:=jsonb_build_array(ref->'kind',ref->'id',ref->'version')::text;
+  if identity=any(seen) then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;seen:=array_append(seen,identity);
+ end loop;
+ seen:='{}';
+ if p_kind='PREVIEW' then
+  if jsonb_typeof(p_body->'selection') is distinct from 'array' or jsonb_array_length(p_body->'selection') not between 1 and 250 then
+   raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+  for entry in select value from jsonb_array_elements(p_body->'selection') loop
+   k:=array['scope_kind','scope_mode','family_root_id','source_work_event_id','source_row_id','component_keys','work_dates','expected_work_revision'];
+   if not private.weekly_exceptional_json_keys_exact_v1(entry,k) or not(entry ?& k)
+    or coalesce(entry->>'scope_kind','') not in('TIMESHEET_FAMILY','SOURCE_ROW') or coalesce(entry->>'scope_mode','') not in('COMPONENT_QUANTITIES','WHOLE_SHIFT')
+    or (entry->>'source_row_id')::uuid is null or (entry->>'family_root_id')::uuid is null and entry->>'scope_kind'='TIMESHEET_FAMILY'
+    or jsonb_typeof(entry->'component_keys') is distinct from 'array' or jsonb_typeof(entry->'work_dates') is distinct from 'array'
+    or jsonb_array_length(entry->'work_dates') not between 1 and 366
+    or (entry->>'scope_mode'='COMPONENT_QUANTITIES' and jsonb_array_length(entry->'component_keys')=0)
+    or (entry->'expected_work_revision'<>'null'::jsonb and (jsonb_typeof(entry->'expected_work_revision')<>'string'
+      or coalesce(entry->>'expected_work_revision','') !~ '^[1-9][0-9]{0,18}$' or (entry->>'expected_work_revision')::bigint<1)) then
+    raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+   perform (entry->>'source_work_event_id')::uuid;perform (entry->>'family_root_id')::uuid;
+   if exists(select 1 from jsonb_array_elements(entry->'component_keys') c where jsonb_typeof(c.value)<>'string' or char_length(c.value#>>'{}') not between 1 and 512)
+    or (select count(*) from jsonb_array_elements(entry->'component_keys'))<>(select count(distinct value) from jsonb_array_elements(entry->'component_keys'))
+    or (select count(*) from jsonb_array_elements(entry->'work_dates'))<>(select count(distinct value) from jsonb_array_elements(entry->'work_dates'))
+    or exists(select 1 from jsonb_array_elements(entry->'work_dates') dt where jsonb_typeof(dt.value)<>'string'
+      or dt.value#>>'{}' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' or to_char((dt.value#>>'{}')::date,'YYYY-MM-DD')<>dt.value#>>'{}')
+    or entry->'work_dates' is distinct from (select jsonb_agg(value order by value#>>'{}') from jsonb_array_elements(entry->'work_dates')) then
+    raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+   -- Selections for one original row may be disjoint genuine components only.
+   -- WHOLE_SHIFT overlaps any member of that original subject, across scope labels.
+   for ref in select value from jsonb_array_elements(p_body->'selection') where value<>entry
+     and value->>'source_row_id'=entry->>'source_row_id' loop
+    if ref->>'scope_mode'='WHOLE_SHIFT' or entry->>'scope_mode'='WHOLE_SHIFT'
+      or exists(select 1 from jsonb_array_elements_text(ref->'component_keys') c
+        join jsonb_array_elements_text(entry->'component_keys') other on other.value=c.value)
+      then raise exception 'SOURCE_PAY_DECISION_SELECTION_OVERLAP' using errcode='22023';end if;
+   end loop;
+   identity:=entry::text;if identity=any(seen) then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;seen:=array_append(seen,identity);
+  end loop;
+  -- Native evidence keys are structurally closed here; the genuine cut owner
+  -- re-reads their exact native records, associations and hashes.
+  if jsonb_typeof(p_body->'financial_history_refs') is distinct from 'array' or jsonb_array_length(p_body->'financial_history_refs')>250 then
+   raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+  seen:='{}';
+  for ref in select value from jsonb_array_elements(p_body->'financial_history_refs') loop
+   if not private.weekly_exceptional_json_keys_exact_v1(ref,array['kind','key','record_sha256']) or not(ref ?& array['kind','key','record_sha256'])
+     or jsonb_typeof(ref->'record_sha256') is distinct from 'string' or coalesce(ref->>'record_sha256','') !~ '^[0-9a-f]{64}$' then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+   if ref->>'kind' in('RUN_LINE','FINANCIAL_EFFECT','WORK_HOLD','RECOVERY_HOLD','TRANSFER','TRANSFER_OUTCOME','EXPENSE_COMPONENT','LEGACY_PAY_ITEM','LEGACY_SNAPSHOT','LEGACY_BREAKDOWN','LEGACY_BANK_TRANSFER') then
+    k:=array['id'];perform (ref#>>'{key,id}')::uuid;
+   elsif ref->>'kind'='APPROVED_LINE' then k:=array['revision_id','line_id','component_key'];
+    perform (ref#>>'{key,revision_id}')::uuid;perform (ref#>>'{key,line_id}')::uuid;
+   elsif ref->>'kind'='APPROVED_SEGMENT' then k:=array['revision_id','segment_id','component_key','segment_key'];
+    perform (ref#>>'{key,revision_id}')::uuid;perform (ref#>>'{key,segment_id}')::uuid;
+   elsif ref->>'kind'='LEGACY_V8_COMPONENT' then k:=array['certificate_uuid','constituent_ordinal','evidence_kind','evidence_ordinal'];
+    perform (ref#>>'{key,certificate_uuid}')::uuid;
+    if (ref#>>'{key,constituent_ordinal}')::integer not between 0 and 49999 or (ref#>>'{key,evidence_ordinal}')::integer<0
+      or ref#>>'{key,evidence_kind}' not in('ALL_SAME_ECONOMIC_KEY','FULL_SIGNED_PRE_SIGNATURE','DECISIVE_SIGNED_EVIDENCE') then
+     raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+   else raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+   if not private.weekly_exceptional_json_keys_exact_v1(ref->'key',k) or not(ref->'key' ?& k)
+     or exists(select 1 from jsonb_each(ref->'key') e where e.value='null'::jsonb) then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+   identity:=jsonb_build_array(ref->'kind',ref->'key')::text;
+   if identity=any(seen) then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;seen:=array_append(seen,identity);
+  end loop;
+ else
+  if exists(select 1 from unnest(array['review_digest','expected_pay_cut_hash','expected_prior_dispositions_sha256']) key where jsonb_typeof(p_body->key) is distinct from 'string')
+   or (p_body->>'review_id')::uuid is null or coalesce(p_body->>'review_digest','') !~ '^[0-9a-f]{64}$'
+   or coalesce(p_body->>'expected_pay_cut_hash','') !~ '^[0-9a-f]{64}$' or coalesce(p_body->>'expected_prior_dispositions_sha256','') !~ '^[0-9a-f]{64}$'
+   or jsonb_typeof(p_body->'expected_prior_dispositions') is distinct from 'array' then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+  for ref in select value from jsonb_array_elements(p_body->'expected_prior_dispositions') loop
+   k:=array['member_key','component_key','disposition_id','decision_id','disposition_version'];
+   if not private.weekly_exceptional_json_keys_exact_v1(ref,k) or not(ref ?& k) or jsonb_typeof(ref->'member_key') is distinct from 'string' or char_length(coalesce(ref->>'member_key','')) not between 1 and 512
+    or (ref->'component_key'<>'null'::jsonb and (jsonb_typeof(ref->'component_key')<>'string' or char_length(coalesce(ref->>'component_key','')) not between 1 and 512))
+    or ((ref->'disposition_id'='null'::jsonb)::integer+(ref->'decision_id'='null'::jsonb)::integer+(ref->'disposition_version'='null'::jsonb)::integer) not in(0,3) then
+    raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+   if ref->'disposition_id'<>'null'::jsonb then
+    perform (ref->>'disposition_id')::uuid;perform (ref->>'decision_id')::uuid;
+    if jsonb_typeof(ref->'disposition_version')<>'string' or coalesce(ref->>'disposition_version','') !~ '^[1-9][0-9]{0,18}$'
+      or (ref->>'disposition_version')::bigint<1 then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+   end if;
+   identity:=jsonb_build_array(ref->'member_key',ref->'component_key')::text;
+   if identity=any(seen) then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;seen:=array_append(seen,identity);
+  end loop;
+  if p_kind='ACCEPT' then
+   if p_body->>'invoice_policy' is distinct from 'KEEP_SOURCE_INVOICE' or p_body->>'contact_policy' is distinct from 'DO_NOT_QUERY_SELECTED_ISSUES'
+    or jsonb_typeof(p_body->'reason')<>'string' or char_length(btrim(p_body->>'reason')) not between 1 and 1000
+    or jsonb_typeof(p_body->'expected_source_invoice_hash') is distinct from 'string' or jsonb_typeof(p_body->'expected_issue_set_hash') is distinct from 'string'
+    or coalesce(p_body->>'expected_source_invoice_hash','') !~ '^[0-9a-f]{64}$' or coalesce(p_body->>'expected_issue_set_hash','') !~ '^[0-9a-f]{64}$' then
+    raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;perform (p_body->>'supersedes_decision_id')::uuid;
+  elsif jsonb_typeof(p_body->'expected_state_revision')<>'string' or coalesce(p_body->>'expected_state_revision','') !~ '^[1-9][0-9]{0,18}$'
+    or (p_body->>'expected_state_revision')::bigint<1 then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ end if;
+ return p_body;
+exception when invalid_text_representation or numeric_value_out_of_range or datetime_field_overflow then
+ raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_request_v1(jsonb,text) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_pay_decision_scope_access_v1(p_actor uuid,p_group uuid,p_client uuid,p_date date)
+returns void language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+begin
+ if p_actor is null or not private.weekly_source_pay_actor_allowed_v1(p_actor) then
+  raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';end if;
+ if p_group is null or p_client is null or p_date is null or not exists(select 1 from public.weekly_source_groups g
+   join public.weekly_source_group_clients c on c.source_group_id=g.id and c.client_id=p_client
+    and p_date between c.valid_from and coalesce(c.valid_to,'infinity'::date) where g.id=p_group and g.active) then
+  raise exception 'SOURCE_PAY_DECISION_SCOPE_DENIED' using errcode='42501';end if;
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_scope_access_v1(uuid,uuid,uuid,date) from public,anon,authenticated,service_role;

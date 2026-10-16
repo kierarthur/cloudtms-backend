@@ -1,0 +1,51 @@
+-- Full genuine run-bound witness for a native subtransaction rollback.
+create or replace function private.weekly_source_pay_decision_native_rollback_witness_v1(p_preparation uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+declare p private.weekly_source_pay_decision_unprotect_preparations%rowtype;placement jsonb;result jsonb;
+begin
+ select x.* into strict p from private.weekly_source_pay_decision_unprotect_preparations x where x.id=p_preparation;
+ placement:=private.weekly_source_protected_current_placement_v1(p.family_id,(p.native_prepare_request_json->>'work_event_id')::uuid,false);
+ select jsonb_build_object('family',(select to_jsonb(f) from public.weekly_exceptional_pay_target_families f where f.id=p.family_id),
+  'run',(select to_jsonb(r) from public.weekly_exceptional_orchestration_runs r where r.id=p.orchestration_run_id),
+  'placement',placement,
+  'current_financial',(select to_jsonb(f) from public.timesheets_financials f where f.id=(placement->>'current_financial_id')::uuid),
+  'targets',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]'::jsonb) from public.weekly_exceptional_pending_reconciliation_targets t where t.family_id=p.family_id),
+  'approvals',(select coalesce(jsonb_agg(to_jsonb(a) order by a.id),'[]'::jsonb) from public.weekly_exceptional_payment_approvals a where a.creation_orchestration_run_id=p.orchestration_run_id),
+  'generations',(select coalesce(jsonb_agg(to_jsonb(g) order by g.id),'[]'::jsonb) from public.weekly_exceptional_pay_generations g
+    where g.request_idempotency_key=any(array[p.child_idempotency_key,p.payload_json#>>'{publish_request,idempotency_key}',p.payload_json#>>'{stage_request,idempotency_key}'])),
+  'requests',(select coalesce(jsonb_agg(to_jsonb(r) order by r.id),'[]'::jsonb) from public.weekly_exceptional_c1_publication_requests r where r.orchestration_run_id=p.orchestration_run_id),
+  'steps',(select coalesce(jsonb_agg(to_jsonb(s) order by s.sequence),'[]'::jsonb) from public.weekly_exceptional_orchestration_steps s where s.orchestration_run_id=p.orchestration_run_id))
+ into result;
+ return result;
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_native_rollback_witness_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_pay_decision_native_dependency_v1(p_preparation uuid,p_before jsonb)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public as $function$
+declare p private.weekly_source_pay_decision_unprotect_preparations%rowtype;a private.weekly_source_pay_decision_acceptance_applications%rowtype;
+ actual jsonb;components jsonb;result jsonb;application uuid;
+begin
+ application:=private.weekly_source_pay_decision_unprotect_application_v1(p_preparation);
+ select x.* into strict p from private.weekly_source_pay_decision_unprotect_preparations x where x.id=p_preparation;
+ select x.* into strict a from private.weekly_source_pay_decision_acceptance_applications x where x.id=application;
+ actual:=private.weekly_source_pay_decision_native_rollback_witness_v1(p.id);
+ if actual is distinct from p_before or actual#>>'{run,state}' is distinct from 'RUNNING'
+  or not exists(select 1 from public.weekly_exceptional_pending_reconciliation_targets t where t.family_id=p.family_id
+    and t.durable_work_event_id=(p.native_prepare_request_json->>'work_event_id')::uuid and t.state='ACTIVE')
+  or exists(select 1 from private.weekly_source_pay_decision_native_adoptions n where n.application_id=a.id and n.member_key=p.member_key) then
+  raise exception 'SOURCE_NATIVE_SUBTRANSACTION_ROLLBACK_NOT_PROVED' using errcode='23514';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('cut_id',m.cut_id,'member_no',m.member_no::text,'member_sha256',encode(m.member_sha256,'hex'))
+  order by m.member_no),'[]'::jsonb) into components from private.bpay_next_source_pay_decision_cut_member m where m.cut_id=a.cut_id and m.member_key=p.member_key;
+ if jsonb_array_length(components)=0 then raise exception 'SOURCE_NATIVE_SUBTRANSACTION_ROLLBACK_NOT_PROVED' using errcode='23514';end if;
+ insert into private.weekly_source_pay_decision_native_adoptions(application_id,decision_id,review_id,member_key,preparation_id,route,origin,
+  reviewed_economic_target_sha256,pre_witness_sha256,post_witness_manifest_json,failure_code,cut_components_json,cut_components_sha256)
+ values(a.id,p.decision_id,p.review_id,p.member_key,p.id,p.route,'NOT_APPLIED_DEPENDENCY',p.reviewed_target_sha256,a.pre_witness_sha256,
+  jsonb_build_object('native_rollback_witness',actual,'native_rollback_witness_sha256',encode(private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_ROLLBACK_WITNESS_V1',actual),'hex')),
+  'DEPENDENCY_UNAVAILABLE',components,private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_CUT_COMPONENTS_V1',components));
+ return jsonb_build_object('version','SOURCE_NATIVE_COMPOSED_RESULT_V1','application_id',a.id,'decision_id',p.decision_id,'request_id',p.accept_or_resume_request_id,
+  'review_id',p.review_id,'member_key',p.member_key,'preparation_id',p.id,'route',p.route,'origin','NOT_APPLIED_DEPENDENCY',
+  'control_status','NOT_APPLIED','native_receipt',null,'failure_code','DEPENDENCY_UNAVAILABLE');
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_native_dependency_v1(uuid,jsonb) from public,anon,authenticated,service_role;

@@ -1,0 +1,32 @@
+{
+  "version": "SOURCE_NATIVE_CONTACT_MATCH_RECEIPT_V1",
+  "input_commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "input": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+  "input_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+  "original_body_sha256": "2664a5781eb36055a1011612156c92daeb8a912fc425e0fd6bbaaaeed2317c64",
+  "output": "forward/42_native_contact_reimport_match.sqlinc",
+  "output_sha256": "2bb2006340eeabc7a049fea21bc255f9fbd2fb6b7b18ea19b94cbb97a02f3ba9",
+  "edits": [
+    {
+      "before": "select coalesce((select latest.state='RESOLVED'",
+      "after": "select private.weekly_source_pay_decision_contact_suppressed_v1(p_source_group_id,p_work_event_id,p_issue)\n    or coalesce((select latest.state='RESOLVED'"
+    }
+  ],
+  "existing_constraint_input": {
+    "commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+    "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+    "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d",
+    "relation": "public.weekly_discrepancy_incidents",
+    "constraint": "weekly_discrepancy_incidents_resolution_kind_check",
+    "added_literal": "SOURCE_PAY_DECISION",
+    "preserved_literals": [
+      "SOURCE_MATCHED",
+      "OFFICE_ACCEPTED_SYSTEM_HOURS",
+      "CANDIDATE_CORRECTED",
+      "MANAGER_CONFIRMED_SYSTEM_HOURS",
+      "RECORDED_NOT_WORKED",
+      "CORRECT_FINAL_SOURCE"
+    ]
+  },
+  "qualification": "SOURCE_REVERSE_ONLY_NATIVE_REQUIRED_NOT_RUN"
+}

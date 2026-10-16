@@ -100,3 +100,14 @@ test('Run-free current-placement native context is the complete pinned native bo
   assert.equal(sha(output), receipt.output_sha256);assert.ok(output.startsWith(generated));
   assert.doesNotMatch(generated, /weekly_exceptional_orchestration_runs|orchestration_run_id/);
 });
+
+test('Source contact reimport matcher preserves the complete original native resolved-decision predicate',()=>{
+ const receipt=JSON.parse(read('NATIVE_CONTACT_MATCH_RECEIPT.json'));const source=git(receipt.input_commit,receipt.input);
+ assert.equal(sha(source),receipt.input_sha256);const start=source.indexOf('create or replace function private.weekly_source_query_resolved_decision_matches_v1(');
+ const end=source.indexOf('$function$;',source.indexOf('as $function$',start))+'$function$;'.length;
+ const original=source.slice(start,end);assert.equal(sha(original),receipt.original_body_sha256);
+ const output=read(receipt.output);assert.equal(sha(output),receipt.output_sha256);
+ let changed=original;for(const edit of receipt.edits){assert.equal(changed.split(edit.before).length,2);changed=changed.replace(edit.before,edit.after);}
+ assert.ok(output.startsWith(changed));for(const edit of receipt.edits.toReversed())changed=changed.replace(edit.after,edit.before);
+ assert.equal(changed,original);
+});

@@ -1,0 +1,81 @@
+create or replace function public.weekly_source_pay_decision_preview_quote_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' as $function$
+declare actor uuid;a private.weekly_source_pay_decision_preview_assemblies%rowtype;q private.weekly_source_pay_decision_preview_quotes%rowtype;
+ quote jsonb;economic jsonb;operands jsonb;facts jsonb;manifest jsonb;quote_hash bytea;economic_hash bytea;target jsonb;component jsonb;keys text[];
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','assembly_id','actor_user_id','quote'])
+  or not(p_request ?& array['version','assembly_id','actor_user_id','quote'])
+  or p_request->>'version' is distinct from 'SOURCE_PAY_DECISION_PREVIEW_QUOTE_V1' then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ actor:=(p_request->>'actor_user_id')::uuid;quote:=p_request->'quote';economic:=quote->'economic_target';
+ keys:=array['member_key','context_sha256','source_observation_sha256','calculation_owner','calculation_policy_sha256','economic_target','economic_target_sha256'];
+ if not private.weekly_exceptional_json_keys_exact_v1(quote,keys) or not(quote ?& keys)
+  or quote->>'calculation_owner' is distinct from 'buildWeeklyScheduleSegmentsSnapshot' or char_length(coalesce(quote->>'member_key','')) not between 1 and 512
+  or exists(select 1 from unnest(array['context_sha256','source_observation_sha256','calculation_policy_sha256','economic_target_sha256']) k
+    where coalesce(quote->>k,'') !~ '^[0-9a-f]{64}$') then raise exception 'SOURCE_PAY_DECISION_QUOTE_INVALID' using errcode='22023';end if;
+ quote_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_PREVIEW_QUOTE_V1',quote);
+ economic_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_ECONOMIC_TARGET_V1',economic);
+ if encode(economic_hash,'hex') is distinct from quote->>'economic_target_sha256' then raise exception 'SOURCE_PAY_DECISION_QUOTE_INVALID' using errcode='22023';end if;
+ select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=(p_request->>'assembly_id')::uuid and x.actor_user_id=actor;
+ -- Exact live quote replay retains bytes. Current authority still applies.
+ manifest:=private.weekly_source_pay_decision_assembly_assert_v1(a.id,actor);
+ select x.* into q from private.weekly_source_pay_decision_preview_quotes x where x.assembly_id=a.id and x.member_key=quote->>'member_key';
+ if found then
+  if q.quote_json is distinct from quote or q.quote_sha256 is distinct from quote_hash or q.economic_target_sha256 is distinct from economic_hash then
+   raise exception 'SOURCE_PAY_DECISION_REQUEST_CONFLICT' using errcode='23505';end if;
+ else
+  if a.state<>'ASSEMBLING' or not exists(select 1 from jsonb_array_elements(a.draft_scope_json->'required_quote_members') required
+    where required.value->>'member_key'=quote->>'member_key') then raise exception 'SOURCE_PAY_DECISION_QUOTE_INVALID' using errcode='22023';end if;
+  operands:=public.weekly_source_pay_decision_preview_quote_context_v1(jsonb_build_object(
+   'version','SOURCE_PAY_DECISION_PREVIEW_QUOTE_CONTEXT_V1','assembly_id',a.id,'decision_id',a.decision_id,
+   'member_key',quote->'member_key','actor_user_id',actor));
+  facts:=operands#>'{review_context,context}';
+  keys:=array['version','family_id','root_timesheet_id','work_event_id','accepted_placement_sha256','actual_schedule_json',
+   'tsfin_snapshot_json','component_economics','quantity_partition','provider','policy_sha256','source_observation_sha256',
+   'approval_evidence_sha256','prior_commitment_cut_sha256'];
+  if not private.weekly_exceptional_json_keys_exact_v1(economic,keys) or not(economic ?& keys)
+   or economic->>'version' is distinct from 'SOURCE_UNPROTECT_ECONOMIC_TARGET_V1'
+   or quote->>'context_sha256' is distinct from operands#>>'{review_context,context_sha256}'
+   or quote->>'source_observation_sha256' is distinct from operands#>>'{review_context,source_observation_sha256}'
+   or economic->'source_observation_sha256' is distinct from quote->'source_observation_sha256'
+   or economic->'policy_sha256' is distinct from quote->'calculation_policy_sha256'
+   or economic->'quantity_partition' is distinct from operands->'quantity_partition'
+   or economic->'prior_commitment_cut_sha256' is distinct from operands->'prior_commitment_cut_sha256'
+   or economic->'provider' is distinct from facts->'provider' or economic->'family_id' is distinct from facts->'family_id'
+   or economic->'root_timesheet_id' is distinct from facts->'root_timesheet_id' or economic->'work_event_id' is distinct from facts->'work_event_id'
+   or economic->'accepted_placement_sha256' is distinct from case when facts#>'{protected_current_placement,moved}'='true'::jsonb
+      then facts#>'{protected_current_placement,placement_certificate_sha256}' else 'null'::jsonb end
+   or economic->'approval_evidence_sha256' is distinct from facts#>'{protected_current_placement,immutable_original_evidence_sha256}'
+   or jsonb_typeof(economic->'actual_schedule_json') is distinct from 'array'
+   or jsonb_typeof(economic->'component_economics') is distinct from 'array'
+   or jsonb_typeof(economic->'tsfin_snapshot_json') is distinct from 'object'
+   or economic#>'{tsfin_snapshot_json,timesheet_id}' is distinct from facts#>'{current_entitlement,timesheet,timesheet_id}'
+   or economic#>'{tsfin_snapshot_json,timesheet_version}' is distinct from facts#>'{current_entitlement,timesheet,version}'
+   or economic#>'{tsfin_snapshot_json,candidate_id}' is distinct from facts->'candidate_id'
+   or economic#>'{tsfin_snapshot_json,client_id}' is distinct from facts->'client_id'
+   or economic#>>'{tsfin_snapshot_json,invoice_breakdown_json,mode}' is distinct from 'SEGMENTS'
+   or jsonb_typeof(economic#>'{tsfin_snapshot_json,invoice_breakdown_json,segments}') is distinct from 'array'
+   or octet_length(convert_to(quote::text,'UTF8'))>2097152 then
+   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+  -- Existing pure native manifest validates complete source/protection schedule
+  -- and actual calculator segment identity, with current B financial target.
+  target:=jsonb_build_object('schema_version','WEEKLY_PROTECTED_TARGET_SNAPSHOT_V1',
+    'actual_schedule_json',economic->'actual_schedule_json','tsfin_snapshot_json',economic->'tsfin_snapshot_json');
+  perform private.weekly_source_protected_component_manifest_v1(
+   private.weekly_source_protected_entitlement_projection_v1(facts||jsonb_build_object('ok',true,'contract','WEEKLY_PROTECTED_ACTION_CONTEXT_V1')),target);
+  -- Provider/quantity/native snapshot are retained in full. No SQL substitute
+  -- calculator or generated preview component identities are constructed.
+  select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x where x.id=a.id and x.actor_user_id=actor for update;
+  if a.state<>'ASSEMBLING' then raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+  insert into private.weekly_source_pay_decision_preview_quotes(id,assembly_id,member_key,quote_json,quote_sha256,economic_target_sha256)
+   values(gen_random_uuid(),a.id,quote->>'member_key',quote,quote_hash,economic_hash) returning * into q;
+ end if;
+ return jsonb_build_object('version','SOURCE_PAY_DECISION_PREVIEW_QUOTE_RESULT_V1','assembly_id',a.id,
+  'member_key',q.member_key,'quote_id',q.id,'quote_sha256',encode(q.quote_sha256,'hex'),'economic_target_sha256',encode(q.economic_target_sha256,'hex'));
+exception when no_data_found or too_many_rows or invalid_text_representation then raise exception 'SOURCE_PAY_DECISION_QUOTE_INVALID' using errcode='22023';
+end;
+$function$;
+revoke all on function public.weekly_source_pay_decision_preview_quote_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_pay_decision_preview_quote_v1(jsonb) to service_role;
+notify pgrst,'reload schema';

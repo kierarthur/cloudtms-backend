@@ -1,0 +1,63 @@
+-- Factual native publication/lineage composition; no new Banking valuer.
+create or replace function private.weekly_source_pay_decision_bind_publication_v1(p_application uuid)
+returns void language plpgsql volatile security definer set search_path=pg_catalog,private,public as $function$
+declare a private.weekly_source_pay_decision_acceptance_applications%rowtype;n record;component record;selected jsonb;
+ binding record;matches integer;lineage public.weekly_source_row_timesheet_lineages%rowtype;member private.weekly_source_pay_decision_members%rowtype;
+ old_binding private.weekly_source_pay_decision_bindings%rowtype;next_no bigint;certificate bytea;
+begin
+ select x.* into strict a from private.weekly_source_pay_decision_acceptance_applications x where x.id=p_application
+  and x.state='STAGED' and x.backend_pid=pg_backend_pid() and x.transaction_id=pg_current_xact_id();
+ insert into private.weekly_source_pay_decision_publication_adoptions(command_id,publication_member_no,application_id,member_key)
+  select pm.command_id,pm.member_no,a.id,n.member_key from private.bpay_next_source_pay_decision_publication publication
+   join private.bpay_next_source_pay_decision_publication_member pm on pm.command_id=publication.command_id
+   join private.bpay_next_source_pay_decision_cut_member cm on cm.cut_id=pm.cut_id and cm.member_no=pm.cut_member_no
+   join private.weekly_source_pay_decision_native_adoptions n on n.application_id=a.id and n.member_key=cm.member_key and n.origin<>'NOT_APPLIED_DEPENDENCY'
+  where publication.application_id=a.id and publication.decision_id=a.decision_id and publication.cut_id=a.cut_id
+   and pm.cut_id=a.cut_id order by pm.command_id,pm.member_no,n.member_key;
+ perform private.weekly_source_pay_decision_publication_adoptions_assert_v1(a.id);
+ for n in select x.* from private.weekly_source_pay_decision_native_adoptions x where x.application_id=a.id
+    and x.origin<>'NOT_APPLIED_DEPENDENCY' and x.local_entitlement_kind='COMMITTED_HEAD' order by x.member_key loop
+  -- Banking owns its exact Source proof arm/components set. Normal two-argument
+  -- binder semantics stay unchanged, and no old POSITION_APPLY row is forged.
+  for component in select * from private.bpay_next_source_binding_components_v1(n.committed_publication_receipt_id) loop
+   perform private.bpay_next_source_component_bind_v1(n.committed_publication_receipt_id,component.source_component_id);
+  end loop;
+ end loop;
+ for member in select m.* from private.weekly_source_pay_decision_members m where m.decision_id=a.decision_id order by m.member_key loop
+  select s.value into strict selected from private.weekly_source_pay_decision_reviews r,
+   lateral jsonb_array_elements(r.private_manifest_json->'selection') s where r.id=a.review_id and s.value->>'member_key'=member.member_key;
+  select l.* into lineage from public.weekly_source_row_timesheet_lineages l where l.row_resolution_id=(selected->>'source_resolution_id')::uuid
+   and l.upload_row_id=(selected->>'observed_source_row_id')::uuid and l.candidate_id=member.candidate_id and l.client_id=member.actual_client_id;
+  if lineage.id is null then continue;end if;
+  select count(*) into matches from private.bpay_next_worker_pay_disposition_subject_binding b
+   where b.disposition_id=member.pay_disposition_id and b.accepted_source_resolution_id=lineage.row_resolution_id
+    and b.original_source_row_id=member.source_row_id and b.source_work_event_id=lineage.work_event_id
+    and b.family_root_id=(private.timesheet_contract_current_placement_v1(lineage.timesheet_id)->>'family_root_id')::uuid;
+  if matches<>1 then
+   if exists(select 1 from private.bpay_next_source_pay_decision_cut_member cm where cm.cut_id=a.cut_id and cm.member_key=member.member_key and cm.qualification_state='QUALIFIED') then
+    raise exception 'SOURCE_PAY_DECISION_SOURCE_RESOLUTION_REQUIRED' using errcode='55000';end if;
+   continue;
+  end if;
+  select b.* into strict binding from private.bpay_next_worker_pay_disposition_subject_binding b
+   where b.disposition_id=member.pay_disposition_id and b.accepted_source_resolution_id=lineage.row_resolution_id
+    and b.original_source_row_id=member.source_row_id and b.source_work_event_id=lineage.work_event_id
+    and b.family_root_id=(private.timesheet_contract_current_placement_v1(lineage.timesheet_id)->>'family_root_id')::uuid;
+  certificate:=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_ACCEPTED_SOURCE_BINDING_V1',
+   jsonb_build_object('decision_id',a.decision_id,'member_key',member.member_key,'native_lineage',to_jsonb(lineage),'native_subject_binding',to_jsonb(binding),
+    'component_keys',member.component_keys));
+  select x.* into old_binding from private.weekly_source_pay_decision_bindings x
+   where x.decision_id=a.decision_id and x.member_key=member.member_key and x.row_resolution_id=lineage.row_resolution_id;
+  if found then
+   if old_binding.binding_certificate_hash is distinct from certificate or old_binding.banking_disposition_id is distinct from binding.disposition_id
+     or old_binding.banking_disposition_binding_no is distinct from binding.binding_no then raise exception 'SOURCE_PAY_DECISION_BINDING_CONFLICT' using errcode='23514';end if;
+  else
+   select coalesce(max(x.binding_no),0)+1 into next_no from private.weekly_source_pay_decision_bindings x where x.decision_id=a.decision_id and x.member_key=member.member_key;
+   insert into private.weekly_source_pay_decision_bindings(decision_id,member_key,row_resolution_id,binding_no,family_root_id,source_work_event_id,component_keys,
+    banking_disposition_id,banking_disposition_binding_no,binding_certificate_hash)
+   values(a.decision_id,member.member_key,lineage.row_resolution_id,next_no,binding.family_root_id,lineage.work_event_id,member.component_keys,
+    binding.disposition_id,binding.binding_no,certificate);
+  end if;
+ end loop;
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_bind_publication_v1(uuid) from public,anon,authenticated,service_role;

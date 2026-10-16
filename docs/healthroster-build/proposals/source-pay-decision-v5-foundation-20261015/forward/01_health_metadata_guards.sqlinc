@@ -74,7 +74,8 @@ begin
   mutable_keys:=array['accept_request_id','accept_request_hash','decision_kind','accepted_selection_sha256',
    'supersedes_decision_id','prior_dispositions_sha256','reason','evidence_refs_json','invoice_before_hash',
    'invoice_after_hash','issue_before_hash','receipt_json','current_financial_cut_id','state_revision'];
-  if NEW.state_revision<OLD.state_revision or NEW.state_revision>OLD.state_revision+1
+  if (OLD.receipt_json is not null and NEW.receipt_json is distinct from OLD.receipt_json)
+   or NEW.state_revision<OLD.state_revision or NEW.state_revision>OLD.state_revision+1
    or (NEW.current_financial_cut_id is distinct from OLD.current_financial_cut_id and NEW.state_revision<>OLD.state_revision+1)
    or (OLD.accept_request_id is not null and old_row-array['state_revision','current_financial_cut_id','receipt_json']
        is distinct from new_row-array['state_revision','current_financial_cut_id','receipt_json']) then

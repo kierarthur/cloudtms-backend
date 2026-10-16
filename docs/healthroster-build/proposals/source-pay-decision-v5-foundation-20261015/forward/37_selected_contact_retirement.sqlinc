@@ -1,0 +1,111 @@
+-- One selected contact owner, only after genuine stage/publication/binding.
+create or replace function private.weekly_source_pay_decision_incident_guard_v1()
+returns trigger language plpgsql security definer set search_path=pg_catalog,private,public as $function$
+begin
+ if TG_OP='DELETE' then
+  if OLD.resolution_kind='SOURCE_PAY_DECISION' then raise exception 'SOURCE_PAY_DECISION_CONTACT_HISTORY_RETAINED' using errcode='55000';end if;
+  return OLD;
+ end if;
+ if TG_OP='UPDATE' and OLD.resolution_kind='SOURCE_PAY_DECISION' then
+  if to_jsonb(NEW) is distinct from to_jsonb(OLD) then raise exception 'SOURCE_PAY_DECISION_CONTACT_HISTORY_IMMUTABLE' using errcode='55000';end if;
+  return NEW;
+ end if;
+ if NEW.resolution_kind is distinct from 'SOURCE_PAY_DECISION' then return NEW;end if;
+ if TG_OP<>'UPDATE' or OLD.state<>'OPEN' or NEW.state<>'RESOLVED' or NEW.resolved_at_utc is distinct from transaction_timestamp()
+  or (to_jsonb(NEW)-array['state','reconciliation_state','candidate_action_state','manager_potential_state','manager_action_state','waiting_source_state','resolved_at_utc','resolution_kind'])
+   is distinct from (to_jsonb(OLD)-array['state','reconciliation_state','candidate_action_state','manager_potential_state','manager_action_state','waiting_source_state','resolved_at_utc','resolution_kind'])
+  or not exists(select 1 from private.weekly_source_pay_decision_acceptance_applications a
+   join private.weekly_source_pay_decision_members m on m.decision_id=a.decision_id and OLD.id=any(m.contact_issue_ids)
+   join private.weekly_source_pay_decision_reviews review on review.id=a.review_id and review.decision_id=a.decision_id
+   join private.bpay_next_source_pay_decision_publication p on p.application_id=a.id and p.cut_id=a.cut_id and p.decision_id=a.decision_id
+   join private.bpay_next_command cmd on cmd.id=p.command_id and cmd.status in('SEALED','COMPLETE') and cmd.sealed_at_utc is not null
+   where a.state='STAGED' and a.backend_pid=pg_backend_pid() and a.transaction_id=pg_current_xact_id()
+    and m.candidate_id=OLD.candidate_id and m.actual_client_id=OLD.client_id and m.source_work_event_id=OLD.work_event_id
+    and exists(select 1 from jsonb_array_elements(review.private_manifest_json->'selection') s,
+     lateral jsonb_array_elements(s.value->'issue_witnesses') issue
+     where s.value->>'member_key'=m.member_key and issue.value->'incident'=to_jsonb(OLD))) then
+  raise exception 'SOURCE_PAY_DECISION_CONTACT_APPLICATION_REQUIRED' using errcode='23514';end if;
+ return NEW;
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_incident_guard_v1() from public,anon,authenticated,service_role;
+create trigger source_pay_decision_incident_guard before insert or update or delete on public.weekly_discrepancy_incidents
+ for each row execute function private.weekly_source_pay_decision_incident_guard_v1();
+
+create or replace function private.weekly_source_pay_decision_contact_retire_v1(p_application uuid)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public as $function$
+declare a private.weekly_source_pay_decision_acceptance_applications%rowtype;m private.weekly_source_pay_decision_members%rowtype;
+ r private.weekly_source_pay_decision_reviews%rowtype;i public.weekly_discrepancy_incidents%rowtype;c public.weekly_issue_comparison_revisions%rowtype;
+ selected jsonb;saved jsonb;issue uuid;result jsonb:='[]';retired jsonb;completed uuid[];manager_completed uuid[];
+begin
+ select x.* into strict a from private.weekly_source_pay_decision_acceptance_applications x where x.id=p_application
+  and x.state='STAGED' and x.backend_pid=pg_backend_pid() and x.transaction_id=pg_current_xact_id();
+ perform private.weekly_source_pay_decision_publication_adoptions_assert_v1(a.id);
+ if exists(select 1 from private.bpay_next_source_pay_decision_cut_member cm where cm.cut_id=a.cut_id and not exists(
+   select 1 from private.bpay_next_source_pay_decision_publication p join private.bpay_next_source_pay_decision_publication_member pm on pm.command_id=p.command_id
+    join private.bpay_next_command cmd on cmd.id=p.command_id and cmd.status in('SEALED','COMPLETE') and cmd.sealed_at_utc is not null
+   where p.application_id=a.id and p.cut_id=cm.cut_id and pm.cut_id=cm.cut_id and pm.cut_member_no=cm.member_no)) then
+  raise exception 'SOURCE_PAY_DECISION_CONTACT_PUBLICATION_REQUIRED' using errcode='23514';end if;
+ select x.* into strict r from private.weekly_source_pay_decision_reviews x where x.id=a.review_id and x.decision_id=a.decision_id;
+ for m in select x.* from private.weekly_source_pay_decision_members x where x.decision_id=a.decision_id order by x.member_key loop
+  retired:='[]';
+  select x.value into strict selected from jsonb_array_elements(r.private_manifest_json->'selection') x where x.value->>'member_key'=m.member_key;
+  for issue in select value::uuid from jsonb_array_elements_text(selected->'selected_issue_ids') order by value loop
+   if not(issue=any(m.contact_issue_ids)) then raise exception 'SOURCE_PAY_DECISION_CONTACT_SCOPE_INVALID' using errcode='23514';end if;
+   select x.* into strict i from public.weekly_discrepancy_incidents x where x.id=issue and x.candidate_id=m.candidate_id and x.client_id=m.actual_client_id
+     and x.work_event_id=m.source_work_event_id and x.source_cycle_id=(selected->>'source_cycle_id')::uuid for update;
+   select x.* into strict c from public.weekly_issue_comparison_revisions x where x.id=i.current_comparison_revision_id
+    and x.incident_id=i.id and x.source_row_id=(selected->>'observed_source_row_id')::uuid
+    and x.issue_family in('SOURCE_MISSING_OR_NOT_AUTHORISED','SOURCE_HOURS_DIFFER','HEALTHROSTER_NOT_FINALISED');
+   select x.value into strict saved from jsonb_array_elements(selected->'issue_witnesses') x where x.value#>>'{incident,id}'=i.id::text;
+   if saved->'incident' is distinct from to_jsonb(i) or saved->'comparison' is distinct from to_jsonb(c) or i.state<>'OPEN' then
+    raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+   update public.weekly_discrepancy_incidents x set state='RESOLVED',reconciliation_state='RECONCILED',
+    candidate_action_state='NOT_REQUIRED',manager_potential_state='NOT_REQUIRED',manager_action_state='NOT_REQUIRED',
+    waiting_source_state='NOT_WAITING',resolved_at_utc=transaction_timestamp(),resolution_kind='SOURCE_PAY_DECISION' where x.id=i.id and x.state='OPEN';
+   if not found then raise exception 'SOURCE_PAY_DECISION_CONTACT_CAS_FAILED' using errcode='40001';end if;
+   update public.weekly_candidate_outreach_memberships membership set state='RESOLVED'
+    from public.weekly_candidate_outreach_generations generation where membership.incident_id=i.id
+     and membership.state in('ACTIONABLE','ANSWERED') and generation.id=membership.candidate_generation_id and generation.request_kind='CHECK_HOURS';
+   with finished as(update public.weekly_candidate_outreach_generations generation set state='COMPLETE'
+    where generation.state='ACTIVE' and generation.request_kind='CHECK_HOURS' and exists(
+      select 1 from public.weekly_candidate_outreach_memberships membership where membership.candidate_generation_id=generation.id and membership.incident_id=i.id)
+     and not exists(select 1 from public.weekly_candidate_outreach_memberships membership where membership.candidate_generation_id=generation.id and membership.state='ACTIONABLE')
+    returning generation.id) select array_agg(id) into completed from finished;
+   update public.weekly_message_intents intent set state='RETIRED' where intent.candidate_generation_id=any(completed) and intent.state in('DUE','RENDERED');
+   update public.weekly_manager_review_items item set response_state='FILTERED_RESOLVED'
+    where item.incident_id=i.id and item.incident_episode=i.episode_number and item.response_state='UNANSWERED';
+   update public.office_action_notifications notice set operational_state='RESOLVED',resolved_at_utc=transaction_timestamp()
+    where notice.issue_id=i.id and notice.operational_state='OPEN';
+   insert into public.weekly_discrepancy_events(incident_id,issue_episode,projection_publication_id,expected_comparison_fingerprint,event_kind,actor_kind,
+    actor_user_id,bounded_payload_json,idempotency_key) values(i.id,i.episode_number,c.projection_publication_id,c.material_comparison_fingerprint,
+    'RESOLVED','OFFICE',a.actor_user_id,jsonb_build_object('resolution','SOURCE_PAY_DECISION','decision_id',a.decision_id,'application_id',a.id,'member_key',m.member_key),
+    'SOURCE_PAY_DECISION:'||a.id::text||':'||i.id::text) on conflict(event_kind,idempotency_key) do nothing;
+   retired:=retired||jsonb_build_array(i.id);
+  end loop;
+  result:=result||jsonb_build_array(jsonb_build_object('member_key',m.member_key,'retired_issue_ids',retired));
+ end loop;
+ -- Mixed recipient generations keep their remaining actual questions. Immutable
+ -- sent renders/accepted deliveries and missing-Timesheet/reference work remain.
+ return result;
+exception when no_data_found or too_many_rows then raise exception 'SOURCE_PAY_DECISION_CONTACT_SCOPE_INVALID' using errcode='23514';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_contact_retire_v1(uuid) from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_pay_decision_contact_suppressed_v1(p_group uuid,p_event uuid,p_issue jsonb)
+returns boolean language sql stable security definer set search_path=pg_catalog,private,public as $function$
+ select coalesce(upper(btrim(p_issue->>'issue_family')) in('SOURCE_MISSING_OR_NOT_AUTHORISED','SOURCE_HOURS_DIFFER','HEALTHROSTER_NOT_FINALISED')
+  and exists(select 1 from private.bpay_next_worker_pay_disposition disposition
+   join private.bpay_next_worker_pay_disposition_member current_member on current_member.disposition_id=disposition.id and current_member.version_no=disposition.current_version
+   join private.weekly_source_pay_decisions decision on decision.id=current_member.member_decision_id and decision.accept_request_id is not null
+    and decision.contact_policy='DO_NOT_QUERY_SELECTED_ISSUES'
+   join private.weekly_source_pay_decision_members selected on selected.decision_id=decision.id and selected.source_row_id=disposition.original_source_row_id
+   join private.weekly_source_pay_decision_requests accepted on accepted.request_id=decision.accept_request_id and accepted.metadata_state='COMMITTED'
+   join private.weekly_source_pay_decision_reviews review on review.id=accepted.review_id
+   where current_member.source_work_event_id=p_event and exists(select 1 from jsonb_array_elements(review.private_manifest_json->'selection') s
+    where s.value->>'member_key'=selected.member_key and s.value->>'source_group_id'=p_group::text
+     and (selected.scope_mode='WHOLE_SHIFT' or jsonb_array_length(s.value->'selected_issue_ids')>0)))
+ ,false);
+$function$;
+revoke all on function private.weekly_source_pay_decision_contact_suppressed_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;

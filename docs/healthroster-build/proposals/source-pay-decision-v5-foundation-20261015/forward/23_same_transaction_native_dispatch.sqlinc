@@ -6,7 +6,7 @@ create or replace function private.weekly_source_pay_decision_unprotect_apply_v1
 declare prep private.weekly_source_pay_decision_unprotect_preparations%rowtype;
  app private.weekly_source_pay_decision_acceptance_applications%rowtype;
  adoption private.weekly_source_pay_decision_native_adoptions%rowtype;
- application_id uuid;result jsonb;
+ application_id uuid;result jsonb;before_native jsonb;native_message text;
 begin
  select p.* into strict prep from private.weekly_source_pay_decision_unprotect_preparations p where p.id=p_preparation_id;
  select a.* into strict app from private.weekly_source_pay_decision_acceptance_applications a where a.request_id=p_request_id;
@@ -26,6 +26,8 @@ begin
  end if;
  application_id:=private.weekly_source_pay_decision_unprotect_application_v1(prep.id);
  if application_id is distinct from app.id then raise exception 'SOURCE_UNPROTECT_APPLICATION_MISMATCH' using errcode='23514';end if;
+ before_native:=private.weekly_source_pay_decision_native_rollback_witness_v1(prep.id);
+ begin
  if prep.route='NEXT' then
   result:=private.weekly_exceptional_pay_publish_next_impl_v1(prep.payload_json->'publish_request',prep.id);
  elsif prep.route='SOURCE_LOCAL' then
@@ -33,6 +35,15 @@ begin
   -- returning. A successful STAGED-only label cannot escape this transaction.
   result:=private.weekly_exceptional_pay_stage_c1_request_impl_v1(prep.payload_json->'stage_request',prep.id);
  else raise exception 'SOURCE_UNPROTECT_ROUTE_INVALID' using errcode='23514';end if;
+ exception when sqlstate '55000' then
+  get stacked diagnostics native_message=MESSAGE_TEXT;
+  -- The one actual native missing-publication-owner refusal is the bounded
+  -- dependency allowlist. Stale, permission, identity, integrity and all other
+  -- programming errors propagate and roll back the complete outer envelope.
+  if native_message is distinct from 'WEEKLY_PROTECTED_LOCAL_PUBLICATION_OWNER_NOT_READY' or prep.route<>'SOURCE_LOCAL' then raise;end if;
+  -- PostgreSQL has rolled back this ENTIRE native stage+complete subtransaction.
+  return private.weekly_source_pay_decision_native_dependency_v1(prep.id,before_native);
+ end;
  select a.* into strict adoption from private.weekly_source_pay_decision_native_adoptions a
   where a.application_id=app.id and a.member_key=prep.member_key and a.preparation_id=prep.id;
  select p.* into strict prep from private.weekly_source_pay_decision_unprotect_preparations p where p.id=prep.id;

@@ -12,6 +12,17 @@ const isUuid = (value) => typeof value === 'string' && UUID.test(value);
 const isHash = (value) => typeof value === 'string' && HASH.test(value);
 export const sourceNativePositiveBigint = (value) => typeof value === 'string'
   && /^[1-9]\d{0,18}$/.test(value) && BigInt(value) <= MAX_I64;
+
+export function decodeSourceNativeDeferredReleaseProof(value, expected = {}) {
+ const keys=['version','application_id','member_key','local_publication_request_id','orchestration_run_id','generation_id','pending_bundle_id',
+  'decision_bundle_id','bundle_revision','original_pending_step_id','released_receipt_id','released_receipt_digest','head_ids','current_local_receipt_sha256','current_native_result_sha256'];
+ if(!sourceNativeClosed(value,keys)||value.version!=='SOURCE_NATIVE_DEFERRED_RELEASE_PROOF_V1'||!member(value.member_key)
+  ||!identities(value,['application_id','local_publication_request_id','orchestration_run_id','generation_id','pending_bundle_id','decision_bundle_id','original_pending_step_id','released_receipt_id'])
+  ||!sourceNativePositiveBigint(value.bundle_revision)||!['released_receipt_digest','current_local_receipt_sha256','current_native_result_sha256'].every(k=>isHash(value[k]))
+  ||!Array.isArray(value.head_ids)||value.head_ids.length!==1||!value.head_ids.every(isUuid)
+  ||!equalExpected(value,expected,['application_id','member_key','local_publication_request_id','orchestration_run_id','generation_id','pending_bundle_id','decision_bundle_id','bundle_revision']))invalid('actual deferred release proof');
+ return value;
+}
 const member = (value) => typeof value === 'string' && value.length > 0 && value.length <= 512;
 function invalid(label) {
   const error = new Error(`The saved Source ${label} is invalid.`);
