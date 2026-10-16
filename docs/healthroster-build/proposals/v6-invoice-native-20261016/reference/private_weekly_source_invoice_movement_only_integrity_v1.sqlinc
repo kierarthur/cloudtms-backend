@@ -1,0 +1,97 @@
+create or replace function private.weekly_source_invoice_movement_only_integrity_v1(
+  p_timesheet_id uuid
+) returns boolean
+language sql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  with resolved_family as materialized (
+    select private.weekly_source_invoice_family_timesheet_ids_v1(p_timesheet_id) timesheet_ids
+  )
+  select p_timesheet_id is not null
+    and (
+      exists(
+        select 1 from public.weekly_source_row_timesheet_lineages lineage
+        where lineage.timesheet_id=any(resolved_family.timesheet_ids)
+      )
+      or exists(
+        select 1
+        from public.weekly_exceptional_pay_target_families family
+        join public.timesheets root
+          on root.timesheet_id=family.root_timesheet_id
+        join public.contracts contract
+          on contract.id=family.contract_id
+        join public.contract_weeks contract_week
+          on contract_week.contract_id=family.contract_id
+         and contract_week.week_ending_date=family.week_ending_date
+         and contract_week.additional_seq=0
+         and contract_week.timesheet_id=family.root_timesheet_id
+        -- Gate 13 hostile review F5 / standing rule 3: after S8 a physical root
+        -- id is no longer a family identity.  A protected family recorded
+        -- against ANY member of this family is this family's protected state,
+        -- so the same one resolved_family array that every other limb reads
+        -- decides this limb too.  Keyed on the bare physical id, a family
+        -- recorded against a rotated sibling was invisible here.
+        where family.root_timesheet_id=any(resolved_family.timesheet_ids)
+          and family.ownership_state='TARGET_MANAGED'
+          and contract.candidate_id=family.candidate_id
+          and root.contract_id=family.contract_id
+          and root.week_ending_date=family.week_ending_date
+          and root.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+          and root.line_type='HOURS'::public.timesheet_line_type_enum
+          and not root.is_adjustment
+          and root.is_current
+          and root.revoked_at is null
+          and root.archived_at_utc is null
+          and not contract_week.is_adjustment
+          and contract_week.status<>'CANCELLED'::public.contract_week_status_enum
+          and not exists(
+            select 1 from public.weekly_source_billing_movements movement
+            where movement.invoice_timesheet_id=any(resolved_family.timesheet_ids)
+          )
+          and not exists(
+            select 1 from public.invoice_lines invoice_line
+            where invoice_line.timesheet_id=any(resolved_family.timesheet_ids)
+          )
+      )
+    )
+    and not exists(
+      select 1
+      from public.invoice_lines invoice_line
+      where invoice_line.timesheet_id=any(resolved_family.timesheet_ids)
+        and not exists(
+          select 1
+          from public.weekly_source_invoice_line_bindings binding
+          join public.weekly_source_billing_movements movement
+            on movement.id=binding.billing_movement_id
+          where binding.invoice_line_id=invoice_line.id
+            and binding.invoice_id=invoice_line.invoice_id
+            and binding.state='CURRENT'
+            and movement.invoice_timesheet_id=any(resolved_family.timesheet_ids)
+            and movement.placement_state in ('PLACED','ISSUED')
+        )
+    )
+    and not exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_billing_movements movement
+        on movement.id=binding.billing_movement_id
+      join public.invoice_lines invoice_line on invoice_line.id=binding.invoice_line_id
+      where movement.invoice_timesheet_id=any(resolved_family.timesheet_ids)
+        and binding.state='CURRENT'
+        and (
+          not (invoice_line.timesheet_id=any(resolved_family.timesheet_ids))
+          or invoice_line.invoice_id is distinct from binding.invoice_id
+        )
+    )
+    and (
+      exists(
+        select 1 from public.weekly_source_billing_movements movement
+        where movement.invoice_timesheet_id=any(resolved_family.timesheet_ids)
+      )
+      or not exists(
+        select 1 from public.invoice_lines invoice_line
+        where invoice_line.timesheet_id=any(resolved_family.timesheet_ids)
+      )
+    )
+  from resolved_family;
+$function$;

@@ -1,0 +1,63 @@
+-- One owner for review and same-transaction postconditions. This certificate
+-- deliberately contains no current PAY state, Banking Work/cut or pay hash.
+create or replace function private.weekly_source_invoice_certificate_v1(
+ p_timesheet_ids uuid[],p_source_row_ids uuid[],p_lock boolean
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_facts jsonb;v_phase text;v_money jsonb;v_result jsonb;
+begin
+ v_facts:=private.weekly_source_invoice_preservation_facts_v1(p_timesheet_ids,p_source_row_ids,p_lock);
+ v_phase:=v_facts->>'certificate_phase';
+ if v_phase='UNRESOLVED' or (v_phase<>'NO_FINAL_REPORT_YET' and jsonb_array_length(v_facts->'issues')>0) then
+  raise exception 'SOURCE_INVOICE_CERTIFICATE_UNRESOLVED' using errcode='55000';end if;
+ if v_phase<>'NO_FINAL_REPORT_YET' then
+  select jsonb_build_object('net',(sum((m->>'invoice_presentation_charge_pence')::numeric)/100)::numeric(20,2),
+   'vat',sum((m->>'vat_amount')::numeric)::numeric(20,2),'gross',sum((m->>'total_inc_vat')::numeric)::numeric(20,2))
+  into v_money from jsonb_array_elements(v_facts#>'{witnesses,billing_movements}') m
+  where m->>'placement_state'<>'VOIDED_BY_CORRECT_FINAL';
+ end if;
+ v_result:=jsonb_build_object('phase',v_phase,'hash',v_facts->>'certificate_hash',
+  'source_row_ids',v_facts->'source_row_ids','original_invoice_timesheet_ids',v_facts->'original_timesheet_ids',
+  'accepted_final_member_ids',coalesce((select jsonb_agg(s->'id' order by s->>'id')
+   from jsonb_array_elements(v_facts#>'{witnesses,final_snapshots}') s),'[]'::jsonb),
+  'invoice_ids',coalesce((select jsonb_agg(i->'id' order by i->>'id')
+   from jsonb_array_elements(v_facts#>'{witnesses,invoice_headers}') i),'[]'::jsonb),
+  'net',case when v_phase='NO_FINAL_REPORT_YET' then null else v_money->>'net' end,
+  'vat',case when v_phase='NO_FINAL_REPORT_YET' then null else v_money->>'vat' end,
+  'gross',case when v_phase='NO_FINAL_REPORT_YET' then null else v_money->>'gross' end);
+ if v_phase='NO_FINAL_REPORT_YET' and (v_result->'invoice_ids'<>'[]'::jsonb
+  or v_result->'accepted_final_member_ids'<>'[]'::jsonb) then
+  raise exception 'SOURCE_INVOICE_CERTIFICATE_PHASE_INVALID' using errcode='55000';end if;
+ return v_result;
+end;
+$function$;
+
+create or replace function private.weekly_source_invoice_certificate_assert_v1(p_expected jsonb,p_lock boolean)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_actual jsonb;v_timesheets uuid[];v_rows uuid[];
+begin
+ if jsonb_typeof(p_expected)<>'object' or p_expected->>'hash'!~'^[0-9a-f]{64}$'
+  or jsonb_typeof(p_expected->'original_invoice_timesheet_ids')<>'array'
+  or jsonb_typeof(p_expected->'source_row_ids')<>'array'
+  or exists(select 1 from jsonb_object_keys(p_expected) k where k<>all(array[
+   'phase','hash','source_row_ids','accepted_final_member_ids','original_invoice_timesheet_ids','invoice_ids','net','vat','gross']))
+  or (select count(*) from jsonb_object_keys(p_expected))<>9 then
+  raise exception 'SOURCE_INVOICE_CERTIFICATE_INVALID' using errcode='22023';end if;
+ select coalesce(array_agg(x::uuid),'{}'::uuid[]) into v_timesheets
+  from jsonb_array_elements_text(p_expected->'original_invoice_timesheet_ids') x;
+ select coalesce(array_agg(x::uuid),'{}'::uuid[]) into v_rows
+  from jsonb_array_elements_text(p_expected->'source_row_ids') x;
+ v_actual:=private.weekly_source_invoice_certificate_v1(v_timesheets,v_rows,p_lock);
+ if v_actual is distinct from p_expected then
+  raise exception 'SOURCE_INVOICE_CERTIFICATE_CHANGED' using errcode='40001';end if;
+ return v_actual;
+end;
+$function$;
+
+alter function private.weekly_source_invoice_certificate_v1(uuid[],uuid[],boolean) owner to postgres;
+alter function private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean) owner to postgres;
+revoke all on function private.weekly_source_invoice_certificate_v1(uuid[],uuid[],boolean) from public,anon,authenticated,service_role;
+revoke all on function private.weekly_source_invoice_certificate_assert_v1(jsonb,boolean) from public,anon,authenticated,service_role;

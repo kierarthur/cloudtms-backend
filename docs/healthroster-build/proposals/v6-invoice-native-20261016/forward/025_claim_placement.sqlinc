@@ -1,0 +1,41 @@
+-- An immutable claim/workflow identity resolves through the exact accepted
+-- member. A workflow-wide or booking-only transfer is never authority.
+create or replace function private.timesheet_contract_claim_placement_v1(
+ p_workflow_id uuid,p_stored_timesheet_id uuid,p_expense_component_id uuid default null
+) returns uuid language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_family uuid;v_count integer;v_current uuid;
+begin
+ select a.family_root_id into v_family from private.timesheet_contract_family_aliases a
+  join private.timesheet_contract_move_operations original on original.id=a.accepted_operation_id
+  where a.timesheet_id=p_stored_timesheet_id and original.state in('COMPLETE','SUPERSEDED');
+ if not found then return null;end if;
+ select count(distinct p.current_timesheet_id),min(p.current_timesheet_id::text)::uuid into v_count,v_current
+ from private.timesheet_contract_current_placements p
+ join private.timesheet_contract_move_operations o on o.id=p.operation_id and o.state='COMPLETE'
+ join private.timesheet_contract_move_members m on m.operation_id=o.id and m.member_key=p.member_key
+ join public.candidate_submission_workflows w on w.id=p_workflow_id and w.id=any(m.workflow_ids)
+ join public.timesheets t on t.timesheet_id=p.current_timesheet_id and t.is_current and t.archived_at_utc is null
+ where p.family_root_id=v_family and m.to_timesheet_id=t.timesheet_id and m.to_version=t.version
+  and m.to_contract_id is not distinct from t.contract_id
+  and o.candidate_id=p.candidate_id and o.actual_client_id=p.actual_client_id
+  and o.placement_receipt_json->>'receipt_id'=p.placement_receipt_id::text
+  and (p_expense_component_id is not null or exists(select 1 from private.timesheet_contract_family_aliases a
+    where a.timesheet_id=p_stored_timesheet_id and a.family_root_id=p.family_root_id and a.member_key=p.member_key))
+  and (p_expense_component_id is null or (p_expense_component_id=any(m.expense_component_ids)
+    and exists(select 1 from public.candidate_expense_components e
+     where e.expense_component_id=p_expense_component_id and e.workflow_id=w.id
+      and (e.owning_timesheet_id=p_stored_timesheet_id or exists(
+       select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=e.owning_timesheet_id
+        and a.family_root_id=v_family)))));
+ if v_count=1 then return v_current;end if;
+ if v_count>1 or exists(select 1 from public.timesheets t
+  where t.timesheet_id=p_stored_timesheet_id and (not t.is_current or t.archived_at_utc is not null)) then
+  raise exception 'CANDIDATE_EXPENSE_CURRENT_PLACEMENT_UNBOUND' using errcode='55000';end if;
+ -- New genuine workflow on the already-current B uses the unchanged owner.
+ return null;
+end;
+$function$;
+alter function private.timesheet_contract_claim_placement_v1(uuid,uuid,uuid) owner to postgres;
+revoke all on function private.timesheet_contract_claim_placement_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

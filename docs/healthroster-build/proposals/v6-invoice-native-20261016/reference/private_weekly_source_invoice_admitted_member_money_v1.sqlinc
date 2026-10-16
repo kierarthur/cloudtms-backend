@@ -1,0 +1,27 @@
+create or replace function private.weekly_source_invoice_admitted_member_money_v1(p_presentation_id uuid,p_movement_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare p public.weekly_source_invoice_presentation_lines%rowtype; m public.weekly_source_billing_movements%rowtype;
+  authority jsonb; receipt public.weekly_source_invoice_hold_releases%rowtype;
+begin
+  select * into strict p from public.weekly_source_invoice_presentation_lines where id=p_presentation_id;
+  select * into strict m from public.weekly_source_billing_movements where id=p_movement_id;
+  if not exists(select 1 from public.weekly_source_invoice_line_bindings b where b.presentation_line_id=p.id
+    and b.billing_movement_id=m.id and b.state='CURRENT') then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADMITTED_MEMBER_INVALID' using errcode='55000'; end if;
+  authority:=private.weekly_source_invoice_rounding_authority_rebuild_v1(p.id);
+  if authority is not null then
+    if authority->>'rounding_movement_id' is distinct from m.id::text then
+      raise exception 'WEEKLY_SOURCE_INVOICE_ROUNDING_MEMBER_INVALID' using errcode='55000'; end if;
+    return jsonb_build_object('net_pence',0,'vat_pence',authority->'admitted_rounding_vat_pence','gross_pence',authority->'admitted_rounding_vat_pence');
+  end if;
+  if p.invoice_hold_release_id is not null then
+    select * into strict receipt from public.weekly_source_invoice_hold_releases where id=p.invoice_hold_release_id;
+    if receipt.upload_row_id::text=m.source_facts_json->>'upload_row_id' and m.movement_role in ('POSITIVE','REPLACEMENT') then
+      return private.weekly_source_invoice_movement_money_v1(m.id,receipt.id); end if;
+  end if;
+  -- NULL is the original immutable money at this exact historical identity.
+  return jsonb_build_object('net_pence',m.invoice_presentation_charge_pence,
+    'vat_pence',(m.vat_amount*100)::bigint,'gross_pence',(m.total_inc_vat*100)::bigint);
+end;
+$function$;

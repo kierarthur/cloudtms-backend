@@ -1,0 +1,172 @@
+create or replace function private.invoice_credit_scope_context_v1(
+  p_invoice_id uuid,p_reversal_timesheet_id uuid,p_operation_id uuid default null,
+  p_planned_credit_id uuid default null,p_lock_rows boolean default false
+) returns jsonb language plpgsql security definer
+set search_path to 'pg_catalog','public','private','extensions','pg_temp'
+as $function$
+declare
+  v_invoice public.invoices%rowtype; v_request private.timesheet_correction_requests%rowtype;
+  v_r public.timesheets%rowtype; v_p public.timesheets%rowtype; v_fin public.timesheets_financials%rowtype;
+  v_document public.invoice_document_versions%rowtype; v_input public.invoice_operation_chunks%rowtype;
+  v_source jsonb; v_line_models jsonb; v_witness jsonb; v_revision text; v_count integer;
+  v_net numeric; v_vat numeric; v_gross numeric; v_pay numeric; v_resume uuid;
+  v_attach_hr boolean; v_attach_ts boolean; v_blocker text; v_lines jsonb;
+begin
+  if p_invoice_id is null or p_reversal_timesheet_id is null then
+    return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_INVALID');
+  end if;
+  if p_lock_rows then perform 1 from public.invoices i where i.id=p_invoice_id for update; end if;
+  select i.* into v_invoice from public.invoices i where i.id=p_invoice_id;
+  if v_invoice.id is null then return jsonb_build_object('valid',false,'blocker','INVOICE_NOT_FOUND'); end if;
+  if v_invoice.type<>'INVOICE' then return jsonb_build_object('valid',false,'blocker','CREDIT_SOURCE_NOT_INVOICE'); end if;
+  if v_invoice.status not in('ISSUED','PAID') then return jsonb_build_object('valid',false,'blocker','CREDIT_SOURCE_NOT_ISSUED'); end if;
+  if p_lock_rows then perform 1 from private.timesheet_correction_requests request
+    where request.reversal_timesheet_id=p_reversal_timesheet_id for update; end if;
+  select request.* into v_request from private.timesheet_correction_requests request
+    where request.reversal_timesheet_id=p_reversal_timesheet_id and request.state='APPLIED'
+      and request.original_invoice_id=p_invoice_id;
+  select t.* into v_r from public.timesheets t where t.timesheet_id=p_reversal_timesheet_id;
+  select t.* into v_p from public.timesheets t where t.timesheet_id=v_request.replacement_timesheet_id;
+  if v_request.id is null or v_r.correction_kind is distinct from 'WHOLE_TIMESHEET_REVERSAL'
+    or v_r.adjustment_origin is distinct from v_request.origin
+    or v_request.origin not in('AGENCY_INVOICE_CORRECTION','SIGNED_TIMESHEET_CORRECTION')
+    or v_r.parent_timesheet_id is distinct from v_request.root_timesheet_id
+    or v_p.correction_id is distinct from v_request.correction_id
+    or v_p.correction_kind is distinct from 'WHOLE_TIMESHEET_REPLACEMENT'
+    or v_p.adjustment_origin is distinct from v_request.origin then
+    return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_NOT_PRESET');
+  end if;
+  if p_lock_rows then
+    perform 1 from public.timesheets t where t.timesheet_id in(v_r.timesheet_id,v_p.timesheet_id)
+      order by t.timesheet_id for update;
+    perform 1 from public.timesheets_financials tf where tf.timesheet_id in(v_r.timesheet_id,v_p.timesheet_id)
+      and tf.is_current order by tf.timesheet_id,tf.id for update;
+    select t.* into v_r from public.timesheets t where t.timesheet_id=p_reversal_timesheet_id;
+    select t.* into v_p from public.timesheets t where t.timesheet_id=v_request.replacement_timesheet_id;
+  end if;
+  if v_r.is_current is distinct from true or v_p.is_current is distinct from true
+    or v_r.authorised_at_server is null or v_p.authorised_at_server is null
+    or (select count(*) from public.timesheets_financials tf where tf.is_current
+      and tf.timesheet_id in(v_r.timesheet_id,v_p.timesheet_id) and tf.authorised_at_utc is not null)<>2 then
+    return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_UNIT_NOT_AUTHORISED');
+  end if;
+  select count(*)::integer,sum(l.total_charge_ex_vat),sum(l.vat_amount),sum(l.total_inc_vat),sum(l.total_pay_ex_vat),
+    jsonb_agg(jsonb_build_object('line_id',l.id,'timesheet_id',l.timesheet_id,'booking_id',l.booking_id,
+      'source_key',l.source_key,'net',l.total_charge_ex_vat,'vat',l.vat_amount,'gross',l.total_inc_vat,'pay',l.total_pay_ex_vat)
+      order by l.id) into v_count,v_net,v_vat,v_gross,v_pay,v_lines
+    from public.invoice_lines l where l.invoice_id=p_invoice_id and l.timesheet_id=v_request.reversed_timesheet_id;
+  if v_count=0 then return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_TIMESHEET_NOT_ON_INVOICE'); end if;
+  v_revision:=encode(digest(jsonb_build_object('invoice_id',p_invoice_id,'status',v_invoice.status,
+    'lines',v_lines,'reversal_id',v_r.timesheet_id,'reversal_authorised',v_r.authorised_at_server,
+    'replacement_id',v_p.timesheet_id,'replacement_authorised',v_p.authorised_at_server,
+    'request_id',v_request.id,'request_state',v_request.state)::text,'sha256'),'hex');
+  select own.credit_note_id into v_resume from private._invoice_credit_resume_v1(
+    p_invoice_id,p_operation_id,p_planned_credit_id,p_reversal_timesheet_id) own;
+  if exists(select 1 from public.invoices cn where cn.original_invoice_id=p_invoice_id and cn.type='CREDIT_NOTE'
+    and cn.status in('DRAFT','ISSUED','PAID') and not(cn.header_snapshot_json?'credit_scope')) then
+    v_blocker:='CREDIT_ALREADY_EXISTS';
+  elsif v_resume is null and exists(select 1 from public.invoices cn join public.invoice_lines l on l.invoice_id=cn.id
+    where cn.original_invoice_id=p_invoice_id and cn.type='CREDIT_NOTE' and cn.status in('DRAFT','ISSUED','PAID')
+      and l.meta_json->>'reversal_timesheet_id'=p_reversal_timesheet_id::text) then
+    v_blocker:='CREDIT_SCOPE_ALREADY_CREDITED';
+  end if;
+  if v_blocker is not null then return jsonb_build_object('valid',false,'blocker',v_blocker,'revision',v_revision); end if;
+  select tf.* into v_fin from public.timesheets_financials tf where tf.timesheet_id=v_r.timesheet_id and tf.is_current;
+  if v_resume is null and (v_fin.locked_by_invoice_id is not null or exists(select 1 from jsonb_array_elements(
+    case when jsonb_typeof(v_fin.invoice_breakdown_json->'segments')='array' then v_fin.invoice_breakdown_json->'segments'
+    else '[]'::jsonb end) s where nullif(s->>'invoice_locked_invoice_id','') is not null)) then
+    return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_ALREADY_CREDITED','revision',v_revision);
+  end if;
+  v_attach_hr:=coalesce((v_invoice.header_snapshot_json#>>'{attach_policy,hr_attach_to_invoice}')::boolean,
+    (v_invoice.header_snapshot_json#>>'{attachment_policy,hr_attach_to_invoice}')::boolean,true);
+  v_attach_ts:=v_request.origin='SIGNED_TIMESHEET_CORRECTION' and coalesce(
+    (v_invoice.header_snapshot_json#>>'{attach_policy,ts_attach_to_invoice}')::boolean,
+    (v_invoice.header_snapshot_json#>>'{attachment_policy,ts_attach_to_invoice}')::boolean,true);
+  if v_attach_hr and not exists(select 1 from public.invoice_hr_source_rows support
+    where support.invoice_id=p_invoice_id and upper(support.source_system)='HEALTHROSTER'
+      and jsonb_typeof(support.member_rows_json->v_request.reversed_timesheet_id::text)='array'
+      and jsonb_array_length(support.member_rows_json->v_request.reversed_timesheet_id::text)>0) then
+    return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_SUPPORT_UNPROVED','revision',v_revision);
+  end if;
+  select d.* into v_document from public.invoice_document_versions d where d.id=v_invoice.issued_document_version_id
+    and d.entity_type='INVOICE' and d.entity_id=p_invoice_id and d.purpose='FINAL_ISSUE'
+    and d.status='READY' and d.verified_at_utc is not null;
+  if v_document.id is null then return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_ORIGINAL_DOCUMENT_UNPROVED','revision',v_revision); end if;
+  select count(*)::integer,min(source.value::text)::jsonb into v_count,v_source
+    from jsonb_array_elements(case when jsonb_typeof(v_document.snapshot_json->'timesheet_sources')='array'
+      then v_document.snapshot_json->'timesheet_sources' else '[]'::jsonb end) source(value)
+    where source.value->>'timesheet_id'=v_request.reversed_timesheet_id::text;
+  if v_count<>1 then return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_ORIGINAL_DOCUMENT_UNPROVED','revision',v_revision); end if;
+  select jsonb_agg(model.value order by model.ordinality) into v_line_models
+    from jsonb_array_elements(case when jsonb_typeof(v_document.snapshot_json#>'{presentation_model,lines}')='array'
+      then v_document.snapshot_json#>'{presentation_model,lines}' else '[]'::jsonb end) with ordinality model(value,ordinality)
+    where exists(select 1 from public.invoice_lines l where l.invoice_id=p_invoice_id
+      and l.timesheet_id=v_request.reversed_timesheet_id and model.value->>'source_invoice_line_id'=l.id::text);
+  if v_line_models is null or exists(select 1 from public.invoice_lines l where l.invoice_id=p_invoice_id
+    and l.timesheet_id=v_request.reversed_timesheet_id and not exists(select 1 from jsonb_array_elements(v_line_models) m
+      where m->>'source_invoice_line_id'=l.id::text)) then
+    return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_ORIGINAL_REFERENCES_UNPROVED','revision',v_revision);
+  end if;
+  if exists(select 1 from jsonb_array_elements(v_line_models) model
+    where not pg_input_is_valid(model->>'net_amount','numeric')
+      or not pg_input_is_valid(model->>'vat_amount','numeric') or not pg_input_is_valid(model->>'gross_amount','numeric')) then
+    return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_ORIGINAL_DOCUMENT_PENCE_MISMATCH','revision',v_revision);
+  end if;
+  if exists(select 1 from public.invoice_lines original left join lateral (
+      select sum((model->>'net_amount')::numeric) net,sum((model->>'vat_amount')::numeric) vat,
+        sum((model->>'gross_amount')::numeric) gross from jsonb_array_elements(v_line_models) model
+        where model->>'source_invoice_line_id'=original.id::text
+    ) frozen on true where original.invoice_id=p_invoice_id and original.timesheet_id=v_request.reversed_timesheet_id
+      and (frozen.net is distinct from original.total_charge_ex_vat or frozen.vat is distinct from original.vat_amount
+        or frozen.gross is distinct from original.total_inc_vat)) then
+    return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_ORIGINAL_DOCUMENT_PENCE_MISMATCH','revision',v_revision);
+  end if;
+  if v_attach_ts then
+    if v_source->>'submission_mode' is distinct from 'ELECTRONIC' then
+      return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_ORIGINAL_SIGNED_ASSET_UNPROVED','revision',v_revision);
+    end if;
+    -- The selected input is T0's completed PDF inside the verified I1 graph,
+    -- never the whole I1 bundle or a current Timesheet document fallback.
+    select count(*)::integer into v_count from public.invoice_operation_chunks input
+      where input.document_version_id=v_document.id and input.chunk_type='DOCUMENT_INPUT'
+        and input.entity_type='TIMESHEET' and input.entity_id=v_request.reversed_timesheet_id
+        and input.payload_json->>'input_type'='ELECTRONIC_TIMESHEET' and input.status='COMPLETE'
+        and nullif(input.result_json->>'r2_key','') is not null
+        and input.result_json->>'sha256'~'^[0-9a-f]{64}$' and input.actual_page_count>0 and input.actual_byte_count>0;
+    if v_count<>1 then return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_ORIGINAL_SIGNED_ASSET_UNPROVED','revision',v_revision); end if;
+    select input.* into v_input from public.invoice_operation_chunks input
+      where input.document_version_id=v_document.id and input.chunk_type='DOCUMENT_INPUT'
+        and input.entity_type='TIMESHEET' and input.entity_id=v_request.reversed_timesheet_id
+        and input.payload_json->>'input_type'='ELECTRONIC_TIMESHEET' and input.status='COMPLETE';
+    select count(*)::integer,(jsonb_agg(jsonb_build_object('workflow_id',manager.workflow_id,'workflow_generation',manager.workflow_generation,
+      'approval_request_id',manager.approval_request_id,'manager_component_id',manager.id,'candidate_component_id',candidate.id,
+      'manager_sha256',encode(manager.source_content_sha256,'hex'),'candidate_sha256',encode(candidate.source_content_sha256,'hex')))->0)
+      into v_count,v_witness from public.candidate_submission_components manager
+      join public.candidate_approval_requests approval on approval.id=manager.approval_request_id and approval.state='APPROVED'
+      join public.candidate_submission_components candidate on candidate.workflow_id=manager.workflow_id
+        and candidate.workflow_generation=manager.workflow_generation and candidate.document_role='CANDIDATE_SIGNATURE'
+        and candidate.state='IMMUTABLE'
+      where manager.document_role='MANAGER_SIGNATURE' and manager.state='IMMUTABLE'
+        and manager.storage_key=v_source#>>'{render_model,signatures,authoriser,r2_key}'
+        and encode(manager.source_content_sha256,'hex')=v_source#>>'{render_model,signatures,authoriser,sha256}'
+        and candidate.storage_key=v_source#>>'{render_model,signatures,candidate,r2_key}'
+        and encode(candidate.source_content_sha256,'hex')=v_source#>>'{render_model,signatures,candidate,sha256}'
+        and approval.workflow_id=manager.workflow_id and approval.workflow_generation=manager.workflow_generation;
+    if v_count<>1 or v_witness is null then return jsonb_build_object('valid',false,'blocker','CREDIT_SCOPE_ORIGINAL_SIGNED_WITNESS_UNPROVED','revision',v_revision); end if;
+    v_source:=v_source||jsonb_build_object('input_document_version_id',v_document.id,
+      'original_document_input_id',v_input.id,'original_document_input_result',v_input.result_json,
+      'original_document_source_revision',v_input.payload_json->>'source_revision',
+      'original_document_input_pages',v_input.actual_page_count,'original_document_input_bytes',v_input.actual_byte_count,
+      'manager_signed_witness',v_witness);
+  end if;
+  v_source:=v_source||jsonb_build_object('attach_timesheet',v_attach_ts,
+    'no_timesheet_required',v_request.origin='AGENCY_INVOICE_CORRECTION');
+  return jsonb_build_object('valid',true,'revision',v_revision,'request_id',v_request.id,'correction_id',v_request.correction_id,
+    'origin',v_request.origin,'root_timesheet_id',v_request.root_timesheet_id,'reversal_timesheet_id',v_r.timesheet_id,
+    'reversed_timesheet_id',v_request.reversed_timesheet_id,'replacement_timesheet_id',v_p.timesheet_id,
+    'resume_invoice_id',v_resume,'source_count',jsonb_array_length(v_lines),
+    'subtotal_ex_vat',-v_net,'vat_amount',-v_vat,'total_inc_vat',-v_gross,'total_pay_ex_vat',-v_pay,
+    'attach_hr',v_attach_hr,'attach_ts',v_attach_ts,'original_document_version_id',v_document.id,
+    'frozen_timesheet_source',v_source,'frozen_line_models',v_line_models);
+end;
+$function$;

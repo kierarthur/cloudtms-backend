@@ -1,0 +1,108 @@
+create or replace function private.weekly_source_finalisation_lineage_assert_v1(
+  p_row_resolution_id uuid,
+  p_source_cycle_id uuid
+) returns uuid
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_resolution public.weekly_source_row_resolutions%rowtype;
+  v_event public.weekly_work_events%rowtype;
+  v_lineage public.weekly_source_row_timesheet_lineages%rowtype;
+  v_contract public.contracts%rowtype;
+  v_contract_week public.contract_weeks%rowtype;
+  v_timesheet public.timesheets%rowtype;
+  v_expected bytea;
+  v_root_identity jsonb;
+begin
+  select * into v_resolution
+  from public.weekly_source_row_resolutions where id=p_row_resolution_id;
+  if not found or v_resolution.mapping_state<>'RESOLVED' then
+    raise exception 'WEEKLY_SOURCE_RESOLUTION_NOT_FINALISABLE' using errcode='55000';
+  end if;
+  select * into strict v_event from public.weekly_work_events where id=v_resolution.work_event_id;
+  -- Decision D8: the lineage relation is the per-source-row BINDING, one row
+  -- per resolution, with no authorisation generation.  The authorisation record
+  -- is per root, in public.weekly_source_root_authorisations.
+  select * into v_lineage
+  from public.weekly_source_row_timesheet_lineages
+  where row_resolution_id=v_resolution.id;
+  if not found or (select pg_catalog.count(*) from public.weekly_source_row_timesheet_lineages
+                    where row_resolution_id=v_resolution.id)<>1 then
+    raise exception 'WEEKLY_SOURCE_TIMESHEET_LINEAGE_CARDINALITY' using errcode='55000';
+  end if;
+  select * into strict v_contract from public.contracts where id=v_resolution.contract_id;
+  select * into strict v_contract_week from public.contract_weeks where id=v_lineage.contract_week_id;
+  select * into strict v_timesheet from public.timesheets where timesheet_id=v_lineage.timesheet_id;
+
+  -- G6-8 / proof/34 section 5 step 4 and section 6.  The stored physical id is
+  -- resolved through the installed Workbench rotation authority and compared
+  -- with the retained family identity and version.  A rotation observed on this
+  -- later path is WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE, never a stale rebuild.
+  v_root_identity:=private.weekly_source_root_integrity_assert_v1(
+    v_lineage.timesheet_id,v_lineage.family_booking_id,v_lineage.timesheet_version
+  );
+  if p_source_cycle_id is null
+     or not exists(
+       select 1
+       from public.weekly_source_upload_rows source_row
+       join public.weekly_source_uploads upload on upload.id=source_row.upload_id
+       where source_row.id=v_resolution.upload_row_id
+         and upload.source_cycle_id=p_source_cycle_id
+     )
+     or v_lineage.source_cycle_id is distinct from p_source_cycle_id
+     or v_lineage.work_event_id is distinct from v_resolution.work_event_id
+     or v_lineage.candidate_id is distinct from v_resolution.candidate_id
+     or v_lineage.client_id is distinct from v_resolution.client_id
+     or v_lineage.contract_id is distinct from v_resolution.contract_id
+     or v_event.candidate_id is distinct from v_resolution.candidate_id
+     or v_event.client_id is distinct from v_resolution.client_id
+     or v_contract.candidate_id is distinct from v_resolution.candidate_id
+     or v_contract.client_id is distinct from v_resolution.client_id
+     or v_contract_week.contract_id is distinct from v_resolution.contract_id
+     or v_contract_week.week_ending_date is distinct from v_lineage.week_ending_date
+     or v_contract_week.additional_seq<>0
+     or v_contract_week.is_adjustment
+     or v_contract_week.timesheet_id is distinct from v_lineage.timesheet_id
+     or v_timesheet.contract_id is distinct from v_resolution.contract_id
+     or v_timesheet.week_ending_date is distinct from v_lineage.week_ending_date
+     or v_timesheet.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum
+     -- Review F11: timesheets.submission_mode is nullable, and `<>` on a NULL
+     -- makes the whole or-chain NULL, so the `if` does not fire and the assert
+     -- passes.  `is distinct from` is NULL-safe.
+     or v_timesheet.submission_mode
+        is distinct from 'MANUAL'::public.submission_mode_enum
+     or v_timesheet.line_type<>'HOURS'::public.timesheet_line_type_enum
+     or v_timesheet.is_adjustment
+     or not v_timesheet.is_current
+     or v_timesheet.revoked_at is not null
+     or v_lineage.family_booking_id is distinct from v_timesheet.booking_id
+     or v_lineage.timesheet_version is distinct from v_timesheet.version
+     or v_lineage.family_booking_id is distinct from
+        (v_root_identity->>'family_booking_id')
+     or v_lineage.timesheet_version is distinct from
+        (v_root_identity->>'canonical_version')::integer
+     or coalesce((v_root_identity->>'requested_is_canonical')::boolean,false)
+        is not true then
+    raise exception 'WEEKLY_SOURCE_TIMESHEET_LINEAGE_INVALID' using errcode='55000';
+  end if;
+  v_expected:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_ROW_TIMESHEET_LINEAGE_V1',
+    pg_catalog.jsonb_build_object(
+      'row_resolution_id',v_lineage.row_resolution_id,
+      'source_cycle_id',v_lineage.source_cycle_id,
+      'work_event_id',v_lineage.work_event_id,
+      'candidate_id',v_lineage.candidate_id,
+      'client_id',v_lineage.client_id,
+      'contract_id',v_lineage.contract_id,
+      'contract_week_id',v_lineage.contract_week_id,
+      'timesheet_id',v_lineage.timesheet_id,
+      'week_ending_date',v_lineage.week_ending_date
+    )
+  );
+  if v_lineage.lineage_fingerprint is distinct from v_expected then
+    raise exception 'WEEKLY_SOURCE_TIMESHEET_LINEAGE_FINGERPRINT_MISMATCH' using errcode='55000';
+  end if;
+  return v_lineage.timesheet_id;
+end;
+$function$;

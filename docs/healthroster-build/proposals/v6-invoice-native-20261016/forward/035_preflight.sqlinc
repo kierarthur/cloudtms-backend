@@ -1,0 +1,113 @@
+create or replace function private.invoice_contract_move_inspect_v1(p_physical jsonb,p_actor_user_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare member jsonb;line record;v_original uuid;v_current uuid;v_ids uuid[]:='{}';v_sources uuid[]:='{}';
+ v_slices jsonb:='[]';v_blockers jsonb:='[]';v_invoice jsonb;v_disposition text;v_source boolean;v_known boolean;
+ v_facts jsonb;v_certificate jsonb;v_requires_admin boolean:=false;v_native record;v_digest text;
+begin
+ if p_physical->>'version'<>'CONTRACT_MOVE_SCOPE_V1' or jsonb_typeof(p_physical->'members')<>'array'
+  or jsonb_array_length(p_physical->'members') not between 1 and 500 or p_lock is null then
+  raise exception 'CONTRACT_MOVE_INVOICE_SCOPE_INVALID' using errcode='22023';end if;
+ for member in select value from jsonb_array_elements(p_physical->'members') order by value->>'member_key' loop
+  v_current:=(member->>'from_timesheet_id')::uuid;v_original:=(member->>'original_timesheet_id')::uuid;
+  v_ids:=array_append(v_ids,v_current);
+  if p_lock then perform 1 from public.timesheets t where t.timesheet_id in(v_current,v_original) order by t.timesheet_id for share nowait;end if;
+  v_source:=exists(select 1 from public.weekly_source_billing_movements m where m.invoice_timesheet_id=v_original)
+   or exists(select 1 from public.timesheets_financials f where f.timesheet_id=v_original
+     and f.basis::text in('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_ADJUSTMENT','HEALTHROSTER_SELF_BILL'));
+  if v_source then v_sources:=array_append(v_sources,v_original);end if;
+  v_known:=false;
+  for line in select l.*,to_jsonb(i) invoice_snapshot,
+    exists(select 1 from public.weekly_source_invoice_line_bindings b where b.invoice_line_id=l.id) source_line
+    from public.invoice_lines l join public.invoices i on i.id=l.invoice_id
+    where (l.timesheet_id=v_current or (v_source and l.timesheet_id=v_original))
+      and i.type='INVOICE' and i.status::text not in('VOID','CANCELLED') order by i.id,l.id loop
+   v_known:=true;v_invoice:=line.invoice_snapshot;
+   if p_lock then perform 1 from public.invoices i where i.id=line.invoice_id for update nowait;
+    perform 1 from public.invoice_lines l where l.id=line.id for share nowait;end if;
+   if line.source_line then v_disposition:='PRESERVE_SOURCE';
+   elsif v_invoice->>'status' in('DRAFT','ON_HOLD') and v_invoice->>'paid_at_utc' is null
+    and v_invoice->>'issued_at_utc' is null and v_invoice->>'issued_document_version_id' is null
+    and (private.invoice_contract_move_verified_unissue_v1(line.invoice_id)
+      or not exists(select 1 from public.audit_events a where a.object_id_text=line.invoice_id::text and a.action='INVOICE_ISSUED')) then
+    v_disposition:='EDIT_DRAFT';v_requires_admin:=true;
+   else v_disposition:='REPLACE_ISSUED';v_requires_admin:=true;
+   end if;
+   if not line.source_line then
+    -- The current native CM producer has not yet supplied prospective B
+    -- invoice-group/admission facts. It must be integrated here, before Ready;
+    -- a later prepare failure must never masquerade as a successful preview.
+    v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','INVOICE_CONTEXT_UNAVAILABLE',
+     'native_owner','HEALTH','field_key',line.invoice_id::text,'permitted_action',null));
+   end if;
+   if not line.source_line and exists(select 1 from public.invoices cn join public.invoice_lines cl on cl.invoice_id=cn.id
+    where cn.original_invoice_id=line.invoice_id and cn.type='CREDIT_NOTE' and cn.status::text not in('VOID','CANCELLED')
+     and (cl.meta_json->>'original_invoice_line_id'=line.id::text or cl.meta_json->>'credit_of_line_id'=line.id::text)) then
+    v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','ORIGINAL_CREDIT_SCOPE_RECONCILIATION_REQUIRED',
+     'native_owner','HEALTH','field_key',line.id::text,'permitted_action',null));
+   end if;
+   if not line.source_line and v_disposition='REPLACE_ISSUED' and not exists(select 1 from public.invoice_document_versions d
+    where d.id=(v_invoice->>'issued_document_version_id')::uuid and d.entity_id=line.invoice_id and d.entity_type='INVOICE'
+     and d.purpose='FINAL_ISSUE' and d.status='READY' and d.verified_at_utc is not null
+     and exists(select 1 from jsonb_array_elements(d.snapshot_json#>'{presentation_model,lines}') model
+      where model->>'source_invoice_line_id'=line.id::text)) then
+    v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','ORIGINAL_DOCUMENT_INPUT_UNPROVED',
+     'native_owner','HEALTH','field_key',line.id::text,'permitted_action',null));
+   end if;
+   v_slices:=v_slices||jsonb_build_array(jsonb_build_object('slice_key','LINE:'||line.id,'member_key',member->>'member_key',
+    'scope_kind','WHOLE_TIMESHEET','scope_id',v_original,'original_invoice_id',line.invoice_id,
+    'original_invoice_line_id',line.id,'original_timesheet_id',line.timesheet_id,'original_financial_id',member->'from_financial_id',
+    'authority',case when line.source_line then 'SOURCE_FINANCIAL' else 'CONTRACT_PRICED' end,
+    'disposition',v_disposition,'original_state',v_invoice,'original_line',to_jsonb(line)-array['invoice_snapshot','source_line'],
+    'hold_purpose',jsonb_build_object('status',v_invoice->>'status','on_hold_reason',v_invoice->'on_hold_reason')));
+  end loop;
+  if not v_known then
+   v_slices:=v_slices||jsonb_build_array(jsonb_build_object('slice_key','UNINVOICED:'||(member->>'member_key'),
+    'member_key',member->>'member_key','scope_kind','WHOLE_TIMESHEET','scope_id',v_original,
+    'original_invoice_id',null,'original_invoice_line_id',null,'original_timesheet_id',v_original,
+    'original_financial_id',member->'from_financial_id','authority',case when v_source then 'SOURCE_FINANCIAL' else 'CONTRACT_PRICED' end,
+    'disposition',case when v_source then 'PRESERVE_SOURCE' else 'NO_INVOICE' end,'original_state','{}'::jsonb,
+    'original_line',null,'hold_purpose',jsonb_build_object('future_collection',true)));
+  end if;
+ end loop;
+ if v_requires_admin and not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
+  v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','INVOICE_PREPARATION_ACTOR_NOT_ALLOWED',
+   'native_owner','HEALTH','field_key',null,'permitted_action',null));end if;
+ if cardinality(v_sources)>0 then
+  select array_agg(distinct id order by id) into v_sources from unnest(v_sources) id;
+  v_certificate:=private.weekly_source_invoice_certificate_v1(v_sources,'{}'::uuid[],p_lock);
+ end if;
+ v_facts:=jsonb_build_object('physical_scope_sha256',p_physical->>'scope_sha256','source_certificate',v_certificate,
+  'slices',v_slices,'required_capabilities',case when v_requires_admin then jsonb_build_array('INVOICE_PREPARE') else '[]'::jsonb end,
+  'known_blockers',v_blockers);
+ v_digest:=encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_CORRECTION_INVOICE_PREFLIGHT_V1',v_facts),'hex');
+ if p_lock then
+  if (private.invoice_contract_move_inspect_v1(p_physical,p_actor_user_id,false)->>'certificate_digest') is distinct from v_digest then
+   raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ end if;
+ return v_facts||jsonb_build_object('certificate_digest',v_digest);
+end;
+$function$;
+
+create or replace function private.invoice_contract_move_preflight_v1(p_review_id uuid,p_actor_user_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare r private.timesheet_contract_move_reviews%rowtype;v_facts jsonb;v_hash text;
+begin
+ select v.* into strict r from private.timesheet_contract_move_reviews v where v.id=p_review_id;
+ v_facts:=private.invoice_contract_move_inspect_v1(r.manifest_json->'physical',p_actor_user_id,p_lock);
+ if p_lock and v_facts is distinct from r.manifest_json->'invoice' then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ v_hash:=v_facts->>'certificate_digest';
+ return jsonb_build_object('version','CONTRACT_CORRECTION_PREFLIGHT_V1','review_id',r.id,
+  'ready_to_confirm',jsonb_array_length(v_facts->'known_blockers')=0,'required_capabilities',v_facts->'required_capabilities',
+  'source_digest',coalesce(v_facts#>>'{source_certificate,hash}',encode(private.weekly_source_sha256_jsonb_v1('EMPTY_SOURCE_INVOICE_V1','[]'::jsonb),'hex')),'group_digest',v_hash,'reference_digest',v_hash,
+  'evidence_digest',v_hash,'document_input_digest',v_hash,'known_blockers',v_facts->'known_blockers','certificate_digest',v_hash);
+end;
+$function$;
+alter function private.invoice_contract_move_inspect_v1(jsonb,uuid,boolean) owner to postgres;
+alter function private.invoice_contract_move_preflight_v1(uuid,uuid,boolean) owner to postgres;
+revoke all on function private.invoice_contract_move_inspect_v1(jsonb,uuid,boolean) from public,anon,authenticated,service_role;
+revoke all on function private.invoice_contract_move_preflight_v1(uuid,uuid,boolean) from public,anon,authenticated,service_role;

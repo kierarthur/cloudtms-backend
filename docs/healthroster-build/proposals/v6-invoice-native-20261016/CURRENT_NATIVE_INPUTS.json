@@ -1,0 +1,332 @@
+{
+  "pin": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "native": false,
+  "owners": [
+    {
+      "name": "public.timesheet_summary_lightweight_rows_v1",
+      "path": "supabase/repeatable/19012026_extras.sql",
+      "signature": "p_filters jsonb DEFAULT '{}'::jsonb",
+      "file": "reference/public_timesheet_summary_lightweight_rows_v1.sqlinc",
+      "sha256": "72c1961157763fd58b6468f99ac7968121fb668eec1986e0049396bd2084b5c0"
+    },
+    {
+      "name": "public._pay_timesheet_rotation_scope",
+      "path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "signature": "p_timesheet_ids uuid[]",
+      "file": "reference/public__pay_timesheet_rotation_scope.sqlinc",
+      "sha256": "8b030a216a7ba5687aeb786c931fb23716f7b296f9fbe98fb4bf00f98e8596cd"
+    },
+    {
+      "name": "public.invoice_apply_edits",
+      "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+      "signature": "p_invoice_id uuid, p_payload jsonb, p_actor_user_id uuid",
+      "file": "reference/public_invoice_apply_edits.sqlinc",
+      "sha256": "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0"
+    },
+    {
+      "name": "public.invoice_issue_batch",
+      "path": "supabase/repeatable/08012026_invoice_rpcs_issue_hold_paid_creditnote.sql",
+      "signature": "p_invoice_ids uuid[], p_actor_user_id uuid",
+      "file": "reference/public_invoice_issue_batch.sqlinc",
+      "sha256": "b7fcbc4f243c2e718d9d5decf009fe104ba491d3a1b6cca35b2f702ab884cb7e"
+    },
+    {
+      "name": "public.invoice_issue_one",
+      "path": "supabase/repeatable/21072026_1235_59_invoice_issue_one.sql",
+      "signature": "p_invoice_id uuid, p_actor_user_id uuid",
+      "file": "reference/public_invoice_issue_one.sqlinc",
+      "sha256": "c35933482c037f7be42a3bd86d1ccf00d1033da6d0303614dce7fb59408db80c"
+    },
+    {
+      "name": "public.invoice_line_archived_timesheet_guard_v1",
+      "path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "signature": "",
+      "file": "reference/public_invoice_line_archived_timesheet_guard_v1.sqlinc",
+      "sha256": "69fab8172de980b5ea40624b1da442480d593246b0ca2105eca0f3a23ad84b81"
+    },
+    {
+      "name": "public.invoice_operation_advance_batch",
+      "path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_operation_advance_batch.sql",
+      "signature": "p_claims jsonb, p_now_utc timestamptz default now()",
+      "file": "reference/public_invoice_operation_advance_batch.sqlinc",
+      "sha256": "fc2beb684cc610826b2db97f02332ce040dd97abbeef90979640ebbd8664ff24"
+    },
+    {
+      "name": "public.invoice_render_manifest",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/14_complete_legacy_render_manifest.sqlinc",
+      "signature": "p_invoice_id uuid",
+      "file": "reference/public_invoice_render_manifest.sqlinc",
+      "sha256": "ef1aad2c0e3bba9e609fb1337b8b4bfa8423cfb013b6ed47f3bbab2ff6b87304"
+    },
+    {
+      "name": "private._invoice_batch_generate_candidate_rows_v2",
+      "path": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql",
+      "signature": "p_query jsonb default '{}'::jsonb, p_now_utc timestamptz default now()",
+      "file": "reference/private__invoice_batch_generate_candidate_rows_v2.sqlinc",
+      "sha256": "33e1ffca466d864e135471ced428a9c34f16f700cb5bd4571c15f06cfe1b28a6"
+    },
+    {
+      "name": "private._invoice_batch_generate_group_rows_v2",
+      "path": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09a_private_invoice_batch_generate_group_rows_v2.sql",
+      "signature": "p_allow_early boolean default false, p_limit integer default null, p_scope_keys text[] default null, p_now_utc timestamptz default now()",
+      "file": "reference/private__invoice_batch_generate_group_rows_v2.sqlinc",
+      "sha256": "3c62fa3bc9c028f7e74b34110643d01d7a62df14474b1eb45d7e100984e07252"
+    },
+    {
+      "name": "private._invoice_correction_validate_batch",
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_validator.sqlinc",
+      "signature": "p_scopes jsonb, p_evaluation_date date",
+      "file": "reference/private__invoice_correction_validate_batch.sqlinc",
+      "sha256": "242a0f7913398f0b1dceeb7caf803d0ecf6326052bc2e612ceeb0b223ef628a4"
+    },
+    {
+      "name": "private._invoice_generation_advance_batch",
+      "path": "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_advance_batch.sql",
+      "signature": "p_claims jsonb, p_now_utc timestamptz",
+      "file": "reference/private__invoice_generation_advance_batch.sqlinc",
+      "sha256": "90e3a2cadc6ffff27ca62e39db08f50324a0915ad53bb40ce841873e829b8783"
+    },
+    {
+      "name": "private._invoice_generation_advance_core_v8",
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_generation.sqlinc",
+      "signature": "p_claims jsonb, p_now_utc timestamptz",
+      "file": "reference/private__invoice_generation_advance_core_v8.sqlinc",
+      "sha256": "6b9ed8b6c4c345d34afb5ae45a22a0917153740b448400c3d533f79b5bdd6730"
+    },
+    {
+      "name": "private._invoice_generation_resolve_command_groups",
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_resolver.sqlinc",
+      "signature": "p_commands jsonb, p_actor_user_id uuid, p_effective_at_utc timestamptz",
+      "file": "reference/private__invoice_generation_resolve_command_groups.sqlinc",
+      "sha256": "bcb8555937926ea86dd23daaa70c22f239a99894f5fa28cd6044a4dc0aae9055"
+    },
+    {
+      "name": "private._invoice_issue_advance_core_v8",
+      "path": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_13_private_invoice_issue_advance_core_v8.sql",
+      "signature": "p_claims jsonb, p_now_utc timestamptz",
+      "file": "reference/private__invoice_issue_advance_core_v8.sqlinc",
+      "sha256": "ec8bc469e80722b414f22e58d6e809c0ebc568c0f29592180fe3a00066beac3a"
+    },
+    {
+      "name": "private._invoice_issue_validate_batch",
+      "path": "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+      "signature": "p_requests jsonb, p_evaluation_date date",
+      "file": "reference/private__invoice_issue_validate_batch.sqlinc",
+      "sha256": "0e4c0edb61486c0b094dbea450a0d32ef16e656f0bfb9e59a9f3ec5353275a50"
+    },
+    {
+      "name": "private._invoice_operation_start_core_v8",
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_start.sqlinc",
+      "signature": "p_commands jsonb, p_actor_user_id uuid, p_now_utc timestamptz default now()",
+      "file": "reference/private__invoice_operation_start_core_v8.sqlinc",
+      "sha256": "791a96838952db0e19a6a46aaf25d9f7a579d9a5f314bfe842e8464168d8b70d"
+    },
+    {
+      "name": "private._invoice_presentation_snapshot_batch",
+      "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/14_complete_native_snapshot_assembler.sqlinc",
+      "signature": "p_requests jsonb, p_now_utc timestamptz default null",
+      "file": "reference/private__invoice_presentation_snapshot_batch.sqlinc",
+      "sha256": "c6b738e69a84b66083582592b09d386721f2b2a8c0515edd31f6adcffc9dd0f4"
+    },
+    {
+      "name": "public.tsfin_report_timesheets_v2",
+      "path": "supabase/repeatable/19012026_extras.sql",
+      "signature": "p_week_ending_from date default null, p_week_ending_to date default null, p_pay_method text default null, p_client_ids uuid[] default null, p_candidate_ids uuid[] default null, p_include_on_hold boolean default false, p_paid boolean default null, p_invoiced boolean default null",
+      "file": "reference/public_tsfin_report_timesheets_v2.sqlinc",
+      "sha256": "3c992bf14603ffc82427edec63d8e7af25b47230878cf8dc3731f3199f30949b"
+    },
+    {
+      "name": "public.tsfin_search_timesheets_v2",
+      "path": "supabase/repeatable/19012026_extras.sql",
+      "signature": "p_week_ending_from date default null, p_week_ending_to date default null, p_pay_method text default null, p_client_id uuid default null, p_candidate_id uuid default null, p_include_on_hold boolean default false, p_paid boolean default null, p_invoiced boolean default null, p_sheet_scope text default null, p_qr_status text default null, p_booking_id text default null, p_occupant_key_norm text default null, p_hospital_norm text default null, p_worked_from timestamptz default null, p_worked_to timestamptz default null, p_created_from timestamptz default null, p_created_to timestamptz default null, p_statuses text[] default null, p_timesheet_ids uuid[] default null, p_order_by text default 'week_ending_date', p_order_dir text default 'desc', p_limit int default 50, p_offset int default 0",
+      "file": "reference/public_tsfin_search_timesheets_v2.sqlinc",
+      "sha256": "e9706a8edb3ec73b7ab86bef575459ce2e21bcb14c3aae37d31d84585bff3655"
+    },
+    {
+      "name": "private.weekly_source_invoice_issue_validate_v1",
+      "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/03_invoice_issue_validate.sqlinc",
+      "signature": "p_invoice_id uuid",
+      "file": "reference/private_weekly_source_invoice_issue_validate_v1.sqlinc",
+      "sha256": "5ed7022c65f5cf78a276c319cebed414aa410fcc540db4edd4ddc32d667fb4e6"
+    },
+    {
+      "name": "private._candidate_expense_components_sync_v1",
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "signature": "p_workflow_id uuid, p_now_utc timestamptz default now()",
+      "file": "reference/private__candidate_expense_components_sync_v1.sqlinc",
+      "sha256": "56916707b298426e04c28bdfe5d8b64ef53ccce865d033b008ee28eef5324171"
+    },
+    {
+      "name": "private._candidate_expense_components_sync_financial_v1",
+      "path": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "signature": "p_timesheet_id uuid, p_now_utc timestamp with time zone DEFAULT now()",
+      "file": "reference/private__candidate_expense_components_sync_financial_v1.sqlinc",
+      "sha256": "027b92f52555ab53e3636ae512d931b8c6f323e14247def9a26df017778106c1"
+    },
+    {
+      "name": "private._candidate_expense_current_timesheet_id_v1",
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "signature": "p_workflow_id uuid, p_stored_timesheet_id uuid",
+      "file": "reference/private__candidate_expense_current_timesheet_id_v1.sqlinc",
+      "sha256": "2bda7931b331dbe3e02ae2b851fb8dd0a2889d4d2c71dc1b504dfbe8a416c4d4"
+    },
+    {
+      "name": "private._candidate_expense_owned_timesheet_id_v1",
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "signature": "p_workflow_id uuid, p_stored_timesheet_id uuid",
+      "file": "reference/private__candidate_expense_owned_timesheet_id_v1.sqlinc",
+      "sha256": "7cdc277a820bd01d7751ef055b91d2b94d29f677d6ba88c0ed70b6efbaa7c2d1"
+    },
+    {
+      "name": "private._candidate_expense_owner_context_lock_v1",
+      "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+      "signature": "p_expense_component_id uuid",
+      "file": "reference/private__candidate_expense_owner_context_lock_v1.sqlinc",
+      "sha256": "60514f88ad8bc4b6376ce79e6e32879d9a95e2fd565dddd28ce52f709556fc0e"
+    },
+    {
+      "name": "private.weekly_source_sha256_jsonb_v1",
+      "path": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "signature": "p_domain text, p_value jsonb",
+      "file": "reference/private_weekly_source_sha256_jsonb_v1.sqlinc",
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "name": "private.weekly_source_finalisation_economic_assert_v1",
+      "path": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "signature": "p_row_resolution_id uuid, p_source_cycle_id uuid, p_expected_source_mode text",
+      "file": "reference/private_weekly_source_finalisation_economic_assert_v1.sqlinc",
+      "sha256": "1936fd624560bc1e1b504496809109634010a0a56a63f99b2b53bf70b45d7934"
+    },
+    {
+      "name": "private.weekly_source_finalisation_lineage_assert_v1",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_finalisation_v1.sql",
+      "signature": "p_row_resolution_id uuid, p_source_cycle_id uuid",
+      "file": "reference/private_weekly_source_finalisation_lineage_assert_v1.sqlinc",
+      "sha256": "b1f70c910a73e6234d83cd19319beff667b2d77207f1237866e1e42f7e4b32d0"
+    },
+    {
+      "name": "private.weekly_source_invoice_family_timesheet_ids_v1",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "signature": "p_timesheet_id uuid",
+      "file": "reference/private_weekly_source_invoice_family_timesheet_ids_v1.sqlinc",
+      "sha256": "0ccbb982c56873ebf53180b94f70311e607da10e4d6335d4af2dbd794b26daf9"
+    },
+    {
+      "name": "private.weekly_source_invoice_movement_only_integrity_v1",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "signature": "p_timesheet_id uuid",
+      "file": "reference/private_weekly_source_invoice_movement_only_integrity_v1.sqlinc",
+      "sha256": "0dd9f0fd03f5f1bb2888673c41eb5fd63eab8c96154c6951bb6dc4e8c7f1e069"
+    },
+    {
+      "name": "private.weekly_source_invoice_line_owner_guard_v1",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "signature": "",
+      "file": "reference/private_weekly_source_invoice_line_owner_guard_v1.sqlinc",
+      "sha256": "e7f3c63145e3cdc4c62be848572bafaaddc6095e26e171520e95680a3eaeabb5"
+    },
+    {
+      "name": "private.weekly_source_invoice_allocation_assert_v1",
+      "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "signature": "p_invoice_id uuid",
+      "file": "reference/private_weekly_source_invoice_allocation_assert_v1.sqlinc",
+      "sha256": "19514a02b4a2c50ad5124b26333b483ee917415400a2f760d8fa991033b063b0"
+    },
+    {
+      "name": "public.weekly_source_invoice_admit_atomic_v1",
+      "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+      "signature": "p_request jsonb",
+      "file": "reference/public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "sha256": "6e92047a29a0b08ad3cdb41edf1695956172c4379b48ee7b192153a3a33a7ec0"
+    },
+    {
+      "name": "public.weekly_source_invoice_batch_candidates_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+      "signature": "p_request jsonb",
+      "file": "reference/public_weekly_source_invoice_batch_candidates_v1.sqlinc",
+      "sha256": "80e29e6550e150fb7284348e7618ce6a4ad07bd997832b6e5f5538ca7084f9fa"
+    },
+    {
+      "name": "public.weekly_source_invoice_batch_admit_atomic_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/08_complete_batch_detail.sqlinc",
+      "signature": "p_request jsonb",
+      "file": "reference/public_weekly_source_invoice_batch_admit_atomic_v1.sqlinc",
+      "sha256": "068bdecb10518c98d4a223b308b4f30200032e59c0bf2f23ba05c71e0c43ebef"
+    },
+    {
+      "name": "public.weekly_source_invoice_report_rows_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10_complete_source_readers_correction.sqlinc",
+      "signature": "p_request jsonb",
+      "file": "reference/public_weekly_source_invoice_report_rows_v1.sqlinc",
+      "sha256": "7a2f4ef8bf2ba83a2a767ba7ffeb325983ce383f0d94c2efc7d0e80e5b7290ef"
+    },
+    {
+      "name": "public.weekly_source_invoice_evidence_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10_complete_source_readers_correction.sqlinc",
+      "signature": "p_request jsonb",
+      "file": "reference/public_weekly_source_invoice_evidence_v1.sqlinc",
+      "sha256": "e4db83df3945a62390f41088432bdff4f1a34e93bf8899567cdb1dfd3fe43208"
+    },
+    {
+      "name": "private.weekly_source_invoice_duty_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "signature": "p_root_timesheet_id uuid",
+      "file": "reference/private_weekly_source_invoice_duty_v1.sqlinc",
+      "sha256": "eca8d5720fd78c53c4d764aeea5b758b44e5ab3aa04cdc5b07b2969a9138b359"
+    },
+    {
+      "name": "private._invoice_credit_resume_v1",
+      "path": "supabase/repeatable/13102026_1111_healthroster_credit_runtime/13102026_1111_resume.sqlinc",
+      "signature": "p_source_invoice_id uuid, p_operation_id uuid, p_planned_credit_id uuid, p_reversal_timesheet_id uuid default null",
+      "file": "reference/private__invoice_credit_resume_v1.sqlinc",
+      "sha256": "c5c8402a6775c4b79ba7b2acc33e57701d06aec1ef7b07935666e59346f7eb4e"
+    },
+    {
+      "name": "private.invoice_credit_scope_context_v1",
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_context.sqlinc",
+      "signature": "p_invoice_id uuid,p_reversal_timesheet_id uuid,p_operation_id uuid default null, p_planned_credit_id uuid default null,p_lock_rows boolean default false",
+      "file": "reference/private_invoice_credit_scope_context_v1.sqlinc",
+      "sha256": "1db3c79f92bdb31992a643eecae1821b13dd36569dff22282f20b5f5f52c09e2"
+    },
+    {
+      "name": "private.invoice_credit_scoped_advance_v1",
+      "path": "supabase/repeatable/13102026_1143_healthroster_scoped_credit/13102026_1143_advance.sqlinc",
+      "signature": "p_claim jsonb,p_now_utc timestamptz",
+      "file": "reference/private_invoice_credit_scoped_advance_v1.sqlinc",
+      "sha256": "6268cb7d71a32bf2ae124f500945b29e9f094c9c00c6bf75e8870fd611836ed7"
+    },
+    {
+      "name": "private.weekly_source_invoice_movement_money_v1",
+      "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "signature": "p_movement_id uuid,p_invoice_hold_release_id uuid default null",
+      "file": "reference/private_weekly_source_invoice_movement_money_v1.sqlinc",
+      "sha256": "e228aa4982875557dc5a8b46cf1df5ea714abedb0cbabe950e300c576625a788"
+    },
+    {
+      "name": "private.weekly_source_invoice_receipt_support_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/03_receipt_and_window_owners.sqlinc",
+      "signature": "p_invoice_id uuid",
+      "file": "reference/private_weekly_source_invoice_receipt_support_v1.sqlinc",
+      "sha256": "9291c172406fdd7735712b8fc2cfa3699fd8efcf605163e11614b2488b7a3ba8"
+    },
+    {
+      "name": "private.weekly_source_invoice_admitted_member_money_v1",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/03_receipt_and_window_owners.sqlinc",
+      "signature": "p_presentation_id uuid,p_movement_id uuid",
+      "file": "reference/private_weekly_source_invoice_admitted_member_money_v1.sqlinc",
+      "sha256": "e3a98d4a4a97197238d1946805d8b82bb25455c5e4a7187428d2baba75ba20ad"
+    },
+    {
+      "name": "private.weekly_source_agency_source_dependencies_v1",
+      "path": "supabase/repeatable/15102026_0344_healthroster_source_selectors/06_complete_source_witness_policy_projection.sqlinc",
+      "signature": "p_source_cycle_id uuid,p_client_ids uuid[]",
+      "file": "reference/private_weekly_source_agency_source_dependencies_v1.sqlinc",
+      "sha256": "4012079f389922487785e1c398b37c2f57245e4f61e771b8138166105399b854"
+    }
+  ],
+  "missing": [
+    "public.invoice_unissue",
+    "public.invoice_batch_generate_candidates_v2"
+  ]
+}

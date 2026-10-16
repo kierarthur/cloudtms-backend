@@ -1,0 +1,125 @@
+create or replace function public.weekly_source_invoice_batch_admit_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid;
+  v_snapshot text;
+  v_current_snapshot text;
+  v_token text;
+  v_refs jsonb;
+  v_ref jsonb;
+  v_manifest public.weekly_source_client_manifests%rowtype;
+  v_all_admitted boolean;
+  v_result jsonb;
+  v_results jsonb:='[]'::jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+       where key not in ('actor_user_id','command_token','snapshot_hash','selected_manifests')) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_BATCH_ADMIT_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin v_actor:=(p_request->>'actor_user_id')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_INVOICE_BATCH_ADMIT_REQUEST_INVALID' using errcode='22023';
+  end;
+  v_token:=nullif(pg_catalog.btrim(p_request->>'command_token'),'');
+  v_snapshot:=nullif(pg_catalog.lower(pg_catalog.btrim(p_request->>'snapshot_hash')),'');
+  v_refs:=coalesce(p_request->'selected_manifests','[]'::jsonb);
+  if v_actor is null or v_token is null or pg_catalog.length(v_token)>256
+     or v_snapshot!~'^[0-9a-f]{64}$'
+     or pg_catalog.jsonb_typeof(v_refs)<>'array'
+     or pg_catalog.jsonb_array_length(v_refs) not between 1 and 5000
+     or exists(select 1 from pg_catalog.jsonb_array_elements(v_refs) item
+       where pg_catalog.jsonb_typeof(item)<>'object'
+         or exists(select 1 from pg_catalog.jsonb_object_keys(item) key
+           where key not in ('client_manifest_id','expected_manifest_hash','selection_key',
+             'client_id','source_cycle_id','finalisation_week_ending','report_number'))
+         or not pg_catalog.pg_input_is_valid(coalesce(item->>'client_manifest_id',''),'uuid')
+         or coalesce(item->>'selection_key','')<>
+           'weekly-source-manifest:'||coalesce(item->>'client_manifest_id','')
+         or coalesce(item->>'expected_manifest_hash','')!~'^[0-9a-f]{64}$')
+     or (select pg_catalog.count(distinct item->>'client_manifest_id')
+         from pg_catalog.jsonb_array_elements(v_refs) item)<>pg_catalog.jsonb_array_length(v_refs) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_BATCH_ADMIT_REQUEST_INVALID' using errcode='22023';
+  end if;
+
+  -- Whole batch group/cycle inventory precedes every nested manifest lock.
+  perform 1 from public.weekly_source_groups g where g.id in (
+    select manifest.source_group_id from public.weekly_source_client_manifests manifest
+    join jsonb_array_elements(v_refs) item on manifest.id=(item->>'client_manifest_id')::uuid)
+    order by g.id for update;
+  perform 1 from public.weekly_source_cycles c where c.id in (
+    select manifest.source_cycle_id from public.weekly_source_client_manifests manifest
+    join jsonb_array_elements(v_refs) item on manifest.id=(item->>'client_manifest_id')::uuid
+    union select coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id)
+      from public.weekly_source_client_manifests manifest
+      join jsonb_array_elements(v_refs) item on manifest.id=(item->>'client_manifest_id')::uuid)
+    order by c.id for update;
+  select pg_catalog.bool_and(manifest.invoice_state='ADMITTED'
+    and pg_catalog.encode(manifest.manifest_hash,'hex')=item->>'expected_manifest_hash')
+  into v_all_admitted
+  from pg_catalog.jsonb_array_elements(v_refs) item
+  join public.weekly_source_client_manifests manifest
+    on manifest.id=(item->>'client_manifest_id')::uuid;
+  v_all_admitted:=coalesce(v_all_admitted,false);
+  v_current_snapshot:=private.weekly_source_invoice_batch_snapshot_v1();
+  if not v_all_admitted and v_current_snapshot<>v_snapshot then
+    raise exception 'BATCH_SOURCE_CHANGED' using errcode='40001';
+  end if;
+
+  for v_ref in select item from pg_catalog.jsonb_array_elements(v_refs) item
+    order by item->>'finalisation_week_ending',item->>'client_id',item->>'client_manifest_id'
+  loop
+    select * into v_manifest from public.weekly_source_client_manifests
+    where id=(v_ref->>'client_manifest_id')::uuid for update;
+    if not found or pg_catalog.encode(v_manifest.manifest_hash,'hex')<>v_ref->>'expected_manifest_hash'
+       or v_manifest.invoice_state not in ('READY','ADMITTED') then
+      raise exception 'BATCH_SOURCE_CHANGED' using errcode='40001';
+    end if;
+    v_result:=public.weekly_source_invoice_admit_atomic_v1(pg_catalog.jsonb_build_object(
+      'actor_user_id',v_actor,'client_manifest_id',v_manifest.id,
+      'expected_manifest_hash',v_ref->>'expected_manifest_hash'
+    ));
+    v_results:=v_results||pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object(
+        'selection_key',v_ref->>'selection_key',
+        'client_manifest_id',v_manifest.id,
+        'client_id',v_manifest.client_id,
+        'source_cycle_id',v_manifest.source_cycle_id,'invoice_window_cycle_id',coalesce(v_manifest.invoice_window_cycle_id,v_manifest.source_cycle_id),
+        'finalisation_week_ending',v_manifest.finalisation_week_ending,
+        'report_number',v_manifest.backing_report_number,
+        'status',v_result->>'status','idempotent',coalesce((v_result->>'idempotent')::boolean,false),
+        'invoice_ids',coalesce(v_result->'invoice_ids','[]'::jsonb)
+      )
+    );
+  end loop;
+
+  if exists(
+    select 1
+    from pg_catalog.jsonb_array_elements(v_results) left_result
+    join pg_catalog.jsonb_array_elements(v_results) right_result
+      on left_result->>'client_manifest_id'<right_result->>'client_manifest_id'
+     and left_result->>'client_id'=right_result->>'client_id'
+     and left_result->>'invoice_window_cycle_id'<>right_result->>'invoice_window_cycle_id'
+    where exists(
+      select 1 from pg_catalog.jsonb_array_elements_text(left_result->'invoice_ids') left_invoice
+      join pg_catalog.jsonb_array_elements_text(right_result->'invoice_ids') right_invoice
+        on left_invoice=right_invoice
+    )
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_CYCLE_CONSOLIDATION_REFUSED' using errcode='55000';
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'contract_version','WEEKLY_SOURCE_INVOICE_BATCH_ADMISSION_V1',
+    'command_token',v_token,'atomic',true,
+    'selected_count',pg_catalog.jsonb_array_length(v_results),
+    'per_manifest_results',v_results
+  );
+end;
+$function$;

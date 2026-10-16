@@ -1,0 +1,99 @@
+create or replace function private.invoice_contract_move_obligation_assert_v1(p_operation_id uuid,p_billing_revision bigint)
+returns void language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;r private.timesheet_contract_move_reviews%rowtype;v_expected integer;
+begin
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ select x.* into strict r from private.timesheet_contract_move_reviews x where x.operation_id=o.id and x.id=o.accepted_review_id;
+ if o.billing_revision<>p_billing_revision or o.placement_receipt_json->>'operation_id' is distinct from o.id::text then
+  raise exception 'CONTRACT_MOVE_BILLING_OBLIGATION_UNBOUND' using errcode='55000';end if;
+ v_expected:=jsonb_array_length(r.manifest_json#>'{invoice,slices}');
+ if v_expected is null or (select count(*) from private.timesheet_contract_move_billing_slices s
+  where s.operation_id=o.id and s.billing_revision=p_billing_revision)<>v_expected then
+  raise exception 'CONTRACT_MOVE_BILLING_SLICE_PARTITION_INCOMPLETE' using errcode='55000';end if;
+ if r.manifest_json#>'{invoice,source_certificate}'<>'null'::jsonb then
+  perform private.weekly_source_invoice_certificate_assert_v1(r.manifest_json#>'{invoice,source_certificate}',true);end if;
+ if exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id
+  and s.disposition in('PRESERVE_SOURCE','NO_INVOICE') and exists(select 1 from private.timesheet_contract_move_replacement_members m
+   where m.operation_id=s.operation_id and m.slice_key=s.slice_key)) then
+  raise exception 'CONTRACT_MOVE_SOURCE_OR_UNINVOICED_REPLACEMENT_FORBIDDEN' using errcode='55000';end if;
+ if not exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition='REPLACE_ISSUED') then
+  if o.preparation_operation_id is not null or exists(select 1 from private.timesheet_contract_move_invoice_scopes s where s.operation_id=o.id)
+   or exists(select 1 from private.timesheet_contract_move_replacement_groups g where g.operation_id=o.id) then
+   raise exception 'CONTRACT_MOVE_UNREQUESTED_INVOICE_JOB' using errcode='55000';end if;
+  return;
+ end if;
+ if not exists(select 1 from public.invoice_operations p where p.id=o.preparation_operation_id and p.operation_type='GENERATE_INVOICES'
+   and p.input_json->>'purpose'='CONTRACT_CORRECTION_PREPARE' and p.input_json->>'correction_id'=o.id::text
+   and p.input_json->>'billing_revision'=p_billing_revision::text)
+  or exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id and s.disposition='REPLACE_ISSUED'
+    and not exists(select 1 from private.timesheet_contract_move_replacement_members m where m.operation_id=s.operation_id and m.billing_revision=s.billing_revision and m.slice_key=s.slice_key))
+  or exists(select 1 from private.timesheet_contract_move_invoice_scopes s where s.operation_id=o.id
+    and not exists(select 1 from public.invoice_operation_chunks c where c.operation_id=s.credit_operation_id
+     and c.entity_id=s.original_invoice_id and c.payload_json#>>'{credit_scope,original_scope_id}'=s.id::text
+     and c.payload_json#>>'{credit_scope,preparation_mode}'='DRAFT_ONLY')) then
+  raise exception 'CONTRACT_MOVE_NATIVE_PREPARATION_REGISTRATION_INCOMPLETE' using errcode='55000';end if;
+end;
+$function$;
+
+create or replace function private.invoice_contract_move_prepare_advance_v1(p_claims jsonb,p_now_utc timestamptz)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare claim jsonb;c public.invoice_operation_chunks%rowtype;o public.invoice_operations%rowtype;v_now timestamptz:=coalesce(p_now_utc,now());
+ v_state text;v_children jsonb;v_result jsonb:='[]';v_receipt jsonb;v_blocker text;
+begin
+ if jsonb_typeof(p_claims)<>'array' or jsonb_array_length(p_claims) not between 1 and 100 then raise exception 'PREPARATION_CLAIMS_INVALID' using errcode='22023';end if;
+ for claim in select x from jsonb_array_elements(p_claims) x loop
+  select x.* into strict c from public.invoice_operation_chunks x where x.id=(claim->>'chunk_id')::uuid for update;
+  select x.* into strict o from public.invoice_operations x where x.id=c.operation_id;
+  if c.payload_json->>'preparation_purpose'<>'CONTRACT_CORRECTION_PREPARE' or c.phase<>'CONTRACT_CORRECTION_PREPARE'
+   or c.status<>'RUNNING' or c.lease_token is distinct from (claim->>'lease_token')::uuid
+   or c.fence_token::text is distinct from claim->>'fence_token' or c.operation_control_version::text is distinct from claim->>'operation_control_version'
+   or o.control_version<>c.operation_control_version or c.lease_expires_at_utc<=v_now then
+   raise exception 'CONTRACT_MOVE_PREPARATION_CLAIM_STALE' using errcode='40001';end if;
+  perform private.invoice_contract_move_obligation_assert_v1((c.payload_json->>'correction_id')::uuid,(c.payload_json->>'billing_revision')::bigint);
+  update private.timesheet_contract_move_replacement_groups g set invoice_id=i.id,native_state='DRAFTS_READY'
+   from public.invoices i where g.generation_operation_id=o.id and i.id=g.planned_invoice_id and i.type='INVOICE' and i.status='DRAFT';
+  select jsonb_agg(jsonb_build_object('chunk_id',x.id,'status',x.status,'phase',x.phase,'result',x.result_json,'error',x.error_json) order by x.sequence_no)
+   into v_children from public.invoice_operation_chunks x where x.operation_id=o.id and x.id<>c.id;
+  v_blocker:=null;
+  if exists(select 1 from public.invoice_operation_chunks x where x.operation_id=o.id and x.id<>c.id and x.status in('FAILED','DEAD_LETTER','BLOCKED','CANCELLED','SUPERSEDED')) then
+   v_state:='ACTION_REQUIRED';v_blocker:='NATIVE_PREPARATION_CHILD_ATTENTION';
+  elsif exists(select 1 from public.invoice_operation_chunks x where x.operation_id=o.id and x.id<>c.id and x.status<>'COMPLETE')
+    or exists(select 1 from private.timesheet_contract_move_invoice_scopes s where s.credit_operation_id=o.id and s.credit_note_id is null)
+    or exists(select 1 from private.timesheet_contract_move_replacement_groups g where g.generation_operation_id=o.id and g.invoice_id is null) then
+   v_state:='PREPARING_DRAFTS';
+  else v_state:='DRAFTS_READY';end if;
+  v_receipt:=jsonb_build_object('version','CONTRACT_CORRECTION_PREPARATION_V1','operation_id',c.payload_json->>'correction_id',
+   'billing_revision',c.payload_json->>'billing_revision','native_parent_operation_id',o.id,'state',v_state,'children',v_children,
+   'coverage_digest',(select r.manifest_json#>>'{invoice,certificate_digest}' from private.timesheet_contract_move_operations m
+    join private.timesheet_contract_move_reviews r on r.id=m.accepted_review_id where m.id=(c.payload_json->>'correction_id')::uuid),
+   'result_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_CORRECTION_PREPARATION_RESULT_V1',coalesce(v_children,'[]'::jsonb)),'hex'),
+   'blocker',case when v_blocker is null then null else jsonb_build_object('code',v_blocker,'native_owner','INVOICE_OPERATIONS') end);
+  update public.invoice_operations set result_json=v_receipt where id=o.id;
+  update public.invoice_operation_chunks set status=case v_state when 'DRAFTS_READY' then 'COMPLETE' when 'ACTION_REQUIRED' then 'BLOCKED' else 'WAITING' end,
+   phase=case when v_state='DRAFTS_READY' then 'COMPLETE' else phase end,result_json=v_receipt,
+   run_after_utc=v_now+interval '5 seconds',lease_owner=null,lease_token=null,lease_expires_at_utc=null,updated_at_utc=v_now,
+   completed_at_utc=case when v_state='DRAFTS_READY' then v_now end where id=c.id;
+  v_result:=v_result||jsonb_build_array(jsonb_build_object('chunk_id',c.id,'phase',case when v_state='DRAFTS_READY' then 'COMPLETE' else c.phase end,
+   'status',case v_state when 'DRAFTS_READY' then 'COMPLETE' when 'ACTION_REQUIRED' then 'BLOCKED' else 'WAITING' end,'result',v_receipt));
+ end loop;
+ return v_result;
+end;
+$function$;
+
+create or replace function private.invoice_contract_move_line_reservation_assert_v1(p_new jsonb)
+returns void language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ if exists(select 1 from private.timesheet_contract_move_replacement_members m
+  join private.timesheet_contract_move_replacement_groups g using(operation_id,billing_revision,group_key)
+  join private.timesheet_contract_move_scope_fences f on f.operation_id=m.operation_id and f.billing_revision=m.billing_revision
+  where m.current_timesheet_id=(p_new->>'timesheet_id')::uuid and f.retired_by_native_receipt_id is null
+   and (p_new->>'invoice_id')::uuid is distinct from coalesce(g.invoice_id,g.planned_invoice_id)) then
+  raise exception 'CONTRACT_MOVE_EXCLUSIVE_BILLING_OBLIGATION' using errcode='55000';end if;
+end;
+$function$;

@@ -1,0 +1,52 @@
+CREATE OR REPLACE FUNCTION public.invoice_line_archived_timesheet_guard_v1()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_current_timesheet_id uuid;
+  v_archived_at_utc timestamptz;
+BEGIN
+  -- Exact identity is authoritative whenever the invoice-line mutation supplies
+  -- a timesheet_id.  Do not replace it with the current row for the booking:
+  -- a historical exact identity can itself be Archived.
+  IF NEW.timesheet_id IS NOT NULL THEN
+    SELECT
+      t.timesheet_id,
+      t.archived_at_utc
+    INTO
+      v_current_timesheet_id,
+      v_archived_at_utc
+    FROM public.timesheets AS t
+    WHERE t.timesheet_id = NEW.timesheet_id
+    FOR KEY SHARE OF t;
+  ELSIF NULLIF(BTRIM(COALESCE(NEW.booking_id, '')), '') IS NOT NULL THEN
+    -- Booking lookup is fallback-only when the caller supplied no exact ID.
+    SELECT
+      t.timesheet_id,
+      t.archived_at_utc
+    INTO
+      v_current_timesheet_id,
+      v_archived_at_utc
+    FROM public.timesheets AS t
+    WHERE t.is_current = true
+      AND t.booking_id = NEW.booking_id
+    ORDER BY t.timesheet_id
+    LIMIT 1
+    FOR KEY SHARE OF t;
+  END IF;
+
+  IF v_current_timesheet_id IS NOT NULL
+     AND v_archived_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION USING
+      MESSAGE = 'TIMESHEET_ARCHIVED',
+      DETAIL = jsonb_build_object(
+        'timesheet_id', v_current_timesheet_id,
+        'reason', 'archived_timesheet_cannot_be_added_to_invoice'
+      )::text;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;

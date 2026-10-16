@@ -1,0 +1,96 @@
+create or replace function public.weekly_source_invoice_report_rows_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_invoice_ids uuid[];
+  v_rows jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key
+               where key not in ('invoice_ids'))
+     or pg_catalog.jsonb_typeof(p_request->'invoice_ids') is distinct from 'array'
+     or pg_catalog.jsonb_array_length(p_request->'invoice_ids') not between 1 and 500 then
+    raise exception 'WEEKLY_SOURCE_INVOICE_REPORT_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    select pg_catalog.array_agg(value::uuid order by ordinality)
+      into v_invoice_ids
+    from pg_catalog.jsonb_array_elements_text(p_request->'invoice_ids')
+      with ordinality item(value,ordinality);
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_INVOICE_REPORT_REQUEST_INVALID' using errcode='22023';
+  end;
+  if v_invoice_ids is null
+     or pg_catalog.cardinality(v_invoice_ids)<>pg_catalog.jsonb_array_length(p_request->'invoice_ids')
+     or pg_catalog.cardinality(v_invoice_ids)<>pg_catalog.cardinality(
+       (select pg_catalog.array_agg(distinct invoice_id) from pg_catalog.unnest(v_invoice_ids) invoice_id)) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_REPORT_REQUEST_INVALID' using errcode='22023';
+  end if;
+
+  with movement_rows as materialized (
+    select binding.invoice_id,
+           movement.id movement_id,
+           movement.movement_role,
+           movement.invoice_timesheet_id,
+           movement.finalisation_cycle_id source_cycle_id,
+           movement.invoice_presentation_charge_pence,
+           manifest.backing_report_number
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement
+      on movement.id=binding.billing_movement_id
+    join public.weekly_source_invoice_presentation_lines presentation
+      on presentation.id=binding.presentation_line_id
+    join public.weekly_source_client_manifests manifest
+      on manifest.id=presentation.client_manifest_id
+    where binding.state='CURRENT'
+      and binding.invoice_id=any(v_invoice_ids)
+  ), per_invoice as (
+    select invoice_id,
+           pg_catalog.count(*)::integer movement_count,
+           (pg_catalog.sum(invoice_presentation_charge_pence)::numeric/100.0)::numeric(12,2)
+             source_movement_ex_vat,
+           pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+             'movement_id',movement_id,
+             'movement_role',movement_role,
+             'timesheet_id',invoice_timesheet_id,
+             'source_cycle_id',source_cycle_id,
+             'charge_ex_vat',(invoice_presentation_charge_pence::numeric/100.0)::numeric(12,2)
+           ) order by movement_id) movements,
+           coalesce((select pg_catalog.jsonb_agg(cycle_id order by cycle_id)
+                     from (select distinct source_cycle_id cycle_id
+                           from movement_rows member
+                           where member.invoice_id=movement_rows.invoice_id) cycles),'[]'::jsonb)
+             source_cycle_ids,
+           coalesce((select pg_catalog.jsonb_agg(report_number order by report_number)
+                     from (select distinct backing_report_number report_number
+                           from movement_rows member
+                           where member.invoice_id=movement_rows.invoice_id
+                             and backing_report_number is not null) reports),'[]'::jsonb)
+             backing_report_numbers
+    from movement_rows
+    group by invoice_id
+  )
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+           'invoice_id',invoice_id,
+           'weekly_source',true,
+           'movement_count',movement_count,
+           'source_movement_ex_vat',source_movement_ex_vat,
+           'source_cycle_ids',source_cycle_ids,
+           'backing_report_numbers',backing_report_numbers,
+           'movements',movements
+         ) order by invoice_id),'[]'::jsonb)
+    into v_rows
+  from per_invoice;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,
+    'invoice_count',pg_catalog.jsonb_array_length(v_rows),
+    'rows',v_rows);
+end;
+$function$;

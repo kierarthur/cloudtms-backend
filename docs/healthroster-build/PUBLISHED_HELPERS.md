@@ -7,3 +7,13 @@ Banking HR-06 may consume only the actual reviewed compatible publication receip
 The other stream's release for `e0a02bb5f86b1fb2134e540bbf0ccc52f6feec92` reached VERIFIED. Publication remains held by the unproved Banking first-install coordination window and remaining package/release gates. No substitute helper, duplicate producer or Banking message is authorised.
 
 PP source and temporary TEST actor/read/ACL rehearsal passed, with all changes rolled back and fresh original-definition/fixture-absence checks. This is development evidence, not the compatible publication receipt required above.
+
+16 October V6 invoice source checkpoint: `proposals/v6-invoice-native-20261016/`
+contains the exact I2-derived complete native owner amendments, owner-only new
+helper ACLs, source manifest and saved Source certificate ABI. Its README records
+all signatures and hash domains. Ten source regression checks and all 29 forward
+SQL/PLpgSQL/inner SQL grammar checks pass. No database execution or installation
+was performed. Ordinary prospective grouping, native selected Draft/repeated
+Unissue reconciliation, H104/H105/H228 projections and integrated native proof
+remain required; ordinary preflight fails closed before Ready. This checkpoint
+does not replace the installed publication receipt or qualify Agency NX-AI6.

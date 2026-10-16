@@ -1,0 +1,93 @@
+-- Saved Source domain and current native Billing projection. Neither reader
+-- discovers work by scanning historical operations or invents economic values.
+create or replace function private.invoice_contract_move_source_certificate_v1(p_operation_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;v_certificate jsonb;
+begin
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ select r.manifest_json#>'{invoice,source_certificate}' into strict v_certificate
+ from private.timesheet_contract_move_reviews r where r.id=o.accepted_review_id and r.operation_id=o.id;
+ if o.placement_receipt_json->>'operation_id' is distinct from o.id::text then
+  raise exception 'CONTRACT_MOVE_SOURCE_CERTIFICATE_UNBOUND' using errcode='55000';end if;
+ if v_certificate is null or v_certificate='null'::jsonb then return null;end if;
+ if p_lock then return private.weekly_source_invoice_certificate_assert_v1(v_certificate,true);end if;
+ return v_certificate;
+end;
+$function$;
+
+create or replace function private.invoice_contract_move_invoice_after_seal_v1(p_operation_id uuid,p_billing_revision bigint)
+returns bytea language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;v_source jsonb;v_facts jsonb;v_hash bytea;
+begin
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id for update;
+ if o.billing_revision<>p_billing_revision then raise exception 'CONTRACT_MOVE_BILLING_REVISION_STALE' using errcode='40001';end if;
+ v_source:=private.invoice_contract_move_source_certificate_v1(o.id,true);
+ if o.after_invoice_hash is not null then return o.after_invoice_hash;end if;
+ if o.invoice_authority='SOURCE_FINANCIAL' then
+  if v_source is null then raise exception 'CONTRACT_MOVE_SOURCE_CERTIFICATE_UNBOUND' using errcode='55000';end if;
+  v_hash:=decode(v_source->>'hash','hex');
+  if o.before_invoice_hash is distinct from v_hash then raise exception 'SOURCE_INVOICE_CERTIFICATE_CHANGED' using errcode='40001';end if;
+ else
+  select jsonb_build_object('operation_id',o.id,'billing_revision',o.billing_revision::text,'source_certificate',v_source,
+   'placement_receipt_id',o.placement_receipt_json->'receipt_id','preparation_operation_id',o.preparation_operation_id,
+   'slices',coalesce((select jsonb_agg(to_jsonb(s) order by s.slice_key) from private.timesheet_contract_move_billing_slices s
+    where s.operation_id=o.id and s.billing_revision=o.billing_revision),'[]'::jsonb),
+   'scopes',coalesce((select jsonb_agg(to_jsonb(s) order by s.id) from private.timesheet_contract_move_invoice_scopes s
+    where s.operation_id=o.id and s.billing_revision=o.billing_revision),'[]'::jsonb),
+   'groups',coalesce((select jsonb_agg(to_jsonb(g) order by g.group_key) from private.timesheet_contract_move_replacement_groups g
+    where g.operation_id=o.id and g.billing_revision=o.billing_revision),'[]'::jsonb),
+   'native_children',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'entity_id',c.entity_id,'work_key',c.work_key,
+      'payload',c.payload_json) order by c.sequence_no) from public.invoice_operation_chunks c
+    where c.operation_id=o.preparation_operation_id),'[]'::jsonb)) into v_facts;
+  v_hash:=private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_AFTER_INVOICE_OBLIGATION_V1',v_facts);
+ end if;
+ update private.timesheet_contract_move_operations set after_invoice_hash=v_hash where id=o.id and after_invoice_hash is null;
+ return v_hash;
+end;
+$function$;
+
+create or replace function private.invoice_contract_move_billing_read_v1(p_operation_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;v_status text;v_full boolean;v_expected integer;v_actual integer;v_issued integer;
+begin
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active) then
+  raise exception 'CORRECTION_RESULT_NOT_VISIBLE' using errcode='42501';end if;
+ v_full:=exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN');
+ if not exists(select 1 from private.timesheet_contract_move_billing_slices s where s.operation_id=o.id
+  and s.billing_revision=o.billing_revision and s.disposition in('EDIT_DRAFT','RELOCATE_DRAFT','REPLACE_ISSUED')) then
+  return jsonb_build_object('status','NOT_REQUIRED','revision',o.billing_revision::text,'group_id',null,'visible_summary',null);end if;
+ select count(*),count(i.id),count(*) filter(where i.issued_at_utc is not null and i.status::text in('ISSUED','PAID'))
+ into v_expected,v_actual,v_issued from (
+  select s.credit_note_id invoice_id from private.timesheet_contract_move_invoice_scopes s
+   where s.operation_id=o.id and s.billing_revision=o.billing_revision
+  union all select coalesce(g.invoice_id,g.planned_invoice_id) from private.timesheet_contract_move_replacement_groups g
+   where g.operation_id=o.id and g.billing_revision=o.billing_revision
+ ) targets left join public.invoices i on i.id=targets.invoice_id;
+ if v_expected>0 and v_issued=v_expected then v_status:='ISSUED';
+ elsif v_issued>0 then v_status:='PARTIALLY_ISSUED';
+ elsif exists(select 1 from public.invoice_operation_chunks c where c.operation_id=o.preparation_operation_id
+  and c.status in('FAILED','DEAD_LETTER','BLOCKED','CANCELLED','SUPERSEDED')) then v_status:='ACTION_REQUIRED';
+ elsif exists(select 1 from public.invoice_operation_chunks c where c.operation_id=o.preparation_operation_id
+  and c.status='WAITING' and c.run_after_utc>now() and c.error_json is not null and c.error_json<>'{}'::jsonb) then v_status:='RETRY_WAIT';
+ elsif v_expected>0 and v_actual=v_expected and not exists(select 1 from public.invoice_operation_chunks c
+  where c.operation_id=o.preparation_operation_id and c.status<>'COMPLETE') then v_status:='DRAFTS_READY';
+ else v_status:='PREPARING_DRAFTS';end if;
+ return jsonb_build_object('status',v_status,'revision',o.billing_revision::text,
+  'group_id',case when v_full then o.preparation_operation_id else null end,
+  'visible_summary',case when v_full then jsonb_build_object('visibility','FULL','text',case v_status
+   when 'ISSUED' then 'The correction invoice group is issued.'
+   when 'PARTIALLY_ISSUED' then 'Part of the correction invoice group is issued.'
+   when 'DRAFTS_READY' then 'The correction invoice Drafts are ready.'
+   when 'RETRY_WAIT' then 'The native invoice job is waiting to retry.'
+   when 'ACTION_REQUIRED' then 'The native invoice job needs attention.'
+   else 'The native invoice job is preparing the correction Drafts.' end)
+  else jsonb_build_object('visibility','REDACTED') end);
+end;
+$function$;

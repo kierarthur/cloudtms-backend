@@ -1,0 +1,255 @@
+-- Private complete invoice preservation evidence. No live Contract pricing,
+-- worker-pay state, Source status shortcut or public financial DTO is authority.
+create or replace function private.weekly_source_invoice_preservation_facts_v1(
+ p_timesheet_ids uuid[],p_source_row_ids uuid[],p_lock boolean
+) returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare
+ v_physical uuid[]; v_resolutions uuid[]:='{}'; v_lineages uuid[]:='{}'; v_events uuid[]:='{}'; v_movements uuid[]:='{}'; v_snapshots uuid[]:='{}'; v_rows uuid[]:='{}'; v_report_bindings uuid[]:='{}'; v_revisions uuid[]:='{}'; v_manifests uuid[]:='{}'; v_presentations uuid[]:='{}'; v_bindings uuid[]:='{}'; v_placements uuid[]:='{}'; v_reports uuid[]:='{}'; v_report_scopes uuid[]:='{}'; v_cycles uuid[]:='{}'; v_uploads uuid[]:='{}'; v_expenses uuid[]:='{}'; v_legacy_shifts uuid[]:='{}'; v_invoices uuid[]:='{}'; v_legacy_financials uuid[]:='{}'; v_legacy_imports uuid[]:='{}';
+ v_originals uuid[]; v_prior uuid[]; v_pass integer; v_expected integer;
+ v_source boolean:=false; v_ordinary boolean:=false; v_unresolved boolean:=false;
+ v_authority text; v_policy text; v_phase text; v_issues text[]:='{}';
+ v_witness jsonb:='{}'; v_part jsonb; v_result jsonb; v_member jsonb; v_members jsonb:='[]';
+ v_ts record; v_native_source boolean; v_native_ordinary boolean;
+begin
+ if p_timesheet_ids is null or p_source_row_ids is null or p_lock is null
+  or cardinality(p_timesheet_ids)>500 or cardinality(p_source_row_ids)>5000
+  or array_position(p_timesheet_ids,null) is not null or array_position(p_source_row_ids,null) is not null
+  or cardinality(p_timesheet_ids)+cardinality(p_source_row_ids)=0 then
+  raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SUBJECT_INVALID' using errcode='22023';end if;
+ select coalesce(array_agg(distinct x order by x),'{}'::uuid[]) into v_physical from unnest(p_timesheet_ids) x;
+ select coalesce(array_agg(distinct x order by x),'{}'::uuid[]) into v_rows from unnest(p_source_row_ids) x;
+ if cardinality(v_physical)<>cardinality(p_timesheet_ids) or cardinality(v_rows)<>cardinality(p_source_row_ids)
+  or (select count(*) from public.timesheets where timesheet_id=any(v_physical))<>cardinality(v_physical)
+  or (select count(*) from public.weekly_source_upload_rows where id=any(v_rows))<>cardinality(v_rows) then
+  raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SUBJECT_INVALID' using errcode='22023';end if;
+ -- Callers acquire native admission/Candidate/family/Source gates before this
+ -- optional row-lock phase. NOWAIT never waits while holding business rows.
+ if p_lock then perform 1 from public.timesheets where timesheet_id=any(v_physical) order by timesheet_id for share nowait;end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_resolutions from(select distinct id from(select r.id from public.weekly_source_row_resolutions r where r.upload_row_id=any(v_rows)
+    or exists(select 1 from public.weekly_source_row_timesheet_lineages l where l.row_resolution_id=r.id and l.timesheet_id=any(v_physical))) found_ids where id is not null) q;
+ if cardinality(v_resolutions)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_lineages from(select distinct id from(select l.id from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=any(v_physical) or l.row_resolution_id=any(v_resolutions)) found_ids where id is not null) q;
+ if cardinality(v_lineages)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_events from(select distinct id from(select r.work_event_id id from public.weekly_source_row_resolutions r where r.id=any(v_resolutions) and r.work_event_id is not null
+    union select l.work_event_id from public.weekly_source_row_timesheet_lineages l where l.id=any(v_lineages)) found_ids where id is not null) q;
+ if cardinality(v_events)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_movements from(select distinct id from(select m.id from public.weekly_source_billing_movements m where m.invoice_timesheet_id=any(v_physical)
+    or m.work_event_id=any(v_events) or m.nhsp_upload_row_id=any(v_rows) or m.self_bill_report_row_id=any(v_rows)) found_ids where id is not null) q;
+ if cardinality(v_movements)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_snapshots from(select distinct id from(select s.id from public.weekly_source_final_snapshot_lines s where s.work_event_id=any(v_events)
+    or s.row_resolution_id=any(v_resolutions)) found_ids where id is not null) q;
+ if cardinality(v_snapshots)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_rows from(select distinct id from(select unnest(v_rows) id union select r.upload_row_id from public.weekly_source_row_resolutions r where r.id=any(v_resolutions)
+    union select s.upload_row_id from public.weekly_source_final_snapshot_lines s where s.id=any(v_snapshots)
+    union select m.nhsp_upload_row_id from public.weekly_source_billing_movements m where m.id=any(v_movements) and m.nhsp_upload_row_id is not null
+    union select m.self_bill_report_row_id from public.weekly_source_billing_movements m where m.id=any(v_movements) and m.self_bill_report_row_id is not null) found_ids where id is not null) q;
+ if cardinality(v_rows)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_report_bindings from(select distinct id from(select b.id from public.weekly_source_self_bill_report_line_bindings b where b.work_event_id=any(v_events)
+    or b.report_row_id=any(v_rows) or b.export_upload_row_id=any(v_rows)) found_ids where id is not null) q;
+ if cardinality(v_report_bindings)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_rows from(select distinct id from(select unnest(v_rows) id union select b.report_row_id from public.weekly_source_self_bill_report_line_bindings b where b.id=any(v_report_bindings)
+    union select b.export_upload_row_id from public.weekly_source_self_bill_report_line_bindings b where b.id=any(v_report_bindings)) found_ids where id is not null) q;
+ if cardinality(v_rows)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_revisions from(select distinct id from(select m.final_revision_id id from public.weekly_source_billing_movements m where m.id=any(v_movements)
+    union select s.final_revision_id from public.weekly_source_final_snapshot_lines s where s.id=any(v_snapshots)) found_ids where id is not null) q;
+ if cardinality(v_revisions)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_manifests from(select distinct id from(select mm.client_manifest_id id from public.weekly_source_manifest_movements mm where mm.billing_movement_id=any(v_movements)) found_ids where id is not null) q;
+ if cardinality(v_manifests)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_presentations from(select distinct id from(select p.id from public.weekly_source_invoice_presentation_lines p where p.billing_movement_id=any(v_movements)
+    or exists(select 1 from public.weekly_source_invoice_line_bindings b where b.presentation_line_id=p.id and b.billing_movement_id=any(v_movements))) found_ids where id is not null) q;
+ if cardinality(v_presentations)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_bindings from(select distinct id from(select b.id from public.weekly_source_invoice_line_bindings b where b.billing_movement_id=any(v_movements) or b.presentation_line_id=any(v_presentations)) found_ids where id is not null) q;
+ if cardinality(v_bindings)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_placements from(select distinct id from(select p.id from public.weekly_source_invoice_placements p where p.billing_movement_id=any(v_movements)) found_ids where id is not null) q;
+ if cardinality(v_placements)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_reports from(select distinct id from(select b.self_bill_report_id id from public.weekly_source_self_bill_report_line_bindings b where b.id=any(v_report_bindings)) found_ids where id is not null) q;
+ if cardinality(v_reports)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_report_scopes from(select distinct id from(select r.report_scope_id id from public.weekly_source_final_revisions r where r.id=any(v_revisions) and r.report_scope_id is not null
+    union select s.id from public.weekly_source_report_scopes s where s.self_bill_report_id=any(v_reports)) found_ids where id is not null) q;
+ if cardinality(v_report_scopes)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_cycles from(select distinct id from(select r.source_cycle_id id from public.weekly_source_final_revisions r where r.id=any(v_revisions)
+    union select m.source_cycle_id from public.weekly_source_client_manifests m where m.id=any(v_manifests)
+    union select m.invoice_window_cycle_id from public.weekly_source_client_manifests m where m.id=any(v_manifests) and m.invoice_window_cycle_id is not null
+    union select p.current_target_cycle_id from public.weekly_source_invoice_placements p where p.id=any(v_placements) and p.current_target_cycle_id is not null
+    union select p.original_automatic_cycle_id from public.weekly_source_invoice_placements p where p.id=any(v_placements)) found_ids where id is not null) q;
+ if cardinality(v_cycles)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_uploads from(select distinct id from(select r.upload_id id from public.weekly_source_upload_rows r where r.id=any(v_rows)
+    union select r.upload_id from public.weekly_source_final_revisions r where r.id=any(v_revisions)) found_ids where id is not null) q;
+ if cardinality(v_uploads)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_expenses from(select distinct id from(select m.expense_authority_generation_id id from public.weekly_source_billing_movements m where m.id=any(v_movements) and m.expense_authority_generation_id is not null) found_ids where id is not null) q;
+ if cardinality(v_expenses)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_legacy_shifts from(select distinct id from(select s.id from public.nhsp_shifts s where s.timesheet_id=any(v_physical)) found_ids where id is not null) q;
+ if cardinality(v_legacy_shifts)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_invoices from(select distinct id from(select b.invoice_id id from public.weekly_source_invoice_line_bindings b where b.id=any(v_bindings)
+    union select p.invoice_id from public.weekly_source_invoice_placements p where p.id=any(v_placements) and p.invoice_id is not null
+    union select l.invoice_id from public.invoice_lines l where l.timesheet_id=any(v_physical)
+    union select s.invoice_id from public.nhsp_shifts s where s.id=any(v_legacy_shifts) and s.invoice_id is not null) found_ids where id is not null) q;
+ if cardinality(v_invoices)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_legacy_financials from(select distinct id from(select f.id from public.timesheets_financials f where f.timesheet_id=any(v_physical)
+    and not exists(select 1 from public.weekly_source_billing_movements m where m.id=any(v_movements) and m.invoice_timesheet_id=f.timesheet_id)) found_ids where id is not null) q;
+ if cardinality(v_legacy_financials)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_legacy_imports from(select distinct id from(select s.latest_import_id id from public.nhsp_shifts s where s.id=any(v_legacy_shifts) and s.latest_import_id is not null
+    union select f.nhsp_import_id from public.timesheets_financials f where f.id=any(v_legacy_financials) and f.nhsp_import_id is not null) found_ids where id is not null) q;
+ if cardinality(v_legacy_imports)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ -- Include actual parent and credit relationships in both directions. This is
+ -- the native original_invoice_id graph, never a Contract/date/name match.
+ for v_pass in 1..32 loop
+  v_prior:=v_invoices;
+ select coalesce(array_agg(q.id order by q.id),'{}'::uuid[]) into v_invoices from(select distinct id from(select unnest(v_invoices) id union select i.original_invoice_id from public.invoices i where i.id=any(v_invoices) and i.original_invoice_id is not null
+    union select i.id from public.invoices i where i.original_invoice_id=any(v_invoices)) found_ids where id is not null) q;
+ if cardinality(v_invoices)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+  exit when v_prior=v_invoices;
+ end loop;
+ if v_prior is distinct from v_invoices then raise exception 'CONTRACT_MOVE_INVOICE_CREDIT_GRAPH_BOUND_EXCEEDED' using errcode='54000';end if;
+ if p_lock then
+  perform 1 from public.invoices where id=any(v_invoices) order by id for share nowait;
+  perform 1 from public.weekly_source_billing_movements where id=any(v_movements) order by id for share nowait;
+  perform 1 from public.weekly_source_invoice_line_bindings where id=any(v_bindings) order by id for share nowait;
+  perform 1 from public.weekly_source_invoice_presentation_lines where id=any(v_presentations) order by id for share nowait;
+ end if;
+ -- Classify actual retained native origin. HR_VALIDATED is also used by
+ -- ordinary checking; neither it nor today's settings proves Source money.
+ for v_ts in select t.timesheet_id,t.version from public.timesheets t where t.timesheet_id=any(v_physical) order by t.timesheet_id loop
+  v_native_source:=exists(select 1 from public.weekly_source_billing_movements m where m.id=any(v_movements) and m.invoice_timesheet_id=v_ts.timesheet_id)
+    or exists(select 1 from public.nhsp_shifts s join public.hr_imports h on h.id=s.latest_import_id
+      where s.id=any(v_legacy_shifts) and s.timesheet_id=v_ts.timesheet_id and h.applied_at is not null
+        and h.source_system=s.source_system and h.client_id=s.client_id and s.charge_amount_snapshot is not null)
+    or exists(select 1 from public.timesheets_financials f where f.id=any(v_legacy_financials) and f.timesheet_id=v_ts.timesheet_id
+      and f.basis::text in('NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_ADJUSTMENT','HEALTHROSTER_SELF_BILL'));
+  v_native_ordinary:=not v_native_source and exists(select 1 from public.timesheets_financials f
+    where f.id=any(v_legacy_financials) and f.timesheet_id=v_ts.timesheet_id and f.timesheet_version=v_ts.version
+      and f.basis::text in('SELF_REPORTED','CONTRACT_WEEKLY','HR_VALIDATED','OVERRIDDEN') and f.nhsp_import_id is null)
+    and not exists(select 1 from public.nhsp_shifts s where s.id=any(v_legacy_shifts) and s.timesheet_id=v_ts.timesheet_id);
+  v_source:=v_source or v_native_source;v_ordinary:=v_ordinary or v_native_ordinary;
+  v_unresolved:=v_unresolved or not(v_native_source or v_native_ordinary);
+  v_members:=v_members||jsonb_build_array(jsonb_build_object('original_timesheet_id',v_ts.timesheet_id,
+    'invoice_authority',case when v_native_source then 'SOURCE_FINANCIAL' when v_native_ordinary then 'CONTRACT_PRICED' else 'UNRESOLVED' end,
+    'invoice_move_policy',case when v_native_source then 'PRESERVE_SOURCE' when v_native_ordinary then 'ORDINARY_CORRECTION' else 'REVIEW_REQUIRED' end));
+ end loop;
+ if cardinality(v_movements)>0 then v_source:=true;end if;
+ if not v_source and cardinality(p_source_row_ids)>0 then v_unresolved:=true;end if;
+ v_authority:=case when v_source and v_ordinary then 'MIXED' when v_source then 'SOURCE_FINANCIAL' when v_ordinary and not v_unresolved then 'CONTRACT_PRICED' else 'UNRESOLVED' end;
+ v_policy:=case when v_source and v_ordinary then 'MIXED' when v_source and not v_ordinary and not v_unresolved then 'PRESERVE_SOURCE'
+   when v_ordinary and not v_source and not v_unresolved then 'ORDINARY_CORRECTION' else 'REVIEW_REQUIRED' end;
+ -- Mixed authority is represented by exact original members, never a blanket Source classification.
+ if v_unresolved then v_issues:=array_append(v_issues,'INVOICE_ORIGIN_REVIEW_REQUIRED');end if;
+ v_phase:=case when cardinality(v_invoices)>0 then 'INVOICED'
+  when cardinality(v_movements)>0 or exists(select 1 from public.nhsp_shifts s where s.id=any(v_legacy_shifts) and s.charge_amount_snapshot is not null) then 'ACCEPTED_UNINVOICED'
+  when cardinality(p_source_row_ids)>0 then 'NO_FINAL_REPORT_YET' else 'UNRESOLVED' end;
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_uploads native_row where id=any(v_uploads);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('source_uploads',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_upload_rows native_row where id=any(v_rows);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('source_rows',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_row_resolutions native_row where id=any(v_resolutions);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('row_resolutions',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_row_timesheet_lineages native_row where id=any(v_lineages);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('lineages',v_part);
+ select coalesce(jsonb_agg(jsonb_build_object('id',native_row.id,'identity',to_jsonb(native_row)-array['current_pay_generation','pay_state','updated_at_utc','current_protected_run_id','current_candidate_timesheet_id']) order by id),'[]'::jsonb) into v_part from public.weekly_work_events native_row where id=any(v_events);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('work_events',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_row_economic_snapshots native_row where row_resolution_id=any(v_resolutions);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('row_economics',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_final_snapshot_lines native_row where id=any(v_snapshots);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('final_snapshots',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_final_revisions native_row where id=any(v_revisions);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('final_revisions',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_nhsp_backing_reports native_row where final_revision_id=any(v_revisions);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('nhsp_backing_reports',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_self_bill_reports native_row where id=any(v_reports);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('self_bill_reports',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_self_bill_report_line_bindings native_row where id=any(v_report_bindings);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('self_bill_members',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_report_scopes native_row where id=any(v_report_scopes);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('report_scopes',v_part);
+ select coalesce(jsonb_agg((to_jsonb(native_row)-'canonical_pay_vector_json'-'total_pay_ex_vat') order by id),'[]'::jsonb) into v_part from public.weekly_source_billing_movements native_row where id=any(v_movements);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('billing_movements',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_client_manifests native_row where id=any(v_manifests);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('client_manifests',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by billing_movement_id),'[]'::jsonb) into v_part from public.weekly_source_manifest_movements native_row where billing_movement_id=any(v_movements);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('manifest_members',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_cycles native_row where id=any(v_cycles);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('invoice_cycles',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_invoice_presentation_lines native_row where id=any(v_presentations);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('presentations',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_invoice_line_bindings native_row where id=any(v_bindings);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('bindings',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_invoice_placements native_row where id=any(v_placements);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('placements',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_expense_authority_generations native_row where id=any(v_expenses);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('expense_authorities',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_expense_materialisations native_row where expense_authority_generation_id=any(v_expenses);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('expense_materialisations',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_row_expense_policy_snapshots native_row where row_resolution_id=any(v_resolutions);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('row_expense_policies',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.weekly_source_invoice_hold_releases native_row where id in(select invoice_hold_release_id from public.weekly_source_invoice_presentation_lines where id=any(v_presentations));
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('vat_release_authorities',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.invoices native_row where id=any(v_invoices);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('invoice_headers',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.invoice_lines native_row where invoice_id=any(v_invoices);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('invoice_lines',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.invoice_document_versions native_row where entity_id=any(v_invoices) and upper(entity_type)='INVOICE';
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('invoice_document_versions',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.invoice_document_assets native_row where source_id=any(v_invoices) or source_id=any(v_physical) or operation_id in(
+    select operation_id from public.invoice_document_versions where entity_id=any(v_invoices) and upper(entity_type)='INVOICE');
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('invoice_document_assets',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.nhsp_shifts native_row where id=any(v_legacy_shifts);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('legacy_shifts',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by id),'[]'::jsonb) into v_part from public.hr_imports native_row where id=any(v_legacy_imports);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('legacy_imports',v_part);
+ select coalesce(jsonb_agg(to_jsonb(native_row) order by invoice_id),'[]'::jsonb) into v_part from public.invoice_hr_source_rows native_row where invoice_id=any(v_invoices);
+ if jsonb_array_length(v_part)>10000 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_SCOPE_TOO_LARGE' using errcode='54000';end if;
+ v_witness:=v_witness||jsonb_build_object('legacy_invoice_source',v_part);
+ -- The legacy accepted invoice charge basis is retained separately from live
+ -- pay, approval/control/paid flags and current physical placement. New Source
+ -- movements already own their exact immutable invoice money; no TSFIN reprice.
+ select coalesce(jsonb_agg(jsonb_build_object('financial_id',f.id,'timesheet_id',f.timesheet_id,
+  'timesheet_version',f.timesheet_version,'basis',f.basis,'nhsp_import_id',f.nhsp_import_id,
+  'policy_snapshot_json',f.policy_snapshot_json,'rate_source_refs_json',f.rate_source_refs_json,
+  'total_charge_ex_vat',f.total_charge_ex_vat::text,'expenses_charge_ex_vat',f.expenses_charge_ex_vat::text,
+  'mileage_charge_ex_vat',f.mileage_charge_ex_vat::text,'additional_charge_ex_vat',f.additional_charge_ex_vat::text,
+  'invoice_breakdown_json',f.invoice_breakdown_json,'external_source_rows_json',f.external_source_rows_json)
+  order by f.id),'[]'::jsonb) into v_part from public.timesheets_financials f where f.id=any(v_legacy_financials);
+ v_witness:=v_witness||jsonb_build_object('legacy_invoice_charge_basis',v_part);
+ select coalesce(array_agg(distinct id order by id),'{}'::uuid[]) into v_originals from(
+  select unnest(v_physical) id union select m.invoice_timesheet_id from public.weekly_source_billing_movements m where m.id=any(v_movements)) original_members;
+ v_result:=jsonb_build_object('version','SOURCE_INVOICE_PRESERVATION_FACTS_V1','invoice_authority',v_authority,
+  'invoice_move_policy',v_policy,'certificate_phase',v_phase,'original_timesheet_ids',to_jsonb(v_originals),
+  'source_row_ids',to_jsonb(v_rows),'work_event_ids',to_jsonb(v_events),'authority_members',v_members,
+  'issues',to_jsonb(v_issues),'witnesses',v_witness);
+ if octet_length(v_result::text)>8388608 then raise exception 'CONTRACT_MOVE_INVOICE_CERTIFICATE_BYTES_EXCEEDED' using errcode='54000';end if;
+ return v_result||jsonb_build_object('certificate_hash',encode(private.weekly_source_sha256_jsonb_v1(
+  'SOURCE_INVOICE_PRESERVATION_FACTS_V1',v_result),'hex'));
+end;
+$function$;
+alter function private.weekly_source_invoice_preservation_facts_v1(uuid[],uuid[],boolean) owner to postgres;
+revoke all on function private.weekly_source_invoice_preservation_facts_v1(uuid[],uuid[],boolean) from public,anon,authenticated,service_role;

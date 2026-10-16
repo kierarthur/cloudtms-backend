@@ -1,0 +1,82 @@
+CREATE OR REPLACE FUNCTION private._candidate_expense_components_sync_financial_v1(p_timesheet_id uuid, p_now_utc timestamp with time zone DEFAULT now())
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'
+AS $function$
+declare
+  v_fin public.timesheets_financials%rowtype;
+  v_timesheet public.timesheets%rowtype;
+  v_component public.candidate_expense_components%rowtype;
+  v_before jsonb;
+  v_agency text;
+  v_base_agency text;
+  v_count integer:=0;
+begin
+  if private._candidate_expense_source_family_v1(p_timesheet_id) then
+    return jsonb_build_object('ok',true,'timesheet_id',p_timesheet_id,'component_count',0);
+  end if;
+  select * into v_timesheet from public.timesheets row
+  where row.timesheet_id=p_timesheet_id;
+  select * into v_fin from public.timesheets_financials row
+  where row.timesheet_id=p_timesheet_id and row.is_current
+  order by row.computed_at_utc desc nulls last,row.updated_at desc,row.id desc limit 1;
+  if not found or v_timesheet.timesheet_id is null then
+    return jsonb_build_object('ok',true,'component_count',0);
+  end if;
+  v_agency:=case
+    when v_fin.paid_at_utc is not null or upper(coalesce(v_timesheet.status::text,''))='PAID'
+      then 'PAID'
+    when v_fin.locked_by_invoice_id is not null
+      or upper(coalesce(v_timesheet.status::text,''))='INVOICED' then 'INVOICED'
+    when v_fin.authorised_at_utc is not null or v_timesheet.authorised_at_server is not null
+      or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED')
+      then 'AUTHORISED'
+    else 'NOT_AUTHORISED' end;
+  v_base_agency:=v_agency;
+  for v_component in
+    select component.*
+    from public.candidate_expense_components component
+    where component.lifecycle_state not in (
+      'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+    )
+      and coalesce(private.timesheet_contract_claim_placement_v1(
+        component.workflow_id,component.owning_timesheet_id,component.expense_component_id),
+        private._candidate_expense_owned_timesheet_id_v1(component.workflow_id,component.owning_timesheet_id))=p_timesheet_id
+    order by component.expense_component_id
+    for update
+  loop
+    -- A correction changes current placement, never historical realised pay.
+    v_agency:=case when v_component.agency_authorisation_state='PAID' then 'PAID' else v_base_agency end;
+    if v_component.agency_authorisation_state is distinct from v_agency
+       or v_component.owning_timesheet_id is distinct from p_timesheet_id then
+      v_before:=to_jsonb(v_component);
+      update public.candidate_expense_components set
+        component_generation=component_generation+1,
+        owning_timesheet_id=p_timesheet_id,
+        agency_authorisation_state=v_agency,
+        updated_at_utc=p_now_utc
+      where expense_component_id=v_component.expense_component_id
+      returning * into v_component;
+      insert into public.candidate_expense_component_events(
+        expense_component_id,workflow_id,component_generation,event_type,actor_kind,
+        before_state_json,after_state_json,idempotency_key,occurred_at_utc
+      ) values (
+        v_component.expense_component_id,v_component.workflow_id,
+        v_component.component_generation,
+        case when v_before->>'agency_authorisation_state' is not distinct from v_agency
+          then 'OWNER_ROTATED'
+          else case v_agency when 'PAID' then 'PAID' when 'INVOICED' then 'INVOICED'
+            when 'AUTHORISED' then 'AUTHORISED' else 'AGENCY_PROTECTION_CLEARED' end end,
+        'SYSTEM',v_before,to_jsonb(v_component),
+        'financial-protection-sync:'||v_fin.id::text||':'
+          ||v_component.expense_component_id::text||':'||v_agency||':'
+          ||p_timesheet_id::text,p_now_utc
+      ) on conflict(expense_component_id,idempotency_key) do nothing;
+      v_count:=v_count+1;
+    end if;
+  end loop;
+  return jsonb_build_object('ok',true,'timesheet_id',p_timesheet_id,
+    'component_count',v_count);
+end;
+$function$;

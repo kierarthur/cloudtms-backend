@@ -1,0 +1,47 @@
+create or replace function private.weekly_source_invoice_family_timesheet_ids_v1(
+  p_timesheet_id uuid
+) returns uuid[]
+language sql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  with certified_member as (
+    select a.family_root_id,a.member_key from private.timesheet_contract_family_aliases a
+    join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id
+    join private.timesheet_contract_current_placements p on p.family_root_id=a.family_root_id and p.member_key=a.member_key
+    join private.timesheet_contract_move_operations current_owner on current_owner.id=p.operation_id and current_owner.state='COMPLETE'
+    where a.timesheet_id=p_timesheet_id and o.state in('COMPLETE','SUPERSEDED')
+      and current_owner.placement_receipt_json->>'receipt_id'=p.placement_receipt_id::text
+  ), certified_aliases as (
+    select a.timesheet_id from private.timesheet_contract_family_aliases a
+    join certified_member m using(family_root_id,member_key)
+    join private.timesheet_contract_move_operations o on o.id=a.accepted_operation_id and o.state in('COMPLETE','SUPERSEDED')
+  ), canonical_split_siblings as (
+    select sibling.timesheet_id
+    from public.timesheets sibling
+    join public.timesheets requested
+      on requested.timesheet_id=p_timesheet_id
+     and pg_catalog.btrim(requested.booking_id)<>''
+    where pg_catalog.btrim(sibling.booking_id)
+          =pg_catalog.btrim(requested.booking_id)
+      and sibling.booking_id<>requested.booking_id
+  ),
+  resolver_seeds as (
+    select p_timesheet_id as timesheet_id
+    union select timesheet_id from certified_aliases
+    union
+    select canonical_split_siblings.timesheet_id from canonical_split_siblings
+  )
+  select coalesce(
+    (
+      select pg_catalog.array_agg(distinct scope.family_timesheet_id)
+      from public._pay_timesheet_rotation_scope(
+        (
+          select pg_catalog.array_agg(resolver_seeds.timesheet_id)
+          from resolver_seeds
+        )
+      ) scope
+      where scope.family_timesheet_id is not null
+    ),
+    array[p_timesheet_id]::uuid[]
+  );
+$function$;

@@ -1,0 +1,42 @@
+create or replace function private._candidate_expense_owner_context_lock_v1(
+  p_expense_component_id uuid
+)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_component public.candidate_expense_components%rowtype;
+  v_timesheet_id uuid;
+begin
+  select component.* into v_component
+  from public.candidate_expense_components component
+  where component.expense_component_id=p_expense_component_id
+  for update;
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_NOT_FOUND' using errcode='P0002';
+  end if;
+  v_timesheet_id:=private._candidate_expense_owned_timesheet_id_v1(
+    v_component.workflow_id,v_component.owning_timesheet_id
+  );
+  if v_timesheet_id is null then return null; end if;
+
+  perform 1 from public.timesheets timesheet
+  where timesheet.timesheet_id=v_timesheet_id for update;
+  perform 1 from public.timesheets_financials financial
+  where financial.timesheet_id=v_timesheet_id
+  order by financial.id for update;
+  perform 1 from public.timesheet_evidence evidence
+  where evidence.timesheet_id=v_timesheet_id
+  order by evidence.id for update;
+  perform 1 from public.candidate_expense_components component
+  where component.owning_timesheet_id=v_timesheet_id
+  order by component.expense_component_id for update;
+  perform 1 from public.candidate_submission_components evidence
+  where evidence.workflow_id=v_component.workflow_id
+  order by evidence.id for update;
+  return v_timesheet_id;
+end;
+$function$;

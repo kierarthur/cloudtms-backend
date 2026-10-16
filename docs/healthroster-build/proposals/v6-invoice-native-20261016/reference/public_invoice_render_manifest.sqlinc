@@ -1,0 +1,762 @@
+create or replace function public.invoice_render_manifest(p_invoice_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invoice_debug boolean := false;
+  v_dbg_started timestamptz := now();
+  v_manifest jsonb := null;
+
+  v_lines_count int := 0;
+  v_timesheet_ids_count int := 0;
+  v_evidence_count int := 0;
+  v_ts_evidence_count int := 0;
+  v_ev_other_count int := 0;
+  v_history_count int := 0;
+  v_seg_keys_count int := 0;
+
+  v_sqlstate text := null;
+  v_err text := null;
+begin
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+    into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  end;
+
+  with inv as (
+    select
+      i.*,
+      (i.header_snapshot_json->'attach_policy') as attach_policy
+    from public.invoices i
+    where i.id = p_invoice_id
+    limit 1
+  ),
+  lines as (
+    select
+      l.*,
+      ts.manual_pdf_r2_key,
+      coalesce(
+        l.paper_ts_r2_key,
+        ts.manual_pdf_r2_key,
+        case
+          when l.timesheet_id is not null
+            then ('docs-pdf/timesheets/ts_' || l.timesheet_id::text || '.pdf')
+          else null
+        end
+      ) as effective_paper_ts_r2_key
+    from public.invoice_lines l
+    left join public.timesheets ts
+      on ts.timesheet_id = l.timesheet_id
+    where l.invoice_id = p_invoice_id
+    order by l.created_at asc
+  ),
+  ts_ids as (
+    select distinct
+      case
+        when l.timesheet_id is not null then l.timesheet_id
+        when l.meta_json is not null
+          and nullif(btrim(coalesce(l.meta_json->>'timesheet_id','')), '') is not null
+          and nullif(btrim(coalesce(l.meta_json->>'timesheet_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        then nullif(btrim(coalesce(l.meta_json->>'timesheet_id','')), '')::uuid
+        else null
+      end as timesheet_id
+    from lines l
+    where
+      l.timesheet_id is not null
+      or (
+        l.meta_json is not null
+        and nullif(btrim(coalesce(l.meta_json->>'timesheet_id','')), '') is not null
+        and nullif(btrim(coalesce(l.meta_json->>'timesheet_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      )
+  ),
+
+  -- ✅ UPDATED: reference rows joined to candidate display name (for UI display)
+  -- Hardened candidate resolution via COALESCE(contract candidate vs TSFIN candidate).
+  ref_rows_joined as (
+    select
+      r.*,
+      con0.id as contract_id,
+      coalesce(con0.candidate_id, tf0.candidate_id) as candidate_id,
+      coalesce(
+        nullif(btrim(coalesce(cand_contract.display_name,'')), ''),
+        nullif(btrim(coalesce(cand_tf.display_name,'')), '')
+      ) as candidate_display
+    from public.invoice_reference_rows(p_invoice_id) r
+    left join public.timesheets ts0
+      on ts0.timesheet_id = r.timesheet_id
+    left join public.contracts con0
+      on con0.id = ts0.contract_id
+    left join public.timesheets_financials tf0
+      on tf0.timesheet_id = r.timesheet_id
+     and tf0.is_current = true
+    left join public.candidates cand_contract
+      on cand_contract.id = con0.candidate_id
+    left join public.candidates cand_tf
+      on cand_tf.id = tf0.candidate_id
+  ),
+
+  -- ✅ additional timesheet ids referenced by reference rows (may include ids not present in lines)
+  ref_ts_ids as (
+    select distinct r.timesheet_id
+    from ref_rows_joined r
+    where r.timesheet_id is not null
+  ),
+
+  -- ✅ union set for reference-source hydration
+  ts_ids_for_ref_sources as (
+    select timesheet_id from ts_ids
+    union
+    select timesheet_id from ref_ts_ids
+  ),
+
+  -- ✅ TSFIN sources for timesheets that may have SEGMENTS refs (NHSP/HR/etc)
+  tsfin_ref_sources as (
+    select
+      tf.timesheet_id,
+      tf.invoice_breakdown_json
+    from public.timesheets_financials tf
+    where tf.is_current = true
+      and tf.timesheet_id in (select timesheet_id from ts_ids_for_ref_sources)
+  ),
+
+  -- ✅ sources needed by FE to rebuild reference update payloads without extra calls
+  --   - If timesheets.actual_schedule_json is present and non-empty, use it.
+  --   - Else if TSFIN is SEGMENTS mode, derive an editable schedule-like array from TSFIN segments
+  --     so multi-shift/day (NHSP/HR/manual) works via segment_id/start/end matching.
+  ts_reference_sources as (
+    select
+      t.timesheet_id,
+      t.reference_number,
+      t.day_references_json,
+      case
+        when tf.invoice_breakdown_json is not null
+          and jsonb_typeof(tf.invoice_breakdown_json) = 'object'
+          and upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+          and jsonb_typeof(tf.invoice_breakdown_json->'segments') = 'array'
+        then coalesce((
+          select jsonb_agg(
+            jsonb_build_object(
+              'segment_id', seg->>'segment_id',
+              'date', seg->>'date',
+              'start_utc', seg->>'start_utc',
+              'end_utc', seg->>'end_utc',
+              -- legacy-friendly aliases (FE/DB matching may use either)
+              'start', seg->>'start_utc',
+              'end', seg->>'end_utc',
+              'ref_num', seg->>'ref_num',
+              'source_system', seg->>'source_system'
+            )
+            order by
+              coalesce(seg->>'date',''),
+              coalesce(seg->>'start_utc',''),
+              coalesce(seg->>'segment_id','')
+          )
+          from jsonb_array_elements(tf.invoice_breakdown_json->'segments') seg
+        ), '[]'::jsonb)
+
+        when t.actual_schedule_json is not null
+          and jsonb_typeof(t.actual_schedule_json) = 'array'
+          and jsonb_array_length(t.actual_schedule_json) > 0
+        then t.actual_schedule_json
+
+        else '[]'::jsonb
+      end as actual_schedule_json
+    from public.timesheets t
+    left join tsfin_ref_sources tf
+      on tf.timesheet_id = t.timesheet_id
+    where t.timesheet_id in (select timesheet_id from ts_ids_for_ref_sources)
+  ),
+
+  -- ✅ NEW: per-timesheet deterministic current refs signature (invoice-scoped)
+  ref_sig_by_timesheet as (
+    select
+      r.timesheet_id,
+      encode(
+        extensions.digest(
+          coalesce(
+            string_agg(
+              (
+                concat_ws(
+                  '|',
+                  r.timesheet_id::text,
+                  r.ref_target,
+                  coalesce(r.segment_id,''),
+                  coalesce(r.day_ymd::text,''),
+                  coalesce(r.start_utc::text,''),
+                  coalesce(r.end_utc::text,'')
+                )
+                || '=' || coalesce(r.current_reference,'')
+              ),
+              '||'
+              ORDER BY
+                concat_ws(
+                  '|',
+                  r.timesheet_id::text,
+                  r.ref_target,
+                  coalesce(r.segment_id,''),
+                  coalesce(r.day_ymd::text,''),
+                  coalesce(r.start_utc::text,''),
+                  coalesce(r.end_utc::text,'')
+                )
+            ),
+            ''
+          ),
+          'sha256'
+        ),
+        'hex'
+      ) as current_refs_sig
+    from ref_rows_joined r
+    where r.timesheet_id is not null
+    group by r.timesheet_id
+  ),
+
+  -- ✅ NEW: summary-derived exclusion flags (NHSP / no_timesheet_required) per timesheet
+  ts_summary_flags as (
+    select
+      v.timesheet_id,
+      coalesce(v.client_is_nhsp, false) as client_is_nhsp,
+      coalesce(v.client_no_timesheet_required, false) as client_no_timesheet_required
+    from public.v_timesheets_summary_base v
+    where v.timesheet_id in (select timesheet_id from ts_ids)
+  ),
+
+  -- ✅ NEW: per-timesheet document flags (electronic regen + QR refs changed)
+  -- ✅ FIX: exclude NHSP / no_timesheet_required from BOTH electronic and QR flags
+  timesheet_doc_flags as (
+    select
+      ts.timesheet_id,
+      jsonb_build_object(
+        'electronic_refs_changed', flags.electronic_changed,
+        'electronic_pdf_regen_required', flags.electronic_changed,
+        'qr_refs_changed', flags.qr_changed,
+        'reasons', reasons.reasons_json
+      ) as flags_json
+    from ts_ids tid
+    join public.timesheets ts
+      on ts.timesheet_id = tid.timesheet_id
+    left join ref_sig_by_timesheet rs
+      on rs.timesheet_id = ts.timesheet_id
+    left join ts_summary_flags sf
+      on sf.timesheet_id = ts.timesheet_id
+    cross join lateral (
+      select
+        (
+          (not x.is_excluded)
+          and upper(coalesce(ts.submission_mode::text,'')) = 'ELECTRONIC'
+          and ts.manual_pdf_r2_key is null
+          and rs.current_refs_sig is not null
+          and (ts.generated_pdf_refs_sig is null or ts.generated_pdf_refs_sig <> rs.current_refs_sig)
+        ) as electronic_changed,
+
+        (
+          (not x.is_excluded)
+          and (
+            (
+              ts.qr_status is not null
+              or ts.qr_token is not null
+              or ts.qr_last_sent_hash is not null
+              or ts.qr_last_sent_at_utc is not null
+            )
+          )
+          and rs.current_refs_sig is not null
+          and (ts.qr_sent_refs_sig is null or ts.qr_sent_refs_sig <> rs.current_refs_sig)
+        ) as qr_changed
+      from (
+        select
+          (
+            coalesce(sf.client_is_nhsp, false) = true
+            or coalesce(sf.client_no_timesheet_required, false) = true
+          ) as is_excluded
+      ) x
+    ) flags
+    cross join lateral (
+      select coalesce(jsonb_agg(z.reason) filter (where z.reason is not null), '[]'::jsonb) as reasons_json
+      from (
+        select
+          case
+            when flags.electronic_changed and ts.generated_pdf_refs_sig is null then 'ELECTRONIC_REFS_SIG_MISSING'
+            when flags.electronic_changed then 'ELECTRONIC_REFS_SIG_DIFFERENT'
+            else null
+          end as reason
+        union all
+        select
+          case
+            when flags.qr_changed and ts.qr_sent_refs_sig is null then 'QR_REFS_SIG_MISSING'
+            when flags.qr_changed then 'QR_REFS_SIG_DIFFERENT'
+            else null
+          end as reason
+      ) z
+    ) reasons
+  ),
+
+  ev as (
+    select
+      e.timesheet_id,
+      e.kind,
+      e.display_name,
+      e.storage_key,
+      e.created_at
+    from public.timesheet_evidence e
+    where e.timesheet_id in (select timesheet_id from ts_ids)
+    order by e.created_at asc
+  ),
+  hr_cache as (
+    select
+      r.invoice_id,
+      r.source_system,
+      r.import_id,
+      r.header_rows,
+      r.header_columns,
+      r.rows_json
+    from public.invoice_hr_source_rows r
+    where r.invoice_id = p_invoice_id
+  ),
+  tsfin as (
+    select
+      tf.id as tsfin_id,
+      tf.timesheet_id,
+      tf.external_source_rows_json,
+
+      -- ✅ Mileage fields for invoice itemisation
+      tf.mileage_units,
+      tf.mileage_pay_rate,
+      tf.mileage_charge_rate
+    from public.timesheets_financials tf
+    where tf.is_current = true
+      and tf.timesheet_id in (select timesheet_id from ts_ids)
+  ),
+
+  tsfin_segments as (
+    select
+      tf.id as tsfin_id,
+      tf.timesheet_id,
+      tf.invoice_breakdown_json
+    from public.timesheets_financials tf
+    where tf.is_current = true
+      and tf.timesheet_id in (select timesheet_id from ts_ids)
+  ),
+  seg_stats as (
+    select
+      t.timesheet_id,
+      t.tsfin_id,
+
+      -- ONLY segments on THIS invoice
+      coalesce(
+        jsonb_agg(
+          s.seg
+          order by coalesce(s.seg->>'date',''), coalesce(s.seg->>'segment_id','')
+        ) filter (
+          where s.seg is not null
+            and s.locked_text = p_invoice_id::text
+        ),
+        '[]'::jsonb
+      ) as invoiced_segments,
+
+      -- counts (do not return the segments)
+      (count(*) filter (where s.seg is not null and s.locked_text is null))::int
+        as uninvoiced_segment_count,
+
+      (count(*) filter (where s.seg is not null and s.locked_text is not null and s.locked_text <> p_invoice_id::text))::int
+        as locked_elsewhere_segment_count
+
+    from tsfin_segments t
+
+    left join lateral (
+      select
+        value as seg,
+        nullif(btrim(coalesce(value->>'invoice_locked_invoice_id','')), '') as locked_text
+      from jsonb_array_elements(
+        case
+          when t.invoice_breakdown_json is not null
+            and jsonb_typeof(t.invoice_breakdown_json) = 'object'
+            and jsonb_typeof(t.invoice_breakdown_json->'segments') = 'array'
+          then t.invoice_breakdown_json->'segments'
+          else '[]'::jsonb
+        end
+      ) value
+    ) s on true
+
+    where upper(coalesce(t.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+
+    group by t.timesheet_id, t.tsfin_id
+  ),
+  hist_audit as (
+    select
+      ae.id,
+      ae.ts_utc,
+      ae.actor_user_id,
+      coalesce(ae.actor_display, tu.display_name, tu.email, 'CloudTMS server') as actor_display,
+      coalesce(ae.actor_role_at_time, tu.role, 'system') as actor_role_at_time,
+      ae.object_type,
+      ae.object_id_text,
+      ae.action,
+      ae.before_json,
+      ae.after_json,
+      ae.reason,
+      ae.ip,
+      ae.user_agent,
+      ae.correlation_id
+    from public.audit_events ae
+    left join public.tms_users tu
+      on tu.id = ae.actor_user_id
+    where ae.object_type in ('invoice','invoices')
+      and ae.object_id_text = p_invoice_id::text
+    order by ae.ts_utc desc, ae.id desc
+    limit 500
+  ),
+  hist_mail as (
+    select
+      m.id as mail_outbox_id,
+      m.created_at_utc as ts_utc,
+      m.status,
+      m."to" as to_email,
+      m.subject,
+      m.reference
+    from public.mail_outbox m
+    where upper(coalesce(m.type,'')) = 'INVOICE'
+      and m.attachments is not null
+      and jsonb_typeof(m.attachments) = 'array'
+      and exists (
+        select 1
+        from jsonb_array_elements(m.attachments) a
+        where btrim(coalesce(a->>'invoice_id','')) = p_invoice_id::text
+      )
+    order by m.created_at_utc desc, m.id desc
+    limit 200
+  ),
+  history as (
+    select
+      jsonb_build_object(
+        'kind','AUDIT',
+        'id', ae.id::text,
+        'ts_utc', to_jsonb(ae.ts_utc),
+        'actor_user_id', case when ae.actor_user_id is null then null else ae.actor_user_id::text end,
+        'actor_display', ae.actor_display,
+        'actor_role_at_time', ae.actor_role_at_time,
+        'action', ae.action,
+        'reason', ae.reason,
+        'object_type', ae.object_type,
+        'object_id_text', ae.object_id_text,
+        'before_json', ae.before_json,
+        'after_json', ae.after_json,
+        'ip', ae.ip,
+        'user_agent', ae.user_agent,
+        'correlation_id', ae.correlation_id
+      ) as row_json,
+      ae.ts_utc as ts_sort
+    from hist_audit ae
+
+    union all
+
+    select
+      jsonb_build_object(
+        'kind','EMAIL',
+        'mail_outbox_id', m.mail_outbox_id::text,
+        'ts_utc', to_jsonb(m.ts_utc),
+        'status', m.status::text,
+        'to', m.to_email,
+        'subject', m.subject,
+        'reference', m.reference
+      ) as row_json,
+      m.ts_utc as ts_sort
+    from hist_mail m
+  ),
+  email_summary as (
+    select
+      count(*)::int as email_count,
+      max(m.created_at_utc) as last_email_at_utc
+    from public.mail_outbox m
+    where upper(coalesce(m.type,'')) = 'INVOICE'
+      and m.attachments is not null
+      and jsonb_typeof(m.attachments) = 'array'
+      and exists (
+        select 1
+        from jsonb_array_elements(m.attachments) a
+        where btrim(coalesce(a->>'invoice_id','')) = p_invoice_id::text
+      )
+  )
+  select jsonb_build_object(
+    'invoice', to_jsonb(inv.*),
+    'header_snapshot_json', coalesce((select inv.header_snapshot_json from inv), '{}'::jsonb),
+    'attach_policy', coalesce((select inv.attach_policy from inv), null),
+
+    'lines', coalesce((
+      select jsonb_agg(
+        to_jsonb(l.*)
+        || jsonb_build_object('paper_ts_r2_key', l.effective_paper_ts_r2_key)
+        || jsonb_build_object('is_adjustment', (l.timesheet_id is null or upper(coalesce(l.meta_json->>'line_type','')) = 'ADJUSTMENT'))
+        || jsonb_build_object('line_type_norm', upper(coalesce(l.meta_json->>'line_type','')))
+        order by l.created_at
+      )
+      from lines l where l.meta_json->>'presentation_disposition' is distinct from 'SUPPRESS_ZERO_ROUNDING_AUTHORITY'
+        or private.weekly_source_invoice_rounding_suppression_witness_v1(l.id) is null
+    ), '[]'::jsonb),
+
+    'timesheet_ids', coalesce((select jsonb_agg(t.timesheet_id::text) from ts_ids t), '[]'::jsonb),
+
+    -- ✅ NEW: per-timesheet document flags for renderer (electronic regen + QR refs changed)
+    'timesheet_doc_flags_by_id', coalesce((
+      select jsonb_object_agg(
+        f.timesheet_id::text,
+        f.flags_json
+      )
+      from timesheet_doc_flags f
+    ), '{}'::jsonb),
+
+    -- ✅ mapping needed for segment edits (tsfin_id is invoice_apply_edits input)
+    'tsfin_id_by_timesheet_id', coalesce((
+      select jsonb_object_agg(
+        t.timesheet_id::text,
+        t.tsfin_id::text
+      )
+      from tsfin t
+    ), '{}'::jsonb),
+
+    -- ✅ mileage units/rates per timesheet (for PDF builder / UI without scanning lines)
+    'mileage_by_timesheet_id', coalesce((
+      select jsonb_object_agg(
+        t.timesheet_id::text,
+        jsonb_build_object(
+          'mileage_units', t.mileage_units,
+          'mileage_pay_rate', t.mileage_pay_rate,
+          'mileage_charge_rate', t.mileage_charge_rate
+        )
+      )
+      from tsfin t
+    ), '{}'::jsonb),
+
+    -- ✅ reference sources needed by FE to build reference update payloads with no extra calls
+    'timesheet_reference_sources_by_id', coalesce((
+      select jsonb_object_agg(
+        s.timesheet_id::text,
+        jsonb_build_object(
+          'reference_number', s.reference_number,
+          'day_references_json', s.day_references_json,
+          'actual_schedule_json', s.actual_schedule_json
+        )
+      )
+      from ts_reference_sources s
+    ), '{}'::jsonb),
+
+    -- ✅ UPDATED: embed reference edit rows for zero-subrequest ref modal
+    -- Adds candidate_display for UI rendering and deterministic row_key to stabilise FE staging identity.
+    'reference_rows', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'row_key', concat_ws(
+            '::',
+            r.timesheet_id::text,
+            r.ref_target,
+            coalesce(r.segment_id,''),
+            coalesce(r.day_ymd::text,''),
+            coalesce(r.start_utc::text,''),
+            coalesce(r.end_utc::text,'')
+          ),
+          'timesheet_id', r.timesheet_id::text,
+          'candidate_id', case when r.candidate_id is null then null else r.candidate_id::text end,
+          'candidate_display', r.candidate_display,
+          'sheet_scope', r.sheet_scope,
+          'submission_mode', r.submission_mode,
+          'ref_target', r.ref_target,
+          'segment_id', r.segment_id,
+          'day_ymd', r.day_ymd,
+          'start_utc', r.start_utc,
+          'end_utc', r.end_utc,
+          'current_reference', r.current_reference,
+          'is_required', r.is_required
+        )
+        order by
+          r.timesheet_id::text,
+          r.ref_target,
+          r.day_ymd nulls last,
+          r.start_utc nulls last,
+          r.end_utc nulls last,
+          r.segment_id nulls last
+      )
+      from ref_rows_joined r
+    ), '[]'::jsonb),
+
+    -- SEGMENTS: segment info for invoice modal expansion
+    'segments_by_timesheet', coalesce((
+      select jsonb_object_agg(
+        s.timesheet_id::text,
+        jsonb_build_object(
+          'tsfin_id', case when s.tsfin_id is null then null else s.tsfin_id::text end,
+          'invoiced_segments', coalesce(s.invoiced_segments, '[]'::jsonb),
+          'uninvoiced_segment_count', coalesce(s.uninvoiced_segment_count, 0),
+          'locked_elsewhere_segment_count', coalesce(s.locked_elsewhere_segment_count, 0)
+        )
+      )
+      from seg_stats s
+    ), '{}'::jsonb),
+
+    -- Alias required by brief
+    'segments_on_invoice_by_timesheet', coalesce((
+      select jsonb_object_agg(
+        s.timesheet_id::text,
+        jsonb_build_object(
+          'tsfin_id', case when s.tsfin_id is null then null else s.tsfin_id::text end,
+          'invoiced_segments', coalesce(s.invoiced_segments, '[]'::jsonb),
+          'uninvoiced_segment_count', coalesce(s.uninvoiced_segment_count, 0),
+          'locked_elsewhere_segment_count', coalesce(s.locked_elsewhere_segment_count, 0)
+        )
+      )
+      from seg_stats s
+    ), '{}'::jsonb),
+
+    -- Backward compatible aggregate (all evidence)
+    'evidence', coalesce((
+      select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
+      from ev
+    ), '[]'::jsonb),
+
+    -- New explicit splits
+    'timesheet_evidence', coalesce((
+      select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
+      from ev
+      where upper(coalesce(ev.kind,'')) = 'TIMESHEET'
+    ), '[]'::jsonb),
+
+    'evidence_other', coalesce((
+      select jsonb_agg(to_jsonb(ev.*) order by ev.created_at)
+      from ev
+      where upper(coalesce(ev.kind,'')) <> 'TIMESHEET'
+    ), '[]'::jsonb),
+
+    'hr_source_rows_cache', coalesce((select jsonb_agg(to_jsonb(h.*)) from hr_cache h), '[]'::jsonb),
+    'tsfin_external_source_rows', coalesce((select jsonb_agg(to_jsonb(t.*)) from tsfin t), '[]'::jsonb),
+
+    -- Invoice history
+    'history', coalesce((
+      select jsonb_agg(h.row_json order by h.ts_sort desc)
+      from history h
+    ), '[]'::jsonb),
+
+    -- email summary for UI label (Email vs Re-email)
+    'email_summary', jsonb_build_object(
+      'emailed_once', (coalesce((select email_count from email_summary),0) > 0),
+      'email_count', coalesce((select email_count from email_summary),0),
+      'last_email_at_utc', (select last_email_at_utc from email_summary)
+    )
+  )
+  into v_manifest
+  from inv;
+
+  if v_manifest is null then
+    v_manifest := '{}'::jsonb;
+  end if;
+
+  -- Extract simple counts for debug
+  begin
+    v_lines_count := coalesce(jsonb_array_length(coalesce(v_manifest->'lines','[]'::jsonb)), 0);
+  exception when others then
+    v_lines_count := 0;
+  end;
+
+  begin
+    v_timesheet_ids_count := coalesce(jsonb_array_length(coalesce(v_manifest->'timesheet_ids','[]'::jsonb)), 0);
+  exception when others then
+    v_timesheet_ids_count := 0;
+  end;
+
+  begin
+    v_evidence_count := coalesce(jsonb_array_length(coalesce(v_manifest->'evidence','[]'::jsonb)), 0);
+  exception when others then
+    v_evidence_count := 0;
+  end;
+
+  begin
+    v_ts_evidence_count := coalesce(jsonb_array_length(coalesce(v_manifest->'timesheet_evidence','[]'::jsonb)), 0);
+  exception when others then
+    v_ts_evidence_count := 0;
+  end;
+
+  begin
+    v_ev_other_count := coalesce(jsonb_array_length(coalesce(v_manifest->'evidence_other','[]'::jsonb)), 0);
+  exception when others then
+    v_ev_other_count := 0;
+  end;
+
+  begin
+    v_history_count := coalesce(jsonb_array_length(coalesce(v_manifest->'history','[]'::jsonb)), 0);
+  exception when others then
+    v_history_count := 0;
+  end;
+
+  begin
+    select coalesce(count(*),0)
+    into v_seg_keys_count
+    from jsonb_object_keys(coalesce(v_manifest->'segments_by_timesheet','{}'::jsonb)) k;
+  exception when others then
+    v_seg_keys_count := 0;
+  end;
+
+  if v_invoice_debug then
+    perform public._inv_write_audit(
+      null,
+      'INVOICE_RENDER_MANIFEST_DEBUG',
+      jsonb_build_object(
+        'invoice_id', p_invoice_id::text,
+        'run_started_at_utc', public._inv_iso_utc(v_dbg_started),
+        'run_finished_at_utc', public._inv_iso_utc(now()),
+        'counts', jsonb_build_object(
+          'lines', v_lines_count,
+          'timesheet_ids', v_timesheet_ids_count,
+          'evidence', v_evidence_count,
+          'timesheet_evidence', v_ts_evidence_count,
+          'evidence_other', v_ev_other_count,
+          'history', v_history_count,
+          'segments_by_timesheet_keys', v_seg_keys_count
+        )
+      ),
+      'invoices',
+      p_invoice_id::text,
+      null,
+      'INVOICE_DEBUG',
+      null,
+      null,
+      null
+    );
+  end if;
+
+  v_manifest:=v_manifest||private.weekly_source_invoice_legacy_render_support_v1(p_invoice_id);
+  return v_manifest;
+
+exception when others then
+  v_sqlstate := sqlstate;
+  v_err := sqlerrm;
+
+  if v_invoice_debug then
+    perform public._inv_write_audit(
+      null,
+      'INVOICE_RENDER_MANIFEST_ERROR',
+      jsonb_build_object(
+        'invoice_id', p_invoice_id::text,
+        'run_started_at_utc', public._inv_iso_utc(v_dbg_started),
+        'run_failed_at_utc', public._inv_iso_utc(now()),
+        'error', jsonb_build_object(
+          'sqlstate', v_sqlstate,
+          'message', v_err
+        )
+      ),
+      'invoices',
+      p_invoice_id::text,
+      null,
+      'INVOICE_DEBUG',
+      null,
+      null,
+      null
+    );
+  end if;
+
+  raise;
+end;
+$$;

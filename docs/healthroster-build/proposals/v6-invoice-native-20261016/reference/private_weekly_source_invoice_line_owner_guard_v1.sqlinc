@@ -1,0 +1,56 @@
+create or replace function private.weekly_source_invoice_line_owner_guard_v1()
+returns trigger
+language plpgsql security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_timesheet_id uuid:=case when tg_op='DELETE' then old.timesheet_id
+    else new.timesheet_id end;
+  v_owner text:=nullif(pg_catalog.current_setting(
+    'cloudtms.weekly_source_invoice_owner',true
+  ),'');
+  v_family uuid[];
+begin
+  -- Gate 13 hostile review F4 / standing rule 3.  This guard is the last thing
+  -- standing between the two invoicing systems, so it must be keyed on the
+  -- Timesheet FAMILY, not on the physical row being written.  A lineage-bound
+  -- root that rotates keeps its lineage on the OLD physical id; the new current
+  -- version carries no lineage row of its own, so a guard keyed on
+  -- new.timesheet_id let an ordinary invoice line be written for worked time
+  -- that is already on a source self-bill - a double invoice.
+  --
+  -- The owner test is evaluated first only to avoid resolving the family on the
+  -- two owners that are allowed to write these lines anyway; the conjunction is
+  -- identical, neither side has an effect, and the refusal is unchanged.  A
+  -- final source row is never removed merely because pay authorisation is
+  -- withdrawn.  The only allocation exception is the explicit same-client move
+  -- between two unissued invoices.
+  if v_timesheet_id is not null and coalesce(v_owner,'') not in (
+    'ADMIT_SOURCE_INVOICE','MOVE_SOURCE_INVOICE'
+  ) then
+    -- One family resolution, through the one installed resolver adapter.  No
+    -- second identity mechanism and no inline re-derivation (proof/34 s10
+    -- rule 12).
+    v_family:=private.weekly_source_invoice_family_timesheet_ids_v1(v_timesheet_id);
+    -- Standing rule 3: fail closed when the family identity cannot be
+    -- established.  This is an explicit cardinality test, never a limit.
+    if v_family is null or pg_catalog.cardinality(v_family)=0 then
+      raise exception 'WEEKLY_SOURCE_INVOICE_FAMILY_UNRESOLVED'
+        using errcode='55000';
+    end if;
+    if exists(
+      select 1 from public.weekly_source_row_timesheet_lineages lineage
+      where lineage.timesheet_id=any(v_family)
+    ) or exists(
+      select 1 from public.weekly_exceptional_pay_target_families family
+      where family.root_timesheet_id=any(v_family)
+        and family.ownership_state='TARGET_MANAGED'
+    ) then
+      raise exception 'WEEKLY_SOURCE_INVOICE_MOVEMENT_OWNER_REQUIRED'
+        using errcode='55000';
+    end if;
+  end if;
+  if tg_op='DELETE' then return old; end if;
+  return new;
+end;
+$function$;

@@ -1,0 +1,58 @@
+create or replace function private.invoice_contract_move_line_allowed_v1(p_new jsonb)
+returns boolean language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_invoice public.invoices%rowtype;v_original public.invoice_lines%rowtype;v_line private.timesheet_contract_move_invoice_scope_lines%rowtype;
+ v_scope private.timesheet_contract_move_invoice_scopes%rowtype;v_p public.weekly_source_invoice_presentation_lines%rowtype;
+begin
+ select i.* into v_invoice from public.invoices i where i.id=(p_new->>'invoice_id')::uuid;
+ if v_invoice.type='CREDIT_NOTE' and v_invoice.header_snapshot_json#>>'{credit_scope,kind}'='CONTRACT_MOVE' then
+  select s.* into v_scope from private.timesheet_contract_move_invoice_scopes s
+   where s.id=(v_invoice.header_snapshot_json#>>'{credit_scope,original_scope_id}')::uuid
+    and s.credit_note_id=v_invoice.id and s.credit_operation_id::text=v_invoice.header_snapshot_json->>'credit_operation_id'
+    and s.billing_revision::text=v_invoice.header_snapshot_json#>>'{credit_scope,billing_revision}'
+    and encode(s.required_credit_scope_digest,'hex')=v_invoice.header_snapshot_json#>>'{credit_scope,accepted_scope_digest}';
+  select s.* into v_line from private.timesheet_contract_move_invoice_scope_lines s
+   where s.scope_id=v_scope.id and s.original_invoice_line_id=(p_new#>>'{meta_json,original_invoice_line_id}')::uuid;
+  select l.* into v_original from public.invoice_lines l where l.id=v_line.original_invoice_line_id and l.invoice_id=v_scope.original_invoice_id;
+  return v_original.id is not null and v_original.timesheet_id::text=p_new->>'timesheet_id'
+   and (p_new->>'total_charge_ex_vat')::numeric=-v_original.total_charge_ex_vat
+   and (p_new->>'vat_amount')::numeric=-v_original.vat_amount and (p_new->>'total_inc_vat')::numeric=-v_original.total_inc_vat
+   and not exists(select 1 from public.weekly_source_invoice_line_bindings b where b.invoice_line_id=v_original.id);
+ end if;
+ if not private.timesheet_contract_source_original_eligible_v1((p_new->>'timesheet_id')::uuid)
+  or v_invoice.header_snapshot_json->>'schema_version'<>'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'
+  or p_new#>>'{meta_json,line_type}'<>'WEEKLY_FINAL_SOURCE'
+  or coalesce(current_setting('cloudtms.weekly_source_invoice_owner',true),'') not in('ADMIT_SOURCE_INVOICE','MOVE_SOURCE_INVOICE') then return false;end if;
+ select p.* into v_p from public.weekly_source_invoice_presentation_lines p
+  where p.id=(p_new#>>'{meta_json,presentation_line_id}')::uuid
+   and p.client_manifest_id::text=v_invoice.header_snapshot_json#>>'{meta,client_manifest_id}'
+   and p.client_id=v_invoice.client_id;
+ return v_p.id is not null and (p_new->>'total_charge_ex_vat')::numeric=v_p.total_charge_ex_vat
+  and (p_new->>'vat_amount')::numeric=v_p.vat_amount and (p_new->>'total_inc_vat')::numeric=v_p.total_inc_vat
+  and exists(select 1 from public.weekly_source_billing_movements m where m.id=v_p.billing_movement_id
+    and m.invoice_timesheet_id::text=p_new->>'timesheet_id');
+end;
+$function$;
+
+create or replace function private.invoice_contract_move_verified_unissue_v1(p_invoice_id uuid)
+returns boolean language sql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+ select exists(select 1 from public.invoices i join public.audit_events a
+  on a.object_id_text=i.id::text and a.action='INVOICE_UNISSUED' and a.object_type='invoice'
+  where i.id=p_invoice_id and i.type='INVOICE' and i.status='DRAFT' and i.issued_at_utc is null
+   and i.paid_at_utc is null and i.issued_document_version_id is null
+   and i.issue_state='NOT_STARTED' and i.active_issue_operation_id is null
+   and case when pg_input_is_valid(i.header_snapshot_json->>'last_unissued_at_utc','timestamptz')
+     then a.ts_utc=(i.header_snapshot_json->>'last_unissued_at_utc')::timestamptz else false end
+   and a.after_json->>'compatibility_pointer_cleared'='true'
+   and a.after_json->>'historical_object_preserved'='true'
+   and a.after_json->'historical_document_version_id' is not distinct from i.header_snapshot_json->'last_unissued_document_version_id'
+   and not exists(select 1 from public.audit_events later where later.object_id_text=i.id::text
+    and later.action='INVOICE_ISSUED' and later.ts_utc>a.ts_utc));
+$function$;
+alter function private.invoice_contract_move_line_allowed_v1(jsonb) owner to postgres;
+alter function private.invoice_contract_move_verified_unissue_v1(uuid) owner to postgres;
+revoke all on function private.invoice_contract_move_line_allowed_v1(jsonb) from public,anon,authenticated,service_role;
+revoke all on function private.invoice_contract_move_verified_unissue_v1(uuid) from public,anon,authenticated,service_role;

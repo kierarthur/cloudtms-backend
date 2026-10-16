@@ -1,0 +1,178 @@
+create or replace function private._candidate_expense_components_sync_v1(
+  p_workflow_id uuid,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_fin public.timesheets_financials%rowtype;
+  v_timesheet public.timesheets%rowtype;
+  v_approval public.candidate_approval_requests%rowtype;
+  v_value record;
+  v_component public.candidate_expense_components%rowtype;
+  v_document_generation integer;
+  v_lifecycle text;
+  v_manager_state text;
+  v_agency_state text;
+  v_has_evidence boolean;
+  v_changed boolean;
+  v_count integer:=0;
+  v_before jsonb;
+begin
+  select * into v_workflow from public.candidate_submission_workflows
+  where id=p_workflow_id;
+  if not found then raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002'; end if;
+  if v_workflow.workflow_kind not in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
+     or v_workflow.immutable_submission_json is null then
+    return jsonb_build_object('ok',true,'workflow_id',v_workflow.id,'component_count',0);
+  end if;
+  v_document_generation:=case when v_workflow.state='FINALISED'
+    then greatest(v_workflow.generation-1,1) else v_workflow.generation end;
+  if v_workflow.target_timesheet_id is not null then
+    select * into v_fin from public.timesheets_financials financial
+    where financial.timesheet_id=v_workflow.target_timesheet_id and financial.is_current
+    order by financial.computed_at_utc desc nulls last,financial.updated_at desc,financial.id desc limit 1;
+    select * into v_timesheet from public.timesheets timesheet
+    where timesheet.timesheet_id=v_workflow.target_timesheet_id and timesheet.is_current;
+    if not found
+       or v_timesheet.archived_at_utc is not null
+       or v_timesheet.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum then
+      raise exception 'CANDIDATE_EXPENSE_COMPONENT_OWNER_SCOPE_INVALID'
+        using errcode='23514';
+    end if;
+  end if;
+  select * into v_approval from public.candidate_approval_requests request
+  where request.workflow_id=v_workflow.id
+    and request.workflow_generation=v_document_generation
+  order by request.request_generation desc,request.updated_at_utc desc,request.id desc limit 1;
+  v_lifecycle:=case
+    when v_workflow.state='REFUSED' then 'MANAGER_REFUSED'
+    when v_workflow.state='REJECTED' then 'OFFICE_REJECTED'
+    when v_workflow.state='CANCELLED' then 'CANCELLED'
+    when v_workflow.state in ('EXPIRED','SUPERSEDED') then 'SUPERSEDED'
+    when v_workflow.state in ('MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE','FINALISED','RECEIVED') then 'MANAGER_APPROVED'
+    when v_workflow.state in ('CREATED','WORKER_DRAFT') then 'DRAFT'
+    else 'SUBMITTED' end;
+  v_manager_state:=case
+    when v_workflow.state='REFUSED' or v_approval.state='REFUSED' then 'REFUSED'
+    when v_workflow.manager_approved_at_utc is not null or v_approval.state='APPROVED'
+      or v_workflow.state in (
+        'MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+        'READY_TO_FINALISE','FINALISED','RECEIVED'
+      ) then 'APPROVED'
+    when v_approval.id is not null and v_approval.state='PENDING' then 'PENDING'
+    else 'NOT_REQUESTED' end;
+  v_agency_state:=case
+    when v_fin.paid_at_utc is not null or upper(coalesce(v_timesheet.status::text,''))='PAID' then 'PAID'
+    when v_fin.locked_by_invoice_id is not null or upper(coalesce(v_timesheet.status::text,''))='INVOICED' then 'INVOICED'
+    when v_fin.authorised_at_utc is not null
+      or v_timesheet.authorised_at_server is not null
+      or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED')
+      then 'AUTHORISED'
+    else 'NOT_AUTHORISED' end;
+
+  for v_value in select * from private._candidate_expense_component_values_v1(v_workflow.id) loop
+    select exists(
+      select 1 from public.candidate_submission_components evidence
+      where evidence.workflow_id=v_workflow.id
+        and evidence.workflow_generation=v_document_generation
+        and evidence.expense_category=v_value.expense_category
+        and evidence.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+        and evidence.state not in ('SUPERSEDED','REJECTED','ABANDONED')
+    ) into v_has_evidence;
+    if v_value.amount<=0 and v_value.mileage_units<=0 and not v_has_evidence then continue; end if;
+    select * into v_component from public.candidate_expense_components component
+    where component.workflow_id=v_workflow.id
+      and component.expense_category=v_value.expense_category
+    for update;
+    if not found then
+      v_before:='{}'::jsonb;
+      insert into public.candidate_expense_components(
+        workflow_id,workflow_generation,expense_category,owning_timesheet_id,amount,mileage_units,
+        lifecycle_state,manager_approval_state,agency_authorisation_state,approval_request_id,
+        submitted_at_utc,manager_approved_at_utc,refusal_kind,refusal_reason,refused_at_utc,
+        removed_at_utc,created_at_utc,updated_at_utc
+      ) values (
+        v_workflow.id,v_document_generation,v_value.expense_category,v_workflow.target_timesheet_id,
+        v_value.amount,v_value.mileage_units,v_lifecycle,v_manager_state,v_agency_state,v_approval.id,
+        v_workflow.worker_submitted_at_utc,v_workflow.manager_approved_at_utc,
+        case when v_lifecycle='MANAGER_REFUSED' then 'MANAGER_REFUSAL'
+          when v_lifecycle='OFFICE_REJECTED' then 'AGENCY_REJECTION' else null end,
+        case when v_lifecycle in ('MANAGER_REFUSED','OFFICE_REJECTED')
+          then coalesce(v_approval.refusal_reason,v_workflow.rejection_reason,'No reason recorded') else null end,
+        case when v_lifecycle in ('MANAGER_REFUSED','OFFICE_REJECTED')
+          then coalesce(v_approval.refused_at_utc,v_workflow.updated_at_utc) else null end,
+        case when v_lifecycle in ('OFFICE_REJECTED','CANCELLED','SUPERSEDED') then v_workflow.updated_at_utc else null end,
+        p_now_utc,p_now_utc
+      ) returning * into v_component;
+      v_changed:=true;
+    else
+      -- A deliberate component withdrawal/cancellation is historical truth;
+      -- a later generic workflow sync must never silently reactivate it.
+       if v_component.lifecycle_state in (
+         'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+       ) then
+        v_count:=v_count+1;
+        continue;
+      end if;
+      v_changed:=v_component.workflow_generation is distinct from v_document_generation
+        or v_component.owning_timesheet_id is distinct from v_workflow.target_timesheet_id
+        or v_component.amount is distinct from v_value.amount
+        or v_component.mileage_units is distinct from v_value.mileage_units
+        or v_component.lifecycle_state is distinct from v_lifecycle
+        or v_component.manager_approval_state is distinct from v_manager_state
+        or v_component.agency_authorisation_state is distinct from v_agency_state
+        or v_component.approval_request_id is distinct from v_approval.id;
+      if v_changed then
+        v_before:=to_jsonb(v_component);
+        update public.candidate_expense_components set
+          workflow_generation=v_document_generation,
+          component_generation=component_generation+1,
+          owning_timesheet_id=v_workflow.target_timesheet_id,
+          amount=v_value.amount,mileage_units=v_value.mileage_units,
+          lifecycle_state=v_lifecycle,manager_approval_state=v_manager_state,
+          agency_authorisation_state=v_agency_state,approval_request_id=v_approval.id,
+          submitted_at_utc=coalesce(submitted_at_utc,v_workflow.worker_submitted_at_utc),
+          manager_approved_at_utc=v_workflow.manager_approved_at_utc,
+          refusal_kind=case when v_lifecycle='MANAGER_REFUSED' then 'MANAGER_REFUSAL'
+            when v_lifecycle='OFFICE_REJECTED' then 'AGENCY_REJECTION' else null end,
+          refusal_reason=case when v_lifecycle in ('MANAGER_REFUSED','OFFICE_REJECTED')
+            then coalesce(v_approval.refusal_reason,v_workflow.rejection_reason,'No reason recorded') else null end,
+          refused_at_utc=case when v_lifecycle in ('MANAGER_REFUSED','OFFICE_REJECTED')
+            then coalesce(v_approval.refused_at_utc,v_workflow.updated_at_utc) else null end,
+          removed_at_utc=case when v_lifecycle in ('OFFICE_REJECTED','CANCELLED','SUPERSEDED')
+            then v_workflow.updated_at_utc else null end,
+          updated_at_utc=p_now_utc
+        where expense_component_id=v_component.expense_component_id
+        returning * into v_component;
+      end if;
+    end if;
+    if v_changed then
+      insert into public.candidate_expense_component_events(
+        expense_component_id,workflow_id,component_generation,event_type,actor_kind,
+        before_state_json,after_state_json,idempotency_key,occurred_at_utc
+      ) values (
+        v_component.expense_component_id,v_workflow.id,v_component.component_generation,
+        case v_component.lifecycle_state
+          when 'MANAGER_APPROVED' then 'MANAGER_APPROVED'
+          when 'MANAGER_REFUSED' then 'MANAGER_REFUSED'
+          when 'OFFICE_REJECTED' then 'OFFICE_REJECTED'
+          when 'SUBMITTED' then 'SUBMITTED'
+          when 'CANCELLED' then 'CANCELLED'
+          when 'SUPERSEDED' then 'SUPERSEDED'
+          else 'CREATED' end,
+        'SYSTEM',coalesce(v_before,'{}'::jsonb),to_jsonb(v_component),
+        'component-sync:'||v_component.expense_component_id::text||':'
+          ||v_component.component_generation::text,p_now_utc
+      ) on conflict(expense_component_id,idempotency_key) do nothing;
+    end if;
+    v_count:=v_count+1;
+  end loop;
+  return jsonb_build_object('ok',true,'workflow_id',v_workflow.id,'component_count',v_count);
+end;
+$function$;

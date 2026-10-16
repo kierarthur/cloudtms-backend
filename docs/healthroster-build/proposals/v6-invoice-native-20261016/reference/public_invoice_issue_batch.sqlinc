@@ -1,0 +1,51 @@
+create or replace function public.invoice_issue_batch(
+  p_invoice_ids uuid[],
+  p_actor_user_id uuid
+)
+returns table (
+  invoice_id uuid,
+  ok boolean,
+  status text,
+  issued_at_utc timestamptz,
+  on_hold_reason text,
+  reasons text[],
+  error text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  if p_invoice_ids is null or coalesce(array_length(p_invoice_ids,1),0) = 0 then
+    raise exception 'invoice_ids[] required';
+  end if;
+
+  foreach v_id in array p_invoice_ids loop
+    begin
+      select
+        v_id,
+        true,
+        x.status,
+        x.issued_at_utc,
+        x.on_hold_reason,
+        x.reasons,
+        null::text
+      into invoice_id, ok, status, issued_at_utc, on_hold_reason, reasons, error
+      from public.invoice_issue_one(v_id, p_actor_user_id) x;
+
+      return next;
+    exception when others then
+      invoice_id := v_id;
+      ok := false;
+      status := null;
+      issued_at_utc := null;
+      on_hold_reason := null;
+      reasons := null;
+      error := sqlerrm;
+      return next;
+    end;
+  end loop;
+end;
+$$;

@@ -1,0 +1,108 @@
+create or replace function public.tsfin_report_timesheets_v2(
+  p_week_ending_from date default null,
+  p_week_ending_to date default null,
+  p_pay_method text default null,
+  p_client_ids uuid[] default null,
+  p_candidate_ids uuid[] default null,
+  p_include_on_hold boolean default false,
+  p_paid boolean default null,
+  p_invoiced boolean default null
+)
+returns setof jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+with base as (
+  select
+    tf.timesheet_id,
+    tf.candidate_id,
+    tf.client_id,
+    tf.pay_method,
+    tf.total_pay_ex_vat,
+    tf.total_charge_ex_vat,
+    tf.margin_ex_vat,
+    tf.expenses_charge_ex_vat,
+    tf.mileage_charge_ex_vat,
+    tf.paid_at_utc,
+    tf.pay_on_hold,
+    tf.locked_by_invoice_id,
+    ts.week_ending_date,
+    c.name as client_name,
+    (
+      tf.locked_by_invoice_id is not null
+      or (
+        upper(coalesce(tf.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+        and exists (
+          select 1
+          from jsonb_array_elements(coalesce(tf.invoice_breakdown_json->'segments','[]'::jsonb)) seg
+          where nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is not null
+        )
+      )
+    ) as invoiced_any
+  from public.timesheets_financials tf
+  join public.timesheets ts
+    on ts.timesheet_id = tf.timesheet_id
+   and ts.is_current = true
+  left join public.clients c
+    on c.id = tf.client_id
+  where tf.is_current = true
+    and (p_week_ending_from is null or ts.week_ending_date::date >= p_week_ending_from)
+    and (p_week_ending_to is null or ts.week_ending_date::date <= p_week_ending_to)
+    and (p_pay_method is null or upper(coalesce(tf.pay_method,'')) = upper(p_pay_method))
+    and (p_include_on_hold or coalesce(tf.pay_on_hold,false) = false)
+    and (
+      p_client_ids is null
+      or array_length(p_client_ids,1) is null
+      or tf.client_id = any(p_client_ids)
+    )
+    and (
+      p_candidate_ids is null
+      or array_length(p_candidate_ids,1) is null
+      or tf.candidate_id = any(p_candidate_ids)
+    )
+    and (
+      p_paid is null
+      or (p_paid = true and tf.paid_at_utc is not null)
+      or (p_paid = false and tf.paid_at_utc is null)
+    )
+)
+select jsonb_build_object(
+  'timesheet_id', base.timesheet_id,
+  'candidate_id', base.candidate_id,
+  'client_id', base.client_id,
+  'pay_method', base.pay_method,
+  'locked_by_invoice_id', base.locked_by_invoice_id,
+  'total_pay_ex_vat', base.total_pay_ex_vat,
+  'total_charge_ex_vat', base.total_charge_ex_vat,
+  'margin_ex_vat', base.margin_ex_vat,
+  'expenses_charge_ex_vat', base.expenses_charge_ex_vat,
+  'mileage_charge_ex_vat', base.mileage_charge_ex_vat,
+  'paid_at_utc', base.paid_at_utc,
+  'pay_on_hold', base.pay_on_hold,
+  'invoiced_any', base.invoiced_any,
+  'timesheet', jsonb_build_object(
+    'week_ending_date', base.week_ending_date
+  ),
+  'client', jsonb_build_object(
+    'name', base.client_name
+  ),
+  -- Plan 6.2 Gate 11 (24 section 18; gap rows XSG-028 and XSG-029).  ADDITIVE
+  -- ONLY: one extra member that separates submitted, source, approved and paid
+  -- hours and keeps the invoice movements apart from all four, so a report that
+  -- means to show paid hours can never show a submission or an invoice movement
+  -- instead.  Paid hours come solely from the immutable settlement allocation
+  -- (private.weekly_source_settlement_allocation_v1), never from a
+  -- currency-to-hours calculation and never from the timesheet_pay_state
+  -- last-settled cache.  The composer returns exactly {} for every Timesheet
+  -- that is not a Weekly Source week, so an ordinary export row is unchanged.
+  'weekly_source_hours', public.tsfin_weekly_source_hours_v1(base.timesheet_id)
+)
+from base
+where (p_invoiced is null or base.invoiced_any = p_invoiced)
+order by
+  base.week_ending_date desc nulls last,
+  base.client_name asc nulls last,
+  base.timesheet_id::text asc;
+$$;

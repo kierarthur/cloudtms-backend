@@ -1,0 +1,27 @@
+create or replace function private.weekly_source_invoice_receipt_support_v1(p_invoice_id uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare witnesses jsonb;
+begin
+  if not exists(select 1 from public.weekly_source_invoice_line_bindings b
+    join public.weekly_source_invoice_presentation_lines p on p.id=b.presentation_line_id
+    where b.invoice_id=p_invoice_id and b.state='CURRENT'
+      and (p.invoice_rounding_authority_json is not null or p.invoice_hold_release_id is not null)) then return null; end if;
+  perform private.weekly_source_invoice_allocation_assert_v1(p_invoice_id);
+  select jsonb_agg(witness order by presentation_id) into witnesses from (
+    select p.id presentation_id,jsonb_build_object('presentation_line_id',p.id,
+      'presentation_hash',encode(p.presentation_hash,'hex'),'source_hash',encode(p.source_hash,'hex'),
+      'client_manifest_id',p.client_manifest_id,'rounding_authority',p.invoice_rounding_authority_json,
+      'invoice_hold_release_authority',private.weekly_source_invoice_presentation_release_authority_v1(
+        array_agg(b.billing_movement_id order by b.billing_movement_id),p.invoice_hold_release_id),
+      'billing_movement_ids',jsonb_agg(b.billing_movement_id order by b.billing_movement_id)) witness
+      from public.weekly_source_invoice_line_bindings b join public.weekly_source_invoice_presentation_lines p on p.id=b.presentation_line_id
+      where b.invoice_id=p_invoice_id and b.state='CURRENT'
+        and (p.invoice_rounding_authority_json is not null or p.invoice_hold_release_id is not null)
+      group by p.id
+  ) exact;
+  return jsonb_build_object('contract','WEEKLY_SOURCE_INVOICE_RECEIPT_SUPPORT_V1','invoice_id',p_invoice_id,
+    'presentation_witnesses',witnesses,'support_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_INVOICE_RECEIPT_SUPPORT_V1',witnesses),'hex'));
+end;
+$function$;

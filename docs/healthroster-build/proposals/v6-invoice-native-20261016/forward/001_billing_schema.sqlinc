@@ -1,0 +1,81 @@
+-- Body for the root's managed schema scaffold. No invoice or business row is
+-- allocated by this DDL. Physical operation/review/member DDL precedes it.
+create table private.timesheet_contract_move_invoice_scopes(
+ id uuid primary key,operation_id uuid not null references private.timesheet_contract_move_operations(id),
+ original_invoice_id uuid not null references public.invoices(id),family_root_id uuid not null,
+ original_timesheet_id uuid not null references public.timesheets(timesheet_id),current_timesheet_id uuid references public.timesheets(timesheet_id),
+ scope_kind text not null check(scope_kind='CONTRACT_MOVE'),original_line_ids uuid[] not null,
+ original_lines_sha256 bytea not null check(octet_length(original_lines_sha256)=32),
+ original_invoice_state_json jsonb not null,replacement_charge_certificate_json jsonb not null,
+ replacement_charge_sha256 bytea not null check(octet_length(replacement_charge_sha256)=32),
+ billing_revision bigint not null check(billing_revision>0),required_credit_scope_digest bytea not null check(octet_length(required_credit_scope_digest)=32),
+ state text not null check(state in('REVIEWED','PREPARING_DRAFTS','DRAFTS_READY','PARTIALLY_ISSUED','ISSUED','RETRY_WAIT','ACTION_REQUIRED')),
+ credit_operation_id uuid references public.invoice_operations(id),credit_note_id uuid references public.invoices(id),
+ replacement_invoice_id uuid check(replacement_invoice_id is null),parent_managed boolean not null check(parent_managed),
+ state_revision bigint not null check(state_revision>0),created_by_user_id uuid not null references public.tms_users(id),
+ created_at_utc timestamptz not null,receipt_json jsonb,
+ unique(operation_id,original_invoice_id),unique(id,billing_revision),
+ foreign key(operation_id,family_root_id) references private.timesheet_contract_move_operations(id,family_root_id)
+);
+create table private.timesheet_contract_move_invoice_scope_lines(
+ scope_id uuid not null references private.timesheet_contract_move_invoice_scopes(id),
+ original_invoice_line_id uuid not null references public.invoice_lines(id),original_timesheet_id uuid not null references public.timesheets(timesheet_id),
+ current_timesheet_id uuid references public.timesheets(timesheet_id),original_line_snapshot_json jsonb not null,
+ original_line_sha256 bytea not null check(octet_length(original_line_sha256)=32),replacement_component_key text not null,
+ primary key(scope_id,original_invoice_line_id)
+);
+create table private.timesheet_contract_move_billing_slices(
+ operation_id uuid not null,member_key text not null,slice_key text not null,scope_kind text not null,
+ scope_id uuid not null,authority text not null check(authority in('SOURCE_FINANCIAL','CONTRACT_PRICED')),
+ disposition text not null check(disposition in('PRESERVE_SOURCE','NO_INVOICE','EDIT_DRAFT','RELOCATE_DRAFT','REPLACE_ISSUED')),
+ original_invoice_id uuid references public.invoices(id),original_financial_id uuid references public.timesheets_financials(id),
+ issued_at timestamptz,original_state_json jsonb not null,original_group_json jsonb not null,hold_purpose_json jsonb not null,
+ source_sha256 bytea not null check(octet_length(source_sha256)=32),billing_revision bigint not null check(billing_revision>0),
+ primary key(operation_id,slice_key),unique(operation_id,billing_revision,slice_key),
+ foreign key(operation_id,member_key) references private.timesheet_contract_move_members(operation_id,member_key)
+);
+create table private.timesheet_contract_move_replacement_groups(
+ operation_id uuid not null references private.timesheet_contract_move_operations(id),billing_revision bigint not null check(billing_revision>0),
+ group_key text not null,native_group_json jsonb not null,group_sha256 bytea not null check(octet_length(group_sha256)=32),
+ planned_invoice_id uuid not null unique,accepted_valuation_json jsonb not null,
+ required_credit_scope_digest bytea not null check(octet_length(required_credit_scope_digest)=32),
+ generation_operation_id uuid references public.invoice_operations(id),invoice_id uuid references public.invoices(id),
+ issue_operation_id uuid references public.invoice_operations(id),document_id uuid references public.invoice_document_versions(id),
+ native_state text not null,receipt_json jsonb,supersedes_operation_id uuid,supersedes_billing_revision bigint,
+ primary key(operation_id,billing_revision,group_key)
+);
+create table private.timesheet_contract_move_replacement_members(
+ operation_id uuid not null,billing_revision bigint not null,group_key text not null,slice_key text not null,
+ current_timesheet_id uuid not null references public.timesheets(timesheet_id),current_financial_id uuid references public.timesheets_financials(id),
+ component_key text not null,member_sha256 bytea not null check(octet_length(member_sha256)=32),
+ primary key(operation_id,billing_revision,slice_key),
+ foreign key(operation_id,billing_revision,group_key) references private.timesheet_contract_move_replacement_groups(operation_id,billing_revision,group_key),
+ foreign key(operation_id,billing_revision,slice_key) references private.timesheet_contract_move_billing_slices(operation_id,billing_revision,slice_key)
+);
+create table private.timesheet_contract_move_scope_fences(
+ operation_id uuid not null references private.timesheet_contract_move_operations(id),billing_revision bigint not null check(billing_revision>0),
+ scope_key text not null unique,scope_sha256 bytea not null check(octet_length(scope_sha256)=32),
+ authority_receipt_id uuid not null,retired_by_native_receipt_id uuid,
+ primary key(operation_id,billing_revision,scope_key)
+);
+
+-- Exact stores only; no private-schema browser/service grants.
+alter table private.timesheet_contract_move_invoice_scopes owner to postgres;
+alter table private.timesheet_contract_move_invoice_scope_lines owner to postgres;
+alter table private.timesheet_contract_move_billing_slices owner to postgres;
+alter table private.timesheet_contract_move_replacement_groups owner to postgres;
+alter table private.timesheet_contract_move_replacement_members owner to postgres;
+alter table private.timesheet_contract_move_scope_fences owner to postgres;
+do $acl$
+declare table_name text;
+begin
+ foreach table_name in array array['timesheet_contract_move_invoice_scopes','timesheet_contract_move_invoice_scope_lines',
+  'timesheet_contract_move_billing_slices','timesheet_contract_move_replacement_groups',
+  'timesheet_contract_move_replacement_members','timesheet_contract_move_scope_fences'] loop
+  execute format('alter table private.%I enable row level security',table_name);
+  execute format('alter table private.%I force row level security',table_name);
+  execute format('create policy invoice_correction_owner on private.%I to current_user using(true) with check(true)',table_name);
+  execute format('revoke all on table private.%I from public,anon,authenticated,service_role',table_name);
+ end loop;
+end;
+$acl$;

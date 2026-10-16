@@ -1,0 +1,731 @@
+create or replace function private.weekly_source_invoice_issue_validate_v1(
+  p_invoice_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_invoice public.invoices%rowtype;
+  v_has_source_header boolean;
+  v_binding_count integer;
+  v_line_count integer;
+  v_codes text[]:=array[]::text[];
+  v_detail jsonb:='{}'::jsonb;
+  v_assert jsonb;
+  v_assert_code text;
+  -- The immutable header's source group, read ONCE and only when it really is a
+  -- uuid.  A malformed value must fail this invoice closed, never abort the
+  -- batch that this invoice happens to share with other invoices.
+  v_header_source_group_id uuid;
+  v_header_source_group_valid boolean;
+  v_validator_error text;
+  -- HANDOVER 2 round 5, Part E: the three financial-record states, recorded
+  -- separately on the verdict this owner returns.
+  v_tsfin jsonb;
+  -- WP-28: the enforced and the withheld halves of that ruling, computed by
+  -- private.weekly_source_invoice_tsfin_refusal_v1 from the state above.
+  v_tsfin_refusal jsonb;
+  -- WP-33: the R8A section 1 admission-predicate boundary, applied once, here.
+  v_wholly_sealed boolean;
+  v_tsfin_codes jsonb;
+  v_tsfin_deferred jsonb;
+  v_tsfin_disposition text;
+begin
+  if p_invoice_id is null then
+    return pg_catalog.jsonb_build_object('is_source_invoice',false);
+  end if;
+  select * into v_invoice from public.invoices where id=p_invoice_id;
+  if not found then
+    -- The ordinary owner already has an exact "not found" behaviour; never
+    -- pre-empt it and never claim the source branch for a missing invoice.
+    return pg_catalog.jsonb_build_object('is_source_invoice',false);
+  end if;
+
+  v_has_source_header:=coalesce(
+    v_invoice.header_snapshot_json#>>'{meta,source}'='WEEKLY_FINAL_SOURCE'
+    and v_invoice.header_snapshot_json#>>'{meta,self_bill}'='true',false
+  );
+  select pg_catalog.count(*)::integer into v_binding_count
+  from public.weekly_source_invoice_line_bindings binding
+  where binding.invoice_id=p_invoice_id and binding.state='CURRENT';
+
+  if not v_has_source_header and v_binding_count=0 then
+    return pg_catalog.jsonb_build_object('is_source_invoice',false);
+  end if;
+
+  select pg_catalog.count(*)::integer into v_line_count
+  from public.invoice_lines invoice_line where invoice_line.invoice_id=p_invoice_id;
+
+  -- Everything from here to the aggregation below is wrapped in ONE handler.
+  -- This function is called from inside private._invoice_issue_validate_batch,
+  -- which evaluates EVERY invoice of a batch in one statement, so an
+  -- unexpected error raised here would abort the verdict of every other
+  -- invoice in that batch, including ordinary invoices that have nothing to do
+  -- with this one.  An unexpected error is therefore converted into a blocking
+  -- code on THIS invoice and nothing else.  It cannot mask an ordinary
+  -- invoice: the two "is_source_invoice: false" returns above are outside the
+  -- handler, so an ordinary invoice never enters it.
+  begin
+
+  -- 24 section 11 qualification list -------------------------------------
+  -- "its immutable header says source = WEEKLY_FINAL_SOURCE and self_bill = true"
+  if not v_has_source_header then
+    v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_HEADER_INVALID'::text;
+  end if;
+  v_header_source_group_valid:=pg_catalog.pg_input_is_valid(
+    coalesce(v_invoice.header_snapshot_json#>>'{meta,source_group_id}',''),'uuid');
+  if v_header_source_group_valid then
+    v_header_source_group_id:=(v_invoice.header_snapshot_json#>>'{meta,source_group_id}')::uuid;
+  else
+    -- 24 section 11: the source group is part of the immutable header the
+    -- source branch is entered on.  A missing or malformed value is this
+    -- invoice's own explicit failure.
+    v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_HEADER_INVALID'::text;
+    v_detail:=v_detail||pg_catalog.jsonb_build_object(
+      'header_source_group_id_invalid',true
+    );
+  end if;
+  -- "it contains at least one source binding"
+  if v_binding_count=0 then
+    v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_NO_SOURCE_BINDING'::text;
+  end if;
+  -- "no empty invoice"
+  if v_line_count=0 then
+    v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_EMPTY_INVOICE'::text;
+  end if;
+  -- "no extra ordinary or unbound line is present"
+  if exists(
+    select 1 from public.invoice_lines invoice_line
+    where invoice_line.invoice_id=p_invoice_id
+      and not exists(
+        select 1 from public.weekly_source_invoice_line_bindings binding
+        where binding.invoice_line_id=invoice_line.id
+          and binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+      )
+      and private.weekly_source_invoice_adjustment_line_valid_v1(invoice_line.id,p_invoice_id) is distinct from true
+  ) then
+    v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_UNBOUND_LINE'::text;
+  end if;
+
+  -- The established rule body.  weekly_source_invoice_allocation_assert_v1
+  -- proves the header shape, extra/unbound lines, manifest hash, movement,
+  -- presentation and placement binding, Contract and Client allocation, exact
+  -- signed line amounts, VAT, header totals and the net-presentation
+  -- cardinality.  It raises; here that becomes a blocker so the real entry
+  -- points can report rather than abort.
+  begin
+    v_assert:=private.weekly_source_invoice_allocation_assert_v1(p_invoice_id);
+    if coalesce((v_assert->>'empty')::boolean,false)
+       and not (v_codes @> array['WEEKLY_SOURCE_ISSUE_EMPTY_INVOICE']) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_EMPTY_INVOICE'::text;
+    end if;
+  exception when others then
+    get stacked diagnostics v_assert_code=message_text;
+    v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_ALLOCATION_INVALID'::text;
+    v_detail:=v_detail||pg_catalog.jsonb_build_object(
+      'allocation_assert_error',pg_catalog.left(coalesce(v_assert_code,''),200)
+    );
+  end;
+
+  if v_binding_count>0 then
+    -- "current manifest and final source revision" -------------------------
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_manifest_movements manifest_movement
+        on manifest_movement.billing_movement_id=binding.billing_movement_id
+      join public.weekly_source_client_manifests manifest
+        on manifest.id=manifest_movement.client_manifest_id
+      join public.weekly_source_final_revisions revision
+        on revision.id=manifest.final_revision_id
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and revision.state<>'CURRENT'
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_STALE_FINAL_REVISION'::text;
+    end if;
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_manifest_movements manifest_movement
+        on manifest_movement.billing_movement_id=binding.billing_movement_id
+      join public.weekly_source_client_manifests manifest
+        on manifest.id=manifest_movement.client_manifest_id
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and (
+          binding.manifest_hash is distinct from manifest.manifest_hash
+          or binding.original_final_revision_id is distinct from manifest.final_revision_id
+          or binding.original_cycle_id is distinct from manifest.source_cycle_id
+          or manifest.invoice_state not in ('PARTLY_ADMITTED','ADMITTED')
+        )
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_STALE_MANIFEST'::text;
+    end if;
+
+    -- "exact presentation, binding and placement hashes" --------------------
+    -- Every hash below is rebuilt from immutable identity text only, so the
+    -- comparison is exact.  The presentation source hash is the admission
+    -- owner's WEEKLY_SOURCE_INVOICE_PRESENTATION_SOURCE_V1 digest over the
+    -- movement set the presentation actually binds, which is also the proof
+    -- that the allocation carries no missing or duplicate movement.
+    if exists(
+      select 1
+      from (
+        select presentation.id,presentation.source_hash,
+          private.weekly_source_invoice_presentation_expected_source_hash_v1(presentation.id) rebuilt
+        from public.weekly_source_invoice_line_bindings binding
+        join public.weekly_source_invoice_presentation_lines presentation
+          on presentation.id=binding.presentation_line_id
+        join public.weekly_source_billing_movements movement
+          on movement.id=binding.billing_movement_id
+        where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        group by presentation.id,presentation.source_hash,presentation.invoice_hold_release_id
+      ) rebuilt_presentation
+      where rebuilt_presentation.rebuilt is distinct from rebuilt_presentation.source_hash
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_PRESENTATION_HASH_INVALID'::text;
+    end if;
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and binding.materialised_line_hash is distinct from
+          private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_SOURCE_INVOICE_BINDING_V1',
+            case when binding.binding_version=1 then
+              pg_catalog.jsonb_build_object(
+                'movement_id',binding.billing_movement_id,
+                'presentation_line_id',binding.presentation_line_id,
+                'invoice_line_id',binding.invoice_line_id,
+                'invoice_id',binding.invoice_id,
+                'manifest_hash',pg_catalog.encode(binding.manifest_hash,'hex'),
+                'binding_version',1
+              )
+            else
+              pg_catalog.jsonb_build_object(
+                'movement_id',binding.billing_movement_id,
+                'presentation_line_id',binding.presentation_line_id,
+                'invoice_line_id',binding.invoice_line_id,
+                'invoice_id',binding.invoice_id,
+                'manifest_hash',pg_catalog.encode(binding.manifest_hash,'hex'),
+                'binding_version',binding.binding_version,
+                'prior_binding_id',binding.prior_binding_id
+              )
+            end
+          )
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_BINDING_HASH_INVALID'::text;
+    end if;
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_invoice_placements placement
+        on placement.billing_movement_id=binding.billing_movement_id
+       and placement.is_current
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and placement.placement_hash is distinct from
+          private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_SOURCE_INVOICE_PLACEMENT_V1',
+            case when placement.placement_revision=1 then
+              pg_catalog.jsonb_build_object(
+                'movement_id',placement.billing_movement_id,
+                'invoice_id',placement.invoice_id,
+                'invoice_line_id',placement.invoice_line_id,
+                'placement_revision',1,
+                'placement_reason',placement.placement_reason
+              )
+            else
+              pg_catalog.jsonb_build_object(
+                'movement_id',placement.billing_movement_id,
+                'invoice_id',placement.invoice_id,
+                'invoice_line_id',placement.invoice_line_id,
+                'placement_revision',placement.placement_revision,
+                'placement_reason',placement.placement_reason,
+                'prior_placement_id',placement.prior_placement_id,
+                'source_invoice_version_fingerprint',
+                  pg_catalog.encode(placement.source_invoice_version_fingerprint,'hex'),
+                'destination_invoice_version_fingerprint',
+                  pg_catalog.encode(placement.destination_invoice_version_fingerprint,'hex')
+              )
+            end
+          )
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_PLACEMENT_HASH_INVALID'::text;
+    end if;
+
+    -- "complete allocation with no missing or duplicate movement" ----------
+    -- Every movement of every manifest this invoice draws on is either bound
+    -- here or bound CURRENT somewhere else; none is bound twice; and the
+    -- invoice never carries a movement its manifest does not contain.
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+      group by binding.billing_movement_id
+      having pg_catalog.count(*)>1
+    ) or exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and not exists(
+          select 1 from public.weekly_source_manifest_movements manifest_movement
+          where manifest_movement.billing_movement_id=binding.billing_movement_id
+        )
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_DUPLICATE_MOVEMENT'::text;
+    end if;
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_invoice_presentation_lines presentation
+        on presentation.id=binding.presentation_line_id
+      join public.weekly_source_invoice_line_bindings sibling
+        on sibling.presentation_line_id=presentation.id
+       and sibling.state='CURRENT'
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and sibling.invoice_id is distinct from p_invoice_id
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_MISSING_MOVEMENT'::text;
+    end if;
+
+    -- Every bound movement is still placed on this invoice and has not been
+    -- voided by a later Correct Final Source.
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_billing_movements movement
+        on movement.id=binding.billing_movement_id
+      left join public.weekly_source_invoice_placements placement
+        on placement.billing_movement_id=movement.id and placement.is_current
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and (
+          movement.placement_state not in ('PLACED','ISSUED')
+          or placement.id is null
+          or placement.placement_state<>'PLACED'
+          or placement.invoice_id is distinct from p_invoice_id
+          or placement.invoice_line_id is distinct from binding.invoice_line_id
+        )
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_MOVEMENT_NOT_PLACED'::text;
+    end if;
+
+    -- "Client, source group, cycle, currency and VAT consistency" -----------
+    -- CloudTMS invoices carry no per-invoice currency column, so currency
+    -- consistency is structural: one Client, one source group.  Cycle
+    -- consistency is deliberately NOT one cycle per invoice: 24 section 12
+    -- allows a confirmed cross-week move, and the header records every
+    -- contained cycle.  What must hold is that the header's contained sets
+    -- describe exactly the manifests the bindings actually reference.
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_manifest_movements manifest_movement
+        on manifest_movement.billing_movement_id=binding.billing_movement_id
+      join public.weekly_source_client_manifests manifest
+        on manifest.id=manifest_movement.client_manifest_id
+      join public.weekly_source_billing_movements movement
+        on movement.id=binding.billing_movement_id
+      join public.weekly_source_invoice_presentation_lines presentation
+        on presentation.id=binding.presentation_line_id
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and (
+          manifest.client_id is distinct from v_invoice.client_id
+          or movement.actual_client_id is distinct from v_invoice.client_id
+          or presentation.client_id is distinct from v_invoice.client_id
+          or binding.client_id is distinct from v_invoice.client_id
+          or manifest.source_group_id is distinct from v_header_source_group_id
+        )
+    ) or exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_manifest_movements manifest_movement
+        on manifest_movement.billing_movement_id=binding.billing_movement_id
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and not (
+          coalesce(
+            v_invoice.header_snapshot_json#>'{meta,contained_client_manifest_ids}',
+            '[]'::jsonb
+          ) @> pg_catalog.to_jsonb(manifest_movement.client_manifest_id)
+        )
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_SCOPE_INCONSISTENT'::text;
+    end if;
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_invoice_presentation_lines presentation
+        on presentation.id=binding.presentation_line_id
+      join public.invoice_lines invoice_line on invoice_line.id=binding.invoice_line_id
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and invoice_line.vat_rate_pct is distinct from presentation.vat_rate_pct
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_SCOPE_INCONSISTENT'::text;
+    end if;
+
+    -- Immutable automatic invoice windows remain distinct from original Source
+    -- cycle witnesses. The header must describe the actual complete bound set.
+    if coalesce(v_invoice.header_snapshot_json#>'{meta,contained_invoice_window_cycle_ids}',
+        v_invoice.header_snapshot_json#>'{meta,contained_source_cycle_ids}','[]'::jsonb)
+      is distinct from coalesce((select jsonb_agg(window_id order by window_id) from (
+        select distinct coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id) window_id
+          from public.weekly_source_invoice_line_bindings binding
+          join public.weekly_source_manifest_movements mm on mm.billing_movement_id=binding.billing_movement_id
+          join public.weekly_source_client_manifests manifest on manifest.id=mm.client_manifest_id
+          where binding.invoice_id=p_invoice_id and binding.state='CURRENT') actual),'[]'::jsonb) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_WINDOW_SCOPE_INCONSISTENT'::text;
+    end if;
+    -- "NHSP physical negative and positive independence" (24 section 10) -----
+    -- An NHSP physical row is one movement, one presentation, one visible line;
+    -- it is never netted with another physical row.
+    if exists(
+      select 1
+      from public.weekly_source_invoice_presentation_lines presentation
+      join public.weekly_source_invoice_line_bindings binding
+        on binding.presentation_line_id=presentation.id
+       and binding.state='CURRENT'
+      where binding.invoice_id=p_invoice_id
+        and presentation.origin_kind='NHSP_PHYSICAL_ROW'
+      group by presentation.id,binding.invoice_line_id
+      having pg_catalog.count(*)<>1
+    ) or exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_invoice_presentation_lines presentation
+        on presentation.id=binding.presentation_line_id
+      join public.weekly_source_billing_movements movement
+        on movement.id=binding.billing_movement_id
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and (
+          (presentation.origin_kind='NHSP_PHYSICAL_ROW')
+            <>(movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT')
+          or (presentation.origin_kind='NHSP_PHYSICAL_ROW'
+              and presentation.correction_role='NET_DIFFERENCE')
+        )
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_NHSP_NETTING_DETECTED'::text;
+    end if;
+
+    -- "the configured non-NHSP correction shape" (24 section 10) ------------
+    -- FULL pair: one movement per presentation, correction_role REVERSAL or
+    -- REPLACEMENT.  NET: exactly the reversal/replacement pair of one
+    -- correction unit on one visible line, correction_role NET_DIFFERENCE.
+    if exists(
+      select 1
+      from (
+        select presentation.id,presentation.correction_role,
+          pg_catalog.count(*)::integer member_count,
+          pg_catalog.count(distinct movement.correction_unit_id) correction_count,
+          pg_catalog.array_agg(movement.movement_role order by movement.movement_role) roles
+        from public.weekly_source_invoice_line_bindings binding
+        join public.weekly_source_invoice_presentation_lines presentation
+          on presentation.id=binding.presentation_line_id
+        join public.weekly_source_billing_movements movement
+          on movement.id=binding.billing_movement_id
+        where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        group by presentation.id,presentation.correction_role
+      ) shaped
+      where shaped.member_count not in (1,2)
+        or (shaped.member_count=2 and (
+          shaped.correction_role is distinct from 'NET_DIFFERENCE'
+          or shaped.correction_count<>1
+          or shaped.roles not in (
+            array['REPLACEMENT','REVERSAL']::text[],
+            array['EXPENSE_REPLACEMENT','EXPENSE_REVERSAL']::text[]
+          )
+        ))
+        or (shaped.member_count=1 and shaped.correction_role='NET_DIFFERENCE')
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_CORRECTION_SHAPE_INVALID'::text;
+    end if;
+
+    -- "source price comparison success" (24 section 13) ---------------------
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_invoice_presentation_lines presentation
+        on presentation.id=binding.presentation_line_id
+      join public.weekly_source_billing_movements movement
+        on movement.id=binding.billing_movement_id
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and (
+          (presentation.origin_kind='NHSP_PHYSICAL_ROW'
+            and (presentation.price_check_result not in (
+                'EXACT','SOURCE_ROUNDING_EQUIVALENT','ACCEPTED_DISPARITY','ACCEPTED_ZERO'
+              )
+              or presentation.amount_authority<>'VALIDATED_SOURCE_PENCE'
+              or presentation.source_validation_charge_pence is null
+              or presentation.invoice_presentation_charge_pence
+                 is distinct from presentation.source_validation_charge_pence
+              or presentation.charge_acceptance_id is distinct from movement.charge_acceptance_id
+              or (presentation.price_check_result in ('ACCEPTED_DISPARITY','ACCEPTED_ZERO')
+                and not exists(
+                  select 1 from public.weekly_source_charge_acceptances acceptance
+                  where acceptance.id=presentation.charge_acceptance_id
+                    and acceptance.acceptance_kind=presentation.price_check_result
+                    and acceptance.upload_row_id=movement.nhsp_upload_row_id
+                    and acceptance.contract_id=movement.contract_id
+                    and acceptance.charge_calculation_fingerprint=movement.price_check_fingerprint
+                    and acceptance.acceptance_policy_fingerprint=
+                      private.weekly_source_charge_acceptance_policy_fingerprint_v1()
+                ))))
+          or (presentation.origin_kind='SOURCE_FIXED_EXPENSE'
+            and (presentation.price_check_result<>'NOT_APPLICABLE'
+              or presentation.amount_authority<>'VALIDATED_SOURCE_PENCE'))
+          or (presentation.amount_authority='VALIDATED_SOURCE_PENCE' and movement.source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION') and private.weekly_source_invoice_source_amount_movement_valid_v1(movement.id) is distinct from true)
+          or (presentation.origin_kind not in ('NHSP_PHYSICAL_ROW','SOURCE_FIXED_EXPENSE')
+            and not (private.weekly_source_invoice_source_amount_movement_valid_v1(movement.id)
+              and presentation.amount_authority='VALIDATED_SOURCE_PENCE')
+            and presentation.amount_authority<>'CLOUDTMS_CALCULATION')
+          or (movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT'
+            and movement.price_check_result
+              not in ('EXACT','SOURCE_ROUNDING_EQUIVALENT','ACCEPTED_DISPARITY','ACCEPTED_ZERO'))
+        )
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_PRICE_CHECK_FAILED'::text;
+    end if;
+
+    -- "exact signed line amounts, VAT and header total" ---------------------
+    -- The allocation assert already compares the visible line with its
+    -- presentation and the header with the sum of its lines.  What it does not
+    -- do is tie the presentation back to the immutable movements it binds.
+    if exists(
+      select 1
+      from (
+        select presentation.id,
+          presentation.total_pay_ex_vat,presentation.total_charge_ex_vat,
+          presentation.vat_amount,presentation.total_inc_vat,
+          presentation.invoice_presentation_charge_pence,
+          presentation.calculated_comparison_charge_pence,
+          pg_catalog.sum(movement.total_pay_ex_vat) movement_pay,
+          pg_catalog.sum((private.weekly_source_invoice_admitted_member_money_v1(presentation.id,movement.id)->>'vat_pence')::numeric/100) movement_vat,
+          pg_catalog.sum((private.weekly_source_invoice_admitted_member_money_v1(presentation.id,movement.id)->>'gross_pence')::numeric/100) movement_total,
+          pg_catalog.sum(movement.invoice_presentation_charge_pence) movement_pence,
+          pg_catalog.sum(movement.calculated_comparison_charge_pence) movement_calc_pence
+        from public.weekly_source_invoice_line_bindings binding
+        join public.weekly_source_invoice_presentation_lines presentation
+          on presentation.id=binding.presentation_line_id
+        join public.weekly_source_billing_movements movement
+          on movement.id=binding.billing_movement_id
+        where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        group by presentation.id,presentation.total_pay_ex_vat,
+          presentation.total_charge_ex_vat,presentation.vat_amount,
+          presentation.total_inc_vat,presentation.invoice_presentation_charge_pence,
+          presentation.calculated_comparison_charge_pence
+      ) amounts
+      where amounts.total_pay_ex_vat is distinct from amounts.movement_pay
+        or amounts.vat_amount is distinct from amounts.movement_vat
+        or amounts.total_inc_vat is distinct from amounts.movement_total
+        or amounts.invoice_presentation_charge_pence is distinct from amounts.movement_pence
+        or amounts.calculated_comparison_charge_pence is distinct from amounts.movement_calc_pence
+        or amounts.invoice_presentation_charge_pence
+           is distinct from (amounts.total_charge_ex_vat*100)::bigint
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_AMOUNT_MISMATCH'::text;
+    end if;
+    if v_invoice.subtotal_ex_vat is distinct from (
+         select pg_catalog.round(coalesce(pg_catalog.sum(line.total_charge_ex_vat),0),2)
+         from public.invoice_lines line where line.invoice_id=p_invoice_id
+       )
+       or v_invoice.vat_amount is distinct from (
+         select pg_catalog.round(coalesce(pg_catalog.sum(line.vat_amount),0),2)
+         from public.invoice_lines line where line.invoice_id=p_invoice_id
+       )
+       or v_invoice.total_inc_vat is distinct from (
+         select pg_catalog.round(coalesce(pg_catalog.sum(line.total_inc_vat),0),2)
+         from public.invoice_lines line where line.invoice_id=p_invoice_id
+       ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_TOTAL_MISMATCH'::text;
+    end if;
+
+    -- "Timesheet relationship where required for navigation, without treating
+    -- Candidate evidence as invoice authority" (24 section 11; proof/34 section 9).
+    -- The visible line keeps the immutable Timesheet identity the movement was
+    -- written against.  Nothing here reads authorisation, signature, PDF or
+    -- any other Candidate evidence, and nothing re-points a line.
+    if exists(
+      select 1
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_billing_movements movement
+        on movement.id=binding.billing_movement_id
+      join public.invoice_lines invoice_line on invoice_line.id=binding.invoice_line_id
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+        and (
+          (invoice_line.timesheet_id is null and not (movement.invoice_timesheet_id is null and (movement.source_line_kind='INVOICE_VAT_ROUNDING'
+            or (movement.source_line_kind='SELF_BILL_REPORT_LINE' and movement.movement_role='STANDALONE_NEGATIVE'))))
+          or invoice_line.timesheet_id is distinct from movement.invoice_timesheet_id
+          or invoice_line.invoice_id is distinct from p_invoice_id
+        )
+    ) then
+      v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_TIMESHEET_LINK_INVALID'::text;
+    end if;
+  end if;
+
+    -- HANDOVER 2 round 5, Part E "Invoice and TSFIN outcomes": the three
+    -- financial-record states are RECORDED SEPARATELY on the verdict so a
+    -- consumer of this owner can tell them apart without reading this body.
+    v_tsfin:=private.weekly_source_invoice_tsfin_state_v1(p_invoice_id);
+    v_detail:=v_detail||pg_catalog.jsonb_build_object('tsfin',v_tsfin);
+
+  exception when others then
+    get stacked diagnostics v_validator_error=message_text;
+    v_codes:=v_codes||'WEEKLY_SOURCE_ISSUE_VALIDATOR_ERROR'::text;
+    v_detail:=v_detail||pg_catalog.jsonb_build_object(
+      'validator_error',pg_catalog.left(coalesce(v_validator_error,''),200)
+    );
+  end;
+
+  select pg_catalog.array_agg(distinct code order by code)
+    into v_codes from pg_catalog.unnest(v_codes) code;
+  v_codes:=coalesce(v_codes,array[]::text[]);
+
+  -- WP-28.  The financial-record refusal is computed OUTSIDE the handler above,
+  -- so a validator that blew up leaves v_tsfin null and the predicate returns
+  -- WEEKLY_SOURCE_ISSUE_TSFIN_STATE_UNDETERMINED rather than nothing.
+  --
+  -- WP-33, HANDOVER 2 round 8 Part 2.1.  The predicate now answers several
+  -- separate questions from the one state document, and this verdict carries
+  -- each of them on its own key because the ruling keeps them apart:
+  --   tsfin_blocker_codes          what ACTUALLY stops the INVOICE today;
+  --   tsfin_invoice_disposition    the explicit typed invoice outcome, which is
+  --                                what both seams consume - an omission is not
+  --                                an outcome, so a seam that cannot read this
+  --                                key fails closed;
+  --   tsfin_payment_blocker_codes  the RETAINED expected-but-missing fact, which
+  --                                is non-empty for the exempt case too so that
+  --                                payment and financial publication stay
+  --                                fail-closed while the invoice issues;
+  --   tsfin_deferred_blocker_codes the expected-but-missing INVOICE refusal that
+  --                                round 8 Part 2.1 requires and sealed pack 02
+  --                                section 15 forbids.  Computed, named, NOT
+  --                                enforced, with a reason that is true today.
+  --
+  -- The WP-28 tsfin_withheld_* keys are RETIRED and deliberately not renamed
+  -- back into use: their reason named the round-6 question, and the approver has
+  -- answered that question.  Standing rule 12 forbids shipping a fail-closed
+  -- reason that is no longer true, so the deferred keys above carry the reason
+  -- that IS true - an outstanding admission-predicate boundary correction.
+  --
+  -- It is carried on its OWN key and is deliberately NOT folded into
+  -- blocker_codes, so `ok` keeps its exact 24 section 11 meaning - "the exact
+  -- source branch passes" - and an admitted source invoice still skips only the
+  -- four irrelevant ordinary evidence categories.  Folding a Candidate
+  -- financial-record refusal into `ok` would additionally (a) stop the direct
+  -- owner skipping public._ctms_assert_invoice_correction_lines_v1, turning an
+  -- ON_HOLD into a raised exception, and (b) re-impose every ordinary evidence
+  -- requirement the pack says is irrelevant to source self-billing.  Both seams
+  -- append this array unconditionally, in the ok and the not-ok branch alike.
+  v_tsfin_refusal:=private.weekly_source_invoice_tsfin_refusal_v1(v_tsfin);
+
+  -- =========================================================================
+  -- WP-33, HANDOVER 2 CORRECTION ADDENDUM R8A section 1 - the ADMISSION
+  -- PREDICATE BOUNDARY.  This is the one place the boundary is applied, and it
+  -- is applied to a verdict whose source-side truth has ALREADY been decided
+  -- immediately above.
+  --
+  -- R8A section 1 is LATER authority than round 8 and is accepted by the
+  -- product owner.  It withdraws round 8 Part 2.2 and Part 6 item 6 for a
+  -- wholly sealed source-backed self-bill, word for word:
+  --
+  --   "Candidate Timesheet authorisation, Candidate-pay TSFIN existence/
+  --    currentness/status, READY_FOR_INVOICE, pay holds, advances, settlement
+  --    and pay query/reconciliation state are never self-bill admission
+  --    predicates."
+  --   "A stale or missing Candidate-pay TSFIN likewise does not block an
+  --    otherwise-valid immutable final-source invoice movement.  It blocks
+  --    Candidate-pay publication, readiness or reconciliation wherever those
+  --    owners require current pay evidence."
+  --
+  -- and restores 02 CONTROLLING POLICY section 15 and acceptance row ISS-013
+  -- ("Source invoice while Candidate pay pending/protected/frozen" -> ISSUED).
+  --
+  -- WHOLLY SEALED IS A POSITIVE TEST, and R8A's first precision point says so:
+  -- "This must be implemented as a positive test of sealed status, never
+  -- inherited by anything partially sealed or merely source-adjacent."  The
+  -- test is cardinality(v_codes)=0 - the exact 24 section 11 branch, every
+  -- source-side limb proved: current manifest and final source revision, exact
+  -- presentation/binding/placement hashes, complete allocation with no missing
+  -- or duplicate movement, every line bound, no extra ordinary line, exact
+  -- signed amounts, VAT and header total, Client/group/cycle/currency/VAT
+  -- consistency, NHSP physical independence, the configured correction shape,
+  -- source price comparison success and a non-empty invoice.  It is the SAME
+  -- value returned as `ok`, computed here and not re-read, so the two can never
+  -- drift apart.
+  --
+  -- IF IT IS NOT PROVED, THE OLD BEHAVIOUR STANDS: every Candidate-pay TSFIN
+  -- code remains an invoice blocker exactly as WP-28 installed it.  A mixed,
+  -- unbound, tampered or partly sealed invoice is already failing closed on its
+  -- own source codes and gains nothing here.
+  --
+  -- WHAT MOVES, AND WHAT DOES NOT.  For a wholly sealed self-bill every
+  -- Candidate-pay TSFIN code moves from tsfin_blocker_codes to
+  -- tsfin_deferred_blocker_codes - stale, expected-but-missing and the
+  -- undetermined/disagreement codes alike, because each of them is a judgement
+  -- about the Candidate financial record and R8A names that whole class.
+  -- tsfin_payment_blocker_codes is NOT touched by any of this: it already
+  -- carries the same facts and it is what keeps Candidate-pay publication,
+  -- readiness and reconciliation fail-closed.  The invoice moves; the payment
+  -- does not.  Nothing in v_codes - the source-side truth - is touched either.
+  -- =========================================================================
+  v_wholly_sealed:=cardinality(v_codes)=0;
+  v_tsfin_codes:=coalesce(v_tsfin_refusal->'blocker_codes','[]'::jsonb);
+  v_tsfin_deferred:=coalesce(v_tsfin_refusal->'deferred_blocker_codes','[]'::jsonb);
+  v_tsfin_disposition:=coalesce(v_tsfin_refusal->>'invoice_disposition','');
+  if v_wholly_sealed and pg_catalog.jsonb_typeof(v_tsfin_codes)='array'
+     and pg_catalog.jsonb_typeof(v_tsfin_deferred)='array' then
+    if pg_catalog.jsonb_array_length(v_tsfin_codes)>0 then
+      -- The sorted union of the two arrays, so the deferred record stays a set
+      -- and its order can never carry meaning.
+      select coalesce(pg_catalog.jsonb_agg(code order by code),'[]'::jsonb)
+        into v_tsfin_deferred
+      from (
+        select distinct element.value code
+        from pg_catalog.jsonb_array_elements_text(
+          v_tsfin_codes||v_tsfin_deferred) as element(value)
+      ) merged;
+      v_tsfin_codes:='[]'::jsonb;
+      -- The typed outcome.  The proved first-authorisation state keeps its own
+      -- name, because R8A names it separately and round 8 Part 2.1 requires an
+      -- explicit typed disposition for it; every other Candidate-pay condition
+      -- on a wholly sealed self-bill gets the boundary's own name.
+      if v_tsfin_disposition
+           <>'WEEKLY_SOURCE_INVOICE_TSFIN_AWAITING_FIRST_AUTHORISATION_EXEMPT' then
+        v_tsfin_disposition:=
+          'WEEKLY_SOURCE_INVOICE_TSFIN_CANDIDATE_PAY_NOT_ADMISSION_PREDICATE';
+      end if;
+    elsif v_tsfin_disposition
+            ='WEEKLY_SOURCE_INVOICE_TSFIN_EXPECTED_BUT_MISSING_NOT_ENFORCED' then
+      v_tsfin_disposition:=
+        'WEEKLY_SOURCE_INVOICE_TSFIN_CANDIDATE_PAY_NOT_ADMISSION_PREDICATE';
+    end if;
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'is_source_invoice',true,
+    'ok',cardinality(v_codes)=0,
+    'invoice_id',p_invoice_id,
+    'line_count',v_line_count,
+    'binding_count',v_binding_count,
+    'wholly_sealed_source_self_bill',v_wholly_sealed,
+    'blocker_codes',pg_catalog.to_jsonb(v_codes),
+    'tsfin_blocker_codes',v_tsfin_codes,
+    'tsfin_invoice_disposition',v_tsfin_disposition,
+    'tsfin_payment_blocker_codes',
+      coalesce(v_tsfin_refusal->'payment_blocker_codes','[]'::jsonb),
+    'tsfin_deferred_blocker_codes',v_tsfin_deferred,
+    'tsfin_deferred_reason',
+      case when pg_catalog.jsonb_array_length(v_tsfin_deferred)>0
+        then case when v_wholly_sealed
+          then 'WEEKLY_SOURCE_TSFIN_CANDIDATE_PAY_NOT_A_SELF_BILL_ADMISSION_PREDICATE'
+          else v_tsfin_refusal->>'deferred_reason' end end,
+    'tsfin_deferred_authority',
+      case when pg_catalog.jsonb_array_length(v_tsfin_deferred)>0
+        then case when v_wholly_sealed
+          then 'HANDOVER 2 CORRECTION ADDENDUM R8A section 1, later authority than '
+            ||'round 8 and accepted by the product owner; sealed pack '
+            ||'02 CONTROLLING POLICY section 15, annex FTI-013 and acceptance row '
+            ||'ISS-013. The fact is retained for Candidate-pay publication, '
+            ||'readiness and reconciliation in tsfin_payment_blocker_codes'
+          else v_tsfin_refusal->>'deferred_authority' end end,
+    'detail',v_detail
+  );
+end;
+$function$;

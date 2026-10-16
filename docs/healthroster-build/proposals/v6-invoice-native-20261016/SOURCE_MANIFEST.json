@@ -1,0 +1,122 @@
+{
+  "source_pin": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "native": "REQUIRED_NOT_RUN",
+  "files": [
+    {
+      "file": "forward/001_billing_schema.sqlinc",
+      "sha256": "e784ad288150267bb62b4b25de66e2b3e30bf28224968d70414cc4363b93d5ba"
+    },
+    {
+      "file": "forward/010_source_invoice_facts.sqlinc",
+      "sha256": "703d55afc9cd8640e95a4a81e90f69ee14b5511ead0746a0924cbf5b7c093c83"
+    },
+    {
+      "file": "forward/015_source_certificate.sqlinc",
+      "sha256": "554463c9b554c3c16171255ab069faac4885b80f2b7ebd96e27700520336cda7"
+    },
+    {
+      "file": "forward/018_source_original.sqlinc",
+      "sha256": "685af569c5874bf50955c2fdbf1c48dde93deedf2d7e1c1198072ea56a03a015"
+    },
+    {
+      "file": "forward/020_source_family.sqlinc",
+      "sha256": "d6ebe3b612e3c28fdb188544b2568a809fabd2cc4a1a19d68ac3d13ed524685c"
+    },
+    {
+      "file": "forward/021_source_lineage.sqlinc",
+      "sha256": "e7a52c3d953356663f7eea2eb4bcde3f6a70182da9602144e2f828a5578ad66a"
+    },
+    {
+      "file": "forward/022_source_presentation.sqlinc",
+      "sha256": "78490867a3415bfc74f0c1fa7114cec4bfcf9a1053b3171acd9fb4c3eb3a386c"
+    },
+    {
+      "file": "forward/023_source_archive.sqlinc",
+      "sha256": "208d4c1dbf004f5803e2888dfa16fa634bf8ed1e951159885f49f4c79c404df9"
+    },
+    {
+      "file": "forward/024_line_admission.sqlinc",
+      "sha256": "5c774a746c479698d995f853fc2a4efd43a3690f19617f90dafc5fe6d1c1a1ec"
+    },
+    {
+      "file": "forward/025_claim_placement.sqlinc",
+      "sha256": "a23f2a30eae352a9903449adbfbd5d1761db96ceac61f883aa4ecbbe72f6ce78"
+    },
+    {
+      "file": "forward/026_claim_current.sqlinc",
+      "sha256": "bf5098454a3dbe32feaa230d460ebc796181d093b068fcaa20c82cb25a7cc942"
+    },
+    {
+      "file": "forward/027_claim_owned.sqlinc",
+      "sha256": "20f9a2394fbe9fee7e29fcc91ab321c8ed13c2b29c7960628d6d27cd0e74d455"
+    },
+    {
+      "file": "forward/028_claim_lock.sqlinc",
+      "sha256": "de2a58a673e9ca657a203874635f7916b9833ef1a15904636d325344c141b268"
+    },
+    {
+      "file": "forward/029_claim_financial.sqlinc",
+      "sha256": "267c5817ca565f0ccecc4bc8b54c5b15189841aae710faddd7f59d656d1171cb"
+    },
+    {
+      "file": "forward/030_claim_sync.sqlinc",
+      "sha256": "37b5101b71391732c6f5e842901b9019066f0aa84868c8cc692b833baa20939b"
+    },
+    {
+      "file": "forward/031_source_line_owner.sqlinc",
+      "sha256": "ac0d0da1833e7b5b31180c029e835bcb05ca2671c009dd37a7acf60307bffb67"
+    },
+    {
+      "file": "forward/035_preflight.sqlinc",
+      "sha256": "3600f7df3d6949efe7ccdb58d9ff9d5d3853cbd970f18122d9e595aedb846adf"
+    },
+    {
+      "file": "forward/038_billing_read.sqlinc",
+      "sha256": "f81da3ad64d2d691ca35b8fdf53bcfc97c77d17bfb926bb8ccd44edfa201e5eb"
+    },
+    {
+      "file": "forward/040_prepare.sqlinc",
+      "sha256": "56df0a0509a0ea3a3d350d37e7eab4ad9e4625be924880916a23576586b42410"
+    },
+    {
+      "file": "forward/045_preparation_native.sqlinc",
+      "sha256": "6f070d179685739804b62802b9801a17e586429eeb0437788864f1a069bb9595"
+    },
+    {
+      "file": "forward/050_credit_owner.sqlinc",
+      "sha256": "f488937f5cb7e51ee37f0bf8258a8e4c11e43358645b919bf0bfa6b456dfaadc"
+    },
+    {
+      "file": "forward/060_scoped_native.sqlinc",
+      "sha256": "ca9cc70f684a1f22eb61006c4ed9c83d09b013d3bb5ca1337c6f4b3a4f4257f5"
+    },
+    {
+      "file": "forward/070_generation_native.sqlinc",
+      "sha256": "b22cf445e197862cdbac1761cb8368f32c7e49c0298f1ef02980443626a27a50"
+    },
+    {
+      "file": "forward/071_generation_dispatch.sqlinc",
+      "sha256": "83c8a0a6143cd9e8feec788903869fb0e0ec2cad4aa97d2674b5654140e9a202"
+    },
+    {
+      "file": "forward/075_issue_owner.sqlinc",
+      "sha256": "8afe68cef36a48ad642ae4f7ce238a394f2b3222f847d2a8fbda9a24498f1f44"
+    },
+    {
+      "file": "forward/080_issue_native.sqlinc",
+      "sha256": "8557905c65d47509291cecb5cf4395d8da8f6b9e09777e02d405dda4147b5cbc"
+    },
+    {
+      "file": "forward/081_issue_registration.sqlinc",
+      "sha256": "031fc7e990c19322f5a7b781b13740bdc1b0474410b28d75ef4b54bace2c5042"
+    },
+    {
+      "file": "forward/082_issue_one.sqlinc",
+      "sha256": "f4b321f9e696fd117ef350d8982d899b6de984e5ea5320d463eeb8bc974486e9"
+    },
+    {
+      "file": "forward/099_new_private_acl.sqlinc",
+      "sha256": "a3b5c80aa1d0f858de0891c7ff5bbca3105af4797ef3aee7d7a7f4287cf14dad"
+    }
+  ]
+}
