@@ -1,0 +1,324 @@
+{
+  "version": "HEALTHROSTER_PURE_FACTS_118A_NATIVE_RECEIPT_V1",
+  "status": "PASS_PURE_JSON_SCALAR_ONLY",
+  "sourceCommit": "118a28ca5c702f629f977d2ac0dead4325c5fdb2",
+  "account": "kier@arthur-rai.co.uk",
+  "route": "cloudtms-miget-operations-kier-codex",
+  "sourceSqlSha256": "5ec89d610278889c5852fb93c3bcc7796b23000d9804a77bb83f44f249cb027b",
+  "mappedSqlSha256": "d557fa993c842626935490fe7ea4f37e82bb4c9f416d31a9e4bae7aa83709d0d",
+  "submittedSqlSha256": "61c1d4f8b906e4a641a3d49939ef65ea7d6ca7f4510f2eceb7e3bacd75bf9632",
+  "assertions": 25,
+  "baseline": {
+    "accepted": true,
+    "databaseTarget": "agency_test",
+    "database": "cloudtms_test_clone",
+    "label": "HEALTHROSTER_118A_PURE_FACTS_BASELINE",
+    "sqlSha256": "568d44a6f6dafe1854fc92dd33d1155b9ff69fc49eb02a196d22205257594644",
+    "statementCount": 3,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "physical_database",
+          "postgres_version",
+          "postmaster_start"
+        ],
+        "rows": [
+          {
+            "physical_database": "cloudtms_test_clone",
+            "postgres_version": "PostgreSQL 17.11 (Debian 17.11-1.pgdg11+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 10.2.1-6) 10.2.1 20210110, 64-bit",
+            "postmaster_start": "2026-10-14T09:07:33.240Z"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "signatures": [
+                {
+                  "acl": "{dee50tht=X/dee50tht}",
+                  "owner": "dee50tht",
+                  "present": true,
+                  "signature": "private._candidate_expense_number_v1(jsonb,text)",
+                  "definition_md5": "d702c10d4c49fcc1554896a32a4d8c80"
+                },
+                {
+                  "acl": null,
+                  "owner": null,
+                  "present": false,
+                  "signature": "private.candidate_contract_move_facts_v1(jsonb,jsonb)",
+                  "definition_md5": null
+                },
+                {
+                  "acl": null,
+                  "owner": null,
+                  "present": false,
+                  "signature": "private.candidate_contract_move_signature_facts_v1(jsonb)",
+                  "definition_md5": null
+                }
+              ]
+            }
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "existing_definition"
+        ],
+        "rows": [
+          {
+            "existing_definition": "CREATE OR REPLACE FUNCTION private._candidate_expense_number_v1(p_value jsonb, p_key text)\n RETURNS numeric\n LANGUAGE sql\n IMMUTABLE PARALLEL SAFE\n SET search_path TO 'pg_catalog', 'pg_temp'\nAS $function$\n  select case\n    when pg_catalog.jsonb_typeof(coalesce(p_value,'{}'::jsonb)->p_key)='number'\n      then greatest(((coalesce(p_value,'{}'::jsonb)->>p_key)::numeric),0)\n    when coalesce(p_value,'{}'::jsonb)->>p_key ~ '^[+]?[0-9]+(?:[.][0-9]+)?$'\n      then greatest(((coalesce(p_value,'{}'::jsonb)->>p_key)::numeric),0)\n    else 0\n  end;\n$function$\n"
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "jsonb_build_object"
+          ],
+          "rows": [
+            {
+              "jsonb_build_object": {
+                "signatures": [
+                  {
+                    "acl": "{dee50tht=X/dee50tht}",
+                    "owner": "dee50tht",
+                    "present": true,
+                    "signature": "private._candidate_expense_number_v1(jsonb,text)",
+                    "definition_md5": "d702c10d4c49fcc1554896a32a4d8c80"
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.candidate_contract_move_facts_v1(jsonb,jsonb)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.candidate_contract_move_signature_facts_v1(jsonb)",
+                    "definition_md5": null
+                  }
+                ]
+              }
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+    ]
+  },
+  "trial": {
+    "accepted": true,
+    "databaseTarget": "agency_test",
+    "database": "cloudtms_test_clone",
+    "label": "HEALTHROSTER_118A_PURE_FACTS_25_SCALAR",
+    "sqlSha256": "61c1d4f8b906e4a641a3d49939ef65ea7d6ca7f4510f2eceb7e3bacd75bf9632",
+    "statementCount": 12,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 8,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 9,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 10,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 11,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 12,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "pure_facts_scalar_result"
+        ],
+        "rows": [
+          {
+            "pure_facts_scalar_result": {
+              "native": "PASS_IF_REACHED",
+              "version": "CANDIDATE_MOVE_PURE_FACTS_NATIVE_V1",
+              "assertions": 25
+            }
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "jsonb_build_object"
+          ],
+          "rows": [
+            {
+              "jsonb_build_object": {
+                "signatures": [
+                  {
+                    "acl": "{dee50tht=X/dee50tht}",
+                    "owner": "dee50tht",
+                    "present": true,
+                    "signature": "private._candidate_expense_number_v1(jsonb,text)",
+                    "definition_md5": "d702c10d4c49fcc1554896a32a4d8c80"
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.candidate_contract_move_facts_v1(jsonb,jsonb)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.candidate_contract_move_signature_facts_v1(jsonb)",
+                    "definition_md5": null
+                  }
+                ]
+              }
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+    ]
+  },
+  "proof": {
+    "pass": true,
+    "baselineExactlyRestored": true
+  },
+  "sharedLock": {
+    "key": [
+      20261013,
+      1
+    ],
+    "turnBackendPid": 162029,
+    "processSession": 62906,
+    "released": true,
+    "processExitCode": 0
+  },
+  "scope": "Only two pure JSON helper bodies and the exact existing numeric dependency. No business rows, native lifecycle, financial producer, API/device/permission acceptance, full verifier/rehearsal or installation qualification.",
+  "install2": "NOT_INSTALLED",
+  "partBCriticSignoff": false
+}

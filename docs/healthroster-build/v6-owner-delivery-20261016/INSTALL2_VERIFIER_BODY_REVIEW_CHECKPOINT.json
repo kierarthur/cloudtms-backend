@@ -357,6 +357,125 @@
         "Native contention, old repeatable-read visibility, trigger caller closure, isolation and rollback proof remain separate REQUIRED_NOT_RUN gates."
       ],
       "executionApproval": false
+    },
+    {
+      "root": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql",
+      "status": "TWELVE_COMPLETE_HELPER_TRIGGER_BODIES_READ_NOT_FULL_REHEARSAL_APPROVAL",
+      "functions": [
+        {
+          "key": "private.timesheet_correction_a0_candidate_before_v1()@0d6c0677bfbdf57d303fd6e5a79daf28b32b69fd8272a567d3f580ea79aa0364",
+          "signature": "private.timesheet_correction_a0_candidate_before_v1()",
+          "statementSha256": "0d6c0677bfbdf57d303fd6e5a79daf28b32b69fd8272a567d3f580ea79aa0364"
+        },
+        {
+          "key": "private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[])@229d60cfed02a283716b42de79c4c9c6fc10b80eb342eb942d5993d7e0f78f8a",
+          "signature": "private.timesheet_correction_a0_fence_tokens_v1(uuid[],uuid[],text[],text[],jsonb[])",
+          "statementSha256": "229d60cfed02a283716b42de79c4c9c6fc10b80eb342eb942d5993d7e0f78f8a"
+        },
+        {
+          "key": "private.timesheet_correction_a0_signed_precursor_v1(uuid)@5dcec85bf84b29dff1e964c9d6d2bb111a1880bc88a396a9a2b962f2c8c9f0fe",
+          "signature": "private.timesheet_correction_a0_signed_precursor_v1(uuid)",
+          "statementSha256": "5dcec85bf84b29dff1e964c9d6d2bb111a1880bc88a396a9a2b962f2c8c9f0fe"
+        },
+        {
+          "key": "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)@f319ef939bfed68ae1993c235ad669ac00dada9211ac615b724ae2f8a092e59f",
+          "signature": "private.timesheet_correction_a0_writer_admit_v1(uuid[],text[],text)",
+          "statementSha256": "f319ef939bfed68ae1993c235ad669ac00dada9211ac615b724ae2f8a092e59f"
+        },
+        {
+          "key": "private.timesheet_correction_a0_child_reference_before_v1()@6ed8a987a066c367dcb1f37368ace2f69efff7d9062169d1c3db1dc97965e804",
+          "signature": "private.timesheet_correction_a0_child_reference_before_v1()",
+          "statementSha256": "6ed8a987a066c367dcb1f37368ace2f69efff7d9062169d1c3db1dc97965e804"
+        },
+        {
+          "key": "private.timesheet_correction_a0_fence_tokens_v2(uuid[],uuid[],text[],text[],jsonb[],uuid[],uuid[],uuid[])@39dea9ecf4cc9a0510dc1afd39066d0cf1f49e12a18c0ad0a13e1b9a1a624656",
+          "signature": "private.timesheet_correction_a0_fence_tokens_v2(uuid[],uuid[],text[],text[],jsonb[],uuid[],uuid[],uuid[])",
+          "statementSha256": "39dea9ecf4cc9a0510dc1afd39066d0cf1f49e12a18c0ad0a13e1b9a1a624656"
+        },
+        {
+          "key": "private.timesheet_correction_a0_booking_before_v1()@0b2514b060deb57dfd82b54cb8ed718db84e1b1784f3b0a2ec9e8a239359b91c",
+          "signature": "private.timesheet_correction_a0_booking_before_v1()",
+          "statementSha256": "0b2514b060deb57dfd82b54cb8ed718db84e1b1784f3b0a2ec9e8a239359b91c"
+        },
+        {
+          "key": "private.timesheet_correction_a0_reference_before_v1()@04591a6453a57f3295cc5fdb9b423d137452c06a08971fd994aa9186925f3fe0",
+          "signature": "private.timesheet_correction_a0_reference_before_v1()",
+          "statementSha256": "04591a6453a57f3295cc5fdb9b423d137452c06a08971fd994aa9186925f3fe0"
+        },
+        {
+          "key": "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)@e761d968cc797386b694ea64f445fe10141c0212faa620012f05c57500b8f803",
+          "signature": "private.timesheet_correction_a0_native_lock_fence_v1(uuid,uuid)",
+          "statementSha256": "e761d968cc797386b694ea64f445fe10141c0212faa620012f05c57500b8f803"
+        },
+        {
+          "key": "private.timesheet_correction_a0_send_family_fence_v1(uuid)@5538333c6d8dd9c9cec68d503e1b9322090a202149a0d6fa0698d58541557416",
+          "signature": "private.timesheet_correction_a0_send_family_fence_v1(uuid)",
+          "statementSha256": "5538333c6d8dd9c9cec68d503e1b9322090a202149a0d6fa0698d58541557416"
+        },
+        {
+          "key": "private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[])@83e0fad52522037c783600ed99924ae05438c708962a044d37aabd2980b19690",
+          "signature": "private.timesheet_correction_a0_family_tokens_retain_v1(uuid,uuid[])",
+          "statementSha256": "83e0fad52522037c783600ed99924ae05438c708962a044d37aabd2980b19690"
+        },
+        {
+          "key": "private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)@e081f86cbc353caf8f9987af27873a58371d91b121b4680d435c8e8aaf5bc41b",
+          "signature": "private.timesheet_correction_a0_request_tokens_retain_v1(private.timesheet_correction_requests)",
+          "statementSha256": "e081f86cbc353caf8f9987af27873a58371d91b121b4680d435c8e8aaf5bc41b"
+        }
+      ],
+      "sourceFileHashes": [
+        {
+          "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union_v1.sql",
+          "sha256": "a8ce93b2d17b66d4ef30aa04f66391b41f66d4c125e632bd57c8540f39217fd6",
+          "bytes": 7143
+        },
+        {
+          "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/01_physical_token_and_retention_helpers.sqlinc",
+          "sha256": "5ff8eea6905813e1b2964d47497f23e46d2ba0eccdd8669ada202e0bc2a1d3c8",
+          "bytes": 14965
+        },
+        {
+          "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/05_native_creator_intents_and_triggers.sqlinc",
+          "sha256": "fdb6219193b7f25fac2907c45b766ca2603c341fbb3d315372c3d3ce5fae1f75",
+          "bytes": 21519
+        },
+        {
+          "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/06_send_family_fence.sqlinc",
+          "sha256": "e9c44bcdd2b9221fedfad9960b5bb4b08b689e52199864168977c5c3f8a11022",
+          "bytes": 7165
+        },
+        {
+          "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/08_complete_current_request.sqlinc",
+          "sha256": "c48af252f023a8bde617502fa34c4a470b4794dc2fe383fed8a0d9f1cd87d5ce",
+          "bytes": 24480
+        },
+        {
+          "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/04_complete_native_lock_fence.sqlinc",
+          "sha256": "c004513b253a208dc731755c9d4a77b641354105a41282408da8ff99120e872c",
+          "bytes": 12634
+        },
+        {
+          "file": "supabase/repeatable/15102026_0216_healthroster_a0_physical_source_union/09_native_child_raw_intents.sqlinc",
+          "sha256": "be53f4621a7aac921dbcc256acb97d194bd310e61130a9a69e41df5e44f9c162",
+          "bytes": 6123
+        }
+      ],
+      "completeFilesRead": [
+        "01_physical_token_and_retention_helpers.sqlinc",
+        "05_native_creator_intents_and_triggers.sqlinc",
+        "06_send_family_fence.sqlinc",
+        "04_complete_native_lock_fence.sqlinc",
+        "09_native_child_raw_intents.sqlinc",
+        "15102026_0216_healthroster_a0_physical_source_union_v1.sql"
+      ],
+      "assessment": [
+        "Raw OLD/NEW physical/workflow/week/cycle/booking/key/alias tokens enter the existing arbiter before snapshot-visible request classification; triggers neither rewrite financial facts nor invoke external effects.",
+        "Active WAITING signed weekly/no-finance requests retain Candidate serial admission then native whole-family locking, bounded NOWAIT/1ms acquisition, sorted actual row locks and current post-lock scope rereads.",
+        "Allocated UUID absence checks are restricted to genuinely planned correction legs, not a broad new dangling-reference policy. Family dependency reads include inactive/history references.",
+        "Native lock fence validates actual named FK columns, validation/deferrability and enabled RI triggers, plus origin replication mode; it does not infer a foreign-key guarantee for validations/invoice lines.",
+        "Trigger enablement/order, all earlier BEFORE owners that could mutate protected fields, READ COMMITTED versus older snapshot contention and complete origin/signature/clock/native family callees remain required independent qualification. No full graph or TEST execution approval inferred."
+      ],
+      "executionApproval": false
     }
   ]
 }

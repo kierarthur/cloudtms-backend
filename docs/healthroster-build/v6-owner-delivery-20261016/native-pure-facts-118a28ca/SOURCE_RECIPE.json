@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "kind": "COMPLETE_PURE_JSON_FACTS_NATIVE_SUBSET",
+  "native": "NOT_RUN",
+  "sqlExecutionByThisLane": false,
+  "projectionBase": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+  "readSourceRoot": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "rootInputCommit": "fb1103659a79028a1bc2976c72b1b59917fca948",
+  "sourceStableSince": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
+  "sourceInput": {
+    "path": "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql",
+    "sha256": "f8f415a641f7ecdece1068d672f407370962e9aaeecc4f790ce832f791ce6908"
+  },
+  "orderedLeaves": [
+    {
+      "path": "forward/02_native_expense_number.sqlinc",
+      "sha256": "988a604cd3b618a6963a3aad29c7a3c7d9131560bf226e4f5efbefd3fb3f145d",
+      "bytes": 752
+    },
+    {
+      "path": "forward/02a_signature_facts.sqlinc",
+      "sha256": "9c92b44753fde319dfcc9759a91d8171c645a0f0d476581274c0e28ec5a83b54",
+      "bytes": 6089
+    },
+    {
+      "path": "forward/02b_worked_facts.sqlinc",
+      "sha256": "ac2e65b546ef6c3b33c85eebafe67cea626fbc607597737e502d18b0a92dba15",
+      "bytes": 1884
+    },
+    {
+      "path": "tests/pure-facts-native.sql",
+      "sha256": "b7fa7b3440b7743a3b8d04fa1d53d5843f6829e1a3c84b36e4a9a204837576a0",
+      "bytes": 8205
+    }
+  ],
+  "preparedSql": {
+    "path": "prepared/pure-facts.sql",
+    "sha256": "5ec89d610278889c5852fb93c3bcc7796b23000d9804a77bb83f44f249cb027b",
+    "bytes": 17012,
+    "parsedTopLevelStatements": 11
+  },
+  "baselineAndFresh": {
+    "path": "tests/pure-facts-baseline-and-fresh.sql",
+    "sha256": "60a6ef0441289f8e4d68f97c176bf576598e68544b1e0d0d8131f44449f34c60",
+    "required": "Capture exact result before; existing expense-number helper present, two proposed Move helpers absent. After server-owned rollback, fresh result must match every prior present/definition_md5/owner/ACL field exactly; both proposed Move helpers absent. No baseline substitution."
+  },
+  "rootExecutionGate": "Root reviews exact bytes and SEND7/current Kier native rollback route; map only audited logical postgres owner with existing provider-neutral mapper. Server owns transaction. No BEGIN/COMMIT, local DB, Bank seed, business tables, audit injection, authority stubs or provider effects.",
+  "assertions": 25,
+  "qualification": "Only actual pure JSON helper native grammar/scalar semantics. No Move/financial producer/permission/API/native lifecycle acceptance claim.",
+  "supersedesPureSource": "5f5e4bb60967563a80c72d632d46b90dc4baecc2"
+}
