@@ -1,0 +1,85 @@
+-- REVIEW PROPOSAL ONLY. Not installed, not executed, native qualification NOT_RUN.
+-- Attach only before the exact immutable 13102026_1430 body in one existing atomic unit.
+-- Keep the existing writer/identity admission, ledger and outer transaction.
+lock table public.weekly_source_charge_checks, public.weekly_source_billing_movements,
+  public.weekly_source_invoice_presentation_lines in access exclusive mode;
+do $health_f23_money_predecessor$
+declare previous_path text;
+begin
+  previous_path:=pg_catalog.current_setting('search_path');
+  perform pg_catalog.set_config('search_path','pg_catalog, public',true);
+  if exists (
+    with expected(name, definition, is_validated, is_deferrable, is_deferred) as (values
+      ('weekly_source_charge_checks_check2', 'CHECK (comparison_result = ''UNVERIFIABLE''::text OR source_commission_pence IS NOT NULL AND source_total_cost_pence IS NOT NULL AND source_shift_charge_pence IS NOT NULL AND calculated_segment_charge_pence IS NOT NULL AND source_charge_difference_pence IS NOT NULL)', true, false, false),
+      ('weekly_source_charge_checks_check3', 'CHECK (comparison_result <> ''EXACT''::text OR source_charge_difference_pence = 0)', true, false, false),
+      ('weekly_source_charge_checks_check4', 'CHECK (comparison_result <> ''SOURCE_ROUNDING_EQUIVALENT''::text OR (source_charge_difference_pence = ANY (ARRAY[1::bigint, ''-1''::integer::bigint])) AND (source_shift_charge_pence > 0 AND calculated_segment_charge_pence > 0 OR source_shift_charge_pence < 0 AND calculated_segment_charge_pence < 0))', true, false, false),
+      ('weekly_source_charge_checks_check5', 'CHECK ((comparison_result <> ALL (ARRAY[''MISMATCH''::text, ''ZERO_SOURCE_CHARGE''::text, ''UNVERIFIABLE''::text])) OR (phase_severity = ANY (ARRAY[''PROVISIONAL_WARNING''::text, ''FINALISATION_BLOCKER''::text])))', true, false, false),
+      ('weekly_source_charge_checks_check6', 'CHECK ((comparison_result = ANY (ARRAY[''MISMATCH''::text, ''ZERO_SOURCE_CHARGE''::text, ''UNVERIFIABLE''::text])) OR blocker_code IS NULL)', true, false, false),
+      ('weekly_source_charge_checks_check7', 'CHECK (comparison_result <> ''ZERO_SOURCE_CHARGE''::text OR source_commission_pence = 0 AND source_total_cost_pence = 0 AND source_shift_charge_pence = 0 AND calculated_segment_charge_pence <> 0 AND blocker_code IS NULL)', true, false, false),
+      ('weekly_source_charge_checks_check8', 'CHECK (row_sign_kind <> ''POSITIVE''::text OR comparison_result = ''UNVERIFIABLE''::text OR source_commission_pence >= 0 AND source_total_cost_pence >= 0 AND (source_shift_charge_pence > 0 AND calculated_segment_charge_pence > 0 OR comparison_result = ''ZERO_SOURCE_CHARGE''::text AND source_shift_charge_pence = 0 AND calculated_segment_charge_pence > 0))', true, false, false),
+      ('weekly_source_charge_checks_check9', 'CHECK (row_sign_kind <> ''FULL_NEGATIVE''::text OR comparison_result = ''UNVERIFIABLE''::text OR source_commission_pence <= 0 AND source_total_cost_pence <= 0 AND source_shift_charge_pence < 0 AND calculated_segment_charge_pence < 0)', true, false, false),
+      ('weekly_source_charge_checks_comparison_profile_version_check', 'CHECK (comparison_profile_version = ''NHSP_TWO_COMPONENT_PENCE_V1''::text)', true, false, false),
+      ('weekly_source_charge_checks_comparison_result_check', 'CHECK (comparison_result = ANY (ARRAY[''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''MISMATCH''::text, ''ZERO_SOURCE_CHARGE''::text, ''UNVERIFIABLE''::text]))', true, false, false),
+      ('weekly_source_charge_checks_row_sign_kind_check', 'CHECK (row_sign_kind = ANY (ARRAY[''POSITIVE''::text, ''FULL_NEGATIVE''::text]))', true, false, false)
+    ), actual as (
+      select c.conname::text name, pg_catalog.pg_get_constraintdef(c.oid,true) definition,
+        c.convalidated is_validated,c.condeferrable is_deferrable,c.condeferred is_deferred
+      from pg_catalog.pg_constraint c
+      where c.conrelid='public.weekly_source_charge_checks'::pg_catalog.regclass and c.contype='c'
+        and (pg_catalog.pg_get_constraintdef(c.oid) like '%comparison_profile_version%'
+        or pg_catalog.pg_get_constraintdef(c.oid) like '%comparison_result%'
+        or pg_catalog.pg_get_constraintdef(c.oid) like '%row_sign_kind%')
+    )
+    select 1 from expected e full join actual a using (name)
+    where (e.definition,e.is_validated,e.is_deferrable,e.is_deferred)
+      is distinct from (a.definition,a.is_validated,a.is_deferrable,a.is_deferred)
+  ) then raise exception 'HEALTH_F23_WEEKLY_SOURCE_CHARGE_CHECKS_PREDECESSOR_CHANGED' using errcode='55000'; end if;
+  if exists (
+    with expected(name, definition, is_validated, is_deferrable, is_deferred) as (values
+      ('weekly_source_billing_movements_check', 'CHECK (((transition_id IS NOT NULL)::integer + (nhsp_upload_row_id IS NOT NULL)::integer + (expense_authority_generation_id IS NOT NULL)::integer) = 1)', true, false, false),
+      ('weekly_source_billing_movements_check1', 'CHECK ((source_profile_kind = ''NHSP_TRUST_BACKING_REPORT''::text) = (nhsp_upload_row_id IS NOT NULL))', true, false, false),
+      ('weekly_source_billing_movements_check2', 'CHECK ((expense_authority_generation_id IS NOT NULL) = (source_line_kind = ''SOURCE_FIXED_EXPENSE''::text))', true, false, false),
+      ('weekly_source_billing_movements_check3', 'CHECK ((expense_authority_generation_id IS NOT NULL) = (movement_role = ANY (ARRAY[''EXPENSE_POSITIVE''::text, ''EXPENSE_REVERSAL''::text, ''EXPENSE_REPLACEMENT''::text])))', true, false, false),
+      ('weekly_source_billing_movements_check4', 'CHECK (source_profile_kind <> ''NHSP_TRUST_BACKING_REPORT''::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND (price_check_result = ANY (ARRAY[''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text])))', true, false, false),
+      ('weekly_source_billing_movements_check5', 'CHECK ((price_check_result = ANY (ARRAY[''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text])) = (charge_acceptance_id IS NOT NULL))', true, false, false),
+      ('weekly_source_billing_movements_check6', 'CHECK (source_line_kind <> ''SOURCE_FIXED_EXPENSE''::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND price_check_result = ''NOT_APPLICABLE''::text)', true, false, false),
+      ('weekly_source_billing_movements_check7', 'CHECK (source_profile_kind = ''NHSP_TRUST_BACKING_REPORT''::text OR (price_check_result = ANY (ARRAY[''NOT_APPLICABLE''::text, ''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text])) AND charge_acceptance_id IS NULL)', true, false, false),
+      ('weekly_source_billing_movements_movement_role_check', 'CHECK (movement_role = ANY (ARRAY[''POSITIVE''::text, ''REVERSAL''::text, ''REPLACEMENT''::text, ''NET_DIFFERENCE_PRESENTATION''::text, ''EXPENSE_POSITIVE''::text, ''EXPENSE_REVERSAL''::text, ''EXPENSE_REPLACEMENT''::text]))', true, false, false),
+      ('weekly_source_billing_movements_price_check_result_check', 'CHECK (price_check_result = ANY (ARRAY[''NOT_APPLICABLE''::text, ''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text]))', true, false, false),
+      ('weekly_source_billing_movements_source_line_kind_check', 'CHECK (source_line_kind = ANY (ARRAY[''SOURCE_ORDINARY''::text, ''SOURCE_REPLACEMENT''::text, ''GENERATED_HISTORICAL_REVERSAL''::text, ''NON_NHSP_DIFFERENCE''::text, ''NHSP_PHYSICAL_POSITIVE''::text, ''NHSP_PHYSICAL_FULL_NEGATIVE''::text, ''SOURCE_FIXED_EXPENSE''::text]))', true, false, false),
+      ('weekly_source_billing_movements_source_profile_kind_check', 'CHECK (source_profile_kind = ANY (ARRAY[''GENERIC_COMPLETE_SNAPSHOT''::text, ''NHSP_TRUST_BACKING_REPORT''::text, ''HEALTHROSTER_ACTUAL_ROWS''::text]))', true, false, false)
+    ), actual as (
+      select c.conname::text name, pg_catalog.pg_get_constraintdef(c.oid,true) definition,
+        c.convalidated is_validated,c.condeferrable is_deferrable,c.condeferred is_deferred
+      from pg_catalog.pg_constraint c
+      where c.conrelid='public.weekly_source_billing_movements'::pg_catalog.regclass and c.contype='c'
+        and (pg_catalog.pg_get_constraintdef(c.oid) like '%transition_id%'
+        or pg_catalog.pg_get_constraintdef(c.oid) like '%nhsp_upload_row_id%'
+        or pg_catalog.pg_get_constraintdef(c.oid) like '%expense_authority_generation_id%'
+        or pg_catalog.pg_get_constraintdef(c.oid) like '%source_profile_kind%'
+        or pg_catalog.pg_get_constraintdef(c.oid) like '%source_line_kind%'
+        or pg_catalog.pg_get_constraintdef(c.oid) like '%movement_role%'
+        or pg_catalog.pg_get_constraintdef(c.oid) like '%price_check_result%')
+    )
+    select 1 from expected e full join actual a using (name)
+    where (e.definition,e.is_validated,e.is_deferrable,e.is_deferred)
+      is distinct from (a.definition,a.is_validated,a.is_deferrable,a.is_deferred)
+  ) then raise exception 'HEALTH_F23_WEEKLY_SOURCE_BILLING_MOVEMENTS_PREDECESSOR_CHANGED' using errcode='55000'; end if;
+  if (select count(*) from pg_catalog.pg_constraint c
+    where c.conrelid='public.weekly_source_invoice_presentation_lines'::pg_catalog.regclass
+      and c.contype='c'
+      and c.conkey=array[(select a.attnum from pg_catalog.pg_attribute a
+        where a.attrelid=c.conrelid and a.attname='price_check_result' and not a.attisdropped)]::smallint[]
+      and pg_catalog.pg_get_constraintdef(c.oid) like '%NOT_APPLICABLE%')<>1
+    or not exists (select 1 from pg_catalog.pg_constraint c
+      where c.conrelid='public.weekly_source_invoice_presentation_lines'::pg_catalog.regclass
+        and c.contype='c' and c.conname='weekly_source_invoice_presentation_lin_price_check_result_check'
+        and c.conkey=array[(select a.attnum from pg_catalog.pg_attribute a
+          where a.attrelid=c.conrelid and a.attname='price_check_result' and not a.attisdropped)]::smallint[]
+        and pg_catalog.pg_get_constraintdef(c.oid,true)='CHECK (price_check_result = ANY (ARRAY[''NOT_APPLICABLE''::text, ''EXACT''::text, ''SOURCE_ROUNDING_EQUIVALENT''::text, ''ACCEPTED_DISPARITY''::text, ''ACCEPTED_ZERO''::text]))'
+        and c.convalidated and not c.condeferrable and not c.condeferred) then
+    raise exception 'HEALTH_F23_PRICE_ENUM_PREDECESSOR_CHANGED' using errcode='55000';
+  end if;
+  perform pg_catalog.set_config('search_path',previous_path,true);
+end;
+$health_f23_money_predecessor$;

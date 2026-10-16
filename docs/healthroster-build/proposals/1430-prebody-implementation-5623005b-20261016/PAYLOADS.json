@@ -1,0 +1,98 @@
+{
+  "version": "HEALTH_1430_PREBODY_FORWARD_PAYLOADS_V1",
+  "status": "SOURCE_ONLY_ROOT_REVIEW_AND_NATIVE_REQUIRED",
+  "rootCommit": "5623005b91e4bc425e79587a88b1c5cad168d5eb",
+  "proposalSha256": "07bcc89807a500ef3648f06cc9bb8b52e70d36e3d01d841d7f1313ed84e1bdf3",
+  "testResultsSha256": "cd96a5b95b3341dca872a7b399b77650780f6c6ffa033ac1765e347e8decc1ea",
+  "preservationCount": 10,
+  "completeForwardFiles": 17,
+  "files": [
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/16102026_0943_money_prebody_assertion_proposal.sqlinc",
+      "sha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+      "bytes": 10532
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/16102026_0959_capability_predecessor_catalogue_recipe.sql",
+      "sha256": "41345fb67d44e75ece9fb9aaa2de325c8aa087d4a2bccba87d81c79248a8cc1a",
+      "bytes": 7025
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/AGGREGATE_CLASSIFIER_PEER_REVIEW.json",
+      "sha256": "1c65eba9147bb288d31e2b5c64ace3ddac3ae7e0ab5d2fa482a3e1420fe3f0a3",
+      "bytes": 5011
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/CAPABILITY_NATIVE_CENSUS_RECIPE.json",
+      "sha256": "7b308e8a13cc5919a3ce7236261bf8741c8ed51450e42733d32373bb5cb8049a",
+      "bytes": 2241
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/check_grammar.py",
+      "sha256": "6f83820748358e72f9be6d2135b80d4a13fdae230e4947b8028bd5a9b3065de5",
+      "bytes": 1051
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/GRAMMAR.json",
+      "sha256": "38fb32357e4753ce7d1203a0315928aee08cf259b0b6d9c4b33b9145b405b652",
+      "bytes": 318
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/peer_review_aggregate.mjs",
+      "sha256": "30c478ee8ee17a6230914dda5f8762e1409bf3e93d6d78b2c4cb10b8965b9ac1",
+      "bytes": 7347
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/REVIEW.json",
+      "sha256": "10573f03cf4d6667627efe08d9e614a8a71d18d77dab9b70f259bf006a688799",
+      "bytes": 63742
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/REVIEW.md",
+      "sha256": "640ef6504219d5f4562ecc4bb84b58b50384764fa627ffc61f1b7d12c7e95395",
+      "bytes": 17829
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/review.mjs",
+      "sha256": "9b15d21d1df5e7ba725ad66cec9d5741f9bbae1d929a8cd7f201bac3efeea365",
+      "bytes": 15706
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json",
+      "sha256": "59c6695da15d52bd5f512fa2cf259337caeb4a9794649e6462a7849d15680e32",
+      "bytes": 75382
+    },
+    {
+      "target": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "1dccee6a3b635f36946e27550db722f4ee5d3f62cf13f0e1cc213245cf7de0c8",
+      "bytes": 47292
+    },
+    {
+      "target": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "ff6e2ce20804ecfd859543d6e76dc3b9da19b033eafc6c3b86c05640c4d4a27e",
+      "bytes": 46773
+    },
+    {
+      "target": "scripts/healthroster-money-predecessor-boundary.mjs",
+      "sha256": "3c49e8aa9e128dfb331d282551c17cc2e12528075ff33866347e51eb2328dbc6",
+      "bytes": 4543
+    },
+    {
+      "target": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "sha256": "932e3769fbad6c361c82e533663c76ce9e782ba300dbee43bb4d8eed55a61277",
+      "bytes": 6985
+    },
+    {
+      "target": "supabase/release/16102026_0943_healthroster_money_predecessor_assertion.sqlinc",
+      "sha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+      "bytes": 10532
+    },
+    {
+      "target": "tests/healthroster-money-predecessor-boundary.test.mjs",
+      "sha256": "051d74067bd3e8b0a0574fc00624ac5dbc043c2e06376dbf561c6461c64fe565",
+      "bytes": 13340
+    }
+  ],
+  "native": "NOT_RUN",
+  "rootEdited": false
+}
