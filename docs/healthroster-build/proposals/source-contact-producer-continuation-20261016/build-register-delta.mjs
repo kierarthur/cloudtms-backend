@@ -16,6 +16,13 @@ for(const name of readdirSync(path.join(base,'forward')).filter(name=>name.endsW
  }
 }
 register.function_signature_count=register.functions.length;
+register.private_capture_kind_delta={table:'weekly_contact_source_intent_captures',source:'one-time/01_contact_producer_journals.sqlinc',
+ prior_source_checkpoint:'638b5a66c3603e20e9c1cd156552e48c36674f05',
+ retained:['ROUTINE_RECOMPOSITION','EXPLICIT_MANUAL','ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION'],
+ added:['ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION'],
+ member_provenance:'Genuine eligible signed INITIAL has routine_step=NULL and no accepted predecessor; genuinely due configured MANUAL has actual positive step and immutable accepted predecessor.',
+ actor_required_for_both:true,recomposition_original_intent_required:true,public_dto_or_new_enquiry_meaning_changed:false,
+ migration_rule:'Uninstalled new journal creation payload successor; no accepted history rewrite. Root must use a new guarded successor if an earlier payload has already been durably installed.'};
 register.deferred_integrity_triggers=[
  {table:'weekly_contact_source_intent_captures',trigger:'weekly_contact_source_intent_captures_lineage',source:'forward/19_capture_and_rebase_integrity.sqlinc'},
  {table:'weekly_contact_source_intent_capture_members',trigger:'weekly_contact_source_intent_capture_members_lineage',source:'forward/19_capture_and_rebase_integrity.sqlinc'},

@@ -20,7 +20,7 @@ begin
   join public.weekly_contact_source_intent_capture_members capture_member on capture_member.message_intent_id=capture.message_intent_id
    and capture_member.logical_contact_key=accepted.logical_contact_key and capture_member.send_ordinal=accepted.send_ordinal
   where accepted.logical_contact_key=decode(keys->>'logical_contact_key','hex') and accepted.accepted_at_utc is not null
-   and capture.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION');
+   and capture.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION','ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION');
  if completed<>steps then raise exception 'CONTACT_SOURCE_ROUTINE_HISTORY_UNRESOLVED' using errcode='55000';end if;
  select id into basis from public.weekly_contact_delivery_memberships where logical_contact_key=decode(keys->>'logical_contact_key','hex')
   and accepted_at_utc is not null order by accepted_at_utc desc,send_ordinal desc limit 1;

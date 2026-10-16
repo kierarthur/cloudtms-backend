@@ -133,7 +133,10 @@ begin
   if cap.message_intent_id is not null then
    fact:=fact||jsonb_build_object('routine_step',old_member->'routine_step','basis_accepted_membership_id',old_member->'basis_accepted_membership_id',
     'selected_issue_ids',old_member->'selected_issue_ids');
-   if cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION') then
+   if cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and old_member->'routine_step'='null'::jsonb
+    and fact->'last_accepted_send'is distinct from 'null'::jsonb then continue;end if;
+   if cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION')
+    or(cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and old_member->'routine_step'<>'null'::jsonb)then
     lineage:=private.weekly_contact_source_manager_followup_state_v1((fact->>'incident_id')::uuid,p_at);
     if lineage->>'routine_sequence' is distinct from old_member->>'routine_step' or lineage->>'reason'<>'SCHEDULED'
      or(lineage->>'due_at_utc')::timestamptz>p_at then continue;end if;

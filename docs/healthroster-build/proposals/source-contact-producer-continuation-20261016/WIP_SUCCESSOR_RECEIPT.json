@@ -1,15 +1,15 @@
 {
   "version": "CONTACT_NATIVE_CONTINUATION_WIP_SUCCESSOR_RECEIPT_V1",
   "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
-  "prior_source_checkpoint": "5b02fed2bce49f8cea8cc8a1e39b4a508e902dc4",
+  "prior_source_checkpoint": "638b5a66c3603e20e9c1cd156552e48c36674f05",
   "source_files": [
     {
       "path": "READ_SOURCE_CHECKPOINT.json",
-      "sha256": "85be29c57349d3575a1877a4b5958610cf8f42e950cfceba8fb75b66adebd0f7"
+      "sha256": "b52ae88152a64ef7b98596976c3e2d77f3d090528d9b1382c11822b819ec997d"
     },
     {
       "path": "REGISTER_DELTA_WIP.json",
-      "sha256": "aaa502c3dc99a927878d6d95a53b682fd7cefa7827b0ad858f62f2c9aa5d39bb"
+      "sha256": "0775dce756c04c285d7dc442ccdb7763a7f4cbbbc4d214e886f8f415a1b4751c"
     },
     {
       "path": "NATIVE_OWNER_INPUTS.json",
@@ -17,7 +17,11 @@
     },
     {
       "path": "MANAGER_ACTION_OWNER_INPUTS.json",
-      "sha256": "cd2f49469675871fc78d86097903b78f11558890b697cfd1f122544b2a83710a"
+      "sha256": "8e9af38b76af7c8516ab133ed6c82d7edc38cd43c7edff332347be7f9492a21b"
+    },
+    {
+      "path": "MANAGER_INITIAL_OWNER_INPUTS.json",
+      "sha256": "8efdbec77369c55e445b8ae97849b0bd0e2c7ce988f36d05617536e4111778bb"
     },
     {
       "path": "SCHEDULER_NOTIFICATION_OWNER_INPUTS.json",
@@ -57,15 +61,15 @@
     },
     {
       "path": "SOURCE_COMPLETION_RECIPE.json",
-      "sha256": "93ad88a1045bd98186af559900d1d2c7711d2ba311bcec6aeccc8f54a8bee9a6"
+      "sha256": "8f838c1a3b306243c66cd5c7501b299c469fd91bd120497c047b01fd0e43566d"
     },
     {
       "path": "OFFLINE_GRAMMAR_INPUTS.json",
-      "sha256": "87f1cd9eaec2a37bd975fa66aaaf4e4d6d17e6441ec6fa0e8d4459b7cb310301"
+      "sha256": "ac13a3519528fddc317701b7127d91aec07539755a4defc902ac014725f22e41"
     },
     {
       "path": "OFFLINE_GRAMMAR_RESULT.json",
-      "sha256": "9bd282d2305fac4575d9a3b657316c7b448d7afb1bac842addb24be2e5073633"
+      "sha256": "2e99813feb55cc9b901282b77c5a8b4b202937d982781909c13d09bacd07de93"
     }
   ],
   "frozen_7161": {
@@ -73,26 +77,26 @@
     "runtime/contact-manual-enquiry.d.ts": "d946b2a2ec0b68afc0941e7bd822cff313f860c505938d089690bf09dcc7c61e"
   },
   "source_only_tests": {
-    "pass": 37,
+    "pass": 46,
     "native": false,
-    "scope": "Request/shared parser, strict service reply and actual finite current host orchestration with mocked RPC/senders; exact complete scheduler source-transformation/selection recipe"
+    "scope": "Request/shared parser, strict service reply and actual finite current host orchestration with mocked RPC/senders; exact complete scheduler and initial-owner source-transformation/selection recipes"
   },
   "sql_scan": {
-    "statements": 378,
+    "statements": 385,
     "PLpgSQL": "OPAQUE_NOT_PARSED",
     "fixtures_excluded": true
   },
   "offline_grammar": {
     "version": "CONTACT_SOURCE_OFFLINE_PG17_RESULT_V1",
-    "input_manifest_sha256": "87f1cd9eaec2a37bd975fa66aaaf4e4d6d17e6441ec6fa0e8d4459b7cb310301",
+    "input_manifest_sha256": "ac13a3519528fddc317701b7127d91aec07539755a4defc902ac014725f22e41",
     "qualification": "OFFLINE_ONLY_NATIVE_COMPILE_AND_FIRST_USE_NOT_RUN",
     "counts": {
-      "sqlLeaves": 56,
-      "sqlStatements": 382,
-      "plpgsqlBodies": 102,
+      "sqlLeaves": 59,
+      "sqlStatements": 390,
+      "plpgsqlBodies": 105,
       "sqlLanguageBodies": 7,
       "doBodies": 7,
-      "rowVariables": 260
+      "rowVariables": 265
     },
     "errors": []
   },

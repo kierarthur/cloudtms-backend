@@ -45,6 +45,9 @@ begin
    or(m.native_member_kind='SUBMISSION_MEMBER')<>(m.purpose='SUBMIT_TIMESHEET')
    or(cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION')and(
     m.audience<>'MANAGER'or m.purpose<>'CHECK_HOURS'or m.routine_step is null or m.routine_step<1))
+   or(cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and(
+    m.audience<>'MANAGER'or m.purpose<>'CHECK_HOURS'or(m.routine_step is not null and m.routine_step<1)
+    or i.tranche_kind<>'MANAGER_MANUAL_RESEND'))
    or(cap.capture_kind in('EXPLICIT_MANUAL','MANUAL_RECOMPOSITION')and m.routine_step is not null)then
    raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID'using errcode='23514';end if;
   if m.purpose='CHECK_HOURS' then
@@ -104,6 +107,10 @@ begin
    'basis_accepted_membership_id',m.basis_accepted_membership_id,'native_basis',m.native_basis_json);
   select value into strict actual from jsonb_array_elements(cap.manifest_json->'members') where value->>'logical_contact_key'=encode(m.logical_contact_key,'hex');
   if actual is distinct from expected then raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  if cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and m.routine_step is null and exists(
+   select 1 from jsonb_array_elements(cap.manifest_json->'current_facts')fact
+    where fact->>'logical_contact_key'=encode(m.logical_contact_key,'hex')and fact->'last_accepted_send'is distinct from 'null'::jsonb)then
+   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID'using errcode='23514';end if;
  end loop;
  if n not between 1 and 500 or n<>jsonb_array_length(cap.manifest_json->'members') then
   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
@@ -195,7 +202,10 @@ begin
    or(m.audience='MANAGER' and sealed_fact->'manager_row' is distinct from private.weekly_contact_source_manager_row_v1(m.incident_id)) then return false;end if;
   if coalesce(sealed_fact->'cutoff'->'routine'->>'policy_revision',sealed_fact->>'global_policy_revision')
    is distinct from(select version::text from public.weekly_source_global_settings where singleton) then return false;end if;
-  if cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION') then
+  if cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and m.routine_step is null
+   and history->'last_accepted_send'is distinct from 'null'::jsonb then return false;end if;
+  if cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION')
+   or(cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and m.routine_step is not null)then
    followup:=private.weekly_contact_source_manager_followup_state_v1(m.incident_id,p_at);
    if history->'last_accepted_send' is distinct from sealed_fact->'last_accepted_send'
     or followup->>'reason' is distinct from 'SCHEDULED'

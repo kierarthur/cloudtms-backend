@@ -12,7 +12,8 @@ const recipe={version:'CONTACT_COMMISSIONED_SOURCE_COMPLETION_RECIPE_V1',status:
  assembly:{one_time:readdirSync(path.join(base,'one-time')).filter(file=>file.endsWith('.sqlinc')).sort().map(file=>pin('one-time/'+file)),
   repeatable:readdirSync(path.join(base,'forward')).filter(file=>file.endsWith('.sqlinc')).sort().map(file=>pin('forward/'+file)),
   order:'Root-owned exact current native schema and existing contact permits/query/membership/timing authorities; reviewed one-time journal/check/cohort deltas; these stable ordered native includes; final exact ACL. No stale whole-parent replacement and no Banking source overwrite.'},
- new_metadata_tables:register.tables,existing_table_identity_delta:register.existing_table_identity_delta,
+ new_metadata_tables:register.tables,existing_table_identity_delta:register.existing_table_identity_delta,private_capture_kind_delta:register.private_capture_kind_delta,
+ native_initial_owner:pin('MANAGER_INITIAL_OWNER_INPUTS.json'),
  new_and_successor_signatures:register.functions.map(({signature,source,schema,security_definer,fixed_search_path,public:publicExecute,anon,authenticated,service_role_execute})=>({
   signature,source,schema,security_definer,fixed_search_path,public:publicExecute,anon,authenticated,service_role_execute})),
  root_only_mount_deltas:['Reconcile all nine exact metadata table record classes, creation-time FORCE RLS/policies/revokes and immutable/truncate guards with current central contract/literal sets/counts.',
@@ -33,14 +34,14 @@ const recipe={version:'CONTACT_COMMISSIONED_SOURCE_COMPLETION_RECIPE_V1',status:
   root_http:'Existing narrow exact function/state/message/detail validation -> original failure envelope HTTP409; no new success receipt.'},
  authored_business_completion:['Genuine current Source subset, exact pre-render rows/counts/links/recipient/content and original logical allowance capture.',
   'Closed manual PREVIEW/ACCEPT, unchanged immutable replay, actual server current checking witness and current per-member eligibility/policy/history.',
-  'Configured due MANUAL through existing Send manager now; explicit New enquiry does not renew routine vector.',
+  'Configured due MANUAL and signed INITIAL through one complete same-signature Send manager now owner, one selected native body/cooldown with per-member NULL initial versus actual due step/predecessor; explicit New enquiry does not renew routine vector.',
   'Grouped selected AUTOMATIC per real cycle/recipient with own per-member step/predecessor/ordinal and existing500rows/100Candidates/100Clients native body bounds.',
   'Existing common recheck task/cursor/native sender and actual future wake; exact one-observation selection/complete phase exhaustion; uncertainty stays with original owner.',
   'Bounded original scheduler selectors and complete sorted actual transaction footprint before any business row lock, with exact ID/currentness revalidation.',
   'Per-client first activation, preserved legacy mixed request reuse, unchanged public one-request success and atomic partial/separate-owner refusal; genuine private Import/Bulk aggregation.'],
- remaining_implementation_review:['Same selected group mixing INITIAL and due MANUAL followup currently explicitly refuses; truthful single-body native composition is still being traced.',
+ remaining_implementation_review:['Native qualification of authored one-body same-signature initial/due-MANUAL composition; exact current signed/unsigned/current actor/accepted predecessor/cooldown and retained attempted/remaining worker-question cases.',
   'Review source/current native grouping/throttle/recomposition and retained alias/accepted-history/notification lineage under actual PostgreSQL and concurrency.'],
- qualification:{source_runtime_checks:37,offline_pg17:'OFFLINE_GRAMMAR_RESULT.json; complete SQL/PLpgSQL/SQL-language/DO grammar and declared fields only',
+ qualification:{source_runtime_checks:46,offline_pg17:'OFFLINE_GRAMMAR_RESULT.json; complete SQL/PLpgSQL/SQL-language/DO grammar and declared fields only',
   native_fixtures:'Authored pg_temp assertion owners require genuine current source/actor and accepted history inputs; not executed or qualified.',
   native_compile_execution_acl_concurrency_api:'NOT_RUN',database_actions:'NONE',mount_install_release:'NOT_RUN'},work_continues:true};
 writeFileSync(path.join(base,'SOURCE_COMPLETION_RECIPE.json'),JSON.stringify(recipe,null,2)+'\n');

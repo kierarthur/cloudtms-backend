@@ -38,6 +38,10 @@ begin
     left join public.weekly_contact_source_intent_capture_members member on member.message_intent_id=intent.id
      and member.logical_contact_key=owner.logical_contact_key where owner.logical_contact_key=decode(fact->>'logical_contact_key','hex');
    member_mode:=case when history->'last_accepted_send'='null'::jsonb then 'INITIAL' else 'ROUTINE_MANUAL_FOLLOWUP' end;
+   if member_mode='INITIAL'and not exists(select 1 from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+    where incident.id=incident_id and comparison.candidate_timesheet_id is not null)then
+    reason:=coalesce(reason,'WEEKLY_SOURCE_MANAGER_REQUIRES_TIMESHEET');end if;
    if fact->'eligible' is distinct from 'true'::jsonb then reason:=coalesce(reason,fact->>'exclusion_reason');end if;
    if fact->'cutoff'->'routine'->'in_scope' is distinct from 'true'::jsonb then reason:=coalesce(reason,'OUTSIDE_ROUTINE_SCOPE');end if;
    if member_mode='ROUTINE_MANUAL_FOLLOWUP' then
@@ -46,9 +50,9 @@ begin
      or(keys->>'due_at_utc')::timestamptz>at_utc then reason:=coalesce(reason,'NO_DUE_CONFIGURED_MANUAL_STEP');end if;
    else keys:=null;end if;
    if mode is null then mode:=member_mode;
-   elsif mode<>member_mode then reason:=coalesce(reason,'MIXED_INITIAL_AND_FOLLOWUP_SELECTION');end if;
+   elsif mode<>member_mode then mode:='MIXED_INITIAL_AND_MANUAL';end if;
    members:=members||jsonb_build_array(jsonb_build_object('incident_id',incident_id,
-    'current_facts',fact-'cooldown_remaining_seconds','logical_history',history,'reservations',reservations,'routine_step',keys,
+    'member_mode',member_mode,'current_facts',fact-'cooldown_remaining_seconds','logical_history',history,'reservations',reservations,'routine_step',keys,
     'scope_revision',coalesce(scope.revision,0)::text,'checking_revision',coalesce(checking.revision,0)::text,
     'checking_facts_sha256',case when checking.facts_sha256 is null then null else encode(checking.facts_sha256,'hex') end));
   end loop;

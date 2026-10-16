@@ -450,7 +450,7 @@ begin
       end if;
     end loop;
     for v_route in
-      select query.manager_recipient_route_key,contact.value->>'mode' contact_mode,
+      select query.manager_recipient_route_key,
         pg_catalog.array_agg(distinct incident_id order by incident_id) incident_ids
       from private.weekly_source_office_query_groups_v1(v_cycle_id,v_publication_id,v_filters) query
       cross join lateral pg_catalog.unnest(query.incident_ids) incident_id
@@ -458,18 +458,15 @@ begin
         on contact.value->>'group_key'=query.group_key and contact.value->'eligible'='true'::jsonb
       where query.group_key=any(v_selected_keys) and query.manager_eligible
         and pg_catalog.jsonb_array_length(query.missing_scopes)=0
-      group by query.manager_recipient_route_key,contact.value->>'mode'
-      order by pg_catalog.encode(query.manager_recipient_route_key,'hex'),contact.value->>'mode'
+      group by query.manager_recipient_route_key
+      order by pg_catalog.encode(query.manager_recipient_route_key,'hex')
     loop
-      if v_route.contact_mode='ROUTINE_MANUAL_FOLLOWUP' then
-        v_owner_result:=private.weekly_contact_source_manager_manual_step_v1(v_actor,v_cycle_id,v_publication_id,
-          v_route.incident_ids,v_current_version);
-      else
-        v_owner_result:=public.weekly_source_query_send_manager_now_atomic_v1(
-          pg_catalog.jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_cycle_id,
-            'projection_publication_id',v_publication_id,'incident_ids',to_jsonb(v_route.incident_ids))
-        );
-      end if;
+      -- One complete same-signature native owner classifies the selected
+      -- cohort union and authors one current body; no initial/followup split.
+      v_owner_result:=public.weekly_source_query_send_manager_now_atomic_v1(
+        pg_catalog.jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_cycle_id,
+          'projection_publication_id',v_publication_id,'incident_ids',to_jsonb(v_route.incident_ids))
+      );
       v_results:=v_results||pg_catalog.jsonb_build_array(v_owner_result);
     end loop;
   end if;

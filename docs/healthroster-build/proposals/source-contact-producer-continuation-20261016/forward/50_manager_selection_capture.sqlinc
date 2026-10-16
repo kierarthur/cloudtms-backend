@@ -1,0 +1,82 @@
+-- One native body for the existing Office Send manager now selection. INITIAL
+-- has NULL step; a due MANUAL member retains its actual step and predecessor.
+-- This is private composition metadata, not the explicit New enquiry command.
+create or replace function private.weekly_contact_source_manager_selection_capture_v1(p_actor uuid,p_cycle uuid,p_publication uuid,p_members jsonb)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare source_group public.weekly_source_groups%rowtype;guard jsonb;selected_ids uuid[];saved jsonb;fact jsonb;followup jsonb;
+ members jsonb:='[]';scope_id uuid;checking jsonb;at_utc timestamptz;recipient text;generation_id uuid;route_id uuid;intent_id uuid;
+ sequence integer;key bytea;group_key bytea;group_json jsonb;model jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();guard:=private.weekly_source_query_current_publication_v1(p_cycle,p_publication);
+ perform private.weekly_source_office_authority_v1(p_actor,'SEND_MANAGER',(guard->>'source_group_id')::uuid,null,
+  (guard->>'finalisation_week_ending')::date);
+ select * into strict source_group from public.weekly_source_groups where id=(guard->>'source_group_id')::uuid;
+ if jsonb_typeof(p_members)is distinct from 'array'or jsonb_array_length(p_members)not between 1 and 500 then
+  raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_INVALID'using errcode='22023';end if;
+ select array_agg((value->>'issue_id')::uuid order by(value->>'issue_id')::uuid)into selected_ids from jsonb_array_elements(p_members);
+ if cardinality(selected_ids)<>(select count(distinct id)from unnest(selected_ids)id)then
+  raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_INVALID'using errcode='22023';end if;
+ perform private.weekly_contact_source_manager_selection_lock_v1(selected_ids,'[]');at_utc:=clock_timestamp();
+ for saved in select value from jsonb_array_elements(p_members)order by value->>'issue_id'loop
+  fact:=private.weekly_contact_manual_member_facts_v1((saved->>'issue_id')::uuid,'MANAGER',at_utc);
+  if fact->>'source_cycle_id'is distinct from p_cycle::text or fact->'eligible'is distinct from 'true'::jsonb
+   or fact->'cutoff'->'routine'->'in_scope'is distinct from 'true'::jsonb
+   or(fact-array['recipient_route_id','cooldown_remaining_seconds'])is distinct from(
+    saved-array['recipient_route_id','cooldown_remaining_seconds','followup_state','routine_step','basis_accepted_membership_id'])then
+   raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_STALE'using errcode='40001';end if;
+  if saved->'routine_step'='null'::jsonb then
+   if fact->'last_accepted_send'is distinct from 'null'::jsonb or not exists(
+    select 1 from public.weekly_discrepancy_incidents incident join public.weekly_issue_comparison_revisions comparison
+     on comparison.id=incident.current_comparison_revision_id where incident.id=(fact->>'issue_id')::uuid
+      and comparison.candidate_timesheet_id is not null)then
+    raise exception 'WEEKLY_SOURCE_MANAGER_REQUIRES_TIMESHEET'using errcode='55000';end if;
+   followup:=null;
+  else
+   followup:=private.weekly_contact_source_manager_followup_state_v1((fact->>'issue_id')::uuid,at_utc);
+   if followup->>'reason'is distinct from 'SCHEDULED'or followup->>'mode'is distinct from 'MANUAL'
+    or(followup->>'due_at_utc')::timestamptz>at_utc or followup->>'routine_sequence'is distinct from saved->>'routine_step'
+    or fact->'last_accepted_send'is distinct from saved->'last_accepted_send'
+    or followup->>'basis_accepted_membership_id'is distinct from saved->>'basis_accepted_membership_id'then
+    raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_STALE'using errcode='40001';end if;
+  end if;
+  if recipient is null then recipient:=fact->>'manager_address';elsif recipient is distinct from fact->>'manager_address'then
+   raise exception 'WEEKLY_SOURCE_MANAGER_SEND_ONE_RECIPIENT_REQUIRED'using errcode='22023';end if;
+  scope_id:=private.weekly_contact_scope_lock_v1(source_group.agency_id,source_group.environment,
+   (fact->>'candidate_id')::uuid,(fact->>'client_id')::uuid);checking:=private.weekly_contact_checking_scope_revision_v1(scope_id);
+  fact:=fact||jsonb_build_object('scope_id',scope_id,'scope_revision',(
+   select revision::text from public.weekly_contact_pause_scopes where id=scope_id),'checking_revision',checking->>'revision',
+   'followup_state',followup,'routine_step',followup->'routine_sequence','basis_accepted_membership_id',followup->'basis_accepted_membership_id');
+  members:=members||jsonb_build_array(fact);
+ end loop;
+ if(select count(distinct value->>'candidate_id')from jsonb_array_elements(members))>100
+  or(select count(distinct value->>'client_id')from jsonb_array_elements(members))>100 then
+  raise exception 'WEEKLY_SOURCE_MANAGER_DIGEST_CAPACITY_EXCEEDED'using errcode='54000';end if;
+ key:=private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_NATIVE_MANAGER_SELECTION_INTENT_V1',jsonb_build_object(
+  'actor_user_id',p_actor,'source_cycle_id',p_cycle,'projection_publication_id',p_publication,'recipient',recipient,'members',(
+   select jsonb_agg(jsonb_build_object('logical_contact_key',m->'logical_contact_key','send_ordinal',m->'send_ordinal',
+    'comparison_revision_id',m->'comparison_revision_id','policy_sha256',m->'policy_sha256','routine_step',m->'routine_step',
+    'last_accepted_send',m->'last_accepted_send')order by m->>'logical_contact_key')from jsonb_array_elements(members)m)));
+ generation_id:=private.weekly_contact_manual_manager_generation_v1(members,p_actor,at_utc);
+ select recipient_route_id into strict route_id from public.weekly_manager_recipient_generations where id=generation_id;
+ select id into intent_id from public.weekly_message_intents where logical_key=key;
+ if found then return jsonb_build_object('message_intent_id',intent_id,'recipient_generation_id',generation_id,'recipient_route_id',route_id);end if;
+ select coalesce(max(tranche_sequence),0)+1 into sequence from public.weekly_message_intents
+  where recipient_generation_id=generation_id and tranche_kind='MANAGER_MANUAL_RESEND';
+ insert into public.weekly_message_intents(environment,agency_id,source_cycle_id,audience_kind,recipient_route_id,recipient_generation_id,
+  sorted_due_event_ids,tranche_kind,tranche_sequence,logical_key,state,due_at_utc,created_at_utc)
+ values(source_group.environment,source_group.agency_id,p_cycle,'MANAGER',route_id,generation_id,'{}','MANAGER_MANUAL_RESEND',sequence,
+  key,'DUE',at_utc,clock_timestamp())returning id into intent_id;
+ select jsonb_build_object('kind','MANAGER_QUERY_MODEL_V1','policy_version','1.8.0','renderer_version','1.4.0','structure_version','1.0.0',
+  'rows',jsonb_agg(m->'manager_row'order by private.weekly_source_query_ascii_fold_v1(m->'manager_row'->>'clientName')collate "C",m->>'client_id',
+   private.weekly_source_query_ascii_fold_v1(m->'manager_row'->>'displayName')collate "C",m->>'candidate_id',m->'manager_row'->>'workDate',
+   m->'manager_row'->>'sourceStartInstant',m->>'issue_id'),'plain_body',null,'attachment_count',0)into model from jsonb_array_elements(members)m;
+ group_key:=private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_NATIVE_MANAGER_SELECTION_GROUP_V1',jsonb_build_object(
+  'source_cycle_id',p_cycle,'recipient',recipient,'logical_key',encode(key,'hex')));
+ group_json:=jsonb_build_object('group_key',encode(group_key,'hex'),'recipient',jsonb_build_object('candidate_id',null,'manager_address',recipient),
+  'preview',model,'canonical_content_sha256',encode(private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_NATIVE_MANAGER_SELECTION_CONTENT_V1',
+   jsonb_build_object('group_key',encode(group_key,'hex'),'recipient',recipient,'preview',model)),'hex'));
+ perform private.weekly_contact_source_capture_insert_v1(intent_id,'ROUTINE_MANUAL_SELECTION',null,null,members,group_json,null,null,at_utc,p_actor);
+ return jsonb_build_object('message_intent_id',intent_id,'recipient_generation_id',generation_id,'recipient_route_id',route_id);
+end;
+$function$;

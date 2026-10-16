@@ -31,7 +31,8 @@ begin
    raise exception 'CONTACT_SOURCE_ORIGINAL_ATTEMPT_OWNER' using errcode='40001';end if;
   return jsonb_build_object('version','CONTACT_SOURCE_RECOMPOSITION_V1','original_message_intent_id',original.id,
    'message_intent_id',null,'disposition','NO_CURRENT_ELIGIBLE_SUBSET');end if;
- kind:=case when cap.capture_kind in('EXPLICIT_MANUAL','MANUAL_RECOMPOSITION') then 'MANUAL_RECOMPOSITION'
+ kind:=case when cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')then 'MANUAL_SELECTION_RECOMPOSITION'
+  when cap.capture_kind in('EXPLICIT_MANUAL','MANUAL_RECOMPOSITION') then 'MANUAL_RECOMPOSITION'
   when cap.capture_kind in('ROUTINE_FOLLOWUP','FOLLOWUP_RECOMPOSITION','ROUTINE_MANUAL_FOLLOWUP') then 'FOLLOWUP_RECOMPOSITION'
   else 'ROUTINE_RECOMPOSITION' end;manual_request:=cap.manual_request_id;
  if original.audience_kind='MANAGER' then

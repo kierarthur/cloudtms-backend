@@ -91,6 +91,26 @@ bulk=once(bulk,`      v_owner_result:=public.weekly_source_query_send_manager_no
             'projection_publication_id',v_publication_id,'incident_ids',to_jsonb(v_route.incident_ids))
         );
       end if;`);
+bulk=once(bulk,"select query.manager_recipient_route_key,contact.value->>'mode' contact_mode,","select query.manager_recipient_route_key,");
+bulk=once(bulk,`      group by query.manager_recipient_route_key,contact.value->>'mode'
+      order by pg_catalog.encode(query.manager_recipient_route_key,'hex'),contact.value->>'mode'`,
+`      group by query.manager_recipient_route_key
+      order by pg_catalog.encode(query.manager_recipient_route_key,'hex')`);
+bulk=once(bulk,`      if v_route.contact_mode='ROUTINE_MANUAL_FOLLOWUP' then
+        v_owner_result:=private.weekly_contact_source_manager_manual_step_v1(v_actor,v_cycle_id,v_publication_id,
+          v_route.incident_ids,v_current_version);
+      else
+        v_owner_result:=public.weekly_source_query_send_manager_now_atomic_v1(
+          pg_catalog.jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_cycle_id,
+            'projection_publication_id',v_publication_id,'incident_ids',to_jsonb(v_route.incident_ids))
+        );
+      end if;`,
+`      -- One complete same-signature native owner classifies the selected
+      -- cohort union and authors one current body; no initial/followup split.
+      v_owner_result:=public.weekly_source_query_send_manager_now_atomic_v1(
+        pg_catalog.jsonb_build_object('actor_user_id',v_actor,'source_cycle_id',v_cycle_id,
+          'projection_publication_id',v_publication_id,'incident_ids',to_jsonb(v_route.incident_ids))
+      );`);
 bulk=once(bulk,'      v_candidate_failed:=false;',`      v_candidate_failed:=false;
       v_candidate_included_count:=0;v_candidate_excluded_count:=0;v_candidate_exclusions:='[]';`);
 const initialStart=bulk.indexOf('        select coalesce(pg_catalog.jsonb_agg(scope.value order by');

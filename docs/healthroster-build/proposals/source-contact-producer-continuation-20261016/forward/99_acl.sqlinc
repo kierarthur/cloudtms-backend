@@ -222,4 +222,9 @@ alter function private.weekly_contact_source_scheduler_selection_lock_v1(jsonb) 
 revoke all on function private.weekly_contact_source_scheduler_selection_lock_v1(jsonb) from public,anon,authenticated,service_role;
 alter function private.weekly_contact_source_manager_followup_group_enqueue_v1(uuid[],timestamptz) owner to postgres;
 revoke all on function private.weekly_contact_source_manager_followup_group_enqueue_v1(uuid[],timestamptz) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_manager_selection_capture_v1(uuid,uuid,uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_contact_source_manager_selection_capture_v1(uuid,uuid,uuid,jsonb) from public,anon,authenticated,service_role;
+alter function public.weekly_source_query_send_manager_now_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_query_send_manager_now_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_query_send_manager_now_atomic_v1(jsonb) to service_role;
 notify pgrst, 'reload schema';

@@ -176,7 +176,7 @@ begin
    (row_json->>'incident_episode')::integer,(row_json->>'work_event_id')::uuid,(row_json->>'comparison_revision_id')::uuid,
    decode(row_json->>'comparison_fingerprint','hex'),(row_json->>'send_ordinal')::integer,
    (row_json->>'routine_step')::integer,(row_json->>'basis_accepted_membership_id')::uuid,row_json->'native_basis');
-  if p_kind in('ROUTINE_RECOMPOSITION','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION') then
+  if p_kind in('ROUTINE_RECOMPOSITION','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION','MANUAL_SELECTION_RECOMPOSITION') then
    update public.weekly_contact_source_ordinal_owners set message_intent_id=i.id,revision=revision+1,recorded_at_utc=clock_timestamp()
     where logical_contact_key=decode(row_json->>'logical_contact_key','hex') and send_ordinal=(row_json->>'send_ordinal')::integer
      and message_intent_id=p_original_intent;
