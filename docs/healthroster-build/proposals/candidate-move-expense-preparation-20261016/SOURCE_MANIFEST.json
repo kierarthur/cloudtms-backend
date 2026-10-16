@@ -1,0 +1,45 @@
+{
+  "status": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "files": [
+    {
+      "path": "build.mjs",
+      "sha256": "135db8a14646e91f200afb187e27e32876a4b37fb277977fb06c62f3dbab8d6f",
+      "bytes": 5241
+    },
+    {
+      "path": "forward/00_expense_draft_policy.sqlinc",
+      "sha256": "ababca1a94ddb878804c9cd0b1ae89ed2718f3accc0ebff40a0213853a34302d",
+      "bytes": 32172
+    },
+    {
+      "path": "forward/01_current_expense_preparation.mjsinc",
+      "sha256": "d366bea0b7f3c376560a7ae068d1bce504261b3321a6500c42f07b501dfd9b15",
+      "bytes": 15468
+    },
+    {
+      "path": "MOUNT_RECIPE.json",
+      "sha256": "fdd279a648912b9355d1e308354eb0c0c4eb50544d24d259232c627de9eb752a",
+      "bytes": 2548
+    },
+    {
+      "path": "README.md",
+      "sha256": "9dba41ac8a0c004016b56a1e008728d1ba88ceaea26b2aedadc6d1060528e9c6",
+      "bytes": 2774
+    },
+    {
+      "path": "record.mjs",
+      "sha256": "f843df227a2e7ba81fcd7b8d1c3d92ffaa81a3b6016e9b931a1c2aefe533ce4f",
+      "bytes": 2879
+    },
+    {
+      "path": "tests/OFFLINE_RESULT.json",
+      "sha256": "6291bd50513d23eba03c999636d84f418e0fdcd91fd25f0ab6cbec5ed4faca88",
+      "bytes": 258
+    },
+    {
+      "path": "tests/preparation.test.mjs",
+      "sha256": "6a25e9923b93c20c21c87b0dc57f600d4a5dd9bc26208400dfc7b5a84058686c",
+      "bytes": 9809
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "status": "SOURCE_ONLY_PREPARATION_NATIVE_NOT_RUN",
+  "predecessor": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+  "publicMove17Unchanged": true,
+  "newOperation": false,
+  "newPublicField": false,
+  "nativePolicyOwner": {
+    "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+    "sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c",
+    "abi": "private._expense_approval_policy_v1(uuid,uuid,date,text)->jsonb",
+    "semantics": "Expense import-disabled paper policy is purpose-specific; base policy equality asserted only for non-Expense kinds."
+  },
+  "sql": [
+    {
+      "payload": "forward/00_expense_draft_policy.sqlinc",
+      "signature": "public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamptz)",
+      "mode": "Complete975 successor, sole WORKER_DRAFT policy eligibility delta. Same owner/search_path/service-only ACL; final exact975ACL/notify remains required."
+    }
+  ],
+  "worker": [
+    {
+      "payload": "forward/01_current_expense_preparation.mjsinc",
+      "module": "broker/src/candidate-app-backend.js",
+      "function": "prepareImmutableSubmission"
+    },
+    {
+      "payload": "forward/01_current_expense_preparation.mjsinc",
+      "module": "broker/src/index.js",
+      "function": "buildCandidateWeeklySubmissionThroughCanonicalAuthority"
+    }
+  ],
+  "caller": "Exact c475 BROKER_CALLER.json original call gains access argument; no new route. Preserve529 CREATE typed snapshot and c03 resubmit, a10f paper/manager wrappers.",
+  "preserved": [
+    "Stored original workflow/Contract/CW/anchor/target/generation",
+    "Original official presentation/component/signature/native request identities",
+    "Actual rate picker/calculator and rounding rules",
+    "Existing canonical prospective create without allocating a physical record",
+    "Controlled movedExpense native submit refusal until actual finalizer/current-carrier publisher is supplied"
+  ],
+  "verification": {
+    "sourceCases": 8,
+    "grammar": "tests/OFFLINE_RESULT.json",
+    "native": "NOT_RUN",
+    "api": "NOT_RUN",
+    "acl": "NOT_RUN",
+    "financial": "NOT_RUN",
+    "databaseCalls": 0
+  },
+  "payloads": [
+    {
+      "path": "forward/00_expense_draft_policy.sqlinc",
+      "sha256": "ababca1a94ddb878804c9cd0b1ae89ed2718f3accc0ebff40a0213853a34302d",
+      "bytes": 32172
+    },
+    {
+      "path": "forward/01_current_expense_preparation.mjsinc",
+      "sha256": "d366bea0b7f3c376560a7ae068d1bce504261b3321a6500c42f07b501dfd9b15",
+      "bytes": 15468
+    }
+  ]
+}

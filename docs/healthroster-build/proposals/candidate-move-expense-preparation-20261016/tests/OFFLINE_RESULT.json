@@ -1,0 +1,5 @@
+{
+  "status": "PASS_SOURCE_8_AND_GRAMMAR_FIELD_ONLY",
+  "native": "NOT_RUN",
+  "output": "00_expense_draft_policy.sqlinc: grammar parsed\n6 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN."
+}

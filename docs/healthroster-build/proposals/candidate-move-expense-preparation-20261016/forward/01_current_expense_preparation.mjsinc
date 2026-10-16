@@ -1,0 +1,272 @@
+async function prepareImmutableSubmission(env, deps, workflow, body, mutationKey, access = null) {
+  const supplied = isObject(body.immutable_submission) ? structuredClone(body.immutable_submission) : {};
+  const forbidden = forbiddenFinancialKeys(supplied);
+  if (forbidden.length) throw new CandidateHttpError(400, 'CANDIDATE_FINANCIAL_AUTHORITY_FORBIDDEN', { fields: forbidden.slice(0, 20) });
+  let calculationWorkflow = workflow;
+  if (workflow.scope === 'WEEKLY' && access) {
+    const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+      p_timesheet_id: null, p_contract_week_id: null, p_workflow_id: workflow.id
+    }));
+    if (detail?.contract_move != null) {
+      const move = decodeCandidateContractMove(detail.contract_move);
+      const week = detail.contract_week;
+      if (!week || !UUID_RE.test(text(week.id)) || !UUID_RE.test(text(week.contract_id))
+          || !isObject(detail.capabilities?.policy)
+          || detail.timesheet?.id !== move.current_mutable_timesheet_id
+          || !(Array.isArray(detail.workflows) ? detail.workflows : []).some(w =>
+            w.workflow_id === workflow.id && Number(w.generation) === Number(workflow.generation))) {
+        throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+      }
+      // Transient calculation input only. The stored workflow identity and the
+      // original official-presentation/signed body below remain original A.
+      if (workflow.workflow_kind === 'CONTRACT_EXPENSE') {
+        // The worked anchor and server-resolved expense carrier are different
+        // native identities. A targetless draft stays targetless; the existing
+        // canonical producer retains its normal prospective create payload.
+        let calculationWeek = week;
+        let calculationTarget = null;
+        if (workflow.target_timesheet_id) {
+          const carrier = await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+            p_timesheet_id: workflow.target_timesheet_id, p_contract_week_id: null, p_workflow_id: null
+          }));
+          const carrierMove = decodeCandidateContractMove(carrier?.contract_move);
+          if (carrierMove.family_root_id !== move.family_root_id || carrierMove.operation_id !== move.operation_id
+              || carrier.timesheet?.id !== carrierMove.current_mutable_timesheet_id
+              || carrier.contract_week?.contract_id !== week.contract_id || !UUID_RE.test(text(carrier.contract_week?.id))
+              || !(Array.isArray(carrier.workflows) ? carrier.workflows : []).some(w =>
+                w.workflow_id === workflow.id && Number(w.generation) === Number(workflow.generation))) {
+            throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+          }
+          calculationWeek = carrier.contract_week;
+          calculationTarget = carrierMove.current_mutable_timesheet_id;
+        }
+        calculationWorkflow = { ...workflow, contract_id: week.contract_id, contract_week_id: calculationWeek.id,
+          target_timesheet_id: calculationTarget, anchor_timesheet_id: move.current_mutable_timesheet_id,
+          policy_snapshot_json: detail.capabilities.policy, _contract_move_current: calculationTarget != null,
+          _contract_move_expense_anchor: { timesheet_id: move.current_mutable_timesheet_id, contract_week_id: week.id } };
+      } else {
+        calculationWorkflow = { ...workflow, contract_id: week.contract_id, contract_week_id: week.id,
+          target_timesheet_id: move.current_mutable_timesheet_id, policy_snapshot_json: detail.capabilities.policy, _contract_move_current: true };
+      }
+    }
+  }
+  const authoritySubmission = workflow.workflow_kind === 'DAILY'
+    ? await deps.buildDailySubmission({ workflow, factualSubmission: supplied, mutationKey })
+    : await deps.buildWeeklySubmission({ workflow: calculationWorkflow, factualSubmission: supplied, mutationKey });
+  const presentation = await buildOfficialPresentationSnapshot(env, workflow);
+  const id = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
+  const rawCorrection = await correctionProjection(deps, id, workflow.candidate_id);
+  if (rawCorrection && rawCorrection.replacement_timesheet_id === id) {
+    const correction = serializeCandidateCorrection(rawCorrection, id, CORRECTION_CONVERTERS);
+    if (correction.state !== 'WAITING') throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    // Read only the canonical producer's actual submitted schedule. Never the
+    // Office proposal, mutable Rota, or the earlier signed record's schedule.
+    const reviewed = scheduleFromImmutable({ ...workflow, immutable_submission_json: authoritySubmission }, null);
+    if (!reviewed.length) throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    const frozen = correctionPresentation(rawCorrection, reviewed, CORRECTION_CONVERTERS);
+    presentation.correction = frozen;
+    presentation.wording.header.lines = [...frozen.header_lines, ...presentation.wording.header.lines];
+  }
+  return {
+    ...authoritySubmission,
+    official_presentation: presentation
+  };
+}
+
+async function buildCandidateWeeklySubmissionThroughCanonicalAuthority(
+  env, { workflow, factualSubmission, mutationKey } = {}
+) {
+  const enc = encodeURIComponent;
+  const factual = (factualSubmission && typeof factualSubmission === 'object' && !Array.isArray(factualSubmission))
+    ? factualSubmission : {};
+  const contractWeekId = String(workflow?.contract_week_id || '').trim();
+  const contractId = String(workflow?.contract_id || '').trim();
+  if (!contractWeekId || !contractId) throw new Error('CANDIDATE_WORKFLOW_WEEK_NOT_FOUND');
+
+  const [cw, contract] = await Promise.all([
+    sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}&select=*`),
+    sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`)
+  ]);
+  if (!cw || !contract || String(cw.contract_id) !== String(contract.id)) throw new Error('CANDIDATE_WORKFLOW_WEEK_NOT_FOUND');
+
+  const targetTimesheetId = String(workflow.target_timesheet_id || '').trim()
+    || await deterministicCandidateUuid(
+      'candidate-weekly-provisional-timesheet-v1', workflow.id, workflow.generation,
+      mutationKey, contractWeekId, contractId
+    );
+  const [existingTimesheet, existingFinancials, candidate, client] = await Promise.all([
+    workflow.target_timesheet_id
+      ? sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(workflow.target_timesheet_id)}&is_current=eq.true&select=*`)
+      : Promise.resolve(null),
+    workflow.target_timesheet_id
+      ? sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(workflow.target_timesheet_id)}&is_current=eq.true&select=*`)
+      : Promise.resolve(null),
+    contract.candidate_id
+      ? sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name,key_norm,mileage_pay_rate`)
+      : Promise.resolve(null),
+    contract.client_id
+      ? sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name,mileage_charge_rate`)
+      : Promise.resolve(null)
+  ]);
+
+  if (workflow._contract_move_current === true && (!existingTimesheet
+      || String(existingTimesheet.timesheet_id) !== targetTimesheetId
+      || String(existingTimesheet.contract_id) !== String(contract.id)
+      || String(cw.timesheet_id) !== targetTimesheetId)) {
+    throw new Error('CANDIDATE_CONTEXT_STALE');
+  }
+  if (workflow._contract_move_expense_anchor) {
+    const anchor = workflow._contract_move_expense_anchor;
+    const [anchorTimesheet, anchorWeek] = await Promise.all([
+      sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(anchor.timesheet_id)}&is_current=eq.true&select=*`),
+      String(anchor.contract_week_id) === String(cw.id) ? Promise.resolve(cw)
+        : sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(anchor.contract_week_id)}&select=*`)
+    ]);
+    if (workflow.workflow_kind !== 'CONTRACT_EXPENSE' || !anchorTimesheet || !anchorWeek
+        || String(anchorTimesheet.timesheet_id) !== String(anchor.timesheet_id)
+        || String(anchorWeek.id) !== String(anchor.contract_week_id)
+        || anchorTimesheet.is_current !== true || anchorTimesheet.archived_at_utc != null
+        || String(anchorTimesheet.contract_id) !== String(contract.id) || anchorTimesheet.sheet_scope !== 'WEEKLY'
+        || ['EXPENSES', 'MILEAGE'].includes(String(anchorTimesheet.line_type || '').toUpperCase())
+        || String(anchorWeek.contract_id) !== String(contract.id) || String(anchorWeek.timesheet_id) !== String(anchor.timesheet_id)
+        || String(anchorWeek.week_ending_date) !== String(cw.week_ending_date)
+        || (workflow.target_timesheet_id && (!existingTimesheet
+          || !['EXPENSES', 'MILEAGE'].includes(String(existingTimesheet.line_type || '').toUpperCase())
+          || Number(cw.additional_seq) <= 0))) {
+      throw new Error('CANDIDATE_CONTEXT_STALE');
+    }
+  }
+  const schedule = Array.isArray(factual.actual_schedule_json)
+    ? factual.actual_schedule_json.map(normaliseCandidateBreakInput)
+    : Array.isArray(factual.timesheet_patch_json?.actual_schedule_json)
+      ? factual.timesheet_patch_json.actual_schedule_json.map(normaliseCandidateBreakInput)
+      : [];
+  const additionalUnitsWeek = factual.additional_units_week || factual.timesheet_patch_json?.additional_units_week || {};
+  const additionalUnitsPerDay = factual.additional_units_per_day || factual.timesheet_patch_json?.additional_units_per_day || {};
+  const claim = (factual.expense_claim && typeof factual.expense_claim === 'object') ? factual.expense_claim : {};
+  const amount = (value, field) => {
+    if (value == null || value === '') return 0;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) throw new Error(`CANDIDATE_EXPENSE_VALUE_INVALID:${field}`);
+    return Math.round(number * 100) / 100;
+  };
+  const mileageUnits = amount(claim.mileage_units, 'mileage_units');
+  const travelAmount = amount(claim.travel_amount, 'travel_amount');
+  const accommodationAmount = amount(claim.accommodation_amount, 'accommodation_amount');
+  const otherAmount = amount(claim.other_amount, 'other_amount');
+  const expensesPay = Math.round((travelAmount + accommodationAmount + otherAmount) * 100) / 100;
+  const expensesCharge = expensesPay;
+
+  let mileagePayRate = Number(contract.mileage_pay_rate || existingFinancials?.mileage_pay_rate || candidate?.mileage_pay_rate || 0) || null;
+  let mileageChargeRate = Number(contract.mileage_charge_rate || existingFinancials?.mileage_charge_rate || client?.mileage_charge_rate || 0) || null;
+  if (mileageUnits > 0 && (!mileagePayRate || !mileageChargeRate)) {
+    const financeRows = await sbRpc(env, 'settings_finance_pick', { p_date: cw.week_ending_date || null }).catch(() => []);
+    const finance = Array.isArray(financeRows) ? financeRows[0] : financeRows;
+    mileagePayRate = mileagePayRate || Number(finance?.mileage_pay_defaults || 0) || null;
+    mileageChargeRate = mileageChargeRate || Number(finance?.mileage_charge_defaults || 0) || null;
+  }
+  if (mileageUnits > 0 && (!mileagePayRate || !mileageChargeRate)) throw new Error('MILEAGE_RATE_MISSING');
+  const mileagePay = Math.round(mileageUnits * Number(mileagePayRate || 0) * 100) / 100;
+  const mileageCharge = Math.round(mileageUnits * Number(mileageChargeRate || 0) * 100) / 100;
+
+  const syntheticTimesheet = {
+    ...(existingTimesheet || {}),
+    timesheet_id: targetTimesheetId,
+    version: existingTimesheet?.version || 1,
+    contract_id: contract.id,
+    week_ending_date: cw.week_ending_date,
+    sheet_scope: 'WEEKLY',
+    submission_mode: 'MANUAL',
+    actual_schedule_json: schedule,
+    additional_units_week: additionalUnitsWeek,
+    additional_units_per_day: additionalUnitsPerDay
+  };
+  const financialInput = {
+    ...(existingFinancials || {}),
+    timesheet_id: targetTimesheetId,
+    candidate_id: contract.candidate_id,
+    client_id: contract.client_id,
+    travel_pay_ex_vat: travelAmount,
+    travel_charge_ex_vat: travelAmount,
+    accommodation_pay_ex_vat: accommodationAmount,
+    accommodation_charge_ex_vat: accommodationAmount,
+    other_pay_ex_vat: otherAmount,
+    other_charge_ex_vat: otherAmount,
+    expenses_pay_ex_vat: expensesPay,
+    expenses_charge_ex_vat: expensesCharge,
+    expenses_description: String(claim.description || '').trim() || null,
+    mileage_units: mileageUnits,
+    mileage_pay_ex_vat: mileagePay,
+    mileage_charge_ex_vat: mileageCharge,
+    mileage_pay_rate: mileagePayRate,
+    mileage_charge_rate: mileageChargeRate
+  };
+  const policy = (workflow.policy_snapshot_json && typeof workflow.policy_snapshot_json === 'object')
+    ? workflow.policy_snapshot_json : {};
+  const built = await buildWeeklyScheduleSegmentsSnapshot(env, syntheticTimesheet, cw, contract, financialInput, {
+    write_now: false,
+    policy_override: policy
+  });
+  const snapshot = {
+    ...built.snapshot,
+    travel_pay_ex_vat: travelAmount,
+    travel_charge_ex_vat: travelAmount,
+    accommodation_pay_ex_vat: accommodationAmount,
+    accommodation_charge_ex_vat: accommodationAmount,
+    other_pay_ex_vat: otherAmount,
+    other_charge_ex_vat: otherAmount,
+    expenses_description: financialInput.expenses_description,
+    mileage_pay_rate: mileagePayRate,
+    mileage_charge_rate: mileageChargeRate
+  };
+  const timesheetPatch = {
+    actual_schedule_json: schedule,
+    additional_units_week: additionalUnitsWeek,
+    additional_units_per_day: additionalUnitsPerDay
+  };
+  const timesheetCreate = existingTimesheet ? null : {
+    timesheet_id: targetTimesheetId,
+    booking_id: `CANDIDATE-WEEKLY-${String(cw.id).replace(/-/g, '')}`,
+    contract_id: contract.id,
+    week_ending_date: cw.week_ending_date,
+    occupant_key_norm: candidate?.key_norm || '',
+    hospital_norm: client?.name || '',
+    ward_norm: '',
+    job_title_norm: contract.role || '',
+    shift_label_norm: 'weekly',
+    band: contract.band || null,
+    status: 'RECEIVED',
+    submission_mode: 'MANUAL',
+    line_type: workflow.workflow_kind === 'CONTRACT_EXPENSE' ? 'EXPENSES' : 'HOURS',
+    sheet_scope: 'WEEKLY',
+    actual_schedule_json: schedule,
+    additional_units_week: additionalUnitsWeek,
+    additional_units_per_day: additionalUnitsPerDay,
+    candidate_hint_text: { display_name: candidate?.display_name || null }
+  };
+  const totals = {
+    ...(cw.totals_json && typeof cw.totals_json === 'object' ? cw.totals_json : {}),
+    actual_schedule_json: schedule,
+    expenses_draft: {
+      mileage_units: mileageUnits,
+      travel_pay: travelAmount,
+      travel_charge: travelAmount,
+      accommodation_pay: accommodationAmount,
+      accommodation_charge: accommodationAmount,
+      other_pay: otherAmount,
+      other_charge: otherAmount,
+      note: financialInput.expenses_description || ''
+    }
+  };
+  const authorityPayload = {
+    contract_version: 'CANDIDATE_WEEKLY_CANONICAL_AUTHORITY_V1',
+    timesheet_create_json: timesheetCreate,
+    timesheet_patch_json: timesheetPatch,
+    contract_week_patch_json: { totals_json: totals, planned_schedule_json: schedule },
+    canonical_tsfin_snapshot: snapshot
+  };
+  if (workflow.workflow_kind === 'CONTRACT_COMBINED') {
+    return { hours_submission: authorityPayload, expense_submission: authorityPayload };
+  }
+  return authorityPayload;
+}
