@@ -1,0 +1,78 @@
+{
+  "version": "CONTACT_CLOSED_COMMAND_COMPONENT_EXPECTED_V1",
+  "sourceInputsSha256": "24ef002dd779b88b21bbf648dfb677be58bfa6d4960fedd7367eb5788bf0b6d0",
+  "sourceCheckpoint": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "mode": "protected-owner-request",
+  "marker": "hr_contact_closed_4bf03ef2c9057f1c3f7db169f6c529dc",
+  "sqlSha256": "403388522c572d805cf88a00642f9baf58d84519c4e2eea11ce421e454ecbbae",
+  "verificationSqlSha256": "844e9f0f48cf6029846a87c48f16f88aee46d887c33fd85cea1e9f1a62509dfd",
+  "statementCount": 18,
+  "sourceFunctions": 3,
+  "protectedHelperPreexistingRequired": true,
+  "heldBeforeOverlayStatement": 2,
+  "beforeSnapshotStatement": 1,
+  "proofStatement": 18,
+  "scope": "CLOSED_COMMAND_COMPONENT_ONLY",
+  "apiRoleProof": "NOT_RUN",
+  "native": "NOT_RUN",
+  "files": [
+    {
+      "path": "COMPONENT.sql",
+      "bytes": 12761,
+      "sha256": "403388522c572d805cf88a00642f9baf58d84519c4e2eea11ce421e454ecbbae"
+    },
+    {
+      "path": "DISCOVERY.sql",
+      "bytes": 2243,
+      "sha256": "0a9b7baefd54851d716e4b49a6a9f47493aca7e60af1adec4e8f59fdc0854210"
+    },
+    {
+      "path": "DISCOVERY_EXPECTED.json",
+      "bytes": 796,
+      "sha256": "618735120f171788bfc38057e2740d14863d52e1f14b1ab6b14731e26cfbb939"
+    },
+    {
+      "path": "DISCOVERY_PREFLIGHT.sql",
+      "bytes": 1568,
+      "sha256": "8ed8f47d05bcb6a3e5a94f3027d9615dcc49d15340b63a9dadd9def9d9dae452"
+    },
+    {
+      "path": "DISCOVERY_PREFLIGHT_REQUEST.json",
+      "bytes": 1710,
+      "sha256": "834b782c9350210d326d3ad854542151f900b8bc90d9eeb3bcbb99b745f28672"
+    },
+    {
+      "path": "DISCOVERY_REQUEST.json",
+      "bytes": 2403,
+      "sha256": "5c0ebc62ab06fd89d0501c0f30141c2129cae7fae04f82645b1ccde6539a861a"
+    },
+    {
+      "path": "EXPECTED.json",
+      "bytes": 784,
+      "sha256": "ad0d127cc603e8d10c8bc7a21311851759fce8a6f5454e3f8f03750fc2f4dd90"
+    },
+    {
+      "path": "FRESH_VERIFY.sql",
+      "bytes": 1935,
+      "sha256": "844e9f0f48cf6029846a87c48f16f88aee46d887c33fd85cea1e9f1a62509dfd"
+    },
+    {
+      "path": "PREFLIGHT_REQUEST.json",
+      "bytes": 3355,
+      "sha256": "d4c95b8762580438b3b9ad8661d2aa5ef17c8f5b88fa8f58e12180877e8e5046"
+    },
+    {
+      "path": "READINESS_PREFLIGHT.sql",
+      "bytes": 3199,
+      "sha256": "82fcab1098b622194778cf5d70c48d4c700664da7b4db66f2a4c21b927cdfad2"
+    },
+    {
+      "path": "REQUEST.json",
+      "bytes": 14948,
+      "sha256": "7851806e793fc2bc64f0c1d16d86309f91968aaa4296d93f52fb5f10da9bbcc3"
+    }
+  ],
+  "sourceOnlyBuilt": true,
+  "caller": "ROOT_ONLY_KIER_ROLLBACK_TOOL",
+  "locks": "ROOT_OWNS_EXISTING_SHARED_PROTOCOL_NOT_ACQUIRED_BY_BUILDER"
+}

@@ -1,0 +1,18 @@
+{
+  "version": "CONTACT_CLOSED_COMMAND_COMPONENT_EXPECTED_V1",
+  "sourceInputsSha256": "24ef002dd779b88b21bbf648dfb677be58bfa6d4960fedd7367eb5788bf0b6d0",
+  "sourceCheckpoint": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "mode": "session-context",
+  "marker": "hr_contact_closed_b505a81c24ffba1149149d5f45c81d79",
+  "sqlSha256": "614ac6a61da06d75402513c6a2271f02cc02ed02b8395ba395de0697d61f9051",
+  "verificationSqlSha256": "9630a7c085266f6759518f2e317d45f04a44986a0736a1ad42069b38dbd120af",
+  "statementCount": 17,
+  "sourceFunctions": 3,
+  "protectedHelperPreexistingRequired": true,
+  "heldBeforeOverlayStatement": 2,
+  "beforeSnapshotStatement": 1,
+  "proofStatement": 17,
+  "scope": "CLOSED_COMMAND_COMPONENT_ONLY",
+  "apiRoleProof": "NOT_RUN",
+  "native": "NOT_RUN"
+}

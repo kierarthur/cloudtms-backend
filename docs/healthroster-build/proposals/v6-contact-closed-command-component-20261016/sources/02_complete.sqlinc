@@ -1,0 +1,13 @@
+create or replace function public.weekly_source_message_dispatch_submission_start_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+begin
+  perform private.weekly_source_query_require_service_v1();
+  raise exception 'WEEKLY_SOURCE_PER_TARGET_DISPATCH_REQUIRED' using errcode='55000';
+end;
+$function$;

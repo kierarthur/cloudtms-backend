@@ -1,0 +1,84 @@
+do $acl$
+declare
+  v_name text;
+  v_public_names constant text[]:=array[
+    'weekly_source_candidate_query_get_v1',
+    'weekly_source_message_render_input_v1',
+    'weekly_source_timesheet_submission_complete_atomic_v1',
+    'weekly_source_query_accept_system_hours_atomic_v1',
+    'weekly_source_office_notifications_list_v1',
+    'weekly_source_office_notification_ack_atomic_v1',
+    'weekly_source_manager_review_get_v1',
+    'weekly_source_manager_review_respond_atomic_v1',
+    'weekly_source_message_dispatch_claim_v1',
+    'weekly_source_message_dispatch_submission_start_atomic_v1',
+    'weekly_source_message_dispatch_result_atomic_v1',
+    'weekly_source_manager_route_prepare_atomic_v1',
+    'weekly_source_message_render_stage_atomic_v1',
+    'weekly_source_query_scheduler_tick_v1',
+    'weekly_source_candidate_response_submit_atomic_v1',
+    'weekly_source_query_send_manager_now_atomic_v1',
+    'weekly_source_candidate_reminder_atomic_v1',
+    'weekly_source_query_ask_candidate_atomic_v1',
+    'weekly_source_timesheet_submission_request_start_atomic_v1',
+    'weekly_source_query_sync_atomic_v1'
+  ];
+  v_private_names constant text[]:=array[
+    'weekly_source_query_require_service_v1',
+    'weekly_source_query_manager_row_owned_v1',
+    'weekly_source_query_manager_generation_v1',
+    'weekly_source_query_manager_intent_v1',
+    'weekly_source_query_restart_activated_cohort_v1',
+    'weekly_source_query_cohort_ensure_v1',
+    'weekly_source_query_candidate_intent_v1',
+    'weekly_source_query_candidate_generation_v1',
+    'weekly_source_query_hex32_v1',
+    'weekly_source_query_ascii_fold_v1',
+    'weekly_source_query_normalise_recipient_v1',
+    'weekly_source_query_current_publication_v1',
+    'weekly_source_query_response_fingerprint_v1',
+    'weekly_source_query_candidate_timesheet_hash_v1',
+    'weekly_source_query_incident_policy_v1',
+    'weekly_source_query_notice_fanout_v1',
+    'weekly_source_query_comparison_fingerprint_v1'
+  ];
+begin
+  -- Keep ownership provider-neutral: the authenticated release owner owns the
+  -- routines on both the local proof database and the Miget TEST database.
+  if (select pg_catalog.count(*)
+      from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
+      where namespace.nspname='public' and procedure.proname=any(v_public_names)
+        and pg_catalog.pg_get_function_identity_arguments(procedure.oid)='p_request jsonb')
+     <>pg_catalog.array_length(v_public_names,1) then
+    raise exception 'WEEKLY_SOURCE_QUERY_PUBLIC_RPC_SURFACE_INCOMPLETE';
+  end if;
+  foreach v_name in array v_public_names loop
+    execute pg_catalog.format('alter function public.%I(jsonb) owner to current_user',v_name);
+    execute pg_catalog.format(
+      'revoke all on function public.%I(jsonb) from public,anon,authenticated,service_role',v_name
+    );
+    execute pg_catalog.format('grant execute on function public.%I(jsonb) to service_role',v_name);
+  end loop;
+  foreach v_name in array v_private_names loop
+    if not exists(
+      select 1 from pg_catalog.pg_proc procedure
+      join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
+      where namespace.nspname='private' and procedure.proname=v_name
+    ) then
+      raise exception 'WEEKLY_SOURCE_QUERY_PRIVATE_ROUTINE_MISSING: %',v_name;
+    end if;
+  end loop;
+  for v_name in
+    select pg_catalog.format('%I.%I(%s)',namespace.nspname,procedure.proname,
+             pg_catalog.pg_get_function_identity_arguments(procedure.oid))
+    from pg_catalog.pg_proc procedure
+    join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
+    where namespace.nspname='private' and procedure.proname=any(v_private_names)
+    order by procedure.proname,pg_catalog.pg_get_function_identity_arguments(procedure.oid)
+  loop
+    execute 'alter function '||v_name||' owner to current_user';
+    execute 'revoke all on function '||v_name||' from public,anon,authenticated,service_role';
+  end loop;
+end;
+$acl$;

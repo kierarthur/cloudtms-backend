@@ -1,0 +1,188 @@
+{
+  "version": "CONTACT_CLOSED_COMMAND_COMPONENT_INPUTS_V1",
+  "sourceCheckpoint": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "functions": [
+    {
+      "signature": "private.weekly_source_query_require_service_v1()",
+      "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sourceFileSha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "completeStatementSha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0",
+      "file": "sources/01_complete.sqlinc",
+      "fileSha256": "6aa87be22a37e7f0001524c5dd41ee591c4d93c4d9f15a3adfa11046fdfe78ea",
+      "rawProsrcMd5": "237c30e8fdce7bf84d2002d0e669cdd3",
+      "securityDefiner": true,
+      "volatility": "s",
+      "searchPath": "pg_catalog,pg_temp",
+      "chain": null
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+      "physical": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "root": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion_v1.sql",
+      "sourceFileSha256": "71e27752fc91e9177992fdad51c131a7d71626da43d5067ab8b0de30c7d7db47",
+      "completeStatementSha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d",
+      "file": "sources/02_complete.sqlinc",
+      "fileSha256": "524fd763e1f0822b64cf3f471b99b22461083516df3a3be2daa07085bf037628",
+      "rawProsrcMd5": "4c0326a4000e71a3fab3cdabd0e691c9",
+      "securityDefiner": true,
+      "volatility": "v",
+      "searchPath": "public,private,pg_catalog,pg_temp",
+      "chain": {
+        "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+          "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion_v1.sql"
+        ],
+        "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+        "healthV6ContactSourceReview": "docs/healthroster-build/proposals/v6-contact-producer-review-20261016/REVIEW.md",
+        "healthV6ContactRootIntegration": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_NATIVE_SOURCE_INTEGRATION.json"
+      }
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_result_atomic_v1(jsonb)",
+      "physical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "root": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "sourceFileSha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+      "completeStatementSha256": "840d2edb81b7f2aa3c4fcdc718533d34dc8560ee01f4a24ce7275d35cb378467",
+      "file": "sources/03_complete.sqlinc",
+      "fileSha256": "c382328edeef48e3a53f6bdafdad0b29c9241b90b57996f53e93e40bfa6485c2",
+      "rawProsrcMd5": "4c0326a4000e71a3fab3cdabd0e691c9",
+      "securityDefiner": true,
+      "volatility": "v",
+      "searchPath": "public,private,pg_catalog,pg_temp",
+      "chain": {
+        "signature": "public.weekly_source_message_dispatch_result_atomic_v1(jsonb)",
+        "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "finalPhysical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+        "allowedPhysical": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        ],
+        "predecessors": [
+          "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+        ],
+        "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+        "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      }
+    },
+    {
+      "signature": "private.weekly_source_protected_qualification_owner_v1()",
+      "physical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "root": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "sourceFileSha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433",
+      "completeStatementSha256": "c9c65bcd2e9d33ebf1cd9c9a701966bf371ac366ab97fd81d6c75b72e56b88cb",
+      "file": "sources/04_complete.sqlinc",
+      "fileSha256": "9b6a565e0916f1f2270c34d86da1e1f13ba48cb7ad96737cc0dda3c1bd666742",
+      "rawProsrcMd5": "7dcc1e303ab436298d7a3fa1ebc61807",
+      "securityDefiner": false,
+      "volatility": "s",
+      "searchPath": "pg_catalog,pg_temp",
+      "chain": {
+        "signature": "private.weekly_source_protected_qualification_owner_v1()",
+        "finalRoot": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+        "finalPhysical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+        "allowedPhysical": [
+          "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/14_q25_owner_xid_qualification_QUALIFICATION_SCOPE.sqlinc",
+          "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/30_q45_actor_event_closed_dto_cross_session_01_complete_qualification_scope.sqlinc",
+          "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc"
+        ],
+        "predecessors": [
+          "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites_v1.sql"
+        ],
+        "finalClosures": [
+          "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql"
+        ],
+        "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+        "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json"
+      }
+    }
+  ],
+  "acl": {
+    "originalPath": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+    "originalFile": "sources/05_complete_original_acl_do.sqlinc",
+    "originalStatementSha256": "60a7ec8310ff55bfcc896d239ca03f6ff858b188acb095e44c15f5a53aa58e03",
+    "startPath": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/99_acl.sqlinc",
+    "startFile": "sources/06_exact_start_acl.sqlinc",
+    "startStatements": [
+      "alter function public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb) owner to postgres;",
+      "revoke all on function public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb) from public,anon,authenticated,service_role;",
+      "grant execute on function public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb) to service_role;"
+    ],
+    "projection": "For private require_service and public closed RESULT only: singleton evaluation of the original frozen complete ACL DO loops. No other name, role, grantee or owner is selected.",
+    "projectedStatements": [
+      "alter function private.weekly_source_query_require_service_v1() owner to current_user;",
+      "revoke all on function private.weekly_source_query_require_service_v1() from public,anon,authenticated,service_role;",
+      "alter function public.weekly_source_message_dispatch_result_atomic_v1(jsonb) owner to current_user;",
+      "revoke all on function public.weekly_source_message_dispatch_result_atomic_v1(jsonb) from public,anon,authenticated,service_role;",
+      "grant execute on function public.weekly_source_message_dispatch_result_atomic_v1(jsonb) to service_role;"
+    ],
+    "ownerMapperPath": "scripts/cloudtms-db-release-lib.mjs",
+    "ownerMapperSha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+    "soleMappedStatement": "alter function public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb) owner to postgres;",
+    "soleMappedResult": "alter function public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb) OWNER TO CURRENT_USER;"
+  },
+  "ownerRequest": {
+    "sourcePath": "scripts/weekly-source-protected-record-evidence.mjs",
+    "sourceSha256": "0a14d9fb74046606ee053717cfef9cf08048604337203f158511c21d3450859d",
+    "evidenceFile": "sources/07_existing_owner_initialize.sqlinc",
+    "evidenceSha256": "85703eaeb52b84590bcd9f00ce0b37fc32c56e151f88a23413b0b58bcafcd286",
+    "difference": "Server-owned outer transaction replaces BEGIN/COMMIT; only the existing owner check and request-role dialect are reused, with set_config local=true. Existing native protected owner/helper must already exist and match; neither is fabricated."
+  },
+  "files": [
+    {
+      "path": "sources/01_complete.sqlinc",
+      "bytes": 510,
+      "sha256": "6aa87be22a37e7f0001524c5dd41ee591c4d93c4d9f15a3adfa11046fdfe78ea"
+    },
+    {
+      "path": "sources/02_complete.sqlinc",
+      "bytes": 414,
+      "sha256": "524fd763e1f0822b64cf3f471b99b22461083516df3a3be2daa07085bf037628"
+    },
+    {
+      "path": "sources/03_complete.sqlinc",
+      "bytes": 404,
+      "sha256": "c382328edeef48e3a53f6bdafdad0b29c9241b90b57996f53e93e40bfa6485c2"
+    },
+    {
+      "path": "sources/04_complete.sqlinc",
+      "bytes": 652,
+      "sha256": "9b6a565e0916f1f2270c34d86da1e1f13ba48cb7ad96737cc0dda3c1bd666742"
+    },
+    {
+      "path": "sources/05_complete_original_acl_do.sqlinc",
+      "bytes": 4036,
+      "sha256": "f5b16c41430f7cb323044b1b732fc1b02e9fdb6e96c66d4ebeab8309b9d324ce"
+    },
+    {
+      "path": "sources/06_exact_start_acl.sqlinc",
+      "bytes": 361,
+      "sha256": "285bd97093e79d05bb743e29464372afe6fe6498edcf04569f10a288b3b0af7a"
+    },
+    {
+      "path": "sources/07_existing_owner_initialize.sqlinc",
+      "bytes": 951,
+      "sha256": "85703eaeb52b84590bcd9f00ce0b37fc32c56e151f88a23413b0b58bcafcd286"
+    }
+  ],
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}

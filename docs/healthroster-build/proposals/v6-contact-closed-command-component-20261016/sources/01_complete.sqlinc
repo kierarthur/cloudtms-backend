@@ -1,0 +1,17 @@
+create or replace function private.weekly_source_query_require_service_v1()
+returns void
+language plpgsql
+stable
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if coalesce(
+       pg_catalog.current_setting('request.jwt.claim.role',true),
+       nullif(pg_catalog.current_setting('request.jwt.claims',true),'')::jsonb->>'role',
+       ''
+     ) <> 'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+end;
+$function$;

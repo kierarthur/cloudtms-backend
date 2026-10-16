@@ -1,0 +1,105 @@
+{
+  "version": "CONTACT_CLOSED_COMPONENT_OUTER_GRAMMAR_V1",
+  "postgresqlParser": "17.7",
+  "passed": 17,
+  "checks": [
+    {
+      "file": "packets/session-context/COMPONENT.sql",
+      "statements": 17,
+      "outerGrammar": "PASS",
+      "offlinePlpgsqlSyntaxBodies": 6
+    },
+    {
+      "file": "packets/session-context/FRESH_VERIFY.sql",
+      "statements": 1,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/session-context/READINESS_PREFLIGHT.sql",
+      "statements": 1,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/session-context/DISCOVERY_PREFLIGHT.sql",
+      "statements": 1,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/session-context/DISCOVERY.sql",
+      "statements": 3,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/protected-owner-request/COMPONENT.sql",
+      "statements": 18,
+      "outerGrammar": "PASS",
+      "offlinePlpgsqlSyntaxBodies": 7
+    },
+    {
+      "file": "packets/protected-owner-request/FRESH_VERIFY.sql",
+      "statements": 1,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/protected-owner-request/READINESS_PREFLIGHT.sql",
+      "statements": 1,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/protected-owner-request/DISCOVERY_PREFLIGHT.sql",
+      "statements": 1,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "packets/protected-owner-request/DISCOVERY.sql",
+      "statements": 3,
+      "outerGrammar": "PASS"
+    },
+    {
+      "file": "sources/01_complete.sqlinc",
+      "statements": 1,
+      "outerGrammar": "PASS",
+      "evidenceOnly": false
+    },
+    {
+      "file": "sources/02_complete.sqlinc",
+      "statements": 1,
+      "outerGrammar": "PASS",
+      "evidenceOnly": false
+    },
+    {
+      "file": "sources/03_complete.sqlinc",
+      "statements": 1,
+      "outerGrammar": "PASS",
+      "evidenceOnly": false
+    },
+    {
+      "file": "sources/04_complete.sqlinc",
+      "statements": 1,
+      "outerGrammar": "PASS",
+      "evidenceOnly": true
+    },
+    {
+      "file": "sources/05_complete_original_acl_do.sqlinc",
+      "statements": 1,
+      "outerGrammar": "PASS",
+      "evidenceOnly": true
+    },
+    {
+      "file": "sources/06_exact_start_acl.sqlinc",
+      "statements": 3,
+      "outerGrammar": "PASS",
+      "evidenceOnly": true
+    },
+    {
+      "file": "sources/07_existing_owner_initialize.sqlinc",
+      "statements": 7,
+      "outerGrammar": "PASS",
+      "evidenceOnly": true
+    }
+  ],
+  "catalogBinding": "NOT_RUN",
+  "plpgsqlRuntime": "NOT_RUN",
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

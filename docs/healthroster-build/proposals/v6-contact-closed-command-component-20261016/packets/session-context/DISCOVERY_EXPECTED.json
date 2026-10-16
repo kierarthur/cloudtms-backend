@@ -1,0 +1,36 @@
+{
+  "version": "CONTACT_BOUNDED_READONLY_DISCOVERY_EXPECTED_V1",
+  "preflightSqlSha256": "8ed8f47d05bcb6a3e5a94f3027d9615dcc49d15340b63a9dadd9def9d9dae452",
+  "sqlSha256": "0a9b7baefd54851d716e4b49a6a9f47493aca7e60af1adec4e8f59fdc0854210",
+  "statementCount": 3,
+  "maxRows": [
+    3,
+    5,
+    5
+  ],
+  "native": "NOT_RUN",
+  "qualification": "CANDIDATE_IDENTIFIERS_ONLY_NOT_ELIGIBILITY_OR_ROLE_PROOF",
+  "permittedOutputKeys": [
+    [
+      "case_kind",
+      "category",
+      "actor_user_id",
+      "authority_fields_md5"
+    ],
+    [
+      "case_kind",
+      "attempt_id",
+      "target_id",
+      "agency_id",
+      "unknown_attempt",
+      "attempt_state_md5"
+    ],
+    [
+      "case_kind",
+      "attempt_id",
+      "target_id",
+      "agency_id",
+      "attempt_state_md5"
+    ]
+  ]
+}
