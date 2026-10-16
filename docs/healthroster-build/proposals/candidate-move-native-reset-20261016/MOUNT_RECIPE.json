@@ -1,0 +1,267 @@
+{
+  "version": 1,
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "predecessor": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+  "schema7d": {
+    "path": "../checklist-v6-contract-correction-20261016/forward/sql/physical-schema.sqlinc",
+    "sha256": "5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115",
+    "changed": false
+  },
+  "sourceInputs": {
+    "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+    "observedHead": "e745f7a3350078ad2ff200400bcae88499ecf20d",
+    "files": [
+      {
+        "path": "broker/src/candidate-app-backend.js",
+        "sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd"
+      },
+      {
+        "path": "supabase/release/current-contract.json",
+        "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+      },
+      {
+        "path": "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql",
+        "sha256": "d0eedd6d77021275e4043c537f2ba8d70ee5020cc03934eb95b1822f38d0d589"
+      },
+      {
+        "path": "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+        "sha256": "feb34bd16cdff196802190581901797bb91e1025ea369a882f4e67f288b14c95"
+      },
+      {
+        "path": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+        "sha256": "535d02bd281c0c79ced43576ff66d8a14a4d07338ddf0384e4a22da641b68174"
+      },
+      {
+        "path": "supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql",
+        "sha256": "f283c6011f70e4bf2534a7499d40ae797053f5d5e4cf115c3169ecb01d3f228c"
+      },
+      {
+        "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+        "sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c"
+      },
+      {
+        "path": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+        "sha256": "5845f7ee77cb9164da6150bddbdbb90bd4e1c062fc556fa2e2207c78cc5e66fe"
+      }
+    ]
+  },
+  "mount": {
+    "after": "Complete exact96c5 projection +118a facts+c475 body +529 factual/paper and actual physical/Invoice prerequisite owners. Root mounts finite successors; no whole-parent transplant.",
+    "orderedSqlPayloads": [
+      "forward/00_native_rotation_binding.sqlinc",
+      "forward/01_native_rotation_publish.sqlinc",
+      "forward/02_current_placement.sqlinc",
+      "forward/03_placement_guard.sqlinc",
+      "forward/04_native_rotate.sqlinc",
+      "forward/05_office_target_workflows.sqlinc",
+      "forward/06_office_reject.sqlinc",
+      "forward/07_candidate_member_workflows.sqlinc",
+      "forward/08_native_resubmit.sqlinc",
+      "forward/09_resubmit_signature.sqlinc",
+      "forward/11_acl.sqlinc"
+    ],
+    "brokerCompleteFunctions": [
+      {
+        "module": "broker/src/candidate-app-backend.js",
+        "payload": "forward/10_resubmit_handler.mjsinc",
+        "names": [
+          "handleWorkflowResubmit"
+        ]
+      }
+    ],
+    "preserve": "All prior correction wrappers, physical trigger relation/name, original bodies/receipts/keys and72 method/path/op/security triples. Private context has no public17-field widening.",
+    "consumerDependency": "Invoice025 strict current target uses exact native_rotation_binding only for accepted member.to_id mismatch; native remains held until its complete owner successor mounted."
+  },
+  "functions": [
+    {
+      "signature": "private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)",
+      "payload": "forward/00_native_rotation_binding.sqlinc",
+      "volatility": "STABLE",
+      "exposure": "owner-only",
+      "classification": "new",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    },
+    {
+      "signature": "private.timesheet_contract_native_rotation_alias_v1(jsonb)",
+      "payload": "forward/00_native_rotation_binding.sqlinc",
+      "volatility": "STABLE",
+      "exposure": "owner-only",
+      "classification": "new",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    },
+    {
+      "signature": "private.timesheet_contract_native_rotation_publish_v1(jsonb,uuid,text,uuid,timestamptz)",
+      "payload": "forward/01_native_rotation_publish.sqlinc",
+      "volatility": "VOLATILE",
+      "exposure": "owner-only",
+      "classification": "new",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    },
+    {
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "payload": "forward/02_current_placement.sqlinc",
+      "volatility": "STABLE",
+      "exposure": "owner-only",
+      "classification": "successor",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    },
+    {
+      "signature": "private.timesheet_contract_move_placement_guard_v1()",
+      "payload": "forward/03_placement_guard.sqlinc",
+      "volatility": "VOLATILE",
+      "exposure": "owner-only",
+      "classification": "successor",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    },
+    {
+      "signature": "private._candidate_timesheet_reject_rotate_v1(uuid,uuid,text,uuid,timestamptz)",
+      "payload": "forward/04_native_rotate.sqlinc",
+      "volatility": "VOLATILE",
+      "exposure": "owner-only",
+      "classification": "successor",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    },
+    {
+      "signature": "private._candidate_office_rejection_targets_v2(text,uuid)",
+      "payload": "forward/05_office_target_workflows.sqlinc",
+      "volatility": "STABLE",
+      "exposure": "owner-only",
+      "classification": "successor",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    },
+    {
+      "signature": "public.candidate_submission_reject_atomic_v1(uuid,text,uuid,uuid,text,text,text,timestamptz)",
+      "payload": "forward/06_office_reject.sqlinc",
+      "volatility": "VOLATILE",
+      "exposure": "service_role",
+      "classification": "successor",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    },
+    {
+      "signature": "private.candidate_contract_move_context_v1(text,uuid,uuid,uuid)",
+      "payload": "forward/07_candidate_member_workflows.sqlinc",
+      "volatility": "STABLE",
+      "exposure": "owner-only",
+      "classification": "successor",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    },
+    {
+      "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)",
+      "payload": "forward/08_native_resubmit.sqlinc",
+      "volatility": "VOLATILE",
+      "exposure": "service_role",
+      "classification": "successor",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    },
+    {
+      "signature": "private.candidate_contract_move_draft_signature_assert_v1(uuid,jsonb,uuid)",
+      "payload": "forward/09_resubmit_signature.sqlinc",
+      "volatility": "STABLE",
+      "exposure": "owner-only",
+      "classification": "successor",
+      "securityDefiner": true,
+      "searchPath": "pg_catalog,public,private,pg_temp"
+    }
+  ],
+  "publicContract": {
+    "secondAdditiveRequestSchemaRepair": true,
+    "operation": "existing RejectedWorkflowResubmitRequest",
+    "optionalField": "input_snapshot: CandidateWorkflowFactualSnapshot identical529",
+    "legacyAbsentIdentityUnchanged": true,
+    "newOperation": false,
+    "move17KeysUnchanged": true,
+    "generatedConsumerOwner": "v6_invoice/MyTMS"
+  },
+  "verification": {
+    "sourceCases": 12,
+    "offlineSqlLeaves": 11,
+    "nativeRowVariables": 49,
+    "native": "NOT_RUN",
+    "api": "NOT_RUN",
+    "acl": "NOT_RUN",
+    "concurrency": "NOT_RUN",
+    "databaseCalls": 0
+  },
+  "remainingHealth": [
+    "Original/intermediate captured-source paper continuation and retirement",
+    "Genuine withdrawal pending/null plus real allocation continuation (separate finite schema correction)",
+    "Correction-pair atomic native reset",
+    "Moved expense/carrier native replacement + signature admission"
+  ],
+  "externalDependencies": [
+    "Actual Bank current-B finalizer/physical stage/cut producer not supplied or accepted",
+    "Invoice025/028 strict rotation-aware ownership successor"
+  ],
+  "payloads": [
+    {
+      "path": "forward/00_native_rotation_binding.sqlinc",
+      "sha256": "1378077f9c394ddde37c53273d5e031c7d392d82d409b6d9a194d301d5a06521",
+      "bytes": 5520
+    },
+    {
+      "path": "forward/01_native_rotation_publish.sqlinc",
+      "sha256": "7975be58d0fba1f1c615bf2068b20293f8b6fb41843f54ac267e068e6f75d1bd",
+      "bytes": 5619
+    },
+    {
+      "path": "forward/02_current_placement.sqlinc",
+      "sha256": "67b259e42bb7a699bdebeb02477fcdfdc373aa3229a2ca35d14f5d0c661942c6",
+      "bytes": 5099
+    },
+    {
+      "path": "forward/03_placement_guard.sqlinc",
+      "sha256": "dd3200e4bac2a68484de0bcec29225b7e9ccbedcfe5de6a1d32f30b0adaed2f9",
+      "bytes": 2028
+    },
+    {
+      "path": "forward/04_native_rotate.sqlinc",
+      "sha256": "cbe91a604bbfb3a1cb755999f844cb45a4336a86066838c97d9a15ffec464aca",
+      "bytes": 12370
+    },
+    {
+      "path": "forward/05_office_target_workflows.sqlinc",
+      "sha256": "ded95f863269e7afd48433f4e9b6c570ccf10f49ef51fa85c8089ce3d4f241e6",
+      "bytes": 7864
+    },
+    {
+      "path": "forward/06_office_reject.sqlinc",
+      "sha256": "664e1e807a19e50dfa9ace393b9106b80db60376f113eaa9b656fc42176b8977",
+      "bytes": 17197
+    },
+    {
+      "path": "forward/07_candidate_member_workflows.sqlinc",
+      "sha256": "b94d2dc67cd67d83539d351ebf6fb6e34b7f791f02058ed93815d3aef4316b2c",
+      "bytes": 10441
+    },
+    {
+      "path": "forward/08_native_resubmit.sqlinc",
+      "sha256": "e5d49bdb8c4bc1f4eec895d0f8325b948d7fa46483d3771e128a14b67e9bc9a8",
+      "bytes": 259338
+    },
+    {
+      "path": "forward/09_resubmit_signature.sqlinc",
+      "sha256": "e8980d7d25ec17cf010dafed870040ef4b8a892ab4f9c8b9ac721bcf26e89a25",
+      "bytes": 5462
+    },
+    {
+      "path": "forward/10_resubmit_handler.mjsinc",
+      "sha256": "dbcb219b93983a6b452143b956dd3573bdd13fa4d671e753a99ee220dc18e08f",
+      "bytes": 929
+    },
+    {
+      "path": "forward/11_acl.sqlinc",
+      "sha256": "e5ef74fc9021a7738f8f6710b05e6a9fdd79a766952935b5514e0dfa14c18213",
+      "bytes": 3038
+    }
+  ]
+}

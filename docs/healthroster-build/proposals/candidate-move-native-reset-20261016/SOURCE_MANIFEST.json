@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "path": "build.mjs",
+      "sha256": "679ac02eb54b843ab9fe334ca550595e9ae250a99e507f513f4e393e7ac87804",
+      "bytes": 17519
+    },
+    {
+      "path": "forward/00_native_rotation_binding.sqlinc",
+      "sha256": "1378077f9c394ddde37c53273d5e031c7d392d82d409b6d9a194d301d5a06521",
+      "bytes": 5520
+    },
+    {
+      "path": "forward/01_native_rotation_publish.sqlinc",
+      "sha256": "7975be58d0fba1f1c615bf2068b20293f8b6fb41843f54ac267e068e6f75d1bd",
+      "bytes": 5619
+    },
+    {
+      "path": "forward/02_current_placement.sqlinc",
+      "sha256": "67b259e42bb7a699bdebeb02477fcdfdc373aa3229a2ca35d14f5d0c661942c6",
+      "bytes": 5099
+    },
+    {
+      "path": "forward/03_placement_guard.sqlinc",
+      "sha256": "dd3200e4bac2a68484de0bcec29225b7e9ccbedcfe5de6a1d32f30b0adaed2f9",
+      "bytes": 2028
+    },
+    {
+      "path": "forward/04_native_rotate.sqlinc",
+      "sha256": "cbe91a604bbfb3a1cb755999f844cb45a4336a86066838c97d9a15ffec464aca",
+      "bytes": 12370
+    },
+    {
+      "path": "forward/05_office_target_workflows.sqlinc",
+      "sha256": "ded95f863269e7afd48433f4e9b6c570ccf10f49ef51fa85c8089ce3d4f241e6",
+      "bytes": 7864
+    },
+    {
+      "path": "forward/06_office_reject.sqlinc",
+      "sha256": "664e1e807a19e50dfa9ace393b9106b80db60376f113eaa9b656fc42176b8977",
+      "bytes": 17197
+    },
+    {
+      "path": "forward/07_candidate_member_workflows.sqlinc",
+      "sha256": "b94d2dc67cd67d83539d351ebf6fb6e34b7f791f02058ed93815d3aef4316b2c",
+      "bytes": 10441
+    },
+    {
+      "path": "forward/08_native_resubmit.sqlinc",
+      "sha256": "e5d49bdb8c4bc1f4eec895d0f8325b948d7fa46483d3771e128a14b67e9bc9a8",
+      "bytes": 259338
+    },
+    {
+      "path": "forward/09_resubmit_signature.sqlinc",
+      "sha256": "e8980d7d25ec17cf010dafed870040ef4b8a892ab4f9c8b9ac721bcf26e89a25",
+      "bytes": 5462
+    },
+    {
+      "path": "forward/10_resubmit_handler.mjsinc",
+      "sha256": "dbcb219b93983a6b452143b956dd3573bdd13fa4d671e753a99ee220dc18e08f",
+      "bytes": 929
+    },
+    {
+      "path": "forward/11_acl.sqlinc",
+      "sha256": "e5ef74fc9021a7738f8f6710b05e6a9fdd79a766952935b5514e0dfa14c18213",
+      "bytes": 3038
+    },
+    {
+      "path": "MOUNT_RECIPE.json",
+      "sha256": "1328ce41078d6d631e27c7a1d1342232292ee25ea244b39d34c3613dbe76c462",
+      "bytes": 10814
+    },
+    {
+      "path": "README.md",
+      "sha256": "45f52b429d3f938b672f502fa16c677d335334faad06c5db8143cf359cd28f86",
+      "bytes": 5384
+    },
+    {
+      "path": "tests/OFFLINE_RESULT.json",
+      "sha256": "b087eaf91b4c798734792576862c669b533aff4b25bddbb0bdf5d23dbe25ae64",
+      "bytes": 3771
+    },
+    {
+      "path": "tests/resubmit.test.mjs",
+      "sha256": "5c374ad59fee5c4839e50b6c2b398e7dd0a734f64a3e01e75006d2cf3c5cc380",
+      "bytes": 2701
+    },
+    {
+      "path": "tests/source.test.mjs",
+      "sha256": "595a6fae3f2ccac6e85fafe2ad5f65b4ceaaf03f70e66c00edc2f3546bbcfc3d",
+      "bytes": 6089
+    },
+    {
+      "path": "WITHDRAWAL_PLAN.md",
+      "sha256": "b0249f822a4c8e4f81a5517ba005eeb76947cd1334295512bf3ca48cc9b72208",
+      "bytes": 4620
+    }
+  ]
+}

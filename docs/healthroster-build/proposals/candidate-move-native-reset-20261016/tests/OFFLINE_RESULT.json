@@ -1,0 +1,66 @@
+{
+  "status": "PASS_GRAMMAR_AND_ROW_FIELD_ONLY",
+  "native": "NOT_RUN",
+  "results": [
+    {
+      "file": "docs\\healthroster-build\\proposals\\candidate-move-native-reset-20261016\\forward\\00_native_rotation_binding.sqlinc",
+      "exit": 0,
+      "output": "00_native_rotation_binding.sqlinc: grammar parsed\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "docs\\healthroster-build\\proposals\\candidate-move-native-reset-20261016\\forward\\01_native_rotation_publish.sqlinc",
+      "exit": 0,
+      "output": "01_native_rotation_publish.sqlinc: grammar parsed\n8 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "docs\\healthroster-build\\proposals\\candidate-move-native-reset-20261016\\forward\\02_current_placement.sqlinc",
+      "exit": 0,
+      "output": "02_current_placement.sqlinc: grammar parsed\n4 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "docs\\healthroster-build\\proposals\\candidate-move-native-reset-20261016\\forward\\03_placement_guard.sqlinc",
+      "exit": 0,
+      "output": "03_placement_guard.sqlinc: grammar parsed\n0 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "docs\\healthroster-build\\proposals\\candidate-move-native-reset-20261016\\forward\\04_native_rotate.sqlinc",
+      "exit": 0,
+      "output": "04_native_rotate.sqlinc: grammar parsed\n2 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "docs\\healthroster-build\\proposals\\candidate-move-native-reset-20261016\\forward\\05_office_target_workflows.sqlinc",
+      "exit": 0,
+      "output": "05_office_target_workflows.sqlinc: grammar parsed\n2 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "docs\\healthroster-build\\proposals\\candidate-move-native-reset-20261016\\forward\\06_office_reject.sqlinc",
+      "exit": 0,
+      "output": "06_office_reject.sqlinc: grammar parsed\n3 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "docs\\healthroster-build\\proposals\\candidate-move-native-reset-20261016\\forward\\07_candidate_member_workflows.sqlinc",
+      "exit": 0,
+      "output": "07_candidate_member_workflows.sqlinc: grammar parsed\n8 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "docs\\healthroster-build\\proposals\\candidate-move-native-reset-20261016\\forward\\08_native_resubmit.sqlinc",
+      "exit": 0,
+      "output": "08_native_resubmit.sqlinc: grammar parsed\n20 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    },
+    {
+      "file": "docs\\healthroster-build\\proposals\\candidate-move-native-reset-20261016\\forward\\09_resubmit_signature.sqlinc",
+      "exit": 0,
+      "output": "09_resubmit_signature.sqlinc: grammar parsed\n2 declared native/proposed row variables checked against data-free source columns. Native compile/first-use NOT_RUN.",
+      "error": ""
+    }
+  ]
+}

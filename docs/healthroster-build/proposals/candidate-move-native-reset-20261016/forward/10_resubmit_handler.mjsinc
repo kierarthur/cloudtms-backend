@@ -1,0 +1,18 @@
+async function handleWorkflowResubmit(request, env, deps, workflowId) {
+  const access = await verifyCandidateAccess(request, env);
+  const body = await readJson(request);
+  const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  const idempotencyKey = requireUuid(body.idempotency_key, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  const payload = {};
+  if (Object.prototype.hasOwnProperty.call(body, 'input_snapshot')) {
+    payload.input_snapshot = validateCandidateWorkflowFactualSnapshot(body.input_snapshot);
+  }
+  await admitCandidateCorrectionWorkflow(request, env, deps, access, workflowId);
+  const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+    access, env, workflowId, 'RESUBMIT_REJECTED', generation, payload, idempotencyKey
+  ));
+  return jsonResponse(201, {
+    ...result,
+    policy: safeCandidateWorkflowPolicy(result?.policy)
+  });
+}

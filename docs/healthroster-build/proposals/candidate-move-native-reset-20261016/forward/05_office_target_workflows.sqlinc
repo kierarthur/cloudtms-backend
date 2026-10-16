@@ -1,0 +1,190 @@
+create or replace function private._candidate_office_rejection_targets_v2(
+  p_environment text,
+  p_timesheet_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text:=private._candidate_assert_environment(p_environment);
+  v_timesheet public.timesheets%rowtype;
+  v_week public.contract_weeks%rowtype;
+  v_route jsonb;
+  v_route_identity jsonb;
+  v_route_timesheet_id uuid;
+  v_route_contract_week_id uuid;
+  v_route_family text;
+  v_workflow_ids uuid[]:=array[]::uuid[];
+  v_targets jsonb:='[]'::jsonb;
+  v_rejection_required boolean:=false;
+  v_candidate_submission_stage text;
+  v_linked_pending_expense_count integer:=0;
+  v_move jsonb;
+  v_candidate_id uuid;
+begin
+  if p_timesheet_id is null then
+    raise exception 'CANDIDATE_REJECT_TARGET_NOT_FOUND' using errcode='P0002';
+  end if;
+
+  select timesheet_row.* into v_timesheet
+  from public.timesheets timesheet_row
+  where timesheet_row.timesheet_id=p_timesheet_id;
+  if not found then
+    raise exception 'CANDIDATE_REJECT_TARGET_NOT_FOUND' using errcode='P0002';
+  end if;
+
+  select week_row.* into v_week
+  from public.contract_weeks week_row
+  where week_row.timesheet_id=v_timesheet.timesheet_id
+  order by week_row.updated_at desc,week_row.id desc
+  limit 1;
+
+  if v_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum then
+    -- Daily is Contract-free and PHONE-only.  Its established Office rejection
+    -- must continue to work, but it is outside the Electronic/QR delete gate.
+    v_route_family:='PHONE';
+  else
+    if v_week.id is null then
+      -- A Weekly parent delete contains every Timesheet version in the stable
+      -- booking chain.  Older versions legitimately no longer own the current
+      -- Contract Week, so resolve them through the same closed identity rule
+      -- used by the Office Candidate projection before classifying the route.
+      v_route_identity:=private._candidate_office_projection_identity_v1(
+        v_timesheet.timesheet_id,null
+      );
+      v_route_timesheet_id:=nullif(
+        v_route_identity->>'current_timesheet_id',''
+      )::uuid;
+      v_route_contract_week_id:=nullif(
+        v_route_identity->>'contract_week_id',''
+      )::uuid;
+    else
+      v_route_timesheet_id:=v_timesheet.timesheet_id;
+      v_route_contract_week_id:=v_week.id;
+    end if;
+    v_route:=private._candidate_route_family_v1(
+      v_route_timesheet_id,v_route_contract_week_id
+    );
+    v_route_family:=upper(coalesce(v_route->>'route_family',''));
+  end if;
+
+  if exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=v_timesheet.timesheet_id) then
+    select c.candidate_id into strict v_candidate_id from public.contracts c where c.id=v_timesheet.contract_id;
+    v_move:=private.candidate_contract_move_context_v1(v_environment,v_candidate_id,v_timesheet.timesheet_id,null);
+    if v_move#>>'{dto,current_timesheet_id}' is distinct from v_timesheet.timesheet_id::text then
+      raise exception 'TIMESHEET_MOVED' using errcode='40001';end if;
+  end if;
+  select coalesce(array_agg(workflow_row.id order by workflow_row.id),array[]::uuid[])
+  into v_workflow_ids
+  from public.candidate_submission_workflows workflow_row
+  left join public.timesheets anchor_timesheet
+    on anchor_timesheet.timesheet_id=workflow_row.anchor_timesheet_id
+  where workflow_row.environment=v_environment
+    and (
+      (v_move is not null and workflow_row.candidate_id=v_candidate_id
+       and workflow_row.id in(select value::uuid from jsonb_array_elements_text(v_move->'workflow_ids'))
+       and workflow_row.state not in('REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'))
+      or (
+        workflow_row.state not in (
+          'FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
+        )
+        and (
+          workflow_row.target_timesheet_id=v_timesheet.timesheet_id
+          or workflow_row.anchor_timesheet_id=v_timesheet.timesheet_id
+          or (
+            workflow_row.target_timesheet_id is null
+            and v_route_family in ('ELECTRONIC','QR')
+            and workflow_row.anchor_timesheet_id is not null
+            and (
+              workflow_row.anchor_timesheet_id=v_timesheet.timesheet_id
+              or (
+                anchor_timesheet.booking_id is not distinct from v_timesheet.booking_id
+                and anchor_timesheet.occupant_key_norm
+                  is not distinct from v_timesheet.occupant_key_norm
+                and anchor_timesheet.contract_id is not distinct from v_timesheet.contract_id
+                and anchor_timesheet.week_ending_date is not distinct from v_timesheet.week_ending_date
+              )
+            )
+          )
+        )
+      )
+      or (
+        workflow_row.state='FINALISED'
+        and workflow_row.target_timesheet_id=v_timesheet.timesheet_id
+      )
+    );
+
+  if cardinality(v_workflow_ids)>20 then
+    raise exception 'CANDIDATE_REJECTION_SCOPE_TOO_LARGE' using errcode='54000';
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'workflow_id',workflow_row.id,
+    'workflow_generation',workflow_row.generation,
+    'workflow_kind',workflow_row.workflow_kind,
+    'route',workflow_row.route,
+    'state',workflow_row.state,
+    'scope',case
+      when workflow_row.workflow_kind='CONTRACT_EXPENSE' then 'EXPENSE'
+      when workflow_row.workflow_kind='CONTRACT_COMBINED' then 'COMBINED'
+      else 'HOURS'
+    end,
+    'link_kind',case
+      when workflow_row.target_timesheet_id=v_timesheet.timesheet_id then 'TARGET'
+      when workflow_row.anchor_timesheet_id=v_timesheet.timesheet_id then 'ANCHOR'
+      else 'ROTATED_ANCHOR'
+    end,
+    'linked_pending_expense',workflow_row.workflow_kind='CONTRACT_EXPENSE'
+      and workflow_row.target_timesheet_id is null,
+    'delete_guard_applicable',(
+      workflow_row.workflow_kind='CONTRACT_EXPENSE'
+        and workflow_row.target_timesheet_id=v_timesheet.timesheet_id
+    ) or v_route_family in ('ELECTRONIC','QR'),
+    'candidate_submission_stage',case
+      when workflow_row.state in (
+        'MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+        'READY_TO_FINALISE','RECEIVED','FINALISED'
+      ) then 'MANAGER_APPROVED'
+      when workflow_row.state in (
+        'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+        'READY_FOR_MANAGER_APPROVAL','AWAITING_MANAGER_APPROVAL',
+        'AWAITING_PAPER_RETURN'
+      ) then 'CANDIDATE_SUBMITTED'
+      else 'DRAFT'
+    end
+  ) order by workflow_row.id),'[]'::jsonb)
+  into v_targets
+  from public.candidate_submission_workflows workflow_row
+  where workflow_row.id=any(v_workflow_ids);
+
+  select
+    coalesce(bool_or(target->>'candidate_submission_stage'<>'DRAFT'),false),
+    case
+      when coalesce(bool_or(target->>'candidate_submission_stage'='MANAGER_APPROVED'),false)
+        then 'MANAGER_APPROVED'
+      when coalesce(bool_or(target->>'candidate_submission_stage'='CANDIDATE_SUBMITTED'),false)
+        then 'CANDIDATE_SUBMITTED'
+      else null
+    end,
+    count(*) filter(where coalesce((target->>'linked_pending_expense')::boolean,false))::integer
+  into v_rejection_required,v_candidate_submission_stage,v_linked_pending_expense_count
+  from jsonb_array_elements(v_targets) target;
+
+  return jsonb_build_object(
+    'ok',true,
+    'contract_version','CANDIDATE_OFFICE_REJECTION_TARGETS_V2',
+    'environment',v_environment,
+    'timesheet_id',v_timesheet.timesheet_id,
+    'contract_week_id',v_week.id,
+    'route_family',v_route_family,
+    'target_workflows',v_targets,
+    'target_workflow_count',jsonb_array_length(v_targets),
+    'candidate_submission_rejection_required',v_rejection_required,
+    'candidate_submission_stage',v_candidate_submission_stage,
+    'linked_pending_expense_claim_count',v_linked_pending_expense_count
+  );
+end;
+$function$;

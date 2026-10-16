@@ -1,0 +1,67 @@
+-- Genuine native draft/body/signature attachment. Caller holds the workflow
+-- lock after ordinary native authentication; no timestamp or caller flag is
+-- substituted for the existing CREATE/AMEND and upload receipts.
+create or replace function private.candidate_contract_move_draft_signature_assert_v1(
+ p_workflow_id uuid,p_factual_submission jsonb,p_signature_id uuid)
+returns void language plpgsql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare w public.candidate_submission_workflows%rowtype; c public.candidate_submission_components%rowtype;
+ input_sha text; epoch_at timestamptz; body_bound boolean:=false;
+begin
+ select v.* into strict w from public.candidate_submission_workflows v where v.id=p_workflow_id;
+ select v.* into c from public.candidate_submission_components v where v.id=p_signature_id and v.workflow_id=w.id
+  and v.workflow_generation=w.generation and v.component_kind='CANDIDATE_SIGNATURE' and v.document_role='CANDIDATE_SIGNATURE'
+  and v.state='IMMUTABLE' and v.source_component_id is null and v.immutable_at_utc is not null and v.source_content_sha256 is not null;
+ if c.id is null or w.state<>'WORKER_DRAFT' or jsonb_typeof(w.input_snapshot_json) is distinct from 'object'
+  or private.candidate_contract_move_signature_facts_v1(w.input_snapshot_json)
+    is distinct from private.candidate_contract_move_signature_facts_v1(p_factual_submission) then
+  raise exception 'CANDIDATE_SIGNATURE_REQUIRED_AFTER_AMENDMENT' using errcode='55000';end if;
+ perform private.candidate_workflow_factual_snapshot_assert_v1(w.input_snapshot_json);
+ input_sha:=encode(private._candidate_sha256_jsonb_v1(w.input_snapshot_json),'hex');
+ if w.generation=1 then
+  body_bound:=w.creation_identity_json->>'version'='CANDIDATE_WORKFLOW_CREATION_IDENTITY_V1'
+   and (w.creation_identity_json#>>'{request,action}'='CREATE'
+    or (w.creation_identity_json#>>'{request,action}'='RESUBMIT_REJECTED'
+      and w.replacement_of_workflow_id::text=w.creation_identity_json#>>'{request,rejected_workflow_id}'
+      and w.creation_identity_json#>>'{derived,replacement_of_workflow_id}'=w.replacement_of_workflow_id::text
+      and exists(select 1 from public.candidate_submission_workflows original
+        where original.id=w.replacement_of_workflow_id and original.environment=w.environment
+         and original.account_id=w.account_id and original.candidate_id=w.candidate_id
+         and original.state in('REJECTED','REFUSED')
+         and original.generation::text=w.creation_identity_json#>>'{request,rejected_workflow_generation}')))
+   and w.creation_identity_json#>>'{request,environment}'=w.environment
+   and w.creation_identity_json#>>'{request,account_id}'=w.account_id::text
+   and w.creation_identity_json#>>'{request,candidate_id}'=w.candidate_id::text
+   and w.creation_identity_json#>'{request,input_snapshot}'=w.input_snapshot_json
+   and w.creation_request_sha256=private._candidate_workflow_creation_request_sha256_v1(w.creation_identity_json->'request');
+  select a.ts_utc into epoch_at from public.audit_events a
+   where a.object_type='candidate_submission_workflow' and a.object_id_text=w.id::text
+    and a.action='CANDIDATE_WORKFLOW_CREATED' and a.correlation_id=w.idempotency_key
+   order by a.ts_utc,a.id limit 1;
+ else
+  select true,a.ts_utc into body_bound,epoch_at from public.audit_events a
+   join public.audit_events r on r.object_type='candidate_workflow_mutation_receipt' and r.object_id_text=a.object_id_text
+    and r.correlation_id=a.correlation_id and r.before_json->>'workflow_action'='AMEND'
+    and r.before_json->>'request_sha256'=a.after_json->>'semantic_request_sha256'
+   where a.object_type='candidate_submission_workflow' and a.object_id_text=w.id::text
+    and a.action='CANDIDATE_WORKFLOW_AMENDED' and a.after_json->>'generation'=w.generation::text
+    and a.after_json->>'input_snapshot_sha256'=input_sha
+    and r.after_json->>'workflow_id'=w.id::text and r.after_json->>'generation'=w.generation::text
+   order by a.ts_utc,a.id limit 1;
+ end if;
+ if body_bound is distinct from true or epoch_at is null or c.created_at_utc<epoch_at
+   or c.immutable_at_utc<epoch_at or not exists(select 1 from public.audit_events p join public.audit_events f
+    on f.object_type='candidate_workflow_mutation_receipt' and f.object_id_text=p.object_id_text
+     and f.before_json->>'workflow_action'='COMPONENT_COMPLETE' and f.after_json->>'component_id'=c.id::text
+     and f.after_json->>'state'='IMMUTABLE'
+   where p.object_type='candidate_workflow_mutation_receipt' and p.object_id_text=w.id::text
+    and p.correlation_id=c.upload_idempotency_key and p.before_json->>'workflow_action'='COMPONENT_PREPARE'
+    and p.after_json->>'component_id'=c.id::text and p.after_json->>'workflow_generation'=w.generation::text
+    and p.after_json->>'component_kind'='CANDIDATE_SIGNATURE' and p.after_json->>'document_role'='CANDIDATE_SIGNATURE'
+    and p.before_json->>'request_sha256' ~ '^[0-9a-f]{64}$' and f.before_json->>'request_sha256' ~ '^[0-9a-f]{64}$'
+    and p.ts_utc>=epoch_at and f.ts_utc>=p.ts_utc) then
+  raise exception 'CANDIDATE_SIGNATURE_REQUIRED_AFTER_AMENDMENT' using errcode='55000';end if;
+end;
+$function$;
+alter function private.candidate_contract_move_draft_signature_assert_v1(uuid,jsonb,uuid) owner to postgres;
+revoke all on function private.candidate_contract_move_draft_signature_assert_v1(uuid,jsonb,uuid) from public,anon,authenticated,service_role;

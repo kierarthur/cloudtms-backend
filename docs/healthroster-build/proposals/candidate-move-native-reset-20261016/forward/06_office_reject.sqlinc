@@ -1,0 +1,349 @@
+create or replace function public.candidate_submission_reject_atomic_v1(
+  p_actor_user_id uuid,
+  p_environment text,
+  p_timesheet_id uuid,
+  p_expected_timesheet_id uuid,
+  p_expected_row_signature text,
+  p_reason text,
+  p_idempotency_key text,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text;
+  v_timesheet public.timesheets%rowtype;
+  v_fin public.timesheets_financials%rowtype;
+  v_week public.contract_weeks%rowtype;
+  v_signature jsonb;
+  v_capabilities jsonb;
+  v_qr_result record;
+  v_new_timesheet_id uuid;
+  v_qr_backed boolean:=false;
+  v_reject_scope text;
+  v_target_context jsonb;
+  v_rejection_target_workflow_ids uuid[]:='{}'::uuid[];
+  v_linked_pending_expense_count integer:=0;
+  v_workflow record;
+  v_rejected_workflow_ids uuid[]:='{}'::uuid[];
+  v_paper_workflow_ids uuid[]:='{}'::uuid[];
+  v_paper_workflow_generations integer[]:='{}'::integer[];
+  v_paper_retirement_result jsonb;
+  v_rejection_family_contract_id uuid;
+  v_rejection_family_week_ending_date date;
+  v_rejection_family_key text;
+  v_rejection_request_hash text;
+  v_rejection_receipt_before jsonb;
+  v_response jsonb;
+begin
+  v_environment:=private._candidate_assert_environment(p_environment);
+  if not private._candidate_office_service_context_valid_v1(
+    v_environment,p_actor_user_id,'REJECT_CONFIRM'
+  ) then
+    perform private._candidate_require_feature_v1(v_environment,'candidate_app_writes');
+  end if;
+  if p_actor_user_id is null or p_timesheet_id is null or p_expected_timesheet_id is null
+     or nullif(btrim(coalesce(p_expected_row_signature,'')),'') is null
+     or nullif(btrim(coalesce(p_reason,'')),'') is null
+     or nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then
+    raise exception 'CANDIDATE_REJECT_PAYLOAD_INVALID' using errcode='22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(
+    'CANDIDATE_REJECTION_IDEMPOTENCY:'||p_actor_user_id::text||':'||p_idempotency_key,0
+  ));
+  v_rejection_request_hash:=encode(extensions.digest(convert_to(jsonb_build_object(
+    'contract_version','CANDIDATE_REJECTION_REQUEST_V2',
+    'environment',v_environment,
+    'actor_user_id',p_actor_user_id,
+    'timesheet_id',p_timesheet_id,
+    'expected_timesheet_id',p_expected_timesheet_id,
+    'expected_row_signature',btrim(p_expected_row_signature),
+    'reason',btrim(p_reason)
+  )::text,'UTF8'),'sha256'),'hex');
+  select ae.before_json,ae.after_json into v_rejection_receipt_before,v_response
+  from public.audit_events ae
+  where ae.object_type='candidate_submission_rejection_receipt'
+    and ae.actor_user_id=p_actor_user_id
+    and ae.correlation_id=p_idempotency_key
+  order by ae.ts_utc desc,ae.id desc
+  limit 1;
+  if found then
+    if v_rejection_receipt_before->>'request_sha256' is distinct from v_rejection_request_hash then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_IDEMPOTENCY_CONFLICT','idempotency_key',p_idempotency_key
+        )::text;
+    end if;
+    return coalesce(v_response,'{}'::jsonb)||jsonb_build_object('idempotent_replay',true);
+  end if;
+
+  -- Native immutable replay precedes current placement, then family precedes
+  -- the shared PAPER advisory and every TS/TF/workflow lock.
+  if exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=p_timesheet_id) then
+    perform private.timesheet_contract_move_family_lock_v1(p_timesheet_id);
+  end if;
+  -- Serialise every Candidate rejection for the same contract/week before
+  -- locking either the hours row or a separate expense carrier. This prevents
+  -- the inverse target/workflow/source lock order that can deadlock H1/E1.
+  select target.contract_id,target.week_ending_date
+  into v_rejection_family_contract_id,v_rejection_family_week_ending_date
+  from public.timesheets target
+  where target.timesheet_id=p_timesheet_id;
+  if not found then
+    raise exception 'CANDIDATE_REJECT_TARGET_NOT_FOUND' using errcode='P0002';
+  end if;
+  v_rejection_family_key:='CANDIDATE_PAPER_FAMILY:'||v_environment||':'
+    ||coalesce(v_rejection_family_contract_id::text,'-')||':'
+    ||coalesce(v_rejection_family_week_ending_date::text,'-');
+  perform pg_advisory_xact_lock(hashtextextended(v_rejection_family_key,0));
+
+  select * into v_timesheet from public.timesheets where timesheet_id=p_timesheet_id for update;
+  if not found then raise exception 'CANDIDATE_REJECT_TARGET_NOT_FOUND' using errcode='P0002'; end if;
+  if not v_timesheet.is_current or v_timesheet.timesheet_id<>p_expected_timesheet_id then
+    raise exception 'TIMESHEET_MOVED' using errcode='40001';
+  end if;
+  select * into v_week from public.contract_weeks where timesheet_id=v_timesheet.timesheet_id for update;
+  if not found and v_timesheet.sheet_scope<>'DAILY'::public.timesheet_scope_enum then
+    raise exception 'CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002';
+  end if;
+  select * into v_fin from public.timesheets_financials
+  where timesheet_id=v_timesheet.timesheet_id and is_current=true for update;
+  if v_fin.authorised_at_utc is not null or v_timesheet.authorised_at_server is not null then
+    raise exception 'CANDIDATE_REJECT_REQUIRES_UNAUTHORISE' using errcode='55000';
+  end if;
+  if v_fin.paid_at_utc is not null or v_fin.locked_by_invoice_id is not null then
+    raise exception 'CANDIDATE_REJECT_PROTECTED_HISTORY' using errcode='55000';
+  end if;
+  v_signature:=public.timesheet_lifecycle_guard_signature_v1(v_timesheet.timesheet_id,v_week.id,false);
+  if coalesce(v_signature->>'row_signature',v_signature->>'backend_row_signature','')<>p_expected_row_signature then
+    raise exception 'ROW_SIGNATURE_MISMATCH' using errcode='40001';
+  end if;
+  v_capabilities:=private._candidate_record_capabilities_v1(v_timesheet.timesheet_id,v_week.id,'{}'::jsonb);
+  if coalesce((v_capabilities->>'can_reject_candidate_submission')::boolean,false)=false then
+    raise exception 'CANDIDATE_REJECT_NOT_ALLOWED' using errcode='55000',detail=v_capabilities::text;
+  end if;
+  v_reject_scope:=v_capabilities->>'reject_scope';
+  v_target_context:=private._candidate_office_rejection_targets_v2(
+    v_environment,v_timesheet.timesheet_id
+  );
+  select
+    coalesce(
+      array_agg((target->>'workflow_id')::uuid order by target->>'workflow_id'),
+      array[]::uuid[]
+    ),
+    count(*) filter(
+      where coalesce((target->>'linked_pending_expense')::boolean,false)
+    )::integer
+  into v_rejection_target_workflow_ids,v_linked_pending_expense_count
+  from jsonb_array_elements(
+    coalesce(v_target_context->'target_workflows','[]'::jsonb)
+  ) target;
+
+  if cardinality(v_rejection_target_workflow_ids)=0 then
+    raise exception 'CANDIDATE_REJECTION_SCOPE_CONFLICT' using errcode='55000';
+  end if;
+
+  v_qr_backed:=v_timesheet.qr_status is not null
+    or v_timesheet.qr_token is not null
+    or v_timesheet.qr_r2_key is not null
+    or exists(
+      select 1
+      from public.candidate_submission_workflows workflow_row
+      where workflow_row.id=any(v_rejection_target_workflow_ids)
+        and workflow_row.route='PAPER'
+    );
+
+  for v_workflow in
+    select w.id,w.generation,w.route,w.state
+    from public.candidate_submission_workflows w
+    where w.id=any(v_rejection_target_workflow_ids)
+    order by w.id
+    for update
+  loop
+    v_rejected_workflow_ids:=array_append(v_rejected_workflow_ids,v_workflow.id);
+    if v_workflow.route='PAPER'
+       and v_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED') then
+      v_paper_workflow_ids:=array_append(v_paper_workflow_ids,v_workflow.id);
+      v_paper_workflow_generations:=array_append(
+        v_paper_workflow_generations,v_workflow.generation
+      );
+    end if;
+  end loop;
+
+  if cardinality(v_paper_workflow_ids)>0 then
+    v_paper_retirement_result:=private._candidate_paper_delivery_retire_set_v1(
+      v_paper_workflow_ids,v_paper_workflow_generations,
+      'OFFICE_REJECTED',p_now_utc
+    );
+    if not coalesce((v_paper_retirement_result->>'retired')::boolean,false)
+       or not coalesce(
+         (v_paper_retirement_result->>'qr_invalidation_proven')::boolean,false
+       ) then
+      raise exception 'CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN',
+          'workflow_ids',to_jsonb(v_paper_workflow_ids),
+          'retirement_receipt',v_paper_retirement_result
+        )::text;
+    end if;
+  end if;
+
+  if v_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum then
+    if v_fin.id is null and v_timesheet.contract_id is null then
+      v_new_timesheet_id:=nullif(
+        private._candidate_daily_receipt_reset_v1(
+          v_environment,(v_capabilities->>'candidate_id')::uuid,
+          v_timesheet.timesheet_id,v_timesheet.timesheet_id,btrim(p_reason),
+          p_actor_user_id,'OFFICE_REJECTED',p_now_utc
+        )->>'current_timesheet_id',''
+      )::uuid;
+    else
+      -- Existing financial/history reset owner is deliberately unchanged.
+      v_new_timesheet_id:=nullif(
+        private._candidate_daily_submission_reset_v1(
+          v_timesheet.timesheet_id,v_timesheet.timesheet_id,btrim(p_reason),
+          p_actor_user_id,'OFFICE_REJECTED',p_now_utc
+        )->>'current_timesheet_id',''
+      )::uuid;
+    end if;
+  elsif v_qr_backed then
+    select * into v_qr_result from public.timesheet_qr_refuse_and_reset(
+      v_timesheet.timesheet_id,v_timesheet.timesheet_id,btrim(p_reason),p_actor_user_id
+    );
+    v_new_timesheet_id:=v_qr_result.timesheet_id;
+  else
+    v_new_timesheet_id:=private._candidate_timesheet_reject_rotate_v1(
+      v_timesheet.timesheet_id,v_timesheet.timesheet_id,btrim(p_reason),p_actor_user_id,p_now_utc);
+  end if;
+  if v_new_timesheet_id is null then raise exception 'CANDIDATE_REJECT_ROTATION_FAILED' using errcode='55000'; end if;
+
+  update public.timesheets set
+    authorised_at_server=null,worked_start_iso=null,worked_end_iso=null,break_start_iso=null,break_end_iso=null,
+    break_minutes=null,actual_schedule_json=null,additional_units_week='{}'::jsonb,additional_units_per_day='{}'::jsonb,
+    manual_pdf_r2_key=null,reference_number=null,day_references_json=null,
+    qr_token=null,qr_status=case when v_qr_backed then 'PENDING'::public.timesheet_qr_status_enum else null end,
+    qr_payload_json='{}'::jsonb,qr_generated_at=null,qr_scanned_at=null,qr_scan_info_json=null,qr_r2_key=null,
+    qr_last_sent_hash=null,qr_last_sent_at_utc=null,qr_signed_hash=null,qr_signed_at_utc=null,
+    updated_at=p_now_utc
+  where timesheet_id=v_new_timesheet_id;
+
+  update public.timesheets_financials set
+    processing_status=case when v_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum
+      then 'UNASSIGNED'::public.ts_fin_processing_status_enum
+      else 'UNPROCESSED'::public.ts_fin_processing_status_enum end,
+    worked_start_iso=null,worked_end_iso=null,break_start_iso=null,break_end_iso=null,
+    break_minutes=null,hours_day=0,hours_night=0,hours_sat=0,hours_sun=0,hours_bh=0,total_hours=0,
+    additional_units_json='{}'::jsonb,additional_pay_ex_vat=0,additional_charge_ex_vat=0,additional_margin_ex_vat=0,
+    expenses_pay_ex_vat=0,expenses_charge_ex_vat=0,expenses_description=null,expenses_evidence_r2_key=null,
+    expenses_evidence_manifest=null,mileage_units=0,mileage_pay_ex_vat=0,mileage_charge_ex_vat=0,
+    mileage_evidence_r2_key=null,mileage_evidence_manifest=null,travel_pay_ex_vat=0,travel_charge_ex_vat=0,
+    accommodation_pay_ex_vat=0,accommodation_charge_ex_vat=0,other_pay_ex_vat=0,other_charge_ex_vat=0,
+    actual_schedule_json=null,actual_minutes_by_day_json=null,total_pay_ex_vat=0,total_charge_ex_vat=0,margin_ex_vat=0,
+    authorised_at_utc=null,authorised_by_user_id=null,updated_at=p_now_utc
+  where timesheet_id=v_new_timesheet_id and is_current=true;
+
+  if v_week.id is not null then
+    update public.contract_weeks set status='OPEN',day_entries_json='[]'::jsonb,
+      totals_json='{}'::jsonb,updated_at=p_now_utc where id=v_week.id;
+  end if;
+  update public.timesheet_evidence set processing_state='SUPERSEDED'
+  where timesheet_id=v_timesheet.timesheet_id and processing_state<>'SUPERSEDED';
+  for v_workflow in
+    select w.id,w.account_id,w.candidate_id,w.generation,w.state as captured_state,
+      w.workflow_kind,
+      coalesce((
+        select (target->>'linked_pending_expense')::boolean
+        from jsonb_array_elements(
+          coalesce(v_target_context->'target_workflows','[]'::jsonb)
+        ) target
+        where target->>'workflow_id'=w.id::text
+        limit 1
+      ),false) as linked_pending_expense,
+      case when w.state='FINALISED' then greatest(w.generation-1,1) else w.generation end as artifact_generation
+    from public.candidate_submission_workflows w
+    where w.id=any(v_rejected_workflow_ids)
+    order by w.id
+    for update
+  loop
+    update public.candidate_approval_requests set
+      state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
+    where workflow_id=v_workflow.id
+      and workflow_generation=v_workflow.artifact_generation
+      and state in ('PENDING','APPROVED');
+    update public.candidate_submission_components set
+      state='REJECTED',superseded_at_utc=p_now_utc
+    where workflow_id=v_workflow.id
+      and workflow_generation=v_workflow.artifact_generation
+      and state not in ('REJECTED','SUPERSEDED','ABANDONED');
+    update public.candidate_submission_workflows set
+      state='REJECTED',generation=v_workflow.generation+1,
+      rejection_reason=btrim(p_reason),
+      rejection_scope=case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        then 'COMPLETE_EXPENSE_CLAIM' else v_reject_scope end,
+      updated_at_utc=p_now_utc
+    where id=v_workflow.id and generation=v_workflow.generation
+      and state=v_workflow.captured_state
+      and state not in ('REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED');
+    if not found then
+      raise exception 'CANDIDATE_REJECT_WORKFLOW_CONFLICT' using errcode='40001';
+    end if;
+    perform private._candidate_notification_insert_v1(
+      v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,
+      case when v_workflow.linked_pending_expense
+        then null else v_new_timesheet_id end,
+      case when v_workflow.linked_pending_expense
+        then 'EXPENSE_CLAIM_CANCELLED' else 'OFFICE_REJECTED' end,
+      case when v_workflow.linked_pending_expense
+        then 'timesheet_expense_attention' else 'office_rejection' end,
+      case when v_workflow.linked_pending_expense
+        then 'candidate-expense-claim-cancelled-timesheet-rejection-v1'
+        else 'candidate-office-rejected-v1' end,
+      jsonb_build_object(
+        'reason',btrim(p_reason),
+        'reason_code',case when v_workflow.linked_pending_expense
+          then 'LINKED_TIMESHEET_REJECTED_FOR_DELETE'
+          else 'OFFICE_REJECTED' end,
+        'workflow_id',v_workflow.id,
+        'resubmission_scope',case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+          then 'COMPLETE_EXPENSE_CLAIM' else v_reject_scope end
+      ),
+      case when v_workflow.linked_pending_expense
+        then jsonb_build_object('type','workflow','workflow_id',v_workflow.id)
+        else jsonb_build_object('type','timesheet','timesheet_id',v_new_timesheet_id) end,
+      case when v_workflow.linked_pending_expense
+        then 'CANDIDATE_EXPENSE_CLAIM_CANCELLED_TIMESHEET_REJECTION_V1:'
+        else 'CANDIDATE_OFFICE_REJECTED_V1:' end
+        ||v_workflow.id::text||':'||(v_workflow.generation+1)::text,
+      p_now_utc
+    );
+  end loop;
+  v_response:=jsonb_build_object(
+    'ok',true,'old_timesheet_id',v_timesheet.timesheet_id,'timesheet_id',v_new_timesheet_id,
+    'scope',case when v_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum then 'DAILY' else 'WEEKLY' end,
+    'contract_week_id',v_week.id,
+    'contract_week_status',case when v_week.id is null then null else 'OPEN' end,
+    'processing_status',case when v_week.id is null then 'UNASSIGNED' else 'UNPROCESSED' end,
+    'rejection_scope',v_reject_scope,'qr_reissue_required',v_qr_backed,
+    'paper_retirement_receipt',v_paper_retirement_result,
+    'rejected_workflow_ids',to_jsonb(v_rejected_workflow_ids),
+    'linked_pending_expense_claim_count',v_linked_pending_expense_count,
+    'idempotency_key',p_idempotency_key
+  );
+  perform private._candidate_audit_v1('timesheet',v_new_timesheet_id::text,'CANDIDATE_SUBMISSION_REJECTED',
+    jsonb_build_object('old_timesheet_id',v_timesheet.timesheet_id),v_response,btrim(p_reason),
+    p_actor_user_id,p_idempotency_key,p_now_utc);
+  insert into public.audit_events(
+    actor_user_id,object_type,object_id_text,action,before_json,after_json,
+    reason,correlation_id,ts_utc
+  ) values (
+    p_actor_user_id,'candidate_submission_rejection_receipt',p_timesheet_id::text,
+    'CANDIDATE_SUBMISSION_REJECTION_RECEIPT',jsonb_build_object(
+      'request_sha256',v_rejection_request_hash,'contract_version','CANDIDATE_REJECTION_REQUEST_V2'
+    ),v_response,btrim(p_reason),p_idempotency_key,p_now_utc
+  );
+  return v_response;
+end;
+$function$;

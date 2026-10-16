@@ -1,0 +1,61 @@
+-- Called only by the existing native reject/rotate owner after its actual
+-- Timesheet allocator and Contract-week update, before native TF callbacks.
+-- All writes share the genuine rejection transaction and roll back together.
+create or replace function private.timesheet_contract_native_rotation_publish_v1(
+ p_old_placement jsonb,p_new_timesheet_id uuid,p_reason text,p_actor_user_id uuid,p_now_utc timestamptz)
+returns void language plpgsql volatile security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare p private.timesheet_contract_current_placements%rowtype; next_p private.timesheet_contract_current_placements%rowtype;
+ old_alias private.timesheet_contract_family_aliases%rowtype; next_alias private.timesheet_contract_family_aliases%rowtype;
+ old_t public.timesheets%rowtype; new_t public.timesheets%rowtype; m private.timesheet_contract_move_members%rowtype;
+ o private.timesheet_contract_move_operations%rowtype;
+begin
+ select v.* into p from private.timesheet_contract_current_placements v
+  where v.family_root_id=(p_old_placement->>'family_root_id')::uuid and v.member_key=p_old_placement->>'member_key' for update;
+ if not found or to_jsonb(p) is distinct from p_old_placement or p.role<>'WORK'
+  or p_actor_user_id is null or nullif(btrim(p_reason),'') is null then
+  raise exception 'CANDIDATE_NATIVE_ROTATION_PLACEMENT_CONFLICT' using errcode='40001';end if;
+ select v.* into strict old_alias from private.timesheet_contract_family_aliases v where v.timesheet_id=p.current_timesheet_id;
+ select v.* into strict m from private.timesheet_contract_move_members v where v.operation_id=p.operation_id and v.member_key=p.member_key;
+ select v.* into strict o from private.timesheet_contract_move_operations v where v.id=p.operation_id;
+ select v.* into strict old_t from public.timesheets v where v.timesheet_id=p.current_timesheet_id;
+ select v.* into new_t from public.timesheets v where v.timesheet_id=p_new_timesheet_id for update;
+ if new_t.timesheet_id is null or not new_t.is_current or new_t.archived_at_utc is not null
+  or old_t.is_current or old_t.archived_at_utc is not null or old_t.status<>'REVOKED'
+  or new_t.booking_id is distinct from old_t.booking_id or new_t.booking_id is distinct from m.current_booking_id
+  or new_t.contract_id is distinct from p.current_contract_id or new_t.contract_id is distinct from old_t.contract_id
+  or new_t.week_ending_date is distinct from old_t.week_ending_date or new_t.version<>old_t.version+1
+  or new_t.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum or m.role<>'WORK' or m.family_root_id<>p.family_root_id
+  or o.state<>'COMPLETE' or o.receipt_json is null or o.purpose<>'CONTRACT_CORRECTION'
+  or o.placement_receipt_json->>'receipt_id' is distinct from p.placement_receipt_id::text
+  or o.candidate_id<>p.candidate_id or o.actual_client_id<>p.actual_client_id
+  or old_alias.family_root_id<>p.family_root_id or old_alias.member_key<>p.member_key
+  or not exists(select 1 from public.contracts c where c.id=new_t.contract_id and c.candidate_id=p.candidate_id and c.client_id=p.actual_client_id)
+  or (select count(*) from public.contract_weeks cw where cw.timesheet_id=new_t.timesheet_id
+    and cw.contract_id=new_t.contract_id and cw.week_ending_date=new_t.week_ending_date)<>1
+  or exists(select 1 from private.timesheet_contract_current_placements sibling where sibling.family_root_id=p.family_root_id and sibling.role='CORRECTION_MEMBER') then
+  raise exception 'CANDIDATE_NATIVE_ROTATION_PLACEMENT_CONFLICT' using errcode='40001';end if;
+ next_p:=p;next_p.current_timesheet_id:=new_t.timesheet_id;next_p.placement_revision:=p.placement_revision+1;
+ next_alias.timesheet_id:=new_t.timesheet_id;next_alias.family_root_id:=p.family_root_id;next_alias.member_key:=p.member_key;
+ next_alias.original_timesheet_id:=old_alias.original_timesheet_id;next_alias.member_role:=p.role;
+ next_alias.accepted_operation_id:=p.operation_id;next_alias.accepted_at_utc:=p_now_utc;
+ -- This remains the real existing native rejection event, after a real physical
+ -- rotation. Its additional flat witness is not a fabricated approval/result.
+ perform private._candidate_audit_v1('timesheet',new_t.timesheet_id::text,'CANDIDATE_ELECTRONIC_REJECTED_VERSION_ROTATED',
+  jsonb_build_object('old_timesheet_id',old_t.timesheet_id,'old_version',old_t.version,
+   'native_contract_placement',jsonb_build_object('placement',to_jsonb(p))),
+  jsonb_build_object('new_timesheet_id',new_t.timesheet_id,'new_version',new_t.version,
+   'submission_mode','MANUAL','effective_submission_mode','ELECTRONIC',
+   'native_contract_placement',jsonb_build_object('version','CANDIDATE_NATIVE_ROTATION_PLACEMENT_V1',
+    'placement',to_jsonb(next_p),'alias',to_jsonb(next_alias),'backend_pid',pg_backend_pid(),
+    'transaction_id',pg_current_xact_id()::text)),btrim(p_reason),p_actor_user_id,null,p_now_utc);
+ insert into private.timesheet_contract_family_aliases select (next_alias).*;
+ update private.timesheet_contract_current_placements v set current_timesheet_id=next_p.current_timesheet_id,
+  placement_revision=next_p.placement_revision where v.family_root_id=p.family_root_id and v.member_key=p.member_key
+   and v.current_timesheet_id=p.current_timesheet_id and v.operation_id=p.operation_id and v.placement_revision=p.placement_revision;
+ if not found or not private.timesheet_contract_native_rotation_binding_v1(to_jsonb(next_p),false)
+  or not private.timesheet_contract_native_rotation_alias_v1(to_jsonb(next_alias)) then
+  raise exception 'CANDIDATE_NATIVE_ROTATION_PLACEMENT_CONFLICT' using errcode='40001';end if;
+end;
+$function$;
