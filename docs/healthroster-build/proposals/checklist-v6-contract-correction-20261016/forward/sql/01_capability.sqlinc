@@ -97,7 +97,7 @@ begin
  return new;
 end;
 $function$;
-create trigger timesheet_contract_move_context_guard before insert or update or delete
+create or replace trigger timesheet_contract_move_context_guard before insert or update or delete
  on private.timesheet_contract_move_execution_contexts for each row execute function private.timesheet_contract_move_context_guard_v1();
 
 create or replace function private.timesheet_contract_move_context_commit_guard_v1()
@@ -111,6 +111,7 @@ begin
  return null;
 end;
 $function$;
+drop trigger if exists timesheet_contract_move_context_commit_guard on private.timesheet_contract_move_execution_contexts;
 create constraint trigger timesheet_contract_move_context_commit_guard after insert or update
  on private.timesheet_contract_move_execution_contexts deferrable initially deferred
  for each row execute function private.timesheet_contract_move_context_commit_guard_v1();
@@ -182,21 +183,29 @@ begin
       and (new_row->>'authorised_at_server') is not distinct from (old_row->>'authorised_at_server');
    end if;
   elsif rel='public.timesheets_financials'::regclass and op='INSERT'
-   and guard in('public.timesheet_archived_evidence_guard_v1','private.bpay_next_ordinary_authorisation_trigger_v1') then
+   and guard in('private.timesheet_contract_move_financial_row_guard_v1','private.bpay_next_ordinary_authorisation_trigger_v1') then
    allowed:=(new_row->>'timesheet_id')::uuid=(m->>'to_timesheet_id')::uuid
     and new_row->>'paid_at_utc' is null and new_row->>'paid_by_user_id' is null
     and new_row->>'locked_by_invoice_id' is null;
   end if;
  elsif c.phase='DAILY_RATE_REVISION' and o.purpose='DAILY_RATE_CORRECTION' then
-  allowed:=rel='public.timesheets_financials'::regclass and op='INSERT'
-    and guard in('public.timesheet_archived_evidence_guard_v1','private.bpay_next_ordinary_authorisation_trigger_v1')
-    and (new_row->>'timesheet_id')::uuid=o.from_timesheet_id and new_row->>'paid_at_utc' is null;
+  if rel='public.timesheets_financials'::regclass and op='INSERT' then
+   allowed:=guard in('private.timesheet_contract_move_financial_row_guard_v1','private.bpay_next_ordinary_authorisation_trigger_v1')
+    and (new_row->>'timesheet_id')::uuid=o.from_timesheet_id and new_row->>'paid_at_utc' is null
+    and new_row->>'paid_by_user_id' is null and new_row->>'locked_by_invoice_id' is null;
+  elsif rel='public.timesheets_financials'::regclass and op='UPDATE'
+   and guard='private.timesheet_contract_move_financial_row_guard_v1' then
+   allowed:=(old_row->>'id')::uuid=(m->>'from_financial_id')::uuid
+    and (old_row->>'timesheet_id')::uuid=o.from_timesheet_id and (old_row->>'is_current')::boolean
+    and not (new_row->>'is_current')::boolean
+    and (old_row-array['is_current','updated_at']) is not distinct from (new_row-array['is_current','updated_at']);
+  end if;
  elsif c.phase in('INVOICE_SELECTED_EDIT','INVOICE_SELECTED_RELOCATE') then
   -- Native selected edit removes old lines and inserts current B lines through
   -- their normal native owner. It needs no archived invoice-line INSERT/UPDATE
   -- exemption. Only the retained original finance lock UPDATE is authorised here.
   if rel='public.timesheets_financials'::regclass and op='UPDATE'
-   and guard='public.timesheet_archived_evidence_guard_v1' then
+   and guard='private.timesheet_contract_move_financial_row_guard_v1' then
    changed:=private.timesheet_contract_move_changed_columns_v1(old_row,new_row);
    allowed:=(old_row->>'id')::uuid=(m->>'from_financial_id')::uuid
     and (old_row->>'timesheet_id')::uuid=(m->>'from_timesheet_id')::uuid

@@ -6,13 +6,13 @@
   "files": [
     {
       "file": "forward/sql/00_identity.sqlinc",
-      "sha256": "d418a0bd9652848e6602601a8af29b544e8e93d4da01f59aebd082d127210057",
-      "bytes": 20603
+      "sha256": "e2fa25ded097d7ce46eba2c79864f6a02020f51c30504556a7e474395eef1d43",
+      "bytes": 20787
     },
     {
       "file": "forward/sql/01_capability.sqlinc",
-      "sha256": "76d40ddbda79456fc5fab1962e4db27f676bb3326e06de51c7f0384b264db8ac",
-      "bytes": 23933
+      "sha256": "71974b7bab2325a8488d46051ded503b1e27b36fccceb674fde730ab73a8bd4b",
+      "bytes": 24674
     },
     {
       "file": "forward/sql/02_physical_apply.sqlinc",
@@ -21,13 +21,13 @@
     },
     {
       "file": "forward/sql/03_native_guards.sqlinc",
-      "sha256": "690d4e8c597c400b88b910b93e5861ef995d4be6dc5733adfa3cc1720c521f0f",
-      "bytes": 7715
+      "sha256": "230841b9bd2a2ea6913858837640a84196af45ec36b57eafa27ab4a686ee6ec8",
+      "bytes": 9909
     },
     {
       "file": "forward/sql/04_atomic_assert.sqlinc",
-      "sha256": "0eddc3adc1229ae4f46302615339f9705a36bc73e791fa3244fde40e260d4717",
-      "bytes": 8521
+      "sha256": "0fb6c39797aeac9dfd60993369fa7532bafcf97ad1046bc5c1c4029674620c4c",
+      "bytes": 8532
     },
     {
       "file": "forward/sql/04a_accept_composition.sqlinc",
@@ -41,8 +41,8 @@
     },
     {
       "file": "forward/sql/05_acl.sqlinc",
-      "sha256": "3a0cbb5050da97df99e6b3a39763a5581950c930ca9cae226ff116db44941869",
-      "bytes": 2837
+      "sha256": "b8ff6abd3f0ef8bba6d11028514a25a2b2fd9506d9adc991e7e6b6afd1c299d0",
+      "bytes": 2899
     },
     {
       "file": "forward/contracts/contract-correction-v3.mjs",
@@ -66,18 +66,18 @@
     },
     {
       "file": "verification/catalogue.sql",
-      "sha256": "9fc457830456b42ae1397a8ddd3bcc6b3059566025a4517d4b3e6aebc90ef5e9",
-      "bytes": 4543
+      "sha256": "4707812de2f1e1450954a3c2b49e74701f955004ef518247194a7259d31696ca",
+      "bytes": 6810
     },
     {
       "file": "build-native-guards.py",
-      "sha256": "356ceb9b4f8e1284d42a9b727761ce7c1e5ada0415ff77f3772461549c882f8d",
-      "bytes": 2910
+      "sha256": "6d9e72f6e2115fee08a832b4c01ec9ad7ec12a20018c4e9c1bd67241430f29aa",
+      "bytes": 5125
     },
     {
       "file": "build-closure.mjs",
-      "sha256": "f0f1011e8c165441ea17a0a0172ab5ffd014ddd052b724e162c41b23780f2c75",
-      "bytes": 8596
+      "sha256": "6511984558c8f04b6f785ef5a82621f3ed5ec69438c40267f5286ccb8ad1f5c8",
+      "bytes": 9905
     },
     {
       "file": "NATIVE_GUARD_INPUTS.json",
@@ -384,6 +384,15 @@
       "sourceDeclarationSha256": "e301f06de7c7fede65d4cb526ac09217a9930eb26b3cf27a9bb0a81374e913ef"
     },
     {
+      "signature": "private.timesheet_contract_move_financial_row_guard_v1()",
+      "source": "forward/sql/03_native_guards.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "fec9f596c6e481631894677bdda5e7b2a5fbbeaa652f7675cbaf5008d55ce255"
+    },
+    {
       "signature": "private.timesheet_contract_move_original_finance_assert_v1(uuid,text,bytea,bytea)",
       "source": "forward/sql/04_atomic_assert.sqlinc",
       "owner": "CURRENT_USER (audited release owner)",
@@ -436,6 +445,97 @@
       "searchPathControlled": true,
       "executeRoles": [],
       "sourceDeclarationSha256": "b11c1117515d4df6bf6fe677147d5915c8ab120df86df47e7317cabcfa128bc0"
+    }
+  ],
+  "triggers": [
+    {
+      "name": "timesheet_contract_move_operation_guard",
+      "relation": "private.timesheet_contract_move_operations",
+      "function": "private.timesheet_contract_move_operation_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "14f9ce3c5bf25ffb7f41d0e694774026bee8938fad423e94499defd6ef874101"
+    },
+    {
+      "name": "timesheet_contract_move_request_guard",
+      "relation": "private.timesheet_contract_move_requests",
+      "function": "private.timesheet_contract_move_request_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "3f4ce9d400a143c61b01aa7ace9942f05d0c712e10e0194b1788e3726920eb51"
+    },
+    {
+      "name": "timesheet_contract_move_member_guard",
+      "relation": "private.timesheet_contract_move_members",
+      "function": "private.timesheet_contract_move_member_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "36f908207a1ade6e69a155306d3acb18da24171af296a62c24171fd87ef4777b"
+    },
+    {
+      "name": "timesheet_contract_move_placement_guard",
+      "relation": "private.timesheet_contract_current_placements",
+      "function": "private.timesheet_contract_move_placement_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "5edfd098ea9a52838a2277b882769dbcd5329b864bcde1245eaebaed6cf00e27"
+    },
+    {
+      "name": "timesheet_contract_move_review_immutable",
+      "relation": "private.timesheet_contract_move_reviews",
+      "function": "private.timesheet_contract_move_immutable_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "2f91c180cb29c702f31b293cd335ae23388b5a8cbe9ffa6a3980ac0c888dd734"
+    },
+    {
+      "name": "timesheet_contract_move_alias_immutable",
+      "relation": "private.timesheet_contract_family_aliases",
+      "function": "private.timesheet_contract_move_immutable_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "71dc5660b8578e75d39de0949f76385fd909911beb872d0aedbae4ff706e02c4"
+    },
+    {
+      "name": "timesheet_contract_move_consumption_immutable",
+      "relation": "private.timesheet_contract_move_capability_consumptions",
+      "function": "private.timesheet_contract_move_immutable_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "b59b30ec00776e608e4e0c08cc5b0b159f4f7dd65b90bac613a265f8ebdefb2c"
+    },
+    {
+      "name": "timesheet_contract_move_commit_guard",
+      "relation": "private.timesheet_contract_move_operations",
+      "function": "private.timesheet_contract_move_commit_guard_v1()",
+      "source": "forward/sql/00_identity.sqlinc",
+      "definitionSha256": "53415747c5abc3bf0798afb4115cdd5d6d56a67612aa7d9bc75b88dfcbdca554"
+    },
+    {
+      "name": "timesheet_contract_move_context_guard",
+      "relation": "private.timesheet_contract_move_execution_contexts",
+      "function": "private.timesheet_contract_move_context_guard_v1()",
+      "source": "forward/sql/01_capability.sqlinc",
+      "definitionSha256": "3f6bf4cc71e88bfe1068831dbaa7489d5d58adbaf2188623dc6c70018b60a7c1"
+    },
+    {
+      "name": "timesheet_contract_move_context_commit_guard",
+      "relation": "private.timesheet_contract_move_execution_contexts",
+      "function": "private.timesheet_contract_move_context_commit_guard_v1()",
+      "source": "forward/sql/01_capability.sqlinc",
+      "definitionSha256": "6829e4b77a563f27d23e0c59dac655ce5705919e1e41b4ff28dc4a4ce6144df9"
+    },
+    {
+      "name": "zz_timesheet_contract_move_financial_row_guard_v1",
+      "relation": "public.timesheets_financials",
+      "function": "private.timesheet_contract_move_financial_row_guard_v1()",
+      "source": "forward/sql/03_native_guards.sqlinc",
+      "definitionSha256": "56042338077166a8ab2d936d0673aa469e771474ac0b03fb174e00066929f530"
+    },
+    {
+      "name": "trg_timesheet_archive_row_guard_v1",
+      "relation": "public.timesheets",
+      "function": "public.timesheet_archive_row_guard_v1()",
+      "source": "existing native trigger; body amended in 03_native_guards.sqlinc"
+    },
+    {
+      "name": "trg_timesheet_archived_evidence_guard_v1",
+      "relation": "public.timesheet_evidence",
+      "function": "public.timesheet_archived_evidence_guard_v1()",
+      "source": "existing native evidence-table trigger only; no original TF attachment inferred"
     }
   ],
   "integration": {

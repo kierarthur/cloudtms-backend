@@ -266,11 +266,12 @@ begin
 end;
 $function$;
 
-create trigger timesheet_contract_move_operation_guard before insert or update or delete on private.timesheet_contract_move_operations for each row execute function private.timesheet_contract_move_operation_guard_v1();
-create trigger timesheet_contract_move_request_guard before update or delete on private.timesheet_contract_move_requests for each row execute function private.timesheet_contract_move_request_guard_v1();
-create trigger timesheet_contract_move_member_guard before insert or update or delete on private.timesheet_contract_move_members for each row execute function private.timesheet_contract_move_member_guard_v1();
-create trigger timesheet_contract_move_placement_guard before insert or update or delete on private.timesheet_contract_current_placements for each row execute function private.timesheet_contract_move_placement_guard_v1();
-create trigger timesheet_contract_move_review_immutable before update or delete on private.timesheet_contract_move_reviews for each row execute function private.timesheet_contract_move_immutable_v1();
-create trigger timesheet_contract_move_alias_immutable before update or delete on private.timesheet_contract_family_aliases for each row execute function private.timesheet_contract_move_immutable_v1();
-create trigger timesheet_contract_move_consumption_immutable before update or delete on private.timesheet_contract_move_capability_consumptions for each row execute function private.timesheet_contract_move_immutable_v1();
+create or replace trigger timesheet_contract_move_operation_guard before insert or update or delete on private.timesheet_contract_move_operations for each row execute function private.timesheet_contract_move_operation_guard_v1();
+create or replace trigger timesheet_contract_move_request_guard before update or delete on private.timesheet_contract_move_requests for each row execute function private.timesheet_contract_move_request_guard_v1();
+create or replace trigger timesheet_contract_move_member_guard before insert or update or delete on private.timesheet_contract_move_members for each row execute function private.timesheet_contract_move_member_guard_v1();
+create or replace trigger timesheet_contract_move_placement_guard before insert or update or delete on private.timesheet_contract_current_placements for each row execute function private.timesheet_contract_move_placement_guard_v1();
+create or replace trigger timesheet_contract_move_review_immutable before update or delete on private.timesheet_contract_move_reviews for each row execute function private.timesheet_contract_move_immutable_v1();
+create or replace trigger timesheet_contract_move_alias_immutable before update or delete on private.timesheet_contract_family_aliases for each row execute function private.timesheet_contract_move_immutable_v1();
+create or replace trigger timesheet_contract_move_consumption_immutable before update or delete on private.timesheet_contract_move_capability_consumptions for each row execute function private.timesheet_contract_move_immutable_v1();
+drop trigger if exists timesheet_contract_move_commit_guard on private.timesheet_contract_move_operations;
 create constraint trigger timesheet_contract_move_commit_guard after insert or update on private.timesheet_contract_move_operations deferrable initially deferred for each row execute function private.timesheet_contract_move_commit_guard_v1();

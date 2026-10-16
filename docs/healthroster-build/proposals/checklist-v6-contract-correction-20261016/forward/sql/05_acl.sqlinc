@@ -24,6 +24,7 @@ begin
   'private.timesheet_contract_move_evidence_v1(uuid)',
   'private.timesheet_contract_move_family_lock_v1(uuid)',
   'private.timesheet_contract_move_financial_economics_v1(jsonb)',
+  'private.timesheet_contract_move_financial_row_guard_v1()',
   'private.timesheet_contract_move_immutable_v1()',
   'private.timesheet_contract_move_inherited_evidence_v1(jsonb)',
   'private.timesheet_contract_move_member_guard_v1()',

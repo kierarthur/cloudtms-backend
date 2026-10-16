@@ -24,7 +24,7 @@ begin
   cross join lateral jsonb_array_elements(k.expected_events_json) e
   where k.operation_id=o.id and k.member_key=m.member_key and k.billing_revision=o.billing_revision
    and k.phase in('INVOICE_SELECTED_EDIT','INVOICE_SELECTED_RELOCATE')
-   and k.guard_name='public.timesheet_archived_evidence_guard_v1'
+   and k.guard_name='private.timesheet_contract_move_financial_row_guard_v1'
    and k.relation_oid='public.timesheets_financials'::regclass and k.row_operation='UPDATE'
    and k.authority_receipt_id=(o.placement_receipt_json->>'receipt_id')::uuid
    and (e->>'event_no')::bigint=k.event_no and e->>'member_key'=k.member_key and e->>'guard_name'=k.guard_name

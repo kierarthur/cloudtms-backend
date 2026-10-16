@@ -38,6 +38,39 @@ BEGIN
  receipts.append({'signature':'public.'+name+'()','inputPath':str(source).removeprefix('\\\\?\\'),
   'inputSha256':hashlib.sha256(original.encode()).hexdigest(),'outputSha256':hashlib.sha256(body.encode()).hexdigest(),
   'exactChange':'One DECLARE variable and exact resolver/consume arm before original BEGIN body; evidence arm applies only to native archived rows, leaving normal B admission intact; all original body bytes retained.'})
+blocks.append('''-- New Health correction-event guard. The existing evidence guard is attached
+-- only to timesheet_evidence; it is never misrepresented as a native TF trigger.
+-- Outside exact live correction-context rows, ordinary native admission is unchanged.
+create or replace function private.timesheet_contract_move_financial_row_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare c private.timesheet_contract_move_execution_contexts%rowtype; cap_id uuid; named boolean:=false;
+begin
+ c:=private.timesheet_contract_move_context_v1();if c.id is null then return new;end if;
+ if c.phase in('ACCEPT_PLACEMENT','DAILY_RATE_REVISION') then
+  named:=exists(select 1 from jsonb_array_elements(c.native_manifest_json->'members') m
+   where (tg_op='INSERT' and (m->>'to_timesheet_id')::uuid=new.timesheet_id)
+    or (tg_op='UPDATE' and (m->>'from_financial_id')::uuid=old.id));
+ elsif c.phase in('INVOICE_SELECTED_EDIT','INVOICE_SELECTED_RELOCATE') and tg_op='UPDATE' then
+  named:=exists(select 1 from jsonb_array_elements(c.native_manifest_json->'members') m
+   where (m->>'from_financial_id')::uuid=old.id);
+ end if;
+ if not named then return new;end if;
+ cap_id:=private.timesheet_contract_move_capability_resolve_v1(
+  'private.timesheet_contract_move_financial_row_guard_v1',tg_relid,tg_op,
+  case when tg_op='UPDATE' then to_jsonb(old) else null end,to_jsonb(new));
+ if cap_id is null then raise exception 'CONTRACT_MOVE_FINANCIAL_CAPABILITY_REQUIRED' using errcode='42501';end if;
+ perform private.timesheet_contract_move_capability_consume_v1(cap_id,
+  'private.timesheet_contract_move_financial_row_guard_v1',tg_relid,tg_op,
+  case when tg_op='UPDATE' then to_jsonb(old) else null end,to_jsonb(new));
+ return new;
+end;
+$function$;
+-- Runs after the native trg_set_updated_at_tsfin so full NEW hashes seal its
+-- actual transaction_timestamp() value. No original timestamp trigger is edited.
+create or replace trigger zz_timesheet_contract_move_financial_row_guard_v1 before insert or update on public.timesheets_financials
+ for each row execute function private.timesheet_contract_move_financial_row_guard_v1();
+''')
 (base/'forward/sql/03_native_guards.sqlinc').write_text('\n'.join(blocks),encoding='utf-8',newline='\n')
 (base/'NATIVE_GUARD_INPUTS.json').write_text(json.dumps({'canonicalI2':'7f5a5a876a9b485beee2b040409233eef70448c7','functions':receipts},indent=2)+'\n',encoding='utf-8')
 print('Native guard bodies generated: '+str(len(blocks)))
