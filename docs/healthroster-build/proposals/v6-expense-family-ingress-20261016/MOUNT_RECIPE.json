@@ -1,8 +1,8 @@
 {
   "version": 1,
   "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
-  "source_commit": null,
-  "remote_source_verified": null,
+  "source_commit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+  "remote_source_verified": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
   "root_observed_head": "66c6e5ef2971a22d34264b829877d6546c49a1be",
   "root_native_input_files_lf_sha256": {
     "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql": "f8f415a641f7ecdece1068d672f407370962e9aaeecc4f790ce832f791ce6908",
