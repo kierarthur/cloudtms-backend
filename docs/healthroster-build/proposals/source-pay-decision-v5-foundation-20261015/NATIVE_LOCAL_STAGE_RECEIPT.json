@@ -2,7 +2,7 @@
   "input": "native-entry/weekly_exceptional_pay_stage_c1_request_v1.sqlinc",
   "input_sha256": "e5a62b6838024c3af98f2a436edb262e51381fa6cf4d2ae0e23753d7ef40265d",
   "output": "forward/20_native_local_stage_implementation.sqlinc",
-  "output_sha256": "bdb1a75d72157932be8aa6b6211477af6d81cd87a47b8e36c603101f125a4ef7",
+  "output_sha256": "06ffc188bc7c404822d3f7a5ef08c4c1f3380857264dbd5030ea9db26d27451f",
   "complete_reverse_equals_input": true,
   "ordinary_body_changes": 0,
   "source_effect": "Real complete native stage then commissioned private complete_local in the same outer transaction.",
@@ -40,6 +40,10 @@
     {
       "before": "  if v_root.contract_id is distinct from v_family.contract_id",
       "after": "  if v_root.contract_id::text is distinct from v_placement->>'current_contract_id'"
+    },
+    {
+      "before": "  v_policy:=private._weekly_source_effective_policy_v1(",
+      "after": "  perform private.weekly_source_protected_action_placement_assert_v1(p_request,v_placement);\n  v_policy:=private._weekly_source_effective_policy_v1("
     },
     {
       "before": "(v_start->>'contract_id')::uuid is distinct from v_family.contract_id",

@@ -223,8 +223,8 @@
         },
         {
           "path": "forward/16_native_next_implementation.sqlinc",
-          "sha256": "59f37c42299fa60ab68393d114d99dc094ae6054fe61e1c98112871850b4b297",
-          "bytes": 44527,
+          "sha256": "e944001616f868078ad3a88e222d374b5c667187ddb78a5837429a3ab6a55880",
+          "bytes": 44649,
           "packaging_statements": 10,
           "functions": [
             "private.weekly_source_protected_next_engine_v1(p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean)",
@@ -263,8 +263,8 @@
         },
         {
           "path": "forward/20_native_local_stage_implementation.sqlinc",
-          "sha256": "bdb1a75d72157932be8aa6b6211477af6d81cd87a47b8e36c603101f125a4ef7",
-          "bytes": 61716,
+          "sha256": "06ffc188bc7c404822d3f7a5ef08c4c1f3380857264dbd5030ea9db26d27451f",
+          "bytes": 61809,
           "packaging_statements": 10,
           "functions": [
             "private.weekly_source_protected_local_stage_engine_v1(p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean)",
@@ -489,6 +489,16 @@
           "functions": [
             "private.weekly_source_query_resolved_decision_matches_v1(p_source_group_id uuid,p_work_event_id uuid,p_issue jsonb)"
           ]
+        },
+        {
+          "path": "forward/43_current_native_action_preparation.sqlinc",
+          "sha256": "45c340aad3125e3afffdcaec7587f57deb6266119103e75d74dbf0ba3b00d512",
+          "bytes": 17633,
+          "packaging_statements": 6,
+          "functions": [
+            "public.weekly_exceptional_pay_prepare_action_v1(p_request jsonb)",
+            "private.weekly_source_protected_action_placement_assert_v1(p_request jsonb,p_placement jsonb)"
+          ]
         }
       ]
     },
@@ -621,8 +631,8 @@
     },
     {
       "path": "tests/weekly-source/source-native-generators.test.mjs",
-      "sha256": "2af32ae1dd26c37ac80f071434d2e34e8b13bb84dc587e0a7c663dab2c118fc2",
-      "bytes": 8523
+      "sha256": "2bc00a3beb3926ae4b3fdf1877dec2c02be09bb61d91f14ede4195efb9e86476",
+      "bytes": 9896
     },
     {
       "path": "tests/weekly-source/source-current-financial.test.mjs",
@@ -708,7 +718,10 @@
       "Original context timesheet/contract_record/root_financial/candidate_submission A retained unchanged",
       "Actual B stream source is sealed in full native payload; stage rehashes current actual B row/version before write",
       "Own native Local stage/complete uses B while original family/approval/source invoice/evidence A remains immutable",
-      "Later B-to-C retains genuine accepted native Local B receipt via immutable stage/physical operation/member proof"
+      "Later B-to-C retains genuine accepted native Local B receipt via immutable stage/physical operation/member proof",
+      "Fresh moved AMEND/WITHDRAW/RECONCILE/RECORD_NOT_WORKED uses actual physical family lock and immutable original family tuple",
+      "Actual native action prepare before-state seals certified B; B-to-C before fresh native Local/NEXT stage refuses before first business write",
+      "Unmoved action before-state domain/bytes and immutable saved-prepare replay remain unchanged; first-APPROVE native prepare owner is separate"
     ],
     "confirmation_preparation_recovery": [
       "Exact common confirmation context validates original nested browser body/actor/current scope/review/digest/prior/three hashes and immutable RESUME reason",

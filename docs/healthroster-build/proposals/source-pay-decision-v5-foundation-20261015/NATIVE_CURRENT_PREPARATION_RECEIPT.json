@@ -1,0 +1,28 @@
+{
+  "input_commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+  "input": "supabase/repeatable/14102026_0410_healthroster_protected_source_prerequisites/43_q45_actor_event_closed_dto_cross_session_12_complete_actor_18_prepare_action.sqlinc",
+  "input_sha256": "9c7637eba0478d7bf88c11bceec8a08066146234558510267fba14926c2438ea",
+  "selected_native_body_sha256": "0e19954eb0f1eac4839148a8261c623fcc7d55de83ff5a2f20886606eb3862ea",
+  "output": "forward/43_current_native_action_preparation.sqlinc",
+  "output_sha256": "45c340aad3125e3afffdcaec7587f57deb6266119103e75d74dbf0ba3b00d512",
+  "edits": [
+    {
+      "before": "  v_saved_route jsonb;",
+      "after": "  v_saved_route jsonb;v_placement jsonb;v_checked_placement jsonb;"
+    },
+    {
+      "before": "  v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);",
+      "after": "  v_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);\n  if v_placement->'moved'='true'::jsonb then\n    perform private.timesheet_contract_move_family_lock_v1((v_placement->>'original_root_timesheet_id')::uuid);\n    select jsonb_build_object('root_timesheet_id',f.root_timesheet_id,'candidate_id',f.candidate_id,\n      'contract_id',f.contract_id,'week_ending_date',f.week_ending_date) into strict v_lock_family\n      from public.weekly_exceptional_pay_target_families f where f.id=v_family_id;\n  else v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);end if;\n  v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);\n  if v_checked_placement is distinct from v_placement then\n    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;"
+    },
+    {
+      "before": "      'protected_schedule',v_schedule,'reason',v_reason\n    )\n  );",
+      "after": "      'protected_schedule',v_schedule,'reason',v_reason\n    )||case when v_placement->'moved'='true'::jsonb\n      then jsonb_build_object('accepted_current_placement',v_placement) else '{}'::jsonb end\n  );"
+    }
+  ],
+  "complete_reverse_equals_input": true,
+  "unmoved_before_hash_changed": false,
+  "original_domain": "WEEKLY_PROTECTED_ACTION_PREPARE_BEFORE_V1",
+  "moved_only_addition": "accepted_current_placement: actual full PROTECTED_CURRENT_PLACEMENT_V1",
+  "first_approve_boundary": "Separate native prepare owner/hash unchanged; helper does not claim first-APPROVE coverage.",
+  "qualification": "SOURCE_ONLY_NATIVE_REQUIRED_NOT_RUN"
+}

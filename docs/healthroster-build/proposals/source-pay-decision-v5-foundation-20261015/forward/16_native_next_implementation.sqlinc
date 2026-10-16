@@ -221,6 +221,7 @@ begin
     'schema_version','WEEKLY_PROTECTED_ACTION_CONTEXT_V1','actor_user_id',v_actor,
     'family_id',v_family.id,'orchestration_run_id',v_run.id,'source_cycle_id',v_cycle.id,
     'work_event_id',v_event,'protected_schedule',p_request->'protected_schedule','evidence_timesheet_id',v_evidence));
+  perform private.weekly_source_protected_action_placement_assert_v1(p_request,v_context->'protected_current_placement');
   if v_context->'source_proposal' is distinct from p_request->'source_proposal'
      or v_context->>'current_comparison_revision_id' is distinct from p_request->>'current_comparison_revision_id'
      or v_context->>'current_final_revision_id' is distinct from p_request->>'current_final_revision_id'

@@ -66,7 +66,8 @@ const stages = [
     'forward/39_actual_native_dependency_rollback.sqlinc',
     'forward/40_actual_publication_and_source_binding.sqlinc',
     'forward/41_atomic_source_acceptance.sqlinc',
-    'forward/42_native_contact_reimport_match.sqlinc'] },
+    'forward/42_native_contact_reimport_match.sqlinc',
+    'forward/43_current_native_action_preparation.sqlinc'] },
   { id: 'CURRENT_NATIVE_ENTRY_FENCES', requires: [
     'private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)',
     'Complete current native bodies pinned by NATIVE_ENTRY_RECEIPT.json; root final owner composition'], files: [
@@ -116,6 +117,9 @@ const manifest = {
     'Actual B stream source is sealed in full native payload; stage rehashes current actual B row/version before write',
     'Own native Local stage/complete uses B while original family/approval/source invoice/evidence A remains immutable',
     'Later B-to-C retains genuine accepted native Local B receipt via immutable stage/physical operation/member proof',
+    'Fresh moved AMEND/WITHDRAW/RECONCILE/RECORD_NOT_WORKED uses actual physical family lock and immutable original family tuple',
+    'Actual native action prepare before-state seals certified B; B-to-C before fresh native Local/NEXT stage refuses before first business write',
+    'Unmoved action before-state domain/bytes and immutable saved-prepare replay remain unchanged; first-APPROVE native prepare owner is separate',
   ], confirmation_preparation_recovery: [
     'Exact common confirmation context validates original nested browser body/actor/current scope/review/digest/prior/three hashes and immutable RESUME reason',
     'Context allocates no journal/run/preparation/native financial rows; positive/no-active-protection required set is genuinely empty',

@@ -2,7 +2,7 @@
   "input": "native-entry/weekly_exceptional_pay_publish_next_v1.sqlinc",
   "input_sha256": "b91bcbe09aab658dacefad71df928105ea57b9a81b8e991cfbb3c9a72501437a",
   "output": "forward/16_native_next_implementation.sqlinc",
-  "output_sha256": "59f37c42299fa60ab68393d114d99dc094ae6054fe61e1c98112871850b4b297",
+  "output_sha256": "e944001616f868078ad3a88e222d374b5c667187ddb78a5837429a3ab6a55880",
   "complete_reverse_equals_input": true,
   "ordinary_body_changes": "Shared active actor predicate; otherwise every ordinary native statement retained under NULL preparation.",
   "source_control": "Actual native writes and Banking protected stage; suppress standalone publication + old receipt only. Genuine application/adoption required.",
@@ -29,6 +29,10 @@
     {
       "before": "  v_source_gate:=private.weekly_source_pay_decision_native_normal_gate_v1(v_family.id,v_run.id,v_actor,'PUBLISH_NEXT');\n  if v_source_gate is not null then return v_source_gate; end if;",
       "after": "  if p_source_decision_preparation_id is null then\n    v_source_gate:=private.weekly_source_pay_decision_native_normal_gate_v1(v_family.id,v_run.id,v_actor,'PUBLISH_NEXT');\n    if v_source_gate is not null then return v_source_gate; end if;\n  else\n    v_source_application_id:=private.weekly_source_pay_decision_native_request_scope_v1(\n      p_source_decision_preparation_id,p_request,'NEXT',not p_validate_only);\n  end if;"
+    },
+    {
+      "before": "  if v_context->'source_proposal' is distinct from p_request->'source_proposal'",
+      "after": "  perform private.weekly_source_protected_action_placement_assert_v1(p_request,v_context->'protected_current_placement');\n  if v_context->'source_proposal' is distinct from p_request->'source_proposal'"
     },
     {
       "before": "  insert into public.weekly_exceptional_payment_approvals(pay_target_family_id,work_event_id,evidence_timesheet_id,",

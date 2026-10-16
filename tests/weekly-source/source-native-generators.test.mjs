@@ -90,6 +90,22 @@ for (const name of ['NATIVE_CURRENT_SCOPE_RECEIPT.json','NATIVE_LOCAL_CURRENT_CO
     }
   });
 }
+
+test('Current native action preparation preserves its entire original owner and unmoved before-state domain', () => {
+  const receipt = JSON.parse(read('NATIVE_CURRENT_PREPARATION_RECEIPT.json'));
+  const source = git(receipt.input_commit, receipt.input);assert.equal(sha(source), receipt.input_sha256);
+  const start = source.indexOf('create or replace function public.weekly_exceptional_pay_prepare_action_v1(');
+  const end = source.indexOf('$function$;', source.indexOf('as $function$', start)) + '$function$;'.length;
+  const original = source.slice(start, end);assert.equal(sha(original), receipt.selected_native_body_sha256);
+  const output = read(receipt.output);assert.equal(sha(output), receipt.output_sha256);
+  let generated = original;
+  for (const edit of receipt.edits) { assert.equal(generated.split(edit.before).length, 2);generated = generated.replace(edit.before, edit.after); }
+  assert.ok(output.startsWith(generated));
+  for (const edit of receipt.edits.toReversed()) generated = generated.replace(edit.after, edit.before);
+  assert.equal(generated, original);assert.equal(receipt.unmoved_before_hash_changed, false);
+  const savedReplay = output.indexOf('if v_saved_route is not null then return v_saved_route;');
+  assert.ok(savedReplay > 0 && savedReplay < output.indexOf('v_placement:=private.weekly_source_protected_current_placement_v1'));
+});
 test('Run-free current-placement native context is the complete pinned native body with exact explicit transformations', () => {
   const receipt = JSON.parse(read('NATIVE_CONTEXT_RECEIPT.json'));const output = read(receipt.output);
   let generated = git(receipt.input_commit, receipt.input);assert.equal(sha(generated), receipt.input_sha256);

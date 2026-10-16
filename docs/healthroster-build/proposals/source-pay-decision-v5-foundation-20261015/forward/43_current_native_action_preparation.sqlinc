@@ -1,0 +1,318 @@
+create or replace function public.weekly_exceptional_pay_prepare_action_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','extensions','pg_catalog','pg_temp'
+as $function$
+declare
+  v_keys constant text[]:=array[
+    'schema_version','actor_user_id','family_id','source_cycle_id','work_event_id',
+    'action','expected_family_bound_version','protected_schedule','reason',
+    'idempotency_key'
+  ];
+  v_schedule_keys constant text[]:=array[
+    'work_date','start_at_local','end_at_local','break_minutes'
+  ];
+  v_actor uuid;
+  v_family_id uuid;
+  v_cycle_id uuid;
+  v_event_id uuid;
+  v_expected_version bigint;
+  v_action text;
+  v_reason text;
+  v_key text;
+  v_family public.weekly_exceptional_pay_target_families%rowtype;
+  v_lock_family jsonb; v_lock_group uuid;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_contract public.contracts%rowtype;
+  v_event public.weekly_work_events%rowtype;
+  v_latest_event public.weekly_exceptional_pay_family_events%rowtype;
+  v_run public.weekly_exceptional_orchestration_runs%rowtype;
+  v_request_hash bytea;
+  v_before bytea;
+  v_source_mode text; v_activated_source_mode text;
+  v_policy jsonb;
+  v_schedule jsonb;
+  v_work_date date;
+  v_start timestamp without time zone;
+  v_end timestamp without time zone;
+  v_break integer;
+  v_replay boolean:=false;
+  v_review_source jsonb;
+  v_saved_route jsonb;v_placement jsonb;v_checked_placement jsonb;
+begin
+  if pg_catalog.jsonb_typeof(p_request)<>'object'
+     or not private.weekly_exceptional_json_keys_exact_v1(p_request,
+       v_keys||array['expected_source_hash','expected_source_revision'])
+     or not (p_request ?& v_keys)
+     or p_request->>'schema_version'<>'WEEKLY_PROTECTED_ACTION_PREPARE_V1' then
+    raise exception 'WEEKLY_PROTECTED_ACTION_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_family_id:=(p_request->>'family_id')::uuid;
+    v_cycle_id:=(p_request->>'source_cycle_id')::uuid;
+    v_event_id:=(p_request->>'work_event_id')::uuid;
+    v_expected_version:=(p_request->>'expected_family_bound_version')::bigint;
+  exception when others then
+    raise exception 'WEEKLY_PROTECTED_ACTION_REQUEST_INVALID' using errcode='22023';
+  end;
+  v_action:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_request->>'action','')));
+  v_reason:=pg_catalog.btrim(coalesce(p_request->>'reason',''));
+  v_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+  v_request_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_PREPARE_ACTION_REQUEST_V1',p_request
+  );
+  if v_action not in ('AMEND','WITHDRAW','WAIT','RECONCILE','RECORD_NOT_WORKED')
+     or v_expected_version<1
+     or pg_catalog.char_length(v_reason) not between 1 and 1000
+     or pg_catalog.char_length(v_key) not between 16 and 200 then
+    raise exception 'WEEKLY_PROTECTED_ACTION_REQUEST_INVALID' using errcode='22023';
+  end if;
+
+  v_saved_route:=private.weekly_source_protected_saved_prepare_route_v1(p_request,
+    'WEEKLY_PROTECTED_PREPARE_ACTION_REQUEST_V1',v_action);
+  if v_saved_route is not null then return v_saved_route; end if;
+  perform private.weekly_source_pay_query_admit_v2();
+  v_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);
+  if v_placement->'moved'='true'::jsonb then
+    perform private.timesheet_contract_move_family_lock_v1((v_placement->>'original_root_timesheet_id')::uuid);
+    select jsonb_build_object('root_timesheet_id',f.root_timesheet_id,'candidate_id',f.candidate_id,
+      'contract_id',f.contract_id,'week_ending_date',f.week_ending_date) into strict v_lock_family
+      from public.weekly_exceptional_pay_target_families f where f.id=v_family_id;
+  else v_lock_family:=private.weekly_source_protected_family_lock_v1(v_family_id);end if;
+  v_checked_placement:=private.weekly_source_protected_current_placement_v1(v_family_id,v_event_id,false);
+  if v_checked_placement is distinct from v_placement then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;
+  -- Share the same global idempotency lock as first approval.  Concurrent
+  -- first attempts for one key therefore become one write plus one exact
+  -- replay instead of leaking the ledger's unique constraint.
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'weekly-exceptional-orchestration|'||v_key,0
+  ));
+
+  select run.* into v_run
+  from public.weekly_exceptional_orchestration_runs run
+  where run.idempotency_key=v_key for update;
+  v_replay:=found;
+
+  select family.* into strict v_family
+  from public.weekly_exceptional_pay_target_families family
+  where family.id=v_family_id for update;
+  if (v_family.root_timesheet_id::text,v_family.candidate_id::text,v_family.contract_id::text,v_family.week_ending_date::text)
+    is distinct from (v_lock_family->>'root_timesheet_id',v_lock_family->>'candidate_id',
+      v_lock_family->>'contract_id',v_lock_family->>'week_ending_date') then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
+  v_lock_group:=private.weekly_source_protected_group_lock_v1(v_cycle_id);
+  select cycle.* into strict v_cycle
+  from public.weekly_source_cycles cycle where cycle.id=v_cycle_id for share;
+  if v_cycle.source_group_id is distinct from v_lock_group then
+    raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001'; end if;
+  select source_group.* into strict v_group
+  from public.weekly_source_groups source_group
+  where source_group.id=v_cycle.source_group_id and source_group.active for share;
+  select contract.* into strict v_contract
+  from public.contracts contract where contract.id=v_family.contract_id for share;
+  select work_event.* into strict v_event
+  from public.weekly_work_events work_event
+  where work_event.id=v_event_id
+    and work_event.candidate_id=v_family.candidate_id
+    and work_event.client_id=v_contract.client_id
+    and work_event.work_date between v_family.week_start_date and v_family.week_ending_date
+  for share;
+  select family_event.* into strict v_latest_event
+  from public.weekly_exceptional_pay_family_events family_event
+  where family_event.family_id=v_family.id
+    and family_event.durable_work_event_id=v_event.id
+  order by family_event.event_sequence desc
+  limit 1
+  for share;
+
+  if v_action='AMEND' then
+    if pg_catalog.jsonb_typeof(p_request->'protected_schedule')<>'object'
+       or not private.weekly_exceptional_json_keys_exact_v1(
+         p_request->'protected_schedule',v_schedule_keys
+       )
+       or not ((p_request->'protected_schedule') ?& v_schedule_keys) then
+      raise exception 'WEEKLY_PROTECTED_ACTION_SCHEDULE_INVALID' using errcode='22023';
+    end if;
+    v_schedule:=p_request->'protected_schedule';
+    begin
+      v_work_date:=(v_schedule->>'work_date')::date;
+      v_start:=(v_schedule->>'start_at_local')::timestamp without time zone;
+      v_end:=(v_schedule->>'end_at_local')::timestamp without time zone;
+      v_break:=(v_schedule->>'break_minutes')::integer;
+    exception when others then
+      raise exception 'WEEKLY_PROTECTED_ACTION_SCHEDULE_INVALID' using errcode='22023';
+    end;
+    if v_work_date<>v_event.work_date or v_start::date<>v_work_date
+       or v_end<=v_start or v_break<0
+       or v_break>=extract(epoch from (v_end-v_start))/60 then
+      raise exception 'WEEKLY_PROTECTED_ACTION_SCHEDULE_INVALID' using errcode='22023';
+    end if;
+  else
+    if p_request->'protected_schedule'<>'null'::jsonb then
+      raise exception 'WEEKLY_PROTECTED_ACTION_SCHEDULE_FORBIDDEN' using errcode='22023';
+    end if;
+    v_schedule:=pg_catalog.jsonb_build_object(
+      'work_date',v_latest_event.work_date,
+      'start_at_local',v_latest_event.start_at_local,
+      'end_at_local',v_latest_event.end_at_local,
+      'break_minutes',v_latest_event.break_minutes
+    );
+  end if;
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'APPROVE_PROTECTED_PAY',v_group.id,v_contract.client_id,v_cycle.finalisation_week_ending
+  );
+  v_policy:=private._weekly_source_effective_policy_v1(
+    v_contract.client_id,v_contract.id,v_event.work_date
+  );
+  v_activated_source_mode:=private.weekly_source_protected_non_self_bill_mode_v1(v_contract.client_id,v_contract.id,v_event.work_date,v_cycle.id,v_actor,v_event.id);
+  v_source_mode:=coalesce(v_policy->>'c1_source_mode',v_activated_source_mode);
+  if v_family.agency_id is distinct from v_group.agency_id
+     or v_family.root_timesheet_id is null
+     or v_family.ownership_state<>'TARGET_MANAGED'
+     or v_contract.candidate_id is distinct from v_family.candidate_id
+     or not exists(
+       select 1 from public.weekly_source_group_clients membership
+       where membership.source_group_id=v_group.id
+         and membership.client_id=v_contract.client_id
+         and v_cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+     )
+     or v_policy->>'authority_mode'<>'SOURCE_AUTHORITY'
+     or (coalesce((v_policy->>'self_bill_enabled')::boolean,false) is not true and v_activated_source_mode is null)
+     or v_source_mode not in ('NHSP_WEEKLY','HEALTHROSTER_WEEKLY')
+     or (v_group.source_family='NHSP') is distinct from (v_source_mode='NHSP_WEEKLY')
+     or v_latest_event.id is null then
+    raise exception 'WEEKLY_PROTECTED_ACTION_SCOPE_INVALID' using errcode='55000';
+  end if;
+
+  if v_replay then
+    if v_run.family_id is distinct from v_family.id
+       or v_run.request_kind is distinct from v_action
+       or v_run.requested_by_user_id is distinct from v_actor
+       or v_run.request_fingerprint is distinct from v_request_hash then
+      raise exception 'WEEKLY_PROTECTED_ACTION_IDEMPOTENCY_COLLISION' using errcode='23505';
+    end if;
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'outcome','PREPARED','family_id',v_family.id,
+      'orchestration_run_id',v_run.id,'source_cycle_id',v_cycle.id,
+      'source_group_id',v_group.id,'agency_id',v_group.agency_id,
+      'candidate_id',v_family.candidate_id,'client_id',v_contract.client_id,
+      'contract_id',v_family.contract_id,'root_timesheet_id',v_family.root_timesheet_id,
+      'work_event_id',v_event.id,'week_start_date',v_family.week_start_date,
+      'week_ending_date',v_family.week_ending_date,'source_mode',v_source_mode,
+      'family_bound_version',v_expected_version,'request_kind',v_action,
+      'protected_schedule',v_schedule,'run_state',v_run.state,
+      'idempotent_replay',true
+    );
+  end if;
+
+  if v_family.current_generation_id is null
+     or v_family.current_lifecycle_state not in (
+       'PROTECTED','WAITING_SOURCE','READY_TO_RECONCILE','RECONCILED','NOT_WORKED','ACTION_REQUIRED'
+     )
+     or v_family.c1_publication_state in ('PENDING','PUBLISHING')
+     or v_family.bound_version<>v_expected_version then
+    -- A business-version refusal is not a retryable PostgreSQL serialization
+    -- failure. PostgREST 14 retries 40001, so return the same refusal as HTTP
+    -- conflict without repeating the request or creating an orchestration run.
+    raise exception 'WEEKLY_PROTECTED_ACTION_STALE' using errcode='PT409';
+  end if;
+
+  -- A new Office review is bound to the exact final-source observation shown.
+  -- Refuse before creating a run; old callers and exact saved replays retain
+  -- their original request shape and fingerprint.
+  if p_request ? 'expected_source_hash' or p_request ? 'expected_source_revision' then
+    if v_action<>'RECONCILE'
+      or coalesce(p_request->>'expected_source_hash','') !~ '^[0-9a-f]{64}$'
+      or coalesce(p_request->>'expected_source_revision','') !~ '^[0-9a-f-]{36}$' then
+      raise exception 'WEEKLY_PROTECTED_ACTION_REQUEST_INVALID' using errcode='22023';
+    end if;
+    v_review_source:=private.weekly_source_protected_final_source_context_v1(v_family.id,v_cycle.id,v_event.id);
+    if not coalesce((v_review_source->>'source_observed')::boolean,false)
+      or v_review_source#>>'{source_proposal,source_hash}' is distinct from p_request->>'expected_source_hash'
+      or v_review_source#>>'{source_proposal,source_revision}' is distinct from p_request->>'expected_source_revision' then
+      raise exception 'WEEKLY_PROTECTED_REVIEW_SOURCE_CHANGED' using errcode='40001';
+    end if;
+  end if;
+
+  v_before:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_PROTECTED_ACTION_PREPARE_BEFORE_V1',
+    pg_catalog.jsonb_build_object(
+      'family_id',v_family.id,'family_bound_version',v_family.bound_version,
+      'current_generation_id',v_family.current_generation_id,
+      'current_generation_number',v_family.current_generation_number,
+      'current_target_vector_hash',pg_catalog.encode(v_family.current_complete_target_vector_hash,'hex'),
+      'source_cycle_id',v_cycle.id,'source_group_id',v_group.id,
+      'work_event_id',v_event.id,'action',v_action,'actor_user_id',v_actor,
+      'protected_schedule',v_schedule,'reason',v_reason
+    )||case when v_placement->'moved'='true'::jsonb
+      then jsonb_build_object('accepted_current_placement',v_placement) else '{}'::jsonb end
+  );
+  insert into public.weekly_exceptional_orchestration_runs(
+    family_id,request_kind,idempotency_key,requested_by_user_id,state,
+    request_fingerprint,before_state_fingerprint
+  ) values (
+    v_family.id,v_action,v_key,v_actor,'RUNNING',v_request_hash,v_before
+  ) returning * into v_run;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'outcome','PREPARED','family_id',v_family.id,
+    'orchestration_run_id',v_run.id,'source_cycle_id',v_cycle.id,
+    'source_group_id',v_group.id,'agency_id',v_group.agency_id,
+    'candidate_id',v_family.candidate_id,'client_id',v_contract.client_id,
+    'contract_id',v_family.contract_id,'root_timesheet_id',v_family.root_timesheet_id,
+    'work_event_id',v_event.id,'week_start_date',v_family.week_start_date,
+    'week_ending_date',v_family.week_ending_date,'source_mode',v_source_mode,
+    'family_bound_version',v_family.bound_version,'request_kind',v_action,
+    'protected_schedule',v_schedule,'run_state',v_run.state,
+    'idempotent_replay',v_replay
+  );
+exception
+  when no_data_found or too_many_rows then
+    raise exception 'WEEKLY_PROTECTED_ACTION_SCOPE_INVALID' using errcode='55000';
+end;
+$function$;
+revoke all on function public.weekly_exceptional_pay_prepare_action_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_exceptional_pay_prepare_action_v1(jsonb) to service_role;
+
+-- Existing native action prepare before-state domain, with the actual moved
+-- certificate sealed only for the new moved branch. No existing native receipt
+-- or unmoved hash semantics changes. First APPROVE has its own prepare owner;
+-- its different before-state hash is not reinterpreted by this helper.
+create or replace function private.weekly_source_protected_action_placement_assert_v1(p_request jsonb,p_placement jsonb)
+returns void language plpgsql volatile security definer set search_path=pg_catalog,private,public as $function$
+declare run public.weekly_exceptional_orchestration_runs%rowtype;
+ family public.weekly_exceptional_pay_target_families%rowtype;
+ cycle public.weekly_source_cycles%rowtype;before_hash bytea;
+begin
+ if p_placement->'moved' is distinct from 'true'::jsonb then return;end if;
+ select r.* into strict run from public.weekly_exceptional_orchestration_runs r where r.id=(p_request->>'orchestration_run_id')::uuid;
+ if run.request_kind='APPROVE' then return;end if;
+ select f.* into strict family from public.weekly_exceptional_pay_target_families f where f.id=run.family_id;
+ select c.* into strict cycle from public.weekly_source_cycles c where c.id=(p_request->>'source_cycle_id')::uuid;
+ if run.request_kind not in('AMEND','WITHDRAW','WAIT','RECONCILE','RECORD_NOT_WORKED')
+  or run.state<>'RUNNING' or run.requested_by_user_id::text is distinct from p_request->>'actor_user_id'
+  or family.id::text is distinct from p_request->>'family_id'
+  or family.bound_version::text is distinct from p_request->>'expected_family_bound_version'
+  or p_placement is distinct from private.weekly_source_protected_current_placement_v1(
+    family.id,(p_request->>'work_event_id')::uuid,false) then
+  raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;
+ before_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_ACTION_PREPARE_BEFORE_V1',jsonb_build_object(
+   'family_id',family.id,'family_bound_version',family.bound_version,
+   'current_generation_id',family.current_generation_id,'current_generation_number',family.current_generation_number,
+   'current_target_vector_hash',encode(family.current_complete_target_vector_hash,'hex'),
+   'source_cycle_id',cycle.id,'source_group_id',cycle.source_group_id,
+   'work_event_id',(p_request->>'work_event_id')::uuid,'action',run.request_kind,'actor_user_id',run.requested_by_user_id,
+   'protected_schedule',p_request->'protected_schedule','reason',btrim(p_request->>'reason'),
+   'accepted_current_placement',p_placement));
+ if before_hash is distinct from run.before_state_fingerprint then
+  raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';end if;
+exception when no_data_found or too_many_rows or invalid_text_representation then
+ raise exception 'WEEKLY_SOURCE_PROTECTED_LOCK_SCOPE_CHANGED' using errcode='40001';
+end;
+$function$;
+revoke all on function private.weekly_source_protected_action_placement_assert_v1(jsonb,jsonb)
+ from public,anon,authenticated,service_role;
+notify pgrst,'reload schema';

@@ -53,6 +53,9 @@ change('  where timesheet.timesheet_id=v_family.root_timesheet_id\n  for share;'
   "  where timesheet.timesheet_id=(v_placement->>'current_timesheet_id')::uuid\n  for share;");
 change('  if v_root.contract_id is distinct from v_family.contract_id',
   "  if v_root.contract_id::text is distinct from v_placement->>'current_contract_id'");
+change('  v_policy:=private._weekly_source_effective_policy_v1(',
+  `  perform private.weekly_source_protected_action_placement_assert_v1(p_request,v_placement);
+  v_policy:=private._weekly_source_effective_policy_v1(`);
 for (const prefix of ["(v_start->>'contract_id')::uuid", "(v_source_entry->>'contract_id')::uuid", "(v_source_document->>'contract_id')::uuid"]) {
   change(`${prefix} is distinct from v_family.contract_id`, `${prefix} is distinct from v_root.contract_id`);
 }

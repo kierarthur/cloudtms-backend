@@ -28,6 +28,8 @@ change("  v_source_gate:=private.weekly_source_pay_decision_native_normal_gate_v
     v_source_application_id:=private.weekly_source_pay_decision_native_request_scope_v1(
       p_source_decision_preparation_id,p_request,'NEXT',not p_validate_only);
   end if;`);
+change("  if v_context->'source_proposal' is distinct from p_request->'source_proposal'",
+  "  perform private.weekly_source_protected_action_placement_assert_v1(p_request,v_context->'protected_current_placement');\n  if v_context->'source_proposal' is distinct from p_request->'source_proposal'");
 change('  insert into public.weekly_exceptional_payment_approvals(pay_target_family_id,work_event_id,evidence_timesheet_id,',
   `  if p_validate_only then
     return jsonb_build_object('version','SOURCE_NATIVE_VALIDATED_REQUEST_V1','route','NEXT',

@@ -410,6 +410,7 @@ begin
     raise exception 'WEEKLY_PROTECTED_C1_ROOT_INVALID' using errcode='55000';
   end if;
 
+  perform private.weekly_source_protected_action_placement_assert_v1(p_request,v_placement);
   v_policy:=private._weekly_source_effective_policy_v1(
     v_client_id,v_family.contract_id,v_work_date
   );
