@@ -1,0 +1,7 @@
+-- ONE-TIME protected migration only. Routine080 is independently repeatable.
+create trigger weekly_contact_query_delivery_integrity_v1 before insert or update on public.hr_issue_email_deliveries
+ for each row execute function private.weekly_contact_query_integrity_v1();
+create trigger weekly_contact_query_items_integrity_v1 before update or delete on public.hr_issue_email_delivery_items
+ for each row execute function private.weekly_contact_query_integrity_v1();
+create trigger weekly_contact_query_sent_integrity_v1 before update of status,sent_at,provider_status,provider_message_id on public.mail_outbox
+ for each row execute function private.weekly_contact_query_integrity_v1();

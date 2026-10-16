@@ -1,0 +1,21 @@
+-- Complete final-repeatable successor after083; original0802 bytes remain intact.
+create or replace function private.weekly_contact_pause_inflight_v1(
+ p_agency uuid,p_environment text,p_candidate uuid,p_client uuid
+) returns jsonb
+language sql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+ select (select coalesce(jsonb_agg(x.summary order by x.started_at,x.permit_id),'[]'::jsonb) from(
+  select p.id permit_id,p.admitted_at_utc started_at,jsonb_build_object(
+   'permit_id',p.id,'owner_kind',p.owner_kind,'delivery_id',coalesce(p.dispatch_target_id,p.query_delivery_id),
+   'provider_attempt_id',p.provider_attempt_id,'channel',p.channel,'status',p.status,
+   'started_at_utc',to_char(p.admitted_at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+   'memberships',(select jsonb_agg(m order by m->>'scope_id',m->>'audience') from jsonb_array_elements(p.scope_revisions_json)m
+    where m->>'candidate_id'=p_candidate::text and m->>'client_id'=p_client::text)
+  )summary
+  from public.weekly_contact_submission_permits p where p.environment=p_environment and p.agency_id=p_agency
+   and p.status in ('STARTED','AMBIGUOUS') and exists(select 1 from jsonb_array_elements(p.scope_revisions_json)m
+    where m->>'candidate_id'=p_candidate::text and m->>'client_id'=p_client::text)
+ )x) || private.weekly_contact_query_legacy_claims_v1(p_candidate,p_client,p_agency,p_environment);
+$function$;
+alter function private.weekly_contact_pause_inflight_v1(uuid,text,uuid,uuid) owner to postgres;
+revoke all on function private.weekly_contact_pause_inflight_v1(uuid,text,uuid,uuid) from public,anon,authenticated,service_role;

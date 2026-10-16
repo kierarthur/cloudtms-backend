@@ -10,7 +10,7 @@
   "grammar": {
     "command": "python parse-source.py C:/tmp/healthroster-v6-invoice-parser-20261016",
     "parser": "pglast7.20",
-    "sql_files": 15,
+    "sql_files": 18,
     "fixture_functions": 7,
     "failures": 0
   },

@@ -60,7 +60,3 @@ begin
  return new;
 end;
 $function$;
-create trigger weekly_contact_query_claim_guard_v1 before update of attempt_lease_token,attempt_leased_at_utc,attempt_lease_expires_at_utc on public.mail_outbox
- for each row execute function private.weekly_contact_query_claim_guard_v1();
-create constraint trigger weekly_contact_query_claim_cleanup_v1 after insert or update on public.hr_issue_email_deliveries
- deferrable initially deferred for each row execute function private.weekly_contact_query_claim_guard_v1();

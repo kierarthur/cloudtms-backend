@@ -40,6 +40,7 @@ pause=(root/'reference/pause.sql').read_text();start=pause.index('create or repl
 end=pause.index('$function$;',start)+len('$function$;');old=pause[start:end]
 new=old.replace(' select coalesce(jsonb_agg',' select (select coalesce(jsonb_agg',1).replace(' )x;',' )x) || private.weekly_contact_query_legacy_claims_v1(p_candidate,p_client,p_agency,p_environment);')
 recipe('ROOT_PAUSE_PATCH.json','supabase/repeatable/15102026_0802_weekly_contact_pause_v1.sql',[{'description':'Retain exact permit summaries; append typed actual pre-upgrade claim facts','before':old,'after':new}])
+write('forward/086_pause_inflight.sqlinc','-- Complete final-repeatable successor after083; original0802 bytes remain intact.\n'+new+'\nalter function private.weekly_contact_pause_inflight_v1(uuid,text,uuid,uuid) owner to postgres;\nrevoke all on function private.weekly_contact_pause_inflight_v1(uuid,text,uuid,uuid) from public,anon,authenticated,service_role;\n')
 anchor='  for (const item of value.in_flight) {\n'
 arm='''    if (item?.kind==='LEGACY_QUERY_CLAIM') {
       if (!exact(item,['kind','mail_outbox_id','query_delivery_id','claim_identity_sha256','claimed_at_utc','lease_expires_at_utc','status','provider_submission_established','can_auto_resend'])

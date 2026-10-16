@@ -76,14 +76,14 @@
     },
     {
       "file": "080_native_integrity.sqlinc",
-      "sql_statements": 4,
+      "sql_statements": 1,
       "plpgsql_functions": 1,
-      "inner_sql_expressions": 38,
+      "inner_sql_expressions": 40,
       "rowtype_parser_alias_only": true
     },
     {
       "file": "081_native_claim_guard.sqlinc",
-      "sql_statements": 5,
+      "sql_statements": 3,
       "plpgsql_functions": 3,
       "inner_sql_expressions": 18,
       "rowtype_parser_alias_only": true
@@ -103,15 +103,36 @@
       "rowtype_parser_alias_only": false
     },
     {
+      "file": "084_native_claim_triggers.sqlinc",
+      "sql_statements": 2,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "file": "085_native_integrity_triggers.sqlinc",
+      "sql_statements": 3,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "file": "086_pause_inflight.sqlinc",
+      "sql_statements": 3,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    },
+    {
       "file": "090_acl.sqlinc",
-      "sql_statements": 48,
+      "sql_statements": 50,
       "plpgsql_functions": 0,
       "inner_sql_expressions": 0,
       "rowtype_parser_alias_only": false
     },
     {
       "file": "091_claim_acl.sqlinc",
-      "sql_statements": 22,
+      "sql_statements": 24,
       "plpgsql_functions": 0,
       "inner_sql_expressions": 0,
       "rowtype_parser_alias_only": false

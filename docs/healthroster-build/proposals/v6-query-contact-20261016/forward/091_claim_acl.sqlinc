@@ -1,3 +1,5 @@
+alter function private.weekly_contact_query_integrity_v1() owner to postgres;
+revoke all on function private.weekly_contact_query_integrity_v1() from public,anon,authenticated,service_role;
 alter function public._email_outbox_contact_claim_stamp_v1(uuid[],text,timestamptz,timestamptz,uuid,text) owner to postgres;
 revoke all on function public._email_outbox_contact_claim_stamp_v1(uuid[],text,timestamptz,timestamptz,uuid,text) from public,anon,authenticated,service_role;
 grant execute on function public._email_outbox_contact_claim_stamp_v1(uuid[],text,timestamptz,timestamptz,uuid,text) to service_role;

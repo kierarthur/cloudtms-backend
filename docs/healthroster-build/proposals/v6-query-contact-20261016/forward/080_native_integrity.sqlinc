@@ -4,6 +4,10 @@ as $function$
 declare d public.hr_issue_email_deliveries%rowtype;r public.hr_issue_email_deliveries%rowtype;p public.weekly_contact_submission_permits%rowtype;
 begin
  if tg_table_name='hr_issue_email_deliveries' then
+  -- The original enqueue may run during DB-first runtime compatibility. Its
+  -- genuine initial native INSERT owns this actual ID and revision1. It need
+  -- not know the additive column to obtain the same explicit self lineage.
+  if tg_op='INSERT' and new.original_delivery_id is null and new.payload_revision=1 then new.original_delivery_id:=new.id;end if;
   if tg_op='UPDATE' and (old.original_delivery_id,old.payload_revision,old.contact_managed,old.import_id,old.operation_id,old.recipient_scope,
     old.recipient_scope_key,old.recipient_route_fingerprint,old.recipient_email,old.reminder_sequence,old.issue_set_fingerprint,
     old.deterministic_outbox_key,old.mail_outbox_id,old.created_by_user_id,old.created_at_utc,old.legacy_claim_lease_token,old.legacy_claim_leased_at_utc,old.legacy_claim_expires_at_utc)
@@ -59,9 +63,3 @@ begin
  raise exception 'CONTACT_QUERY_GUARD_SCOPE_INVALID' using errcode='23514';
 end;
 $function$;
-create trigger weekly_contact_query_delivery_integrity_v1 before insert or update on public.hr_issue_email_deliveries
- for each row execute function private.weekly_contact_query_integrity_v1();
-create trigger weekly_contact_query_items_integrity_v1 before update or delete on public.hr_issue_email_delivery_items
- for each row execute function private.weekly_contact_query_integrity_v1();
-create trigger weekly_contact_query_sent_integrity_v1 before update of status,sent_at,provider_status,provider_message_id on public.mail_outbox
- for each row execute function private.weekly_contact_query_integrity_v1();

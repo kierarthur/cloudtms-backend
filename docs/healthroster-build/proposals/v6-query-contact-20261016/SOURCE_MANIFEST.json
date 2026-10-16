@@ -4,7 +4,6 @@
   "database_execution": false,
   "source_inputs": "SOURCE_INPUTS.json",
   "ordered_sql": [
-    "forward/010_existing_delivery_lineage.sqlinc",
     "forward/020_native_member.sqlinc",
     "forward/021_native_payload.sqlinc",
     "forward/030_native_enqueue_core.sqlinc",
@@ -17,6 +16,7 @@
     "forward/081_native_claim_guard.sqlinc",
     "forward/082_native_claim_kernel.sqlinc",
     "forward/083_native_claim_bridge.sqlinc",
+    "forward/086_pause_inflight.sqlinc",
     "forward/090_acl.sqlinc",
     "forward/091_claim_acl.sqlinc"
   ],
@@ -115,6 +115,11 @@
       "name": "private.weekly_contact_query_legacy_claims_v1",
       "signature": "private.weekly_contact_query_legacy_claims_v1(uuid,uuid,uuid,text)",
       "payload": "forward/083_native_claim_bridge.sqlinc"
+    },
+    {
+      "name": "private.weekly_contact_pause_inflight_v1",
+      "signature": "private.weekly_contact_pause_inflight_v1(uuid,text,uuid,uuid)",
+      "payload": "forward/086_pause_inflight.sqlinc"
     }
   ],
   "schema": {
@@ -122,12 +127,15 @@
     "payload": "forward/010_existing_delivery_lineage.sqlinc",
     "atomic_claim_fence": [
       "forward/010_existing_delivery_lineage.sqlinc",
+      "forward/080_native_integrity.sqlinc",
       "forward/081_native_claim_guard.sqlinc",
       "forward/082_native_claim_kernel.sqlinc",
       "forward/083_native_claim_bridge.sqlinc",
-      "forward/091_claim_acl.sqlinc"
+      "forward/091_claim_acl.sqlinc",
+      "forward/084_native_claim_triggers.sqlinc",
+      "forward/085_native_integrity_triggers.sqlinc"
     ],
-    "note": "Snapshot and query lease/generic claim fence plus every created routine ACL must commit atomically. Existing delivery store only; root self identity and genuine revision1, no timestamp backfill."
+    "note": "Snapshot, genuine initial INSERT self-lineage, SENT/query lease/generic claim fence and every created routine ACL plus migration-only triggers must commit atomically. Final ordered_sql repeats complete routine bodies only; never migration-only trigger DDL. Existing delivery store only; root self identity and genuine revision1, no timestamp backfill."
   },
   "root0226": {
     "target": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
@@ -155,7 +163,9 @@
   "compatibility": {
     "database_first": true,
     "jobs_remain_running": true,
+    "pause_successor": "forward/086_pause_inflight.sqlinc",
     "pause_recipe": "ROOT_PAUSE_PATCH.json",
+    "pause_install": "Preserve original0802 bytes; mount complete086 body plus explicit private ACL in final query-contact repeatable after083. Recipe documents finite body derivation only.",
     "worker_pause_recipe": "WORKER_PAUSE_PATCH.json",
     "office_contract_recipe": "OFFICE_CONTRACT_PATCH.json",
     "office_controls_recipe": "OFFICE_CONTROLS_PATCH.json",
@@ -207,11 +217,11 @@
     },
     {
       "file": "forward/080_native_integrity.sqlinc",
-      "sha256": "1d9954198e87665af1ac1b3f06d5390f6a2434ee1bf111c9efd6a96efd24f244"
+      "sha256": "c416deb4987780e37714f99762c9c894266db5ef6409742773d6158885c00272"
     },
     {
       "file": "forward/081_native_claim_guard.sqlinc",
-      "sha256": "36e9a9bdf74e09a04face13618ccacefc79a1788a86818590d6842fdbb6f8a54"
+      "sha256": "eaf1a4f28f5fbb207b8e1ad8a30ca1de20966a78973c3ec1e50240284c261f3b"
     },
     {
       "file": "forward/082_native_claim_kernel.sqlinc",
@@ -222,12 +232,24 @@
       "sha256": "659c5c8c7186f99696fefcfed804fab35716b8826b2c89bc32d780a79017c3e9"
     },
     {
+      "file": "forward/084_native_claim_triggers.sqlinc",
+      "sha256": "e972154b6837772c4ae0744ac976ebfa946615344217f828eca0e858e470a3bf"
+    },
+    {
+      "file": "forward/085_native_integrity_triggers.sqlinc",
+      "sha256": "2ac9c8b4e1ec1fecbfdf101e19c30a1d7a6f6db42500ad5872b3aabbff4bc116"
+    },
+    {
+      "file": "forward/086_pause_inflight.sqlinc",
+      "sha256": "788f41a4fba9de808fef4c7dc2bbacb11f887b6da2c74d54ff22d1b92fbe602e"
+    },
+    {
       "file": "forward/090_acl.sqlinc",
-      "sha256": "6c0e4aae56a004ef5e2c82197f8dcd0713062fcb94740b505a236e7fa346aacc"
+      "sha256": "d18558c0ab5ad72ae5fd17ad9d3de806d4b43cf7ff804137c4b1a5ff2a74bfa2"
     },
     {
       "file": "forward/091_claim_acl.sqlinc",
-      "sha256": "58b73fdeb32d095c74d21d7e22af2a6e6b80a23e6ed79efe388b182fe96c212c"
+      "sha256": "5bdc4ac616da2e68d7e2b6e2b75338ad2addf86fb8b521f19be88ad35246e7cb"
     },
     {
       "file": "forward/query-contact-drain.mjs",
