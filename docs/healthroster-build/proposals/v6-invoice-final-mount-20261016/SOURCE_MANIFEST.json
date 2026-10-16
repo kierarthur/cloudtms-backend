@@ -1,0 +1,12 @@
+{
+  "version": "HEALTH_SOURCE_QUALIFICATION_MANIFEST_V1",
+  "qualification": "SOURCE_ONLY_NOT_NATIVE_ACCEPTANCE",
+  "native": "NOT_RUN",
+  "files": {
+    "FINAL_MOUNT_SELECTION.json": "42fe73e938a141588fa60d629353dc2706069a7491cfb31570ea67626fbbc7a4",
+    "FINAL_SIGNATURES.tsv": "9cef0c2471e9b32de8378d1e7c453bf93b97fc1f1be12e830c9a2f59ede13198",
+    "build-map.mjs": "03f5da0dfbdd65726210a597a756d40dc64bc8f7014277754a4d6d4cd2d6fffe",
+    "verify-map.mjs": "9637129bbd550877c4b02f95861894bebf2406d3bc76fb3f14b91d0d046f607a",
+    "README.md": "0bac2bd82e62b7769aabed70153fa8d373d481383488d569b7cc920ec6b75b91"
+  }
+}
