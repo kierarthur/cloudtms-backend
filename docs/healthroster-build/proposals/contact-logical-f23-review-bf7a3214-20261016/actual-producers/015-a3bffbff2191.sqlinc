@@ -1,0 +1,84 @@
+declare i public.weekly_message_intents%rowtype;original_hash bytea;captured jsonb:='[]';manager_members jsonb;
+ member jsonb;aliases uuid[];native_id uuid;basis jsonb;row_json jsonb;hash bytea;manifest jsonb;projection uuid;
+begin
+ select * into strict i from public.weekly_message_intents where id=p_intent_id;
+ if i.audience_kind='CANDIDATE' then select membership_hash into strict original_hash from public.weekly_candidate_outreach_generations where id=i.candidate_generation_id;
+ else select membership_hash into strict original_hash from public.weekly_manager_recipient_generations where id=i.recipient_generation_id;end if;
+ select current_projection_publication_id into strict projection from public.weekly_source_cycles where id=i.source_cycle_id;
+ perform private.weekly_source_query_current_publication_v1(i.source_cycle_id,projection);
+  
+  
+ for member in select distinct on(value->>'logical_contact_key') value from jsonb_array_elements(p_members)
+  order by value->>'logical_contact_key',value->>'issue_id' loop
+  if jsonb_typeof(member->'selected_issue_ids')='array' then
+   select coalesce(array_agg(value::uuid order by value::uuid),'{}') into aliases from jsonb_array_elements_text(member->'selected_issue_ids');
+  else
+   select coalesce(array_agg((m->>'issue_id')::uuid order by m->>'issue_id') filter(where m->>'issue_id' is not null),'{}') into aliases
+    from jsonb_array_elements(p_members)m where m->>'logical_contact_key'=member->>'logical_contact_key';
+  end if;
+  native_id:=(member->>'native_member_id')::uuid;basis:=member->'native_basis';
+  if i.audience_kind='MANAGER' then
+   select id into strict native_id from public.weekly_manager_recipient_memberships where recipient_generation_id=i.recipient_generation_id
+    and incident_id=(member->>'issue_id')::uuid and comparison_revision_id=(member->>'comparison_revision_id')::uuid;
+   basis:=basis||jsonb_build_object('recipient_generation_id',i.recipient_generation_id,'membership_id',native_id);
+  end if;
+  row_json:=jsonb_build_object('logical_contact_key',member->'logical_contact_key','budget_owner_key',member->'budget_owner_key',
+   'native_member_kind',member->'native_member_kind','native_member_id',native_id,'selected_issue_ids',to_jsonb(aliases),
+   'candidate_id',member->'candidate_id','client_id',member->'client_id','scope_id',member->'scope_id',
+   'scope_revision',member->'scope_revision','checking_revision',member->'checking_revision','audience',member->'audience',
+   'purpose',member->'purpose','incident_id',member->'incident_id','incident_episode',member->'incident_episode',
+   'work_event_id',member->'work_event_id','comparison_revision_id',member->'comparison_revision_id',
+   'comparison_fingerprint',member->'comparison_fingerprint','send_ordinal',member->'send_ordinal',
+   'routine_step',coalesce((member->>'routine_step')::integer,p_routine_step),
+   'basis_accepted_membership_id',coalesce((member->>'basis_accepted_membership_id')::uuid,p_basis_accepted),'native_basis',basis);
+  captured:=captured||jsonb_build_array(row_json);
+ end loop;
+ if i.audience_kind='MANAGER' then
+  select jsonb_agg(jsonb_build_object('incident_id',m->'incident_id','incident_episode',m->'incident_episode',
+   'comparison_revision_id',m->'comparison_revision_id','comparison_fingerprint',m->'comparison_fingerprint',
+   'client_order',client_order,'candidate_order',candidate_order,'shift_order',shift_order) order by client_order,candidate_order,shift_order)
+   into manager_members from(
+   select m,dense_rank() over(order by private.weekly_source_query_ascii_fold_v1(client.name) collate C,client.id)::integer client_order,
+    dense_rank() over(partition by client.id order by private.weekly_source_query_ascii_fold_v1(coalesce(nullif(candidate.display_name,''),
+     concat_ws(' ',candidate.first_name,candidate.last_name))) collate C,candidate.id)::integer candidate_order,
+    row_number() over(partition by client.id,candidate.id order by work.work_date,coalesce(comparison.system_start_at_local,comparison.candidate_start_at_local),
+     incident.id)::integer shift_order
+   from jsonb_array_elements(captured)m join public.weekly_discrepancy_incidents incident on incident.id=(m->>'incident_id')::uuid
+   join public.weekly_issue_comparison_revisions comparison on comparison.id=(m->>'comparison_revision_id')::uuid
+   join public.weekly_work_events work on work.id=incident.work_event_id join public.clients client on client.id=incident.client_id
+   join public.candidates candidate on candidate.id=incident.candidate_id)x;
+  hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_MANAGER_REVIEW_BATCH_MEMBERSHIP_V1',manager_members);
+ else hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_CAPTURE_MEMBERSHIP_V1',captured);end if;
+ manifest:=jsonb_build_object('version','CONTACT_SOURCE_INTENT_CAPTURE_V1','group_key',p_group->'group_key',
+  'membership_hash',encode(hash,'hex'),'original_generation_membership_hash',encode(original_hash,'hex'),
+  'recipient',p_group->'recipient','preview',p_group->'preview','canonical_content_sha256',p_group->'canonical_content_sha256',
+  'members',captured,'manager_members',manager_members,'current_facts',p_members);
+ insert into public.weekly_contact_source_intent_captures(message_intent_id,capture_kind,original_message_intent_id,manual_request_id,accepted_actor_user_id,
+  agency_id,environment,source_cycle_id,projection_publication_id,original_generation_membership_hash,membership_hash,manifest_json,created_at_utc)
+ values(i.id,p_kind,p_original_intent,p_manual_request,p_actor,i.agency_id,i.environment,i.source_cycle_id,projection,original_hash,hash,manifest,clock_timestamp());
+ for row_json in select value from jsonb_array_elements(captured) loop
+  insert into public.weekly_contact_source_intent_capture_members(message_intent_id,logical_contact_key,budget_owner_key,native_member_kind,
+   native_member_id,selected_issue_ids,candidate_id,client_id,scope_id,scope_revision,checking_revision,audience,purpose,incident_id,
+   incident_episode,work_event_id,comparison_revision_id,comparison_fingerprint,send_ordinal,routine_step,basis_accepted_membership_id,native_basis_json)
+  values(i.id,decode(row_json->>'logical_contact_key','hex'),decode(row_json->>'budget_owner_key','hex'),row_json->>'native_member_kind',
+   (row_json->>'native_member_id')::uuid,array(select value::uuid from jsonb_array_elements_text(row_json->'selected_issue_ids')),
+   (row_json->>'candidate_id')::uuid,(row_json->>'client_id')::uuid,(row_json->>'scope_id')::uuid,(row_json->>'scope_revision')::bigint,
+   (row_json->>'checking_revision')::bigint,row_json->>'audience',row_json->>'purpose',(row_json->>'incident_id')::uuid,
+   (row_json->>'incident_episode')::integer,(row_json->>'work_event_id')::uuid,(row_json->>'comparison_revision_id')::uuid,
+   decode(row_json->>'comparison_fingerprint','hex'),(row_json->>'send_ordinal')::integer,
+   (row_json->>'routine_step')::integer,(row_json->>'basis_accepted_membership_id')::uuid,row_json->'native_basis');
+  if p_kind in('ROUTINE_RECOMPOSITION','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION','MANUAL_SELECTION_RECOMPOSITION') then
+   update public.weekly_contact_source_ordinal_owners set message_intent_id=i.id,revision=revision+1,recorded_at_utc=clock_timestamp()
+    where logical_contact_key=decode(row_json->>'logical_contact_key','hex') and send_ordinal=(row_json->>'send_ordinal')::integer
+     and message_intent_id=p_original_intent;
+  end if;
+  insert into public.weekly_contact_source_ordinal_owners(logical_contact_key,send_ordinal,message_intent_id,revision,recorded_at_utc)
+   values(decode(row_json->>'logical_contact_key','hex'),(row_json->>'send_ordinal')::integer,i.id,1,clock_timestamp())
+   on conflict(logical_contact_key,send_ordinal) do nothing;
+  if not exists(select 1 from public.weekly_contact_source_ordinal_owners owner where owner.logical_contact_key=decode(row_json->>'logical_contact_key','hex')
+   and owner.send_ordinal=(row_json->>'send_ordinal')::integer and owner.message_intent_id=i.id) then
+   raise exception 'CONTACT_MANUAL_ENQUIRY_REVIEW_STALE' using errcode='40001';end if;
+ end loop;
+ perform private.weekly_contact_source_capture_assert_v1(i.id);
+ perform private.weekly_contact_source_capture_notification_v1(i.id);
+end;

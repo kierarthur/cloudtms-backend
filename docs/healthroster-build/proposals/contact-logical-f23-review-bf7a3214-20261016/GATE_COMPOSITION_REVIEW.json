@@ -1,0 +1,20 @@
+{
+  "version": "CONTACT_SOURCE_FINITE_GATE_COMPOSITION_REVIEW_V1",
+  "qualification": "SOURCE_ONLY_TWO_DISJOINT_CONTRIBUTIONS_COMMUTE_AND_FULL_RAW_REVERSE",
+  "sourceProposalCommit": "2a08bd38133365f5a91f671cd5f708c34a15f1bc",
+  "sourceIntegrationSnapshotSha256": "40f3ac0c516a64c02fc78d13c95297f73ef5c682cb4a73190cd959cedb66d786",
+  "beforeRawSha256": "50a7de7aa554fe192432a6de17d91ef1db0afa7d9519e52e9e1dd9edc840361d",
+  "sourceOnlyRawSha256": "fa09c5e5f70b2c40bec6ff1342d9aa4ad3eacf44859976fd89cb3d103c5c8b8a",
+  "contactOnlyRawSha256": "3c402fa53b9c42ae40946f7d5ffc50ea1adb5360f2779b559aeda27316901c98",
+  "combinedRawSha256": "20cd8fbdce5112988c853384bdd374d7660640a752a53d23414237a414b5d578",
+  "eachContributionEdits": 2,
+  "everyAnchorExactlyOnce": true,
+  "bothApplyOrdersEqual": true,
+  "bothReverseOrdersEqualOriginal": true,
+  "combinedSyntax": true,
+  "missingAndDuplicatedAnchorRefusals": true,
+  "editedPreimageHashRefused": true,
+  "rootWritten": false,
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}

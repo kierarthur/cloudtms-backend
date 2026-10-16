@@ -1,0 +1,32 @@
+declare scope public.weekly_contact_pause_scopes%rowtype;cycle public.weekly_source_cycles%rowtype;
+ source_group public.weekly_source_groups%rowtype;route_id uuid;routes jsonb:='[]';pairs jsonb;requests jsonb;
+begin
+ select * into strict scope from public.weekly_contact_pause_scopes where id=p_scope;
+ select * into strict cycle from public.weekly_source_cycles where id=p_cycle;
+ select * into strict source_group from public.weekly_source_groups where id=cycle.source_group_id;
+ if(source_group.agency_id,source_group.environment)is distinct from(scope.agency_id,scope.environment) then
+  raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('request',to_jsonb(request),'members',(
+  select jsonb_agg(to_jsonb(member)order by member.id)from public.weekly_timesheet_submission_request_memberships member
+   where member.submission_request_id=request.id))order by request.id),'[]') into requests
+  from public.weekly_timesheet_submission_requests request where request.source_cycle_id=cycle.id
+   and request.candidate_id=scope.candidate_id and request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+   and exists(select 1 from public.weekly_timesheet_submission_request_memberships selected where selected.submission_request_id=request.id
+    and selected.client_id=scope.client_id);
+ for route_id in select distinct route.id from public.weekly_manager_recipient_routes route where route.source_cycle_id=cycle.id and(
+  exists(select 1 from public.weekly_candidate_cohorts cohort where cohort.source_cycle_id=cycle.id
+   and cohort.candidate_id=scope.candidate_id and cohort.client_id=scope.client_id
+   and cohort.manager_recipient_route_key=route.normalised_recipient_hash)
+  or exists(select 1 from private.weekly_source_office_query_groups_v1(cycle.id,cycle.current_projection_publication_id,'{}')groups
+   where groups.candidate_id=scope.candidate_id and groups.client_id=scope.client_id and groups.manager_eligible
+    and groups.manager_recipient_route_key=route.normalised_recipient_hash))order by route.id loop
+  routes:=routes||jsonb_build_array(private.weekly_contact_source_route_scope_facts_v1(route_id));end loop;
+ select jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id)order by candidate_id,client_id)into pairs from(
+  select scope.candidate_id candidate_id,scope.client_id client_id
+  union select scope.candidate_id,(member->>'client_id')::uuid from jsonb_array_elements(requests)request
+   cross join lateral jsonb_array_elements(request->'members')member
+  union select(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid from jsonb_array_elements(routes)route
+   cross join lateral jsonb_array_elements(route->'pairs')pair)actual;
+ return jsonb_build_object('version','CONTACT_ACTIVATION_SCOPE_FACTS_V1','scope_id',scope.id,'source_cycle_id',cycle.id,
+  'projection_publication_id',cycle.current_projection_publication_id,'original_requests',requests,'route_facts',routes,'pairs',pairs);
+end;

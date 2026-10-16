@@ -1,0 +1,102 @@
+declare scope public.weekly_contact_pause_scopes%rowtype;cycle public.weekly_source_cycles%rowtype;
+ publication public.weekly_source_projection_publications%rowtype;source_group public.weekly_source_groups%rowtype;
+ context jsonb;scopes jsonb;result jsonb;
+ worker_results jsonb:='[]';manager_results jsonb:='[]';first record;route record;at_utc timestamptz;guard jsonb;
+begin
+ select * into strict scope from public.weekly_contact_pause_scopes where id=p_scope;
+ select * into strict cycle from public.weekly_source_cycles where id=p_cycle;
+ select * into strict source_group from public.weekly_source_groups where id=cycle.source_group_id;
+ if(source_group.agency_id,source_group.environment) is distinct from(scope.agency_id,scope.environment) then
+  raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+ perform private.weekly_contact_deployment_lock_v1(scope.agency_id,scope.environment);
+ perform private.weekly_contact_context_v1(scope.agency_id,scope.environment);
+ perform private.weekly_contact_source_activation_lock_v1(scope.id,cycle.id);
+ select * into strict cycle from public.weekly_source_cycles where id=cycle.id;
+ perform private.weekly_source_query_current_publication_v1(cycle.id,cycle.current_projection_publication_id);
+ select * into strict publication from public.weekly_source_projection_publications where id=cycle.current_projection_publication_id;
+ if publication.correction_session_id is not null or cycle.state not in('OPEN','FINALISABLE') then
+  return jsonb_build_object('version','CONTACT_SOURCE_FIRST_ACTIVATION_V1','disposition','CURRENT_SOURCE_NOT_INITIAL_CAMPAIGN');end if;
+ at_utc:=clock_timestamp();
+ guard:=private.weekly_contact_scope_guard_v1(scope.candidate_id,scope.client_id,'WORKER',at_utc);
+ if guard->'allow'='true'::jsonb and(select count(*) from public.candidate_app_global_membership_links membership
+   join public.candidate_app_accounts account on account.id=membership.account_id where membership.candidate_id=scope.candidate_id
+    and membership.state='ACTIVE' and account.status='ACTIVE')=1 then
+   
+   
+  select coalesce(jsonb_agg(member.value order by member.value::text),'[]') into scopes from(
+   select distinct membership.value from private.weekly_source_office_query_groups_v1(cycle.id,publication.id,'{}'::jsonb)groups
+   cross join lateral jsonb_array_elements(groups.missing_scopes)membership
+   where groups.candidate_id=scope.candidate_id and groups.client_id=scope.client_id
+    and coalesce((private._weekly_source_effective_policy_v1((membership.value->>'client_id')::uuid,
+     (membership.value->>'contract_id')::uuid,(membership.value->>'week_ending')::date)->>'candidate_queries_enabled')::boolean,false)
+    and not exists(select 1 from public.timesheets sheet where sheet.contract_id=(membership.value->>'contract_id')::uuid
+     and sheet.week_ending_date=(membership.value->>'week_ending')::date and sheet.is_current and sheet.revoked_at is null
+     and sheet.archived_at_utc is null and sheet.sheet_scope='WEEKLY' and sheet.line_type='HOURS'
+     and sheet.r2_nurse_key is not null and sheet.img_sha256_nurse is not null)
+    and not exists(select 1 from public.weekly_route_activations activation where activation.source_cycle_id=cycle.id
+     and activation.candidate_id=scope.candidate_id and activation.client_id=scope.client_id and activation.route_mode='MANAGER_DIRECT')
+  )member;
+  perform private.weekly_contact_source_submission_lock_v1(cycle.id,scope.candidate_id,
+   case when jsonb_array_length(scopes)>0 then scopes else jsonb_build_array(jsonb_build_object('client_id',scope.client_id)) end,publication.id);
+  if jsonb_array_length(scopes)>0 then
+   result:=private.weekly_contact_source_submission_partition_v1(jsonb_build_object('source_cycle_id',cycle.id,
+    'projection_publication_id',publication.id,'candidate_id',scope.candidate_id,'scopes',scopes),true);
+   worker_results:=worker_results||jsonb_build_array(result);
+  end if;
+   
+   
+  if not exists(select 1 from public.weekly_candidate_cohorts cohort join public.weekly_candidate_outreach_generations generation
+    on generation.candidate_cohort_id=cohort.id where cohort.source_cycle_id=cycle.id and cohort.candidate_id=scope.candidate_id
+     and cohort.client_id=scope.client_id and generation.request_kind='CHECK_HOURS') then
+   select incident.id,comparison.contract_id,event.work_date into first from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+    join public.weekly_work_events event on event.id=incident.work_event_id where incident.source_cycle_id=cycle.id
+     and incident.candidate_id=scope.candidate_id and incident.client_id=scope.client_id and incident.state='OPEN'
+     and comparison.projection_publication_id=publication.id and incident.candidate_action_state='NOT_ASKED'
+     and not(comparison.issue_family='HEALTHROSTER_NOT_FINALISED' and private.weekly_source_is_import_authoritative_v1(
+      incident.client_id,comparison.contract_id,event.work_date))
+     and not private.weekly_source_expected_week_question_v1(incident.id)
+     and not private.weekly_source_waiting_requested_week_v1(cycle.id,scope.candidate_id,scope.client_id,comparison.contract_id,event.work_date)
+     and not exists(select 1 from public.weekly_route_activations activation where activation.source_cycle_id=cycle.id
+      and activation.candidate_id=scope.candidate_id and activation.client_id=scope.client_id and activation.route_mode='MANAGER_DIRECT')
+     and(private.weekly_contact_source_cutoff_classification_v1(incident.id,at_utc))->'routine'->'in_scope'='true'::jsonb
+    order by event.work_date,incident.id limit 1;
+   if first.id is not null then
+    context:=private.weekly_source_query_cohort_ensure_v1(cycle.id,scope.candidate_id,scope.client_id,first.contract_id,first.work_date);
+    if coalesce((context->>'candidate_queries_enabled')::boolean,false) then
+     if coalesce((context->>'manager_queries_enabled')::boolean,false) and nullif(context->>'manager_route_id','') is not null then
+      insert into public.weekly_route_activations(source_cycle_id,candidate_id,client_id,audience_route,route_mode,activated_at_utc,updated_at_utc)
+      values(cycle.id,scope.candidate_id,scope.client_id,'MANAGER','CANDIDATE_FIRST',clock_timestamp(),clock_timestamp())
+      on conflict(source_cycle_id,candidate_id,client_id,audience_route) do nothing;
+     end if;
+      
+      
+     result:=private.weekly_source_query_candidate_generation_v1(cycle.id,scope.candidate_id,scope.client_id,publication.id,
+      'NEW_INCIDENT',null,clock_timestamp());worker_results:=worker_results||jsonb_build_array(result);
+    end if;
+   end if;
+  end if;
+ end if;
+  
+  
+  
+ for route in select route.id from public.weekly_candidate_cohorts cohort join public.weekly_manager_recipient_routes route
+  on route.source_cycle_id=cohort.source_cycle_id and route.normalised_recipient_hash=cohort.manager_recipient_route_key
+  where cohort.source_cycle_id=cycle.id and cohort.candidate_id=scope.candidate_id and cohort.client_id=scope.client_id
+   and route.current_generation_id is null and not exists(select 1 from public.weekly_manager_recipient_generations generation
+    where generation.recipient_route_id=route.id)
+   and exists(select 1 from public.weekly_route_activations activation where activation.source_cycle_id=cycle.id
+    and activation.candidate_id=scope.candidate_id and activation.client_id=scope.client_id and activation.audience_route='MANAGER')
+  order by route.id loop
+  if exists(select 1 from public.weekly_candidate_cohorts cohort join public.weekly_discrepancy_incidents incident
+    on incident.source_cycle_id=cohort.source_cycle_id and incident.candidate_id=cohort.candidate_id and incident.client_id=cohort.client_id
+    where cohort.source_cycle_id=cycle.id and cohort.manager_recipient_route_key=(select normalised_recipient_hash
+      from public.weekly_manager_recipient_routes where id=route.id) and incident.state='OPEN'
+     and(private.weekly_contact_source_manager_followup_state_v1(incident.id,clock_timestamp()))->>'reason'<>'NO_ACCEPTED_CONTACT') then
+   continue;end if;
+  result:=private.weekly_source_query_manager_generation_v1(route.id,'NEW_INCIDENT',clock_timestamp(),false);
+  manager_results:=manager_results||jsonb_build_array(result);
+ end loop;
+ return jsonb_build_object('version','CONTACT_SOURCE_FIRST_ACTIVATION_V1','disposition','FIRST_ACTIVATION_RECHECKED',
+  'worker_results',worker_results,'manager_results',manager_results);
+end;

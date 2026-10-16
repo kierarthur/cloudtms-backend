@@ -1,0 +1,59 @@
+{
+  "version": "CONTACT_MANUAL_SELECTION_ORDINAL_GUARD_CORRECTION_V1",
+  "status": "PROPOSED_SOURCE_SUCCESSOR_NATIVE_REQUIRED_NOT_RUN",
+  "source": {
+    "commit": "e4661d28219b85c66b854d99c6522b55aae33139",
+    "path": "docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/forward/01_checking_revision_and_history.sqlinc",
+    "fileSha256": "89ec4bcbc88e488a13a7e8871cc168dfea48600a361c1a67d07130516f2cb161",
+    "completeFunctionSha256": "7c0de501bfb1fa62a1d3604a3f6666eafa54106c285d5a9a573d2386fa18a96b",
+    "signature": "private.weekly_contact_source_ordinal_owner_guard_v1()"
+  },
+  "correction": {
+    "old": "cap.capture_kind not in('ROUTINE_RECOMPOSITION','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION')",
+    "new": "cap.capture_kind not in('ROUTINE_RECOMPOSITION','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION','MANUAL_SELECTION_RECOMPOSITION')",
+    "substitutions": 1,
+    "completeFunctionReverseEquality": true,
+    "payload": "COMPLETE_GUARD_SUCCESSOR.sqlinc",
+    "sha256": "650f736b80474576dcfc72ffba5eecbbb0aac954b893e3fb2e1cc81c3d83d796"
+  },
+  "reason": "Genuine forward13 recomposition maps ROUTINE_MANUAL_SELECTION to MANUAL_SELECTION_RECOMPOSITION; forward08 transfers the retained logical ordinal current pointer. The old BEFORE UPDATE guard rejected that exact commissioned kind.",
+  "preserved": [
+    "DELETE refusal",
+    "Exact captured member logical key and send ordinal",
+    "Unchanged key/ordinal; revision increments exactly one",
+    "New capture direct original_message_intent_id equals former owner",
+    "Every original rendered attempted/uncertain owner retains refusal",
+    "INSERT revision1 only",
+    "Immutable capture/history rows unchanged; only existing current ordinal pointer can transfer",
+    "Same signature/security/search_path/owner authority and final ACL"
+  ],
+  "composition": "Apply complete base e466 owners, this exact whole successor, then exact unchanged e466 final ACL. No managed mount or installation in this checkpoint.",
+  "nativeRequired": [
+    "Actual initial/due-MANUAL selected mixed body; pause or current Source change forces real remaining-member recomposition with same ordinal and one original logical budget",
+    "Original unsubmitted current pointer transfers exactly once; immutable old/new capture rows and original clock retained",
+    "Attempted or uncertain original render refuses transfer; no new provider/delivery/allowance",
+    "Changed member/key/ordinal/revision/direct-original and cross-scope negative cases retain23514",
+    "Fresh rollback restoration under shared TEST lock"
+  ],
+  "effects": {
+    "dbCalls": 0,
+    "deployment": false,
+    "bankingSourceChanges": false,
+    "historyRewritten": false
+  },
+  "offlineGrammar": {
+    "pglast": "v7.20/PG17.7",
+    "topLevelStatements": 1,
+    "plpgsqlBodies": 1,
+    "rowtypeSubstitution": "Parser only; no native object resolution",
+    "status": "PASS_OFFLINE_ONLY"
+  },
+  "interimPeerReview": {
+    "reviewerLane": "Report Sol6.1 xhigh",
+    "scope": "Source boundary only; complete actual guard and capture/transfer/currentness/recomposition owners read",
+    "verdict": "APPROVED_EXACT_SINGLE_ALLOWLIST_ADDITION",
+    "dated": "2026-10-16",
+    "finalPartB": false,
+    "publishedReceipt": "PENDING_FINAL_REVIEW_REPORT"
+  }
+}

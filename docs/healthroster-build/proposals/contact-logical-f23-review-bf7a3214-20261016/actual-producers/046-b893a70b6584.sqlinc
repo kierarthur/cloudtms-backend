@@ -1,0 +1,32 @@
+declare request public.weekly_timesheet_submission_requests%rowtype;generation public.weekly_candidate_outreach_generations%rowtype;
+ cohort public.weekly_candidate_cohorts%rowtype;
+begin
+ select * into strict request from public.weekly_timesheet_submission_requests where id=p_request;
+ select * into strict cohort from public.weekly_candidate_cohorts where id=request.candidate_cohort_id;
+ select * into strict generation from public.weekly_candidate_outreach_generations g where g.candidate_cohort_id=request.candidate_cohort_id
+  and g.generation_number=request.request_generation and g.request_kind='SUBMIT_TIMESHEET';
+ if private.weekly_contact_submission_request_for_generation_v1(generation.id) is distinct from request.id
+  or(cohort.candidate_id,cohort.source_cycle_id) is distinct from(request.candidate_id,request.source_cycle_id)
+  or not exists(select 1 from public.weekly_source_cycles cycle join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+   where cycle.id=request.source_cycle_id and(source_group.agency_id,source_group.environment)=(request.agency_id,request.environment))
+  or not exists(select 1 from public.weekly_timesheet_submission_request_memberships where submission_request_id=request.id)
+  or exists(select 1 from public.weekly_timesheet_submission_request_memberships member
+   left join public.contracts contract on contract.id=member.contract_id and contract.candidate_id=request.candidate_id and contract.client_id=member.client_id
+   where member.submission_request_id=request.id and contract.id is null) then
+  raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+ if request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED') then
+  if generation.state<>'ACTIVE' or cohort.current_submission_generation_id is distinct from generation.id then
+   raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+   
+   
+  if exists(select 1 from public.weekly_timesheet_submission_request_memberships member
+   join public.weekly_timesheet_submission_requests other on other.source_cycle_id=request.source_cycle_id
+    and other.candidate_id=request.candidate_id and other.id<>request.id and other.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+   join public.weekly_timesheet_submission_request_memberships overlap on overlap.submission_request_id=other.id
+    and(overlap.client_id,overlap.contract_id,overlap.week_ending)=(member.client_id,member.contract_id,member.week_ending)
+   where member.submission_request_id=request.id) then
+   raise exception 'CONTACT_SOURCE_SUBMISSION_SCOPE_CONFLICT' using errcode='55000';end if;
+ elsif request.state='COMPLETE' and generation.state<>'COMPLETE' then
+  raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';
+ end if;
+end;

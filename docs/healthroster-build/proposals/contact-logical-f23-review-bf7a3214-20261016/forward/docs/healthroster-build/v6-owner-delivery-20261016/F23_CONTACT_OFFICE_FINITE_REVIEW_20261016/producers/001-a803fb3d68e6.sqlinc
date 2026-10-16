@@ -1,0 +1,12 @@
+declare relation text;
+begin
+ foreach relation in array array['weekly_contact_checking_scope_versions','weekly_contact_manual_reviews',
+  'weekly_contact_manual_acceptances','weekly_contact_source_intent_captures','weekly_contact_source_intent_capture_members',
+  'weekly_contact_source_ordinal_owners','weekly_contact_recheck_progress','weekly_contact_recheck_steps','weekly_contact_source_due_event_rebases'] loop
+  execute format('alter table public.%I owner to %I',relation,CURRENT_USER);
+  execute format('alter table public.%I enable row level security',relation);
+  execute format('alter table public.%I force row level security',relation);
+  execute format('create policy cloudtms_miget_service_owner_all on public.%I for all to CURRENT_USER,service_role using(true) with check(true)',relation);
+  execute format('revoke all on public.%I from public,anon,authenticated,service_role',relation);
+ end loop;
+end;

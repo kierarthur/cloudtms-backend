@@ -1,0 +1,42 @@
+declare g public.weekly_candidate_outreach_generations%rowtype;r public.weekly_timesheet_submission_requests%rowtype;
+ m public.weekly_timesheet_submission_request_memberships%rowtype;sg public.weekly_source_groups%rowtype;cycle public.weekly_source_cycles%rowtype;
+ keys jsonb;policy jsonb;guard jsonb;reason text;history jsonb;
+begin
+ select * into strict g from public.weekly_candidate_outreach_generations where id=p_generation_id and request_kind='SUBMIT_TIMESHEET';
+ select * into strict m from public.weekly_timesheet_submission_request_memberships where id=p_member_id;
+ select * into strict r from public.weekly_timesheet_submission_requests where id=m.submission_request_id
+  and candidate_cohort_id=g.candidate_cohort_id and request_generation=g.generation_number and membership_hash=g.membership_hash
+  and candidate_id=g.candidate_id and source_cycle_id=g.source_cycle_id;
+ select * into strict cycle from public.weekly_source_cycles where id=g.source_cycle_id;
+ select * into strict sg from public.weekly_source_groups where id=cycle.source_group_id;
+ perform private.weekly_source_query_current_publication_v1(cycle.id,cycle.current_projection_publication_id);
+ if not exists(select 1 from public.contracts c where c.id=m.contract_id and c.candidate_id=r.candidate_id and c.client_id=m.client_id) then
+  raise exception 'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID' using errcode='23514';end if;
+ policy:=private._weekly_source_effective_policy_v1(m.client_id,m.contract_id,m.week_ending);
+ guard:=private.weekly_contact_scope_guard_v1(r.candidate_id,m.client_id,'WORKER',p_at);
+ keys:=private.weekly_contact_source_identity_v1(sg.agency_id,sg.environment,r.candidate_id,m.client_id,'SUBMIT_TIMESHEET','WORKER',
+  jsonb_build_object('contract_id',m.contract_id,'week_ending',m.week_ending));
+ history:=private.weekly_contact_source_logical_history_v1(sg.agency_id,sg.environment,r.candidate_id,m.client_id,decode(keys->>'logical_contact_key','hex'));
+ reason:=case when g.state<>'ACTIVE' or not private.weekly_source_candidate_generation_current_v1(g.id) then 'ACTIVE_NATIVE_QUESTION_REQUIRED'
+  when g.deadline_at_utc<=p_at then 'NATIVE_QUESTION_EXPIRED'
+  when r.state not in('ACTIVE','OVERDUE','PARTLY_SUBMITTED') or m.state<>'WAITING' then 'SUBMISSION_NO_LONGER_REQUIRED'
+  when guard->'allow' is distinct from 'true'::jsonb then 'CONTACT_PAUSED'
+  when policy->>'source_group_id' is distinct from sg.id::text or policy->>'authority_mode' is distinct from 'SOURCE_AUTHORITY'
+   or policy->>'document_mode' is distinct from 'CHECK_ONLY' or policy->'candidate_queries_enabled' is distinct from 'true'::jsonb then 'WORKER_CONTACT_DISABLED'
+  when not private.weekly_source_missing_scope_unchanged_v1(r.current_projection_publication_id,cycle.current_projection_publication_id,
+    r.candidate_id,m.client_id,m.contract_id,m.week_ending)
+   or exists(select 1 from public.timesheets t where t.contract_id=m.contract_id and t.week_ending_date=m.week_ending and t.is_current
+    and t.revoked_at is null and t.archived_at_utc is null and t.sheet_scope='WEEKLY' and t.line_type='HOURS'
+    and t.r2_nurse_key is not null and t.img_sha256_nurse is not null) then 'SUBMISSION_NO_LONGER_REQUIRED'
+  when history->'unknown_original'='true'::jsonb then 'ORIGINAL_SUBMISSION_UNCERTAIN'
+  when history->'original_retry_pending'='true'::jsonb then 'ORIGINAL_ATTEMPT_OWNER_PENDING' end;
+ return jsonb_build_object('version','CONTACT_EXPECTED_WEEK_FACT_V1','issue_id',null,'candidate_id',r.candidate_id,'client_id',m.client_id,
+  'source_cycle_id',cycle.id,'projection_publication_id',cycle.current_projection_publication_id,'audience','WORKER','purpose','SUBMIT_TIMESHEET',
+  'eligible',reason is null,'exclusion_reason',reason,'logical_contact_key',keys->'logical_contact_key','budget_owner_key',keys->'budget_owner_key',
+  'native_member_kind','SUBMISSION_MEMBER','native_member_id',m.id,'native_basis',jsonb_build_object('kind','NATIVE_EXPECTED_WEEK_MEMBER_V1',
+   'submission_request_id',r.id,'membership_id',m.id,'candidate_generation_id',g.id,'contract_id',m.contract_id,'week_ending',m.week_ending,
+   'expected_source_fingerprint',encode(m.expected_source_fingerprint,'hex')),'candidate_generation_id',g.id,'recipient_route_id',null,
+  'manager_address',null,'manager_row',null,'incident_id',null,'incident_episode',null,'work_event_id',null,'comparison_revision_id',null,
+  'comparison_fingerprint',null,'global_policy_revision',(select version::text from public.weekly_source_global_settings where singleton),
+  'policy_sha256',encode(private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_EFFECTIVE_SOURCE_POLICY_V1',policy),'hex'));
+end;

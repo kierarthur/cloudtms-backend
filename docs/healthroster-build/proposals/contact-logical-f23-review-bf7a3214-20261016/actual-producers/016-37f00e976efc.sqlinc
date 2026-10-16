@@ -1,0 +1,27 @@
+declare generation_id uuid;route_id uuid;cohort_id uuid;sequence integer;intent_id uuid;key bytea;
+begin
+ if p_request->>'audience'='MANAGER' then
+  generation_id:=private.weekly_contact_manual_manager_generation_v1(p_members,(p_request->>'actor_user_id')::uuid,p_at);
+  select recipient_route_id into strict route_id from public.weekly_manager_recipient_generations where id=generation_id;
+ else
+  generation_id:=(p_group->>'candidate_generation_id')::uuid;
+  select candidate_cohort_id into strict cohort_id from public.weekly_candidate_outreach_generations where id=generation_id
+   and state='ACTIVE' and deadline_at_utc>p_at;
+ end if;
+ select coalesce(max(intent.tranche_sequence),0)+1 into sequence from public.weekly_message_intents intent
+  where(case when p_request->>'audience'='MANAGER' then intent.recipient_generation_id=generation_id and intent.tranche_kind='MANAGER_MANUAL_RESEND'
+   else intent.candidate_generation_id=generation_id and intent.tranche_kind='CANDIDATE_MANUAL_REMINDER' end);
+ key:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_NATIVE_INTENT_V1',jsonb_build_object(
+  'request_id',p_request->'request_id','group_key',p_group->'group_key','agency_id',p_request->'agency_id','environment',p_request->'environment'));
+ insert into public.weekly_message_intents(environment,agency_id,source_cycle_id,audience_kind,candidate_cohort_id,candidate_generation_id,
+  recipient_route_id,recipient_generation_id,sorted_due_event_ids,tranche_kind,tranche_sequence,logical_key,state,due_at_utc,created_at_utc)
+ values(p_request->>'environment',(p_request->>'agency_id')::uuid,(p_group->>'source_cycle_id')::uuid,
+  case when p_request->>'audience'='MANAGER' then 'MANAGER' else 'CANDIDATE' end,cohort_id,
+  case when p_request->>'audience'='WORKER' then generation_id end,route_id,
+  case when p_request->>'audience'='MANAGER' then generation_id end,'{}',
+  case when p_request->>'audience'='MANAGER' then 'MANAGER_MANUAL_RESEND' else 'CANDIDATE_MANUAL_REMINDER' end,sequence,key,'DUE',p_at,clock_timestamp())
+ returning id into intent_id;
+ perform private.weekly_contact_source_capture_insert_v1(intent_id,'EXPLICIT_MANUAL',(p_request->>'request_id')::uuid,null,
+  p_members,p_group,null,null,p_at,(p_request->>'actor_user_id')::uuid);
+ return intent_id;
+end;

@@ -1,0 +1,97 @@
+declare i public.weekly_message_intents%rowtype;cap public.weekly_contact_source_intent_captures%rowtype;
+ g public.weekly_candidate_outreach_generations%rowtype;native record;fact jsonb;old_member jsonb;lineage jsonb;
+ basis_members jsonb:='[]';result jsonb:='[]';scope_id uuid;checking jsonb;ordinal integer;history jsonb;sg public.weekly_source_groups%rowtype;
+begin
+ select * into strict i from public.weekly_message_intents where id=p_intent_id;
+ select source_group.* into strict sg from public.weekly_source_cycles cycle join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
+  where cycle.id=i.source_cycle_id;
+ if i.audience_kind='CANDIDATE' and i.tranche_kind in('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL') and exists(
+  select 1 from public.weekly_message_intents later where later.candidate_generation_id=i.candidate_generation_id
+   and later.tranche_kind in('CANDIDATE_REMINDER_6H','TIMESHEET_SUBMISSION_REMINDER_6H') and later.due_at_utc<=p_at) then
+  return '[]'::jsonb;end if;
+ select * into cap from public.weekly_contact_source_intent_captures where message_intent_id=i.id;
+ if found then
+  perform private.weekly_contact_source_capture_assert_v1(i.id);basis_members:=cap.manifest_json->'members';
+  if cap.accepted_actor_user_id is not null then
+   begin perform private.weekly_source_office_authority_v1(cap.accepted_actor_user_id,'ASK_CANDIDATES',null,null,null);
+   exception when insufficient_privilege then return '[]'::jsonb;end;
+  end if;
+ elsif i.audience_kind='CANDIDATE' then
+  select * into strict g from public.weekly_candidate_outreach_generations where id=i.candidate_generation_id;
+  ordinal:=case when i.tranche_kind in('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL') and i.tranche_sequence=1 then 1
+   when i.tranche_kind='CANDIDATE_REMINDER_6H' and i.tranche_sequence=1 then 2
+   when i.tranche_kind='TIMESHEET_SUBMISSION_REMINDER_6H' and i.tranche_sequence<=2147483646 then i.tranche_sequence+1
+   when i.tranche_kind='CANDIDATE_MANUAL_REMINDER' and i.tranche_sequence<=2147483645 then i.tranche_sequence+2 end;
+  if ordinal is null then raise exception 'CONTACT_SOURCE_NATIVE_ORDINAL_UNPROVIDED' using errcode='55000';end if;
+  if g.request_kind='CHECK_HOURS' then
+   select coalesce(jsonb_agg(jsonb_build_object('native_member_kind','OUTREACH_MEMBER','native_member_id',membership.id,
+    'incident_id',membership.incident_id,'comparison_revision_id',membership.comparison_revision_id,'send_ordinal',ordinal) order by membership.id),'[]')
+    into basis_members from public.weekly_candidate_outreach_memberships membership where candidate_generation_id=g.id;
+  else
+   select coalesce(jsonb_agg(jsonb_build_object('native_member_kind','SUBMISSION_MEMBER','native_member_id',membership.id,'send_ordinal',ordinal)
+    order by membership.id),'[]') into basis_members from public.weekly_timesheet_submission_requests request
+    join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id
+    where request.candidate_cohort_id=g.candidate_cohort_id and request.request_generation=g.generation_number
+     and request.membership_hash=g.membership_hash and request.candidate_id=g.candidate_id and request.source_cycle_id=g.source_cycle_id;
+  end if;
+ elsif i.audience_kind='MANAGER' then
+  if i.tranche_sequence<>1 or i.tranche_kind not in('MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED','MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED') then
+   raise exception 'CONTACT_SOURCE_NATIVE_ORDINAL_UNPROVIDED' using errcode='55000';end if;
+  if exists(select 1 from public.weekly_message_renders where message_intent_id=i.id) then
+   select coalesce(jsonb_agg(jsonb_build_object('native_member_kind','MANAGER_MEMBER','incident_id',item.incident_id,
+    'comparison_revision_id',item.sent_comparison_revision_id,'send_ordinal',1) order by item.id),'[]') into basis_members
+    from public.weekly_message_renders render join public.weekly_manager_review_batches batch on batch.message_render_id=render.id
+    join public.weekly_manager_review_items item on item.review_batch_id=batch.id where render.message_intent_id=i.id
+     and render.render_sequence=(select max(render_sequence) from public.weekly_message_renders where message_intent_id=i.id);
+  else
+   select coalesce(jsonb_agg(jsonb_build_object('native_member_kind','MANAGER_MEMBER','incident_id',membership.incident_id,
+    'comparison_revision_id',membership.comparison_revision_id,'send_ordinal',1) order by membership.id),'[]') into basis_members
+    from public.weekly_manager_recipient_memberships membership join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+    where membership.recipient_generation_id=i.recipient_generation_id
+     and(i.tranche_kind<>'MANAGER_T6_RESPONDED' or incident.candidate_action_state='RESPONDED')
+     and(cardinality(i.sorted_due_event_ids)=0 or exists(select 1 from public.weekly_manager_cohort_due_events event
+      where event.id=any(i.sorted_due_event_ids) and event.candidate_cohort_id=membership.candidate_cohort_id
+       and private.weekly_source_manager_due_event_covers_v1(event.id,incident.id)));
+  end if;
+ else raise exception 'CONTACT_SOURCE_NATIVE_PURPOSE_UNPROVIDED' using errcode='55000';end if;
+ if jsonb_array_length(basis_members)>500 then raise exception 'CONTACT_SOURCE_NATIVE_MEMBERSHIP_CAPACITY_EXCEEDED' using errcode='54000';end if;
+ for old_member in select value from jsonb_array_elements(basis_members) loop
+  if old_member->>'native_member_kind'='SUBMISSION_MEMBER' then
+   fact:=private.weekly_contact_source_expected_week_fact_v1(i.candidate_generation_id,(old_member->>'native_member_id')::uuid,p_at);
+  else
+   fact:=private.weekly_contact_manual_member_facts_v1((old_member->>'incident_id')::uuid,
+    case when i.audience_kind='MANAGER' then 'MANAGER' else 'WORKER' end,p_at);
+   if fact->>'comparison_revision_id' is distinct from old_member->>'comparison_revision_id'
+    or(i.audience_kind='CANDIDATE' and fact->>'candidate_generation_id' is distinct from i.candidate_generation_id::text) then continue;end if;
+  end if;
+  if fact->'eligible' is distinct from 'true'::jsonb and fact->>'exclusion_reason' not in('MANUAL_ENQUIRY_COOLDOWN','ORIGINAL_ENQUIRY_QUEUED') then continue;end if;
+  ordinal:=(old_member->>'send_ordinal')::integer;
+  if exists(select 1 from public.weekly_contact_source_ordinal_owners owner where owner.logical_contact_key=decode(fact->>'logical_contact_key','hex')
+   and owner.send_ordinal=ordinal and owner.message_intent_id<>i.id) then continue;end if;
+  history:=private.weekly_contact_source_logical_history_v1(sg.agency_id,sg.environment,(fact->>'candidate_id')::uuid,
+   (fact->>'client_id')::uuid,decode(fact->>'logical_contact_key','hex'));
+  if history->'unknown_original'='true'::jsonb or history->'original_retry_pending'='true'::jsonb or exists(
+   select 1 from jsonb_array_elements(history->'events')event where(event->>'send_ordinal')::integer=ordinal and event->>'accepted_at_utc' is not null) then continue;end if;
+  if cap.manual_request_id is not null and fact->>'manager_address' is distinct from cap.manifest_json->'recipient'->>'manager_address' then continue;end if;
+  if cap.manual_request_id is null and i.audience_kind='MANAGER' and fact->'cutoff'->'routine'->'in_scope' is distinct from 'true'::jsonb then continue;end if;
+  scope_id:=private.weekly_contact_scope_lock_v1(sg.agency_id,sg.environment,(fact->>'candidate_id')::uuid,(fact->>'client_id')::uuid);
+  checking:=private.weekly_contact_checking_scope_revision_v1(scope_id);
+  fact:=fact||jsonb_build_object('scope_id',scope_id,'scope_revision',(select revision::text from public.weekly_contact_pause_scopes where id=scope_id),
+   'checking_revision',checking->>'revision','send_ordinal',ordinal,'eligible',true,'exclusion_reason',null);
+  if cap.message_intent_id is not null then
+   fact:=fact||jsonb_build_object('routine_step',old_member->'routine_step','basis_accepted_membership_id',old_member->'basis_accepted_membership_id',
+    'selected_issue_ids',old_member->'selected_issue_ids');
+   if cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and old_member->'routine_step'='null'::jsonb
+    and fact->'last_accepted_send'is distinct from 'null'::jsonb then continue;end if;
+   if cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION')
+    or(cap.capture_kind in('ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION')and old_member->'routine_step'<>'null'::jsonb)then
+    lineage:=private.weekly_contact_source_manager_followup_state_v1((fact->>'incident_id')::uuid,p_at);
+    if lineage->>'routine_sequence' is distinct from old_member->>'routine_step' or lineage->>'reason'<>'SCHEDULED'
+     or(lineage->>'due_at_utc')::timestamptz>p_at then continue;end if;
+    fact:=fact||jsonb_build_object('followup_state',lineage);
+   end if;
+  end if;
+  result:=result||jsonb_build_array(fact);
+ end loop;
+ return result;
+end;

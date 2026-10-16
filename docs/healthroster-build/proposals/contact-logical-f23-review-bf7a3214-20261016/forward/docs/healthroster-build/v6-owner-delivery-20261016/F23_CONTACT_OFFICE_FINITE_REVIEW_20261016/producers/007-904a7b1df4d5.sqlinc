@@ -1,0 +1,38 @@
+declare i public.weekly_discrepancy_incidents%rowtype;c public.weekly_issue_comparison_revisions%rowtype;
+ w public.weekly_work_events%rowtype;cycle public.weekly_source_cycles%rowtype;s public.weekly_source_global_settings%rowtype;
+ policy jsonb;settings jsonb;today date;last_sunday date;in_scope boolean;reason text;
+begin
+ if p_at is null or not isfinite(p_at) then raise exception 'CONTACT_SOURCE_TIME_INVALID' using errcode='22023';end if;
+ select * into strict i from public.weekly_discrepancy_incidents where id=p_incident_id;
+ select * into strict c from public.weekly_issue_comparison_revisions where id=i.current_comparison_revision_id;
+ select * into strict w from public.weekly_work_events where id=i.work_event_id;
+ select * into strict cycle from public.weekly_source_cycles where id=i.source_cycle_id;
+ if not exists(select 1 from public.contracts contract where contract.id=c.contract_id
+  and contract.client_id=i.client_id and contract.candidate_id=i.candidate_id) then
+  raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+ policy:=private._weekly_source_effective_policy_v1(i.client_id,c.contract_id,w.work_date);
+ settings:=private._contract_settings_effective_core_v1(i.client_id,c.contract_id,w.work_date,'OFFICE',null);
+ if policy->>'source_group_id' is distinct from i.source_group_id::text or settings->>'client_id' is distinct from i.client_id::text
+  or settings->>'contract_id' is distinct from c.contract_id::text
+  or settings->>'authority_fingerprint' is null or settings->>'authority_fingerprint' !~ '^[0-9a-f]{64}$' then
+  raise exception 'CONTACT_DEPENDENCY_UNAVAILABLE' using errcode='55000';end if;
+ select * into strict s from public.weekly_source_global_settings where singleton;
+ today:=(p_at at time zone 'Europe/London')::date;last_sunday:=today-extract(isodow from today)::integer;
+ in_scope:=w.work_date<=last_sunday and w.work_date>last_sunday-7*s.manager_recent_completed_weeks
+  and w.work_date>=today-s.manager_max_work_age_days;
+ reason:=case when w.work_date>last_sunday then 'WEEK_NOT_COMPLETED'
+  when w.work_date<today-s.manager_max_work_age_days then 'MAXIMUM_ROUTINE_WORK_AGE'
+  when w.work_date<=last_sunday-7*s.manager_recent_completed_weeks then 'OUTSIDE_RECENT_COMPLETED_WEEKS'
+  else null end;
+ return jsonb_build_object('version','CONTACT_CUTOFF_CLASSIFICATION_V1','client_id',i.client_id,
+  'contract_id',c.contract_id,'work_date',w.work_date,'source_group_id',i.source_group_id,
+  'settings_authority_sha256',settings->>'authority_fingerprint',
+  'hard_restriction',jsonb_build_object('present',false,'reason',null,'resolution_action',null,
+   'source','NO_STRUCTURED_CONTACT_PROHIBITION_IN_REVIEWED_CURRENT_CLIENT_CONTRACT_SETTINGS'),
+  'report_cutoff',jsonb_build_object('classification','REPORT_ONLY','weekday',policy->'cutoff_weekday',
+   'local_time',policy->'cutoff_local_time','cutoff_at_utc',case when cycle.cutoff_at_utc is null then null
+    else to_char(cycle.cutoff_at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end),
+  'routine',jsonb_build_object('in_scope',in_scope,'reason',reason,'manual_override_permitted',true,
+   'recent_completed_weeks',s.manager_recent_completed_weeks,'max_work_age_days',s.manager_max_work_age_days,
+   'policy_revision',s.version::text));
+end;

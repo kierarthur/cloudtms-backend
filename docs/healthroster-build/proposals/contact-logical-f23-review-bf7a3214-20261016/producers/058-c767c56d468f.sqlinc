@@ -1,0 +1,25 @@
+declare generation public.weekly_candidate_outreach_generations%rowtype;source_group public.weekly_source_groups%rowtype;
+ request_id uuid;members jsonb;pairs jsonb;
+begin
+ select * into strict generation from public.weekly_candidate_outreach_generations where id=p_generation and candidate_id=p_candidate;
+ select groups.* into strict source_group from public.weekly_source_cycles cycle join public.weekly_source_groups groups
+  on groups.id=cycle.source_group_id where cycle.id=generation.source_cycle_id;
+ if generation.request_kind='CHECK_HOURS' then
+  select coalesce(jsonb_agg(jsonb_build_object('membership_id',member.id,'incident_id',incident.id,'candidate_id',incident.candidate_id,
+   'client_id',incident.client_id,'comparison_revision_id',member.comparison_revision_id) order by member.id),'[]') into members
+  from public.weekly_candidate_outreach_memberships member join public.weekly_discrepancy_incidents incident on incident.id=member.incident_id
+  where member.candidate_generation_id=generation.id and incident.candidate_id=generation.candidate_id
+   and incident.client_id=generation.client_id and incident.source_cycle_id=generation.source_cycle_id;
+ elsif generation.request_kind='SUBMIT_TIMESHEET' then
+  request_id:=private.weekly_contact_submission_request_for_generation_v1(generation.id);
+  select coalesce(jsonb_agg(jsonb_build_object('membership_id',member.id,'candidate_id',generation.candidate_id,
+   'client_id',member.client_id,'contract_id',member.contract_id,'week_ending',member.week_ending,
+   'expected_source_fingerprint',encode(member.expected_source_fingerprint,'hex')) order by member.id),'[]') into members
+  from public.weekly_timesheet_submission_request_memberships member where member.submission_request_id=request_id;
+ else raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+ if jsonb_array_length(members)<1 then raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+ select jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id) order by candidate_id,client_id) into pairs
+  from(select distinct(member->>'candidate_id')::uuid candidate_id,(member->>'client_id')::uuid client_id from jsonb_array_elements(members)member)actual;
+ return jsonb_build_object('version','CONTACT_NATIVE_GENERATION_SCOPE_FACTS_V1','generation',to_jsonb(generation),
+  'agency_id',source_group.agency_id,'environment',source_group.environment,'submission_request_id',request_id,'members',members,'pairs',pairs);
+end;

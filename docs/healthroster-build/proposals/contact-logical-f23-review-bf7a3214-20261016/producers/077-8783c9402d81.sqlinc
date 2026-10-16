@@ -1,0 +1,311 @@
+declare
+  v_actor uuid;
+  v_cycle_id uuid;
+  v_publication_id uuid;
+  v_guard jsonb;
+  v_requested uuid[];
+  v_incident public.weekly_discrepancy_incidents%rowtype;
+  v_comparison public.weekly_issue_comparison_revisions%rowtype;
+  v_event public.weekly_work_events%rowtype;
+  v_context jsonb;
+  v_route_id uuid;
+  v_current_route_id uuid;
+  v_seen_keys text[]:='{}'::text[];
+  v_selected_cohort_ids uuid[]:='{}'::uuid[];
+  v_key text;
+  v_selected record;
+  v_candidate_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_generation jsonb;
+  v_generation_id uuid;
+  v_due_ids uuid[];
+  v_intent_id uuid;
+  v_settings public.weekly_source_global_settings%rowtype;
+  v_route public.weekly_manager_recipient_routes%rowtype;
+  v_initial_ids uuid[]:='{}';
+  v_contact_members jsonb:='[]';
+  v_contact_member jsonb;
+  v_contact_fact jsonb;
+  v_followup jsonb;
+  v_contact_at timestamptz;
+  v_contact_available timestamptz;
+  v_send_available timestamptz;
+  v_worker_intent record;
+  v_had_candidate_generation boolean;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(
+       select 1 from pg_catalog.jsonb_object_keys(p_request) key
+       where key not in (
+         'actor_user_id','source_cycle_id','projection_publication_id','incident_ids'
+       )
+     ) or pg_catalog.jsonb_typeof(p_request->'incident_ids')<>'array' then
+    raise exception 'WEEKLY_SOURCE_MANAGER_SEND_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_cycle_id:=(p_request->>'source_cycle_id')::uuid;
+    v_publication_id:=(p_request->>'projection_publication_id')::uuid;
+    select pg_catalog.array_agg(value::uuid order by value::uuid) into v_requested
+    from pg_catalog.jsonb_array_elements_text(p_request->'incident_ids');
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_MANAGER_SEND_REQUEST_INVALID' using errcode='22023';
+  end;
+  if coalesce(pg_catalog.array_length(v_requested,1),0)=0
+     or pg_catalog.array_length(v_requested,1)<>(
+       select pg_catalog.count(distinct value) from pg_catalog.unnest(v_requested) value
+     ) then
+    raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_INVALID' using errcode='22023';
+  end if;
+  v_guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'SEND_MANAGER',(v_guard->>'source_group_id')::uuid,null,
+    (v_guard->>'finalisation_week_ending')::date
+  );
+
+   
+   
+  if cardinality(v_requested)>500 then raise exception 'WEEKLY_SOURCE_MANAGER_DIGEST_CAPACITY_EXCEEDED'using errcode='54000';end if;
+  perform private.weekly_contact_source_manager_selection_lock_v1(v_requested,'[]');
+  v_guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
+  perform private.weekly_source_office_authority_v1(v_actor,'SEND_MANAGER',(v_guard->>'source_group_id')::uuid,null,
+    (v_guard->>'finalisation_week_ending')::date);
+  v_contact_at:=clock_timestamp();
+  for v_selected in select incident.id from public.weekly_discrepancy_incidents incident where incident.id=any(v_requested)order by incident.id loop
+    v_contact_fact:=private.weekly_contact_manual_member_facts_v1(v_selected.id,'MANAGER',v_contact_at);
+    if v_contact_fact->'eligible'is distinct from 'true'::jsonb and v_contact_fact->>'exclusion_reason'<>'MANUAL_ENQUIRY_COOLDOWN'
+      or v_contact_fact->'cutoff'->'routine'->'in_scope'is distinct from 'true'::jsonb then
+      raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_STALE'using errcode='40001';end if;
+    if v_contact_fact->>'cooldown_until_utc'is not null then
+      v_contact_available:=greatest(v_contact_available,(v_contact_fact->>'cooldown_until_utc')::timestamptz);end if;
+    if v_contact_fact->'last_accepted_send'='null'::jsonb then
+       
+       
+      if not exists(select 1 from public.weekly_discrepancy_incidents incident
+        join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+        where incident.id=v_selected.id and comparison.candidate_timesheet_id is not null)then
+        raise exception 'WEEKLY_SOURCE_MANAGER_REQUIRES_TIMESHEET'using errcode='55000';end if;
+      v_initial_ids:=array_append(v_initial_ids,v_selected.id);v_followup:=null;
+    else
+      v_followup:=private.weekly_contact_source_manager_followup_state_v1(v_selected.id,v_contact_at);
+      if v_followup->>'reason'is distinct from 'SCHEDULED'or v_followup->>'mode'is distinct from 'MANUAL'
+        or(v_followup->>'due_at_utc')::timestamptz>v_contact_at then
+        raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_STALE'using errcode='40001';end if;
+    end if;
+    v_contact_members:=v_contact_members||jsonb_build_array(v_contact_fact||jsonb_build_object('followup_state',v_followup,
+      'routine_step',v_followup->'routine_sequence','basis_accepted_membership_id',v_followup->'basis_accepted_membership_id'));
+  end loop;
+
+  for v_incident in
+    select incident.*
+    from public.weekly_discrepancy_incidents incident
+    where incident.id=any(v_requested)
+    order by incident.id
+    for update
+  loop
+    if v_incident.source_cycle_id<>v_cycle_id or v_incident.state<>'OPEN'
+       or v_incident.manager_potential_state<>'AVAILABLE'
+       or private.weekly_source_covered_hours_incident_v1(v_incident.id)
+       or v_incident.manager_action_state in ('RESPONDED','NOT_REQUIRED') then
+      raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_STALE' using errcode='40001';
+    end if;
+    select * into strict v_comparison from public.weekly_issue_comparison_revisions
+    where id=v_incident.current_comparison_revision_id;
+    select value into strict v_contact_member from jsonb_array_elements(v_contact_members)where value->>'issue_id'=v_incident.id::text;
+    v_contact_fact:=private.weekly_contact_manual_member_facts_v1(v_incident.id,'MANAGER',v_contact_at);
+    if(v_contact_fact-array['recipient_route_id','cooldown_remaining_seconds'])is distinct from(
+      v_contact_member-array['recipient_route_id','cooldown_remaining_seconds','followup_state','routine_step','basis_accepted_membership_id'])then
+      raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_STALE'using errcode='40001';end if;
+    if v_incident.id=any(v_initial_ids)and v_comparison.candidate_timesheet_id is null then
+      raise exception 'WEEKLY_SOURCE_MANAGER_REQUIRES_TIMESHEET' using errcode='55000';
+    end if;
+    select * into strict v_event from public.weekly_work_events where id=v_incident.work_event_id;
+    v_context:=private.weekly_source_query_cohort_ensure_v1(
+      v_cycle_id,v_incident.candidate_id,v_incident.client_id,
+      v_comparison.contract_id,v_event.work_date
+    );
+    if coalesce((v_context->>'manager_queries_enabled')::boolean,false) is not true
+       or nullif(v_context->>'manager_route_id','') is null then
+      raise exception 'WEEKLY_SOURCE_MANAGER_QUERIES_DISABLED' using errcode='55000';
+    end if;
+    v_current_route_id:=(v_context->>'manager_route_id')::uuid;
+    if v_route_id is null then v_route_id:=v_current_route_id;
+    elsif v_route_id<>v_current_route_id then
+      raise exception 'WEEKLY_SOURCE_MANAGER_SEND_ONE_RECIPIENT_REQUIRED' using errcode='22023';
+    end if;
+    if v_incident.id=any(v_initial_ids)and not ((v_context->>'cohort_id')::uuid=any(v_selected_cohort_ids)) then
+      v_selected_cohort_ids:=pg_catalog.array_append(
+        v_selected_cohort_ids,(v_context->>'cohort_id')::uuid
+      );
+    end if;
+    v_key:=v_incident.candidate_id::text||':'||v_incident.client_id::text;
+    if v_incident.id=any(v_initial_ids)and not (v_key=any(v_seen_keys)) then
+      v_seen_keys:=pg_catalog.array_append(v_seen_keys,v_key);
+      insert into public.weekly_route_activations(
+        source_cycle_id,candidate_id,client_id,audience_route,route_mode,
+        activated_by_user_id,activated_at_utc,updated_at_utc
+      ) values (
+        v_cycle_id,v_incident.candidate_id,v_incident.client_id,'MANAGER','MANAGER_DIRECT',
+        v_actor,v_contact_at,v_contact_at
+      ) on conflict (source_cycle_id,candidate_id,client_id,audience_route)
+      do update set route_mode='MANAGER_DIRECT',
+        activated_by_user_id=excluded.activated_by_user_id,
+        activated_at_utc=coalesce(public.weekly_route_activations.activated_at_utc,excluded.activated_at_utc),
+        updated_at_utc=excluded.updated_at_utc;
+    end if;
+  end loop;
+  if (select pg_catalog.count(*) from public.weekly_discrepancy_incidents where id=any(v_requested))
+     <>pg_catalog.array_length(v_requested,1) then
+    raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_STALE' using errcode='40001';
+  end if;
+  if exists(
+    select 1
+    from public.weekly_candidate_cohorts cohort
+    join public.weekly_discrepancy_incidents incident
+      on incident.source_cycle_id=cohort.source_cycle_id
+     and incident.candidate_id=cohort.candidate_id
+     and incident.client_id=cohort.client_id
+     and incident.state='OPEN'
+     and incident.manager_potential_state='AVAILABLE'
+     and incident.manager_action_state not in ('RESPONDED','NOT_REQUIRED')
+    join public.weekly_issue_comparison_revisions comparison
+      on comparison.id=incident.current_comparison_revision_id
+     and comparison.candidate_timesheet_id is not null
+    where cohort.id=any(v_selected_cohort_ids)
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
+      and not (incident.id=any(v_requested))
+  ) then
+    raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_STALE' using errcode='40001';
+  end if;
+
+   
+   
+   
+  for v_selected in
+    select cohort.id,cohort.candidate_id,cohort.client_id
+    from public.weekly_candidate_cohorts cohort
+    where cohort.id=any(v_selected_cohort_ids)
+    order by cohort.id
+  loop
+    select * into v_candidate_generation from public.weekly_candidate_outreach_generations
+    where candidate_cohort_id=v_selected.id and state='ACTIVE'and request_kind='CHECK_HOURS'for update;
+    v_had_candidate_generation:=found;
+    if v_had_candidate_generation and exists(select 1 from public.weekly_message_intents intent
+      join public.weekly_message_renders render on render.message_intent_id=intent.id
+      where intent.candidate_generation_id=v_candidate_generation.id and private.weekly_contact_source_render_attempted_v1(render.id))then
+       
+       
+      continue;
+    end if;
+    if v_had_candidate_generation and exists(select 1 from public.weekly_candidate_outreach_memberships member
+      where member.candidate_generation_id=v_candidate_generation.id and member.state='ACTIONABLE'
+        and not(member.incident_id=any(v_initial_ids)))then
+       
+       
+      update public.weekly_candidate_outreach_memberships set state='SUPERSEDED'
+        where candidate_generation_id=v_candidate_generation.id and incident_id=any(v_initial_ids)and state='ACTIONABLE';
+      update public.weekly_discrepancy_incidents set candidate_action_state='NOT_REQUIRED'
+        where source_cycle_id=v_cycle_id and candidate_id=v_selected.candidate_id and client_id=v_selected.client_id
+          and id=any(v_initial_ids)and candidate_action_state in('NOT_ASKED','ASKED');
+      for v_worker_intent in select id from public.weekly_message_intents where candidate_generation_id=v_candidate_generation.id
+        and state in('DUE','RENDERED')order by id loop
+        perform private.weekly_contact_source_recompose_intent_v1(v_worker_intent.id,null);end loop;
+      continue;
+    end if;
+    insert into public.weekly_route_activations(
+      source_cycle_id,candidate_id,client_id,audience_route,route_mode,
+      activated_by_user_id,activated_at_utc,updated_at_utc
+    ) values (
+      v_cycle_id,v_selected.candidate_id,v_selected.client_id,'CANDIDATE','MANAGER_DIRECT',
+      v_actor,v_contact_at,v_contact_at
+    ) on conflict (source_cycle_id,candidate_id,client_id,audience_route)
+    do update set route_mode='MANAGER_DIRECT',
+      activated_by_user_id=excluded.activated_by_user_id,
+      activated_at_utc=coalesce(public.weekly_route_activations.activated_at_utc,excluded.activated_at_utc),
+      updated_at_utc=excluded.updated_at_utc;
+    if v_had_candidate_generation then
+      update public.weekly_candidate_cohorts
+      set current_generation_id=null where id=v_selected.id;
+      update public.weekly_message_renders render
+      set state='STALE'
+      from public.weekly_message_dispatch_commands command
+      where command.message_render_id=render.id
+        and command.candidate_generation_id=v_candidate_generation.id
+        and command.state in ('READY','LEASED') and render.state='CURRENT';
+      update public.weekly_message_dispatch_commands
+      set state='RETIRED',lease_owner=null,lease_token=null,lease_expires_at_utc=null
+      where candidate_generation_id=v_candidate_generation.id
+        and state in ('READY','LEASED');
+      update public.weekly_message_intents
+      set state='RETIRED'
+      where candidate_generation_id=v_candidate_generation.id
+        and state in ('DUE','RENDERED');
+      update public.weekly_candidate_outreach_memberships
+      set state='SUPERSEDED'
+      where candidate_generation_id=v_candidate_generation.id and state='ACTIONABLE';
+      update public.weekly_candidate_outreach_generations
+      set state='CANCELLED' where id=v_candidate_generation.id;
+    end if;
+    update public.weekly_discrepancy_incidents
+    set candidate_action_state='NOT_REQUIRED'
+    where source_cycle_id=v_cycle_id
+      and candidate_id=v_selected.candidate_id and client_id=v_selected.client_id
+      and id=any(v_initial_ids) and candidate_action_state in ('NOT_ASKED','ASKED');
+  end loop;
+
+  select * into strict v_settings from public.weekly_source_global_settings where singleton;
+  select * into strict v_route from public.weekly_manager_recipient_routes
+  where id=v_route_id for update;
+  if greatest(v_route.manager_send_available_at_utc,v_contact_available)>clock_timestamp()then
+    raise exception 'WEEKLY_SOURCE_MANAGER_SEND_COOLDOWN' using errcode='55000',
+      detail=pg_catalog.jsonb_build_object(
+        'available_at_utc',greatest(v_route.manager_send_available_at_utc,v_contact_available)
+      )::text;
+  end if;
+   
+   
+   
+   
+   
+  if cardinality(v_initial_ids)>0 and not exists(
+    select 1 from public.weekly_discrepancy_incidents incident
+    where incident.id=any(v_initial_ids)
+      and not private.weekly_source_query_manager_row_owned_v1(
+        v_route_id,incident.id,incident.episode_number
+      )
+  ) then
+    raise exception 'WEEKLY_SOURCE_MANAGER_SEND_ALREADY_SENT' using errcode='55000';
+  end if;
+   
+   
+  v_generation:=private.weekly_contact_source_manager_selection_capture_v1(v_actor,v_cycle_id,v_publication_id,v_contact_members);
+  v_generation_id:=(v_generation->>'recipient_generation_id')::uuid;
+  v_intent_id:=(v_generation->>'message_intent_id')::uuid;
+  v_send_available:=clock_timestamp()+v_settings.manager_manual_send_cooldown;
+  update public.weekly_manager_recipient_routes
+  set manager_send_available_at_utc=v_send_available
+  where id=v_route_id;
+  update public.weekly_discrepancy_incidents incident
+  set manager_action_state='DUE'
+  from public.weekly_manager_recipient_memberships membership
+  where membership.recipient_generation_id=v_generation_id
+    and membership.candidate_cohort_id=any(v_selected_cohort_ids)
+    and membership.incident_id=incident.id
+    and incident.manager_action_state in ('NOT_SENT','SENT')
+    and not private.weekly_source_query_manager_row_owned_v1(
+      v_route_id,incident.id,incident.episode_number
+    );
+  perform public._audit_insert(
+    'weekly_source_manager_send',v_intent_id::text,'WEEKLY_SOURCE_MANAGER_SEND_STAGED',
+    null,pg_catalog.jsonb_build_object(
+      'recipient_route_id',v_route_id,'recipient_generation_id',v_generation_id,
+      'selected_incident_count',pg_catalog.array_length(v_requested,1),
+      'send_available_at_utc',v_send_available
+    ),'Manager review email staged',v_actor
+  );
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'message_intent_id',v_intent_id,'recipient_route_id',v_route_id,
+    'recipient_generation_id',v_generation_id,
+    'send_available_at_utc',v_send_available
+  );
+end;

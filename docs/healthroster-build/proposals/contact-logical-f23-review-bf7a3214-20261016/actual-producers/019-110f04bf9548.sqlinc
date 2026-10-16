@@ -1,0 +1,27 @@
+declare target public.weekly_message_dispatch_targets%rowtype;c public.weekly_message_dispatch_commands%rowtype;
+ i public.weekly_message_intents%rowtype;r public.weekly_message_renders%rowtype;b public.weekly_manager_review_batches%rowtype;
+ current_need boolean;push jsonb;audience text;native jsonb;pairs jsonb;
+begin
+ select * into strict target from public.weekly_message_dispatch_targets where id=p_target_id;
+ select * into strict c from public.weekly_message_dispatch_commands where id=target.dispatch_command_id;
+ select * into strict i from public.weekly_message_intents where id=c.message_intent_id;
+ select * into strict r from public.weekly_message_renders where id=c.message_render_id;
+ native:=private.weekly_contact_source_capture_logical_members_v1(c.id);
+ if (c.agency_id,c.environment) is distinct from(p_agency,p_environment) or target.rendered_content_hash<>c.rendered_content_hash then
+  raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ current_need:=target.state='LEASED' and i.state='RENDERED' and r.state='CURRENT'
+  and private.weekly_contact_source_capture_current_v1(i.id,clock_timestamp(),false);
+ if i.audience_kind='CANDIDATE' and target.channel='PUSH' and target.target_kind='CANDIDATE_DEVICE' then
+  audience:='WORKER';push:=private.weekly_contact_push_dispatch_context_v1(target.id,c.id,target.provider,target.target_snapshot_hash,p_agency,p_environment);
+  current_need:=current_need and push->'current'='true'::jsonb;
+ elsif i.audience_kind='MANAGER' and target.channel='EMAIL' and target.target_kind='MANAGER_ADDRESS' and target.provider='POWER_AUTOMATE' then
+  audience:='MANAGER';
+  select * into strict b from public.weekly_manager_review_batches where message_render_id=r.id;
+  current_need:=current_need and b.state='ACTIVE' and b.expires_at_utc>clock_timestamp()
+   and not exists(select 1 from public.weekly_manager_review_items where review_batch_id=b.id and response_state<>'UNANSWERED');
+ else raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+ pairs:=private.weekly_contact_source_capture_pairs_v1(i.id);
+ return jsonb_build_object('dispatch_target_id',target.id,'dispatch_command_id',c.id,'channel',target.channel,'audience',audience,
+  'scope_pairs',pairs,'content_hash',encode(target.rendered_content_hash,'hex'),'recipient_hash',encode(target.keyed_target_fingerprint,'hex'),
+  'current',coalesce(current_need and jsonb_array_length(pairs) between 1 and 500,false));
+end;

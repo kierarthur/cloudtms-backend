@@ -1,0 +1,40 @@
+declare i public.weekly_discrepancy_incidents%rowtype;sg public.weekly_source_groups%rowtype;s public.weekly_source_global_settings%rowtype;
+ keys jsonb;history jsonb;steps integer;completed integer;step jsonb;due timestamptz;cutoff jsonb;basis uuid;
+begin
+ select * into strict i from public.weekly_discrepancy_incidents where id=p_incident_id;
+ select * into strict sg from public.weekly_source_groups where id=i.source_group_id;
+ select * into strict s from public.weekly_source_global_settings where singleton;
+ keys:=private.weekly_contact_source_identity_v1(sg.agency_id,sg.environment,i.candidate_id,i.client_id,'CHECK_HOURS','MANAGER',
+  jsonb_build_object('work_event_id',i.work_event_id,'incident_id',i.id,'incident_episode',i.episode_number));
+ history:=private.weekly_contact_source_logical_history_v1(sg.agency_id,sg.environment,i.candidate_id,i.client_id,decode(keys->>'logical_contact_key','hex'));
+ select coalesce(max(capture_member.routine_step),0),count(distinct capture_member.routine_step) filter(where capture_member.routine_step>0)
+  into completed,steps from public.weekly_contact_delivery_memberships accepted
+  join public.weekly_message_dispatch_commands command on command.id=accepted.delivery_id
+  join public.weekly_contact_source_intent_captures capture on capture.message_intent_id=command.message_intent_id
+  join public.weekly_contact_source_intent_capture_members capture_member on capture_member.message_intent_id=capture.message_intent_id
+   and capture_member.logical_contact_key=accepted.logical_contact_key and capture_member.send_ordinal=accepted.send_ordinal
+  where accepted.logical_contact_key=decode(keys->>'logical_contact_key','hex') and accepted.accepted_at_utc is not null
+   and capture.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION','ROUTINE_MANUAL_SELECTION','MANUAL_SELECTION_RECOMPOSITION');
+ if completed<>steps then raise exception 'CONTACT_SOURCE_ROUTINE_HISTORY_UNRESOLVED' using errcode='55000';end if;
+ select id into basis from public.weekly_contact_delivery_memberships where logical_contact_key=decode(keys->>'logical_contact_key','hex')
+  and accepted_at_utc is not null order by accepted_at_utc desc,send_ordinal desc limit 1;
+ cutoff:=private.weekly_contact_source_cutoff_classification_v1(i.id,p_at);
+ if history->'last_accepted_send'<>'null'::jsonb then
+  if(history->'last_accepted_send'->>'accepted_at_utc')::timestamptz>p_at then
+   raise exception 'CONTACT_SOURCE_TIME_INVALID' using errcode='22023';end if;
+  step:=s.manager_followups->completed;
+  if step is not null then due:=private.weekly_source_manager_interval_due_v1(i.client_id,
+   (history->'last_accepted_send'->>'accepted_at_utc')::timestamptz,(step->>'interval_value')::integer,step->>'interval_unit');end if;
+ end if;
+ return jsonb_build_object('version','CONTACT_SOURCE_MANAGER_FOLLOWUP_V1','policy_revision',s.version::text,
+  'logical_contact_key',keys->'logical_contact_key','incident_id',i.id,'incident_episode',i.episode_number,
+  'last_accepted_at_utc',history->'last_accepted_send'->'accepted_at_utc','next_send_ordinal',case when step is null then null else history->'next_send_ordinal' end,
+  'routine_sequence',step->'sequence','mode',step->'mode','due_at_utc',case when due is null then null
+    else to_char(due at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end,
+  'basis_accepted_membership_id',basis,'routine_in_scope',cutoff->'routine'->'in_scope',
+  'reason',case when history->'unknown_original'='true'::jsonb then 'ORIGINAL_SUBMISSION_UNCERTAIN'
+   when history->'original_retry_pending'='true'::jsonb then 'ORIGINAL_ATTEMPT_OWNER_PENDING'
+   when history->'last_accepted_send'='null'::jsonb then 'NO_ACCEPTED_CONTACT'
+   when cutoff->'routine'->'in_scope' is distinct from 'true'::jsonb then 'OUTSIDE_ROUTINE_SCOPE'
+   when step is null then 'FOLLOWUPS_COMPLETE' else 'SCHEDULED' end,'requires_current_start_admission',true);
+end;

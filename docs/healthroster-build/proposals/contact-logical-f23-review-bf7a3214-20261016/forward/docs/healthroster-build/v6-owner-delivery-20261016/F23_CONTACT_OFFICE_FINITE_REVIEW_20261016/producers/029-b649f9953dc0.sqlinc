@@ -1,0 +1,69 @@
+declare task public.weekly_contact_recheck_tasks%rowtype;scope public.weekly_contact_pause_scopes%rowtype;
+ progress public.weekly_contact_recheck_progress%rowtype;checking jsonb;native uuid;result jsonb;phase text;at_utc timestamptz;next_due timestamptz;
+ selection jsonb;pair jsonb;selection_at timestamptz;
+begin
+ select * into strict task from public.weekly_contact_recheck_tasks where id=p_task;
+ select * into strict scope from public.weekly_contact_pause_scopes where id=task.scope_id;
+ perform private.weekly_contact_deployment_lock_v1(scope.agency_id,scope.environment);
+ perform private.weekly_contact_context_v1(scope.agency_id,scope.environment);
+ selection_at:=coalesce(p_selection_at,clock_timestamp());selection:=private.weekly_contact_recheck_selection_scope_facts_v1(task.id,selection_at);
+ if p_expected_selection is not null and selection is distinct from p_expected_selection then
+  raise exception 'CONTACT_RECHECK_SELECTION_STALE' using errcode='40001';end if;
+ for pair in select value from jsonb_array_elements(selection->'pairs')order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+  perform private.weekly_contact_scope_lock_v1(scope.agency_id,scope.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ if private.weekly_contact_recheck_selection_scope_facts_v1(task.id,selection_at)is distinct from selection then
+  raise exception 'CONTACT_RECHECK_SELECTION_STALE' using errcode='40001';end if;
+ select * into strict scope from public.weekly_contact_pause_scopes where id=scope.id;
+ select * into strict task from public.weekly_contact_recheck_tasks where id=p_task for update;
+ at_utc:=clock_timestamp();
+ if task.state='DONE' or task.due_at_utc>at_utc or(task.state='LEASED' and task.lease_expires_at_utc>at_utc) then
+  return jsonb_build_object('version','CONTACT_RECHECK_TASK_RESULT_V1','task_id',task.id,'disposition','NOT_DUE');end if;
+ checking:=private.weekly_contact_checking_scope_revision_v1(scope.id);
+ select * into progress from public.weekly_contact_recheck_progress where task_id=task.id for update;
+ if not found or progress.phase='COMPLETE' or(progress.scope_revision,progress.checking_revision)
+    is distinct from(scope.revision,(checking->>'revision')::bigint) then
+  perform private.weekly_contact_recheck_record_v1(task.id,'SOURCE_ACTIVATION',null,scope.revision,(checking->>'revision')::bigint,
+   decode(checking->>'facts_sha256','hex'),jsonb_build_object('version','CONTACT_RECHECK_OBSERVATION_V1','disposition','CURRENT_SCOPE_BEGIN'));
+  select * into strict progress from public.weekly_contact_recheck_progress where task_id=task.id;
+ end if;
+ loop
+  phase:=progress.phase;
+  select native_id into native from private.weekly_contact_recheck_native_ids_v1(scope.id,phase,progress.last_native_id) order by native_id limit 1;
+  if native is not null then
+   if(phase,native)is distinct from(selection->>'phase',(selection->>'native_id')::uuid)then
+    raise exception 'CONTACT_RECHECK_SELECTION_STALE' using errcode='40001';end if;
+   if phase='SOURCE_ACTIVATION' then
+    result:=private.weekly_contact_source_scope_first_activation_v1(scope.id,native);
+   elsif phase in('SOURCE_WORKER','SOURCE_MANAGER') then
+    result:=private.weekly_contact_source_recompose_intent_v1(native,null);
+   elsif phase='LEGACY_OUTBOX' then
+     
+     
+    result:=private.weekly_contact_query_recompose_v1(native,scope.agency_id,scope.environment,null,null);
+   else raise exception 'CONTACT_RECHECK_PROGRESS_INVALID' using errcode='23514';end if;
+   checking:=private.weekly_contact_checking_scope_revision_v1(scope.id);
+   perform private.weekly_contact_recheck_record_v1(task.id,phase,native,scope.revision,(checking->>'revision')::bigint,
+    decode(checking->>'facts_sha256','hex'),jsonb_build_object('version','CONTACT_RECHECK_OBSERVATION_V1','disposition','NATIVE_OBSERVED','result',result));
+   update public.weekly_contact_recheck_tasks set state='READY',lease_token=null,lease_expires_at_utc=null where id=task.id;
+   return jsonb_build_object('version','CONTACT_RECHECK_TASK_RESULT_V1','task_id',task.id,'disposition','CONTINUE',
+    'phase',phase,'native_id',native,'native_disposition',result->'disposition');
+  end if;
+  phase:=case phase when 'SOURCE_ACTIVATION' then 'SOURCE_WORKER' when 'SOURCE_WORKER' then 'SOURCE_MANAGER'
+   when 'SOURCE_MANAGER' then 'LEGACY_OUTBOX' else 'COMPLETE' end;
+  perform private.weekly_contact_recheck_record_v1(task.id,phase,null,scope.revision,(checking->>'revision')::bigint,
+   decode(checking->>'facts_sha256','hex'),jsonb_build_object('version','CONTACT_RECHECK_OBSERVATION_V1','disposition','PHASE_EXHAUSTED'));
+  if phase='COMPLETE' then exit;end if;
+  select * into strict progress from public.weekly_contact_recheck_progress where task_id=task.id;
+ end loop;
+ at_utc:=clock_timestamp();next_due:=private.weekly_contact_recheck_next_due_v1(scope.id,at_utc);
+ if next_due is null then
+  update public.weekly_contact_recheck_tasks set state='DONE',lease_token=null,lease_expires_at_utc=null,completed_at_utc=at_utc,
+   disposition_json=jsonb_build_object('version','CONTACT_RECHECK_COMPLETION_V1','phase','COMPLETE','scope_revision',scope.revision::text,
+    'checking_revision',checking->>'revision','all_current_phases_exhausted',true) where id=task.id;
+ else
+  update public.weekly_contact_recheck_tasks set state='READY',due_at_utc=next_due,lease_token=null,lease_expires_at_utc=null where id=task.id;
+ end if;
+ return jsonb_build_object('version','CONTACT_RECHECK_TASK_RESULT_V1','task_id',task.id,
+  'disposition',case when next_due is null then 'COMPLETE' else 'WAITING_ACTUAL_NATIVE_DUE' end,
+  'next_due_at_utc',case when next_due is null then null else to_char(next_due at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end);
+end;

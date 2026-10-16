@@ -1,0 +1,13 @@
+declare guard jsonb;sg public.weekly_source_groups%rowtype;pair record;
+begin
+ guard:=private.weekly_source_query_current_publication_v1(p_cycle,p_publication);
+ perform private.weekly_source_office_authority_v1(p_actor,'SEND_MANAGER',(guard->>'source_group_id')::uuid,null,
+  (guard->>'finalisation_week_ending')::date);
+ select * into strict sg from public.weekly_source_groups where id=(guard->>'source_group_id')::uuid;
+ perform private.weekly_contact_deployment_lock_v1(sg.agency_id,sg.environment);
+ perform private.weekly_contact_context_v1(sg.agency_id,sg.environment);
+ for pair in select distinct candidate_id,client_id from private.weekly_source_office_query_groups_v1(p_cycle,p_publication,p_filters)
+  order by candidate_id,client_id loop
+  perform private.weekly_contact_scope_lock_v1(sg.agency_id,sg.environment,pair.candidate_id,pair.client_id);
+ end loop;
+end;

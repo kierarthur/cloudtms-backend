@@ -1,0 +1,52 @@
+{
+  "version": "HEALTH_SOURCE_CLASSIFIER_DELEGATION_GATE_INTEGRATION_V1",
+  "status": "FINITE_SOURCE_INTEGRATED_NOT_NATIVE_APPROVAL",
+  "baseRootCommit": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "originalReviewCommit": "9bb4deecdc3503585148ab0542e92b13ff943f65",
+  "proposalCommit": "2a08bd38133365f5a91f671cd5f708c34a15f1bc",
+  "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_GATE_REVIEW_20261016/GATE_CONTRIBUTION.json",
+  "helper": "scripts/healthroster-source-classifier-delegation-review.mjs",
+  "helperSha256": "df301590ae3f8e44b782e8e667c70ce6688d2717768ee59598e117493a0f4555",
+  "classification": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/CLASSIFICATION.json",
+  "classificationSha256": "abe64516babd46100709f45baaa815c7a6c1070f47fd5b9c655e87d09971c14a",
+  "counts": {
+    "completeBodies": 13,
+    "filePins": 37,
+    "definitionEvents": 17,
+    "aclEvents": 75
+  },
+  "scope": "Unchanged exact classifier signature/physical caller,13wholefunctionowners/37closurefiles/17actualdefinitions/75ACL/defaultACL events; only4exactnames returned",
+  "gate": {
+    "path": "scripts/bpay-next-source-gates.mjs",
+    "beforeRawSha256": "50a7de7aa554fe192432a6de17d91ef1db0afa7d9519e52e9e1dd9edc840361d",
+    "standaloneAfterRawSha256": "fa09c5e5f70b2c40bec6ff1342d9aa4ad3eacf44859976fd89cb3d103c5c8b8a",
+    "edits": [
+      {
+        "id": "finite-delegation-import",
+        "before": "import {reviewedSource13Hazards} from './healthroster-source13-finite-review.mjs';",
+        "after": "import {reviewedSourceClassifierDelegates} from './healthroster-source-classifier-delegation-review.mjs';\nimport {reviewedSource13Hazards} from './healthroster-source13-finite-review.mjs';"
+      },
+      {
+        "id": "finite-delegation-approved-set",
+        "before": "...(WB29_CAPTURED_WORK_CALLEES[signature]??[])]);",
+        "after": "...(WB29_CAPTURED_WORK_CALLEES[signature]??[]),...reviewedSourceClassifierDelegates(source,file,signature,parts[0])]);"
+      }
+    ],
+    "wholeRawReverseEquality": true,
+    "otherContributionsMayCompose": true,
+    "unconditionalMapStillEmpty": true,
+    "genericHistoryDynamicAndUnknownRefusalsRetained": true
+  },
+  "tests": {
+    "independentlyRerunActualHelperAndProposedGateChecks": 48,
+    "failed": 0,
+    "rootAndSqlWrittenByTests": false
+  },
+  "historicalReviewUnchanged": true,
+  "sqlChanged": false,
+  "bankingBodiesChanged": false,
+  "native": "NOT_RUN",
+  "financialAndPermissionAndApi": "NOT_RUN",
+  "fullGate": "PENDING_CURRENT_RUN",
+  "install2AndPartB": "NOT_RUN"
+}

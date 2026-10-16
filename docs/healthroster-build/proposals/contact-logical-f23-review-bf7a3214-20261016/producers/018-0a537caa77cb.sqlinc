@@ -1,0 +1,41 @@
+declare c public.weekly_message_dispatch_commands%rowtype;i public.weekly_message_intents%rowtype;
+ r public.weekly_message_renders%rowtype;cap public.weekly_contact_source_intent_captures%rowtype;
+ m public.weekly_contact_source_intent_capture_members%rowtype;b public.weekly_manager_review_batches%rowtype;
+ item public.weekly_manager_review_items%rowtype;members jsonb:='[]';native_id uuid;basis jsonb;actual_count integer;
+begin
+ select * into strict c from public.weekly_message_dispatch_commands where id=p_command_id;
+ select * into strict i from public.weekly_message_intents where id=c.message_intent_id;
+ select * into strict r from public.weekly_message_renders where id=c.message_render_id;
+ select * into strict cap from public.weekly_contact_source_intent_captures where message_intent_id=i.id;
+ perform private.weekly_contact_source_capture_assert_v1(i.id);
+ if (i.environment,i.agency_id,i.source_cycle_id,i.tranche_kind,i.tranche_sequence) is distinct from
+   (c.environment,c.agency_id,c.source_cycle_id,c.tranche_kind,c.tranche_sequence)
+  or r.message_intent_id<>i.id or r.rendered_content_hash<>c.rendered_content_hash or r.membership_hash<>c.membership_hash
+  or cap.membership_hash<>c.membership_hash or cap.projection_publication_id<>c.projection_publication_id
+  or r.projection_publication_id<>cap.projection_publication_id or r.render_sequence<1 then
+  raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ if i.audience_kind='MANAGER' then
+  select * into strict b from public.weekly_manager_review_batches where message_render_id=r.id;
+  if b.recipient_generation_id<>i.recipient_generation_id or b.original_membership_hash<>cap.membership_hash
+   or b.sent_content_hash<>r.rendered_content_hash or c.recipient_route_id<>i.recipient_route_id then
+   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  select count(*) into actual_count from public.weekly_manager_review_items where review_batch_id=b.id;
+  if actual_count<>jsonb_array_length(cap.manifest_json->'members') then raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ elsif c.candidate_generation_id is distinct from i.candidate_generation_id then
+  raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ for m in select * from public.weekly_contact_source_intent_capture_members where message_intent_id=i.id order by logical_contact_key loop
+  native_id:=m.native_member_id;basis:=m.native_basis_json;
+  if i.audience_kind='MANAGER' then
+   select * into strict item from public.weekly_manager_review_items where review_batch_id=b.id and incident_id=m.incident_id
+    and incident_episode=m.incident_episode and sent_comparison_revision_id=m.comparison_revision_id and sent_comparison_fingerprint=m.comparison_fingerprint;
+   native_id:=item.id;basis:=jsonb_build_object('kind','MANAGER_REVIEW_ITEM_V1','review_batch_id',b.id,'review_item_id',item.id,
+    'comparison_revision_id',m.comparison_revision_id,'comparison_fingerprint',encode(m.comparison_fingerprint,'hex'));
+  end if;
+  members:=members||jsonb_build_array(jsonb_build_object('native_member_id',native_id,'incident_id',m.incident_id,
+   'incident_episode',m.incident_episode,'work_event_id',m.work_event_id,'candidate_id',m.candidate_id,'client_id',m.client_id,
+   'native_basis',basis,'logical_contact_key',encode(m.logical_contact_key,'hex'),'budget_owner_key',encode(m.budget_owner_key,'hex'),
+   'purpose',m.purpose,'audience',m.audience,'send_ordinal',m.send_ordinal));
+ end loop;
+ return jsonb_build_object('version','SOURCE_LOGICAL_MEMBERS_V1','dispatch_command_id',c.id,'payload_revision',r.render_sequence::text,
+  'content_hash',encode(c.rendered_content_hash,'hex'),'members',members);
+end;

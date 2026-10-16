@@ -1,0 +1,1629 @@
+{
+  "version": "CONTACT_COMMISSIONED_SOURCE_COMPLETION_RECIPE_V1",
+  "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
+  "authoritative_worktree": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026",
+  "branch": "codex/healthroster-v2-money-build-13102026",
+  "source_base": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+  "untouched_frozen_sources": {
+    "financial": "d863577918ce7d439206296e91ad78de298e98b2",
+    "manual_request_types": "7161b1732fb682f78f9387e8ed9c9fe89c4e59f5"
+  },
+  "assembly": {
+    "one_time": [
+      {
+        "path": "one-time/01_contact_producer_journals.sqlinc",
+        "sha256": "e88cd29710eb391a0a2c80ae1ab9bb62e1f75e5e0a494b389300e7f870ff0f89"
+      },
+      {
+        "path": "one-time/02_automatic_followup_tranche.sqlinc",
+        "sha256": "d81e1f7a541dd38261fe661c9e692ad44245015b0184d1b49b7267565747f33e"
+      },
+      {
+        "path": "one-time/03_submission_cohort_identity.sqlinc",
+        "sha256": "ab68a320c2e2627d82e241e8e4fe3d6b8ac5daac5c70284f88c52605aba48125"
+      }
+    ],
+    "repeatable": [
+      {
+        "path": "forward/00_current_logical_closure.sqlinc",
+        "sha256": "dfacbe3cbcd9be1a3d9ebff6d590ef98fde8cddf9b4760b67c0d298cf8347623"
+      },
+      {
+        "path": "forward/01_checking_revision_and_history.sqlinc",
+        "sha256": "89ec4bcbc88e488a13a7e8871cc168dfea48600a361c1a67d07130516f2cb161"
+      },
+      {
+        "path": "forward/02_cutoff_classification.sqlinc",
+        "sha256": "47583ccd2c125de4ab5da7d61c758284a814b58441a2427cfdd92256d928e2de"
+      },
+      {
+        "path": "forward/03_manual_request_validation.sqlinc",
+        "sha256": "69aefcf3e9f2609d83fef79126639a4d58313ad21603e99d7cc3a7781320fac3"
+      },
+      {
+        "path": "forward/04_original_logical_history.sqlinc",
+        "sha256": "bfed563a5d80a0ed884daea971cf0ac1e681834461a9750d8254edfdb4e13efe"
+      },
+      {
+        "path": "forward/05_manual_member_facts.sqlinc",
+        "sha256": "3457f7ce340a7c279d345dc8945f2dfe8beab85caecd5a367cab827c2a6bc3b2"
+      },
+      {
+        "path": "forward/06_manual_manifest_and_preview.sqlinc",
+        "sha256": "d8af98736b140ffc7b93671d001ec6c836b1d9a73a7b18622b386c6b881bbc51"
+      },
+      {
+        "path": "forward/07_capture_native_reads.sqlinc",
+        "sha256": "5e65426dcb61a1779bea321eaf249e9f72dd2954739d523be79de41af04f431c"
+      },
+      {
+        "path": "forward/08_manual_native_enqueue.sqlinc",
+        "sha256": "fd5e001fed0d5967708fb5e69a3e7aede7ce30ed454a6b2d1069408fce621b16"
+      },
+      {
+        "path": "forward/09_manual_accept_and_errors.sqlinc",
+        "sha256": "02cd82e8b7b4a50454310dc32d8978fa985ae6c873c95321dc7ec015571851fa"
+      },
+      {
+        "path": "forward/10_capture_dispatch_lineage.sqlinc",
+        "sha256": "2b3465c98b5da5e2ea4cfdb4fe3b95e62c29b73508ca93e6c164b53191c18aa8"
+      },
+      {
+        "path": "forward/11_followup_state_and_enqueue.sqlinc",
+        "sha256": "5620a8f4bc6320b269c84e16b6faf2fe82328d96c59a2dda06eccb2dac94e895"
+      },
+      {
+        "path": "forward/12_current_native_subset.sqlinc",
+        "sha256": "96cfe9f5e5972f0d6387faaa6401dccbd546c7a9d309b7b568421eb4a46b19c4"
+      },
+      {
+        "path": "forward/13_recompose_native_intents.sqlinc",
+        "sha256": "240401001f4e4508b7e77c477af86f48812a4ce20010fd65ac493396fa120ce5"
+      },
+      {
+        "path": "forward/14_manager_action_current_witness.sqlinc",
+        "sha256": "29d417aac44be428ccd894e907095dc2477618069d3eb4be823d5c1d667fe0b5"
+      },
+      {
+        "path": "forward/15_configured_manual_step.sqlinc",
+        "sha256": "e56965f591f49e559831c107ab9b29d187f5b17189a1b94d99ec86214e6e9d1b"
+      },
+      {
+        "path": "forward/16_recheck_native_progress.sqlinc",
+        "sha256": "520ec0cb5e7846e421b48ff5e1371c8f9d7b50ef7888d10a00b4abf07f8ffca9"
+      },
+      {
+        "path": "forward/17_common_recheck_consumer.sqlinc",
+        "sha256": "1af69cd9e77e78610fde3d9f742c413889492eeab3d2d0e55569f25efdf75614"
+      },
+      {
+        "path": "forward/18_capture_question_presentation.sqlinc",
+        "sha256": "b049b5744ba1dae58cebdab3510f9d9c33c8e39e310a8506b5b20b846a3e84da"
+      },
+      {
+        "path": "forward/19_capture_and_rebase_integrity.sqlinc",
+        "sha256": "b4061f936d97648bf1d83cf354976042da6b993ec158f1398043bd6145632ef0"
+      },
+      {
+        "path": "forward/20_native_manager_members.sqlinc",
+        "sha256": "422ba86657f3f7d6aa30e317dbbe4c7fda7c107d543b6125138731ec15f609a2"
+      },
+      {
+        "path": "forward/21_native_render_input.sqlinc",
+        "sha256": "bf0dc43d725483075d2abf7c6b37d67cb36a5bab9e533f21f882ccd693eccede"
+      },
+      {
+        "path": "forward/22_native_render_stage.sqlinc",
+        "sha256": "70ea1582a5a882dc7df492a856959e426bc0d2222cfa3321fbe64c5017a0bea4"
+      },
+      {
+        "path": "forward/23_native_logical_members.sqlinc",
+        "sha256": "9c39a2b814d74013d4aa64366ee2cc82d720ab10dd44e565751c2bac9f14ab74"
+      },
+      {
+        "path": "forward/24_native_budget.sqlinc",
+        "sha256": "7cddbe5a12062e8861ed52e61cd2d52f9bf988e79ba9596b58beaa57a9203f53"
+      },
+      {
+        "path": "forward/25_native_current_membership.sqlinc",
+        "sha256": "8e7058cf427263941898f6e3898ff31a01128e91954e6f083082f990c0b60f41"
+      },
+      {
+        "path": "forward/26_native_push_context.sqlinc",
+        "sha256": "f99fd42da4f7da8cc430f99a81abd1a956994bf0e0559b4b6b16f1a232bb6fd9"
+      },
+      {
+        "path": "forward/27_native_manager_intent.sqlinc",
+        "sha256": "50e601b2651098700e6785fac1f0b537a84428ce43e56b1d8bd015641c29edc4"
+      },
+      {
+        "path": "forward/28_native_contact_workspace.sqlinc",
+        "sha256": "48c28182274acc2f27de4ee8751135b24b71afa9fcce782a616630b9b9bab028"
+      },
+      {
+        "path": "forward/29_native_contact_bulk.sqlinc",
+        "sha256": "75d3a54270939e2a1d23bdf3cdfca193a383e0cd528b462d5389c75342db9f93"
+      },
+      {
+        "path": "forward/30_native_notification_retirement.sqlinc",
+        "sha256": "a9542b570e0b21d0764cf6083cda33cd3784969cc4cda2c81f34c8686b42a0ea"
+      },
+      {
+        "path": "forward/31_current_followup_candidate.sqlinc",
+        "sha256": "8dd820ed75dc2d1faefec5f5899c2ceea1c2438e3631524018fffa28b317ab0c"
+      },
+      {
+        "path": "forward/32_native_scheduler_followups.sqlinc",
+        "sha256": "305377cd512fd41c0b8dbd262f2a17501c157b3e9d30f4095e696b2b7562fccf"
+      },
+      {
+        "path": "forward/33_native_submission_pause.sqlinc",
+        "sha256": "ff8d76ddada432abaa5537a36b3e260e395e76fb437e8f9ea2990c84334677a2"
+      },
+      {
+        "path": "forward/34_scope_first_activation.sqlinc",
+        "sha256": "3f9d9378978436b10d6104a5c518083151bb2329478a6693572fb656116e2946"
+      },
+      {
+        "path": "forward/35_native_cycle_scope_lock.sqlinc",
+        "sha256": "a01a4f8f6958252972d61e8aaf8b134c9d97a3d52acb6d705c9c45c274f04aff"
+      },
+      {
+        "path": "forward/36_submission_identity_and_guard.sqlinc",
+        "sha256": "258ed5e3acab342c3f01bc72dc1bea2300d4308f997bb801f7a96cff87f0e3ad"
+      },
+      {
+        "path": "forward/37_submission_partition.sqlinc",
+        "sha256": "8834b29001502cdacd2c30075f2674f6e3487f539679f38d426e9a7ffcaca86a"
+      },
+      {
+        "path": "forward/38_native_submission_readers.sqlinc",
+        "sha256": "dccdc8e5843aee7fd6d18e0bebca9ab76a57a9e7691ddd3e1b216b11346861c4"
+      },
+      {
+        "path": "forward/39_native_submission_callers.sqlinc",
+        "sha256": "1d1c587b17750260804553b16aa46cd6ec2ee0138fddb332a3a2ae44480c9074"
+      },
+      {
+        "path": "forward/40_candidate_contact_entry_owners.sqlinc",
+        "sha256": "d19f35d16792445dc2b74c871609e248da98b55e39f9a7c9c8d3248d69caefd5"
+      },
+      {
+        "path": "forward/41_exact_native_scope_locks.sqlinc",
+        "sha256": "2b7eb1aee7b876382c6aae78e7e01fd2720080198bc32cab292f81ebca324b7c"
+      },
+      {
+        "path": "forward/42_exact_native_lock_owners.sqlinc",
+        "sha256": "057c359c98c9c2df733237b2bf1a93704df6751937919c07436e0966e478d5b4"
+      },
+      {
+        "path": "forward/43_exact_bulk_scope_locks.sqlinc",
+        "sha256": "7f1f8e98060f7c45b2eeb0cf374c54e22752ebffa0e0c51c180eba7e2d7b82a9"
+      },
+      {
+        "path": "forward/44_manager_selection_scope_locks.sqlinc",
+        "sha256": "9d69e2f9fcaf43754855b58741682e7ec8e396d03a7a15f1c8671c55fcaf2289"
+      },
+      {
+        "path": "forward/45_native_composition_scope_facts.sqlinc",
+        "sha256": "7cc08d77765b6a6da9356696e2c8417b11cafc64e5f6db64084f1b0ab950db38"
+      },
+      {
+        "path": "forward/46_recheck_selection_scope_facts.sqlinc",
+        "sha256": "290dd8ed5ba712c0b0c9f1e585d3c7f8a1b893660890050003d5a2fd0b482985"
+      },
+      {
+        "path": "forward/47_native_scheduler_selection.sqlinc",
+        "sha256": "2a7175036fcce40edcbd3695adae909c5328f0b420c1cb1c8e613b44c5fab4e0"
+      },
+      {
+        "path": "forward/48_native_scheduler_selection_locks.sqlinc",
+        "sha256": "01935b7603a223600f526b29b1114fc86a2ce85a8b89454be9ac35f4da9c85e1"
+      },
+      {
+        "path": "forward/49_grouped_automatic_followup.sqlinc",
+        "sha256": "0944cf658fe62b4ba61edeb4cad7e867432faac690a71a1492a3deb77de7b513"
+      },
+      {
+        "path": "forward/50_manager_selection_capture.sqlinc",
+        "sha256": "fab1d2d7885bead48ca5c4e9df27e5ac4cd975c081e7dc5c6f4e4ca7c9963f51"
+      },
+      {
+        "path": "forward/51_native_initial_manager_owner.sqlinc",
+        "sha256": "962d5bc5aad71a333bd1134a11ee876c9a4ed5e9f7402239c0426df40e68b04d"
+      },
+      {
+        "path": "forward/99_acl.sqlinc",
+        "sha256": "007857838e847fc6c51f61a778f7a2c7c0ca523ae960f42d0c766237d3f7d197"
+      }
+    ],
+    "order": "Root-owned exact current native schema and existing contact permits/query/membership/timing authorities; reviewed one-time journal/check/cohort deltas; these stable ordered native includes; final exact ACL. No stale whole-parent replacement and no Banking source overwrite."
+  },
+  "new_metadata_tables": [
+    {
+      "table_name": "weekly_contact_checking_scope_versions",
+      "record_class": "STATEFUL_SERVER_OWNED",
+      "immutable_row_trigger": null,
+      "truncate_trigger": "weekly_contact_checking_scope_versions_no_truncate"
+    },
+    {
+      "table_name": "weekly_contact_manual_acceptances",
+      "record_class": "IMMUTABLE_APPEND_ONLY",
+      "immutable_row_trigger": "weekly_contact_manual_acceptances_immutable",
+      "truncate_trigger": "weekly_contact_manual_acceptances_no_truncate"
+    },
+    {
+      "table_name": "weekly_contact_manual_reviews",
+      "record_class": "IMMUTABLE_APPEND_ONLY",
+      "immutable_row_trigger": "weekly_contact_manual_reviews_immutable",
+      "truncate_trigger": "weekly_contact_manual_reviews_no_truncate"
+    },
+    {
+      "table_name": "weekly_contact_recheck_progress",
+      "record_class": "STATEFUL_SERVER_OWNED",
+      "immutable_row_trigger": null,
+      "truncate_trigger": "weekly_contact_recheck_progress_no_truncate"
+    },
+    {
+      "table_name": "weekly_contact_recheck_steps",
+      "record_class": "IMMUTABLE_APPEND_ONLY",
+      "immutable_row_trigger": "weekly_contact_recheck_steps_immutable",
+      "truncate_trigger": "weekly_contact_recheck_steps_no_truncate"
+    },
+    {
+      "table_name": "weekly_contact_source_due_event_rebases",
+      "record_class": "IMMUTABLE_APPEND_ONLY",
+      "immutable_row_trigger": "weekly_contact_source_due_event_rebases_immutable",
+      "truncate_trigger": "weekly_contact_source_due_event_rebases_no_truncate"
+    },
+    {
+      "table_name": "weekly_contact_source_intent_capture_members",
+      "record_class": "IMMUTABLE_APPEND_ONLY",
+      "immutable_row_trigger": "weekly_contact_source_intent_capture_members_immutable",
+      "truncate_trigger": "weekly_contact_source_intent_capture_members_no_truncate"
+    },
+    {
+      "table_name": "weekly_contact_source_intent_captures",
+      "record_class": "IMMUTABLE_APPEND_ONLY",
+      "immutable_row_trigger": "weekly_contact_source_intent_captures_immutable",
+      "truncate_trigger": "weekly_contact_source_intent_captures_no_truncate"
+    },
+    {
+      "table_name": "weekly_contact_source_ordinal_owners",
+      "record_class": "STATEFUL_SERVER_OWNED",
+      "immutable_row_trigger": null,
+      "truncate_trigger": "weekly_contact_source_ordinal_owners_no_truncate"
+    }
+  ],
+  "existing_table_identity_delta": {
+    "source": "one-time/03_submission_cohort_identity.sqlinc",
+    "table": "weekly_timesheet_submission_requests",
+    "new_table": false,
+    "prior_generation_key": [
+      "source_cycle_id",
+      "candidate_id",
+      "request_generation"
+    ],
+    "generation_constraint": "weekly_timesheet_submission_requests_cohort_generation_uq",
+    "generation_key": [
+      "source_cycle_id",
+      "candidate_id",
+      "candidate_cohort_id",
+      "request_generation"
+    ],
+    "active_index": "weekly_timesheet_submission_requests_active_uq",
+    "prior_active_key": [
+      "source_cycle_id",
+      "candidate_id"
+    ],
+    "active_key": [
+      "source_cycle_id",
+      "candidate_id",
+      "candidate_cohort_id"
+    ],
+    "active_states": [
+      "READY",
+      "ACTIVE",
+      "OVERDUE",
+      "PARTLY_SUBMITTED"
+    ],
+    "existing_history_rewrite": false,
+    "native_qualification": "NOT_RUN",
+    "deferred_triggers": [
+      {
+        "table": "weekly_timesheet_submission_requests",
+        "trigger": "weekly_contact_submission_identity",
+        "function": "private.weekly_contact_submission_identity_deferred_v1()",
+        "source": "forward/36_submission_identity_and_guard.sqlinc"
+      },
+      {
+        "table": "weekly_timesheet_submission_request_memberships",
+        "trigger": "weekly_contact_submission_member_identity",
+        "function": "private.weekly_contact_submission_identity_deferred_v1()",
+        "source": "forward/36_submission_identity_and_guard.sqlinc"
+      },
+      {
+        "table": "weekly_candidate_cohorts",
+        "trigger": "weekly_contact_submission_cohort_identity",
+        "function": "private.weekly_contact_submission_identity_deferred_v1()",
+        "source": "forward/36_submission_identity_and_guard.sqlinc"
+      },
+      {
+        "table": "weekly_candidate_outreach_generations",
+        "trigger": "weekly_contact_submission_generation_identity",
+        "function": "private.weekly_contact_submission_identity_deferred_v1()",
+        "source": "forward/36_submission_identity_and_guard.sqlinc"
+      }
+    ]
+  },
+  "private_capture_kind_delta": {
+    "table": "weekly_contact_source_intent_captures",
+    "source": "one-time/01_contact_producer_journals.sqlinc",
+    "prior_source_checkpoint": "638b5a66c3603e20e9c1cd156552e48c36674f05",
+    "retained": [
+      "ROUTINE_RECOMPOSITION",
+      "EXPLICIT_MANUAL",
+      "ROUTINE_FOLLOWUP",
+      "ROUTINE_MANUAL_FOLLOWUP",
+      "MANUAL_RECOMPOSITION",
+      "FOLLOWUP_RECOMPOSITION"
+    ],
+    "added": [
+      "ROUTINE_MANUAL_SELECTION",
+      "MANUAL_SELECTION_RECOMPOSITION"
+    ],
+    "member_provenance": "Genuine eligible signed INITIAL has routine_step=NULL and no accepted predecessor; genuinely due configured MANUAL has actual positive step and immutable accepted predecessor.",
+    "actor_required_for_both": true,
+    "recomposition_original_intent_required": true,
+    "public_dto_or_new_enquiry_meaning_changed": false,
+    "migration_rule": "Uninstalled new journal creation payload successor; no accepted history rewrite. Root must use a new guarded successor if an earlier payload has already been durably installed."
+  },
+  "native_initial_owner": {
+    "path": "MANAGER_INITIAL_OWNER_INPUTS.json",
+    "sha256": "8efdbec77369c55e445b8ae97849b0bd0e2c7ce988f36d05617536e4111778bb"
+  },
+  "new_and_successor_signatures": [
+    {
+      "signature": "private.weekly_contact_checking_logical_keys_v1(uuid,text,uuid,uuid)",
+      "source": "forward/00_current_logical_closure.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_producer_immutable_v1()",
+      "source": "forward/01_checking_revision_and_history.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_checking_pair_facts_v1(uuid,text,uuid,uuid)",
+      "source": "forward/01_checking_revision_and_history.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_checking_scope_facts_v1(uuid)",
+      "source": "forward/01_checking_revision_and_history.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
+      "source": "forward/01_checking_revision_and_history.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_checking_scope_revision_v1(uuid)",
+      "source": "forward/01_checking_revision_and_history.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_checking_version_guard_v1()",
+      "source": "forward/01_checking_revision_and_history.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_ordinal_owner_guard_v1()",
+      "source": "forward/01_checking_revision_and_history.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_cutoff_classification_v1(uuid,timestamptz)",
+      "source": "forward/02_cutoff_classification.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_manual_request_assert_v1(jsonb,boolean)",
+      "source": "forward/03_manual_request_validation.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_manual_scopes_lock_v1(jsonb)",
+      "source": "forward/03_manual_request_validation.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_identity_v1(uuid,text,uuid,uuid,text,text,jsonb)",
+      "source": "forward/04_original_logical_history.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_logical_history_v1(uuid,text,uuid,uuid,bytea)",
+      "source": "forward/04_original_logical_history.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_row_v1(uuid)",
+      "source": "forward/05_manual_member_facts.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_manual_member_facts_v1(uuid,text,timestamptz)",
+      "source": "forward/05_manual_member_facts.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_manual_manifest_v1(jsonb,timestamptz)",
+      "source": "forward/06_manual_manifest_and_preview.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_manual_manifest_seal_v1(jsonb)",
+      "source": "forward/06_manual_manifest_and_preview.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_contact_manual_enquiry_preview_v1(jsonb)",
+      "source": "forward/06_manual_manifest_and_preview.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_pairs_v1(uuid)",
+      "source": "forward/07_capture_native_reads.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_assert_v1(uuid)",
+      "source": "forward/07_capture_native_reads.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_current_v1(uuid,timestamptz,boolean)",
+      "source": "forward/07_capture_native_reads.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_manual_manager_generation_v1(jsonb,uuid,timestamptz)",
+      "source": "forward/08_manual_native_enqueue.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_insert_v1(uuid,text,uuid,uuid,jsonb,jsonb,integer,uuid,timestamptz,uuid)",
+      "source": "forward/08_manual_native_enqueue.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_manual_enqueue_v1(jsonb,jsonb,jsonb,timestamptz)",
+      "source": "forward/08_manual_native_enqueue.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_contact_manual_enquiry_accept_v1(jsonb)",
+      "source": "forward/09_manual_accept_and_errors.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "private.weekly_contact_manual_raise_public_v1(text,text)",
+      "source": "forward/09_manual_accept_and_errors.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_logical_members_v1(uuid)",
+      "source": "forward/10_capture_dispatch_lineage.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_dispatch_membership_v1(uuid,uuid,text)",
+      "source": "forward/10_capture_dispatch_lineage.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_followup_state_v1(uuid,timestamptz)",
+      "source": "forward/11_followup_state_and_enqueue.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_source_manager_followup_timing_v1(uuid,timestamptz)",
+      "source": "forward/11_followup_state_and_enqueue.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_followup_enqueue_v1(uuid,timestamptz)",
+      "source": "forward/11_followup_state_and_enqueue.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_expected_week_fact_v1(uuid,uuid,timestamptz)",
+      "source": "forward/12_current_native_subset.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_intent_current_subset_v1(uuid,timestamptz)",
+      "source": "forward/12_current_native_subset.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_recompose_intent_v1(uuid,uuid)",
+      "source": "forward/13_recompose_native_intents.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_action_v1(uuid,uuid,uuid,jsonb)",
+      "source": "forward/14_manager_action_current_witness.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_action_lock_v1(uuid,uuid,uuid,jsonb)",
+      "source": "forward/14_manager_action_current_witness.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_manual_step_v1(uuid,uuid,uuid,uuid[],text)",
+      "source": "forward/15_configured_manual_step.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_recheck_progress_guard_v1()",
+      "source": "forward/16_recheck_native_progress.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_recheck_record_v1(uuid,text,uuid,bigint,bigint,bytea,jsonb)",
+      "source": "forward/16_recheck_native_progress.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_recheck_native_ids_v1(uuid,text,uuid)",
+      "source": "forward/16_recheck_native_progress.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_recheck_next_due_v1(uuid,timestamptz)",
+      "source": "forward/16_recheck_native_progress.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_recheck_task_selected_v1(uuid,jsonb,timestamptz)",
+      "source": "forward/17_common_recheck_consumer.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_recheck_task_v1(uuid)",
+      "source": "forward/17_common_recheck_consumer.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_contact_recheck_batch_v1(jsonb)",
+      "source": "forward/17_common_recheck_consumer.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_notification_v1(uuid)",
+      "source": "forward/18_capture_question_presentation.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_capture_deferred_v1()",
+      "source": "forward/19_capture_and_rebase_integrity.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_due_rebase_assert_v1()",
+      "source": "forward/19_capture_and_rebase_integrity.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_members_v1(uuid)",
+      "source": "forward/20_native_manager_members.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_message_render_input_v1(jsonb)",
+      "source": "forward/21_native_render_input.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.weekly_source_message_render_stage_atomic_v1(jsonb)",
+      "source": "forward/22_native_render_stage.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "private.weekly_contact_source_logical_members_v1(uuid)",
+      "source": "forward/23_native_logical_members.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_budget_v1(uuid)",
+      "source": "forward/24_native_budget.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_membership_v1(uuid,uuid,text)",
+      "source": "forward/25_native_current_membership.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_push_dispatch_context_v1(uuid,uuid,text,bytea,uuid,text)",
+      "source": "forward/26_native_push_context.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_source_query_manager_intent_v1(uuid,uuid,uuid[],text,integer,timestamptz)",
+      "source": "forward/27_native_manager_intent.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "source": "forward/28_native_contact_workspace.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)",
+      "source": "forward/29_native_contact_bulk.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "private.weekly_source_candidate_notification_retire_v1()",
+      "source": "forward/30_native_notification_retirement.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_followup_candidate_v1(uuid,timestamptz)",
+      "source": "forward/31_current_followup_candidate.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_query_scheduler_tick_v1(jsonb)",
+      "source": "forward/32_native_scheduler_followups.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "private.weekly_source_submission_request_start_v1(jsonb,boolean)",
+      "source": "forward/33_native_submission_pause.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_scope_first_activation_v1(uuid,uuid)",
+      "source": "forward/34_scope_first_activation.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_cycle_lock_v1(uuid)",
+      "source": "forward/35_native_cycle_scope_lock.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_submission_lock_v1(uuid,uuid,jsonb,uuid)",
+      "source": "forward/36_submission_identity_and_guard.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_submission_request_for_generation_v1(uuid)",
+      "source": "forward/36_submission_identity_and_guard.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_submission_view_request_v1(uuid,uuid,date,uuid)",
+      "source": "forward/36_submission_identity_and_guard.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_submission_request_assert_v1(uuid)",
+      "source": "forward/36_submission_identity_and_guard.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_submission_identity_deferred_v1()",
+      "source": "forward/36_submission_identity_and_guard.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_submission_partition_v1(jsonb,boolean)",
+      "source": "forward/37_submission_partition.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_candidate_query_get_v1(jsonb)",
+      "source": "forward/38_native_submission_readers.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
+      "source": "forward/38_native_submission_readers.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+      "source": "forward/38_native_submission_readers.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "private.weekly_source_candidate_app_projection_v1(uuid,uuid,timestamptz)",
+      "source": "forward/38_native_submission_readers.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz)",
+      "source": "forward/38_native_submission_readers.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamptz)",
+      "source": "forward/38_native_submission_readers.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_source_candidate_notification_intent_v1()",
+      "source": "forward/38_native_submission_readers.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_source_candidate_view_request_v1(jsonb)",
+      "source": "forward/38_native_submission_readers.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_source_import_outreach_v1(uuid)",
+      "source": "forward/39_native_submission_callers.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+      "source": "forward/39_native_submission_callers.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.weekly_source_candidate_reminder_atomic_v1(jsonb)",
+      "source": "forward/40_candidate_contact_entry_owners.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamptz)",
+      "source": "forward/40_candidate_contact_entry_owners.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "private.weekly_contact_source_generation_scope_facts_v1(uuid,uuid)",
+      "source": "forward/41_exact_native_scope_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_route_scope_facts_v1(uuid)",
+      "source": "forward/41_exact_native_scope_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_route_lock_v1(uuid)",
+      "source": "forward/41_exact_native_scope_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_intent_lock_v1(uuid)",
+      "source": "forward/41_exact_native_scope_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_generation_lock_v1(uuid,uuid)",
+      "source": "forward/41_exact_native_scope_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_manager_route_prepare_atomic_v1(jsonb)",
+      "source": "forward/42_exact_native_lock_owners.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    },
+    {
+      "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamptz,boolean)",
+      "source": "forward/42_exact_native_lock_owners.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_source_query_candidate_generation_v1(uuid,uuid,uuid,uuid,text,uuid,timestamptz)",
+      "source": "forward/42_exact_native_lock_owners.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_retire_unsubmitted_v1(uuid)",
+      "source": "forward/42_exact_native_lock_owners.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_recompose_v1(uuid)",
+      "source": "forward/42_exact_native_lock_owners.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_bulk_scope_facts_v1(jsonb)",
+      "source": "forward/43_exact_bulk_scope_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_bulk_lock_v1(jsonb)",
+      "source": "forward/43_exact_bulk_scope_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_selection_scope_facts_v1(uuid[])",
+      "source": "forward/44_manager_selection_scope_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_selection_lock_v1(uuid[],jsonb)",
+      "source": "forward/44_manager_selection_scope_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_intent_composition_scope_facts_v1(uuid)",
+      "source": "forward/45_native_composition_scope_facts.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_activation_lock_v1(uuid,uuid)",
+      "source": "forward/45_native_composition_scope_facts.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_intent_composition_lock_v1(uuid)",
+      "source": "forward/45_native_composition_scope_facts.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_activation_scope_facts_v1(uuid,uuid)",
+      "source": "forward/45_native_composition_scope_facts.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_recheck_selection_scope_facts_v1(uuid,timestamptz)",
+      "source": "forward/46_recheck_selection_scope_facts.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_scheduler_selection_v1(timestamptz,integer)",
+      "source": "forward/47_native_scheduler_selection.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_scheduler_work_facts_v1(text,uuid)",
+      "source": "forward/48_native_scheduler_selection_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_scheduler_selection_lock_v1(jsonb)",
+      "source": "forward/48_native_scheduler_selection_locks.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_followup_group_enqueue_v1(uuid[],timestamptz)",
+      "source": "forward/49_grouped_automatic_followup.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_selection_capture_v1(uuid,uuid,uuid,jsonb)",
+      "source": "forward/50_manager_selection_capture.sqlinc",
+      "schema": "private",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.weekly_source_query_send_manager_now_atomic_v1(jsonb)",
+      "source": "forward/51_native_initial_manager_owner.sqlinc",
+      "schema": "public",
+      "security_definer": true,
+      "fixed_search_path": true,
+      "public": false,
+      "anon": false,
+      "authenticated": false,
+      "service_role_execute": true
+    }
+  ],
+  "root_only_mount_deltas": [
+    "Reconcile all nine exact metadata table record classes, creation-time FORCE RLS/policies/revokes and immutable/truncate guards with current central contract/literal sets/counts.",
+    "Reconcile existing request indexes/constraint and affected-row deferred guards; preserve exact old mixed request IDs/generations/hash/start/reminder/deadline and fail unexplained overlaps.",
+    "Reconcile signature exposure/private/final-definer metadata and exact current contract inventory for every listed owner; no browser EXECUTE grants.",
+    "Consume existing root canonical manual request/types/strict reply/one-RPC Office handler; mount read contribution and routes/Office through sole root current owners.",
+    "Apply only RUNTIME_CONTRIBUTION finite edits around actual current delivery runtime; continue original render, original sender, final START/provider-result owners and release pipeline."
+  ],
+  "canonical_runtime": {
+    "source_commits": [
+      "1859790b0596761f405a10c258394a1d47ca304e",
+      "81d06f820af6670c3783f0a7d825be9fc5c5d767"
+    ],
+    "files": [
+      "broker/src/weekly-source/contact-manual-enquiry-request.mjs",
+      "broker/src/weekly-source/contact-manual-enquiry-types.d.ts",
+      "broker/src/weekly-source/contact-manual-enquiry-office.mjs",
+      "broker/src/weekly-source/contact-manual-enquiry-contract.mjs",
+      "broker/src/contract-correction-v3.mjs"
+    ],
+    "duplicate_implementation": false,
+    "finite_contribution": {
+      "path": "RUNTIME_CONTRIBUTION.json",
+      "sha256": "af1f5af6a79bf2f50fa8b532b74a7f4421e4800bfc5274f2e4342688b1641188"
+    }
+  },
+  "readonly_projection": {
+    "signature": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
+    "version": "CONTACT_MANUAL_ENQUIRY_ROW_V1",
+    "mutations": false,
+    "complete_open_issue_bound": 1000,
+    "request_selected_issue_bound": 500,
+    "pause_row_contract": "Original seven keys unchanged; separate typed row property is a root combined-read contribution."
+  },
+  "reminder_refusal": {
+    "source": {
+      "path": "forward/40_candidate_contact_entry_owners.sqlinc",
+      "sha256": "d19f35d16792445dc2b74c871609e248da98b55e39f9a7c9c8d3248d69caefd5"
+    },
+    "sqlstate": "55000",
+    "message": "CONTACT_PAUSED",
+    "detail_keys": [
+      "version",
+      "candidate_id",
+      "client_id",
+      "audience",
+      "next_allowed_utc",
+      "next_allowed_local"
+    ],
+    "version": "CONTACT_PAUSE_REFUSAL_V1",
+    "audience": "WORKER",
+    "utc": "Exact same native expiry, UTC6",
+    "local": "YYYY-MM-DD HH:mm Europe/London from existing server London formatter",
+    "root_http": "Existing narrow exact function/state/message/detail validation -> original failure envelope HTTP409; no new success receipt."
+  },
+  "authored_business_completion": [
+    "Genuine current Source subset, exact pre-render rows/counts/links/recipient/content and original logical allowance capture.",
+    "Closed manual PREVIEW/ACCEPT, unchanged immutable replay, actual server current checking witness and current per-member eligibility/policy/history.",
+    "Configured due MANUAL and signed INITIAL through one complete same-signature Send manager now owner, one selected native body/cooldown with per-member NULL initial versus actual due step/predecessor; explicit New enquiry does not renew routine vector.",
+    "Grouped selected AUTOMATIC per real cycle/recipient with own per-member step/predecessor/ordinal and existing500rows/100Candidates/100Clients native body bounds.",
+    "Existing common recheck task/cursor/native sender and actual future wake; exact one-observation selection/complete phase exhaustion; uncertainty stays with original owner.",
+    "Bounded original scheduler selectors and complete sorted actual transaction footprint before any business row lock, with exact ID/currentness revalidation.",
+    "Per-client first activation, preserved legacy mixed request reuse, unchanged public one-request success and atomic partial/separate-owner refusal; genuine private Import/Bulk aggregation."
+  ],
+  "remaining_implementation_review": [
+    "Native qualification of authored one-body same-signature initial/due-MANUAL composition; exact current signed/unsigned/current actor/accepted predecessor/cooldown and retained attempted/remaining worker-question cases.",
+    "Review source/current native grouping/throttle/recomposition and retained alias/accepted-history/notification lineage under actual PostgreSQL and concurrency."
+  ],
+  "qualification": {
+    "source_runtime_checks": 46,
+    "offline_pg17": "OFFLINE_GRAMMAR_RESULT.json; complete SQL/PLpgSQL/SQL-language/DO grammar and declared fields only",
+    "native_fixtures": "Authored pg_temp assertion owners require genuine current source/actor and accepted history inputs; not executed or qualified.",
+    "native_compile_execution_acl_concurrency_api": "NOT_RUN",
+    "database_actions": "NONE",
+    "mount_install_release": "NOT_RUN"
+  },
+  "work_continues": true
+}

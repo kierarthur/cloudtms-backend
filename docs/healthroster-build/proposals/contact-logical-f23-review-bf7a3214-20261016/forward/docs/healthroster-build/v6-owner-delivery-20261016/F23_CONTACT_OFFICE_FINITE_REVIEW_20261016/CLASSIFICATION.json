@@ -1,0 +1,996 @@
+{
+  "version": "HEALTHROSTER_CONTACT_OFFICE_FINITE_CLASSIFICATION_V1",
+  "sourceAssemblyCommit": "bf7a321429969f2c43345ce05ad2679ce3dbe83c",
+  "lockGroupingSuccessorCommit": "bdb86a015c343b685f94682e5ae644f63fab7468",
+  "newOccurrences": 187,
+  "newUniqueKeys": 184,
+  "filePins": [
+    {
+      "path": "supabase/migrations/16102026_1205_weekly_contact_10_producer_journals.sql",
+      "sha256": "a6af48dac55e25dbf98a420e4171c30fc5dad767236dcca98b93e6676fca3875"
+    },
+    {
+      "path": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "sha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17"
+    },
+    {
+      "path": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "sha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/00_current_logical_closure.sqlinc",
+      "sha256": "dfacbe3cbcd9be1a3d9ebff6d590ef98fde8cddf9b4760b67c0d298cf8347623"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/01_checking_revision_and_history.sqlinc",
+      "sha256": "89ec4bcbc88e488a13a7e8871cc168dfea48600a361c1a67d07130516f2cb161"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/02_cutoff_classification.sqlinc",
+      "sha256": "47583ccd2c125de4ab5da7d61c758284a814b58441a2427cfdd92256d928e2de"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/03_manual_request_validation.sqlinc",
+      "sha256": "69aefcf3e9f2609d83fef79126639a4d58313ad21603e99d7cc3a7781320fac3"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/04_original_logical_history.sqlinc",
+      "sha256": "bfed563a5d80a0ed884daea971cf0ac1e681834461a9750d8254edfdb4e13efe"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/05_manual_member_facts.sqlinc",
+      "sha256": "3457f7ce340a7c279d345dc8945f2dfe8beab85caecd5a367cab827c2a6bc3b2"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/06_manual_manifest_and_preview.sqlinc",
+      "sha256": "d8af98736b140ffc7b93671d001ec6c836b1d9a73a7b18622b386c6b881bbc51"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/07_capture_native_reads.sqlinc",
+      "sha256": "5e65426dcb61a1779bea321eaf249e9f72dd2954739d523be79de41af04f431c"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/08_manual_native_enqueue.sqlinc",
+      "sha256": "fd5e001fed0d5967708fb5e69a3e7aede7ce30ed454a6b2d1069408fce621b16"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/09_manual_accept_and_errors.sqlinc",
+      "sha256": "02cd82e8b7b4a50454310dc32d8978fa985ae6c873c95321dc7ec015571851fa"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/10_capture_dispatch_lineage.sqlinc",
+      "sha256": "2b3465c98b5da5e2ea4cfdb4fe3b95e62c29b73508ca93e6c164b53191c18aa8"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/11_followup_state_and_enqueue.sqlinc",
+      "sha256": "5620a8f4bc6320b269c84e16b6faf2fe82328d96c59a2dda06eccb2dac94e895"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/12_current_native_subset.sqlinc",
+      "sha256": "96cfe9f5e5972f0d6387faaa6401dccbd546c7a9d309b7b568421eb4a46b19c4"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/13_recompose_native_intents.sqlinc",
+      "sha256": "240401001f4e4508b7e77c477af86f48812a4ce20010fd65ac493396fa120ce5"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/14_manager_action_current_witness.sqlinc",
+      "sha256": "29d417aac44be428ccd894e907095dc2477618069d3eb4be823d5c1d667fe0b5"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/15_configured_manual_step.sqlinc",
+      "sha256": "e56965f591f49e559831c107ab9b29d187f5b17189a1b94d99ec86214e6e9d1b"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/16_recheck_native_progress.sqlinc",
+      "sha256": "520ec0cb5e7846e421b48ff5e1371c8f9d7b50ef7888d10a00b4abf07f8ffca9"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/17_common_recheck_consumer.sqlinc",
+      "sha256": "1af69cd9e77e78610fde3d9f742c413889492eeab3d2d0e55569f25efdf75614"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/18_capture_question_presentation.sqlinc",
+      "sha256": "b049b5744ba1dae58cebdab3510f9d9c33c8e39e310a8506b5b20b846a3e84da"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/19_capture_and_rebase_integrity.sqlinc",
+      "sha256": "b4061f936d97648bf1d83cf354976042da6b993ec158f1398043bd6145632ef0"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/20_native_manager_members.sqlinc",
+      "sha256": "422ba86657f3f7d6aa30e317dbbe4c7fda7c107d543b6125138731ec15f609a2"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/21_native_render_input.sqlinc",
+      "sha256": "bf0dc43d725483075d2abf7c6b37d67cb36a5bab9e533f21f882ccd693eccede"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/22_native_render_stage.sqlinc",
+      "sha256": "70ea1582a5a882dc7df492a856959e426bc0d2222cfa3321fbe64c5017a0bea4"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/23_native_logical_members.sqlinc",
+      "sha256": "9c39a2b814d74013d4aa64366ee2cc82d720ab10dd44e565751c2bac9f14ab74"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/24_native_budget.sqlinc",
+      "sha256": "7cddbe5a12062e8861ed52e61cd2d52f9bf988e79ba9596b58beaa57a9203f53"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/25_native_current_membership.sqlinc",
+      "sha256": "8e7058cf427263941898f6e3898ff31a01128e91954e6f083082f990c0b60f41"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/26_native_push_context.sqlinc",
+      "sha256": "f99fd42da4f7da8cc430f99a81abd1a956994bf0e0559b4b6b16f1a232bb6fd9"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/27_native_manager_intent.sqlinc",
+      "sha256": "50e601b2651098700e6785fac1f0b537a84428ce43e56b1d8bd015641c29edc4"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/28_native_contact_workspace.sqlinc",
+      "sha256": "48c28182274acc2f27de4ee8751135b24b71afa9fcce782a616630b9b9bab028"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/29_native_contact_bulk.sqlinc",
+      "sha256": "75d3a54270939e2a1d23bdf3cdfca193a383e0cd528b462d5389c75342db9f93"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/30_native_notification_retirement.sqlinc",
+      "sha256": "a9542b570e0b21d0764cf6083cda33cd3784969cc4cda2c81f34c8686b42a0ea"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/31_current_followup_candidate.sqlinc",
+      "sha256": "8dd820ed75dc2d1faefec5f5899c2ceea1c2438e3631524018fffa28b317ab0c"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/32_native_scheduler_followups.sqlinc",
+      "sha256": "305377cd512fd41c0b8dbd262f2a17501c157b3e9d30f4095e696b2b7562fccf"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/33_native_submission_pause.sqlinc",
+      "sha256": "ff8d76ddada432abaa5537a36b3e260e395e76fb437e8f9ea2990c84334677a2"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/34_scope_first_activation.sqlinc",
+      "sha256": "3f9d9378978436b10d6104a5c518083151bb2329478a6693572fb656116e2946"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/35_native_cycle_scope_lock.sqlinc",
+      "sha256": "a01a4f8f6958252972d61e8aaf8b134c9d97a3d52acb6d705c9c45c274f04aff"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/36_submission_identity_and_guard.sqlinc",
+      "sha256": "258ed5e3acab342c3f01bc72dc1bea2300d4308f997bb801f7a96cff87f0e3ad"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/37_submission_partition.sqlinc",
+      "sha256": "8834b29001502cdacd2c30075f2674f6e3487f539679f38d426e9a7ffcaca86a"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "sha256": "71e27752fc91e9177992fdad51c131a7d71626da43d5067ab8b0de30c7d7db47"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/39_native_submission_callers.sqlinc",
+      "sha256": "1d1c587b17750260804553b16aa46cd6ec2ee0138fddb332a3a2ae44480c9074"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/40_candidate_contact_entry_owners.sqlinc",
+      "sha256": "d19f35d16792445dc2b74c871609e248da98b55e39f9a7c9c8d3248d69caefd5"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/41_exact_native_scope_locks.sqlinc",
+      "sha256": "2b7eb1aee7b876382c6aae78e7e01fd2720080198bc32cab292f81ebca324b7c"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "sha256": "057c359c98c9c2df733237b2bf1a93704df6751937919c07436e0966e478d5b4"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/43_exact_bulk_scope_locks.sqlinc",
+      "sha256": "7f1f8e98060f7c45b2eeb0cf374c54e22752ebffa0e0c51c180eba7e2d7b82a9"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "sha256": "3de091d35163e0b7a1fb7b98d4b4685e70792d0a257a1315a04d4aa268b0b301"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/45_native_composition_scope_facts.sqlinc",
+      "sha256": "7cc08d77765b6a6da9356696e2c8417b11cafc64e5f6db64084f1b0ab950db38"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/46_recheck_selection_scope_facts.sqlinc",
+      "sha256": "290dd8ed5ba712c0b0c9f1e585d3c7f8a1b893660890050003d5a2fd0b482985"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/47_native_scheduler_selection.sqlinc",
+      "sha256": "2a7175036fcce40edcbd3695adae909c5328f0b420c1cb1c8e613b44c5fab4e0"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/48_native_scheduler_selection_locks.sqlinc",
+      "sha256": "01935b7603a223600f526b29b1114fc86a2ce85a8b89454be9ac35f4da9c85e1"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/49_grouped_automatic_followup.sqlinc",
+      "sha256": "0944cf658fe62b4ba61edeb4cad7e867432faac690a71a1492a3deb77de7b513"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/50_manager_selection_capture.sqlinc",
+      "sha256": "fab1d2d7885bead48ca5c4e9df27e5ac4cd975c081e7dc5c6f4e4ca7c9963f51"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/51_native_initial_manager_owner.sqlinc",
+      "sha256": "962d5bc5aad71a333bd1134a11ee876c9a4ed5e9f7402239c0426df40e68b04d"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/99_acl.sqlinc",
+      "sha256": "007857838e847fc6c51f61a778f7a2c7c0ca523ae960f42d0c766237d3f7d197"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/98_manual_selection_ordinal_guard.sqlinc",
+      "sha256": "650f736b80474576dcfc72ffba5eecbbb0aac954b893e3fb2e1cc81c3d83d796"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion_v1.sql",
+      "sha256": "6fd0844122be2463bbd00e598a19e8753a01b7b811465301e52e59ec9cb2cc67"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_10_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "sha256": "122fcfc460ced0ac3037bab34207261dedee4018a0cdd8800c9e358ff176cd14"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_10_producer_prerequisites/02_original_private_acl.sqlinc",
+      "sha256": "32e6cdaa74acf44ea336670d14b3e7a6ce4a1fb08ecfd5171d79ba478d5657aa"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_10_producer_prerequisites_v1.sql",
+      "sha256": "4f533b0efa81e36f7f72eb150b4ab85c9fd6793bea1dec30d3d7536caaf07609"
+    },
+    {
+      "path": "broker/src/weekly-source/delivery-runtime.mjs",
+      "sha256": "b5b7109136fe51b26b643a4b4381d411e56efc8009a7ff0ce67e6b7c763cdaa5"
+    },
+    {
+      "path": "broker/src/weekly-source/contact-recheck-runtime.mjs",
+      "sha256": "6bf1eed7b3dd86b984217c91b37a4a8d6b786511f712ea6daa87cf8f0a41e8ff"
+    },
+    {
+      "path": "supabase/repeatable/includes/weekly_contact_manual_enquiry_office_rows_v1.sqlinc",
+      "sha256": "d9f357da000be10590e85df31f2704bcbcdfe4b0e7e8b05821035496102a8001"
+    },
+    {
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_30_manual_enquiry_office_read_v1.sql",
+      "sha256": "efd31694fa1f2e08be313fb5a1dc71c57c3696919644ca740a03c7eda9627d32"
+    }
+  ],
+  "dependencies": [
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+      "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+    },
+    {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/ACTUAL_CENSUS.json",
+      "sha256": "7f9aef5f20bdbe28b8a510e212622669f5deb906810aa406ee745d16d159da2f"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/REVIEW.json",
+      "sha256": "a869adc9cc21d3da49122dffbc2415416fec739fdcce3f1460fdc70a86cdfbf2"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/EXTENSION_MAP.json",
+      "sha256": "dcd8fd70547092a9404a43facf74ce00f7c1e81975b1ce75a910ced585850398"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/DEPENDENCIES.json",
+      "sha256": "d9ef38a638f930b6ad6b072d5532f895b23deae37084a508e8a7382a8810b215"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/BASELINE_RECONCILIATION.json",
+      "sha256": "f07c76d032dfc44f1434b0c3fd1c2714116bad9674b334f06c972da86189c672"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/verify-frozen-baseline.mjs",
+      "sha256": "9fe8164c68c53525b6e77abe84c1685438fa1ae62f01a4ca9126635cc224ecc5"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/review.py",
+      "sha256": "15bae9fb8994032f3bca55f0d6b5750015c391732441005a9077623318ecb32e"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/census-actual.mjs",
+      "sha256": "602b92e3154f2eefaa1ae4b2b357174eb94a257656dcfb320a645d3362b68003"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/collect-dependencies.mjs",
+      "sha256": "b3c18ddaf46918f73c5ba603a1dd309ad90f2f5b69a10ddd0a32bc5a85cb466c"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql",
+      "sha256": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+      "sha256": "91972ea67ab5c4898ff513a970a4cb63fa8a333a599ebcee4634977662f58511"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "sha256": "3682178b5da113aac0587a08b0f07cab893a61b6d5c9332fd1d3925a8361967b"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sha256": "5cae1d5dafd9fce93d8a3d9f5ee008e67abe14e099087388d656ae7e21956da5"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "sha256": "dace15a8df0b37decf261beb3cd99ac5c59ea362f22114b382c1c0148d4bf0e4"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "sha256": "a06bd86711d35d29b807d97e54c2bb81303ccbc37b86832cc624e88e5867eb0b"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "sha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "sha256": "2623374220b3c7ebb14699428a280bf8bbbd1f87dce5371072fe9e1cf35d62e6"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/17092026_0700_weekly_source_pending_entitlement_release_v1.sql",
+      "sha256": "177400e1d5f1be23e789ef4cd3596cdac1f9860fe94602a5a031bdd1142488c6"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/repeatable/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "sha256": "077e1f34271adfb97ee6d5d3d2d718ce21186f0c1a9d99e221c51d94dd02b77a"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sha256": "3fbde7575ae33a04207224b6acbe4295c47f2b77f13396853474f2aab05086f9"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/15092026_1534_weekly_source_finalisation_v1.sql",
+      "sha256": "17274f274bf7ca2b4510f2f6f8313559fea58678b3f0442ace13ba1f846ba66e"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256": "2f8603d7abb04c84737f294101ae5b78e05a46652a5006db2c341297e1b0557d"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/15092026_1534_weekly_source_read_projections_v1.sql",
+      "sha256": "14be3691add62d1851ed28d7ee53c60a5b7418ef9342bcd12132fbe6f9cf880f"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/15092026_1534_weekly_source_upload_context_v1.sql",
+      "sha256": "840215eb7ab94d2094a606834a06f80a311ec160a77ef241325b08a6d614353c"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "sha256": "b00ca0d3214f8fe23e27a98f031bd62ad6bfbc30a6ab0aac0b90785e1fbe76ba"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "sha256": "3ec090d8f862faafc38d40b7e24342dbdc6e1df80ded73c75f0f941c78785b1e"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/15092026_2312_weekly_source_delivery_targets_v1.sql",
+      "sha256": "5a97fc8588ff265008a4f41a4dcd80bbeafc4f193c3d5d14845a277af9d28f0f"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "sha256": "81b8c4e4ffc9cd6ccacc1aa12d0533f7d454ae3f7b0cf14a028b492c4c24056c"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "sha256": "2cae976df85977013190868f89ea965b88951132adb7a3ee8153cc65c2485988"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/frozen-baseline/supabase/verification/24092026_1800_weekly_source_invoice_evidence_component_v1.sql",
+      "sha256": "941c5cac1af67c66667de3643f7a47abc46a5f4218168aecc77691fd7bec3b66"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/lock-successor/PROPOSAL.json",
+      "sha256": "06da6de8e47842bdf3b52c855ebc11526431fc07812a22d5351c7a142d465756"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/lock-successor/LOCK_REVIEW.md",
+      "sha256": "7801fff0ca95e96e00aca0ca7228ba2a4d0d8da1169496fa46930ab0e72a03ee"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/lock-successor/PREBODY_GRAPH_REVIEW.json",
+      "sha256": "4340e4e125532086d9af5623a1a82675d2585478396ef80577d0c265bec5a0e6"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/inputs/lock-successor/GRAMMAR_RESULT.json",
+      "sha256": "1a3234fb16706e63619753d7009c5ed9581232edf998eb946c48b260f5ab830e"
+    }
+  ],
+  "producers": [
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_10_producer_journals.sql",
+      "signature": "outer:supabase/migrations/16102026_1205_weekly_contact_10_producer_journals.sql",
+      "bodySha256": "a803fb3d68e6775fdd408c245c8938bf1d1416e24d1661bf2e51e944ca8cfb40",
+      "completeStatementSha256": null,
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/001-a803fb3d68e6.sqlinc"
+    },
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_10_producer_journals.sql",
+      "signature": "outer:supabase/migrations/16102026_1205_weekly_contact_10_producer_journals.sql",
+      "bodySha256": "d780d3966924dbf41b707a96a488470de12b5c931758a82e662f2eb248ef1892",
+      "completeStatementSha256": null,
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/002-d780d3966924.sqlinc"
+    },
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "signature": "outer:supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "bodySha256": "eaf4b150310df29db1d7d1d7957c32d81fcad60951e7cd3f32dc679a239ba4fc",
+      "completeStatementSha256": null,
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/003-eaf4b150310d.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/01_checking_revision_and_history.sqlinc",
+      "signature": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
+      "bodySha256": "b31bf0736226b18ebb3f3e9c6b975060cdefcfcbc8bd5b61cbbf7e79d4741588",
+      "completeStatementSha256": "141d2868eca3d61054d198c2f3d255bf82c9d4e8fb35950fc9813001dc0ed990",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/004-b31bf0736226.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/01_checking_revision_and_history.sqlinc",
+      "signature": "private.weekly_contact_checking_scope_revision_v1(uuid)",
+      "bodySha256": "521f1b414c6605aeb20b036a60612f71c655d364fc9dffa1c2398aad01c6ec48",
+      "completeStatementSha256": "e38c13714a367663319f4630140e4ed9e27d75246b923daac76079f595813623",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/005-521f1b414c66.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/01_checking_revision_and_history.sqlinc",
+      "signature": "private.weekly_contact_source_ordinal_owner_guard_v1()",
+      "bodySha256": "3e5940bc6f56f0df1782a87fc269e4118eac54de722ba3410da1b7d76abe0e9a",
+      "completeStatementSha256": "7c0de501bfb1fa62a1d3604a3f6666eafa54106c285d5a9a573d2386fa18a96b",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/006-3e5940bc6f56.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/02_cutoff_classification.sqlinc",
+      "signature": "private.weekly_contact_source_cutoff_classification_v1(uuid,timestamp with time zone)",
+      "bodySha256": "904a7b1df4d5d937982f949b6d2d52d8198b0d176af526ea1e0185bf1509f14e",
+      "completeStatementSha256": "a9ca692a7159bc88ffd3b4d0cd347eee1c83c2efd7bd4945fbf4621ba73fad33",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/007-904a7b1df4d5.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/04_original_logical_history.sqlinc",
+      "signature": "private.weekly_contact_source_logical_history_v1(uuid,text,uuid,uuid,bytea)",
+      "bodySha256": "fb755f238343af1e8f5ffbe691e8e0c6693562751bb67886d418f905200bad49",
+      "completeStatementSha256": "b0e2f0fa9aee6f9f4c6b2343667f98a74c93855a1d9a29cc649cd49f2dec1edf",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/008-fb755f238343.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/05_manual_member_facts.sqlinc",
+      "signature": "private.weekly_contact_manual_member_facts_v1(uuid,text,timestamp with time zone)",
+      "bodySha256": "30cf937e5edbea99d66ac0fd14d1a861da5344543dcac47c4920679bf36849f1",
+      "completeStatementSha256": "5175d20d61a971eedda13a37bd654aec37b3fb898093543f48af3dccd876bdef",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/009-30cf937e5edb.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/06_manual_manifest_and_preview.sqlinc",
+      "signature": "private.weekly_contact_manual_manifest_v1(jsonb,timestamp with time zone)",
+      "bodySha256": "158972f0500a7a4b85cabeabe2c7176bba3f0cb5829c7057c23e85bffad6c994",
+      "completeStatementSha256": "54b36aff256a5a18f25e9c9d0e1ccdbe5b713f1fc693da6a0de76fa1a4c1a874",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/010-158972f0500a.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/06_manual_manifest_and_preview.sqlinc",
+      "signature": "public.weekly_source_contact_manual_enquiry_preview_v1(jsonb)",
+      "bodySha256": "0d72cdc55a7b82538fe580435a55590872df4f0cb7b78fa21ed3c22b9fa32ad8",
+      "completeStatementSha256": "5ebe82f16f7e3e59b88bae7801dc02c7b60174b42dddb0679da18d7e13bfa2fe",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/011-0d72cdc55a7b.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/07_capture_native_reads.sqlinc",
+      "signature": "private.weekly_contact_source_capture_assert_v1(uuid)",
+      "bodySha256": "d34d16f8f00f67e5a29d7c98e8605adae847aba34b165c7cd6011af10f03d75d",
+      "completeStatementSha256": "057b27910842ab4daf04ac1f75781fad411568341842ac06f019cff69294fe60",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/012-d34d16f8f00f.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/07_capture_native_reads.sqlinc",
+      "signature": "private.weekly_contact_source_capture_current_v1(uuid,timestamp with time zone,boolean)",
+      "bodySha256": "e42a4989a35a29c38a795ca613eddc3bc7ff26f451df297601bea757ac82add5",
+      "completeStatementSha256": "44e818845644e9ce7311124d24e8b73ea4f36ce871ba8823a02413e3af386804",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/013-e42a4989a35a.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/08_manual_native_enqueue.sqlinc",
+      "signature": "private.weekly_contact_manual_manager_generation_v1(jsonb,uuid,timestamp with time zone)",
+      "bodySha256": "5844933c04cc812b4e8337bc9b55d40f705be752ed7c53cbbcedf65a3336fd8b",
+      "completeStatementSha256": "7610f1f8aea2710549ecb1a03b5c34f2987cbf13ae95ea442c3d209ad912080f",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/014-5844933c04cc.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/08_manual_native_enqueue.sqlinc",
+      "signature": "private.weekly_contact_source_capture_insert_v1(uuid,text,uuid,uuid,jsonb,jsonb,integer,uuid,timestamp with time zone,uuid)",
+      "bodySha256": "a3bffbff2191de50098f946f43ae3d768b4dc1800c0aa38e6d4ed90dfa64afd4",
+      "completeStatementSha256": "b95dcd83acc58613e7fc6a39018a71f5db598463c8d7489ab20bcee6e7633a43",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/015-a3bffbff2191.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/08_manual_native_enqueue.sqlinc",
+      "signature": "private.weekly_contact_manual_enqueue_v1(jsonb,jsonb,jsonb,timestamp with time zone)",
+      "bodySha256": "37f00e976efce87e34c7c7c26a2ecbddb1880fdfba0a0ad422e0cbc409581357",
+      "completeStatementSha256": "119a8227833a143c7beb64191e91918df45db09316b2a5e6af4812aeabd808f9",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/016-37f00e976efc.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/09_manual_accept_and_errors.sqlinc",
+      "signature": "public.weekly_source_contact_manual_enquiry_accept_v1(jsonb)",
+      "bodySha256": "4f66e7350cfe1e40b530419e38e41850970c3eea511cf42e97bc6c2bf498f719",
+      "completeStatementSha256": "1308d2d650d1368b198e25d63196c3c9b9483789bc3018940aa3eb1d18794dae",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/017-4f66e7350cfe.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/10_capture_dispatch_lineage.sqlinc",
+      "signature": "private.weekly_contact_source_capture_logical_members_v1(uuid)",
+      "bodySha256": "0a537caa77cb56f04cbe838fdd94679ceed1a965bf98536ec7b94b6e11977dcc",
+      "completeStatementSha256": "2e8436abefe1d48a2a96dae5fbe03a988d8cd1b919db781727efd2f47045db3d",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/018-0a537caa77cb.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/10_capture_dispatch_lineage.sqlinc",
+      "signature": "private.weekly_contact_source_capture_dispatch_membership_v1(uuid,uuid,text)",
+      "bodySha256": "110f04bf9548187f565ae2d7bbe0ec02804dfc95496b712aea4f882155703cc9",
+      "completeStatementSha256": "c05f4d414ef540888a824f7bada383d86a6d4ec73ff17dd6504f96554ef1dac3",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/019-110f04bf9548.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/11_followup_state_and_enqueue.sqlinc",
+      "signature": "private.weekly_contact_source_manager_followup_state_v1(uuid,timestamp with time zone)",
+      "bodySha256": "b01fc2f7616efb6cd69ef968e02f9e44c6d9426d8dd78a47d9296270328f8bfe",
+      "completeStatementSha256": "68d1c50a0ffb01f84124a6f5e33060896a37fccaafa0c58aa6dd54ec709958d2",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/020-b01fc2f7616e.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/11_followup_state_and_enqueue.sqlinc",
+      "signature": "private.weekly_source_manager_followup_timing_v1(uuid,timestamp with time zone)",
+      "bodySha256": "1645e7942b02ab33665221fdfff12370a526d03c121309689eeec3ea3b9a7e58",
+      "completeStatementSha256": "0592f9d3051760aea94ed39b75e7fe23272e0911e9a44cf9e82616d4929682b2",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/021-1645e7942b02.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/12_current_native_subset.sqlinc",
+      "signature": "private.weekly_contact_source_expected_week_fact_v1(uuid,uuid,timestamp with time zone)",
+      "bodySha256": "8a518ab8849a974eb7a0c8989bb4f050ba5634bcc5db27d17f60d925ee92de30",
+      "completeStatementSha256": "e62e749d7f3e26fdb5021262613bc028cebefc42637f37716acb86e3472bbd4e",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/022-8a518ab8849a.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/12_current_native_subset.sqlinc",
+      "signature": "private.weekly_contact_source_intent_current_subset_v1(uuid,timestamp with time zone)",
+      "bodySha256": "2e89d8dab031801f195727a17e0d1f18c9b5d49773b7144bc5acbc1a0270e6c0",
+      "completeStatementSha256": "9786f0485447485bc117078785bc46dc5c51675043b7060f5644bfcf028164e4",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/023-2e89d8dab031.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/13_recompose_native_intents.sqlinc",
+      "signature": "private.weekly_contact_source_recompose_intent_v1(uuid,uuid)",
+      "bodySha256": "597b8a26787a66687873de108a87050cc3f2b9d00e6e57240b1ac0c9835d8769",
+      "completeStatementSha256": "6aab25318bc80af914431beb7ec06403c5f9907b5ff1d3b88833dfcc6d199e0c",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/024-597b8a26787a.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/14_manager_action_current_witness.sqlinc",
+      "signature": "private.weekly_contact_source_manager_action_v1(uuid,uuid,uuid,jsonb)",
+      "bodySha256": "c9178d6eb5d17c256e88564de82df573eb4002d82d8e5b5a7ce6b5c5f29705ec",
+      "completeStatementSha256": "b97cccbee87a0a78f859c872ddf6870441e7c867a0fc50660616a71fbd8fa11d",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/025-c9178d6eb5d1.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/14_manager_action_current_witness.sqlinc",
+      "signature": "private.weekly_contact_source_manager_action_lock_v1(uuid,uuid,uuid,jsonb)",
+      "bodySha256": "27c7096bb65b486565a0b9e5e4e88717cccc06b7ccd2e09baf97ab3354dfe89f",
+      "completeStatementSha256": "b531eeae22cae80b409cac437b1b079a952d84d9c30abbdbb2f90208fe55ac5a",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/026-27c7096bb65b.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/16_recheck_native_progress.sqlinc",
+      "signature": "private.weekly_contact_recheck_native_ids_v1(uuid,text,uuid)",
+      "bodySha256": "68a9c8f431a3727919533c90a6256132aab9a15dd0b67155e77dea53f63db9d9",
+      "completeStatementSha256": "d630f463dc3edd6c77eb92af56304a29c0924c66d4ae276e790248bc5e800ca6",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/027-68a9c8f431a3.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/16_recheck_native_progress.sqlinc",
+      "signature": "private.weekly_contact_recheck_next_due_v1(uuid,timestamp with time zone)",
+      "bodySha256": "241367aa3b630008abb7af8d0f83961f6399e9835016430778d433852948b8a1",
+      "completeStatementSha256": "e211c5352f440d1ff7ade56143154212d0a313c6e455e717dbc0676171ce2952",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/028-241367aa3b63.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/17_common_recheck_consumer.sqlinc",
+      "signature": "private.weekly_contact_recheck_task_selected_v1(uuid,jsonb,timestamp with time zone)",
+      "bodySha256": "b649f9953dc0426d94a85f06548fe0f747b3aef583acd669b405ec74be097df2",
+      "completeStatementSha256": "7dba03627b6a0f26a4db61f9323657e02d259e1429fd914f94fc9aae77b695f8",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/029-b649f9953dc0.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/18_capture_question_presentation.sqlinc",
+      "signature": "private.weekly_contact_source_capture_notification_v1(uuid)",
+      "bodySha256": "7e803ab00ba5647050b47356aaaf379aac31d30468939f76a7449ab19d317be5",
+      "completeStatementSha256": "76d6cfde3ebe379845012990d0bfa2902530729170b16e6da0b12ae426782952",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/030-7e803ab00ba5.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/19_capture_and_rebase_integrity.sqlinc",
+      "signature": "private.weekly_contact_source_due_rebase_assert_v1()",
+      "bodySha256": "91199dbfdc7ceead3eefee1dfb04543708f81ac08283c3b6e44c1d3c104384bb",
+      "completeStatementSha256": "f8bf9db4bc63b445aca9a5ed91dfa2a77a600c599345a930bdc7eba70fbe788c",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/031-91199dbfdc7c.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/20_native_manager_members.sqlinc",
+      "signature": "private.weekly_contact_source_manager_members_v1(uuid)",
+      "bodySha256": "0b0830928e7aac4b6150cfbf043f81cdc181fd51d4c5f348b67c8c226a7f7207",
+      "completeStatementSha256": "c2f9ad82498e1e5c59171da7c6f9d4f0174dfc8a2126c893913e7185cdb108a0",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/032-0b0830928e7a.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/21_native_render_input.sqlinc",
+      "signature": "public.weekly_source_message_render_input_v1(jsonb)",
+      "bodySha256": "799a6f02ba49857b681849087f818623e60dbca071271dea758aaf1c4aa24a6e",
+      "completeStatementSha256": "6c89e5908eb868f6b034cee74d3aa496917319e9cfdc15d4d554bdfa22550af5",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/033-799a6f02ba49.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/22_native_render_stage.sqlinc",
+      "signature": "public.weekly_source_message_render_stage_atomic_v1(jsonb)",
+      "bodySha256": "9d4a891eb0586b75f508cf24c43b2949200782424c964d3448987f476c5ed124",
+      "completeStatementSha256": "770279ef007d387f7c4507a9fb204ced97762fd8ee801d4556280caf12974731",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/034-9d4a891eb058.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/23_native_logical_members.sqlinc",
+      "signature": "private.weekly_contact_source_logical_members_v1(uuid)",
+      "bodySha256": "75d82ec4546e853c583178788e159d43954640bd257204ebeb3460045591d9fc",
+      "completeStatementSha256": "e86f21c8d6fc790f42d183f17cab47c5a1986e7151ad656b682d9155e7c57eba",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/035-75d82ec4546e.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/24_native_budget.sqlinc",
+      "signature": "private.weekly_contact_source_budget_v1(uuid)",
+      "bodySha256": "4fb2c3f649715118173938c94cc7f182b5e42f1ae2c56ea71dc0cd0f9bc4785d",
+      "completeStatementSha256": "c5c9e32aaafc93bd8926ab8de98277338230cfa60cdfd54e3078f6ef6cd0a2bc",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/036-4fb2c3f64971.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/25_native_current_membership.sqlinc",
+      "signature": "private.weekly_contact_source_membership_v1(uuid,uuid,text)",
+      "bodySha256": "466a065594237b0fc12bff32f13e719e9a9d638338ee16a8dff0f2080a8b69f2",
+      "completeStatementSha256": "9143649a4d836734e42fac694b4385b0c7f53d9f301c09ba39bfcf551983f7a9",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/037-466a06559423.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/26_native_push_context.sqlinc",
+      "signature": "private.weekly_contact_push_dispatch_context_v1(uuid,uuid,text,bytea,uuid,text)",
+      "bodySha256": "67c4d11cbf2e728bda4063febb5bf8d7d56f061c791b4da8290024249b482af4",
+      "completeStatementSha256": "48597768e5f6a1cd420dcce5abbd68235f3d2d55addc80f9b89ca3e2af49bda9",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/038-67c4d11cbf2e.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/27_native_manager_intent.sqlinc",
+      "signature": "private.weekly_source_query_manager_intent_v1(uuid,uuid,uuid[],text,integer,timestamp with time zone)",
+      "bodySha256": "f9be4c3c41df8aa7a66d59598ca9ff4f6fdb63f5b8e5a18033518eaa23af5ad1",
+      "completeStatementSha256": "5e1b7bb3b6f9acc22cadae2e19cedbe1e5b05312337ef30c214ae9b479bf25bd",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/039-f9be4c3c41df.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/28_native_contact_workspace.sqlinc",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "bodySha256": "bad9b030a27d812ac9aaba7ce65832268b153fdeac170753d4d658f0112b9af7",
+      "completeStatementSha256": "74b3e3a0c11459012d9ff3a1e791dbb21c22d697ac13dfbe3756de2a15bc2367",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/040-bad9b030a27d.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/29_native_contact_bulk.sqlinc",
+      "signature": "public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)",
+      "bodySha256": "93b2c78e2f755fb1dc782961b232aa5c7bf61beb2a24d681f0baf35e17e51e73",
+      "completeStatementSha256": "2c36bdec57f737997e815d87dabe0ed479c8bd699ad215c3e1aa42add0bde21b",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/041-93b2c78e2f75.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/32_native_scheduler_followups.sqlinc",
+      "signature": "public.weekly_source_query_scheduler_tick_v1(jsonb)",
+      "bodySha256": "fe843d47ff361da1d13cd2451bd67394789486d7f21f6ecabea9398090e75e6c",
+      "completeStatementSha256": "896a43ea6cdebbba62de1160c5f699dd93f118f07c4e3ab15c28cbc676b44a08",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/042-fe843d47ff36.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/33_native_submission_pause.sqlinc",
+      "signature": "private.weekly_source_submission_request_start_v1(jsonb,boolean)",
+      "bodySha256": "14b87d22b7f212be283a2537c34431e0fd50396d44e8ab6f68d2ea7cbe5b48ec",
+      "completeStatementSha256": "68f9bb40b4dc00b29f5ca2194264cf83b6b9a88cfeec8939fd51dc267135be7b",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/043-14b87d22b7f2.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/34_scope_first_activation.sqlinc",
+      "signature": "private.weekly_contact_source_scope_first_activation_v1(uuid,uuid)",
+      "bodySha256": "0ebbd1bf1d99f1a49081ba2d9fe91fb272265534807ec2c8bce83aa9b70f426e",
+      "completeStatementSha256": "80a489158933efc147da317dcd4f88cdb1cfa091996eb314995aeb9db81bdf85",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/044-0ebbd1bf1d99.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/36_submission_identity_and_guard.sqlinc",
+      "signature": "private.weekly_contact_source_submission_lock_v1(uuid,uuid,jsonb,uuid)",
+      "bodySha256": "51ca9ef0e355fb28cc2feb2309a10190bffcda22454926cb656ded15c9ce889c",
+      "completeStatementSha256": "0c8e8215961058605b5992e5345cfddea2090a731279f5c53a71ae26f2d3c149",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/045-51ca9ef0e355.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/36_submission_identity_and_guard.sqlinc",
+      "signature": "private.weekly_contact_submission_request_assert_v1(uuid)",
+      "bodySha256": "b893a70b65843c4257a20576be09f33888584380c2789c668789cfcf6e0e9856",
+      "completeStatementSha256": "c8e90b4c0d275aead26a2d79df5e56db01fe0f0e5fab52e2416f31a6f240ba5b",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/046-b893a70b6584.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/37_submission_partition.sqlinc",
+      "signature": "private.weekly_contact_source_submission_partition_v1(jsonb,boolean)",
+      "bodySha256": "0725e75bb1556e4d389c416d3d8118c5e6114f350805cd51cda40558bf2f2e7f",
+      "completeStatementSha256": "40c8e582a1030323648c4328b4efafb413fc1532b92e04a222ab30ea98e595be",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/047-0725e75bb155.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "signature": "public.weekly_source_candidate_query_get_v1(jsonb)",
+      "bodySha256": "155df1183cfd825bcf00af32d2b583dae7af60fbde97d416f2d8d4f4c60f047c",
+      "completeStatementSha256": "df874209632c5db3b41934cf5439979aa486a57fed31805061b937e0c2ac5742",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/048-155df1183cfd.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "signature": "public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
+      "bodySha256": "e9c200f6b0503dbcdea86bf9178e2f412ae9ec69bfe1a7eb4fc17f368df73cc3",
+      "completeStatementSha256": "1be32b056ca5e7c76de4926598872fea9e1c3a750272eca2f2d2cbea36399b25",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/049-e9c200f6b050.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "signature": "private.weekly_source_candidate_app_projection_v1(uuid,uuid,timestamp with time zone)",
+      "bodySha256": "df0f297f0b069443aa6ba07d70640fff01d3b2f65f8b10e5affb084bf2e15e06",
+      "completeStatementSha256": "bb23c9741ab7468ad642c679255c207db1101c2bb1be556c7cdb4ae38b589c3d",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/050-df0f297f0b06.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "signature": "public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)",
+      "bodySha256": "24b938d26c324955d7d4a00d1903f0bb7d64745c4849b9dca309f891d4cf7ed6",
+      "completeStatementSha256": "b356068688301a4e8f099917cb8fd3e2653fa88023f37c93d286ce43d779b4f0",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/051-24b938d26c32.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+      "bodySha256": "83ededb17c886d301b6e1d6e5b70c73e1b8f7319ce577b57435a787cbad49327",
+      "completeStatementSha256": "16ca0be09f7cb42d3d30daad383f382dd36ee98f5b34743b48ab9abf26ff286c",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/052-83ededb17c88.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "signature": "private.weekly_source_candidate_notification_intent_v1()",
+      "bodySha256": "5a0cfa96191cf62932cc0f3ce5a727b4d198b060bbbfab60a7518bf1ee9f7f03",
+      "completeStatementSha256": "0547bf0afd88d3e3bef7783d2b15659f3f3462fd7d0cb030487690cc6e72d9f5",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/053-5a0cfa96191c.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/38_native_submission_readers.sqlinc",
+      "signature": "private.weekly_source_candidate_view_request_v1(jsonb)",
+      "bodySha256": "96685cc4ba7f5d59f1e348245b03c0d7be9b20288e44e1ff33eba11a05eff59e",
+      "completeStatementSha256": "4bbf8b7d01f8806ca9db7143b58d41e62398369d5e6a284fd4e6d0d9f89b9902",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/054-96685cc4ba7f.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/39_native_submission_callers.sqlinc",
+      "signature": "public.weekly_source_projection_publish_atomic_v1(jsonb)",
+      "bodySha256": "f48c306b78578071b3adf570ea4ca3c5e1b8a193670bf17bc0e487738c972799",
+      "completeStatementSha256": "743c2b9cca40fdb4957e6b451d2d02116f546b1e8a259057e39b3f6f43470097",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/055-f48c306b7857.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/40_candidate_contact_entry_owners.sqlinc",
+      "signature": "public.weekly_source_candidate_reminder_atomic_v1(jsonb)",
+      "bodySha256": "c4241758f349c68ce8555f584056c6d2a4fe3af5dd73b41855fcc4fe533e96d4",
+      "completeStatementSha256": "4af7ee339eff30df8ecf231f793e0a8e5cf3da0145da9d51fafa9ad926b4ecdc",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/056-c4241758f349.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/40_candidate_contact_entry_owners.sqlinc",
+      "signature": "public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)",
+      "bodySha256": "10b2518b7968d8efaf295fc01b3221d0259b639f068ea8df37ed5681a711fa02",
+      "completeStatementSha256": "a24d45382b173e1313e64e2217fc7a736097b56cc10f8cf70f293d971353870e",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/057-10b2518b7968.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/41_exact_native_scope_locks.sqlinc",
+      "signature": "private.weekly_contact_source_generation_scope_facts_v1(uuid,uuid)",
+      "bodySha256": "c767c56d468f61f89eddeec31dfd98f20ded133ca5d7c0501f3999ed8dd48160",
+      "completeStatementSha256": "282cbcdb87e31d25ee8bbfebafc7daf6bb4a329d65d348112cd97030f2673660",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/058-c767c56d468f.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/41_exact_native_scope_locks.sqlinc",
+      "signature": "private.weekly_contact_source_route_scope_facts_v1(uuid)",
+      "bodySha256": "1048031bd4a11c66a15d0b8e57b1aa5cf51a733ce20d5e4f6e52ae37c45ebf4e",
+      "completeStatementSha256": "345d1bd1893f71b465b774ca778b9484b86b4beddf0adc7f73459779db98c3c5",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/059-1048031bd4a1.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/41_exact_native_scope_locks.sqlinc",
+      "signature": "private.weekly_contact_source_route_lock_v1(uuid)",
+      "bodySha256": "bfe5e49cb3e652a1a4735090a379f34f2bc4894ffbcef639530c16562592c328",
+      "completeStatementSha256": "2860b27ed67091442ec88b33b6dfb34759bc23b32154018f9264daa58628da65",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/060-bfe5e49cb3e6.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/41_exact_native_scope_locks.sqlinc",
+      "signature": "private.weekly_contact_source_intent_lock_v1(uuid)",
+      "bodySha256": "9c4a22cc24c992edf043faca21390ff3bd1c5557bd4809a76e4f3ab4676c065d",
+      "completeStatementSha256": "54c83a60e89cf9c584e6744a0bf0a73dca09768d5f83fd1325b9fcf0100984d8",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/061-9c4a22cc24c9.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "signature": "public.weekly_source_manager_route_prepare_atomic_v1(jsonb)",
+      "bodySha256": "c6afbfc38e79802fc3a9cc6098ef564fa80a54d33bcbd2047f25090ef2d371c5",
+      "completeStatementSha256": "0cd45559440bdbf012bb7f77f7fab0b0326cc484645584989f59c11b4ff89e01",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/062-c6afbfc38e79.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+      "bodySha256": "3d1e1b762dc7271741e219160d18f8e7a8d91ab765ab903e1fbce0194c97398f",
+      "completeStatementSha256": "952a7feb8f999cfd52de87aa056f89dd156ff47aa06c3a842723e763d5b34270",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/063-3d1e1b762dc7.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "signature": "private.weekly_source_query_candidate_generation_v1(uuid,uuid,uuid,uuid,text,uuid,timestamp with time zone)",
+      "bodySha256": "e08d75fe2138a354c0241b5570864f1939993d8263fcd2004814dfd518f2ca4f",
+      "completeStatementSha256": "a07b1339d7d2ddf229dc895c979f4b081203d1e02c6f1e6f351a8ac690944a85",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/064-e08d75fe2138.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "signature": "private.weekly_contact_source_retire_unsubmitted_v1(uuid)",
+      "bodySha256": "a42053fdc84206a76284f69a482d71e8c9ed50e9eb7bf4ac8cf066a0189d33d9",
+      "completeStatementSha256": "b3b433e0cddd273d211c5aade75ed1f575809d2dd0daf729b82424b6eda2086f",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/065-a42053fdc842.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/42_exact_native_lock_owners.sqlinc",
+      "signature": "private.weekly_contact_source_manager_recompose_v1(uuid)",
+      "bodySha256": "718fad3e7d15f1d862b45d0a794f566ca2a9334aba6d2748bacb7837a726c7d5",
+      "completeStatementSha256": "507388e4f4a2472f03330de04701e82888180535f44f008a8cd7e4e3122c8a0c",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/066-718fad3e7d15.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/43_exact_bulk_scope_locks.sqlinc",
+      "signature": "private.weekly_contact_source_bulk_lock_v1(jsonb)",
+      "bodySha256": "14f7863cab889e367a1c9670c3b7850c0366e897c9624f242dbe23b4b3e0d467",
+      "completeStatementSha256": "99fd97d5e0882bd48c563aab1ec53d54935318931d9480b83d59350bf4da7e5b",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/067-14f7863cab88.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/45_native_composition_scope_facts.sqlinc",
+      "signature": "private.weekly_contact_source_intent_composition_scope_facts_v1(uuid)",
+      "bodySha256": "063d250d4cd069a449c41ad2acb1f0fbbdc45f20ab74e94c7c645330f9c951ef",
+      "completeStatementSha256": "fa5055243467bd92d67cc11dc24f173b7ddd2ed8ac21053cc340d48079444f7a",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/068-063d250d4cd0.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/45_native_composition_scope_facts.sqlinc",
+      "signature": "private.weekly_contact_source_activation_lock_v1(uuid,uuid)",
+      "bodySha256": "83a8ccd49df4491781327e1346023ad229f07b3e9fcfe2f6b1c352dc6d690a4c",
+      "completeStatementSha256": "989e6a27e019b89222e7993defbedc9f5bbd13790d0f10de619c37649f606442",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/069-83a8ccd49df4.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/45_native_composition_scope_facts.sqlinc",
+      "signature": "private.weekly_contact_source_intent_composition_lock_v1(uuid)",
+      "bodySha256": "825a5664e2e69c701a900898857b047d18845c98fa9dea321549a28f31e4e2d0",
+      "completeStatementSha256": "56b9212339d8bb33d8278eb3b7ac9abaf886861e802a328681bf3cacbe74bab2",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/070-825a5664e2e6.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/45_native_composition_scope_facts.sqlinc",
+      "signature": "private.weekly_contact_source_activation_scope_facts_v1(uuid,uuid)",
+      "bodySha256": "a9e882b5d47e767a8afa1c363f9baaf2b0cf553819d46ccf6e9e475daba38b14",
+      "completeStatementSha256": "7dc653e042533db72698cd2de1958a8e46338c335316e1c4d610a5d1fa35b824",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/071-a9e882b5d47e.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/46_recheck_selection_scope_facts.sqlinc",
+      "signature": "private.weekly_contact_recheck_selection_scope_facts_v1(uuid,timestamp with time zone)",
+      "bodySha256": "80d04da293fa4980b9982e7dfe12976c55bcea7a7b4b18852e868e5b0e57dd9d",
+      "completeStatementSha256": "4975d36ccb19666fe32f02857a420e6d935ded00155a490e8dc0be3545a74907",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/072-80d04da293fa.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/47_native_scheduler_selection.sqlinc",
+      "signature": "private.weekly_contact_source_scheduler_selection_v1(timestamp with time zone,integer)",
+      "bodySha256": "3d74498ac7e7c7ee77c9a616b1e3737c62b7f133b46d0ba6fe31b8d6c5178031",
+      "completeStatementSha256": "73eb489e44569103b604c0e953b5862c5b4b31167dc7e8ed320330cea613e3f5",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/073-3d74498ac7e7.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/48_native_scheduler_selection_locks.sqlinc",
+      "signature": "private.weekly_contact_source_scheduler_work_facts_v1(text,uuid)",
+      "bodySha256": "a0d0f615372caf1ed2d4e33b3ac80f63883d25c5123c45fd9f4eff27e7b3dc03",
+      "completeStatementSha256": "779b65adbb0f97c80b1dcca0e4ab65dddf8a51a3daeb2f527b59990142ce368f",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/074-a0d0f615372c.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/49_grouped_automatic_followup.sqlinc",
+      "signature": "private.weekly_contact_source_manager_followup_group_enqueue_v1(uuid[],timestamp with time zone)",
+      "bodySha256": "2a191ad7a1d2aa4c1bd9f65836cea19a90c7aa406e620f1d1fe956c9ca27bd12",
+      "completeStatementSha256": "5c7b81d4038003fac196a2a1ae4619c4a3fc8addc2518f514440d604a625dbbb",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/075-2a191ad7a1d2.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/50_manager_selection_capture.sqlinc",
+      "signature": "private.weekly_contact_source_manager_selection_capture_v1(uuid,uuid,uuid,jsonb)",
+      "bodySha256": "c4d1e859fc7970bad9464698010375f431f18f7f2ab756244f0c2e87d9815e50",
+      "completeStatementSha256": "4ea12f9b29cbfb613e3701e52aded423dcb9251877a776a8f70f8676a0ef674c",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/076-c4d1e859fc79.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/51_native_initial_manager_owner.sqlinc",
+      "signature": "public.weekly_source_query_send_manager_now_atomic_v1(jsonb)",
+      "bodySha256": "8783c9402d816678bf763fa3688e9d81093bbf6c479b99465e593c03034e7ff5",
+      "completeStatementSha256": "7bbed0a031cf90876b4d5266c3296ca9dbc778f25a1f3154cc93451e7d2e7281",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/077-8783c9402d81.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/98_manual_selection_ordinal_guard.sqlinc",
+      "signature": "private.weekly_contact_source_ordinal_owner_guard_v1()",
+      "bodySha256": "5e53bc86afe13a5492e30878a5cf3009fda468936d4e48d6ac88d43b1cbc4989",
+      "completeStatementSha256": "44c8b6e5915767fa351a3e7be3172f454c6b1ddd8ab72d0eabfc927a36b6e4d3",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/078-5e53bc86afe1.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_10_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "signature": "private.weekly_contact_source_candidate_render_assert_v1(uuid)",
+      "bodySha256": "eebb9ebdaea2f255cde19099045f43d5eed346511d4abbc602bf03d1bb98785f",
+      "completeStatementSha256": "c7d54bbd048a52f1d8c7c48d86da753ba44412083654a23072ee1f672d782bb3",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/079-eebb9ebdaea2.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_10_producer_prerequisites/01_complete_native_helpers.sqlinc",
+      "signature": "private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamp with time zone)",
+      "bodySha256": "e139192e0169d170a536a98ecc169229a0c7223c4660171386ef44e88cadf823",
+      "completeStatementSha256": "4ff854c06eb693c390bc2ede6ca7e91ed94192943b30f8d89fa4e27666d46c43",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/producers/080-e139192e0169.sqlinc"
+    }
+  ],
+  "mapPath": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/EXTENSION_MAP.json",
+  "proofPath": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/REVIEW.json",
+  "rawPath": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CONTACT_OFFICE_FINITE_REVIEW_20261016/ACTUAL_CENSUS.json",
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "bankingSchemaOrAbiAssumptions": [],
+  "sqlEdits": 0,
+  "scope": "Exact corrected Contact/Office types and closed DDL only; original baseline118 and all prior finite maps remain separately required."
+}

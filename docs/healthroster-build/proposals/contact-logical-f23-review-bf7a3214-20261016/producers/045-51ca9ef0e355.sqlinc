@@ -1,0 +1,47 @@
+declare source_group public.weekly_source_groups%rowtype;after_group public.weekly_source_groups%rowtype;pair record;
+begin
+ select groups.* into strict source_group from public.weekly_source_cycles cycle
+  join public.weekly_source_groups groups on groups.id=cycle.source_group_id where cycle.id=p_cycle;
+ if jsonb_typeof(p_scopes) is distinct from 'array' or(p_publication is not null and not exists(
+  select 1 from public.weekly_source_projection_publications publication join public.weekly_source_cycles cycle on cycle.id=publication.source_cycle_id
+   where publication.id=p_publication and cycle.source_group_id=source_group.id)) then
+  raise exception 'WEEKLY_SOURCE_QUERY_PUBLICATION_SCOPE_INVALID' using errcode='55000';end if;
+ perform private.weekly_contact_deployment_lock_v1(source_group.agency_id,source_group.environment);
+ perform private.weekly_contact_context_v1(source_group.agency_id,source_group.environment);
+ select groups.* into strict after_group from public.weekly_source_cycles cycle
+  join public.weekly_source_groups groups on groups.id=cycle.source_group_id where cycle.id=p_cycle;
+ if(after_group.id,after_group.agency_id,after_group.environment) is distinct from(source_group.id,source_group.agency_id,source_group.environment)
+  or(p_publication is not null and not exists(select 1 from public.weekly_source_projection_publications publication
+   join public.weekly_source_cycles cycle on cycle.id=publication.source_cycle_id
+   where publication.id=p_publication and cycle.source_group_id=source_group.id)) then
+  raise exception 'WEEKLY_SOURCE_PROJECTION_SCOPE_CHANGED' using errcode='40001';end if;
+ for pair in
+  select cohort.candidate_id,cohort.client_id from public.weekly_candidate_cohorts cohort
+   where p_candidate is null and cohort.source_cycle_id=p_cycle and exists(
+    select 1 from public.weekly_candidate_outreach_generations generation where generation.candidate_cohort_id=cohort.id and generation.state='ACTIVE'
+     and(generation.id=cohort.current_generation_id or generation.id=cohort.current_submission_generation_id))
+  union select candidate_id,client_id from public.weekly_discrepancy_incidents
+   where p_candidate is null and source_cycle_id=p_cycle and state='OPEN'
+  union select request.candidate_id,member.client_id from public.weekly_timesheet_submission_requests request
+   join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+   where request.source_cycle_id=p_cycle and request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+    and(p_candidate is null or(request.candidate_id=p_candidate and exists(
+     select 1 from public.weekly_timesheet_submission_request_memberships overlap join jsonb_array_elements(p_scopes)scope
+      on(overlap.client_id,overlap.contract_id,overlap.week_ending)=
+       ((scope->>'client_id')::uuid,(scope->>'contract_id')::uuid,(scope->>'week_ending')::date)
+     where overlap.submission_request_id=request.id)))
+  union select resolution.candidate_id,resolution.client_id from public.weekly_source_projection_publications publication
+   join public.weekly_source_upload_rows source_row on source_row.upload_id=publication.upload_id
+   join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+   where p_candidate is null and publication.id=p_publication and resolution.mapping_state='RESOLVED' and resolution.candidate_id is not null and resolution.client_id is not null
+    and resolution.generation=(select max(current_resolution.generation) from public.weekly_source_row_resolutions current_resolution
+     where current_resolution.upload_row_id=source_row.id)
+  union select p_candidate,(scope->>'client_id')::uuid from jsonb_array_elements(p_scopes)scope where p_candidate is not null
+  order by candidate_id,client_id
+ loop
+  perform private.weekly_contact_scope_lock_v1(source_group.agency_id,source_group.environment,pair.candidate_id,pair.client_id);
+ end loop;
+ if p_candidate is not null and exists(select 1 from jsonb_array_elements(p_scopes)scope where not exists(
+  select 1 from public.clients client where client.id=(scope->>'client_id')::uuid)) then
+  raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+end;

@@ -1,0 +1,111 @@
+{
+  "version": "CONTACT_MANAGER_SELECTION_JSON_GROUPING_SOURCE_V1",
+  "qualification": "OFFLINE_PG17_AST_AND_EXACT_SOURCE_ONLY",
+  "sourceCommit": "bf7a321429969f2c43345ce05ad2679ce3dbe83c",
+  "proposalPath": "payload/supabase/repeatable/16102026_1210_weekly_contact_producer_completion/44_manager_selection_scope_locks.sqlinc",
+  "actualMappedPath": "PENDING_ROOT_MAP",
+  "sourceSha256": "9d69e2f9fcaf43754855b58741682e7ec8e396d03a7a15f1c8671c55fcaf2289",
+  "original": "facts->'pairs'||p_extra_pairs",
+  "explicitGrouping": "(facts->'pairs')||p_extra_pairs",
+  "exactOneOccurrence": true,
+  "samePg17AstIgnoringLocations": true,
+  "pglast": "v7.20",
+  "postgres": [
+    17,
+    7
+  ],
+  "argumentTypes": {
+    "facts": "JSONB result of exact scope-facts owner; pairs is coalesced JSONB_AGG array",
+    "p_extra_pairs": "JSONB input explicitly refused unless ARRAY"
+  },
+  "ast": {
+    "version": 170007,
+    "stmts": [
+      {
+        "stmt": {
+          "SelectStmt": {
+            "targetList": [
+              {
+                "ResTarget": {
+                  "val": {
+                    "FuncCall": {
+                      "funcname": [
+                        {
+                          "String": {
+                            "sval": "jsonb_array_elements"
+                          }
+                        }
+                      ],
+                      "args": [
+                        {
+                          "A_Expr": {
+                            "kind": "AEXPR_OP",
+                            "name": [
+                              {
+                                "String": {
+                                  "sval": "||"
+                                }
+                              }
+                            ],
+                            "lexpr": {
+                              "A_Expr": {
+                                "kind": "AEXPR_OP",
+                                "name": [
+                                  {
+                                    "String": {
+                                      "sval": "->"
+                                    }
+                                  }
+                                ],
+                                "lexpr": {
+                                  "ColumnRef": {
+                                    "fields": [
+                                      {
+                                        "String": {
+                                          "sval": "facts"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                },
+                                "rexpr": {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "pairs"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "rexpr": {
+                              "ColumnRef": {
+                                "fields": [
+                                  {
+                                    "String": {
+                                      "sval": "p_extra_pairs"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "funcformat": "COERCE_EXPLICIT_CALL"
+                    }
+                  }
+                }
+              }
+            ],
+            "limitOption": "LIMIT_OPTION_DEFAULT",
+            "op": "SETOP_NONE"
+          }
+        }
+      }
+    ]
+  },
+  "sqlEdits": 0,
+  "databaseCalls": 0,
+  "native": "NOT_RUN",
+  "classification": "WITHHELD_PENDING_ACTUAL_MOUNT_AND_ROOT_TREATMENT"
+}

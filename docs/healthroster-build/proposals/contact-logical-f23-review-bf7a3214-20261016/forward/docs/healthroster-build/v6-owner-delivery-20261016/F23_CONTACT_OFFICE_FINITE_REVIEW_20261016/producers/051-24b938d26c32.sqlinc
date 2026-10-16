@@ -1,0 +1,571 @@
+declare
+  v_account_id uuid;
+  v_candidate_id uuid;
+  v_candidate_generation_id uuid;
+  v_projection_publication_id uuid;
+  v_scope_id uuid;
+  v_workflow_id uuid;
+  v_signature_id uuid;
+  v_key uuid;
+  v_expected_generation integer;
+  v_request_hash bytea;
+  v_projection jsonb;
+  v_scope jsonb;
+  v_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_account public.candidate_app_accounts%rowtype;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_signature public.candidate_submission_components%rowtype;
+  v_signature_copy public.candidate_submission_components%rowtype;
+  v_contract public.contracts%rowtype;
+  v_contract_week public.contract_weeks%rowtype;
+  v_candidate public.candidates%rowtype;
+  v_client public.clients%rowtype;
+  v_timesheet public.timesheets%rowtype;
+  v_membership public.weekly_timesheet_submission_request_memberships%rowtype;
+  v_submission public.weekly_timesheet_submission_requests%rowtype;
+  v_schedule_input jsonb;
+  v_units_week jsonb;
+  v_units_day jsonb;
+  v_schedule jsonb;
+  v_next_generation integer;
+  v_component_no integer;
+  v_booking_id text;
+  v_previous_context text;
+  v_previous_defer_summary_refresh text;
+  v_worked_start timestamptz;
+  v_worked_end timestamptz;
+  v_break_minutes integer;
+  v_worked_minutes integer;
+  v_timesheet_hash bytea;
+  v_compare jsonb;
+  v_completion jsonb;
+  v_result jsonb;
+  v_kind text;
+  v_day_off_dates jsonb;
+  v_today date;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
+     or exists(
+       select 1 from pg_catalog.jsonb_object_keys(p_request) key
+       where key not in (
+         'account_id','candidate_id','candidate_generation_id',
+         'projection_publication_id','request_version','request_fingerprint',
+         'scope_id','scope_version','scope_fingerprint','request_kind',
+         'workflow_id','expected_workflow_generation',
+         'candidate_signature_component_id','candidate_signed_at_utc',
+         'immutable_submission','request_idempotency_key'
+       )
+     )
+     or pg_catalog.jsonb_typeof(p_request->'immutable_submission')<>'object'
+     or (coalesce(p_request->>'request_kind','')<>'SELF_SUBMIT'
+       and (coalesce(p_request->>'request_fingerprint','') !~ '^[0-9a-f]{64}$'
+         or coalesce(p_request->>'scope_fingerprint','') !~ '^[0-9a-f]{64}$')) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_MATERIALISATION_REQUEST_INVALID' using errcode='22023';
+  end if;
+  begin
+    v_account_id:=(p_request->>'account_id')::uuid;
+    v_candidate_id:=(p_request->>'candidate_id')::uuid;
+    v_candidate_generation_id:=(p_request->>'candidate_generation_id')::uuid;
+    v_projection_publication_id:=(p_request->>'projection_publication_id')::uuid;
+    v_scope_id:=(p_request->>'scope_id')::uuid;
+    v_workflow_id:=(p_request->>'workflow_id')::uuid;
+    v_signature_id:=(p_request->>'candidate_signature_component_id')::uuid;
+    v_key:=(p_request->>'request_idempotency_key')::uuid;
+    v_expected_generation:=(p_request->>'expected_workflow_generation')::integer;
+    perform (p_request->>'request_version')::integer;
+    perform (p_request->>'scope_version')::integer;
+    perform (p_request->>'candidate_signed_at_utc')::timestamptz;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_MATERIALISATION_REQUEST_INVALID' using errcode='22023';
+  end;
+  v_kind:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_request->>'request_kind','')));
+  if v_kind not in ('CHECK_HOURS','SUBMIT_TIMESHEET','SELF_SUBMIT') then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_MATERIALISATION_REQUEST_INVALID' using errcode='22023';
+  end if;
+  perform private.weekly_source_candidate_app_assert_hours_only_v1(
+    p_request->'immutable_submission'
+  );
+  v_request_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CANDIDATE_CHECK_MATERIALISATION_V1',
+    p_request-'request_idempotency_key'
+  );
+  if v_kind<>'SELF_SUBMIT' then
+     
+     
+    select * into strict v_generation from public.weekly_candidate_outreach_generations
+      where id=v_candidate_generation_id and candidate_id=v_candidate_id and request_kind=v_kind;
+    select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
+    perform private.weekly_contact_source_generation_lock_v1(v_generation.id,v_candidate_id);
+  end if;
+   
+  if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    perform private.weekly_source_pay_query_admit_v2();
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'WEEKLY_SOURCE_CANDIDATE_MATERIALISE:'||v_workflow_id::text,0
+  ));
+
+  select * into v_workflow from public.candidate_submission_workflows
+  where id=v_workflow_id for update;
+  if not found or v_workflow.account_id is distinct from v_account_id
+     or v_workflow.candidate_id is distinct from v_candidate_id then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_WORKFLOW_STALE' using errcode='40001';
+  end if;
+  if v_workflow.last_mutation_idempotency_key=v_key::text then
+    if v_workflow.last_mutation_response_json->>'materialisation_request_hash'
+         is distinct from pg_catalog.encode(v_request_hash,'hex') then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_MATERIALISATION_REPLAY_CONFLICT'
+        using errcode='23505';
+    end if;
+    return pg_catalog.jsonb_set(
+      v_workflow.last_mutation_response_json,'{idempotent_replay}','true'::jsonb,false
+    );
+  end if;
+  if v_workflow.generation<>v_expected_generation
+     or v_workflow.state<>'WORKER_DRAFT'
+     or v_workflow.workflow_kind<>'CONTRACT_HOURS'
+     or v_workflow.scope<>'WEEKLY'
+     or v_workflow.route<>'ELECTRONIC' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_WORKFLOW_STALE' using errcode='40001';
+  end if;
+  select * into strict v_account from public.candidate_app_accounts
+  where id=v_account_id and environment=v_workflow.environment and status='ACTIVE';
+  if v_kind<>'SELF_SUBMIT' then
+  select * into strict v_generation from public.weekly_candidate_outreach_generations
+  where id=v_candidate_generation_id and candidate_id=v_candidate_id
+    and request_kind=v_kind and state='ACTIVE' for update;
+  select * into strict v_cycle from public.weekly_source_cycles
+  where id=v_generation.source_cycle_id;
+  select * into strict v_group from public.weekly_source_groups
+  where id=v_cycle.source_group_id and environment=v_workflow.environment;
+  if v_cycle.current_projection_publication_id is distinct from v_projection_publication_id then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REQUEST_STALE' using errcode='40001';
+  end if;
+  perform private.weekly_source_query_current_publication_v1(
+    v_cycle.id,v_projection_publication_id
+  );
+  v_projection:=private.weekly_source_candidate_app_projection_v1(
+    v_candidate_id,v_candidate_generation_id,p_now_utc
+  );
+  if (p_request->>'request_version')::integer
+       is distinct from (v_projection->>'request_version')::integer
+     or p_request->>'request_fingerprint' is distinct from v_projection->>'request_fingerprint' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REQUEST_STALE' using errcode='40001';
+  end if;
+  select value into v_scope from pg_catalog.jsonb_array_elements(v_projection->'scopes')
+  where value->>'scope_id'=v_scope_id::text;
+  if v_scope is null
+     or (p_request->>'scope_version')::integer
+          is distinct from (v_scope->>'scope_version')::integer
+     or p_request->>'scope_fingerprint' is distinct from v_scope->>'scope_fingerprint'
+     or v_scope->>'request_kind' is distinct from v_kind
+     or v_scope->>'completion_state'='COMPLETE' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SCOPE_STALE' using errcode='40001';
+  end if;
+  else
+    v_scope:=pg_catalog.jsonb_build_object(
+      'contract_id',v_workflow.contract_id,
+      'contract_week_id',v_workflow.contract_week_id,
+      'week_ending_date',v_workflow.week_ending_date
+    );
+    v_today:=(p_now_utc at time zone 'Europe/London')::date;
+    if v_workflow.week_ending_date-6>v_today then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_NOT_STARTED' using errcode='55000';
+    end if;
+    if exists(
+      select 1 from public.weekly_timesheet_submission_request_memberships membership
+      join public.weekly_timesheet_submission_requests submission
+        on submission.id=membership.submission_request_id
+      where submission.candidate_id=v_candidate_id
+        and submission.state in ('ACTIVE','PARTLY_SUBMITTED','OVERDUE')
+        and membership.state='WAITING'
+        and membership.contract_id=v_workflow.contract_id
+        and membership.week_ending=v_workflow.week_ending_date
+    ) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_USE_ACTIVE_REQUEST' using errcode='55000';
+    end if;
+  end if;
+  if v_workflow.contract_id is distinct from (v_scope->>'contract_id')::uuid
+     or v_workflow.contract_week_id is distinct from (v_scope->>'contract_week_id')::uuid
+     or v_workflow.week_ending_date is distinct from (v_scope->>'week_ending_date')::date then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_WORKFLOW_STALE' using errcode='40001';
+  end if;
+  select * into strict v_contract_week from public.contract_weeks
+  where id=v_workflow.contract_week_id
+    and contract_id=v_workflow.contract_id
+    and week_ending_date=v_workflow.week_ending_date
+    and additional_seq=0 and not is_adjustment
+  for update;
+  if v_contract_week.status in (
+       'AUTHORISED'::public.contract_week_status_enum,
+       'INVOICED'::public.contract_week_status_enum,
+       'CANCELLED'::public.contract_week_status_enum
+     ) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_LOCKED' using errcode='55000';
+  end if;
+  select * into strict v_contract from public.contracts
+  where id=v_workflow.contract_id and candidate_id=v_candidate_id
+    and (v_kind='SELF_SUBMIT' or client_id=v_generation.client_id)
+    and v_workflow.week_ending_date>=start_date
+    and v_workflow.week_ending_date-6<=end_date;
+  if (private._weekly_source_effective_policy_v1(
+        v_contract.client_id,v_contract.id,v_workflow.week_ending_date
+      )->>'authority_mode')<>'SOURCE_AUTHORITY'
+     or (private._weekly_source_effective_policy_v1(
+        v_contract.client_id,v_contract.id,v_workflow.week_ending_date
+      )->>'document_mode')<>'CHECK_ONLY' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_MATERIALISATION_NOT_APPLICABLE' using errcode='55000';
+  end if;
+  select * into strict v_signature from public.candidate_submission_components
+  where id=v_signature_id and workflow_id=v_workflow.id
+    and workflow_generation=v_workflow.generation
+    and component_kind='CANDIDATE_SIGNATURE'
+    and document_role='CANDIDATE_SIGNATURE' and state='IMMUTABLE'
+    and immutable_at_utc is not null and storage_key is not null
+    and media_type in ('image/png','image/jpeg') and byte_size>0
+    and source_content_sha256 is not null
+    and pg_catalog.octet_length(source_content_sha256)=32
+  for update;
+  if (p_request->>'candidate_signed_at_utc')::timestamptz
+       >p_now_utc+interval '5 minutes' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SIGNATURE_TIME_INVALID' using errcode='22023';
+  end if;
+
+  v_schedule_input:=coalesce(
+    p_request->'immutable_submission'->'actual_schedule_json',
+    p_request->'immutable_submission'->'schedule_json',
+    p_request->'immutable_submission'->'timesheet_patch_json'->'actual_schedule_json',
+    p_request->'immutable_submission'->'timesheet_patch_json'->'schedule_json',
+    p_request->'immutable_submission'->'hours_submission'->'actual_schedule_json',
+    p_request->'immutable_submission'->'hours_submission'->'schedule_json'
+  );
+  v_units_week:=coalesce(
+    p_request->'immutable_submission'->'additional_units_week',
+    p_request->'immutable_submission'->'timesheet_patch_json'->'additional_units_week',
+    p_request->'immutable_submission'->'hours_submission'->'additional_units_week',
+    '{}'::jsonb
+  );
+  v_units_day:=coalesce(
+    p_request->'immutable_submission'->'additional_units_per_day',
+    p_request->'immutable_submission'->'timesheet_patch_json'->'additional_units_per_day',
+    p_request->'immutable_submission'->'hours_submission'->'additional_units_per_day',
+    '{}'::jsonb
+  );
+  if pg_catalog.jsonb_typeof(v_units_week)<>'object'
+     or pg_catalog.jsonb_typeof(v_units_day)<>'object' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_SUBMISSION_INVALID' using errcode='22023';
+  end if;
+  v_schedule:=private.weekly_source_candidate_app_schedule_v1(
+    v_schedule_input,v_units_day
+  );
+  v_today:=(p_now_utc at time zone 'Europe/London')::date;
+  if v_kind in ('SELF_SUBMIT','SUBMIT_TIMESHEET') then
+    v_day_off_dates:=p_request->'immutable_submission'->'day_off_dates';
+    if pg_catalog.jsonb_typeof(v_day_off_dates)<>'array'
+       or pg_catalog.jsonb_array_length(v_day_off_dates)>7
+       or exists(
+         select 1 from pg_catalog.jsonb_array_elements_text(v_day_off_dates) value
+         where value !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+       ) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_INCOMPLETE' using errcode='22023';
+    end if;
+    if exists(
+      select 1 from pg_catalog.generate_series(
+        v_workflow.week_ending_date-6,v_workflow.week_ending_date,interval '1 day'
+      ) day_value
+      where (select case when pg_catalog.count(*)>0 then 1 else 0 end
+             from pg_catalog.jsonb_array_elements(v_schedule) row_value
+             where (row_value->>'date')::date=day_value::date)
+          +(select pg_catalog.count(*) from pg_catalog.jsonb_array_elements_text(v_day_off_dates) off_date
+            where off_date::date=day_value::date)<>1
+    ) or exists(
+      select 1 from pg_catalog.jsonb_array_elements_text(v_day_off_dates) off_date
+      where off_date::date not between v_workflow.week_ending_date-6 and v_workflow.week_ending_date
+    ) or exists(
+      select 1 from pg_catalog.jsonb_array_elements(v_schedule) row_value
+      where (case when (row_value->>'end')::time<=(row_value->>'start')::time
+        then (row_value->>'date')::date+1+(row_value->>'end')::time
+        else (row_value->>'date')::date+(row_value->>'end')::time end)
+          at time zone 'Europe/London'>p_now_utc
+    ) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_INCOMPLETE' using errcode='22023';
+    end if;
+  end if;
+  perform private.weekly_source_candidate_app_units_week_v1(v_units_week);
+  perform private.weekly_source_candidate_app_units_day_v1(v_units_day,null);
+  if exists(
+    select 1 from pg_catalog.jsonb_array_elements(v_schedule) item
+    where (item->>'date')::date not between
+      v_workflow.week_ending_date-6 and v_workflow.week_ending_date
+  ) or exists(
+    select 1
+    from pg_catalog.jsonb_array_elements(v_schedule) item
+    where nullif(item->>'row_key','') is not null
+    group by item->>'row_key' having pg_catalog.count(*)>1
+  ) or exists(
+    select 1
+    from pg_catalog.jsonb_array_elements(v_schedule) item
+    group by item->>'date',item->>'start',item->>'end'
+    having pg_catalog.count(*)>1
+  ) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_SUBMISSION_INVALID' using errcode='22023';
+  end if;
+  if exists(
+    with rows as (
+      select ordinality,
+        (value->>'date')::date+(value->>'start')::time as starts,
+        case when (value->>'end')::time<=(value->>'start')::time
+          then (value->>'date')::date+1+(value->>'end')::time
+          else (value->>'date')::date+(value->>'end')::time end as ends
+      from pg_catalog.jsonb_array_elements(v_schedule) with ordinality
+    )
+    select 1 from rows a join rows b on a.ordinality<b.ordinality
+    where a.starts<b.ends and b.starts<a.ends
+  ) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_OVERLAP' using errcode='22023';
+  end if;
+
+  select
+    pg_catalog.min(((value->>'date')::date+(value->>'start')::time)
+      at time zone 'Europe/London'),
+    pg_catalog.max((case when (value->>'end')::time<=(value->>'start')::time
+      then (value->>'date')::date+1+(value->>'end')::time
+      else (value->>'date')::date+(value->>'end')::time end)
+      at time zone 'Europe/London'),
+    coalesce(pg_catalog.sum(coalesce(
+      nullif(value#>>'{break_entry,break_minutes}','')::integer,
+      nullif(value#>>'{break_entry,calculated_break_minutes}','')::integer,0
+    )),0)::integer,
+    coalesce(pg_catalog.sum(
+      (pg_catalog.date_part('epoch',(
+        case when (value->>'end')::time<=(value->>'start')::time
+          then (value->>'date')::date+1+(value->>'end')::time
+          else (value->>'date')::date+(value->>'end')::time end
+        -((value->>'date')::date+(value->>'start')::time)
+      ))/60)::integer
+      -coalesce(nullif(value#>>'{break_entry,break_minutes}','')::integer,
+        nullif(value#>>'{break_entry,calculated_break_minutes}','')::integer,0)
+    ),0)::integer
+  into v_worked_start,v_worked_end,v_break_minutes,v_worked_minutes
+  from pg_catalog.jsonb_array_elements(v_schedule);
+  if v_worked_minutes<0 then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_SUBMISSION_INVALID' using errcode='22023';
+  end if;
+
+  if v_contract_week.timesheet_id is not null then
+    select * into strict v_timesheet from public.timesheets
+    where timesheet_id=v_contract_week.timesheet_id for update;
+    if v_timesheet.contract_id is distinct from v_contract.id
+       or v_timesheet.week_ending_date is distinct from v_workflow.week_ending_date
+       or v_timesheet.sheet_scope<>'WEEKLY' or v_timesheet.line_type<>'HOURS'
+       or v_timesheet.is_adjustment or not v_timesheet.is_current
+       or v_timesheet.revoked_at is not null or v_timesheet.archived_at_utc is not null
+       or v_timesheet.authorised_at_server is not null then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_TIMESHEET_LOCKED' using errcode='55000';
+    end if;
+    if v_kind='CHECK_HOURS'
+       and v_timesheet.timesheet_id is distinct from
+         (v_scope#>>'{detail_target,id}')::uuid then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_TIMESHEET_STALE' using errcode='40001';
+    end if;
+  elsif v_kind='CHECK_HOURS' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_TIMESHEET_STALE' using errcode='40001';
+  end if;
+  if v_timesheet.timesheet_id is not null and (
+       exists(select 1 from public.timesheets_financials financial
+              where financial.timesheet_id=v_timesheet.timesheet_id)
+       or exists(select 1 from public.invoice_lines invoice_line
+                 where invoice_line.timesheet_id=v_timesheet.timesheet_id)
+       or exists(select 1 from public.timesheet_pay_state pay_state
+                 where pay_state.timesheet_id=v_timesheet.timesheet_id)
+       or exists(select 1 from public.timesheet_pay_state_history pay_history
+                 where pay_history.timesheet_id=v_timesheet.timesheet_id)
+       or exists(select 1 from public.pay_batch_items batch_item
+                 where batch_item.timesheet_id=v_timesheet.timesheet_id)
+       or exists(select 1 from public.pay_batch_timesheet_snapshots batch_snapshot
+                 where batch_snapshot.timesheet_id=v_timesheet.timesheet_id)
+       or exists(select 1 from public.pay_advances finance_case
+                 where finance_case.linked_timesheet_id=v_timesheet.timesheet_id)
+       or exists(select 1 from public.pay_finance_case_components finance_component
+                 where finance_component.linked_timesheet_id=v_timesheet.timesheet_id)
+       or exists(select 1 from public.timesheet_payment_overrides payment_override
+                 where payment_override.timesheet_id=v_timesheet.timesheet_id)
+     ) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_TIMESHEET_FINANCIAL_STATE_EXISTS' using errcode='55000';
+  end if;
+
+  v_previous_context:=pg_catalog.current_setting(
+    'cloudtms.lifecycle_mutation_context',true
+  );
+  v_previous_defer_summary_refresh:=pg_catalog.current_setting(
+    'cloudtms.lifecycle_defer_summary_refresh',true
+  );
+  perform pg_catalog.set_config(
+    'cloudtms.lifecycle_mutation_context','ordinary_timesheet_save',true
+  );
+   
+   
+   
+  perform pg_catalog.set_config(
+    'cloudtms.lifecycle_defer_summary_refresh','on',true
+  );
+  if v_timesheet.timesheet_id is null then
+    select * into strict v_candidate from public.candidates where id=v_candidate_id;
+    select * into strict v_client from public.clients where id=v_contract.client_id;
+    v_booking_id:='bk_'||pg_catalog.substr(pg_catalog.encode(
+      private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_BASE_TIMESHEET_V1',
+        pg_catalog.jsonb_build_object(
+          'contract_id',v_contract.id,'week_ending_date',v_workflow.week_ending_date
+        )
+      ),'hex'
+    ),1,24);
+    if exists(select 1 from public.timesheets existing
+              where existing.booking_id=v_booking_id and existing.is_current) then
+      raise exception 'WEEKLY_SOURCE_BOOKING_ID_COLLISION' using errcode='55000';
+    end if;
+    insert into public.timesheets(
+      booking_id,version,is_current,status,sheet_scope,submission_mode,line_type,
+      occupant_key_norm,hospital_norm,ward_norm,job_title_norm,shift_label_norm,
+      worked_start_iso,worked_end_iso,break_minutes,worked_minutes,
+      week_ending_date,contract_id,actual_schedule_json,additional_units_week,
+      additional_units_per_day,r2_nurse_key,img_sha256_nurse,is_adjustment,
+      candidate_workflow_id,candidate_workflow_generation,created_at,updated_at
+    ) values (
+      v_booking_id,1,true,'RECEIVED','WEEKLY','MANUAL','HOURS',
+      pg_catalog.lower(coalesce(nullif(pg_catalog.btrim(v_candidate.tms_ref),''),
+        nullif(pg_catalog.btrim(v_candidate.display_name),''),v_candidate.id::text)),
+      pg_catalog.lower(coalesce(nullif(pg_catalog.btrim(v_contract.display_site),''),
+        nullif(pg_catalog.btrim(v_client.name),''),v_client.id::text)),
+      pg_catalog.lower(coalesce(nullif(pg_catalog.btrim(v_contract.ward_hint),''),'contract')),
+      pg_catalog.lower(coalesce(nullif(pg_catalog.btrim(v_contract.role),''),'weekly')),
+      'weekly-0',v_worked_start,v_worked_end,v_break_minutes,v_worked_minutes,
+      v_workflow.week_ending_date,v_contract.id,v_schedule,v_units_week,v_units_day,
+      v_signature.storage_key,pg_catalog.encode(v_signature.source_content_sha256,'hex'),false,
+      v_workflow.id,v_workflow.generation+1,p_now_utc,p_now_utc
+    ) returning * into v_timesheet;
+    update public.contract_weeks
+    set timesheet_id=v_timesheet.timesheet_id,status='SUBMITTED',
+      submission_mode_snapshot='ELECTRONIC',updated_at=p_now_utc
+    where id=v_contract_week.id returning * into v_contract_week;
+  else
+    update public.timesheets set
+      status='RECEIVED',submission_mode='MANUAL',actual_schedule_json=v_schedule,
+      additional_units_week=v_units_week,additional_units_per_day=v_units_day,
+      worked_start_iso=v_worked_start,worked_end_iso=v_worked_end,
+      break_minutes=v_break_minutes,worked_minutes=v_worked_minutes,
+      r2_nurse_key=v_signature.storage_key,
+      img_sha256_nurse=pg_catalog.encode(v_signature.source_content_sha256,'hex'),
+      candidate_workflow_id=v_workflow.id,
+      candidate_workflow_generation=v_workflow.generation+1,
+      candidate_manager_approved_at_utc=null,updated_at=p_now_utc
+    where timesheet_id=v_timesheet.timesheet_id returning * into v_timesheet;
+    update public.contract_weeks
+    set status=case when status='OPEN' then 'SUBMITTED' else status end,
+      submission_mode_snapshot='ELECTRONIC',
+      updated_at=p_now_utc
+    where id=v_contract_week.id returning * into v_contract_week;
+  end if;
+  perform pg_catalog.set_config(
+    'cloudtms.lifecycle_mutation_context',coalesce(v_previous_context,''),true
+  );
+  perform pg_catalog.set_config(
+    'cloudtms.lifecycle_defer_summary_refresh',
+    coalesce(v_previous_defer_summary_refresh,''),true
+  );
+
+  v_next_generation:=v_workflow.generation+1;
+  select coalesce(pg_catalog.max(component_no),0)+1 into v_component_no
+  from public.candidate_submission_components
+  where workflow_id=v_workflow.id and workflow_generation=v_next_generation;
+  insert into public.candidate_submission_components(
+    workflow_id,workflow_generation,component_no,timesheet_id,
+    component_kind,document_role,state,source_component_id,storage_key,
+    media_type,byte_size,source_content_sha256,immutable_at_utc,required,
+    review_ordinal,review_render_state,final_signed_render_state,created_at_utc
+  ) values (
+    v_workflow.id,v_next_generation,v_component_no,v_timesheet.timesheet_id,
+    'CANDIDATE_SIGNATURE','CANDIDATE_SIGNATURE','IMMUTABLE',
+    coalesce(v_signature.source_component_id,v_signature.id),v_signature.storage_key,
+    v_signature.media_type,v_signature.byte_size,v_signature.source_content_sha256,
+    p_now_utc,false,null,'NOT_REQUIRED','NOT_REQUIRED',p_now_utc
+  ) returning * into v_signature_copy;
+  update public.candidate_submission_workflows set
+    state='WORKER_SUBMITTED',generation=v_next_generation,
+    anchor_timesheet_id=coalesce(anchor_timesheet_id,v_timesheet.timesheet_id),
+    target_timesheet_id=v_timesheet.timesheet_id,
+    input_snapshot_json=p_request->'immutable_submission',
+    immutable_submission_json=p_request->'immutable_submission',
+    immutable_submission_sha256=private._candidate_sha256_jsonb_v1(
+      p_request->'immutable_submission'
+    ),
+    candidate_signature_component_id=v_signature_copy.id,
+    candidate_signature_sha256=v_signature_copy.source_content_sha256,
+    candidate_signed_at_utc=(p_request->>'candidate_signed_at_utc')::timestamptz,
+    manager_name=null,manager_position=null,manager_signature_component_id=null,
+    manager_signature_sha256=null,manager_approved_at_utc=null,
+    review_manifest_json=null,review_manifest_sha256=null,
+    issue_codes='[]'::jsonb,worker_submitted_at_utc=p_now_utc,
+    finalised_at_utc=null,daily_context_sha256=null,canonical_financial_sha256=null,
+    canonical_save_input_sha256=null,canonical_save_row_signature=null,
+    canonical_save_financials_id=null,canonical_save_receipt_json=null,
+    canonical_saved_at_utc=null,last_mutation_idempotency_key=v_key::text,
+    last_mutation_response_json=null,updated_at_utc=p_now_utc
+  where id=v_workflow.id returning * into v_workflow;
+
+  v_timesheet_hash:=private.weekly_source_query_candidate_timesheet_hash_v1(
+    v_timesheet.timesheet_id
+  );
+  if v_timesheet_hash is null then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_TIMESHEET_STALE' using errcode='40001';
+  end if;
+  if v_kind='SUBMIT_TIMESHEET' then
+    select * into strict v_submission
+    from public.weekly_timesheet_submission_requests
+    where id=private.weekly_contact_submission_request_for_generation_v1(v_generation.id)
+      and candidate_id=v_candidate_id and source_cycle_id=v_cycle.id
+      and state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+    for update;
+    select * into strict v_membership
+    from public.weekly_timesheet_submission_request_memberships
+    where id=v_scope_id and submission_request_id=v_submission.id and state='WAITING'
+    for update;
+    if not private.weekly_source_missing_scope_unchanged_v1(v_submission.current_projection_publication_id,
+      v_projection_publication_id,v_candidate_id,v_membership.client_id,v_membership.contract_id,v_membership.week_ending) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_MATERIALISATION_STALE' using errcode='40001';end if;
+    v_compare:=private.weekly_source_candidate_submission_compare_sync_v1(
+      v_generation.id,v_projection_publication_id,v_membership.id,
+      v_timesheet.timesheet_id,v_timesheet_hash,p_now_utc
+    );
+    v_completion:=public.weekly_source_timesheet_submission_complete_atomic_v1(
+      pg_catalog.jsonb_build_object(
+        'candidate_id',v_candidate_id,'submission_request_id',v_submission.id,
+        'projection_publication_id',v_projection_publication_id,
+        'completions',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+          'membership_id',v_membership.id,'timesheet_id',v_timesheet.timesheet_id,
+          'timesheet_revision',v_timesheet.version,
+          'timesheet_hash',pg_catalog.encode(v_timesheet_hash,'hex'),
+          'outcome',v_compare->>'outcome'
+        ))
+      )
+    );
+  end if;
+  v_result:=pg_catalog.jsonb_build_object(
+    'ok',true,'idempotent_replay',false,'workflow_id',v_workflow.id,
+    'generation',v_workflow.generation,'state',v_workflow.state,
+    'timesheet_id',v_timesheet.timesheet_id,'timesheet_revision',v_timesheet.version,
+    'timesheet_hash',pg_catalog.encode(v_timesheet_hash,'hex'),
+    'candidate_signature_component_id',v_signature_copy.id,
+    'request_kind',v_kind,'comparison',v_compare,'completion',v_completion,
+    'materialisation_request_hash',pg_catalog.encode(v_request_hash,'hex')
+  );
+  update public.candidate_submission_workflows
+  set last_mutation_response_json=v_result where id=v_workflow.id;
+  return v_result;
+exception when no_data_found or too_many_rows then
+  raise exception 'WEEKLY_SOURCE_CANDIDATE_MATERIALISATION_STALE' using errcode='40001';
+end;

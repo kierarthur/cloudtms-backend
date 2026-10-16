@@ -1,0 +1,357 @@
+declare
+  v_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_submission public.weekly_timesheet_submission_requests%rowtype;
+  v_scope record;
+  v_timesheet public.timesheets%rowtype;
+  v_contract public.contracts%rowtype;
+  v_client public.clients%rowtype;
+  v_contract_week_id uuid;
+  v_scope_id uuid;
+  v_scope_version integer;
+  v_scope_state text;
+  v_scope_fingerprint text;
+  v_timesheet_hash bytea;
+  v_schedule jsonb;
+  v_units_week jsonb;
+  v_units_day jsonb;
+  v_issues jsonb;
+  v_issue_facts jsonb;
+  v_draft public.weekly_candidate_response_drafts%rowtype;
+  v_draft_id uuid;
+  v_scopes jsonb:='[]'::jsonb;
+  v_sorted_scopes jsonb;
+  v_request_state text;
+  v_earliest uuid;
+  v_request_fingerprint text;
+begin
+  if p_candidate_id is null or p_request_id is null then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  select * into v_generation
+  from public.weekly_candidate_outreach_generations
+  where id=p_request_id and candidate_id=p_candidate_id;
+  if not found or v_generation.state in ('SUPERSEDED','CANCELLED') then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REQUEST_NOT_FOUND' using errcode='P0002';
+  end if;
+  select * into strict v_cycle from public.weekly_source_cycles
+  where id=v_generation.source_cycle_id;
+  select * into strict v_group from public.weekly_source_groups
+  where id=v_cycle.source_group_id;
+  perform private.weekly_source_query_current_publication_v1(
+    v_cycle.id,v_cycle.current_projection_publication_id
+  );
+
+  select * into v_draft
+  from public.weekly_candidate_response_drafts
+  where candidate_generation_id=v_generation.id and candidate_id=p_candidate_id
+    and state='DRAFT'
+  order by draft_version desc,id desc limit 1;
+  v_draft_id:=case when found then v_draft.id else null end;
+
+  if v_generation.request_kind='CHECK_HOURS' then
+    for v_scope in
+      select min(membership.id::text)::uuid as scope_id,
+        comparison.contract_id,comparison.candidate_timesheet_id,
+        timesheet.week_ending_date,
+        pg_catalog.count(*)::integer as member_count,
+        pg_catalog.count(*) filter (
+          where membership.state='ACTIONABLE' and incident.state='OPEN'
+        )::integer as open_count,
+        pg_catalog.count(*) filter (
+          where membership.state in ('ANSWERED','RESOLVED') or incident.state='RESOLVED'
+        )::integer as answered_count
+      from public.weekly_candidate_outreach_memberships membership
+      join public.weekly_discrepancy_incidents incident
+        on incident.id=membership.incident_id
+      join public.weekly_issue_comparison_revisions comparison
+        on comparison.id=incident.current_comparison_revision_id
+      join public.timesheets timesheet
+        on timesheet.timesheet_id=comparison.candidate_timesheet_id
+      where membership.candidate_generation_id=v_generation.id
+        and membership.state<>'SUPERSEDED'
+      group by comparison.contract_id,comparison.candidate_timesheet_id,timesheet.week_ending_date
+      order by timesheet.week_ending_date,comparison.contract_id,comparison.candidate_timesheet_id
+    loop
+      if v_scope.contract_id is null or v_scope.candidate_timesheet_id is null then
+        raise exception 'WEEKLY_SOURCE_CANDIDATE_SCOPE_INVALID' using errcode='55000';
+      end if;
+      select * into strict v_timesheet from public.timesheets
+      where timesheet_id=v_scope.candidate_timesheet_id
+        and contract_id=v_scope.contract_id and week_ending_date=v_scope.week_ending_date
+        and is_current=true and archived_at_utc is null;
+      select * into strict v_contract from public.contracts
+      where id=v_scope.contract_id and candidate_id=p_candidate_id
+        and client_id=v_generation.client_id;
+      select * into strict v_client from public.clients where id=v_contract.client_id;
+      select week_row.id into v_contract_week_id
+      from public.contract_weeks week_row
+      where week_row.timesheet_id=v_timesheet.timesheet_id
+        and week_row.contract_id=v_contract.id
+        and week_row.week_ending_date=v_timesheet.week_ending_date
+      order by week_row.updated_at desc,week_row.id desc limit 1;
+      if v_contract_week_id is null then
+        raise exception 'WEEKLY_SOURCE_CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002';
+      end if;
+      v_timesheet_hash:=private.weekly_source_query_candidate_timesheet_hash_v1(
+        v_timesheet.timesheet_id
+      );
+      if v_timesheet_hash is null then
+        raise exception 'WEEKLY_SOURCE_CANDIDATE_TIMESHEET_STALE' using errcode='40001';
+      end if;
+      v_schedule:=private.weekly_source_candidate_app_schedule_v1(
+        v_timesheet.actual_schedule_json,v_timesheet.additional_units_per_day
+      );
+      v_units_week:=private.weekly_source_candidate_app_units_week_v1(
+        v_timesheet.additional_units_week
+      );
+      v_units_day:=private.weekly_source_candidate_app_units_day_v1(
+        v_timesheet.additional_units_per_day,null
+      );
+
+      select coalesce(pg_catalog.jsonb_agg(issue_row order by
+        issue_row->>'date',issue_row->'submitted_hours'->>'start',issue_row->>'issue_id'
+      ),'[]'::jsonb),
+      coalesce(pg_catalog.jsonb_agg(fact_row order by fact_row->>'incident_id'),'[]'::jsonb)
+      into v_issues,v_issue_facts
+      from (
+        select
+          pg_catalog.jsonb_build_object(
+            'issue_id',incident.id,
+            'issue_fingerprint',pg_catalog.encode(comparison.material_comparison_fingerprint,'hex'),
+            'issue_family',case
+              when comparison.issue_family='SOURCE_HOURS_DIFFER' then 'HOURS_DIFFER'
+              when comparison.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED'
+                   and v_group.source_family='NHSP' then 'NHSP_ABSENT'
+              when comparison.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED' then 'SOURCE_ABSENT'
+              when comparison.issue_family='HEALTHROSTER_NOT_FINALISED' then 'HEALTHROSTER_NOT_FINALISED'
+              else 'UNSUPPORTED'
+            end,
+            'date',pg_catalog.to_char(work_event.work_date,'YYYY-MM-DD'),
+            'submitted_hours',private.weekly_source_candidate_app_issue_hours_v1(
+              work_event.work_date,comparison.candidate_start_at_local,
+              comparison.candidate_end_at_local,comparison.candidate_break_minutes,
+              matched.row_key,matched.additional_units
+            ),
+            'system_hours',private.weekly_source_candidate_app_issue_hours_v1(
+              work_event.work_date,
+              case when comparison.source_presence='PRESENT' then comparison.system_start_at_local end,
+              case when comparison.source_presence='PRESENT' then comparison.system_end_at_local end,
+              case when comparison.source_presence='PRESENT' then comparison.system_break_minutes else 0 end,
+              matched.row_key,matched.additional_units
+            ),
+            'saved_draft_response',case
+              when membership.state<>'ACTIONABLE' or incident.state<>'OPEN' then null
+              when draft_item.choice='CANDIDATE_CORRECT' then pg_catalog.jsonb_build_object(
+                'issue_id',incident.id,
+                'issue_fingerprint',pg_catalog.encode(comparison.material_comparison_fingerprint,'hex'),
+                'answer_code','MY_HOURS_CORRECT'
+              )
+              when draft_item.choice='CANDIDATE_WRONG' then pg_catalog.jsonb_build_object(
+                'issue_id',incident.id,
+                'issue_fingerprint',pg_catalog.encode(comparison.material_comparison_fingerprint,'hex'),
+                'answer_code','MY_HOURS_WRONG_SYSTEM_CORRECT'
+              )
+              when draft_item.choice='NEITHER_CORRECT' then pg_catalog.jsonb_build_object(
+                'issue_id',incident.id,
+                'issue_fingerprint',pg_catalog.encode(comparison.material_comparison_fingerprint,'hex'),
+                'answer_code','NEITHER_CORRECT',
+                'corrected_hours',private.weekly_source_candidate_app_issue_hours_v1(
+                  work_event.work_date,draft_item.corrected_start_at_local,
+                  draft_item.corrected_end_at_local,draft_item.corrected_break_minutes,
+                  matched.row_key,matched.additional_units
+                )
+              )
+              else null
+            end,
+            'state',case when membership.state='ACTIONABLE' and incident.state='OPEN'
+              then 'OPEN' else 'ANSWERED' end
+          ) as issue_row,
+          pg_catalog.jsonb_build_object(
+            'incident_id',incident.id,'membership_id',membership.id,
+            'membership_state',membership.state,'incident_state',incident.state,
+            'comparison_revision_id',comparison.id,
+            'comparison_fingerprint',pg_catalog.encode(comparison.material_comparison_fingerprint,'hex')
+          ) as fact_row
+        from public.weekly_candidate_outreach_memberships membership
+        join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+        join public.weekly_issue_comparison_revisions comparison
+          on comparison.id=incident.current_comparison_revision_id
+        join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+        left join public.weekly_candidate_response_draft_items draft_item
+          on draft_item.response_draft_id=v_draft_id and draft_item.incident_id=incident.id
+          and draft_item.comparison_revision_id=comparison.id
+        left join lateral (
+          select hours->>'row_key' as row_key,
+            coalesce(hours->'additional_units','[]'::jsonb) as additional_units
+          from pg_catalog.jsonb_array_elements(v_schedule) hours
+          where hours->>'date'=pg_catalog.to_char(work_event.work_date,'YYYY-MM-DD')
+            and hours->>'start'=pg_catalog.to_char(comparison.candidate_start_at_local,'HH24:MI')
+            and hours->>'end'=pg_catalog.to_char(comparison.candidate_end_at_local,'HH24:MI')
+          order by coalesce(hours->>'row_key','') collate C limit 1
+        ) matched on true
+        where membership.candidate_generation_id=v_generation.id
+          and membership.state<>'SUPERSEDED'
+          and comparison.contract_id=v_scope.contract_id
+          and comparison.candidate_timesheet_id=v_scope.candidate_timesheet_id
+      ) issue_rows;
+      if exists(
+        select 1 from pg_catalog.jsonb_array_elements(v_issues) issue
+        where issue->>'issue_family'='UNSUPPORTED'
+      ) then
+        raise exception 'WEEKLY_SOURCE_CANDIDATE_ISSUE_UNSUPPORTED' using errcode='55000';
+      end if;
+      v_scope_id:=v_scope.scope_id;
+      v_scope_version:=v_timesheet.version;
+      v_scope_state:=case
+        when v_scope.open_count=0 then 'COMPLETE'
+        when v_scope.answered_count>0 then 'PARTLY_COMPLETE'
+        else 'OUTSTANDING'
+      end;
+      v_scope_fingerprint:=pg_catalog.encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_CANDIDATE_APP_SCOPE_V1',pg_catalog.jsonb_build_object(
+          'scope_id',v_scope_id,'scope_version',v_scope_version,
+          'request_kind','CHECK_HOURS','publication_id',v_cycle.current_projection_publication_id,
+          'timesheet_hash',pg_catalog.encode(v_timesheet_hash,'hex'),
+          'issue_facts',v_issue_facts,
+          'draft_hash',case when v_draft_id is not null then pg_catalog.encode(v_draft.draft_hash,'hex') end
+        )
+      ),'hex');
+      v_scopes:=v_scopes||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+        'scope_id',v_scope_id,'scope_version',v_scope_version,
+        'scope_fingerprint',v_scope_fingerprint,'request_kind','CHECK_HOURS',
+        'completion_state',v_scope_state,
+        'week_ending_date',pg_catalog.to_char(v_timesheet.week_ending_date,'YYYY-MM-DD'),
+        'contract_id',v_contract.id,'contract_week_id',v_contract_week_id,
+        'client_name',v_client.name,'job_title',nullif(pg_catalog.btrim(coalesce(v_contract.role,'')),''),
+        'detail_target',pg_catalog.jsonb_build_object(
+          'identity_kind','timesheet','id',v_timesheet.timesheet_id
+        ),
+        'workflow_binding',null,
+        'submitted_timesheet',v_schedule,
+        'additional_units_week',v_units_week,
+        'additional_units_per_day',v_units_day,
+        'issues',v_issues
+      ));
+    end loop;
+  else
+    select * into v_submission
+    from public.weekly_timesheet_submission_requests
+    where id=private.weekly_contact_submission_request_for_generation_v1(v_generation.id)
+      and candidate_id=p_candidate_id and state not in ('SUPERSEDED','CANCELLED');
+    if not found then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMISSION_REQUEST_NOT_FOUND' using errcode='P0002';
+    end if;
+    for v_scope in
+      select membership.* from public.weekly_timesheet_submission_request_memberships membership
+      where membership.submission_request_id=v_submission.id
+      order by membership.week_ending,membership.client_id,membership.contract_id,membership.id
+    loop
+      select * into strict v_contract from public.contracts
+      where id=v_scope.contract_id and candidate_id=p_candidate_id
+        and client_id=v_scope.client_id;
+      select * into strict v_client from public.clients where id=v_contract.client_id;
+      select week_row.id into v_contract_week_id
+      from public.contract_weeks week_row
+      where week_row.contract_id=v_scope.contract_id
+        and week_row.week_ending_date=v_scope.week_ending
+        and week_row.additional_seq=0 and week_row.is_adjustment=false
+      order by week_row.updated_at desc,week_row.id desc limit 1;
+      if v_contract_week_id is null then
+        raise exception 'WEEKLY_SOURCE_CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002';
+      end if;
+      if v_scope.submitted_timesheet_id is not null then
+        select * into strict v_timesheet from public.timesheets
+        where timesheet_id=v_scope.submitted_timesheet_id
+          and contract_id=v_scope.contract_id and week_ending_date=v_scope.week_ending;
+        v_schedule:=private.weekly_source_candidate_app_schedule_v1(
+          v_timesheet.actual_schedule_json,v_timesheet.additional_units_per_day
+        );
+        v_units_week:=private.weekly_source_candidate_app_units_week_v1(
+          v_timesheet.additional_units_week
+        );
+        v_units_day:=private.weekly_source_candidate_app_units_day_v1(
+          v_timesheet.additional_units_per_day,null
+        );
+      else
+        v_schedule:='[]'::jsonb;
+        v_units_week:='[]'::jsonb;
+        v_units_day:='[]'::jsonb;
+      end if;
+      v_scope_id:=v_scope.id;
+      v_scope_version:=v_submission.request_generation;
+      v_scope_state:=case when v_scope.state='WAITING' then 'OUTSTANDING' else 'COMPLETE' end;
+      v_scope_fingerprint:=pg_catalog.encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_CANDIDATE_APP_SCOPE_V1',pg_catalog.jsonb_build_object(
+          'scope_id',v_scope.id,'scope_version',v_scope_version,
+          'request_kind','SUBMIT_TIMESHEET','publication_id',v_cycle.current_projection_publication_id,
+          'membership_state',v_scope.state,
+          'expected_source_fingerprint',pg_catalog.encode(v_scope.expected_source_fingerprint,'hex'),
+          'submitted_timesheet_hash',case when v_scope.submitted_timesheet_hash is not null
+            then pg_catalog.encode(v_scope.submitted_timesheet_hash,'hex') end
+        )
+      ),'hex');
+      v_scopes:=v_scopes||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+        'scope_id',v_scope_id,'scope_version',v_scope_version,
+        'scope_fingerprint',v_scope_fingerprint,'request_kind','SUBMIT_TIMESHEET',
+        'completion_state',v_scope_state,
+        'week_ending_date',pg_catalog.to_char(v_scope.week_ending,'YYYY-MM-DD'),
+        'contract_id',v_contract.id,'contract_week_id',v_contract_week_id,
+        'client_name',v_client.name,'job_title',nullif(pg_catalog.btrim(coalesce(v_contract.role,'')),''),
+        'detail_target',pg_catalog.jsonb_build_object(
+          'identity_kind','contract-week','id',v_contract_week_id
+        ),
+        'workflow_binding',null,
+        'submitted_timesheet',v_schedule,
+        'additional_units_week',v_units_week,
+        'additional_units_per_day',v_units_day,
+        'issues','[]'::jsonb
+      ));
+    end loop;
+  end if;
+
+  if pg_catalog.jsonb_array_length(v_scopes)=0 then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_REQUEST_EMPTY' using errcode='55000';
+  end if;
+  select pg_catalog.jsonb_agg(value order by
+    value->>'week_ending_date',private.weekly_source_query_ascii_fold_v1(value->>'client_name') collate C,
+    value->>'contract_id',value->>'scope_id'
+  ) into v_sorted_scopes from pg_catalog.jsonb_array_elements(v_scopes);
+  select case
+    when pg_catalog.count(*) filter (where value->>'completion_state'<>'COMPLETE')=0 then 'COMPLETE'
+    when pg_catalog.count(*) filter (where value->>'completion_state'='COMPLETE')>0
+      or pg_catalog.count(*) filter (where value->>'completion_state'='PARTLY_COMPLETE')>0
+      then 'PARTLY_COMPLETE'
+    else 'OPEN'
+  end into v_request_state
+  from pg_catalog.jsonb_array_elements(v_sorted_scopes);
+  select (value->>'scope_id')::uuid into v_earliest
+  from pg_catalog.jsonb_array_elements(v_sorted_scopes)
+  where value->>'completion_state'<>'COMPLETE'
+  order by value->>'week_ending_date',value->>'client_name',value->>'contract_id',value->>'scope_id'
+  limit 1;
+  v_request_fingerprint:=pg_catalog.encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_CANDIDATE_APP_REQUEST_V1',pg_catalog.jsonb_build_object(
+      'request_id',v_generation.id,'request_version',v_generation.generation_number,
+      'request_kind',v_generation.request_kind,'generation_state',v_generation.state,
+      'membership_hash',pg_catalog.encode(v_generation.membership_hash,'hex'),
+      'publication_id',v_cycle.current_projection_publication_id,
+      'scopes',(
+        select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+          'scope_id',value->>'scope_id','scope_version',value->'scope_version',
+          'scope_fingerprint',value->>'scope_fingerprint',
+          'completion_state',value->>'completion_state'
+        ) order by value->>'scope_id')
+        from pg_catalog.jsonb_array_elements(v_sorted_scopes)
+      )
+    )
+  ),'hex');
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'request_id',v_generation.id,
+    'request_version',v_generation.generation_number,
+    'request_fingerprint',v_request_fingerprint,
+    'state',v_request_state,'earliest_outstanding_scope_id',v_earliest,
+    'scopes',v_sorted_scopes
+  );
+end;

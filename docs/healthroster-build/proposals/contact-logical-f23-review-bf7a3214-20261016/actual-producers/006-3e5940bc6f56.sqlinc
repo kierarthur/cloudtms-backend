@@ -1,0 +1,16 @@
+declare cap public.weekly_contact_source_intent_captures%rowtype;
+begin
+ if TG_OP='DELETE' then raise exception 'CONTACT_SOURCE_ORDINAL_IMMUTABLE' using errcode='23514';end if;
+ select * into strict cap from public.weekly_contact_source_intent_captures where message_intent_id=NEW.message_intent_id;
+ if not exists(select 1 from public.weekly_contact_source_intent_capture_members m where m.message_intent_id=cap.message_intent_id
+  and m.logical_contact_key=NEW.logical_contact_key and m.send_ordinal=NEW.send_ordinal) then
+  raise exception 'CONTACT_SOURCE_ORDINAL_SCOPE_INVALID' using errcode='23514';end if;
+ if TG_OP='UPDATE' and(NEW.logical_contact_key<>OLD.logical_contact_key or NEW.send_ordinal<>OLD.send_ordinal
+  or NEW.revision<>OLD.revision+1 or cap.capture_kind not in('ROUTINE_RECOMPOSITION','MANUAL_RECOMPOSITION','FOLLOWUP_RECOMPOSITION')
+  or cap.original_message_intent_id is distinct from OLD.message_intent_id
+  or exists(select 1 from public.weekly_message_renders r where r.message_intent_id=OLD.message_intent_id
+    and private.weekly_contact_source_render_attempted_v1(r.id))) then
+  raise exception 'CONTACT_SOURCE_ORIGINAL_ATTEMPT_OWNER' using errcode='23514';end if;
+ if TG_OP='INSERT' and NEW.revision<>1 then raise exception 'CONTACT_SOURCE_ORDINAL_SCOPE_INVALID' using errcode='23514';end if;
+ return NEW;
+end;

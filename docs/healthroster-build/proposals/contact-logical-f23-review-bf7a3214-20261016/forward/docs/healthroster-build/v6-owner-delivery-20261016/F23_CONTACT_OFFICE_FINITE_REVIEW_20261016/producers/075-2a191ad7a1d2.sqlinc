@@ -1,0 +1,73 @@
+declare incident public.weekly_discrepancy_incidents%rowtype;source_group public.weekly_source_groups%rowtype;
+ member jsonb;state jsonb;members jsonb:='[]';results jsonb:='[]';recipient text;cycle_id uuid;
+ scope_id uuid;checking jsonb;generation_id uuid;route_id uuid;intent_id uuid;key bytea;group_key bytea;group_json jsonb;model jsonb;
+ sequence integer;due timestamptz;disposition text;
+begin
+ if p_incidents is null or cardinality(p_incidents)not between 1 and 500
+  or cardinality(p_incidents)<>(select count(distinct id)from unnest(p_incidents)id)or array_position(p_incidents,null)is not null then
+  raise exception 'CONTACT_SOURCE_FOLLOWUP_SELECTION_INVALID'using errcode='22023';end if;
+ perform private.weekly_contact_source_manager_selection_lock_v1(p_incidents,'[]');p_at:=clock_timestamp();
+ select groups.* into strict source_group from public.weekly_discrepancy_incidents selected
+  join public.weekly_source_groups groups on groups.id=selected.source_group_id where selected.id=p_incidents[1];
+ for incident in select * from public.weekly_discrepancy_incidents where id=any(p_incidents)order by id loop
+  state:=private.weekly_contact_source_manager_followup_state_v1(incident.id,p_at);
+  disposition:=case when state->>'reason'<>'SCHEDULED'then state->>'reason'
+   when state->>'mode'<>'AUTOMATIC'then 'CONFIGURED_MANUAL_STEP'
+   when(state->>'due_at_utc')::timestamptz>p_at then 'NOT_DUE' end;
+  if disposition is null then
+   member:=private.weekly_contact_manual_member_facts_v1(incident.id,'MANAGER',p_at);
+   if member->'eligible'is distinct from 'true'::jsonb and member->>'exclusion_reason'<>'MANUAL_ENQUIRY_COOLDOWN'then
+    disposition:=member->>'exclusion_reason';end if;
+  end if;
+  if disposition is not null then
+   results:=results||jsonb_build_array(jsonb_build_object('version','CONTACT_SOURCE_FOLLOWUP_ENQUEUE_V1','incident_id',incident.id,
+    'message_intent_id',null,'disposition',disposition));continue;end if;
+  if cycle_id is null then cycle_id:=incident.source_cycle_id;recipient:=member->>'manager_address';
+  elsif(cycle_id,recipient)is distinct from(incident.source_cycle_id,member->>'manager_address')then
+   raise exception 'CONTACT_SOURCE_FOLLOWUP_ONE_RECIPIENT_REQUIRED'using errcode='40001';end if;
+  if recipient is null then raise exception 'CONTACT_SOURCE_FOLLOWUP_ONE_RECIPIENT_REQUIRED'using errcode='40001';end if;
+  scope_id:=private.weekly_contact_scope_lock_v1(source_group.agency_id,source_group.environment,incident.candidate_id,incident.client_id);
+  checking:=private.weekly_contact_checking_scope_revision_v1(scope_id);
+  member:=member||jsonb_build_object('scope_id',scope_id,'scope_revision',(
+   select revision::text from public.weekly_contact_pause_scopes where id=scope_id),'checking_revision',checking->>'revision',
+   'eligible',true,'exclusion_reason',null,'send_ordinal',state->'next_send_ordinal','followup_state',state,
+   'routine_step',state->'routine_sequence','basis_accepted_membership_id',state->'basis_accepted_membership_id');
+  due:=greatest(due,(state->>'due_at_utc')::timestamptz);members:=members||jsonb_build_array(member);
+ end loop;
+ if jsonb_array_length(members)=0 then return jsonb_build_object('version','CONTACT_SOURCE_FOLLOWUP_GROUP_ENQUEUE_V1',
+  'message_intent_id',null,'results',results);end if;
+ if(select count(distinct m->>'candidate_id')from jsonb_array_elements(members)m)>100
+  or(select count(distinct m->>'client_id')from jsonb_array_elements(members)m)>100 then
+  raise exception 'WEEKLY_SOURCE_MANAGER_DIGEST_CAPACITY_EXCEEDED'using errcode='54000';end if;
+ key:=private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_ROUTINE_FOLLOWUP_GROUP_INTENT_V1',jsonb_build_object(
+  'source_cycle_id',cycle_id,'recipient',recipient,'members',(
+   select jsonb_agg(jsonb_build_object('logical_contact_key',m->'logical_contact_key','send_ordinal',m->'send_ordinal',
+    'routine_step',m->'routine_step','basis_accepted_at_utc',m->'followup_state'->'last_accepted_at_utc',
+    'policy_revision',m->'followup_state'->'policy_revision')order by m->>'logical_contact_key')from jsonb_array_elements(members)m)));
+ select id into intent_id from public.weekly_message_intents where logical_key=key;
+ if found then
+  select results||jsonb_agg(jsonb_build_object('version','CONTACT_SOURCE_FOLLOWUP_ENQUEUE_V1','incident_id',m->'incident_id',
+   'message_intent_id',intent_id,'disposition','ORIGINAL_QUEUED_STEP')order by m->>'incident_id')into results from jsonb_array_elements(members)m;
+  return jsonb_build_object('version','CONTACT_SOURCE_FOLLOWUP_GROUP_ENQUEUE_V1','message_intent_id',intent_id,'results',results);end if;
+ generation_id:=private.weekly_contact_manual_manager_generation_v1(members,null,p_at);
+ select recipient_route_id into strict route_id from public.weekly_manager_recipient_generations where id=generation_id;
+ select coalesce(max(tranche_sequence),0)+1 into sequence from public.weekly_message_intents
+  where recipient_generation_id=generation_id and tranche_kind='MANAGER_AUTOMATIC_FOLLOWUP';
+ insert into public.weekly_message_intents(environment,agency_id,source_cycle_id,audience_kind,recipient_route_id,recipient_generation_id,
+  sorted_due_event_ids,tranche_kind,tranche_sequence,logical_key,state,due_at_utc,created_at_utc)
+ values(source_group.environment,source_group.agency_id,cycle_id,'MANAGER',route_id,generation_id,'{}','MANAGER_AUTOMATIC_FOLLOWUP',sequence,
+  key,'DUE',due,clock_timestamp())returning id into intent_id;
+ select jsonb_build_object('kind','MANAGER_QUERY_MODEL_V1','policy_version','1.8.0','renderer_version','1.4.0','structure_version','1.0.0',
+  'rows',jsonb_agg(m->'manager_row'order by private.weekly_source_query_ascii_fold_v1(m->'manager_row'->>'clientName')collate C,m->>'client_id',
+   private.weekly_source_query_ascii_fold_v1(m->'manager_row'->>'displayName')collate C,m->>'candidate_id',m->'manager_row'->>'workDate',
+   m->'manager_row'->>'sourceStartInstant',m->>'issue_id'),'plain_body',null,'attachment_count',0)into model from jsonb_array_elements(members)m;
+ group_key:=private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_ROUTINE_FOLLOWUP_GROUP_V1',jsonb_build_object(
+  'source_cycle_id',cycle_id,'recipient',recipient,'native_intent_logical_key',encode(key,'hex')));
+ group_json:=jsonb_build_object('group_key',encode(group_key,'hex'),'recipient',jsonb_build_object('candidate_id',null,'manager_address',recipient),
+  'preview',model,'canonical_content_sha256',encode(private.weekly_source_sha256_jsonb_v1('CONTACT_SOURCE_ROUTINE_FOLLOWUP_CONTENT_V1',
+   jsonb_build_object('group_key',encode(group_key,'hex'),'preview',model,'recipient',recipient)),'hex'));
+ perform private.weekly_contact_source_capture_insert_v1(intent_id,'ROUTINE_FOLLOWUP',null,null,members,group_json,null,null,p_at,null);
+ select results||jsonb_agg(jsonb_build_object('version','CONTACT_SOURCE_FOLLOWUP_ENQUEUE_V1','incident_id',m->'incident_id',
+  'message_intent_id',intent_id,'disposition','ONE_DUE_AUTOMATIC_STEP_QUEUED')order by m->>'incident_id')into results from jsonb_array_elements(members)m;
+ return jsonb_build_object('version','CONTACT_SOURCE_FOLLOWUP_GROUP_ENQUEUE_V1','message_intent_id',intent_id,'results',results);
+end;

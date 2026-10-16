@@ -1,0 +1,46 @@
+select cycle.id from public.weekly_contact_pause_scopes scope join public.weekly_source_groups source_group
+  on source_group.agency_id=scope.agency_id and source_group.environment=scope.environment
+ join public.weekly_source_cycles cycle on cycle.source_group_id=source_group.id
+ join public.weekly_source_projection_publications publication on publication.id=cycle.current_projection_publication_id
+  and publication.state='CURRENT' and publication.correction_session_id is null
+ where scope.id=p_scope and p_phase='SOURCE_ACTIVATION' and cycle.state in('OPEN','FINALISABLE')
+  and(p_after is null or cycle.id>p_after) and(
+   exists(select 1 from public.weekly_discrepancy_incidents incident where incident.source_cycle_id=cycle.id
+    and incident.candidate_id=scope.candidate_id and incident.client_id=scope.client_id and incident.state='OPEN')
+   or exists(select 1 from public.weekly_source_upload_rows source_row join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+    where source_row.upload_id=publication.upload_id and resolution.candidate_id=scope.candidate_id and resolution.client_id=scope.client_id
+     and resolution.mapping_state='RESOLVED' and resolution.generation=(select max(current_resolution.generation)
+      from public.weekly_source_row_resolutions current_resolution where current_resolution.upload_row_id=source_row.id)))
+ union
+ select intent.id from public.weekly_contact_pause_scopes scope join public.weekly_message_intents intent
+  on intent.agency_id=scope.agency_id and intent.environment=scope.environment
+ join public.weekly_candidate_outreach_generations generation on generation.id=intent.candidate_generation_id
+ where scope.id=p_scope and p_phase='SOURCE_WORKER' and intent.audience_kind='CANDIDATE'
+  and(p_after is null or intent.id>p_after) and generation.candidate_id=scope.candidate_id
+  and(intent.state in('DUE','RENDERED') or(intent.state='RETIRED' and generation.state='ACTIVE'
+   and generation.deadline_at_utc>statement_timestamp() and private.weekly_source_candidate_generation_current_v1(generation.id)))
+  and(generation.client_id=scope.client_id or exists(select 1 from public.weekly_timesheet_submission_requests request
+   join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+   where request.candidate_cohort_id=generation.candidate_cohort_id and request.request_generation=generation.generation_number
+    and request.membership_hash=generation.membership_hash and member.client_id=scope.client_id))
+ union
+ select intent.id from public.weekly_contact_pause_scopes scope join public.weekly_message_intents intent
+  on intent.agency_id=scope.agency_id and intent.environment=scope.environment
+ where scope.id=p_scope and p_phase='SOURCE_MANAGER' and intent.audience_kind='MANAGER'
+  and(p_after is null or intent.id>p_after) and(intent.state in('DUE','RENDERED') or(intent.state='RETIRED' and exists(
+   select 1 from public.weekly_manager_recipient_generations generation join public.weekly_manager_recipient_routes route
+    on route.current_generation_id=generation.id where generation.id=intent.recipient_generation_id and generation.state='ACTIVE')))
+  and(exists(select 1 from public.weekly_contact_source_intent_capture_members member where member.message_intent_id=intent.id
+   and member.candidate_id=scope.candidate_id and member.client_id=scope.client_id)
+   or exists(select 1 from public.weekly_manager_recipient_memberships member join public.weekly_discrepancy_incidents incident
+    on incident.id=member.incident_id where member.recipient_generation_id=intent.recipient_generation_id
+     and incident.candidate_id=scope.candidate_id and incident.client_id=scope.client_id))
+ union
+ select delivery.id from public.weekly_contact_pause_scopes scope join public.hr_issue_email_deliveries delivery
+  on delivery.original_delivery_id=delivery.id join public.mail_outbox mail on mail.id=delivery.mail_outbox_id
+ where scope.id=p_scope and p_phase='LEGACY_OUTBOX' and delivery.status in('QUEUED','RETIRED')
+  and(p_after is null or delivery.id>p_after)
+  and(delivery.contact_rechecked_at_utc is null or scope.updated_at_utc>delivery.contact_rechecked_at_utc
+   or(mail.next_attempt_at_utc is not null and mail.next_attempt_at_utc<=statement_timestamp()))
+  and exists(select 1 from public.hr_issue_email_delivery_items item join public.import_review_decisions action on action.action_id=item.action_id
+   where item.delivery_id=delivery.id and action.candidate_id=scope.candidate_id and action.client_id=scope.client_id)

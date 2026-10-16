@@ -1,0 +1,44 @@
+declare v_intent public.weekly_message_intents%rowtype;v_generation public.weekly_manager_recipient_generations%rowtype;
+ v_at timestamptz:=clock_timestamp();result jsonb;
+begin
+ select * into strict v_intent from public.weekly_message_intents where id=p_intent_id;
+ if exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=v_intent.id) then
+  if not private.weekly_contact_source_capture_current_v1(v_intent.id,v_at,true) then
+   raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
+  select manifest_json->'manager_members' into strict result from public.weekly_contact_source_intent_captures where message_intent_id=v_intent.id;
+  return result;
+ end if;
+ select generation.* into strict v_generation from public.weekly_manager_recipient_generations generation
+ join public.weekly_manager_recipient_routes route on route.id=generation.recipient_route_id
+ where generation.id=v_intent.recipient_generation_id and generation.state='ACTIVE' and route.current_generation_id=generation.id
+  and route.id=v_intent.recipient_route_id and route.environment=v_intent.environment and route.agency_id=v_intent.agency_id;
+ if v_intent.audience_kind<>'MANAGER' or v_intent.tranche_sequence<>1 or v_intent.tranche_kind not in
+  ('MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED','MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED') then
+  raise exception 'CONTACT_SOURCE_NATIVE_ORDINAL_UNPROVIDED' using errcode='55000';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('incident_id',x.incident_id,'incident_episode',x.episode_number,
+  'comparison_revision_id',x.comparison_revision_id,'comparison_fingerprint',encode(x.comparison_fingerprint,'hex'),
+  'client_order',x.client_order,'candidate_order',x.candidate_order,'shift_order',x.shift_order)
+  order by x.client_order,x.candidate_order,x.shift_order),'[]'::jsonb) into result from(
+  select incident.id incident_id,incident.episode_number,comparison.id comparison_revision_id,
+   comparison.material_comparison_fingerprint comparison_fingerprint,
+   dense_rank() over(order by private.weekly_source_query_ascii_fold_v1(client.name) collate C,client.id)::integer client_order,
+   dense_rank() over(partition by client.id order by private.weekly_source_query_ascii_fold_v1(coalesce(nullif(candidate.display_name,''),
+    concat_ws(' ',candidate.first_name,candidate.last_name))) collate C,candidate.id)::integer candidate_order,
+   row_number() over(partition by client.id,candidate.id order by work_event.work_date,
+    coalesce(comparison.system_start_at_local,comparison.candidate_start_at_local),incident.id)::integer shift_order
+  from public.weekly_manager_recipient_memberships membership
+  join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+  join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+  join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+  join public.clients client on client.id=incident.client_id join public.candidates candidate on candidate.id=incident.candidate_id
+  where membership.recipient_generation_id=v_generation.id and membership.comparison_revision_id=incident.current_comparison_revision_id
+   and private.weekly_contact_source_manager_member_eligible_v1(incident.id,v_generation.recipient_route_id,v_at)
+   and(coalesce(array_length(v_intent.sorted_due_event_ids,1),0)=0 or exists(
+    select 1 from public.weekly_manager_cohort_due_events event where event.id=any(v_intent.sorted_due_event_ids)
+     and event.recipient_generation_id=v_generation.id and event.candidate_cohort_id=membership.candidate_cohort_id
+     and private.weekly_source_manager_due_event_covers_v1(event.id,incident.id)))
+   and(v_intent.tranche_kind<>'MANAGER_T6_RESPONDED' or incident.candidate_action_state='RESPONDED')
+ )x;
+ if jsonb_array_length(result)>500 then raise exception 'WEEKLY_SOURCE_MANAGER_DIGEST_CAPACITY_EXCEEDED' using errcode='54000';end if;
+ return result;
+end;

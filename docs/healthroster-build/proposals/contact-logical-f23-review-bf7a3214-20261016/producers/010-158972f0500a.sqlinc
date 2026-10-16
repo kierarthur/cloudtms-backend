@@ -1,0 +1,69 @@
+declare scope_request jsonb;issue jsonb;scope public.weekly_contact_pause_scopes%rowtype;revision jsonb;facts jsonb;
+ scopes jsonb:='[]';members jsonb:='[]';witnesses jsonb:='[]';reviews jsonb;groups jsonb:='[]';group_members jsonb;
+ grouping record;selected jsonb;model jsonb;descriptor jsonb;content_hash bytea;group_key bytea;cas_matches boolean:=true;
+begin
+  
+ for scope_request in select value from jsonb_array_elements(p_request->'scopes') loop
+  select * into strict scope from public.weekly_contact_pause_scopes where agency_id=(p_request->>'agency_id')::uuid
+   and environment=p_request->>'environment' and candidate_id=(scope_request->>'candidate_id')::uuid
+   and client_id=(scope_request->>'client_id')::uuid;
+  revision:=private.weekly_contact_checking_scope_revision_v1(scope.id);
+  cas_matches:=cas_matches and scope.revision::text=scope_request->>'expected_scope_revision'
+   and revision->>'revision'=scope_request->>'expected_checking_revision';
+  witnesses:=witnesses||jsonb_build_array(jsonb_build_object('scope_id',scope.id,'candidate_id',scope.candidate_id,
+   'client_id',scope.client_id,'scope_revision',scope.revision::text,'checking_revision',revision->>'revision',
+   'checking_facts_sha256',revision->>'facts_sha256'));
+  reviews:='[]';
+  for issue in select value from jsonb_array_elements(scope_request->'selected_issue_ids') loop
+   facts:=private.weekly_contact_manual_member_facts_v1((issue#>>'{}')::uuid,p_request->>'audience',p_at);
+   if facts->>'candidate_id' is distinct from scope.candidate_id::text or facts->>'client_id' is distinct from scope.client_id::text then
+    raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+   facts:=facts||jsonb_build_object('scope_id',scope.id,'scope_revision',scope.revision::text,'checking_revision',revision->>'revision');
+   members:=members||jsonb_build_array(facts);
+   reviews:=reviews||jsonb_build_array(jsonb_build_object('issue_id',facts->'issue_id','eligible',facts->'eligible',
+    'exclusion_reason',facts->'exclusion_reason','resolution_action',facts->'resolution_action',
+    'same_purpose_reason',facts->'same_purpose_reason','last_accepted_send',facts->'last_accepted_send',
+    'next_routine_step',facts->'next_routine_step','cooldown_until_utc',facts->'cooldown_until_utc',
+    'cooldown_remaining_seconds',facts->'cooldown_remaining_seconds','cutoff',facts->'cutoff'));
+  end loop;
+  scopes:=scopes||jsonb_build_array(jsonb_build_object('candidate_id',scope.candidate_id,'client_id',scope.client_id,
+   'scope_revision',scope.revision::text,'checking_revision',revision->>'revision',
+   'permission',jsonb_build_object('allowed',true,'reason',null),'members',reviews));
+ end loop;
+ for grouping in select member->>'source_cycle_id' cycle_id,member->>'manager_address' address,
+   member->>'candidate_generation_id' generation_id,member->>'purpose' purpose
+  from jsonb_array_elements(members)member where member->'eligible'='true'::jsonb
+  group by member->>'source_cycle_id',member->>'manager_address',member->>'candidate_generation_id',member->>'purpose'
+  order by member->>'source_cycle_id',member->>'manager_address',member->>'candidate_generation_id',member->>'purpose'
+ loop
+  select jsonb_agg(member order by member->>'issue_id'),jsonb_agg(member->'issue_id' order by member->>'issue_id')
+   into group_members,selected from jsonb_array_elements(members)member
+   where member->'eligible'='true'::jsonb and member->>'source_cycle_id'=grouping.cycle_id
+    and member->>'manager_address' is not distinct from grouping.address
+    and member->>'candidate_generation_id' is not distinct from grouping.generation_id and member->>'purpose'=grouping.purpose;
+  if p_request->>'audience'='MANAGER' then
+   select jsonb_build_object('kind','MANAGER_QUERY_MODEL_V1','policy_version','1.8.0','renderer_version','1.4.0','structure_version','1.0.0',
+    'rows',jsonb_agg(member->'manager_row' order by private.weekly_source_query_ascii_fold_v1(member->'manager_row'->>'clientName') collate C,
+     member->>'client_id',private.weekly_source_query_ascii_fold_v1(member->'manager_row'->>'displayName') collate C,member->>'candidate_id',
+     member->'manager_row'->>'workDate',member->'manager_row'->>'sourceStartInstant',member->>'issue_id'),
+    'plain_body',null,'attachment_count',0) into model from jsonb_array_elements(group_members)member;
+   descriptor:=jsonb_build_object('audience','MANAGER','channel','EMAIL','recipient_route_id',group_members->0->'recipient_route_id',
+    'candidate_generation_id',null,'recipient',jsonb_build_object('candidate_id',null,'manager_address',grouping.address));
+  else
+   model:=jsonb_build_object('kind','WORKER_QUERY_MODEL_V1','policy_version','weekly-source-candidate-push-v1','renderer_version','1.0.0',
+    'structure_version',null,'rows','[]'::jsonb,'plain_body',case grouping.purpose when 'CHECK_HOURS'
+      then 'Open MyTMS to check your Timesheet hours.' else 'Open MyTMS to submit your Timesheet hours.' end,'attachment_count',0);
+   descriptor:=jsonb_build_object('audience','WORKER','channel','PUSH','recipient_route_id',null,'candidate_generation_id',grouping.generation_id::uuid,
+    'recipient',jsonb_build_object('candidate_id',group_members->0->'candidate_id','manager_address',null));
+  end if;
+  group_key:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_GROUP_V1',jsonb_build_object('agency_id',p_request->'agency_id',
+   'environment',p_request->'environment','source_cycle_id',grouping.cycle_id,'audience',p_request->'audience',
+   'recipient',descriptor->'recipient','candidate_generation_id',descriptor->'candidate_generation_id','purpose',grouping.purpose));
+  content_hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_REVIEW_CONTENT_V1',jsonb_build_object('group_key',encode(group_key,'hex'),
+   'selected_issue_ids',selected,'recipient',descriptor->'recipient','preview',model));
+  groups:=groups||jsonb_build_array(descriptor||jsonb_build_object('group_key',encode(group_key,'hex'),'source_cycle_id',grouping.cycle_id::uuid,
+   'selected_issue_ids',selected,'canonical_content_sha256',encode(content_hash,'hex'),'preview',model));
+ end loop;
+ return jsonb_build_object('version','CONTACT_MANUAL_MANIFEST_V1','cas_matches',cas_matches,'scope_results',scopes,
+  'scope_witnesses',witnesses,'groups',groups,'members',members);
+end;

@@ -1,0 +1,11 @@
+declare scope public.weekly_contact_pause_scopes%rowtype;facts jsonb;pair jsonb;
+begin
+ select * into strict scope from public.weekly_contact_pause_scopes where id=p_scope;
+ perform private.weekly_contact_deployment_lock_v1(scope.agency_id,scope.environment);
+ perform private.weekly_contact_context_v1(scope.agency_id,scope.environment);
+ facts:=private.weekly_contact_source_activation_scope_facts_v1(p_scope,p_cycle);
+ for pair in select value from jsonb_array_elements(facts->'pairs')order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+  perform private.weekly_contact_scope_lock_v1(scope.agency_id,scope.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ if private.weekly_contact_source_activation_scope_facts_v1(p_scope,p_cycle)is distinct from facts then
+  raise exception 'CONTACT_RECHECK_SELECTION_STALE' using errcode='40001';end if;
+end;

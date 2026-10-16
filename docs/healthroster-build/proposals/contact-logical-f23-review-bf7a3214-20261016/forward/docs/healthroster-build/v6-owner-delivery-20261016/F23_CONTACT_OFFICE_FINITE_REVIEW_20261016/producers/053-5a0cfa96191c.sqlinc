@@ -1,0 +1,125 @@
+declare
+  v_generation public.weekly_candidate_outreach_generations%rowtype;
+  v_link public.candidate_app_global_membership_links%rowtype;
+  v_account public.candidate_app_accounts%rowtype;
+  v_notification public.candidate_notifications%rowtype;
+  v_link_count integer;
+  v_request_kind text;
+  v_event_type text;
+  v_template_key text;
+  v_dedupe_key text;
+  v_client_name text;
+  v_timesheet_count integer;
+  v_week_ending date;
+begin
+  if new.audience_kind<>'CANDIDATE' then return new; end if;
+  if new.tranche_kind not in (
+    'CANDIDATE_INITIAL','CANDIDATE_REMINDER_6H','CANDIDATE_MANUAL_REMINDER',
+    'TIMESHEET_SUBMISSION_INITIAL','TIMESHEET_SUBMISSION_REMINDER_6H'
+  ) then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_NOTIFICATION_TRANCHE_INVALID' using errcode='22023';
+  end if;
+  select * into strict v_generation
+  from public.weekly_candidate_outreach_generations
+  where id=new.candidate_generation_id;
+
+   
+   
+   
+   
+  if new.tranche_kind in ('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL') then
+    select pg_catalog.count(*) into v_link_count
+    from public.candidate_app_global_membership_links link
+    join public.candidate_app_accounts account on account.id=link.account_id
+    where link.candidate_id=v_generation.candidate_id
+      and link.state='ACTIVE' and account.status='ACTIVE';
+    if v_link_count<>1 then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_APP_UNAVAILABLE' using errcode='55000';
+    end if;
+    select link.* into strict v_link
+    from public.candidate_app_global_membership_links link
+    join public.candidate_app_accounts account on account.id=link.account_id
+    where link.candidate_id=v_generation.candidate_id
+      and link.state='ACTIVE' and account.status='ACTIVE';
+  else
+    select link.* into v_link
+    from public.weekly_candidate_message_notifications prior
+    join public.candidate_app_global_membership_links link
+      on link.membership_id=prior.membership_id and link.account_id=prior.account_id
+    where prior.candidate_generation_id=v_generation.id
+    order by prior.created_at_utc,prior.message_intent_id
+    limit 1;
+    if not found then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_APP_UNAVAILABLE' using errcode='55000';
+    end if;
+  end if;
+  select * into strict v_account from public.candidate_app_accounts where id=v_link.account_id;
+
+  v_request_kind:=v_generation.request_kind;
+  v_event_type:=case
+    when new.tranche_kind in ('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL')
+      then 'WEEKLY_SOURCE_REQUEST'
+    else 'WEEKLY_SOURCE_REMINDER' end;
+  v_template_key:=case when v_request_kind='SUBMIT_TIMESHEET'
+    then 'weekly-source-submit-timesheet-v1'
+    else 'weekly-source-check-hours-v1' end;
+  v_dedupe_key:='weekly-source-message-intent:'||new.id::text;
+
+  if v_request_kind='SUBMIT_TIMESHEET' then
+    select client.name into strict v_client_name
+    from public.clients client
+    where client.id=v_generation.client_id;
+
+    select pg_catalog.count(*)::integer,pg_catalog.min(membership.week_ending)
+      into v_timesheet_count,v_week_ending
+    from public.weekly_timesheet_submission_requests submission
+    join public.weekly_timesheet_submission_request_memberships membership
+      on membership.submission_request_id=submission.id
+    where submission.candidate_cohort_id=v_generation.candidate_cohort_id
+      and submission.source_cycle_id=v_generation.source_cycle_id
+      and submission.candidate_id=v_generation.candidate_id
+      and submission.request_generation=v_generation.generation_number and submission.membership_hash=v_generation.membership_hash
+      and submission.state not in ('SUPERSEDED','CANCELLED')
+      and membership.state='WAITING';
+    if coalesce(v_timesheet_count,0)<1 or v_week_ending is null then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMISSION_SCOPE_NOT_FOUND'
+        using errcode='55000';
+    end if;
+  end if;
+
+  insert into public.candidate_notifications(
+    account_id,candidate_id,workflow_id,timesheet_id,event_type,
+    preference_category,template_key,template_params,deep_link_json,
+    state,push_state,dedupe_key,created_at_utc
+  ) values (
+    v_account.id,v_generation.candidate_id,null,null,v_event_type,
+    'timesheet_expense_attention',v_template_key,
+    pg_catalog.jsonb_build_object(
+      'request_id',v_generation.id,
+      'request_kind',v_request_kind,
+      'tranche_kind',new.tranche_kind,
+      'due_at_utc',new.due_at_utc,
+      'deadline_at_utc',v_generation.deadline_at_utc
+    )||case when v_request_kind='SUBMIT_TIMESHEET' then
+      pg_catalog.jsonb_build_object(
+        'timesheet_count',v_timesheet_count,
+        'week_ending_label',pg_catalog.to_char(v_week_ending,'FMDD FMMonth YYYY'),
+        'client_name',v_client_name
+      ) else '{}'::jsonb end,
+    pg_catalog.jsonb_build_object(
+      'destination','WEEKLY_SOURCE_REQUEST','request_id',v_generation.id
+    ),
+    'UNREAD','PENDING',v_dedupe_key,pg_catalog.transaction_timestamp()
+  )
+  on conflict (dedupe_key) do update set dedupe_key=excluded.dedupe_key
+  returning * into v_notification;
+
+  insert into public.weekly_candidate_message_notifications(
+    message_intent_id,candidate_generation_id,candidate_id,account_id,
+    membership_id,notification_id,tranche_kind,dedupe_key
+  ) values (
+    new.id,v_generation.id,v_generation.candidate_id,v_account.id,
+    v_link.membership_id,v_notification.id,new.tranche_kind,v_dedupe_key
+  );
+  return new;
+end;

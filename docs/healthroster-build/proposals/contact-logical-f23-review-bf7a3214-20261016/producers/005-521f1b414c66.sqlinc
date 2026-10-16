@@ -1,0 +1,20 @@
+declare s public.weekly_contact_pause_scopes%rowtype;saved public.weekly_contact_checking_scope_versions%rowtype;
+ facts jsonb;hash bytea;
+begin
+ select * into strict s from public.weekly_contact_pause_scopes where id=p_scope_id;
+ perform private.weekly_contact_deployment_lock_v1(s.agency_id,s.environment);
+ perform private.weekly_contact_context_v1(s.agency_id,s.environment);
+ perform private.weekly_contact_scope_lock_v1(s.agency_id,s.environment,s.candidate_id,s.client_id);
+ facts:=private.weekly_contact_checking_scope_facts_v1(s.id);
+ hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_CHECKING_SCOPE_FACTS_V1',facts);
+ insert into public.weekly_contact_checking_scope_versions(scope_id,revision,facts_sha256,facts_json,recorded_at_utc)
+  values(s.id,0,hash,facts,clock_timestamp()) on conflict(scope_id) do nothing;
+ select * into strict saved from public.weekly_contact_checking_scope_versions where scope_id=s.id for update;
+ if saved.facts_sha256<>hash then
+  if saved.revision=9223372036854775807 then raise exception 'CONTACT_CHECKING_REVISION_EXHAUSTED' using errcode='54000';end if;
+  update public.weekly_contact_checking_scope_versions set revision=revision+1,facts_sha256=hash,facts_json=facts,
+   recorded_at_utc=clock_timestamp() where scope_id=s.id returning * into saved;
+ end if;
+ return jsonb_build_object('version','CONTACT_CHECKING_REVISION_V1','scope_id',s.id,'revision',saved.revision::text,
+  'facts_sha256',encode(saved.facts_sha256,'hex'),'facts',saved.facts_json);
+end;

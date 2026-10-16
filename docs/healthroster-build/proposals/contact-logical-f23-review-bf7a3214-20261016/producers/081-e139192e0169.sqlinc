@@ -1,0 +1,24 @@
+declare i public.weekly_discrepancy_incidents%rowtype;c public.weekly_issue_comparison_revisions%rowtype;
+ w public.weekly_work_events%rowtype;r public.weekly_manager_recipient_routes%rowtype;
+ s public.weekly_source_global_settings%rowtype;policy jsonb;local_today date;last_sunday date;
+begin
+ if p_at is null or not isfinite(p_at) then raise exception 'CONTACT_SOURCE_TIME_INVALID' using errcode='22023';end if;
+ select * into strict i from public.weekly_discrepancy_incidents where id=p_incident_id;
+ select * into strict c from public.weekly_issue_comparison_revisions where id=i.current_comparison_revision_id;
+ select * into strict w from public.weekly_work_events where id=i.work_event_id;
+ select * into strict r from public.weekly_manager_recipient_routes where id=p_route_id;
+ if i.source_cycle_id<>r.source_cycle_id or i.state<>'OPEN' or i.manager_action_state='RESPONDED'
+  or i.manager_potential_state<>'AVAILABLE' or private.weekly_source_covered_hours_incident_v1(i.id) then return false;end if;
+ policy:=private._weekly_source_effective_policy_v1(i.client_id,c.contract_id,w.work_date);
+ if policy->>'source_group_id' is distinct from i.source_group_id::text
+  or policy->>'authority_mode' is distinct from 'SOURCE_AUTHORITY' or policy->>'document_mode' is distinct from 'CHECK_ONLY'
+  or policy->'manager_queries_enabled' is distinct from 'true'::jsonb
+  or private.weekly_source_query_normalise_recipient_v1(policy->>'manager_query_recipient')
+   is distinct from private.weekly_source_query_normalise_recipient_v1(r.protected_recipient_address)
+  or not exists(select 1 from public.contracts contract where contract.id=c.contract_id
+   and contract.candidate_id=i.candidate_id and contract.client_id=i.client_id) then return false;end if;
+ select * into strict s from public.weekly_source_global_settings where singleton;
+ local_today:=(p_at at time zone 'Europe/London')::date;last_sunday:=local_today-extract(isodow from local_today)::integer;
+ return w.work_date<=last_sunday and w.work_date>last_sunday-7*s.manager_recent_completed_weeks
+  and w.work_date>=local_today-s.manager_max_work_age_days;
+end;
