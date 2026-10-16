@@ -3385,6 +3385,14 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "native_source_commit": "14aea250e1ec68e21086f85d3017790ec7be51cb",
+        "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/PUSH_DISPATCH_CONSUME_NATIVE_ROLLBACK_R2.json",
+        "sql_sha256": "d3a573b6a931a046f1d2fee6352ff6063bcfe71e58d6386b7f0e05f713903774",
+        "statement_count": 123,
+        "qualification": "Native obsolete saved-target advisory and strict saved identity negatives only; eligible original START/read/claim/calendar race union NOT_RUN.",
+        "installed": false
       }
     },
     {
@@ -3580,6 +3588,14 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "native_source_commit": "14aea250e1ec68e21086f85d3017790ec7be51cb",
+        "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/PUSH_DISPATCH_CONSUME_NATIVE_ROLLBACK_R2.json",
+        "sql_sha256": "d3a573b6a931a046f1d2fee6352ff6063bcfe71e58d6386b7f0e05f713903774",
+        "statement_count": 123,
+        "qualification": "Native synthetic already-admitted attempt consume-once/replay/foreign scope/hash/expiry/unconsumed-accept/browser negatives and original uncertain permit metadata only; original START/native result/accepted-budget/race union NOT_RUN.",
+        "installed": false
       }
     },
     {
