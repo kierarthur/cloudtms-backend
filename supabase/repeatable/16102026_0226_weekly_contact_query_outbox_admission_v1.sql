@@ -17,7 +17,7 @@ declare v_mail public.mail_outbox%rowtype;v_delivery public.hr_issue_email_deliv
  v_item public.hr_issue_email_delivery_items%rowtype;v_action public.import_review_decisions%rowtype;
  v_issue public.hr_issue_emails%rowtype;v_operation public.import_apply_operations%rowtype;
  v_import public.hr_imports%rowtype;v_ts public.timesheets%rowtype;
- v_current boolean;v_count integer:=0;v_route jsonb;v_evidence jsonb;
+ v_current boolean;v_count integer:=0;v_route jsonb;v_evidence jsonb;v_fact jsonb;v_saved jsonb;
  v_route_hashes text[]:='{}';v_issue_witnesses jsonb:='[]';v_pairs jsonb:='[]';v_members jsonb:='[]';
  v_attachments jsonb;v_issue_set text;v_route_set text;v_content jsonb;v_content_hash bytea;v_recipient bytea;
 begin
@@ -37,63 +37,18 @@ begin
  select * into strict v_import from public.hr_imports where id=v_delivery.import_id;
  if v_operation.import_id is distinct from v_delivery.import_id or v_operation.committed_at_utc is null then
   raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
- v_current:=v_mail.status::text='QUEUED' and v_mail.sent_at is null and v_delivery.status='QUEUED'
+ v_current:=v_delivery.contact_managed and v_delivery.retired_at_utc is null and v_mail.status::text='QUEUED' and v_mail.sent_at is null and v_delivery.status='QUEUED'
   and v_import.pruned_at is null and v_operation.state in('SOURCE_COMMITTED_TSFIN_PENDING','COMPLETE');
  for v_item in select * from public.hr_issue_email_delivery_items
   where delivery_id=v_delivery.id order by action_id,id loop
   v_count:=v_count+1;
   if v_count>500 then raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
-  select * into strict v_action from public.import_review_decisions where action_id=v_item.action_id;
-  select * into strict v_issue from public.hr_issue_emails where id=v_item.issue_id;
-  select * into strict v_ts from public.timesheets where timesheet_id=v_action.timesheet_id;
-  if v_action.import_id is distinct from v_delivery.import_id or v_issue.import_id is distinct from v_delivery.import_id
-   -- A first native enqueue creates the issue after the immutable action was
-   -- catalogued, and fills only its native temporary issue projection. Its
-   -- saved action may therefore genuinely have no issue_id yet. The real
-   -- delivery item + exact immutable fingerprint still bind that new issue.
-   or (v_action.issue_id is not null and v_action.issue_id is distinct from v_issue.id)
-   or v_action.timesheet_id is distinct from v_issue.timesheet_id
-   or v_action.client_id is distinct from v_issue.client_id or v_action.contract_id is distinct from v_issue.contract_id
-   or v_action.candidate_id is null
-   or v_action.client_id is null or v_item.issue_fingerprint is distinct from v_issue.issue_fingerprint
-   or v_item.issue_fingerprint is distinct from coalesce(nullif(v_action.summary_json->>'issue_fingerprint',''),v_action.source_identity)
-   or v_action.action_kind not in('EMAIL_ISSUE','EMAIL_REMINDER')
-   or not exists(select 1 from public.import_review_action_outcomes o
-    where o.import_id=v_delivery.import_id and o.operation_id=v_delivery.operation_id and o.action_id=v_action.action_id) then
-   raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
-  -- The physical Timesheet has no candidate_id column. Weekly identity is
-  -- its real Contract; a genuine contractless Daily uses the same exact
-  -- native import identity view that produced the reviewed action.
-  if v_ts.contract_id is not null then
-   if not exists(select 1 from public.contracts c where c.id=v_ts.contract_id
-    and c.candidate_id=v_action.candidate_id and c.client_id=v_action.client_id) then
-    raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
-  elsif v_ts.sheet_scope::text<>'DAILY'
-   or (select count(*) from public.v_timesheets_daily_match d where d.timesheet_id=v_ts.timesheet_id)<>1
-   or not exists(select 1 from public.v_timesheets_daily_match d where d.timesheet_id=v_ts.timesheet_id
-    and d.candidate_id=v_action.candidate_id and d.client_id=v_action.client_id) then
-   raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';
-  end if;
-  v_route:=public._timesheet_query_recipient_resolve_core_v1(v_action.client_id,v_action.contract_id);
-  v_evidence:=private.weekly_source_issued_signed_query_evidence_v1(v_action.timesheet_id,v_delivery.import_id);
-  if v_route->>'recipient_email' is distinct from v_delivery.recipient_email
-   or v_route->>'recipient_scope_key' is distinct from v_action.summary_json->>'recipient_scope_key'
-   or v_route->>'route_fingerprint' is distinct from v_action.summary_json->>'recipient_route_fingerprint' then
-   v_current:=false;end if;
-  if v_action.is_current is distinct from true or v_action.selected is distinct from true
-   or v_action.requires_reconfirmation is distinct from false or v_item.marked_sent_at_utc is not null
-   or v_evidence->>'reason_code' is not null
-   or v_evidence->'document_ready' is distinct from 'true'::jsonb
-   or v_evidence->'source_complete' is distinct from 'true'::jsonb
-   or v_evidence->>'evidence_fingerprint' is distinct from v_action.summary_json->>'attachment_fingerprint' then
-   v_current:=false;end if;
-  v_route_hashes:=array_append(v_route_hashes,v_route->>'route_fingerprint');
-  v_issue_witnesses:=v_issue_witnesses||jsonb_build_array(jsonb_build_object('timesheet_id',v_action.timesheet_id,
-   'issue_fingerprint',v_item.issue_fingerprint,'evidence_fingerprint',v_evidence->>'evidence_fingerprint',
-   'r2_key',v_evidence->>'attachment_r2_key','filename',v_evidence->>'attachment_filename'));
-  v_pairs:=v_pairs||jsonb_build_array(jsonb_build_object('candidate_id',v_action.candidate_id,'client_id',v_action.client_id));
-  v_members:=v_members||jsonb_build_array(jsonb_build_object('action_id',v_action.action_id,'issue_id',v_issue.id,
-   'issue_fingerprint',v_item.issue_fingerprint,'candidate_id',v_action.candidate_id,'client_id',v_action.client_id));
+  v_fact:=private.weekly_contact_query_member_v1(v_delivery.id,v_item.id);
+  v_current:=v_current and v_fact->'current'='true'::jsonb;
+  v_route_hashes:=array_append(v_route_hashes,v_fact->>'route_fingerprint');
+  v_issue_witnesses:=v_issue_witnesses||jsonb_build_array(v_fact->'issue_witness');
+  v_pairs:=v_pairs||jsonb_build_array(v_fact->'pair');
+  v_members:=v_members||jsonb_build_array(v_fact->'member');
  end loop;
  select coalesce(jsonb_agg(x.pair order by x.pair->>'candidate_id',x.pair->>'client_id'),'[]'::jsonb)
   into v_pairs from(select distinct value pair from jsonb_array_elements(v_pairs))x;
@@ -113,19 +68,10 @@ begin
  -- The server-owned native enqueue freezes these fields. The trigger below
  -- forbids in-place body/recipient/attachment edits for this exact mail type;
  -- recomposition must retain this row and create the genuine new native row.
- v_content:=jsonb_build_object('mail_outbox_id',v_mail.id,'query_delivery_id',v_delivery.id,
-  'type',v_mail.type,'to',v_mail."to",'cc',v_mail.cc,'bcc',v_mail.bcc,'reply_to',v_mail.reply_to,
-  'subject',v_mail.subject,'body_html',v_mail.body_html,'body_text',v_mail.body_text,'attachments',v_mail.attachments,
-  'importance',v_mail.importance,'attachment_delivery_policy',v_mail.attachment_delivery_policy,
-  'recipient_kind',v_mail.recipient_kind,'recipient_id',v_mail.recipient_id,
-  'context_kind',v_mail.context_kind,'context_id',v_mail.context_id,'email_type',v_mail.email_type,
-  'reference',v_mail.reference,'deterministic_outbox_key',v_mail.deterministic_outbox_key,
-  'created_by',v_mail.created_by,'delivery_items',v_members);
- v_content_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_QUERY_CONTENT_V1',v_content);
- v_recipient:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_QUERY_RECIPIENT_V1',jsonb_build_object(
-  'to',v_mail."to",'cc',v_mail.cc,'bcc',v_mail.bcc,'reply_to',v_mail.reply_to,
-  'recipient_route_fingerprint',v_delivery.recipient_route_fingerprint));
- return jsonb_build_object('mail_outbox_id',v_mail.id,'query_delivery_id',v_delivery.id,'scope_pairs',v_pairs,
+ v_saved:=private.weekly_contact_query_saved_payload_v1(v_mail.id,v_delivery.id);
+ if v_saved->'members' is distinct from v_members then raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
+ v_content_hash:=decode(v_saved->>'content_hash','hex');v_recipient:=decode(v_saved->>'recipient_hash','hex');
+ return jsonb_build_object('mail_outbox_id',v_mail.id,'query_delivery_id',v_delivery.id,'original_delivery_id',v_saved->'original_delivery_id','payload_revision',v_saved->'payload_revision','scope_pairs',v_pairs,
   'content_hash',encode(v_content_hash,'hex'),'recipient_hash',encode(v_recipient,'hex'),
   'members',v_members,'current',coalesce(v_current,false));
 end;
@@ -265,12 +211,12 @@ begin
   insert into public.weekly_contact_delivery_memberships(logical_contact_key,purpose,audience,
    candidate_id,client_id,scope_id,scope_revision,delivery_id,payload_revision,content_hash,send_ordinal,budget_owner_key)
   values(v_contact,'TIMESHEET_QUERY','MANAGER',(v_member->>'candidate_id')::uuid,(v_member->>'client_id')::uuid,
-   v_scope_row.id,v_scope_row.revision,v_delivery_id,1,decode(v_after->>'content_hash','hex'),v_ordinal,v_budget)
+   v_scope_row.id,v_scope_row.revision,v_delivery_id,v_delivery.payload_revision,decode(v_after->>'content_hash','hex'),v_ordinal,v_budget)
   on conflict(delivery_id,logical_contact_key,send_ordinal)do nothing;
   if not exists(select 1 from public.weekly_contact_delivery_memberships m where m.delivery_id=v_delivery_id
    and m.logical_contact_key=v_contact and m.send_ordinal=v_ordinal and m.content_hash=decode(v_after->>'content_hash','hex')
    and m.candidate_id=(v_member->>'candidate_id')::uuid and m.client_id=(v_member->>'client_id')::uuid
-   and m.scope_id=v_scope_row.id and m.budget_owner_key=v_budget and m.accepted_at_utc is null) then
+   and m.scope_id=v_scope_row.id and m.payload_revision=v_delivery.payload_revision and m.budget_owner_key=v_budget and m.accepted_at_utc is null) then
    raise exception 'CONTACT_QUERY_MEMBERSHIP_CONFLICT' using errcode='40001';end if;
  end loop;
  return v_base||jsonb_build_object('ok',true,'contact_permit_id',v_permit_id,

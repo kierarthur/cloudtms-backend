@@ -1,0 +1,62 @@
+create or replace function private.weekly_contact_query_member_v1(p_delivery_id uuid,p_item_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare v_delivery public.hr_issue_email_deliveries%rowtype;v_item public.hr_issue_email_delivery_items%rowtype;
+ v_action public.import_review_decisions%rowtype;v_issue public.hr_issue_emails%rowtype;v_ts public.timesheets%rowtype;
+ v_current boolean:=true;v_route jsonb;v_evidence jsonb;
+begin
+ select * into strict v_delivery from public.hr_issue_email_deliveries where id=p_delivery_id;
+ select * into strict v_item from public.hr_issue_email_delivery_items where id=p_item_id and delivery_id=p_delivery_id;
+  select * into strict v_action from public.import_review_decisions where action_id=v_item.action_id;
+  select * into strict v_issue from public.hr_issue_emails where id=v_item.issue_id;
+  select * into strict v_ts from public.timesheets where timesheet_id=v_action.timesheet_id;
+  if v_action.import_id is distinct from v_delivery.import_id or v_issue.import_id is distinct from v_delivery.import_id
+   -- A first native enqueue creates the issue after the immutable action was
+   -- catalogued, and fills only its native temporary issue projection. Its
+   -- saved action may therefore genuinely have no issue_id yet. The real
+   -- delivery item + exact immutable fingerprint still bind that new issue.
+   or (v_action.issue_id is not null and v_action.issue_id is distinct from v_issue.id)
+   or v_action.timesheet_id is distinct from v_issue.timesheet_id
+   or v_action.client_id is distinct from v_issue.client_id or v_action.contract_id is distinct from v_issue.contract_id
+   or v_action.candidate_id is null
+   or v_action.client_id is null or v_item.issue_fingerprint is distinct from v_issue.issue_fingerprint
+   or v_item.issue_fingerprint is distinct from coalesce(nullif(v_action.summary_json->>'issue_fingerprint',''),v_action.source_identity)
+   or v_action.action_kind not in('EMAIL_ISSUE','EMAIL_REMINDER')
+   or not exists(select 1 from public.import_review_action_outcomes o
+    where o.import_id=v_delivery.import_id and o.operation_id=v_delivery.operation_id and o.action_id=v_action.action_id) then
+   raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
+  -- The physical Timesheet has no candidate_id column. Weekly identity is
+  -- its real Contract; a genuine contractless Daily uses the same exact
+  -- native import identity view that produced the reviewed action.
+  if v_ts.contract_id is not null then
+   if not exists(select 1 from public.contracts c where c.id=v_ts.contract_id
+    and c.candidate_id=v_action.candidate_id and c.client_id=v_action.client_id) then
+    raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
+  elsif v_ts.sheet_scope::text<>'DAILY'
+   or (select count(*) from public.v_timesheets_daily_match d where d.timesheet_id=v_ts.timesheet_id)<>1
+   or not exists(select 1 from public.v_timesheets_daily_match d where d.timesheet_id=v_ts.timesheet_id
+    and d.candidate_id=v_action.candidate_id and d.client_id=v_action.client_id) then
+   raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';
+  end if;
+  v_route:=public._timesheet_query_recipient_resolve_core_v1(v_action.client_id,v_action.contract_id);
+  v_evidence:=private.weekly_source_issued_signed_query_evidence_v1(v_action.timesheet_id,v_delivery.import_id);
+  if v_route->>'recipient_email' is distinct from v_delivery.recipient_email
+   or v_route->>'recipient_scope_key' is distinct from v_action.summary_json->>'recipient_scope_key'
+   or v_route->>'route_fingerprint' is distinct from v_action.summary_json->>'recipient_route_fingerprint' then
+   v_current:=false;end if;
+  if v_action.is_current is distinct from true or v_action.selected is distinct from true
+   or v_action.requires_reconfirmation is distinct from false or v_item.marked_sent_at_utc is not null
+   or v_evidence->>'reason_code' is not null
+   or v_evidence->'document_ready' is distinct from 'true'::jsonb
+   or v_evidence->'source_complete' is distinct from 'true'::jsonb
+   or v_evidence->>'evidence_fingerprint' is distinct from v_action.summary_json->>'attachment_fingerprint' then
+   v_current:=false;end if;
+
+ return jsonb_build_object('current',v_current,'route_fingerprint',v_route->>'route_fingerprint',
+  'issue_witness',jsonb_build_object('timesheet_id',v_action.timesheet_id,'issue_fingerprint',v_item.issue_fingerprint,
+   'evidence_fingerprint',v_evidence->>'evidence_fingerprint','r2_key',v_evidence->>'attachment_r2_key','filename',v_evidence->>'attachment_filename'),
+  'pair',jsonb_build_object('candidate_id',v_action.candidate_id,'client_id',v_action.client_id),
+  'member',jsonb_build_object('action_id',v_action.action_id,'issue_id',v_issue.id,'issue_fingerprint',v_item.issue_fingerprint,
+   'candidate_id',v_action.candidate_id,'client_id',v_action.client_id));
+end;
+$function$;

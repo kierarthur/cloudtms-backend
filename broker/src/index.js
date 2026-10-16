@@ -1,3 +1,4 @@
+import {createTimesheetQueryContactDrain} from './weekly-source/query-contact-drain.mjs';
 import { createContractPresetWriteTransport } from './weekly-source/contract-preset-write.mjs';
 const contractPresetWriteFetch = createContractPresetWriteTransport({ sbRpc, unwrapRpcJsonb });
 import { createNativeCorrectionSnapshotProducers } from './native-correction-snapshot-producers.mjs';
@@ -130623,6 +130624,13 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
       ? globalThis.crypto.randomUUID()
       : `lease_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
+  let queryContactDeployment = null;
+  try { queryContactDeployment = weeklySourceDeploymentContext(env); } catch {}
+  const queryContact = createTimesheetQueryContactDrain({
+    rpc: (name,args) => sbRpc(env,name,args,{timeoutMs:15000}), deployment:queryContactDeployment,
+    workerId:'cloudtms:email-outbox-drain',leaseToken:attemptLeaseToken
+  });
+
   const patchMailOutboxRows = async (query, body) => {
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?${query}`, {
       method: 'PATCH',
@@ -130742,14 +130750,16 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   };
 
   const claimEmailOutboxReadyBatch = async (takeCount) => {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/email_outbox_claim_ready_batch`, {
+    const claimName = queryContactDeployment ? 'email_outbox_claim_ready_batch_contact_v1' : 'email_outbox_claim_ready_batch';
+    const claimArgs = queryContactDeployment ? {p_request:{
+      version:'EMAIL_OUTBOX_CONTACT_CLAIM_V1',limit:Math.max(0,Math.min(takeCount,500)),
+      attempt_lease_token:attemptLeaseToken,lease_minutes:leaseMinutes,
+      worker_id:'cloudtms:email-outbox-drain',...queryContactDeployment
+    }} : {p_limit:takeCount,p_attempt_lease_token:attemptLeaseToken,p_lease_minutes:leaseMinutes};
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${claimName}`, {
       method: 'POST',
       headers: sbHeaders(env),
-      body: JSON.stringify({
-        p_limit: takeCount,
-        p_attempt_lease_token: attemptLeaseToken,
-        p_lease_minutes: leaseMinutes
-      })
+      body: JSON.stringify(claimArgs)
     });
 
     if (!res.ok) {
@@ -130822,6 +130832,11 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   };
 
   const claimTake = typeFilterSet ? maxDrainJobs : take;
+  // Existing drain owns the bounded retired-payload wake; this does not send.
+  if (!typeFilterSet || typeFilterSet.has('TIMESHEET_QUERY')) {
+    const queryWake = await queryContact.wake();
+    if (!queryWake.ok) errors.push({error:queryWake.reason,contact_query_wake_held:true});
+  }
   const claimed = await claimEmailOutboxReadyBatch(claimTake);
 
   const noClaimedRows = claimed.length === 0;
@@ -131059,6 +131074,20 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   };
 
   const reconcileBatchResult = async (res, rowIds, currentLeaseToken) => {
+    const queryOutcomes = await queryContact.reconcileProviderBatch(res,rowIds,claimedRowsById);
+    const handledQueries = new Set(queryOutcomes.map(result => String(result.id)));
+    for (const result of queryOutcomes) {
+      if (result.disposition === 'ACCEPTED') {
+        sent += 1;
+        await recordEmailAudit(env,null,'EMAIL_SENT',{outbox_id:result.id,provider_message_id:result.provider_message_id,type:'TIMESHEET_QUERY'});
+      } else {
+        deferred += 1;
+        errors.push({id:result.id,error:result.reason || 'CONTACT_QUERY_ORIGINAL_ATTEMPT_AMBIGUOUS',
+          checking_original_attempt:true,automatic_resend:false});
+      }
+    }
+    rowIds = rowIds.filter(id => !handledQueries.has(String(id)));
+    if (!rowIds.length) return;
     if (!res || !res.ok) {
       const errMsg = String((res && res.body) || (res && `HTTP ${res.status}`) || 'Provider transport failure');
       for (const rowId of rowIds) {
@@ -131228,6 +131257,11 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         continue;
       }
 
+      const queryPreparation = await queryContact.prepare(row);
+      if (queryPreparation.applicable && !queryPreparation.allowed) {
+        deferred += 1; errors.push({id:row.id,error:queryPreparation.reason,deferred:true,contact_query_held:true});
+        continue;
+      }
       const payloadBase = await buildEmailPayloadFromOutboxRow(env, row);
       const payload = {
         ...payloadBase,
@@ -131361,6 +131395,13 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
               type: claimedRow && claimedRow.type
             });
           }
+          continue;
+        }
+        // Last query admission before this native provider batch. No cached
+        // pause boolean or browser fields can replace the actual START owner.
+        const queryStart = await queryContact.start(claimedRow);
+        if (queryStart.applicable && !queryStart.allowed) {
+          deferred += 1; errors.push({id:rowId,error:queryStart.reason,deferred:true,contact_query_held:true});
           continue;
         }
         batchJobs.push(candidateJobs[itemIndex]);

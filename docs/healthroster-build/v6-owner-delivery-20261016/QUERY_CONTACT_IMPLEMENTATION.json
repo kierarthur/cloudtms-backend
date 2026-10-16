@@ -1,0 +1,137 @@
+{
+  "scope": "NATIVE_QUERY_CONTACT_SOURCE_INTEGRATION",
+  "proposal_commit": "f601343afd2d05dcefb085239ae5559cf57c48c0",
+  "proposal_manifest_sha256": "a416420f31e73a527f4e25d550c2079128e1d35d956b576020ea359efb9dab15",
+  "database_execution": false,
+  "native": "REQUIRED_NOT_RUN",
+  "provider": "NOT_RUN",
+  "concurrency": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "jobs_remain_running": true,
+  "source_checks": {
+    "backend_tests": 46,
+    "office_tests": 70,
+    "failed": 0,
+    "workspace_browser_viewports": [
+      "1366x900",
+      "390x844"
+    ],
+    "workspace_browser_scope": "Actual saved workspace/event binder/dispatcher/controllers; isolated modal shell and API replies; not installed/native acceptance",
+    "external_requests": 0,
+    "source_integrity": {
+      "migrations": 407,
+      "repeatables": 1073
+    },
+    "older_migration_hashes_unchanged": 406
+  },
+  "review_corrections": [
+    {
+      "finding": "Plain trigger DDL would be re-applied and collide after migration or later repeatable change",
+      "disposition": "APPLIED in reviewed f601: routine-only080/081; schema triggers084/085 only in atomic migration"
+    },
+    {
+      "finding": "Old native enqueue lacks new non-null original_delivery_id during DB-first rollout",
+      "disposition": "APPLIED in reviewed f601: BEFORE INSERT initializes actual NEW.id only for true original payload_revision1; no fabricated identity or timestamp"
+    }
+  ],
+  "atomic_migration": {
+    "path": "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+    "sha256": "82a3d0487cb483e692c7fdf590a75280a4dd88a7a1057b43a7fb39639da4e9e7",
+    "sources": [
+      "forward/010_existing_delivery_lineage.sqlinc",
+      "forward/080_native_integrity.sqlinc",
+      "forward/081_native_claim_guard.sqlinc",
+      "forward/082_native_claim_kernel.sqlinc",
+      "forward/083_native_claim_bridge.sqlinc",
+      "forward/091_claim_acl.sqlinc",
+      "forward/084_native_claim_triggers.sqlinc",
+      "forward/085_native_integrity_triggers.sqlinc"
+    ]
+  },
+  "repeatable": {
+    "path": "supabase/repeatable/16102026_0339_weekly_contact_query_native_lifecycle_v1.sql",
+    "sha256": "d7e7919d601e8d6a8eaf82a7fb30f3c46a287c2b08f95c98f8a7bdbbfefb2e79",
+    "complete_includes": [
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/020_native_member.sqlinc",
+        "sha256": "fc8c7e3f3ec942984a22fb5756c89f7e3f7315d067143b91c04cc1a00e665cfa"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/021_native_payload.sqlinc",
+        "sha256": "f7b74f5bda6d2bc5c3b009af10c5260b1b9928f2b7eeeab5d97d91417823aa37"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/030_native_enqueue_core.sqlinc",
+        "sha256": "80e333e33685204838b49ae2c67a055d5df5bf2534d9c66026a58955111d25de"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/040_native_recomposition.sqlinc",
+        "sha256": "74283f975ceb265dc07137652136414144c9c64d4f24a0cdfbf5fd80ae7ae7f6"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/050_native_entrypoints.sqlinc",
+        "sha256": "0958ee3673664c3f7b82860c0522d09db21bd73f25da67d35ac7d4ffc9a9476f"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/060_native_result.sqlinc",
+        "sha256": "9f0294f2aba86d207959eef9e3578736158c45595cc12693c01d39b8e06792b8"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/065_native_followup.sqlinc",
+        "sha256": "44847094bae7a1a33200a03540421c99d4f2bf1a69fcd7cb208f7a7da7ebc3e4"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/070_native_mark.sqlinc",
+        "sha256": "a76b9149dbadd5e9375a00eae5e2018d3bc74a5ced34b5f0b6fbaf4c0ed39705"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/080_native_integrity.sqlinc",
+        "sha256": "c416deb4987780e37714f99762c9c894266db5ef6409742773d6158885c00272"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/081_native_claim_guard.sqlinc",
+        "sha256": "eaf1a4f28f5fbb207b8e1ad8a30ca1de20966a78973c3ec1e50240284c261f3b"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+        "sha256": "9f9a54c9c3e650f6d71ccfd6fa0bd8181b9dfe816b6789e8be5907ea92a381dc"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/083_native_claim_bridge.sqlinc",
+        "sha256": "659c5c8c7186f99696fefcfed804fab35716b8826b2c89bc32d780a79017c3e9"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/086_pause_inflight.sqlinc",
+        "sha256": "788f41a4fba9de808fef4c7dc2bbacb11f887b6da2c74d54ff22d1b92fbe602e"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/090_acl.sqlinc",
+        "sha256": "d18558c0ab5ad72ae5fd17ad9d3de806d4b43cf7ff804137c4b1a5ff2a74bfa2"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_query/091_claim_acl.sqlinc",
+        "sha256": "5bdc4ac616da2e68d7e2b6e2b75338ad2addf86fb8b521f19be88ad35246e7cb"
+      }
+    ]
+  },
+  "finite_composition": [
+    "ROOT0226_PATCH.json",
+    "INDEX_DRAIN_PATCH.json",
+    "WORKER_PAUSE_PATCH.json",
+    "OFFICE_CONTROLS_PATCH.json"
+  ],
+  "earlier_pause_repeatable_preserved_sha256": "d83c11d3eae6ee290b545e714738e45f22c70a12de5d0a1188717b065f8bceff",
+  "office_decoder": {
+    "single_owner": "broker/src/weekly-source/contact-pause-office.mjs",
+    "generated_by": "scripts/compose-healthroster-contact-office-contract.mjs",
+    "sha256": "6efcd432c18b8871202b27b801e8cab57f25088204022611717468536a9640cf"
+  },
+  "pending": [
+    "native catalogue and transaction binding",
+    "genuine query enqueue/recompose/result fixtures",
+    "old-cached-body concurrency proof",
+    "actual shared PDF rebuild owner when included/excluded workers share an immutable PDF",
+    "Source accepted-budget/producer/scheduler integration",
+    "full contract/security/NEW-UPGRADE/rehearsal/release/API/Office acceptance"
+  ]
+}

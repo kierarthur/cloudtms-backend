@@ -1,0 +1,78 @@
+create or replace function public.timesheet_query_email_contact_result_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare permit public.weekly_contact_submission_permits%rowtype;mail public.mail_outbox%rowtype;delivery public.hr_issue_email_deliveries%rowtype;
+ pair jsonb;saved jsonb;provider jsonb;at_utc timestamptz;receipt jsonb;marked jsonb;logical bytea;member jsonb;ordinal integer;
+ agency uuid;environment text;permit_id uuid;outbox_id uuid;v_delivery_id uuid;provider_identity text;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ perform private.weekly_contact_assert_closed_v1(p_request,array['version','contact_permit_id','mail_outbox_id','query_delivery_id','attempt_lease_token','worker_id','content_hash','provider_result','agency_id','environment'],
+  array['version','contact_permit_id','mail_outbox_id','query_delivery_id','attempt_lease_token','worker_id','content_hash','provider_result','agency_id','environment'],'CONTACT_REQUEST_INVALID');
+ provider:=p_request->'provider_result';
+ perform private.weekly_contact_assert_closed_v1(provider,array['status','provider_message_id','error'],array['status','provider_message_id','error'],'CONTACT_REQUEST_INVALID');
+ if p_request->>'version' is distinct from 'TIMESHEET_QUERY_RESULT_V1' or not coalesce(provider->>'status' in('SUCCESS','FAILED','UNKNOWN'),false)
+  or jsonb_typeof(p_request->'attempt_lease_token') is distinct from 'string' or char_length(p_request->>'attempt_lease_token') not between 1 and 500
+  or jsonb_typeof(p_request->'worker_id') is distinct from 'string' or char_length(p_request->>'worker_id') not between 1 and 200
+  or jsonb_typeof(p_request->'content_hash') is distinct from 'string' or not coalesce(p_request->>'content_hash'~'^[0-9a-f]{64}$',false) or not coalesce(p_request->>'environment' in('TEST','LIVE'),false)
+  or (provider->'provider_message_id'<>'null'::jsonb and(jsonb_typeof(provider->'provider_message_id')<>'string' or char_length(provider->>'provider_message_id') not between 1 and 500))
+  or (provider->'error'<>'null'::jsonb and(jsonb_typeof(provider->'error')<>'string' or char_length(provider->>'error')>1000)) then
+  raise exception 'CONTACT_REQUEST_INVALID' using errcode='22023';end if;
+ agency:=private.weekly_contact_uuid_v1(p_request->'agency_id');environment:=p_request->>'environment';
+ permit_id:=private.weekly_contact_uuid_v1(p_request->'contact_permit_id');outbox_id:=private.weekly_contact_uuid_v1(p_request->'mail_outbox_id');
+ v_delivery_id:=private.weekly_contact_uuid_v1(p_request->'query_delivery_id');
+ perform private.weekly_contact_deployment_lock_v1(agency,environment);perform private.weekly_contact_context_v1(agency,environment);
+ select * into strict permit from public.weekly_contact_submission_permits where id=permit_id;
+ for pair in select value from jsonb_array_elements(permit.scope_revisions_json) order by value->>'candidate_id',value->>'client_id' loop
+  perform private.weekly_contact_scope_lock_v1(agency,environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);
+ end loop;
+ select * into strict mail from public.mail_outbox where id=outbox_id for update;
+ select * into strict delivery from public.hr_issue_email_deliveries where id=v_delivery_id for update;
+ select * into strict permit from public.weekly_contact_submission_permits where id=permit_id for update;
+ if permit.owner_kind<>'TIMESHEET_QUERY_OUTBOX' or permit.mail_outbox_id<>mail.id or permit.query_delivery_id<>delivery.id
+  or permit.agency_id<>agency or permit.environment<>environment or permit.lease_token is distinct from p_request->>'attempt_lease_token'
+  or permit.lease_owner is distinct from p_request->>'worker_id' or permit.content_hash<>decode(p_request->>'content_hash','hex')
+  or permit.status not in('STARTED','AMBIGUOUS','ACCEPTED') or permit.admitted_at_utc is null or permit.consumed_at_utc is null
+  or not delivery.contact_managed or delivery.status='RETIRED' then raise exception 'CONTACT_QUERY_RESULT_SCOPE_INVALID' using errcode='42501';end if;
+ -- Original immutable ownership is re-read, without demanding live eligibility
+ -- or the creator's later permission. A pause/reply/permission loss after START
+ -- cannot erase a genuine acceptance. The original lease identity must match;
+ -- its expiry never proves submission or failure and never creates a new one.
+ saved:=private.weekly_contact_query_saved_payload_v1(mail.id,delivery.id);
+ if saved->>'content_hash'<>encode(permit.content_hash,'hex') or saved->>'recipient_hash'<>encode(permit.recipient_hash,'hex') then
+  raise exception 'CONTACT_QUERY_RESULT_SCOPE_INVALID' using errcode='42501';end if;
+ if permit.status='ACCEPTED' then
+  if permit.accepted_result_json->'provider_result' is distinct from provider then raise exception 'CONTACT_QUERY_RESULT_CONFLICT' using errcode='40001';end if;
+  return permit.accepted_result_json->'receipt';
+ end if;
+ at_utc:=clock_timestamp();ordinal:=delivery.reminder_sequence+1;provider_identity:=nullif(btrim(provider->>'provider_message_id'),'');
+ for member in select value from jsonb_array_elements(saved->'members') loop
+  logical:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_QUERY_MEMBERSHIP_V1',jsonb_build_object('issue_id',member->'issue_id','purpose','TIMESHEET_QUERY'));
+  if not exists(select 1 from public.weekly_contact_delivery_memberships m where m.delivery_id=delivery.id and m.logical_contact_key=logical
+   and m.send_ordinal=ordinal and m.payload_revision=(saved->>'payload_revision')::bigint and m.content_hash=permit.content_hash and m.candidate_id=(member->>'candidate_id')::uuid
+   and m.client_id=(member->>'client_id')::uuid and m.accepted_at_utc is null
+   and exists(select 1 from jsonb_array_elements(permit.scope_revisions_json)s where (s->>'scope_id')::uuid=m.scope_id
+    and (s->>'candidate_id')::uuid=m.candidate_id and(s->>'client_id')::uuid=m.client_id and s->>'audience'='MANAGER'
+    and(s->>'revision')::bigint=m.scope_revision)) then raise exception 'CONTACT_QUERY_RESULT_SCOPE_INVALID' using errcode='42501';end if;
+ end loop;
+ if (select count(*) from public.weekly_contact_delivery_memberships m where m.delivery_id=delivery.id and m.content_hash=permit.content_hash and m.send_ordinal=ordinal)
+  <>jsonb_array_length(saved->'members') then raise exception 'CONTACT_QUERY_RESULT_SCOPE_INVALID' using errcode='42501';end if;
+ receipt:=jsonb_build_object('ok',true,'version','TIMESHEET_QUERY_RESULT_RECORDED_V1','contact_permit_id',permit.id,
+  'mail_outbox_id',mail.id,'query_delivery_id',delivery.id,'disposition',case when provider->>'status'='SUCCESS' then 'ACCEPTED' else 'AMBIGUOUS' end);
+ if provider->>'status'='SUCCESS' then
+  update public.weekly_contact_submission_permits set status='ACCEPTED',accepted_at_utc=at_utc,
+   provider_idempotency_identity=provider_identity,accepted_result_json=jsonb_build_object('provider_result',provider,'receipt',receipt) where id=permit.id;
+  update public.weekly_contact_delivery_memberships set accepted_at_utc=at_utc where delivery_id=delivery.id and content_hash=permit.content_hash and send_ordinal=ordinal and accepted_at_utc is null;
+  update public.mail_outbox set status='SENT',sent_at=at_utc,provider_status='ACCEPTED',provider_message_id=provider_identity,
+   last_error=null,failed_at=null,attempt_lease_token=null,attempt_leased_at_utc=null,attempt_lease_expires_at_utc=null where id=mail.id;
+  marked:=public._timesheet_query_email_delivery_mark_core_v1(mail.id,provider_identity,'ACCEPTED',at_utc,delivery.created_by_user_id);
+ else
+  -- The inspected provider FAILED vocabulary does not certify NOT_SUBMITTED.
+  -- Preserve the same admitted attempt for missing/failed/unknown responses.
+  update public.weekly_contact_submission_permits set status='AMBIGUOUS' where id=permit.id;
+  update public.mail_outbox set status='FAILED',provider_status='DELIVERY_UNCERTAIN',last_error=coalesce(provider->>'error','Provider outcome is being checked'),
+   attempt_lease_token=null,attempt_leased_at_utc=null,attempt_lease_expires_at_utc=null where id=mail.id;
+  update public.hr_issue_email_deliveries set status='FAILED',provider_status='DELIVERY_UNCERTAIN',updated_at_utc=at_utc where id=delivery.id;
+ end if;
+ return receipt;
+end;
+$function$;

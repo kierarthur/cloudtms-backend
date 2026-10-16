@@ -1,0 +1,33 @@
+create or replace function public._timesheet_query_email_delivery_mark_core_v1(
+  p_mail_outbox_id uuid,p_provider_message_id text,p_provider_status text,p_accepted_at_utc timestamptz,p_actor_user_id uuid
+)
+returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
+declare d public.hr_issue_email_deliveries%rowtype; o public.mail_outbox%rowtype; v_marked integer:=0; v_state public.import_review_states%rowtype; v_reconcile jsonb;
+begin
+  select * into o from public.mail_outbox where id=p_mail_outbox_id for update;
+  select * into d from public.hr_issue_email_deliveries where mail_outbox_id=p_mail_outbox_id for update;
+  if o.id is null or d.id is null then raise exception 'TIMESHEET_QUERY_DELIVERY_NOT_FOUND' using errcode='P0002'; end if;
+  if upper(coalesce(o.status::text,''))<>'SENT' and o.sent_at is null then raise exception 'TIMESHEET_QUERY_OUTBOX_NOT_SENT' using errcode='55000'; end if;
+  if nullif(btrim(coalesce(o.provider_message_id,'')),'') is not null and nullif(btrim(coalesce(p_provider_message_id,'')),'') is not null
+    and o.provider_message_id<>btrim(p_provider_message_id) then raise exception 'TIMESHEET_QUERY_PROVIDER_ID_MISMATCH' using errcode='22023'; end if;
+  if d.status='RETIRED' then raise exception 'CONTACT_QUERY_RETIRED_DELIVERY' using errcode='42501';end if;
+  if d.contact_managed and not exists(select 1 from public.weekly_contact_submission_permits p
+    where p.owner_kind='TIMESHEET_QUERY_OUTBOX' and p.query_delivery_id=d.id and p.mail_outbox_id=o.id and p.status='ACCEPTED'
+     and p.content_hash=decode(private.weekly_contact_query_saved_payload_v1(o.id,d.id)->>'content_hash','hex')
+     and p.accepted_at_utc is not distinct from o.sent_at and p.accepted_result_json->'provider_result'->>'status'='SUCCESS') then
+    raise exception 'CONTACT_QUERY_ACCEPTED_PROOF_REQUIRED' using errcode='42501';end if;
+  if d.status='SENT' then return jsonb_build_object('ok',true,'replay',true,'delivery_id',d.id,'marked_issue_count',0); end if;
+  update public.hr_issue_email_delivery_items set marked_sent_at_utc=coalesce(p_accepted_at_utc,o.sent_at,now())
+  where delivery_id=d.id and marked_sent_at_utc is null;
+  get diagnostics v_marked=row_count;
+  update public.hr_issue_emails e set last_sent_at=coalesce(p_accepted_at_utc,o.sent_at,now()),sent_count=e.sent_count+1,
+    last_successful_delivery_id=d.id,delivery_history_status='SENT_VERIFIED',updated_at=now()
+  where e.id in (select di.issue_id from public.hr_issue_email_delivery_items di where di.delivery_id=d.id and di.marked_sent_at_utc is not null)
+    and e.last_successful_delivery_id is distinct from d.id;
+  update public.hr_issue_email_deliveries set status='SENT',provider_message_id=coalesce(nullif(btrim(p_provider_message_id),''),o.provider_message_id),
+    provider_status=coalesce(nullif(btrim(p_provider_status),''),o.provider_status,'ACCEPTED'),accepted_at_utc=coalesce(p_accepted_at_utc,o.sent_at,now()),marked_at_utc=now(),updated_at_utc=now()
+  where id=d.id returning * into d;
+  v_reconcile:=private.weekly_contact_query_complete_v1(d.import_id,d.operation_id,p_actor_user_id);
+  return jsonb_build_object('ok',true,'replay',false,'delivery_id',d.id,'marked_issue_count',v_marked,'status',d.status,
+    'follow_up_status',coalesce(v_reconcile->>'follow_up_status',(select s.follow_up_status from public.import_review_states s where s.import_id=d.import_id)));
+end $function$;

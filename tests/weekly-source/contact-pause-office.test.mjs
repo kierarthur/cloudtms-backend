@@ -119,3 +119,15 @@ test('in-flight uncertainty is factual and cannot disclose another scope or full
     assert.equal(r.status,503);assert.deepEqual(r.value,{ok:false,error_code:'CONTACT_DEPENDENCY_UNAVAILABLE'});
   }
 });
+
+const legacyClaim=()=>({kind:'LEGACY_QUERY_CLAIM',mail_outbox_id:id(30),query_delivery_id:id(31),claim_identity_sha256:'a'.repeat(64),claimed_at_utc:'2026-10-15T12:00:00.000000Z',lease_expires_at_utc:'2026-10-15T12:05:00.000000Z',status:'CHECKING_ORIGINAL_LEGACY_CLAIM',provider_submission_established:false,can_auto_resend:false});
+test('actual route preserves a factual expired legacy claim and nullable original timestamps without inventing START',async()=>{
+ for(const claim of [legacyClaim(),{...legacyClaim(),claimed_at_utc:null,lease_expires_at_utc:null}]){
+  const b=body('CONTACT_PAUSE_GET'),reply=native(b);reply.scope.in_flight=[claim];const r=await run(b,{reply});assert.equal(r.status,200);assert.deepEqual(r.value.scope.in_flight,[claim]);
+ }
+});
+test('legacy claim union refuses invented acceptance, automatic resend, START identity and malformed facts',async()=>{
+ for(const patch of [{provider_submission_established:true},{can_auto_resend:true},{status:'ACCEPTED'},{claim_identity_sha256:'x'.repeat(64)},{claimed_at_utc:'yesterday'},{permit_id:id(32)},{kind:'WEEKLY_SOURCE_TARGET'}]){
+  const b=body('CONTACT_PAUSE_GET'),reply=native(b);reply.scope.in_flight=[{...legacyClaim(),...patch}];const r=await run(b,{reply});assert.equal(r.status,503);
+ }
+});

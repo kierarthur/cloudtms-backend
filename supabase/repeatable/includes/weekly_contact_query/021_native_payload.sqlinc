@@ -1,0 +1,46 @@
+create or replace function private.weekly_contact_query_saved_payload_v1(p_outbox_id uuid,p_delivery_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare v_mail public.mail_outbox%rowtype;v_delivery public.hr_issue_email_deliveries%rowtype;v_root public.hr_issue_email_deliveries%rowtype;
+ v_members jsonb;v_content jsonb;v_content_hash bytea;v_recipient bytea;
+begin
+ select * into strict v_mail from public.mail_outbox where id=p_outbox_id;
+ select * into strict v_delivery from public.hr_issue_email_deliveries where id=p_delivery_id;
+ select * into strict v_root from public.hr_issue_email_deliveries where id=v_delivery.original_delivery_id;
+ if v_delivery.mail_outbox_id is distinct from v_mail.id or v_mail.type is distinct from 'TIMESHEET_QUERY'
+  or v_mail.context_kind is distinct from 'TIMESHEET_QUERY_DELIVERY' or v_mail.context_id is distinct from v_delivery.id
+  or v_mail.deterministic_outbox_key is distinct from v_delivery.deterministic_outbox_key or v_mail.reference is distinct from v_delivery.deterministic_outbox_key
+  or v_mail.created_by is distinct from v_delivery.created_by_user_id or v_mail."to" is distinct from v_delivery.recipient_email
+  or v_mail.email_type is distinct from 'TIMESHEET_QUERY' or v_root.original_delivery_id is distinct from v_root.id or v_root.payload_revision<>1
+  or v_root.import_id is distinct from v_delivery.import_id or v_root.operation_id is distinct from v_delivery.operation_id
+  or v_root.created_by_user_id is distinct from v_delivery.created_by_user_id or v_root.recipient_email is distinct from v_delivery.recipient_email
+  or v_root.reminder_sequence is distinct from v_delivery.reminder_sequence
+  or (v_delivery.id=v_root.id) is distinct from (v_delivery.payload_revision=1) then
+  raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
+ if exists(select 1 from public.hr_issue_email_delivery_items child where child.delivery_id=v_delivery.id and not exists(
+  select 1 from public.hr_issue_email_delivery_items original where original.delivery_id=v_root.id and original.action_id=child.action_id
+   and original.issue_id=child.issue_id and original.issue_fingerprint=child.issue_fingerprint)) then
+  raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
+ select coalesce(jsonb_agg(jsonb_build_object('action_id',x.action_id,'issue_id',x.issue_id,'issue_fingerprint',x.issue_fingerprint,
+  'candidate_id',a.candidate_id,'client_id',a.client_id) order by x.action_id,x.id),'[]'::jsonb) into v_members
+ from public.hr_issue_email_delivery_items x join public.import_review_decisions a on a.action_id=x.action_id
+ where x.delivery_id=v_delivery.id;
+ if jsonb_array_length(v_members)=0 or jsonb_array_length(v_members)>500 then raise exception 'CONTACT_QUERY_SCOPE_INVALID' using errcode='42501';end if;
+ v_content:=jsonb_build_object('mail_outbox_id',v_mail.id,'query_delivery_id',v_delivery.id,
+  'original_delivery_id',v_delivery.original_delivery_id,'payload_revision',v_delivery.payload_revision::text,'type',v_mail.type,'to',v_mail."to",'cc',v_mail.cc,'bcc',v_mail.bcc,'reply_to',v_mail.reply_to,
+  'subject',v_mail.subject,'body_html',v_mail.body_html,'body_text',v_mail.body_text,'attachments',v_mail.attachments,
+  'importance',v_mail.importance,'attachment_delivery_policy',v_mail.attachment_delivery_policy,
+  'recipient_kind',v_mail.recipient_kind,'recipient_id',v_mail.recipient_id,
+  'context_kind',v_mail.context_kind,'context_id',v_mail.context_id,'email_type',v_mail.email_type,
+  'reference',v_mail.reference,'deterministic_outbox_key',v_mail.deterministic_outbox_key,
+  'created_by',v_mail.created_by,'delivery_items',v_members);
+ v_content_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_QUERY_CONTENT_V1',v_content);
+ v_recipient:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_QUERY_RECIPIENT_V1',jsonb_build_object(
+  'to',v_mail."to",'cc',v_mail.cc,'bcc',v_mail.bcc,'reply_to',v_mail.reply_to,
+  'recipient_route_fingerprint',v_delivery.recipient_route_fingerprint));
+
+ return jsonb_build_object('mail_outbox_id',v_mail.id,'query_delivery_id',v_delivery.id,'original_delivery_id',v_root.id,
+  'payload_revision',v_delivery.payload_revision::text,'content_hash',encode(v_content_hash,'hex'),
+  'recipient_hash',encode(v_recipient,'hex'),'members',v_members);
+end;
+$function$;

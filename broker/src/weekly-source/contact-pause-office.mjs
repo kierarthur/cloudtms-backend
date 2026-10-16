@@ -64,6 +64,15 @@ function scope(value,request,mutation) {
     || !Array.isArray(value.in_flight) || value.in_flight.length>500) unavailable();
   audience(value.worker);audience(value.manager);
   for (const item of value.in_flight) {
+    if (item?.kind==='LEGACY_QUERY_CLAIM') {
+      if (!exact(item,['kind','mail_outbox_id','query_delivery_id','claim_identity_sha256','claimed_at_utc','lease_expires_at_utc','status','provider_submission_established','can_auto_resend'])
+        || !uuid(item.mail_outbox_id) || !uuid(item.query_delivery_id)
+        || typeof item.claim_identity_sha256!=='string' || !/^[0-9a-f]{64}$/.test(item.claim_identity_sha256)
+        || (item.claimed_at_utc!==null && !instant(item.claimed_at_utc))
+        || (item.lease_expires_at_utc!==null && !instant(item.lease_expires_at_utc))
+        || item.status!=='CHECKING_ORIGINAL_LEGACY_CLAIM' || item.provider_submission_established!==false || item.can_auto_resend!==false) unavailable();
+      continue;
+    }
     if (!exact(item,['permit_id','owner_kind','delivery_id','provider_attempt_id','channel','status','started_at_utc','memberships'])
       || !uuid(item.permit_id) || !uuid(item.delivery_id) || (item.provider_attempt_id!==null && !uuid(item.provider_attempt_id))
       || !['WEEKLY_SOURCE_TARGET','TIMESHEET_QUERY_OUTBOX'].includes(item.owner_kind)

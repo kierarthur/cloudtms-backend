@@ -1619,6 +1619,10 @@
       "sha256": "36d9470a7b8033899ad2fe9c6ef37e4cf428f397290eed4e4caab575dfb93d40"
     },
     {
+      "path": "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+      "sha256": "82a3d0487cb483e692c7fdf590a75280a4dd88a7a1057b43a7fb39639da4e9e7"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

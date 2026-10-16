@@ -3686,6 +3686,13 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -3791,6 +3798,13 @@
           "remaining": "Legacy drain/result/recomposition; Source current producer/accepted-membership/claim/recheck; complete generated registries/ACL/contract/full release and API/Office/phone acceptance",
           "installed": false
         }
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -3864,6 +3878,13 @@
         "statement_count": 123,
         "qualification": "Native synthetic already-admitted attempt consume-once/replay/foreign scope/hash/expiry/unconsumed-accept/browser negatives and original uncertain permit metadata only; original START/native result/accepted-budget/race union NOT_RUN.",
         "installed": false
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -3929,6 +3950,13 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -4041,6 +4069,13 @@
           "remaining": "Legacy drain/result/recomposition; Source current producer/accepted-membership/claim/recheck; complete generated registries/ACL/contract/full release and API/Office/phone acceptance",
           "installed": false
         }
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -4913,6 +4948,13 @@
         "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
         "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
         "installed": false
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -5001,6 +5043,13 @@
         "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
         "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
         "installed": false
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -5089,6 +5138,13 @@
         "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
         "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
         "installed": false
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -5177,6 +5233,13 @@
         "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
         "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
         "installed": false
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -5274,6 +5337,13 @@
         "office_source": "7db0009982ce955468327c104417e3b35cec68f1",
         "office": "9functional tests + actual local desktop/mobile component DOM; parent/real API/installed acceptance pending",
         "original_status_preserved": true
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -5371,6 +5441,13 @@
         "office_source": "7db0009982ce955468327c104417e3b35cec68f1",
         "office": "9functional tests + actual local desktop/mobile component DOM; parent/real API/installed acceptance pending",
         "original_status_preserved": true
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -5468,6 +5545,13 @@
         "office_source": "7db0009982ce955468327c104417e3b35cec68f1",
         "office": "9functional tests + actual local desktop/mobile component DOM; parent/real API/installed acceptance pending",
         "original_status_preserved": true
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -5533,6 +5617,13 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
@@ -5621,6 +5712,13 @@
         "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
         "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
         "installed": false
+      },
+      "legacy_query_source_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_IMPLEMENTATION.json",
+        "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "full_acceptance": "REQUIRED_NOT_RUN",
+        "prior_approvals_and_history_preserved": true
       }
     },
     {
