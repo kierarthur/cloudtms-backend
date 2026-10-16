@@ -6,7 +6,7 @@ import json,re,sys
 from collections import defaultdict
 from pathlib import Path
 receipt=json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
-if receipt.get('version')!='CONTACT_FIXTURE_ABSENCE_SET_V1' or receipt.get('database') not in ('cloudtms_test_clone','banking_modal_v2_test'):
+if receipt.get('version')!='CONTACT_FIXTURE_ABSENCE_SET_V1' or receipt.get('database') not in ('cloudtms_test_clone',):
  raise ValueError('Wrong native absence receipt')
 objects=receipt.get('objects')
 if not isinstance(objects,list) or not 1<=len(objects)<=10000:raise ValueError('Missing/bounded actual IDs required')

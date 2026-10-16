@@ -1,6 +1,6 @@
 {
   "version": "CONTACT_NATIVE_SEED_ROOT_PREREQUISITES_V1",
-  "root_commit": "61a6e675f249f7512f799a74d0e68d3274ab49a7",
+  "root_commit": "cae8715b349a4b78c34846bd46ecf967990058f5",
   "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
   "recipe": "Existing protected NEW/UPGRADE source inventory and order, not a new installer. Root alone stages the genuine current union under its rollback lock. Never execute the old verifier fake audit/CURRENT seed blocks.",
   "controls": [
@@ -14,7 +14,7 @@
     },
     {
       "path": "supabase/release/migration-lock.json",
-      "sha256": "74c19c764e81fb720b472c88a62f8c72ff97ec6b655693211d7f34be0c18cfeb"
+      "sha256": "f2afa08d1c8efe06790348a26665ac80535c56c294ca092ef86d80893111a204"
     },
     {
       "path": "supabase/release/baseline-repeatable-lock.json",
@@ -1682,6 +1682,10 @@
     {
       "path": "supabase/migrations/16102026_0244_weekly_contact_global_timing_schema.sql",
       "sha256": "36d9470a7b8033899ad2fe9c6ef37e4cf428f397290eed4e4caab575dfb93d40"
+    },
+    {
+      "path": "supabase/migrations/16102026_0339_weekly_contact_query_lineage_and_claim_fence.sql",
+      "sha256": "82a3d0487cb483e692c7fdf590a75280a4dd88a7a1057b43a7fb39639da4e9e7"
     },
     {
       "path": "supabase/migrations/remittance_config_table.sql",
@@ -9865,7 +9869,7 @@
         "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
         "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc"
       ],
-      "sha256": "4d6f00d542ea2573aef974f65187a9368b3e31588561ffe913eb42ed3e88d1cb"
+      "sha256": "d72d19314cfa0d5a80f0a405ffd38fab99994c79ea0fdaef05fc8045d550d3b4"
     },
     {
       "path": "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql",
@@ -9888,6 +9892,28 @@
         "supabase/repeatable/includes/weekly_contact_office_rows_v1.sqlinc"
       ],
       "sha256": "136da95a8987968e25456a928048961cb82481ee37b3d131c245353db3fd8cba"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0339_weekly_contact_query_native_lifecycle_v1.sql",
+      "paths": [
+        "supabase/repeatable/16102026_0339_weekly_contact_query_native_lifecycle_v1.sql",
+        "supabase/repeatable/includes/weekly_contact_query/020_native_member.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/021_native_payload.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/030_native_enqueue_core.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/040_native_recomposition.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/050_native_entrypoints.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/060_native_result.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/065_native_followup.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/070_native_mark.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/080_native_integrity.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/081_native_claim_guard.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/083_native_claim_bridge.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/086_pause_inflight.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/090_acl.sqlinc",
+        "supabase/repeatable/includes/weekly_contact_query/091_claim_acl.sqlinc"
+      ],
+      "sha256": "531115bc7efdd0fae3e1482a4a4cc50b830b7487f88f7db2154d4880dfcc6611"
     },
     {
       "path": "supabase/repeatable/rpc_smoke_test.sql",

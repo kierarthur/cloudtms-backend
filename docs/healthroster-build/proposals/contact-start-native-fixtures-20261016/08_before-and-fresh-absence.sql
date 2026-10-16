@@ -4,7 +4,7 @@
 DO $absence$
 DECLARE v_item record;v_found boolean;
 BEGIN
- IF current_database() NOT IN('cloudtms_test_clone','banking_modal_v2_test') THEN RAISE EXCEPTION 'CONTACT_FIXTURE_ABSENCE_WRONG_DATABASE';END IF;
+ IF current_database() NOT IN('cloudtms_test_clone') THEN RAISE EXCEPTION 'CONTACT_FIXTURE_ABSENCE_WRONG_DATABASE';END IF;
  FOR v_item IN SELECT * FROM(VALUES
   ('tms_users','id'),
   ('clients','id'),

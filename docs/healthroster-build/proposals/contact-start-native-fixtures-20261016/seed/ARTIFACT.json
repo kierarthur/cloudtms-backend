@@ -6,7 +6,7 @@
   "work_date": "2026-10-06",
   "contract_start": "2026-08-12",
   "contract_end": "2026-12-10",
-  "root_commit": "b192e0433cd24c4e7027ec1ca91470a715e57584",
+  "root_commit": "cae8715b349a4b78c34846bd46ecf967990058f5",
   "synthetic_facts": true,
   "native_execution": "NOT_RUN",
   "report": {

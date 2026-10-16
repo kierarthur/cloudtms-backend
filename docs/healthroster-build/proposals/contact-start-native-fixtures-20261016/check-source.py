@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='contact-start-emitter-unit-') as temp:
  result=emit(valid)
  if result.returncode:raise RuntimeError(result.stderr)
  parser.parse_sql(result.stdout);parser.parse_plpgsql_json(result.stdout)
- bad=[{**valid,'database':'LIVE'},{**valid,'objects':[]},{**valid,'objects':[{**valid['objects'][0],'relation_name':"public.x;delete"}]},
+ bad=[{**valid,'database':'LIVE'},{**valid,'database':'banking_modal_v2_test'},{**valid,'objects':[]},{**valid,'objects':[{**valid['objects'][0],'relation_name':"public.x;delete"}]},
   {**valid,'objects':[{**valid['objects'][0],'column_name':'id) OR true'}]},
   {**valid,'objects':[{**valid['objects'][0],'object_id':'F716C000-0000-4000-8000-000000000001'}]},
   {**valid,'objects':[{**valid['objects'][0],'extra':True}]}]
@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix='contact-start-emitter-unit-') as temp:
  for obj in [{**restored,'restoration':{'settings_defaults_sha256':'x'}},
   {**restored,'restoration':{**restored['restoration'],'global_contact_settings_sha256':"';bad"}}]:
   if emit(obj).returncode==0:raise RuntimeError('Invalid restoration seal accepted')
-print('Emitter: two synthetic unit receipts parsed; eight malformed receipt units rejected')
+print('Emitter: two synthetic unit receipts parsed; nine malformed receipt units rejected')
 manifest=base/'SOURCE_MANIFEST.json'
 if manifest.exists():
  data=json.loads(manifest.read_text(encoding='utf-8'))

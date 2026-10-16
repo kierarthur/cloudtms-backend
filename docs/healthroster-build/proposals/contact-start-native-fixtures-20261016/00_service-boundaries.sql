@@ -3,7 +3,7 @@
 DO $boundary$
 DECLARE v_role text; v_table text; v_privilege text; v_signature text; v_request jsonb;
 BEGIN
- IF current_database() NOT IN('cloudtms_test_clone','banking_modal_v2_test')
+ IF current_database() NOT IN('cloudtms_test_clone')
   OR NOT EXISTS(SELECT 1 FROM private.cloudtms_database_identity WHERE singleton AND environment='TEST') THEN
   RAISE EXCEPTION 'CONTACT_START_FIXTURE_WRONG_DATABASE'; END IF;
  FOREACH v_table IN ARRAY ARRAY[
@@ -36,7 +36,8 @@ BEGIN
   'private.weekly_contact_source_permit_v1(uuid,uuid,jsonb)',
   'private.weekly_contact_query_admission_v1(jsonb)',
   'private.weekly_contact_query_content_v1(uuid,uuid)',
-  'private.weekly_contact_scope_lock_v1(uuid,text,uuid,uuid)'] LOOP
+  'private.weekly_contact_scope_lock_v1(uuid,text,uuid,uuid)',
+  'private.weekly_contact_office_rows_v1(jsonb,jsonb,uuid)'] LOOP
   FOREACH v_role IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
    IF has_function_privilege(v_role,v_signature,'EXECUTE') THEN
     RAISE EXCEPTION 'CONTACT_FIXTURE_PRIVATE_EXECUTE % %',v_role,v_signature; END IF;

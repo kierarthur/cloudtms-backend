@@ -58,12 +58,20 @@ BEGIN
   'source_group_id','f716c000-0000-4000-8000-000000000001','client_id','f716c000-0000-4000-8000-000000000020',
   'week_ending',v_artifact->'week_ending','tab','queries','section','questions','limit',100));
  SELECT jsonb_agg(jsonb_build_object('candidate_id',row->'candidate_id','client_id',row->'client_id',
-  'scope_key',row->'scope_key') ORDER BY row->>'candidate_id') INTO v_projection FROM jsonb_array_elements(v_review->'rows') row
+  'scope_key',row->'scope_key','contact_controls',row->'contact_controls') ORDER BY row->>'candidate_id') INTO v_projection FROM jsonb_array_elements(v_review->'rows') row
  WHERE row->>'candidate_id' IN('f716c000-0000-4000-8000-000000000010','f716c000-0000-4000-8000-000000000011','f716c000-0000-4000-8000-000000000012')
   AND nullif(row->>'scope_key','') IS NOT NULL AND EXISTS(SELECT 1 FROM jsonb_array_elements(v_review->'owners') owner
    WHERE owner->>'key'=row->>'scope_key' AND owner->'scope'->>'source_group_id'='f716c000-0000-4000-8000-000000000001'
     AND owner->'scope'->>'source_cycle_id'=v_cycle::text);
  PERFORM pg_temp.contact_assert_v1(jsonb_array_length(v_projection)=3,'genuine combined query rows must expose native owner scope_key');
+ PERFORM pg_temp.contact_assert_v1(NOT EXISTS(SELECT 1 FROM jsonb_array_elements(v_projection) x
+  WHERE x->'contact_controls' IS DISTINCT FROM jsonb_build_object('version','CONTACT_CONTROLS_ROW_V1',
+   'candidate_id',x->'candidate_id','client_id',x->'client_id','scope_revision','0',
+   'worker',jsonb_build_object('paused',false,'until_local',NULL),
+   'manager',jsonb_build_object('paused',false,'until_local',NULL),
+   'actions',jsonb_build_array(jsonb_build_object('operation','PAUSE','label','Pause messages'))))
+  AND NOT EXISTS(SELECT 1 FROM public.weekly_contact_pause_scopes WHERE candidate_id::text LIKE 'f716c000-%'),
+  '0319 must return exact scoped initial contact actions for all A/B/C without writing scope rows');
  INSERT INTO pg_temp.contact_seed_receipts VALUES('native_query_projection',v_projection);
  INSERT INTO pg_temp.contact_seed_receipts VALUES('native_ask_candidate',v_ask),('native_manager_selection',v_manager);
  v_receipt:=jsonb_build_object('version','CONTACT_NATIVE_SOURCE_PREFIX_RECEIPT_V1','native_constructors_completed',true,

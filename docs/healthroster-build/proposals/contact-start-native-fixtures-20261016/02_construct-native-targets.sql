@@ -10,7 +10,7 @@ DECLARE v_seed record; v_intent public.weekly_message_intents%rowtype;
  v_worker text:='contact-native-fixture';v_member jsonb;v_pairs jsonb;v_group uuid;
 BEGIN
  PERFORM set_config('request.jwt.claim.role','service_role',true);
- PERFORM pg_temp.contact_assert_v1(current_database() IN('cloudtms_test_clone','banking_modal_v2_test'),'wrong database');
+ PERFORM pg_temp.contact_assert_v1(current_database() IN('cloudtms_test_clone'),'wrong database');
  PERFORM pg_temp.contact_assert_v1(clock_timestamp()-transaction_timestamp()<interval '180 seconds',
   'native claim uses transaction time: prefix too old for genuine 300-second lease budget');
  PERFORM pg_temp.contact_assert_v1((SELECT count(*)=2 FROM pg_temp.contact_start_fixture_input),

@@ -18,7 +18,7 @@ $capture$;
 DO $observers$
 DECLARE r record;v_args text;v_count integer:=0;v_sig text;
 BEGIN
- PERFORM pg_temp.contact_assert_v1(current_database() IN('cloudtms_test_clone','banking_modal_v2_test'),'seed database');
+ PERFORM pg_temp.contact_assert_v1(current_database() IN('cloudtms_test_clone'),'seed database');
  PERFORM set_config('request.jwt.claim.role','service_role',true);
  PERFORM pg_temp.contact_assert_v1((SELECT count(*)=1 FROM pg_temp.contact_native_seed_artifact)
   AND (SELECT value->>'as_of'=(clock_timestamp() AT TIME ZONE 'Europe/London')::date::text FROM pg_temp.contact_native_seed_artifact),
@@ -38,6 +38,7 @@ BEGIN
   'public.weekly_source_projection_publish_atomic_v1(jsonb)',
   'public.weekly_source_query_ask_candidate_atomic_v1(jsonb)',
   'public.weekly_source_combined_review_workspace_v1(jsonb)',
+  'private.weekly_contact_office_rows_v1(jsonb,jsonb,uuid)',
   'public.weekly_source_query_send_manager_now_atomic_v1(jsonb)',
   'public.weekly_source_global_settings_get_v1(jsonb)',
   'public.weekly_source_global_settings_save_atomic_v1(jsonb)'
