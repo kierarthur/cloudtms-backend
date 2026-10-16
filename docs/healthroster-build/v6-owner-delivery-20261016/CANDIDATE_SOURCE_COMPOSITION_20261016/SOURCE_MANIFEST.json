@@ -1,0 +1,160 @@
+{
+  "status": "SOURCE_COMPOSITION_NATIVE_NOT_RUN",
+  "files": [
+    {
+      "path": "BROKER_CALLER.json",
+      "sha256": "8a72374fd2ae7eabdca8104f1406944f138de275bf967e81325c615cd216f672",
+      "bytes": 536
+    },
+    {
+      "path": "FINAL_FUNCTIONS.tsv",
+      "sha256": "87d39b0a95efdcda521dce824df729fdf631bd92c0fdc6dc9708ec076ad5cdf7",
+      "bytes": 22961
+    },
+    {
+      "path": "FROZEN_PHYSICAL_INVOICE_PREREQUISITES.json",
+      "sha256": "a91e1b751436b6c17ce4764005f6e975b11ca42bf4dd93a4d0c30f009ec881cf",
+      "bytes": 62701
+    },
+    {
+      "path": "INVENTORY.json",
+      "sha256": "5de5ffaee2c1adaf12961a2b77b92fe859c291f3b617581dd75b6355e601cc57",
+      "bytes": 60022
+    },
+    {
+      "path": "JOINED_SQL_MAP.json",
+      "sha256": "99de61228ff4893d46765311db974a32eaab7dd66f4fa25fee2a0b9d7abf3ec1",
+      "bytes": 59730
+    },
+    {
+      "path": "MOUNT_RECIPE.json",
+      "sha256": "e4ae5b059060aca1a9318e0c447c5530a1f6100eef79af6f1094a0beef0a9c44",
+      "bytes": 9831
+    },
+    {
+      "path": "README.md",
+      "sha256": "5b19f350a1b1e0aacc6e5c0e9ae3622adaa0bd4ee1019dd5b8afa603b8064fc6",
+      "bytes": 5154
+    },
+    {
+      "path": "REVIEWED_SELECTION.json",
+      "sha256": "866457b59011b0ff4ae912c03eb61203a3fe9ac55afcb85d67e8a249c6625941",
+      "bytes": 32513
+    },
+    {
+      "path": "WORKER_MAP.json",
+      "sha256": "9655a0af572f2808630b95cc0d7ee5e32eb8a71220c4eaa0aa530579a74829a9",
+      "bytes": 9830
+    },
+    {
+      "path": "assemble.py",
+      "sha256": "442761e40e3616c265174d29abd2b0ba9b62977cde74ece2738761b5a3477862",
+      "bytes": 7870
+    },
+    {
+      "path": "finalize.py",
+      "sha256": "c6ea12a9422939e7ec2507c4902dc899eb2079416a1fd4b688a15e42cc3fd98f",
+      "bytes": 8314
+    },
+    {
+      "path": "forward/CANDIDATE_EFFECTS.sqlinc",
+      "sha256": "c76727d61d6fd09739b63e1a2d9a3fb1ef5fde295edbc7cf9f8a7eb353e29844",
+      "bytes": 401
+    },
+    {
+      "path": "forward/CANDIDATE_FINAL_ACL.sqlinc",
+      "sha256": "2489d92c14804bd04a95bc9a90781264f947787478133c188d96f547e076551f",
+      "bytes": 15500
+    },
+    {
+      "path": "forward/CANDIDATE_FINAL_FUNCTIONS.sqlinc",
+      "sha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "bytes": 806209
+    },
+    {
+      "path": "forward/NATIVE_PENDING_MIGRATION_BODY.sqlinc",
+      "sha256": "c36ecbba9bfaa2d79f362689112b996155098ceb0b81d10f32aacda55c404d04",
+      "bytes": 2335
+    },
+    {
+      "path": "forward/worker/assembleCandidatePaperPack.mjsinc",
+      "sha256": "1d61369a833be28ad5675d4f5978001f1bea365ec5735bf2a7270f22f0c7c921",
+      "bytes": 4478
+    },
+    {
+      "path": "forward/worker/buildCandidateWeeklySubmissionThroughCanonicalAuthority.mjsinc",
+      "sha256": "7b67bdd5e9f78985e2244540dfc1823b3689aa51aff14d9d670e2270d3940552",
+      "bytes": 10332
+    },
+    {
+      "path": "forward/worker/candidate-contract-move.mjs",
+      "sha256": "172e9f0e1c513751c9713c7581fa869c4055f6342195fcd8e523b0308d7ef6b3",
+      "bytes": 3126
+    },
+    {
+      "path": "forward/worker/candidatePaperPackContext.mjsinc",
+      "sha256": "5927ba44ce7bf4058452c6259593d87894f7fd021f1e4d6b40e931a4b8158551",
+      "bytes": 8726
+    },
+    {
+      "path": "forward/worker/handlePaperPackStatus.mjsinc",
+      "sha256": "80e4abe60c55544bcd5f41af63b1219605b14f4255549dc3b04a9eb6b1c12ecc",
+      "bytes": 4326
+    },
+    {
+      "path": "forward/worker/handleWorkflowResubmit.mjsinc",
+      "sha256": "dbcb219b93983a6b452143b956dd3573bdd13fa4d671e753a99ee220dc18e08f",
+      "bytes": 929
+    },
+    {
+      "path": "forward/worker/managerStartResult.mjsinc",
+      "sha256": "71ded825cd4e357cb814c5ce3cbfa96db5928cc3f21300703dcbc744c24681e5",
+      "bytes": 2131
+    },
+    {
+      "path": "forward/worker/normaliseCandidateWorkflowCreatePayload.mjsinc",
+      "sha256": "97e334c4f024159d2a833778f63e566c7f4528c39903bc8c4d8e9b466e2f2553",
+      "bytes": 1519
+    },
+    {
+      "path": "forward/worker/prepareImmutableSubmission.mjsinc",
+      "sha256": "70a551df045c259ff93ea6af847ed0c0d97f34cc44d2253d0977421f8ca48d34",
+      "bytes": 5135
+    },
+    {
+      "path": "forward/worker/restartCandidatePaperSourceDocumentFromStatus.mjsinc",
+      "sha256": "7d7765e70eda78872d479bb3ba47b4f8c94e30aad9a875d189cf9c0264faab34",
+      "bytes": 1441
+    },
+    {
+      "path": "forward/worker/validateCandidateWorkflowFactualSnapshot.mjsinc",
+      "sha256": "b3b0b2f14c7699bbc6d4b5229a465c736a79a87d8d7b827afcbec6cef768fdcb",
+      "bytes": 4965
+    },
+    {
+      "path": "tests/BASELINE_FRESH.sql",
+      "sha256": "c7b8e8e3560a1f184e58fd7a8bf757d4ac899fc6eeae8b12ae65b6874c22a942",
+      "bytes": 6875
+    },
+    {
+      "path": "tests/GRAMMAR_RESULT.json",
+      "sha256": "196af02cb98c45e26b5b7184c87190ddab4f93b59c11d953546ec31eebfbacfe",
+      "bytes": 1939
+    },
+    {
+      "path": "tests/SOURCE_RESULT.json",
+      "sha256": "559c8e6a1f63dbe25beda91d9c0d6d309b105c229c6939334f5c5ef047b466d3",
+      "bytes": 139
+    },
+    {
+      "path": "tests/source.py",
+      "sha256": "650e1375329aebfadc58641c25b2d6bc2400255b641427dc54e6eeac207cd6bf",
+      "bytes": 7018
+    },
+    {
+      "path": "workers.mjs",
+      "sha256": "20f341b4afa8937be9f7c7459b782218b845d764d49fca0c7db02155d60b8f81",
+      "bytes": 5542
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+{
+  "status": "SOURCE_COMPOSITION_NATIVE_API_NOT_RUN",
+  "functions": [
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "managerStartResult",
+      "sourceCommit": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+      "sourcePath": "docs/healthroster-build/proposals/candidate-contract-move-native-20261016/forward/11_broker_native_contexts.mjsinc",
+      "sourceFileSha256": "c0a4c3ef0f34c482ca943a71043daf0d48bfe641024da12678f740c367d28835",
+      "sourceStartByte": 0,
+      "sourceEndByteExclusive": 2133,
+      "sourceSpanSha256": "db3896d7374065d2e1519391647ba6335c2f9a7abaec2acf3577d4172c196ad6",
+      "payload": "forward/worker/managerStartResult.mjsinc",
+      "sha256": "71ded825cd4e357cb814c5ce3cbfa96db5928cc3f21300703dcbc744c24681e5",
+      "mode": "Replace complete exact same-name function, preserving every unrelated wrapper/caller"
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "candidatePaperPackContext",
+      "sourceCommit": "a10f080f2272155c423991ffc81de8670d3c756b",
+      "sourcePath": "docs/healthroster-build/proposals/candidate-move-qr-paper-20261016/forward/06_captured_paper_context.mjsinc",
+      "sourceFileSha256": "a1b7a08e163c7e1c72614b5c1c282e0de09c3289607e015f571b0740fd77d749",
+      "sourceStartByte": 0,
+      "sourceEndByteExclusive": 8727,
+      "sourceSpanSha256": "529790af04d06b52655d17a9af482cdde1d0302f85b9d95968c30269b917cdf3",
+      "payload": "forward/worker/candidatePaperPackContext.mjsinc",
+      "sha256": "5927ba44ce7bf4058452c6259593d87894f7fd021f1e4d6b40e931a4b8158551",
+      "mode": "Replace complete exact same-name function, preserving every unrelated wrapper/caller"
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "assembleCandidatePaperPack",
+      "sourceCommit": "a10f080f2272155c423991ffc81de8670d3c756b",
+      "sourcePath": "docs/healthroster-build/proposals/candidate-move-qr-paper-20261016/forward/06_captured_paper_context.mjsinc",
+      "sourceFileSha256": "a1b7a08e163c7e1c72614b5c1c282e0de09c3289607e015f571b0740fd77d749",
+      "sourceStartByte": 8727,
+      "sourceEndByteExclusive": 13205,
+      "sourceSpanSha256": "1d61369a833be28ad5675d4f5978001f1bea365ec5735bf2a7270f22f0c7c921",
+      "payload": "forward/worker/assembleCandidatePaperPack.mjsinc",
+      "sha256": "1d61369a833be28ad5675d4f5978001f1bea365ec5735bf2a7270f22f0c7c921",
+      "mode": "Replace complete exact same-name function, preserving every unrelated wrapper/caller"
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "restartCandidatePaperSourceDocumentFromStatus",
+      "sourceCommit": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+      "sourcePath": "docs/healthroster-build/proposals/candidate-move-paper-draft-20261016/forward/04_original_paper_status.mjsinc",
+      "sourceFileSha256": "c7c558deb3245774b5d7c8d8ce3104f277cc9dfc07d4a84bb6a8325c738b0ddd",
+      "sourceStartByte": 0,
+      "sourceEndByteExclusive": 1442,
+      "sourceSpanSha256": "2fdd1afa2725b318fbbd3a5af06ebf072b0af78822d1e7030c5229372d5bc030",
+      "payload": "forward/worker/restartCandidatePaperSourceDocumentFromStatus.mjsinc",
+      "sha256": "7d7765e70eda78872d479bb3ba47b4f8c94e30aad9a875d189cf9c0264faab34",
+      "mode": "Replace complete exact same-name function, preserving every unrelated wrapper/caller"
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "handlePaperPackStatus",
+      "sourceCommit": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+      "sourcePath": "docs/healthroster-build/proposals/candidate-move-paper-draft-20261016/forward/04_original_paper_status.mjsinc",
+      "sourceFileSha256": "c7c558deb3245774b5d7c8d8ce3104f277cc9dfc07d4a84bb6a8325c738b0ddd",
+      "sourceStartByte": 1442,
+      "sourceEndByteExclusive": 5768,
+      "sourceSpanSha256": "80e4abe60c55544bcd5f41af63b1219605b14f4255549dc3b04a9eb6b1c12ecc",
+      "payload": "forward/worker/handlePaperPackStatus.mjsinc",
+      "sha256": "80e4abe60c55544bcd5f41af63b1219605b14f4255549dc3b04a9eb6b1c12ecc",
+      "mode": "Replace complete exact same-name function, preserving every unrelated wrapper/caller"
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "validateCandidateWorkflowFactualSnapshot",
+      "sourceCommit": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+      "sourcePath": "docs/healthroster-build/proposals/candidate-move-paper-draft-20261016/forward/08_factual_snapshot.mjsinc",
+      "sourceFileSha256": "e10f4b08e6305402decf2eac73d7ea0344cb231d26400a6f9aee4a4472e7c30d",
+      "sourceStartByte": 81,
+      "sourceEndByteExclusive": 5046,
+      "sourceSpanSha256": "b3b0b2f14c7699bbc6d4b5229a465c736a79a87d8d7b827afcbec6cef768fdcb",
+      "payload": "forward/worker/validateCandidateWorkflowFactualSnapshot.mjsinc",
+      "sha256": "b3b0b2f14c7699bbc6d4b5229a465c736a79a87d8d7b827afcbec6cef768fdcb",
+      "mode": "Add exact pure helper adjacent to existing normalizer"
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "normaliseCandidateWorkflowCreatePayload",
+      "sourceCommit": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+      "sourcePath": "docs/healthroster-build/proposals/candidate-move-paper-draft-20261016/forward/09_create_payload.mjsinc",
+      "sourceFileSha256": "97e334c4f024159d2a833778f63e566c7f4528c39903bc8c4d8e9b466e2f2553",
+      "sourceStartByte": 0,
+      "sourceEndByteExclusive": 1519,
+      "sourceSpanSha256": "97e334c4f024159d2a833778f63e566c7f4528c39903bc8c4d8e9b466e2f2553",
+      "payload": "forward/worker/normaliseCandidateWorkflowCreatePayload.mjsinc",
+      "sha256": "97e334c4f024159d2a833778f63e566c7f4528c39903bc8c4d8e9b466e2f2553",
+      "mode": "Replace complete exact same-name function, preserving every unrelated wrapper/caller"
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "handleWorkflowResubmit",
+      "sourceCommit": "c03c010dfabe8280fcbb36779fa210e7e5242a02",
+      "sourcePath": "docs/healthroster-build/proposals/candidate-move-native-reset-20261016/forward/10_resubmit_handler.mjsinc",
+      "sourceFileSha256": "dbcb219b93983a6b452143b956dd3573bdd13fa4d671e753a99ee220dc18e08f",
+      "sourceStartByte": 0,
+      "sourceEndByteExclusive": 929,
+      "sourceSpanSha256": "dbcb219b93983a6b452143b956dd3573bdd13fa4d671e753a99ee220dc18e08f",
+      "payload": "forward/worker/handleWorkflowResubmit.mjsinc",
+      "sha256": "dbcb219b93983a6b452143b956dd3573bdd13fa4d671e753a99ee220dc18e08f",
+      "mode": "Replace complete exact same-name function, preserving every unrelated wrapper/caller"
+    },
+    {
+      "module": "broker/src/candidate-app-backend.js",
+      "name": "prepareImmutableSubmission",
+      "sourceCommit": "2b5f58431df26561b1423d40c48bef15209494fd",
+      "sourcePath": "docs/healthroster-build/proposals/candidate-move-expense-preparation-20261016/forward/01_current_expense_preparation.mjsinc",
+      "sourceFileSha256": "d366bea0b7f3c376560a7ae068d1bce504261b3321a6500c42f07b501dfd9b15",
+      "sourceStartByte": 0,
+      "sourceEndByteExclusive": 5136,
+      "sourceSpanSha256": "78b4f55af35c6660330e449db16be3cd09be7fe9aac19ea0543aae4baa1134e5",
+      "payload": "forward/worker/prepareImmutableSubmission.mjsinc",
+      "sha256": "70a551df045c259ff93ea6af847ed0c0d97f34cc44d2253d0977421f8ca48d34",
+      "mode": "Replace complete exact same-name function, preserving every unrelated wrapper/caller"
+    },
+    {
+      "module": "broker/src/index.js",
+      "name": "buildCandidateWeeklySubmissionThroughCanonicalAuthority",
+      "sourceCommit": "2b5f58431df26561b1423d40c48bef15209494fd",
+      "sourcePath": "docs/healthroster-build/proposals/candidate-move-expense-preparation-20261016/forward/01_current_expense_preparation.mjsinc",
+      "sourceFileSha256": "d366bea0b7f3c376560a7ae068d1bce504261b3321a6500c42f07b501dfd9b15",
+      "sourceStartByte": 5136,
+      "sourceEndByteExclusive": 15468,
+      "sourceSpanSha256": "7b67bdd5e9f78985e2244540dfc1823b3689aa51aff14d9d670e2270d3940552",
+      "payload": "forward/worker/buildCandidateWeeklySubmissionThroughCanonicalAuthority.mjsinc",
+      "sha256": "7b67bdd5e9f78985e2244540dfc1823b3689aa51aff14d9d670e2270d3940552",
+      "mode": "Replace complete exact same-name function, preserving every unrelated wrapper/caller"
+    }
+  ],
+  "sharedDecoder": {
+    "sourceCommit": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+    "sourcePath": "docs/healthroster-build/proposals/candidate-contract-move-native-20261016/forward/candidate-contract-move.mjs",
+    "payload": "forward/worker/candidate-contract-move.mjs",
+    "sha256": "172e9f0e1c513751c9713c7581fa869c4055f6342195fcd8e523b0308d7ef6b3",
+    "target": "broker/src/candidate-contract-move.mjs",
+    "import": "decodeCandidateContractMove"
+  },
+  "callerPatch": {
+    "sourceCommit": "c47530caa7e4c7e2412a5d6b03b76bbb7f6dc8bb",
+    "sourcePath": "docs/healthroster-build/proposals/candidate-contract-move-lifecycle-20261016/BROKER_CALLER.json",
+    "sha256": "8a72374fd2ae7eabdca8104f1406944f138de275bf967e81325c615cd216f672",
+    "payload": "BROKER_CALLER.json",
+    "mode": "Exact sole prepareImmutableSubmission caller adds genuine access argument; no new route."
+  },
+  "preserve": [
+    "Outer handleManagerAction START enrichManagerCorrection/deps/env/request wrapper; manager fragment grants no Candidate read",
+    "Current Source/self-entry/contact/manual wrappers, all72 method/path/operation/security boundaries",
+    "Immutable original signed official presentation/body/component/signature identities",
+    "MyTMS f8aba9d7b7a7a5ba9c67d4c5ece424d594e3bd79 additive CREATE/resubmit typed snapshot schemas/journals; no third repair",
+    "Native movedExpense submit controlled refusal; actual currentB finalizer remains separately owned"
+  ]
+}

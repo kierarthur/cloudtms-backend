@@ -6508,5 +6508,33 @@
     "native": "NOT_RUN",
     "sourceDutySuccessor": "PENDING_MOUNT",
     "finalCandidate": "PENDING_MOUNT"
+  },
+  "candidate_native_sql_source_continuation_20261016": {
+    "status": "SOURCE_INTEGRATED_NATIVE_NOT_RUN",
+    "producerCommit": "f5668bf45854ca36b47e713c0e8f3dd3ae4b852b",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json",
+    "root": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+    "closureSha256": "b8a9346de8601b612cbc405f1085c501d3ff1684842829140eb2426cff676be1",
+    "migration": {
+      "path": "supabase/migrations/16102026_1003_nhsp_v6_native_pending_allocation.sql",
+      "sha256": "cf2f82f28ab0f1c96084235acff3ea8fc4245f82ba10cdf5960223b1c436ccec",
+      "sourceBodySha256": "c36ecbba9bfaa2d79f362689112b996155098ceb0b81d10f32aacda55c404d04",
+      "previous407LockEntriesAndBytesUnchanged": true,
+      "managedMigrationCount": 408,
+      "inlineWholeBody": true,
+      "functionsInMigration": "Only required native_pending_commit_guard trigger function, installed with the new deferred schema guard"
+    },
+    "completeFunctions": 55,
+    "finalWorkflowDefinitions": 1,
+    "schemaOverride": {
+      "relation": "private.timesheet_contract_current_placements",
+      "column": "current_timesheet_id",
+      "notNull": false,
+      "guard": "timesheet_contract_native_pending_commit_guard",
+      "qualification": "Source override only; not installed. Exact native pending/allocation receipt must prove absence/current ownership."
+    },
+    "original92BaselineObjectsPreserved": true,
+    "workerSource": "PENDING_ROOT_INTEGRATION",
+    "native": "NOT_RUN"
   }
 }

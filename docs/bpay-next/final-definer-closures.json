@@ -28,25 +28,29 @@
     },
     {
       "signature": "private._candidate_break_entry_context_core_v1(uuid,uuid,date,jsonb)",
-      "finalRoot": "supabase/repeatable/28092026_1110_candidate_source_self_entry_break_context_v1.sql",
-      "finalPhysical": "supabase/repeatable/28092026_1110_candidate_source_self_entry_break_context_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql",
         "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
         "supabase/repeatable/03092026_1215_candidate_weekly_preroute_break_entry_v1.sql",
-        "supabase/repeatable/28092026_1110_candidate_source_self_entry_break_context_v1.sql"
+        "supabase/repeatable/28092026_1110_candidate_source_self_entry_break_context_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql",
         "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
         "supabase/repeatable/03092026_1215_candidate_weekly_preroute_break_entry_v1.sql",
-        "supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql",
         "supabase/repeatable/28092026_1110_candidate_source_self_entry_break_context_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/28092026_1110_candidate_source_self_entry_break_context_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private._candidate_daily_booked_source_v1(text,uuid,jsonb,timestamp with time zone)",
@@ -841,19 +845,23 @@
     },
     {
       "signature": "private._candidate_office_rejection_targets_v2(text,uuid)",
-      "finalRoot": "supabase/repeatable/06092026_0710_candidate_office_guard_owner_reassert_v1.sql",
-      "finalPhysical": "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
-        "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql"
+        "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
-        "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
         "supabase/repeatable/06092026_0710_candidate_office_guard_owner_reassert_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/06092026_0710_candidate_office_guard_owner_reassert_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private._candidate_office_service_context_close_v1()",
@@ -915,37 +923,45 @@
     },
     {
       "signature": "private._candidate_paper_delivery_retire_set_v1(uuid[],integer[],text,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
-        "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql"
+        "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
-        "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql",
         "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private._candidate_paper_delivery_retire_v1(uuid,integer,text,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
-        "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql"
+        "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
-        "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql",
         "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private._candidate_paper_pack_readiness_v1(uuid,integer)",
@@ -1226,21 +1242,25 @@
     },
     {
       "signature": "private._candidate_timesheet_reject_rotate_v1(uuid,uuid,text,uuid,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
-      "finalPhysical": "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
-        "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql"
+        "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
-        "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql",
         "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private._candidate_week_ending_label_v1(date)",
@@ -1278,20 +1298,24 @@
     },
     {
       "signature": "private._candidate_weekly_withdrawal_reset_v1(uuid,text,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
-      "finalPhysical": "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
+        "supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql",
+        "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [
         "supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql",
         "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql"
+        "supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
       ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private._candidate_whole_claim_action_v1(text,uuid)",
@@ -1361,22 +1385,26 @@
     },
     {
       "signature": "private._candidate_workflow_maps_to_card_v1(uuid,uuid,uuid)",
-      "finalRoot": "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql",
-        "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql"
+        "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql",
         "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql",
-        "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
         "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private._candidate_workflow_mutation_receipt_v1(uuid,text,text,text,text,text,jsonb,timestamp with time zone)",
@@ -8265,14 +8293,15 @@
     },
     {
       "signature": "public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql",
         "supabase/repeatable/27082026_0858_candidate_finalised_artifact_readiness_v1.sql",
         "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
         "supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql",
-        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql",
@@ -8280,13 +8309,16 @@
         "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql",
         "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
         "supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql",
-        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
         "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B first-install current TEST integration",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "public.candidate_app_timesheet_detail_v2(uuid,text,uuid,uuid,uuid,timestamp with time zone)",
@@ -8310,8 +8342,8 @@
     },
     {
       "signature": "public.candidate_app_timesheet_page_v1(uuid,text,text,text,integer,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
-      "finalPhysical": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql",
         "supabase/repeatable/26082026_1516_candidate_timesheet_card_draft_linkage_v1.sql",
@@ -8319,7 +8351,8 @@
         "supabase/repeatable/30082026_0125_candidate_submitted_weekly_card_linkage.sql",
         "supabase/repeatable/28082026_2017_candidate_daily_timesheet_list_v1.sql",
         "supabase/repeatable/28082026_2236_candidate_daily_receipt_display_v1.sql",
-        "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql"
+        "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql",
@@ -8331,35 +8364,42 @@
         "supabase/repeatable/28082026_2236_candidate_daily_receipt_display_v1.sql",
         "supabase/repeatable/30082026_0125_candidate_submitted_weekly_card_linkage.sql",
         "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
-        "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
         "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "public.candidate_break_entry_context_get_v1(uuid,text,uuid,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql",
         "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
-        "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql"
+        "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql",
         "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql",
         "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
         "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
-        "supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql",
         "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "public.candidate_contract_week_add_missing_atomic_v1(uuid,text,uuid,date,text,timestamp with time zone)",
@@ -9039,24 +9079,28 @@
     },
     {
       "signature": "public.candidate_paper_return_proof_validate_v1(uuid,text,uuid,integer,text,text,text,text,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/30082026_1531_candidate_paper_return_proof_transaction_boundary_reassert_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql",
         "supabase/repeatable/30082026_1113_candidate_paper_return_proof_transaction_boundary_v1.sql",
-        "supabase/repeatable/30082026_1531_candidate_paper_return_proof_transaction_boundary_reassert_v1.sql"
+        "supabase/repeatable/30082026_1531_candidate_paper_return_proof_transaction_boundary_reassert_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql",
         "supabase/repeatable/30082026_1113_candidate_paper_return_proof_transaction_boundary_v1.sql",
         "supabase/repeatable/30082026_1531_candidate_paper_return_proof_transaction_boundary_reassert_v1.sql",
-        "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql",
         "supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "public.candidate_pay_method_change_refresh_scope_v1(uuid,text,text)",
@@ -9104,23 +9148,27 @@
     },
     {
       "signature": "public.candidate_submission_reject_atomic_v1(uuid,text,uuid,uuid,text,text,text,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/06092026_0710_candidate_office_guard_owner_reassert_v1.sql",
-      "finalPhysical": "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
         "supabase/repeatable/28082026_2027_candidate_daily_office_receipt_adapter_v1.sql",
-        "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql"
+        "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql",
         "supabase/repeatable/28082026_2027_candidate_daily_office_receipt_adapter_v1.sql",
-        "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql",
         "supabase/repeatable/06092026_0710_candidate_office_guard_owner_reassert_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/06092026_0710_candidate_office_guard_owner_reassert_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "public.candidate_weekly_paper_target_prepare_v1(uuid,text,uuid,integer,timestamp with time zone)",
@@ -9180,8 +9228,8 @@
     },
     {
       "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
         "supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql",
@@ -9189,7 +9237,8 @@
         "supabase/repeatable/28082026_1913_candidate_daily_submission_admission_v1.sql",
         "supabase/repeatable/28082026_2210_candidate_daily_handoff_recovery_v1.sql",
         "supabase/repeatable/29082026_0951_candidate_expense_resubmission_anchor_v1.sql",
-        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
@@ -9201,13 +9250,16 @@
         "supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql",
         "supabase/repeatable/06092026_0337_candidate_sequential_expense_manager_approval_gate_v1.sql",
         "supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql",
-        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql",
         "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain; owner SEND4/SEND4B first-install current TEST integration",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "public.client_create_with_settings_v1(uuid,jsonb,uuid,jsonb,timestamp with time zone)",
@@ -9359,8 +9411,8 @@
     },
     {
       "signature": "public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/13062026_1544_process_authorise_unprocess_unauthorise.sql",
         "supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql",
@@ -9368,7 +9420,8 @@
         "supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql",
         "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
         "supabase/repeatable/10102026_0922_weekly_source_pay_query_identity_admission_v1.sql",
-        "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql"
+        "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/13062026_1544_process_authorise_unprocess_unauthorise.sql",
@@ -9382,11 +9435,16 @@
         "supabase/repeatable/05092026_1200_banking_pay_draft_v8_final_authority_closure.sql",
         "supabase/repeatable/09092026_1548_banking_pay_restored_authority_canonicalisation_v1.sql",
         "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
-        "supabase/repeatable/10102026_0922_weekly_source_pay_query_identity_admission_v1.sql"
+        "supabase/repeatable/10102026_0922_weekly_source_pay_query_identity_admission_v1.sql",
+        "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql"
       ],
-      "finalClosures": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0942_weekly_source_manual_upsert_busy_passthrough_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "SP-12 identity/mapping/rotation admission; preserve complete current owner",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "public.contracts_clone_and_extend_atomic(uuid,date,date,date,boolean,uuid,text,jsonb,boolean,boolean,boolean,uuid)",
@@ -11969,22 +12027,26 @@
     },
     {
       "signature": "public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)",
-      "finalRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
-      "finalPhysical": "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/16122025_timesheet_qr_refuse_restore_planned_delete_audit_rpc.sql",
-        "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql"
+        "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/16122025_timesheet_qr_refuse_restore_planned_delete_audit_rpc.sql",
         "supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql",
-        "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql",
         "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "F-04 baseline census; exact feature successor follows master editor chain",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "public.timesheet_qr_restore_version(uuid,uuid,text,uuid)",
@@ -21583,31 +21645,41 @@
     },
     {
       "signature": "private.timesheet_contract_current_placement_v1(uuid)",
-      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
-      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
-        "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc"
+        "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
-      "predecessors": [],
-      "finalClosures": [
+      "predecessors": [
         "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
-      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private.timesheet_contract_move_family_lock_v1(uuid)",
-      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
-      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
-        "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc"
+        "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
-      "predecessors": [],
-      "finalClosures": [
+      "predecessors": [
         "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
-      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private.timesheet_contract_move_immutable_v1()",
@@ -21667,17 +21739,22 @@
     },
     {
       "signature": "private.timesheet_contract_move_placement_guard_v1()",
-      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
-      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
-        "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc"
+        "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
-      "predecessors": [],
-      "finalClosures": [
+      "predecessors": [
         "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
-      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private.timesheet_contract_move_commit_guard_v1()",
@@ -21863,31 +21940,41 @@
     },
     {
       "signature": "private.timesheet_contract_move_evidence_v1(uuid)",
-      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
-      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
-        "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc"
+        "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
-      "predecessors": [],
-      "finalClosures": [
+      "predecessors": [
         "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
-      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private.timesheet_contract_move_scope_v1(uuid,boolean)",
-      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
-      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
-        "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc"
+        "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
-      "predecessors": [],
-      "finalClosures": [
+      "predecessors": [
         "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
-      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private.timesheet_contract_move_review_members_v1(uuid,jsonb)",
@@ -21947,17 +22034,22 @@
     },
     {
       "signature": "private.timesheet_contract_move_evidence_source_v1(uuid)",
-      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
-      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
       "allowedPhysical": [
-        "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc"
+        "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
       ],
-      "predecessors": [],
-      "finalClosures": [
+      "predecessors": [
         "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
       "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
-      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     },
     {
       "signature": "private.timesheet_contract_move_stage_v1(uuid,uuid,bytea)",
@@ -23472,6 +23564,537 @@
       "owner": "Health V6 exact complete Invoice source composition; native/catalogue/effect qualification required",
       "baselineSource": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
       "healthV6InvoiceSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_component_source_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_sources_v1(uuid[])",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_claim_snapshot_assert_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_evidence_snapshot_assert_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_move_evidence_live_v1(uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private._candidate_timesheet_summary_workflow_revision_trg_v1()",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_summary_invalidate_v1()",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_signature_facts_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "c47530caa7e4c7e2412a5d6b03b76bbb7f6dc8bb",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_facts_v1(jsonb,jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "c47530caa7e4c7e2412a5d6b03b76bbb7f6dc8bb",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_workflow_facts_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "c47530caa7e4c7e2412a5d6b03b76bbb7f6dc8bb",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_workflow_factual_snapshot_assert_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "public.candidate_paper_manifest_v2_promote_v1(uuid,text,uuid,integer,text,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "public.candidate_paper_return_pack_complete_v2(uuid,text,uuid,integer,jsonb,text,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/30082026_1414_candidate_paper_return_pack_complete_v2.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/30082026_1414_candidate_paper_return_pack_complete_v2.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_draft_signature_assert_v1(uuid,jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "c03c010dfabe8280fcbb36779fa210e7e5242a02",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_paper_source_lock_v1(text,uuid,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "a10f080f2272155c423991ffc81de8670d3c756b",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "public.candidate_targetless_expense_paper_pack_enqueue_v1(text,uuid,integer,text,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/06092026_0540_candidate_targetless_expense_paper_pack_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/06092026_0540_candidate_targetless_expense_paper_pack_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "a10f080f2272155c423991ffc81de8670d3c756b",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "public.candidate_paper_return_proof_validate_v2(uuid,text,uuid,integer,text,text,jsonb,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "a10f080f2272155c423991ffc81de8670d3c756b",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_allocation_binding_v1(jsonb,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_allocation_alias_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_booking_bound_v1(uuid,text,text,uuid,date)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_rotation_binding_v1(jsonb,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_rotation_alias_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_v1(jsonb,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_workflow_v1(jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_publish_v1(jsonb,uuid,uuid,text,uuid,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_allocation_publish_v1(jsonb,uuid,uuid,boolean,uuid,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_rotation_publish_v1(jsonb,uuid,text,uuid,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_qr_rotation_publish_v1(jsonb,uuid,text,uuid,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_for_v1(uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_week_v1(uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.timesheet_contract_native_pending_enter_week_v1(uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private._candidate_timesheet_summary_revision_touch_workflow_v1(uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "public.candidate_app_timesheet_page_v2(uuid,text,text,text,integer,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/03102026_1540_candidate_approved_hours_visible.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/03102026_1540_candidate_approved_hours_visible.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    },
+    {
+      "signature": "private.candidate_contract_move_context_v1(text,uuid,uuid,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Candidate native composition; native security/lifecycle/contract qualification required",
+      "baselineSource": "11afc9c69c85b6babef0b0e7b5230bc2e0bd3417",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
     }
   ],
   "editorChains": [

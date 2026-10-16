@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "status": "SOURCE_COMPOSITION_NATIVE_NOT_RUN",
+  "kind": "Exact finite final definition selection; no installation adapter or registry mutation",
+  "rootObservedHead": "24a2cabb9aaf31b91f8b9c671ba4a8dda3f9605f",
+  "rootSavedInputs": [
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "f5bff8ca19712b957eea1e51a1732d54b4f8584d79fe4f57a3a018b782b1b21f"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    }
+  ],
+  "frozenPackages": [
+    {
+      "commit": "96c5a7ec4655481499f53d3e2c59361ede102a74",
+      "package": "candidate-contract-move-native-20261016",
+      "recipePath": "docs/healthroster-build/proposals/candidate-contract-move-native-20261016/MOUNT_RECIPE.json",
+      "recipeSha256": "0691c7f0ceb181314954e6cead69911ba78795b80d8bd43b6c1303ad4553d97c"
+    },
+    {
+      "commit": "c47530caa7e4c7e2412a5d6b03b76bbb7f6dc8bb",
+      "package": "candidate-contract-move-lifecycle-20261016",
+      "recipePath": "docs/healthroster-build/proposals/candidate-contract-move-lifecycle-20261016/MOUNT_RECIPE.json",
+      "recipeSha256": "3e7c94d66ded27e96b339ad0659040c02c5c84002f7cc187e3d3b406ee603695"
+    },
+    {
+      "commit": "529ecc404c29c923b1fcfca3d764e9dc9d6762ad",
+      "package": "candidate-move-paper-draft-20261016",
+      "recipePath": "docs/healthroster-build/proposals/candidate-move-paper-draft-20261016/MOUNT_RECIPE.json",
+      "recipeSha256": "acaa5e6d097828f93b9e6757fe88f590a4af7ffc26a2a8d7f377663be9155135"
+    },
+    {
+      "commit": "c03c010dfabe8280fcbb36779fa210e7e5242a02",
+      "package": "candidate-move-native-reset-20261016",
+      "recipePath": "docs/healthroster-build/proposals/candidate-move-native-reset-20261016/MOUNT_RECIPE.json",
+      "recipeSha256": "1328ce41078d6d631e27c7a1d1342232292ee25ea244b39d34c3613dbe76c462"
+    },
+    {
+      "commit": "a10f080f2272155c423991ffc81de8670d3c756b",
+      "package": "candidate-move-qr-paper-20261016",
+      "recipePath": "docs/healthroster-build/proposals/candidate-move-qr-paper-20261016/MOUNT_RECIPE.json",
+      "recipeSha256": "cc3b5ed185e2ca23e266b0457c809b82303696703cdd0b291afe8884257d58ed"
+    },
+    {
+      "commit": "975376fd97855248c76b0ccbe027eed9b50f25ff",
+      "package": "candidate-native-pending-20261016",
+      "recipePath": "docs/healthroster-build/proposals/candidate-native-pending-20261016/MOUNT_RECIPE.json",
+      "recipeSha256": "5a4bc204c3126c463fd569f8cd5243af649ad0fbd68c220833b37b15963e3cf2"
+    },
+    {
+      "commit": "2b5f58431df26561b1423d40c48bef15209494fd",
+      "package": "candidate-move-expense-preparation-20261016",
+      "recipePath": "docs/healthroster-build/proposals/candidate-move-expense-preparation-20261016/MOUNT_RECIPE.json",
+      "recipeSha256": "fdd279a648912b9355d1e308354eb0c0c4eb50544d24d259232c627de9eb752a"
+    },
+    {
+      "commit": "11afc9c69c85b6babef0b0e7b5230bc2e0bd3417",
+      "package": "candidate-current-body-witness-20261016",
+      "recipePath": "docs/healthroster-build/proposals/candidate-current-body-witness-20261016/MOUNT_RECIPE.json",
+      "recipeSha256": "2ae26595c98a69188838e855c8ddc884e192be26cf6cd2984876c76a7757e661"
+    }
+  ],
+  "explicitSelection": "REVIEWED_SELECTION.json",
+  "completePhysicalSourceMap": "JOINED_SQL_MAP.json",
+  "humanSignatureMap": "FINAL_FUNCTIONS.tsv",
+  "prerequisites": {
+    "physicalInvoice": {
+      "recordCommit": "55437f5ced7b82f27ac6975f2e7a2da3e32fc5ab",
+      "path": "docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/FROZEN_CONTRACT_INTEGRATION_C03.json",
+      "sha256": "a91e1b751436b6c17ce4764005f6e975b11ca42bf4dd93a4d0c30f009ec881cf",
+      "copy": "FROZEN_PHYSICAL_INVOICE_PREREQUISITES.json",
+      "mode": "Already-root-composed7d/00f stable physical, full Daily and Invoice c86 then330a015/035. Do not reinstall historical schema or superseded routine whole roots."
+    },
+    "expenseIngress": {
+      "kernelCommit": "f0172356c678695a68db80cd066ed69e80648a29",
+      "kernel": "v6-expense-daily-ingress-20261016/forward/001_family_entry.sqlinc",
+      "sha256": "fd49adbd4620aee76d0ec0782658c7cca7046d80f0e2518e8689cefaf1d82034",
+      "outerPrefixCommit": "150ac08f4a9ae4196a6f6319f1478a693f70fd39",
+      "mode": "Both exact kernel functions before final WF. All12 full actual native prefix successors remain150ac; no duplicate competing helper."
+    },
+    "invoicePending": {
+      "commit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+      "recipe": "v6-claim-native-pending-20261016/MOUNT_RECIPE.json",
+      "sha256": "90370acf2f334ed5fd2584ebe0790ba0cdf879f1097afbfb7a791844faae8294",
+      "mode": "Own complete025/026/027/028/030 +claim_pending helper; replaces rotation-only ffc where superseded, no original/current fallback for genuine pending. Root review required."
+    },
+    "sourcePending": "Source-owned bound-origin pending/current reader composition remains explicit unprovided qualification; do not infer Work/Bank/Source facts.",
+    "mytms": {
+      "sourceCommit": "f8aba9d7b7a7a5ba9c67d4c5ece424d594e3bd79",
+      "manifest": "docs/healthroster-build/MYTMS_FACTUAL_CREATE_RESUBMIT_V6_SOURCE_MANIFEST.json",
+      "sha256": "45602075d6f532bd2a48a9b112f6d73680aba4e8a69d82ac1a3f224d7f3d5e88",
+      "mode": "Existing same72/same17 optional factual CREATE and resubmit request-schema repairs + exact request/body journals; native/API still NOT_RUN."
+    }
+  },
+  "orderedMount": [
+    {
+      "stage": "MIGRATION",
+      "payload": "forward/NATIVE_PENDING_MIGRATION_BODY.sqlinc",
+      "mode": "Exact975 one-time body after actual0159. Root allocates/reviews one new db:new migration and generated contract; never alter/relock7d. Includes its deferred trigger function once; no repeated CREATE from this file in routine root."
+    },
+    {
+      "stage": "FINAL_FUNCTIONS",
+      "payload": "forward/CANDIDATE_FINAL_FUNCTIONS.sqlinc",
+      "mode": "55 complete controlling definitions in supplied order, after all current historical owners and stable physical/Invoice prerequisites. Final975 workflow appears ONCE. Do not then mount original predecessor payloads. Every complete function source span/hash is pinned; no latest-body fallback."
+    },
+    {
+      "stage": "ACTUAL_DDL_EFFECTS",
+      "payload": "forward/CANDIDATE_EFFECTS.sqlinc",
+      "mode": "Exact two96c5 existing summary trigger drop/create after all selected functions. Pending deferred trigger/index is only the migration."
+    },
+    {
+      "stage": "FINAL_ACL",
+      "payload": "forward/CANDIDATE_FINAL_ACL.sqlinc",
+      "mode": "Explicit55 functions plus migration trigger function; logical postgres owner mapping only existing approved adapter, all private owner-only/public existing RPCs service-only; final notify."
+    },
+    {
+      "stage": "WORKER_SOURCE",
+      "record": "WORKER_MAP.json",
+      "mode": "10 complete same-name functions at exact listed modules, shared unchanged17decoder +sole caller access argument. Preserve outer correction/manager/Source/contact owners."
+    }
+  ],
+  "schemaAndRegistry": "Root allocates final controlling repeatable/include; finite exact55 signature chain metadata, preserving EVERY existing companion root and historical owner. Migration trigger function has its actual migration owner. No automated blind register-to-current, no changed Bank body. Generated current-contract/native RLS/ACL/trigger catalogue required before release.",
+  "nativeQualification": "NOT_RUN: no DB/local infrastructure/locks/provider/deploy. 25/28 earlier pure native proofs remain separately immutable and do not qualify lifecycle. Root actual full176 verifier/rehearsal/feature/native producer gates remain mandatory.",
+  "knownSourceCorrections": [
+    "11af complete context restores independently reviewed c475 workflow_facts accepted-body/native receipt proof omitted by c03/975 raw aggregate; no silent prior PASS",
+    "2b5 complete detail adds actual WORKER_DRAFT Expense purpose policy; separate worked-anchor/carrier canonical preparation; movedExpense native submit remains controlled",
+    "Only selected a10f paper-source helper CRLF canonically becomes LF after native literal-token scan; raw+canonical hashes recorded. No SQL literals changed. Historical CRLF ACL omitted in favour of explicit final ACL.",
+    "Raw pglast character spans converted to UTF8 physical bytes; multibyte QR comment regression checked, complete function parsed individually."
+  ],
+  "payloads": [
+    {
+      "path": "forward/NATIVE_PENDING_MIGRATION_BODY.sqlinc",
+      "sha256": "c36ecbba9bfaa2d79f362689112b996155098ceb0b81d10f32aacda55c404d04",
+      "bytes": 2335
+    },
+    {
+      "path": "forward/CANDIDATE_FINAL_FUNCTIONS.sqlinc",
+      "sha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b",
+      "bytes": 806209
+    },
+    {
+      "path": "forward/CANDIDATE_EFFECTS.sqlinc",
+      "sha256": "c76727d61d6fd09739b63e1a2d9a3fb1ef5fde295edbc7cf9f8a7eb353e29844",
+      "bytes": 401
+    },
+    {
+      "path": "forward/CANDIDATE_FINAL_ACL.sqlinc",
+      "sha256": "2489d92c14804bd04a95bc9a90781264f947787478133c188d96f547e076551f",
+      "bytes": 15500
+    }
+  ],
+  "counts": {
+    "uniqueFinalFunctions": 55,
+    "workflowDefinitions": 1,
+    "supersededDefinitionsExcluded": 29,
+    "actualRoutineDdlEffects": 2,
+    "migrationOnlyTriggerFunctions": 1,
+    "workerFunctions": 10
+  },
+  "verification": {
+    "source": "tests/SOURCE_RESULT.json",
+    "grammar": "tests/GRAMMAR_RESULT.json",
+    "native": "NOT_RUN",
+    "acl": "NOT_RUN",
+    "api": "NOT_RUN",
+    "financial": "NOT_RUN",
+    "race": "NOT_RUN",
+    "databaseCalls": 0
+  }
+}
