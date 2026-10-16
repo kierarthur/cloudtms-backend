@@ -1,0 +1,74 @@
+{
+  "version": "CONTACT_LARGE_CANONICAL_FIXED_METADATA_PROPOSAL_V1",
+  "parentHistoricalReport": "fb3aac4d163c1b7a4520e0ff42120fc484cf4f46",
+  "rootSource": "39aa5b30042711956b83a7bf899f416d2f3b4771",
+  "files": [
+    {
+      "file": "GRAMMAR_RESULT.json",
+      "bytes": 1316,
+      "sha256": "4be2a4cc248ff18d0ebdb0955ac038bad375b209c77799a52422a2e62b6966f1"
+    },
+    {
+      "file": "INCIDENT_AND_BUDGET.json",
+      "bytes": 1910,
+      "sha256": "c39af3f3304f36dbfdcc376ffb873ee44eea2119768f46c601073311888b4c50"
+    },
+    {
+      "file": "OFFLINE_PROGRAMS.json",
+      "bytes": 314852,
+      "sha256": "15a17fefe489a246e7e0de6d923984de2db5fb415846d269421e1bc399d14d64"
+    },
+    {
+      "file": "README.md",
+      "bytes": 1307,
+      "sha256": "0ef35fc719555b0fe42c2c65ccf4c67d1c1ce2917e620a8cd8b54faa8a71f728"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 13537,
+      "sha256": "68960fcf05e2d965ca8b060b3d82b3070e9a6c9201e42bcc10a85eefaa6aefa3"
+    },
+    {
+      "file": "SOURCE_CHECKS.json",
+      "bytes": 425,
+      "sha256": "0c7f6b1ca65db2c6921b52f8a23cdd14500eeaf934603e2bb4b0215d82b83752"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 4689,
+      "sha256": "d05359d8b43c8197b4f33f4953d3c1baf3673a07575f1e21c1cc2f175249abd8"
+    },
+    {
+      "file": "fixed-metadata-reader.mjs",
+      "bytes": 10760,
+      "sha256": "9e0bce9e142266e28ed24a777ae97d26fcc54eab52f4e5b7656344228a18b556"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 2026,
+      "sha256": "2e6de508696978c21819acc091f6ce57f5d148daf30af1ba458f2dedb1a33a9a"
+    },
+    {
+      "file": "grammar-review.py",
+      "bytes": 1517,
+      "sha256": "b985ecbaf5955371a858b6b93cc4b8fff009b971e489b58031b24cb5dea91a70"
+    },
+    {
+      "file": "prepare-programs.mjs",
+      "bytes": 1300,
+      "sha256": "5c7f28741656c5e253eaee0a74d6c04035f4babf342e221b894bfb114c609ec6"
+    },
+    {
+      "file": "prepare-review.mjs",
+      "bytes": 4955,
+      "sha256": "f3349f2d0391797156427237e3a90609c4fa9b4420f966ac9f20e1c913431df0"
+    },
+    {
+      "file": "reader.test.mjs",
+      "bytes": 5667,
+      "sha256": "fa4dbe5611054e034732127b023b615d2710d46985f12eb247fe1efda458dd16"
+    }
+  ],
+  "sourceVerdict": "NARROW_OWNER_FIXED_READ_ONLY_METADATA_ROUTE_SUPPORTED; COMPLETE_MCP_ADAPTER_AND_NATIVE_REVIEW_PENDING",
+  "native": "NOT_RUN"
+}

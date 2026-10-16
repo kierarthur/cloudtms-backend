@@ -1,0 +1,125 @@
+{
+  "version": "CONTACT_FIXED_CANONICAL_METADATA_SOURCE_PINS_V1",
+  "rootHead": "39aa5b30042711956b83a7bf899f416d2f3b4771",
+  "rootInputs": [
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48190,
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754"
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "bytes": 14597,
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "bytes": 12864,
+      "sha256": "b7e16cdb12e8b5c6d11894e53296e4d20aeeaceb8dd968ed32936884f3ab3610"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "bytes": 9580,
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    }
+  ],
+  "rootCallerEvidence": [
+    {
+      "file": "scripts/healthroster-install1-native-coordinator.mjs",
+      "bytes": 21134,
+      "sha256": "c930f408d0d060dd35dfad8b1be4ab3e529d3df92a9b89c684adb932eee5aea0"
+    },
+    {
+      "file": "docs/healthroster-build/install1-rehearsal/LIVE_TEST_RESTORATION_RULING_14102026.md",
+      "bytes": 3455,
+      "sha256": "850bab1d9509e15f63e55600e30836b4167828c5b81ea7d8f504b1ab845af1ce"
+    },
+    {
+      "file": "docs/healthroster-build/install1-source/BUILD_RELEASE_TURN_SOURCE_REVIEW_20261014.md",
+      "bytes": 8177,
+      "sha256": "865b6f38cd1be4dd4f367b50e8f676444e9c87cf322aefe7a843596f3e4eefde"
+    }
+  ],
+  "ownerInstructions": [
+    {
+      "base": "workspace",
+      "file": "AGENTS.md",
+      "bytes": 94038,
+      "sha256": "93e9c3f3cf707756139cdc67a3a87e8fd3bb9376816d5be71c568e9a2445c86a"
+    },
+    {
+      "base": "ordinary-backend",
+      "file": "codex_outputs/claude-stage2-continuation-20260925/SEND_5_TO_HEALTHROSTER_BUILD_STAGE_NONSTOP.md",
+      "bytes": 7802,
+      "sha256": "62174e646395f01c199558ebc8f5bb1e04839c0127ab182e08fb207edd9bed91"
+    },
+    {
+      "base": "ordinary-backend",
+      "file": "codex_outputs/claude-stage2-continuation-20260925/SEND_5B_TO_HEALTHROSTER_FULL_REHEARSAL.md",
+      "bytes": 5814,
+      "sha256": "e1e098b316cfa7e9dd2d416232b44dfbe47f18d697161e016889f4b0e3257c9e"
+    },
+    {
+      "base": "ordinary-backend",
+      "file": "codex_outputs/claude-stage2-continuation-20260925/SEND_7_TEST_REHEARSAL_TURN_TAKING.md",
+      "bytes": 3035,
+      "sha256": "1d0f0a3d6d264422cac6288af4bb49aadff5ff86b7cecf89a1dae4b12bcb671c"
+    },
+    {
+      "base": "ordinary-backend",
+      "file": "AGENTS.md",
+      "bytes": 57391,
+      "sha256": "6c44eb64e77eadebbf08b1fae3cbf9e844de5a0a5fe790d58e554930c9a5869c"
+    }
+  ],
+  "savedRouteEvidence": [
+    {
+      "base": "ordinary-backend",
+      "file": "infra/miget/cloudtms-miget-operations/src/index.ts",
+      "bytes": 112374,
+      "sha256": "1835e3bea23240d4f09cbbfb4ee1265487def08fcdfe157fcf5f064471802ac0"
+    },
+    {
+      "base": "ordinary-backend",
+      "file": "infra/miget/cloudtms-miget-operations/src/rollback-transaction.ts",
+      "bytes": 9072,
+      "sha256": "27f7331b43623717db3a139ca269a644f1c06ef163f476f82919294ccc4c86eb"
+    },
+    {
+      "base": "ordinary-backend",
+      "file": "infra/miget/cloudtms-miget-operations/package.json",
+      "bytes": 592,
+      "sha256": "711906aed759300a52c7fb56cf99f06a30c22c9ab84d0f6dec48fc4c6a980e07"
+    },
+    {
+      "base": "ordinary-backend",
+      "file": "infra/miget/cloudtms-miget-operations/node_modules/agents/dist/mcp/index.js",
+      "bytes": 63634,
+      "sha256": "62a68a83f786458e2f8ac677cef76e1af7956f0486c6cf8ddbc8317b217637d6"
+    },
+    {
+      "base": "ordinary-backend",
+      "file": "infra/miget/cloudtms-miget-operations/node_modules/@modelcontextprotocol/server/dist/index.mjs",
+      "bytes": 80210,
+      "sha256": "4494af7ea28b45d1655df5a67dcbd6079a50cbe382f811d82441ad2004bf4d60"
+    }
+  ],
+  "routeAttestation": "SAVED_SOURCE_ONLY_NOT_DEPLOYED_BYTES; ordinary index.ts modified and rollback-transaction.ts untracked",
+  "historicalTransportCommit": "737b82cadea8d9e73b73421de1d4f36565e5b29e",
+  "physicalPayloadReviewCommit": "85b485e0e75342e2b2e20c42533a0570865c448e"
+}

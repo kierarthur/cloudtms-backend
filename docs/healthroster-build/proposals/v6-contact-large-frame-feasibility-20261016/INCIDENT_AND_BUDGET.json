@@ -1,0 +1,58 @@
+{
+  "version": "CONTACT_CANONICAL_FRAME_ATTEMPT3_SAFE_METADATA_V1",
+  "resultBytes": 1797030,
+  "resultSha256": "0049c040f46318e69f3b4b3b90b8e11257b9b4492721852499a5e0ffe5c2ea79",
+  "accepted": false,
+  "database": "cloudtms_test_clone",
+  "rolledBack": true,
+  "connectedFresh": true,
+  "failed": [
+    {
+      "statement": 13,
+      "sqlstate": "55P03"
+    }
+  ],
+  "before": {
+    "statement": 7,
+    "rowCount": 100,
+    "rowsReturned": 100,
+    "rowsTruncated": false,
+    "totalParts": 3496,
+    "totalChars": 27961220,
+    "totalUtf8Bytes": 27961220,
+    "fullSha256": "e69e3b4d6d4cd9a231923c738d2ac00af0957d4b3a21766b6db5ff8e317d57b9",
+    "querySha256": "4ab9b1f06b3cbc18f5b90c145467945be533ab1cea9fe914c8f355f590f4f04d",
+    "firstPart": 1,
+    "lastPart": 100,
+    "lastEof": false,
+    "returnedChunkCodepoints": 800000
+  },
+  "after": {
+    "statement": 2,
+    "rowCount": 100,
+    "rowsReturned": 100,
+    "rowsTruncated": false,
+    "totalParts": 3496,
+    "totalChars": 27961603,
+    "totalUtf8Bytes": 27961603,
+    "fullSha256": "b042782e3068751b612f549f27879250092a72be534bf649a09a1f26f9dc8431",
+    "querySha256": "4ab9b1f06b3cbc18f5b90c145467945be533ab1cea9fe914c8f355f590f4f04d",
+    "firstPart": 1,
+    "lastPart": 100,
+    "lastEof": false,
+    "returnedChunkCodepoints": 800000
+  },
+  "outcome": "HELD_MCP_FRAME_TOTALS_REFUSED; parent reported own holder189510 rollback/unlock/close; no qualification PASS",
+  "rawMetadataCopied": false,
+  "nativeExecutedByThisLane": false,
+  "hypotheticalFortyColumnGrid": {
+    "chunkCodepoints": 8000,
+    "columns": 40,
+    "rowLimit": 100,
+    "capacityCodepoints": 32000000,
+    "rowsPerSnapshot": 88,
+    "combinedCanonicalCodepoints": 55922823,
+    "minimumDuplicateJsonPayloadAsciiBytes": 111845646,
+    "conclusion": "Capacity arithmetic only; not a memory, response delivery, database resource or clinical-data-exposure qualification"
+  }
+}

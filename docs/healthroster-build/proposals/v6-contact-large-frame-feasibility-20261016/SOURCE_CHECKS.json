@@ -1,0 +1,16 @@
+{
+  "scope": "OFFLINE_SOURCE_ONLY",
+  "tests": 10,
+  "pass": 10,
+  "fail": 0,
+  "grammarPrograms": 6,
+  "canonicalCompleteQueryBytesPreserved": true,
+  "canonicalCompleteQueryASTPreserved": true,
+  "native": "NOT_RUN",
+  "priorAttempt3": "HELD",
+  "metadataReaderNativeLifecycle": "NOT_RUN",
+  "finiteMcpAdapter": "ROOT_IMPLEMENTATION_REQUIRED",
+  "rawLogsRetained": false,
+  "credentialsRead": false,
+  "databaseCalls": 0
+}
