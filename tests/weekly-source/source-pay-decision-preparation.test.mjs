@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { prepareSourcePayDecisionConfirmation } from '../../broker/src/weekly-source/source-pay-decision-preparation.mjs';
+import { prepareSourcePayDecisionConfirmation, loadSourcePayDecisionConfirmationContext } from '../../broker/src/weekly-source/source-pay-decision-preparation.mjs';
 import { decodeSourcePayDecisionConfirmationPrepared, sourceNativeContinuationFromRpcError } from '../../broker/src/weekly-source/source-native-contract.mjs';
 const id = (n) => `91000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const hash = 'a'.repeat(64);
@@ -20,6 +20,45 @@ function member(n) { return { version: 'SOURCE_UNPROTECT_RUN_PREPARED_V1', prepa
       end_at_local: '2026-10-16 17:00:00', break_minutes: 30 }, run_state: 'RUNNING', idempotent_replay: false } }; }
 const result = () => ({ version: 'SOURCE_PAY_DECISION_CONFIRMATION_PREPARED_V1', decision_id: id(1), review_id: id(3),
   request_id: id(2), confirmation_reason: 'Office confirmation', members: [member(1), member(2)] });
+const contextResult = () => ({ version: 'SOURCE_PAY_DECISION_CONFIRMATION_CONTEXT_RESULT_V1', decision_id: id(1), review_id: id(3),
+  request_id: id(2), confirmation_reason: 'Office confirmation', required_members: result().members.map(m => ({
+    member_key: m.member_key, family_id: m.prepared.family_id, work_event_id: m.prepared.work_event_id })) });
+
+test('bounded saved-review context passes the unchanged confirmation and accepts only server-required member identities', async () => {
+  const body = request();const calls = [];
+  const actual = await loadSourcePayDecisionConfirmationContext({ request: body, actorUserId: id(99), dataRpc: async (...args) => {
+    calls.push(args);return contextResult();
+  } });
+  assert.deepEqual(calls, [['weekly_source_pay_decision_confirmation_context_v1', { p_request: {
+    version: 'SOURCE_PAY_DECISION_CONFIRMATION_CONTEXT_V1', actor_user_id: id(99), confirmation_request: body } }]]);
+  assert.deepEqual(actual.required_members, contextResult().required_members);
+});
+
+test('context rejects extra/duplicate/cross-request identities, fake native fields and mismatched accepted reason', async () => {
+  for (const mutate of [v => v.request_id = id(90), v => v.review_id = id(90), v => v.decision_id = id(90),
+    v => v.confirmation_reason = 'guessed', v => v.required_members.push(v.required_members[0]),
+    v => v.required_members[0].family_id = null, v => v.required_members[0].work_event_id = 'not-uuid',
+    v => v.required_members[0].preparation_id = id(90), v => v.actor_user_id = id(90)]) {
+    const value = contextResult();mutate(value);
+    await assert.rejects(loadSourcePayDecisionConfirmationContext({ request: request(), actorUserId: id(99), dataRpc: async () => value }),
+      { code: 'SOURCE_NATIVE_RESULT_INVALID' });
+  }
+  const positive = { ...request(), decision: 'ACCEPT_FINAL_SOURCE_PAY' };
+  await assert.rejects(loadSourcePayDecisionConfirmationContext({ request: positive, actorUserId: id(99), dataRpc: async () => contextResult() }),
+    { code: 'SOURCE_NATIVE_RESULT_INVALID' });
+  const empty = contextResult();empty.required_members = [];
+  assert.deepEqual((await loadSourcePayDecisionConfirmationContext({ request: positive, actorUserId: id(99), dataRpc: async () => empty })).required_members, []);
+});
+
+test('context exact committed continuation stops with the original result and does not widen ordinary native adapter', async () => {
+  const fn = 'weekly_source_pay_decision_confirmation_context_v1';
+  const error = Object.assign(new Error('RPC failed'), { fn, status: 400, json: { code: 'P0001',
+    message: 'SOURCE_PAY_DECISION_RESULT_REQUIRED', details: JSON.stringify({ version: 'SOURCE_NATIVE_CONTINUATION_V1',
+      decision_id: id(1), request_id: id(2), reason: 'APPLICATION_INCOMPLETE' }) } });
+  assert.equal(sourceNativeContinuationFromRpcError(error, fn), null);
+  await assert.rejects(loadSourcePayDecisionConfirmationContext({ request: request(), actorUserId: id(99), dataRpc: async () => { throw error; } }),
+    e => e.code === 'SOURCE_PAY_DECISION_RESULT_REQUIRED' && e.details.next_action.target_id === id(1));
+});
 test('fresh confirmation calls one server composition with unchanged nested browser body', async () => {
   const body = request();const calls = [];
   const saved = await prepareSourcePayDecisionConfirmation({ request: body, actorUserId: id(99), dataRpc: async (...args) => {
@@ -94,5 +133,16 @@ test('browser cannot choose required members, actor, preparation or assembly', a
     let called = false;
     await assert.rejects(prepareSourcePayDecisionConfirmation({ request: { ...request(), [key]: id(90) }, actorUserId: id(99),
       dataRpc: async () => { called = true;return result(); } }));assert.equal(called, false);
+  }
+});
+
+test('a well-formed continuation for a different request cannot redirect this confirmation', async () => {
+  for (const contextOnly of [false, true]) {
+    const fn = contextOnly ? 'weekly_source_pay_decision_confirmation_context_v1' : 'weekly_source_pay_decision_confirmation_prepare_v1';
+    const error = Object.assign(new Error('RPC failed'), { fn, status: 400, json: { code: 'P0001',
+      message: 'SOURCE_PAY_DECISION_RESULT_REQUIRED', details: JSON.stringify({ version: 'SOURCE_NATIVE_CONTINUATION_V1',
+        decision_id: id(98), request_id: id(97), reason: 'APPLICATION_INCOMPLETE' }) } });
+    await assert.rejects((contextOnly ? loadSourcePayDecisionConfirmationContext : prepareSourcePayDecisionConfirmation)({
+      request: request(), actorUserId: id(99), dataRpc: async () => { throw error; } }), e => e === error);
   }
 });

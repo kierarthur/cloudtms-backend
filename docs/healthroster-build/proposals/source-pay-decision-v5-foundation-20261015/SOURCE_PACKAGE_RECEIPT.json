@@ -130,10 +130,12 @@
         },
         {
           "path": "forward/06_confirmation_run_preparation.sqlinc",
-          "sha256": "0ae49f640787e56c522903900f60256b111a4fa5c95b83d74fd5cfbe55d1ce5d",
-          "bytes": 12319,
-          "packaging_statements": 4,
+          "sha256": "901552c63d00330934afe8822c860ffa6df69e627642bb35396e13db134cbb31",
+          "bytes": 15713,
+          "packaging_statements": 9,
           "functions": [
+            "private.weekly_source_pay_decision_confirmation_context_v1(p_request jsonb,p_version text)",
+            "public.weekly_source_pay_decision_confirmation_context_v1(p_request jsonb)",
             "public.weekly_source_pay_decision_confirmation_prepare_v1(p_request jsonb)"
           ]
         },
@@ -529,8 +531,8 @@
     },
     {
       "path": "broker/src/weekly-source/source-native-contract.mjs",
-      "sha256": "b7d1c61dcd9267260ff427d71c57908a0a7a6130bfb0753748736fb6e7ef3c48",
-      "bytes": 24196
+      "sha256": "1a7817a2465485481aa005d6296281467bde9d17b292d971423d7ff12860519a",
+      "bytes": 25329
     },
     {
       "path": "broker/src/weekly-source/source-pay-decision-request.mjs",
@@ -539,8 +541,8 @@
     },
     {
       "path": "broker/src/weekly-source/source-pay-decision-preparation.mjs",
-      "sha256": "d21be9e4553d04b6cec4132114648fecedacb26f64380046174713d2397a4e94",
-      "bytes": 3225
+      "sha256": "41d8ea8799f88a930a20eeca1c197c30ef9e2556d418dd19e320aee15d3082d1",
+      "bytes": 4024
     },
     {
       "path": "broker/src/weekly-source/source-native-economic.mjs",
@@ -549,8 +551,8 @@
     },
     {
       "path": "broker/src/weekly-source/source-unprotect-worker.mjs",
-      "sha256": "c3afd0b6b95de5055ad11ce83cfcb0d616a4485659e0c1300ad3415c1c963cdc",
-      "bytes": 9677
+      "sha256": "79119506ea25acf118d072ab80f14af340554645347312512a6af57d13447376",
+      "bytes": 12411
     },
     {
       "path": "broker/src/weekly-source/source-current-financial.mjs",
@@ -594,8 +596,8 @@
     },
     {
       "path": "tests/weekly-source/source-pay-decision-preparation.test.mjs",
-      "sha256": "d470e5062d7bf1afee1ab3e1bf1338769240d76d10a24e5e2b3d3989b7b99abb",
-      "bytes": 8062
+      "sha256": "eb126d1c49ccdb7e37305e5a03ff0d234a6174d747817ca993257423097a0470",
+      "bytes": 12066
     },
     {
       "path": "tests/weekly-source/source-protected-placement.test.mjs",
@@ -614,8 +616,8 @@
     },
     {
       "path": "tests/weekly-source/source-unprotect-worker.test.mjs",
-      "sha256": "f3257eea090214ff48a895ab40199140e637c899ce55532d2fd74910e25ea3da",
-      "bytes": 14437
+      "sha256": "8563f966968c147ac0ab32c22348da3ae5f967ebcc0199801b3a457115197181",
+      "bytes": 20252
     },
     {
       "path": "tests/weekly-source/source-native-generators.test.mjs",
@@ -707,6 +709,16 @@
       "Actual B stream source is sealed in full native payload; stage rehashes current actual B row/version before write",
       "Own native Local stage/complete uses B while original family/approval/source invoice/evidence A remains immutable",
       "Later B-to-C retains genuine accepted native Local B receipt via immutable stage/physical operation/member proof"
+    ],
+    "confirmation_preparation_recovery": [
+      "Exact common confirmation context validates original nested browser body/actor/current scope/review/digest/prior/three hashes and immutable RESUME reason",
+      "Context allocates no journal/run/preparation/native financial rows; positive/no-active-protection required set is genuinely empty",
+      "Atomic birth timeout recovers only exact saved server-required members; actual late run/preparation is retained and fenced",
+      "Metadata lock timeout/cancellation or exact genuine missing native prerequisite yields NOT_PREPARED without a financial attempt",
+      "One member unavailable does not suppress another genuine prepared member or claim any withdrawal succeeded",
+      "Stale/permission/integrity/malformed generic network or mismatched function/result does not become NOT_PREPARED",
+      "Exact committed request returns original Source continuation before mutable cut/expiry checks; different decision/request continuation refuses",
+      "Acceptance independently derives the complete active required member set and rejects missing/extra/duplicate or consumed NOT_PREPARED references"
     ]
   },
   "database_actions": "NONE",

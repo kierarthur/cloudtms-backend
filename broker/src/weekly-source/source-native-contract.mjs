@@ -232,6 +232,22 @@ export function decodeSourcePayDecisionConfirmationPrepared(value, expected = {}
   return value;
 }
 
+export function decodeSourcePayDecisionConfirmationContext(value, expected = {}) {
+  const keys = ['version', 'decision_id', 'review_id', 'request_id', 'confirmation_reason', 'required_members'];
+  if (!sourceNativeClosed(value, keys) || value.version !== 'SOURCE_PAY_DECISION_CONFIRMATION_CONTEXT_RESULT_V1'
+      || !identities(value, ['decision_id', 'review_id', 'request_id']) || !Array.isArray(value.required_members)
+      || typeof value.confirmation_reason !== 'string' || !value.confirmation_reason.trim()
+      || [...value.confirmation_reason].length > 1000
+      || !equalExpected(value, expected, ['decision_id', 'review_id', 'request_id'])) invalid('confirmation context');
+  const seen = new Set();
+  for (const required of value.required_members) {
+    if (!sourceNativeClosed(required, ['member_key', 'family_id', 'work_event_id']) || !member(required.member_key)
+        || !identities(required, ['family_id', 'work_event_id']) || seen.has(required.member_key)) invalid('required confirmation member');
+    seen.add(required.member_key);
+  }
+  return value;
+}
+
 function decodeNextControl(value) {
   const keys = ['family_id', 'orchestration_run_id', 'approval_id', 'generation_id', 'work_id', 'revision_id',
     'new_family_bound_version', 'approved_pay_ex_vat', 'source_manifest_sha256'];
@@ -300,7 +316,7 @@ export function sourceNativeContinuationFromRpcError(error, expectedFunction) {
 }
 export function sourcePayDecisionContinuationFromRpcError(error, expectedFunction) {
   return continuationFromRpcError(error, expectedFunction,
-    new Set(['weekly_source_pay_decision_confirmation_prepare_v1']));
+    new Set(['weekly_source_pay_decision_confirmation_prepare_v1', 'weekly_source_pay_decision_confirmation_context_v1']));
 }
 function continuationFromRpcError(error, expectedFunction, allowedFunctions) {
   if (!allowedFunctions.has(expectedFunction) || error?.fn !== expectedFunction

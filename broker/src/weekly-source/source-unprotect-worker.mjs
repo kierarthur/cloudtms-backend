@@ -1,6 +1,6 @@
 import { composeWeeklyProtectedTargetSchedule } from './protected-target-schedule.js';
 import { buildWeeklyProtectedNativePayload } from './protected-action-orchestrator.mjs';
-import { prepareSourcePayDecisionConfirmation } from './source-pay-decision-preparation.mjs';
+import { prepareSourcePayDecisionConfirmation, loadSourcePayDecisionConfirmationContext } from './source-pay-decision-preparation.mjs';
 import { loadWeeklyProtectedCurrentFinancialSource } from './source-current-financial.mjs';
 import { decodeSourceUnprotectReviewContext, normalizeSourceNativeCalculationContext,
   decodeSourceUnprotectPreparationResult, decodeSourcePreviewQuoteContext, decodeSourceUnprotectQuoteContext } from './source-native-contract.mjs';
@@ -9,6 +9,35 @@ import { sourceProtectedCalculationContext, buildSourceUnprotectEconomicTarget,
 
 const encoder = new TextEncoder();
 function fail(code) { const error = new Error(code);error.code = code;error.status = 409;throw error; }
+class PreparationDependency extends Error {
+  constructor(failureCode, cause) {
+    super('The native Source preparation is unavailable.', { cause });
+    this.code = 'SOURCE_NATIVE_PREREQUISITE_NOT_PREPARED';this.status = 409;this.failureCode = failureCode;
+  }
+}
+const metadataFunctions = new Set(['weekly_source_pay_decision_confirmation_prepare_v1',
+  'weekly_source_pay_decision_unprotect_quote_context_v1', 'weekly_exceptional_pay_action_context_v1',
+  'weekly_source_protected_current_financial_source_v1', 'weekly_source_pay_decision_unprotect_prepare_v1']);
+function preparationRpc(owner) {
+  return async (name, args) => {
+    try { return await owner(name, args); } catch (error) {
+      // sbRpc's exact function/error envelope is required. A generic 5xx,
+      // permission/stale/integrity refusal or plain network Error is not proof.
+      if (metadataFunctions.has(name) && error?.fn === name) {
+        if (error.status === 408 && error.json === null && error.body === '') {
+          throw new PreparationDependency('RESULT_UNKNOWN', error);
+        }
+        if (['55P03', '57014'].includes(error.json?.code)
+            || error.json?.code === '55000' && ['SOURCE_NATIVE_PREREQUISITE_NOT_PREPARED',
+              'WEEKLY_PROTECTED_LOCAL_PUBLICATION_OWNER_NOT_READY'].includes(error.json.message)) {
+          throw new PreparationDependency('DEPENDENCY_UNAVAILABLE', error);
+        }
+      }
+      throw error;
+    }
+  };
+}
+const notPrepared = (memberKey, error) => Object.freeze({ member_key: memberKey, status: 'NOT_PREPARED', failure_code: error.failureCode });
 function dependencies(value) {
   if (typeof value?.calculateWeeklySnapshot !== 'function' || typeof value?.dataRpc !== 'function') {
     fail('SOURCE_UNPROTECT_DEPENDENCIES_REQUIRED');
@@ -17,7 +46,7 @@ function dependencies(value) {
 }
 async function calculate(context, owner) {
   if (context.requires_zero_financial || context.current_entitlement.current_financial === null) {
-    fail('SOURCE_NATIVE_PREREQUISITE_NOT_PREPARED');
+    throw new PreparationDependency('DEPENDENCY_UNAVAILABLE');
   }
   const target = composeWeeklyProtectedTargetSchedule({ sourceSegments: context.source_segments, decisions: context.protected_decisions });
   const calculation = await owner({ context: sourceProtectedCalculationContext(context), schedule: target.segments, zeroRoot: false,
@@ -61,10 +90,23 @@ async function childKey(decisionId, memberKey, requestId) {
 // preparation. Native stage/publish/complete are called later by SQL acceptance
 // under its real PREVALIDATED application and one database transaction.
 export async function prepareSourcePayDecisionServiceRequest({ request, actorUserId, ...provided }) {
-  const owner = dependencies(provided);
-  const batch = await prepareSourcePayDecisionConfirmation({ request, actorUserId, dataRpc: owner.dataRpc });
+  const supplied = dependencies(provided);
+  const owner = { ...supplied, dataRpc: preparationRpc(supplied.dataRpc) };
+  let batch;
+  try {
+    batch = await prepareSourcePayDecisionConfirmation({ request, actorUserId, dataRpc: owner.dataRpc });
+  } catch (error) {
+    if (!(error instanceof PreparationDependency)) throw error;
+    // Failed atomic run birth supplies no member list. Re-read the exact saved
+    // review through the common server validation owner; never use the browser
+    // selection, cached preview, a generated native ID or a partial failed reply.
+    const context = await loadSourcePayDecisionConfirmationContext({ request, actorUserId, dataRpc: supplied.dataRpc });
+    return Object.freeze({ ...request, actor_user_id: actorUserId, preview_assembly_ref: null,
+      unprotect_preparations: Object.freeze(context.required_members.map(member => notPrepared(member.member_key, error))) });
+  }
   const references = [];
   for (const member of batch.members) {
+    try {
     const prepared = member.prepared;
     const quote = decodeSourceUnprotectQuoteContext(await owner.dataRpc('weekly_source_pay_decision_unprotect_quote_context_v1', { p_request: {
       version: 'SOURCE_UNPROTECT_QUOTE_CONTEXT_V1', actor_user_id: actorUserId, decision_id: batch.decision_id,
@@ -113,6 +155,12 @@ export async function prepareSourcePayDecisionServiceRequest({ request, actorUse
     }
     references.push(Object.freeze({ member_key: member.member_key, status: 'READY', preparation_id: registered.preparation_id,
       payload_sha256: registered.payload_sha256 }));
+    } catch (error) {
+      if (!(error instanceof PreparationDependency)) throw error;
+      // Retain the genuine run/preparation fence. SQL acceptance independently
+      // derives required members and refuses any already-consumed preparation.
+      references.push(notPrepared(member.member_key, error));
+    }
   }
   return Object.freeze({ ...request, actor_user_id: actorUserId, preview_assembly_ref: null,
     unprotect_preparations: Object.freeze(references) });

@@ -61,6 +61,83 @@ function owner(calls, mutate = () => {}) { return async (fn, args) => {
     payload_sha256: await hashSourceNativeJson('SOURCE_UNPROTECT_NATIVE_PAYLOAD_V1', args.p_request.native_payload), expires_at_utc: expires };
   assert.fail(`Unexpected financial RPC ${fn}`);
 }; }
+const savedContext = () => ({ version: 'SOURCE_PAY_DECISION_CONFIRMATION_CONTEXT_RESULT_V1', decision_id: id(1), review_id: id(3),
+  request_id: id(2), confirmation_reason: body().reason, required_members: [{ member_key: born().member_key,
+    family_id: prepared().family_id, work_event_id: prepared().work_event_id }] });
+const rpcError = (fn, code, message) => Object.assign(new Error('RPC failed'), { fn, status: 400, json: { code, message }, body: '{}' });
+const timeout = fn => Object.assign(new Error('RPC timed out'), { fn, status: 408, json: null, body: '' });
+
+test('failed atomic birth rederives the exact required set and emits no invented native identity or financial call', async () => {
+  const fn = 'weekly_source_pay_decision_confirmation_prepare_v1';
+  for (const [error, failure] of [[timeout(fn), 'RESULT_UNKNOWN'], [rpcError(fn, '55P03', 'lock timeout'), 'DEPENDENCY_UNAVAILABLE']]) {
+    const calls = [];const service = await prepareSourcePayDecisionServiceRequest({ request: body(), actorUserId: id(20),
+      calculateWeeklySnapshot: calculator(calls), dataRpc: async (name, args) => {
+        calls.push([name, args]);if (name === fn) throw error;
+        assert.equal(name, 'weekly_source_pay_decision_confirmation_context_v1');
+        assert.deepEqual(args.p_request.confirmation_request, body());return savedContext();
+      } });
+    assert.deepEqual(calls.map(([name]) => name), [fn, 'weekly_source_pay_decision_confirmation_context_v1']);
+    assert.deepEqual(service.unprotect_preparations, [{ member_key: born().member_key, status: 'NOT_PREPARED', failure_code: failure }]);
+    assert.equal(Object.hasOwn(service.unprotect_preparations[0], 'preparation_id'), false);
+  }
+});
+
+test('a concrete metadata registration dependency retains the actual run fence and never invokes a native financial writer', async () => {
+  const fn = 'weekly_source_pay_decision_unprotect_prepare_v1';
+  for (const [error, failure] of [[timeout(fn), 'RESULT_UNKNOWN'],
+    [rpcError(fn, '55000', 'WEEKLY_PROTECTED_LOCAL_PUBLICATION_OWNER_NOT_READY'), 'DEPENDENCY_UNAVAILABLE'],
+    [rpcError(fn, '55000', 'SOURCE_NATIVE_PREREQUISITE_NOT_PREPARED'), 'DEPENDENCY_UNAVAILABLE']]) {
+    const calls = [];const actual = owner(calls);
+    const service = await prepareSourcePayDecisionServiceRequest({ request: body(), actorUserId: id(20), calculateWeeklySnapshot: calculator(calls),
+      dataRpc: async (name, args) => { if (name === fn) { calls.push([name, args]);throw error; }return actual(name, args); } });
+    assert.equal(calls.at(-1)[0], fn);
+    assert.deepEqual(service.unprotect_preparations, [{ member_key: born().member_key, status: 'NOT_PREPARED', failure_code: failure }]);
+  }
+});
+
+test('permission/stale/integrity/generic transport/malformed/wrong-function failures never become NOT_PREPARED', async () => {
+  const fn = 'weekly_source_pay_decision_confirmation_prepare_v1';
+  for (const error of [rpcError(fn, '42501', 'denied'), rpcError(fn, '40001', 'changed'), rpcError(fn, '23514', 'invalid'),
+    rpcError(fn, '55000', 'WEEKLY_PROTECTED_ACTION_SCOPE_INVALID'), Object.assign(new Error('unavailable'), { status: 503 }),
+    { ...timeout(fn), body: 'not empty' }, { ...timeout(fn), json: {} }, timeout('weekly_exceptional_pay_publish_next_v1'),
+    new TypeError('fetch failed')]) {
+    const calls = [];
+    await assert.rejects(prepareSourcePayDecisionServiceRequest({ request: body(), actorUserId: id(20), calculateWeeklySnapshot: calculator(calls),
+      dataRpc: async name => { calls.push(name);throw error; } }), e => e === error);
+    assert.deepEqual(calls, [fn]);
+  }
+});
+
+test('one unavailable member retains its truthful status while another genuine member completes payload preparation', async () => {
+  const calls = [];const failed = { ...born(), member_key: 'actual:other-member', preparation_id: id(41),
+    prepared: { ...prepared(), orchestration_run_id: id(42), work_event_id: id(43) } };
+  const actual = owner(calls, batch => { batch.members.unshift(failed); });
+  const service = await prepareSourcePayDecisionServiceRequest({ request: body(), actorUserId: id(20), calculateWeeklySnapshot: calculator(calls),
+    dataRpc: async (name, args) => {
+      if (name === 'weekly_source_pay_decision_unprotect_quote_context_v1' && args.p_request.member_key === failed.member_key) {
+        calls.push([name, args]);throw rpcError(name, '55P03', 'lock timeout');
+      }
+      return actual(name, args);
+    } });
+  assert.deepEqual(service.unprotect_preparations.map(ref => [ref.member_key, ref.status]), [[failed.member_key, 'NOT_PREPARED'], [born().member_key, 'READY']]);
+  assert.equal(service.unprotect_preparations[1].preparation_id, born().preparation_id);
+  assert.equal(calls.filter(([name]) => name === 'weekly_source_pay_decision_unprotect_prepare_v1').length, 1);
+});
+
+test('failed birth recovery still refuses changed/consumed saved context before Source acceptance', async () => {
+  for (const changed of ['member', 'review', 'committed', 'permission']) {
+    const calls = [];const birth = 'weekly_source_pay_decision_confirmation_prepare_v1';
+    await assert.rejects(prepareSourcePayDecisionServiceRequest({ request: body(), actorUserId: id(20), calculateWeeklySnapshot: calculator(calls),
+      dataRpc: async name => {
+        calls.push(name);if (name === birth) throw timeout(name);
+        if (changed === 'permission') throw rpcError(name, '42501', 'denied');
+        if (changed === 'committed') throw rpcError(name, 'P0001', 'SOURCE_PAY_DECISION_RESULT_REQUIRED');
+        const result = savedContext();if (changed === 'member') result.required_members[0].from_browser = true;
+        else result.review_id = id(40);return result;
+      } }));
+    assert.deepEqual(calls, [birth, 'weekly_source_pay_decision_confirmation_context_v1']);
+  }
+});
 test('Run-free preview calls actual calculator without allocating a run/publication identity or invoking financial RPC', async () => {
   const calls = [];const quote = await calculateSourceUnprotectPreviewQuote({ reviewContext: {
     version: 'SOURCE_UNPROTECT_REVIEW_CONTEXT_RESULT_V1', assembly_id: id(17), decision_id: id(1), member_key: born().member_key,
