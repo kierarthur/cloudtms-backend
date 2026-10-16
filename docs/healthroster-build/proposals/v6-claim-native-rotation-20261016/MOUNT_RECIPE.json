@@ -1,8 +1,8 @@
 {
   "version": 1,
   "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
-  "source_commit": null,
-  "remote_verified_tip": null,
+  "source_commit": "ffc317246e54fd2c943d65f7af653c4537dae80f",
+  "remote_verified_tip": "ffc317246e54fd2c943d65f7af653c4537dae80f",
   "base_report_commit": "d49de3d59e7ba0d1bde8233a3bc42f957f631797",
   "predecessor_invoice_source": "c86a1dfcf0098a26b6f0eac085c95c9b08f81074",
   "physical": {
