@@ -3766,6 +3766,30 @@
           "native": "REQUIRED_NOT_RUN",
           "remaining": "Public common tagged union, actual legacy outbox admission/recomposition and original native START/claim/result/accepted-membership/race/API integration required before activation",
           "installed": false
+        },
+        "common_native_union": {
+          "source": [
+            {
+              "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+              "sha256": "0d4832a5bbed99f5e9da4430bb41d5a1691835d90cb7b472382bd2eb3b730fa2"
+            },
+            {
+              "path": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+              "sha256": "a8b3f8343faf3ec6a2f290e875a2b9cde60caea75ce115fc0608b6732c430c6b"
+            },
+            {
+              "path": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+              "sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152"
+            }
+          ],
+          "source_status": "BOTH_TAGGED_ARMS_AND_NATIVE_SOURCE_START_AUTHORED",
+          "public_entry": "public.weekly_contact_submission_start_v1(jsonb)",
+          "native_start": "public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)",
+          "public_entry_request": "Exact Source7-key or legacy8-key CONTACT_START_V1 union; no caller actor/body/scope/clock/channel/price",
+          "native_start_request": "Exactly dispatch_target_id,lease_token,worker_id,agency_id,environment",
+          "qualification": "PG17 grammar8procedures/360inner expressions and31declared native row variables pass; native first-use/race/API NOT_RUN",
+          "remaining": "Legacy drain/result/recomposition; Source current producer/accepted-membership/claim/recheck; complete generated registries/ACL/contract/full release and API/Office/phone acceptance",
+          "installed": false
         }
       }
     },
@@ -3992,7 +4016,31 @@
         "native_scope": "103error-free statements including existing QT/calendar prerequisites. Actual first pause0→1, independent audiences/partial resume, replay/conflict/stale/permission/strict scalars, immutable event/receipt, actual bounded wake metadata and Monday/DST/lazy expiry. Fresh8table/23routine/fixture absence; identical ledgers/LEGACY1.",
         "internal_implementation": "Exact four-argument guard receives validated private transaction-local deployment context; no QT-policy dependency. Auxiliary weekly_contact_recheck_tasks records bounded recheck metadata only; actual scheduler/sender integration remains open.",
         "full_required_native_cases": "START/permit/consume/provider/accepted-budget/grouped recomposition/current legacy in-flight/races/real Office and full acceptance remain open.",
-        "installed": false
+        "installed": false,
+        "common_native_union": {
+          "source": [
+            {
+              "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+              "sha256": "0d4832a5bbed99f5e9da4430bb41d5a1691835d90cb7b472382bd2eb3b730fa2"
+            },
+            {
+              "path": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+              "sha256": "a8b3f8343faf3ec6a2f290e875a2b9cde60caea75ce115fc0608b6732c430c6b"
+            },
+            {
+              "path": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+              "sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152"
+            }
+          ],
+          "source_status": "BOTH_TAGGED_ARMS_AND_NATIVE_SOURCE_START_AUTHORED",
+          "public_entry": "public.weekly_contact_submission_start_v1(jsonb)",
+          "native_start": "public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)",
+          "public_entry_request": "Exact Source7-key or legacy8-key CONTACT_START_V1 union; no caller actor/body/scope/clock/channel/price",
+          "native_start_request": "Exactly dispatch_target_id,lease_token,worker_id,agency_id,environment",
+          "qualification": "PG17 grammar8procedures/360inner expressions and31declared native row variables pass; native first-use/race/API NOT_RUN",
+          "remaining": "Legacy drain/result/recomposition; Source current producer/accepted-membership/claim/recheck; complete generated registries/ACL/contract/full release and API/Office/phone acceptance",
+          "installed": false
+        }
       }
     },
     {

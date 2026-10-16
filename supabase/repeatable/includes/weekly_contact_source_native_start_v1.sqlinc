@@ -1,0 +1,288 @@
+-- Exact current native START amended before its original native locks.
+-- Baseline abd5400e384a815aa2c3964cdb68848f43d5eb2d:supabase/repeatable/10102026_1624_candidate_notification_consumers_v1.sql
+-- Baseline complete-definition SHA256 cd32d36532f2da4c111df826612ad4e48d36b86558e8ca6d2fb836874018fd93
+create or replace function public.weekly_source_message_dispatch_target_start_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_target_id uuid;
+  v_lease_token uuid;
+  v_worker text;
+  v_target public.weekly_message_dispatch_targets%rowtype;
+  v_command public.weekly_message_dispatch_commands%rowtype;
+  v_intent public.weekly_message_intents%rowtype;
+  v_render public.weekly_message_renders%rowtype;
+  v_attempt public.weekly_message_target_attempts%rowtype;
+  v_attempt_number integer;
+  v_reason text;
+  v_contact jsonb;
+  v_agency uuid;
+  v_environment text;
+  v_next timestamptz;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private.weekly_contact_assert_closed_v1(p_request,
+    array['dispatch_target_id','lease_token','worker_id','agency_id','environment'],
+    array['dispatch_target_id','lease_token','worker_id','agency_id','environment'],
+    'WEEKLY_SOURCE_TARGET_START_REQUEST_INVALID');
+  if jsonb_typeof(p_request->'worker_id') is distinct from 'string'
+    or char_length(p_request->>'worker_id') not between 1 and 200
+    or p_request->>'environment' is null or p_request->>'environment' not in('TEST','LIVE') then
+    raise exception 'WEEKLY_SOURCE_TARGET_START_REQUEST_INVALID' using errcode='22023';end if;
+  begin
+    v_target_id:=private.weekly_contact_uuid_v1(p_request->'dispatch_target_id');
+    v_lease_token:=private.weekly_contact_uuid_v1(p_request->'lease_token');
+    v_agency:=private.weekly_contact_uuid_v1(p_request->'agency_id');
+    v_environment:=p_request->>'environment';
+    v_worker:=p_request->>'worker_id';
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_TARGET_START_REQUEST_INVALID' using errcode='22023';
+  end;
+  -- Read-only recovery never admits/resends or acquires a later lower-order
+  -- lock. Exact old lease replay and any still-unknown native attempt return
+  -- the original identity, even after a lease was reclaimed by another worker.
+  perform private.weekly_contact_context_v1(v_agency,v_environment);
+  select * into strict v_target from public.weekly_message_dispatch_targets where id=v_target_id;
+  select * into strict v_command from public.weekly_message_dispatch_commands where id=v_target.dispatch_command_id;
+  if v_command.agency_id is distinct from v_agency or v_command.environment is distinct from v_environment then
+    raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+  select * into v_attempt from public.weekly_message_target_attempts
+  where dispatch_target_id=v_target.id and(completed_at_utc is null
+    or(lease_token=v_lease_token and lease_owner=v_worker))
+  order by attempt_number desc limit 1;
+  if found then
+    return jsonb_build_object('ok',true,'replay',true,'provider_attempt_id',v_attempt.id,
+      'call_once',false,'reason','CHECK_ORIGINAL_ATTEMPT');end if;
+  -- The common entry takes deployment -> PUSH policy -> sorted scopes ->
+  -- required calendar row locks BEFORE the original target/command locks.
+  -- It derives channel and memberships from these genuine native rows.
+  v_contact:=public.weekly_contact_submission_start_v1(jsonb_build_object(
+    'version','CONTACT_START_V1','owner_kind','WEEKLY_SOURCE_TARGET',
+    'dispatch_target_id',v_target_id,'lease_token',v_lease_token,'worker_id',v_worker,
+    'agency_id',v_agency,'environment',v_environment));
+  if v_contact->'ok' is distinct from 'true'::jsonb then
+    select * into strict v_target from public.weekly_message_dispatch_targets where id=v_target_id for update;
+    select * into strict v_command from public.weekly_message_dispatch_commands where id=v_target.dispatch_command_id for update;
+    if v_contact->>'reason' not in('NOT_STARTED_PAUSED','NOT_STARTED_QUIET','EXPIRED_TIMING','OBSOLETE')
+      or v_contact->>'reason' is null or v_contact->>'dispatch_target_id' is distinct from v_target.id::text
+      or v_contact->>'channel' is distinct from v_target.channel then
+      raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+    if v_contact->>'reason'='NOT_STARTED_QUIET'
+      or(v_contact->>'reason'='NOT_STARTED_PAUSED' and v_target.channel='PUSH') then
+      v_next:=(v_contact->>'next_eligible_at_utc')::timestamptz;
+      if v_next is null or not isfinite(v_next) then
+        raise exception 'CONTACT_DISPATCH_SCOPE_INVALID' using errcode='42501';end if;
+      update public.weekly_message_dispatch_targets set state='TRANSIENT_FAILURE',
+        next_attempt_at_utc=v_next,terminal_at_utc=null,terminal_reason=null,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null where id=v_target.id;
+    else
+      update public.weekly_message_dispatch_targets set state='RETIRED',terminal_at_utc=clock_timestamp(),
+        terminal_reason=v_contact->>'reason',next_attempt_at_utc=null,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null where id=v_target.id;
+      if v_target.channel='EMAIL' then
+        -- Retire the whole unsent frozen manager body/link, never filter its
+        -- members under that same body. Original recheck/recomposition owns
+        -- any later eligible-only render with unchanged logical allowances.
+        update public.weekly_manager_review_batches set state='REVOKED'
+          where message_render_id=v_command.message_render_id and state='ACTIVE';
+        update public.weekly_manager_route_receipts r set state='REVOKED',revoked_at_utc=clock_timestamp()
+          from public.weekly_manager_review_batches b
+          where r.review_batch_id=b.id and b.message_render_id=v_command.message_render_id and r.state='ACTIVE';
+        update public.weekly_manager_review_items m set response_state='OBSOLETE'
+          from public.weekly_manager_review_batches b
+          where m.review_batch_id=b.id and b.message_render_id=v_command.message_render_id and m.response_state='UNANSWERED';
+      end if;
+    end if;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return v_contact;
+  end if;
+  select * into strict v_target from public.weekly_message_dispatch_targets
+  where id=v_target_id for update;
+  select * into strict v_command from public.weekly_message_dispatch_commands
+  where id=v_target.dispatch_command_id for update;
+  select * into strict v_intent from public.weekly_message_intents
+  where id=v_command.message_intent_id;
+  select * into strict v_render from public.weekly_message_renders
+  where id=v_command.message_render_id;
+  select * into v_attempt from public.weekly_message_target_attempts
+  where dispatch_target_id=v_target.id and completed_at_utc is null
+  order by attempt_number desc limit 1;
+  if found and v_target.state='SUBMISSION_STARTED' then
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'replay',true,'provider_attempt_id',v_attempt.id,
+      'call_once',false,'reason','CHECK_ORIGINAL_ATTEMPT'
+    );
+  end if;
+  if v_target.state<>'LEASED' or v_target.lease_token<>v_lease_token
+     or v_target.lease_owner<>v_worker
+     or v_target.lease_expires_at_utc<=pg_catalog.transaction_timestamp()
+     or v_intent.state<>'RENDERED' or v_render.state<>'CURRENT' then
+    raise exception 'WEEKLY_SOURCE_TARGET_LEASE_STALE' using errcode='40001';
+  end if;
+  begin
+    perform private.weekly_source_query_current_publication_v1(
+      v_command.source_cycle_id,v_command.projection_publication_id
+    );
+  exception when others then
+    update public.weekly_message_dispatch_targets
+    set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason='CURRENT_HOURS_CHANGED',next_attempt_at_utc=null,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason','CURRENT_HOURS_CHANGED',
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id
+    );
+  end;
+  if v_target.channel='PUSH' and not exists(
+    select 1 from public.weekly_candidate_message_notifications message_notification
+    join public.candidate_notifications notification on notification.id=message_notification.notification_id
+    where message_notification.message_intent_id=v_intent.id and notification.state='UNREAD'
+      and private.candidate_notification_visible_v1(notification,pg_catalog.transaction_timestamp())
+  ) then
+    update public.weekly_message_dispatch_targets
+    set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),terminal_reason='NOTIFICATION_NO_LONGER_ACTIONABLE',
+      next_attempt_at_utc=null,lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return pg_catalog.jsonb_build_object('ok',false,'reason','NOTIFICATION_NO_LONGER_ACTIONABLE',
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id);
+  end if;
+  if v_intent.audience_kind='CANDIDATE' and not exists(
+    select 1 from public.weekly_candidate_outreach_generations generation
+    join public.weekly_candidate_cohorts cohort on cohort.id=generation.candidate_cohort_id
+    where generation.id=v_command.candidate_generation_id and generation.state='ACTIVE'
+      and private.weekly_source_candidate_generation_current_v1(generation.id)
+  ) then
+    update public.weekly_message_dispatch_targets
+    set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason='CANDIDATE_GENERATION_CHANGED',next_attempt_at_utc=null,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason','CANDIDATE_GENERATION_CHANGED',
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id
+    );
+  elsif v_intent.audience_kind='CANDIDATE' and not exists(
+    select 1
+    from public.weekly_candidate_outreach_memberships membership
+    join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+    where membership.candidate_generation_id=v_command.candidate_generation_id
+      and membership.state='ACTIONABLE' and incident.state='OPEN'
+  ) and not exists(
+    select 1
+    from public.weekly_candidate_outreach_generations generation
+    join public.weekly_timesheet_submission_requests submission
+      on submission.candidate_cohort_id=generation.candidate_cohort_id
+     and submission.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+    join public.weekly_timesheet_submission_request_memberships membership
+      on membership.submission_request_id=submission.id and membership.state='WAITING'
+    where generation.id=v_command.candidate_generation_id
+      and generation.request_kind='SUBMIT_TIMESHEET'
+  ) then
+    update public.weekly_message_dispatch_targets
+    set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason='REQUEST_RESOLVED',next_attempt_at_utc=null,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason','REQUEST_RESOLVED',
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id
+    );
+  elsif v_intent.audience_kind='MANAGER' and not exists(
+    select 1
+    from public.weekly_manager_recipient_generations generation
+    join public.weekly_manager_recipient_routes route on route.id=generation.recipient_route_id
+    join public.weekly_manager_review_batches batch
+      on batch.recipient_generation_id=generation.id
+     and batch.message_render_id=v_render.id and batch.state='ACTIVE'
+    where generation.id=v_intent.recipient_generation_id and generation.state='ACTIVE'
+      and route.current_generation_id=generation.id
+  ) then
+    v_reason:='REVIEW_REPLACED';
+  elsif v_intent.audience_kind='MANAGER' and (
+    exists(
+      select 1
+      from public.weekly_manager_review_batches batch
+      join public.weekly_manager_review_items item on item.review_batch_id=batch.id
+      join public.weekly_discrepancy_incidents incident on incident.id=item.incident_id
+      join public.weekly_issue_comparison_revisions comparison
+        on comparison.id=incident.current_comparison_revision_id
+      where batch.message_render_id=v_render.id
+        and (
+          item.response_state<>'UNANSWERED' or incident.state<>'OPEN'
+          or item.incident_episode<>incident.episode_number
+          or item.sent_comparison_revision_id<>incident.current_comparison_revision_id
+          or item.sent_comparison_fingerprint<>comparison.material_comparison_fingerprint
+        )
+    ) or not exists(
+      select 1
+      from public.weekly_manager_review_batches batch
+      join public.weekly_manager_review_items item on item.review_batch_id=batch.id
+      join public.weekly_discrepancy_incidents incident on incident.id=item.incident_id
+      where batch.message_render_id=v_render.id
+        and item.response_state='UNANSWERED' and incident.state='OPEN'
+    )
+  ) then
+    v_reason:='REVIEW_CHANGED';
+  end if;
+  if v_reason is not null then
+    update public.weekly_message_dispatch_targets
+    set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),
+        terminal_reason=v_reason,next_attempt_at_utc=null,
+        lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=v_target.id;
+    update public.weekly_manager_review_batches
+    set state='REVOKED'
+    where message_render_id=v_render.id and state='ACTIVE';
+    update public.weekly_manager_route_receipts receipt
+    set state='REVOKED',revoked_at_utc=pg_catalog.transaction_timestamp()
+    from public.weekly_manager_review_batches batch
+    where receipt.review_batch_id=batch.id and batch.message_render_id=v_render.id
+      and receipt.state='ACTIVE';
+    update public.weekly_manager_review_items item
+    set response_state='OBSOLETE'
+    from public.weekly_manager_review_batches batch
+    where item.review_batch_id=batch.id and batch.message_render_id=v_render.id
+      and item.response_state='UNANSWERED';
+    perform private.weekly_source_delivery_aggregate_command_v1(v_command.id);
+    return pg_catalog.jsonb_build_object(
+      'ok',false,'reason',v_reason,
+      'dispatch_target_id',v_target.id,'dispatch_command_id',v_command.id
+    );
+  end if;
+  select coalesce(pg_catalog.max(attempt_number),0)+1 into v_attempt_number
+  from public.weekly_message_target_attempts where dispatch_target_id=v_target.id;
+  if v_attempt_number>v_target.maximum_attempts then
+    raise exception 'WEEKLY_SOURCE_TARGET_RETRIES_EXHAUSTED' using errcode='55000';
+  end if;
+  insert into public.weekly_message_target_attempts(
+    dispatch_target_id,attempt_number,provider_idempotency_key,
+    lease_owner,lease_token,submission_started_at_utc
+  ) values (
+    v_target.id,v_attempt_number,
+    v_target.provider_idempotency_key||'/attempt-'||v_attempt_number::text,
+    v_worker,v_lease_token,(v_contact#>>'{admission,admitted_at_utc}')::timestamptz
+  ) returning * into v_attempt;
+  update public.weekly_message_dispatch_targets
+  set state='SUBMISSION_STARTED',attempt_count=v_attempt_number
+  where id=v_target.id;
+  update public.weekly_message_dispatch_commands set state='SUBMISSION_STARTED'
+  where id=v_command.id;
+  update public.weekly_message_renders set state='SUBMISSION_STARTED'
+  where id=v_render.id;
+  return private.weekly_contact_source_permit_v1(v_target.id,v_attempt.id,v_contact->'admission');
+end;
+$function$;
+
+alter function public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb) to service_role;
