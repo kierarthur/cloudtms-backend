@@ -30,7 +30,7 @@ begin
     or (select count(distinct value->>'tms_ref') from jsonb_array_elements(manifest->'candidate_refs'))<>jsonb_array_length(manifest->'candidate_ids') then
     raise exception 'WEEKLY_SOURCE_OFF_RULE_SETUP_SHAPE_INVALID' using errcode='22023'; end if;
   permitted:=case p_auth->>'purpose' when 'SOURCE_FIXTURE_SETUP' then array[
-    'weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1','weekly_source_upload_stage_rows_atomic_v1','weekly_source_upload_seal_atomic_v1',
+    'weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1','weekly_source_upload_stage_rows_atomic_v1','weekly_source_upload_seal_atomic_v1','weekly_source_invoice_hold_release_atomic_v1',
     'weekly_source_projection_begin_atomic_v1','weekly_source_projection_rows_apply_atomic_v1','weekly_source_projection_publish_atomic_v1',
     'weekly_source_import_prepare_atomic_v1','weekly_source_finalise_atomic_v1','weekly_source_finalisation_pay_open_atomic_v1',
     'weekly_source_finalisation_pay_task_start_atomic_v1','weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1',

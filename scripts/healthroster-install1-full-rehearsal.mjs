@@ -14,6 +14,7 @@ import {verifierClosure} from './healthroster-install1-verifier-census.mjs';
 import {backgroundSnapshotFieldsSql,fixtureObservationSql,transactionIdentitySql,validateFixtureObservations,assertQualifiedLiveRestoration} from './healthroster-live-test-restoration.mjs';
 import {assertFreshInstall2NativeGate} from './healthroster-install2-native-gate.mjs';
 import {compileReviewedManagedEnvelope,managedEnvelopeReviewPath,managedCalleeAuditPath} from './healthroster-reviewed-managed-envelope.mjs';
+import {f5Verifier,partitionF5VerificationFiles} from './healthroster-f5-post-verified-gate.mjs';
 
 export const REHEARSAL_VERSION='HEALTHROSTER_INSTALL1_FULL_REHEARSAL_V1';
 export const INSTALL2_REHEARSAL_VERSION='HEALTHROSTER_INSTALL2_FULL_REHEARSAL_V1';
@@ -33,6 +34,8 @@ const releaseInputFiles=['scripts/cloudtms-db-release-lib.mjs','scripts/cloudtms
  'scripts/healthroster-install1-full-rehearsal.mjs','scripts/healthroster-install2-native-gate.mjs',
  'scripts/healthroster-install2-source-relationship.mjs','scripts/healthroster-install2-installed-source.mjs',
  'scripts/healthroster-full-rehearsal-protocol.mjs','scripts/healthroster-reviewed-managed-envelope.mjs',
+ 'scripts/healthroster-f5-post-verified-gate.mjs','scripts/healthroster-f5-prepublication.mjs',
+ 'scripts/healthroster-f5-synthetic-fixture.mjs','scripts/healthroster-f5-native-setup.mjs','scripts/healthroster-f5-restoration.sql',
  managedEnvelopeReviewPath,managedCalleeAuditPath];
 
 // Root runs this exact source literal as a separate fresh read-only probe under
@@ -148,7 +151,14 @@ export function assertReview(review,release){
  for(const [index,file] of release.verificationFiles.entries()){
   const row=review.verifiers[index];
   requireThat(row?.file===file&&hashPattern.test(row.sourceSqlHash??'')&&hashPattern.test(row.effectGraphHash??'')
-   &&['INCLUDE','EXCLUDE'].includes(row.decision)&&typeof row.reason==='string'&&row.reason.length>10,'REHEARSAL_REVIEW_ROW_REFUSED');
+   &&['INCLUDE','EXCLUDE','REQUIRED_POST_VERIFIED'].includes(row.decision)&&typeof row.reason==='string'&&row.reason.length>10,'REHEARSAL_REVIEW_ROW_REFUSED');
+  if (row.decision === 'REQUIRED_POST_VERIFIED') {
+   requireThat(file === f5Verifier && row.executionPhase === 'POST_VERIFIED' && row.mandatory === true
+    && row.status === 'REQUIRED_POST_VERIFIED_NOT_EXECUTABLE_PREINSTALL' && row.positives_pending === true
+    && row.provider_or_runtime_acceptance === false && row.assertionBodyDisposition === 'KEEP_COMPLETE',
+    'REHEARSAL_REQUIRED_POST_VERIFIED_PHASE_REFUSED');
+  }
+  if (file === f5Verifier) requireThat(row.decision === 'REQUIRED_POST_VERIFIED','REHEARSAL_F5_PHASE_REQUIRED');
  }
  return review;
 }
@@ -206,13 +216,20 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
   units.push({file:phases.readers[0].path,kind:'repeatable',sql,sqlHash:digest(sql),phase:'source_reader_activation',
    sourceFiles:phases.readers.map(x=>({file:x.path,sha256:x.sha256})),sourceSqlHash:digest(activation)});
  }
- const exclusions=[];
+ // F5 retains mandatory census membership but cannot fabricate its genuine
+ // post-VERIFIED authority inside the preinstall rollback transaction.
+ partitionF5VerificationFiles(release,'UPGRADE');
+ const exclusions=[],requiredPostVerifiedVerifiers=[];
  for(const [index,file] of release.verificationFiles.entries()){
   const reviewed=review.verifiers[index],{sql,original}=readVerifier(file);
   requireThat(original.sourceSqlHash===reviewed.sourceSqlHash&&original.closureHash===reviewed.closureHash,'REHEARSAL_VERIFIER_SOURCE_DRIFT');
   requireThat(digest(sql)===reviewed.executableSqlHash,'REHEARSAL_VERIFIER_EXECUTABLE_DRIFT');
   if(reviewed.decision==='EXCLUDE'){exclusions.push(reviewed);continue;}
   requireThat(reviewed.pendingIndependentReview!==true,'REHEARSAL_SAFETY_REVIEW_INCOMPLETE');
+  if (reviewed.decision === 'REQUIRED_POST_VERIFIED') {
+   requiredPostVerifiedVerifiers.push(reviewed);
+   continue;
+  }
   const unit={file,kind:'verifier',sql,sqlHash:digest(sql),effectGraphHash:reviewed.effectGraphHash};
   const neutral=neutraliseReviewedVerifierEnvelope(unit,{sourceSqlHash:unit.sqlHash,removedCommands:reviewed.removedCommands,
    readOnlyBodyReviewed:reviewed.readOnlyBodyReviewed===true});
@@ -290,7 +307,8 @@ export function compileFullRehearsal({candidatePin,currentRemoteTestPin,installe
   currentCounts:{migrations:current.migrations.length,repeatables:current.repeatables.length,verifiers:release.verificationFiles.length},
   pendingCounts:{migrations:pending.migrations.length,repeatables:pending.repeatables.length,readerPair:phases.readers.length},
   units:rendered.units.map((x,i)=>({...x,phase:units[i].phase,sourceFiles:units[i].sourceFiles??[],clientVariables:units[i].clientVariables??[]})),
-  exclusions,exclusionCount:exclusions.length,sql,sqlHash:digest(sql),bytes:Buffer.byteLength(sql),lineMap,
+  exclusions,exclusionCount:exclusions.length,requiredPostVerifiedVerifiers,
+  sql,sqlHash:digest(sql),bytes:Buffer.byteLength(sql),lineMap,
   outerIsolation:rendered.outerIsolation,isolationRequirements:rendered.isolationRequirements,
   sourceBinding,expectedContractHash,expectedJsonbHash,diagnosticCodes,diagnosticCodesHash,
   fixtureObservationUnits:observeLiveBusiness?units.flatMap((unit,i)=>['verifier','final_browser_verifier'].includes(unit.kind)?[i]:[]):[],
@@ -401,7 +419,8 @@ export async function runFullRehearsalWithinOwnedTurn({turn,candidatePin,current
  requireThat(execution.errors.length===0,'REHEARSAL_FULL_ERRORS_HOLD_INSTALL');
  const receipt={version,status:'FULL_CLEAN_ROLLBACK_PROVED',candidatePin,currentRemoteTestPin,sqlHash:plan.sqlHash,
   beforeFingerprints:Object.fromEntries(['ledgerFingerprint','catalogueFingerprint','businessCountsFingerprint','businessRowsFingerprint'].map(k=>[k,before[k]])),
-  restoration,counts:plan.currentCounts,pending:plan.pendingCounts,exclusions:plan.exclusions,errors:[],turnId:turn.identity.turnId};
+  restoration,counts:plan.currentCounts,pending:plan.pendingCounts,exclusions:plan.exclusions,
+  requiredPostVerifiedVerifiers:plan.requiredPostVerifiedVerifiers??[],errors:[],turnId:turn.identity.turnId};
  receipt.sourceBinding=plan.sourceBinding;receipt.installedContract=execution.installedContract;
  await gate(phasePrefix+'-before-managed-release');
  // The root callback must use turn.runManagedRelease / canonical npm release:test,

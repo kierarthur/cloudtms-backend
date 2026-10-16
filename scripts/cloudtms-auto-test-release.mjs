@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { chooseTestDatabaseRoute } from './automatic-test-release-policy.mjs';
+import { assertF5AuthorityCompatibility, readF5VerifiedState, runF5PostVerifiedGate } from './healthroster-f5-post-verified-gate.mjs';
 import { canonicalContractHash, exportContract, inventory, psql, readJson, repoRoot, shellGitHead,
   validateExpectedDatabase, validateTarget, verifyIntegrity } from './cloudtms-db-release-lib.mjs';
 
@@ -37,14 +38,26 @@ try {
   // PLAN already verifies immutable migrations; retain explicit repeatable inventory checks.
   const known=new Set(current.repeatables.map(x=>x.path));
   if(repeatables.some(x=>!known.has(x.path))) throw new Error('Installed repeatable is absent from the repository');
+  const expected=readJson('supabase/release/current-contract.json');
+  const expectedContractSha256=canonicalContractHash(expected);
+  const restorationSql=fs.readFileSync(path.join(repoRoot,'scripts/healthroster-f5-restoration.sql'),'utf8');
   let authorityUnchanged=false;
   if(/^[a-f0-9]{40}$/.test(latest.commit||'')) {
     if(spawnSync('git',['cat-file','-e',`${latest.commit}^{commit}`],{cwd:repoRoot,stdio:'ignore'}).status!==0)
       spawnSync('git',['fetch','--no-tags','--depth=1','origin',latest.commit],{cwd:repoRoot,stdio:'ignore'});
-    const diff=spawnSync('git',['diff','--name-only',latest.commit,commit,'--','supabase','scripts','.github/workflows/database-release.yml','.github/workflows/automatic-test-release.yml','package.json','package-lock.json'],{cwd:repoRoot,encoding:'utf8'});
-    authorityUnchanged=diff.status===0&&!diff.stdout.trim();
+    try {
+      assertF5AuthorityCompatibility(repoRoot,latest.commit,commit);
+      authorityUnchanged=true;
+    } catch {
+      // Only the existing protected owner's actual audited receipt registration
+      // may normalize evidence-only source. No caller boolean or broad exclusion.
+      try {
+        const native=await readF5VerifiedState({psql,expectedContractSha256,restorationSql});
+        assertF5AuthorityCompatibility(repoRoot,latest.commit,commit,native.authority_registrations,native.execution);
+        authorityUnchanged=true;
+      } catch { authorityUnchanged=false; }
+    }
   }
-  const expected=readJson('supabase/release/current-contract.json');
   const actual=exportContract();
   const state={environment:'TEST',database:'cloudtms_test_clone',identityVerified:true,ledgerVerified:true,
     latestStatus:latest.status||null,verificationAuthorityUnchanged:authorityUnchanged,
@@ -72,6 +85,11 @@ try {
       run('scripts/cloudtms-db-component-release.mjs',['rehearse','--environment=TEST']);
       run('scripts/cloudtms-db-component-release.mjs',['apply','--environment=TEST'],{CLOUDTMS_RELEASE_APPROVAL:`APPLY TEST COMPONENT ${component.componentId} ${commit}`});
     } else if(decision.route!=='NO_DATABASE_CHANGE') throw new Error('No approved executable component adapter registered');
+    // Every approved route, including unchanged/component, must produce the
+    // genuine post-VERIFIED rollback receipt before application publication.
+    receipt.f5Gate=await runF5PostVerifiedGate({psql,root:repoRoot,sourceCommit:commit,expectedContractSha256,restorationSql});
+    receipt.databaseRelease={release_id:receipt.f5Gate.release_id,source_commit:receipt.f5Gate.database_source_commit,
+      contract_sha256:receipt.f5Gate.contract_sha256};
     receipt.status='DATABASE_READY';receipt.completedAt=new Date().toISOString();save();
     console.log('DATABASE_READY: continue ordered application publication. This is not proof of backend, Office or phone deployment.');
   }

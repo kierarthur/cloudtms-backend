@@ -6412,5 +6412,19 @@
     "centralTableAclFinalDefinerAndIndependentLiteralVerifier": "NOT_UPDATED_FOR_WIP_NOT_MOUNTED",
     "native": "NOT_RUN",
     "implementationComplete": false
+  },
+  "f5_protected_phase_continuation_20261016": {
+    "sourceCommit": "d49de3d59e7ba0d1bde8233a3bc42f957f631797",
+    "status": "SOURCE_INTEGRATED_NATIVE_REQUIRED_NOT_RUN",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/F5_PROTECTED_PHASE_INTEGRATION.json",
+    "mandatoryVerifier": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+    "executionPhase": "POST_VERIFIED_BEFORE_ANY_APPLICATION_PUBLICATION",
+    "featuresRemainOff": true,
+    "existingTableFunctionSignaturesUnchanged": true,
+    "newSqlRoutines": 0,
+    "newTables": 0,
+    "native": "NOT_RUN",
+    "contractSeal": "PENDING_FINAL_SOURCE_COMPOSITION",
+    "original92ObjectsPreserved": true
   }
 }

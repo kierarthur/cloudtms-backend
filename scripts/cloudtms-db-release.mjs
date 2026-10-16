@@ -14,6 +14,7 @@ import {
 } from './cloudtms-db-release-lib.mjs';
 import { requireWeeklySourceHandover2Approval } from './weekly-source-external-approval.mjs';
 import { applyManagedRelease, identitySql, managedReleaseContext, resumeCheckSql } from './cloudtms-managed-release.mjs';
+import { partitionF5VerificationFiles, runF5PostVerifiedGate } from './healthroster-f5-post-verified-gate.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
 const options = Object.fromEntries(rest.map(arg => {
@@ -95,9 +96,16 @@ function verificationFilesForMode(release, mode) {
   return release.verificationFiles;
 }
 
+function verifierPhases(release, mode, context) {
+  if (context?.environment === 'TEST' && ['NEW','UPGRADE'].includes(mode)) {
+    return partitionF5VerificationFiles(release, mode);
+  }
+  return {preVerified:verificationFilesForMode(release,mode),postVerified:[]};
+}
+
 function runVerifiers(mode, context) {
   const release = readJson('supabase/release/current-release.json');
-  for (const file of verificationFilesForMode(release, mode)) {
+  for (const file of verifierPhases(release, mode, context).preVerified) {
     const started = Date.now();
     console.log(`VERIFY START ${file}`);
     try {
@@ -344,6 +352,10 @@ async function applyRelease() {
   };
 
   if (mode === 'NEW' || mode === 'UPGRADE') {
+    // Partition before durable application; the original mandatory F5 path is
+    // retained as an explicit post-VERIFIED positive gate, never a pre-pass.
+    const phases = verifierPhases(release,mode,releaseVerifierContext);
+    const agencyTest = environment === 'TEST' && expectedDatabase === 'cloudtms_test_clone';
     await applyManagedRelease({
       root: repoRoot, current, release,
       context: { ...releaseVerifierContext, mode, expectedHash },
@@ -358,8 +370,12 @@ async function applyRelease() {
       verify: () => {
         runVerifiers(mode,releaseVerifierContext);
         const verified=compareExpected(release.contractPath);
-        return {...verified,evidence:{verificationFiles:verificationFilesForMode(release,mode)}};
+        return {...verified,evidence:{verificationFiles:phases.preVerified,
+          mandatory_post_verified_verification_files:phases.postVerified,
+          ...(phases.postVerified.length?{post_verified_verification_phase:'REQUIRED_POST_VERIFIED',positives_pending:true}:{})}};
       },
+      postVerified: agencyTest ? () => runF5PostVerifiedGate({psql,root:repoRoot,sourceCommit:gitCommit,
+        expectedContractSha256:expectedHash,restorationSql:fs.readFileSync(path.join(repoRoot,'scripts/healthroster-f5-restoration.sql'),'utf8')}) : undefined,
       log: message=>console.log(message),
     });
     console.log(`VERIFIED ${mode} release ${releaseId} for ${environment}.`);

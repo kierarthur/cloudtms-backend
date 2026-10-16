@@ -16,6 +16,10 @@
       {
         "file": "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
         "reason": "Explicit-unknown scope verifier corrected; regenerate census after final mount."
+      },
+      {
+        "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+        "reason": "Mandatory post-VERIFIED actual OFF-rule positive fixture; exact root phase wiring and native-ID binding integrated. Regenerate full current census after final source mount."
       }
     ]
   },
@@ -204,14 +208,18 @@
     {
       "id": "I2-VERIFIER-F5-CURRENT-AUTHORITY",
       "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
-      "status": "OWNED_FIX_IN_PROGRESS",
+      "status": "SOURCE_INTEGRATED_GENUINE_NATIVE_SETUP_AND_EXECUTION_PENDING",
       "evidence": [
         "Current managed release invokes verify before its final VERIFIED update in scripts/cloudtms-managed-release.mjs.",
         "F5 asserts actual latest.status=VERIFIED before its positive stage/hold assertions.",
         "Actual final feature setter in 14102026_0541/05_complete_current_feature_setup.sqlinc requires a genuine protected_capability_qualification_sha256 for RULE_SET true before the latest release check. The F5 request supplies none."
       ],
       "requirement": "Use a genuine reviewed protected setup/qualification path and preserve every original positive staging/hold assertion. Never fabricate VERIFIED/release/qualification rows, relax the feature setter, skip the fixture or claim a native pass.",
-      "native": "NOT_RUN"
+      "native": "NOT_RUN",
+      "integrationRecord": "docs/healthroster-build/v6-owner-delivery-20261016/F5_PROTECTED_PHASE_INTEGRATION.json",
+      "executionPhase": "REQUIRED_POST_VERIFIED_NOT_EXECUTABLE_PREINSTALL",
+      "mandatory": true,
+      "positives_pending": true
     },
     {
       "id": "I2-VERIFIER-PROFILE-RECEIPT",

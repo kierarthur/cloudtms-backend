@@ -1,6 +1,7 @@
--- F5 first-use configuration/staging/hold proof, root-only hosted TEST rollback.
+-- F5 actual OFF_RULE setup, post-VERIFIED mandatory pre-publication rollback journey.
+-- SOURCE_ONLY / NATIVE_NOT_RUN; genuine registered authorisation required, features remain OFF.
 -- No pay/finalisation/invoice/provider/comms owner; no fabricated READY/signature/release.
--- Fixed future week 2026-11-01: regenerate/review if no longer future before rehearsal.
+-- Fresh synthetic Source file comes from the actual past open cycle/window; all native clocks remain genuine.
 \set ON_ERROR_STOP on
 begin;
 set local lock_timeout='5s';
@@ -12,7 +13,10 @@ create function pg_temp.f5_refuses(p_sql text,p_code text) returns void language
 begin begin execute p_sql; exception when others then if sqlerrm=p_code then return; end if;
 raise exception 'F5_WRONG_REFUSAL: expected %, received %',p_code,sqlerrm; end;
 raise exception 'F5_REFUSAL_MISSING: %',p_code; end; $f$;
-select pg_temp.f5_assert(date '2026-11-01'>current_date,'future fixture date');
+create temporary table f5_generated_input(value jsonb not null);
+-- F5_GENERATED_DATA_INSERT_REQUIRED
+select pg_temp.f5_assert((select count(*)=1 from f5_generated_input),'actual parser-generated synthetic file required');
+select pg_temp.f5_assert(((clock_timestamp() at time zone 'Europe/London')::date+14+(7-extract(dow from (clock_timestamp() at time zone 'Europe/London')::date+14)::integer)%7)>(clock_timestamp() at time zone 'Europe/London')::date,'future fixture date');
 select pg_temp.f5_assert(not exists(select 1 from public.tms_users where id::text like 'f5510000-%' or email like 'f5-%@example.invalid')
  and not exists(select 1 from public.clients where id::text like 'f5510000-%' or name='F5 fixture self bill')
  and not exists(select 1 from public.client_settings where id::text like 'f5510000-%')
@@ -30,53 +34,148 @@ insert into public.tms_users(id,email,role,password_hash,display_name,is_active,
  ('f5510000-0000-4000-8000-000000000002','f5-authoriser@example.invalid','user','not-a-real-password','F5 authoriser',true,true,false);
 insert into public.clients(id,name,ts_queries_email,vat_chargeable) values ('f5510000-0000-4000-8000-000000000010','F5 fixture self bill','f5-manager@example.invalid',true);
 insert into public.client_settings(id,client_id,effective_from,hr_validation_required,autoprocess_hr,self_bill_no_invoices_sent,no_timesheet_required,requires_hr,is_nhsp)
- values ('f5510000-0000-4000-8000-000000000020','f5510000-0000-4000-8000-000000000010',date '2026-11-01'-60,true,true,true,true,true,false);
+ values ('f5510000-0000-4000-8000-000000000020','f5510000-0000-4000-8000-000000000010',((clock_timestamp() at time zone 'Europe/London')::date+14+(7-extract(dow from (clock_timestamp() at time zone 'Europe/London')::date+14)::integer)%7)-60,true,true,true,true,true,false);
 insert into public.weekly_source_groups(id,environment,agency_id,code,display_name,source_family,cutoff_weekday,cutoff_local_time)
  values ('f5510000-0000-4000-8000-000000000050','TEST','f5510000-0000-4000-8000-000000000099','F5_VERIFY_MONEY','F5 money','ROSTER',3,'23:59');
 insert into public.weekly_source_group_clients(id,source_group_id,client_id,valid_from,created_by_user_id)
- values ('f5510000-0000-4000-8000-000000000060','f5510000-0000-4000-8000-000000000050','f5510000-0000-4000-8000-000000000010',date '2026-11-01'-60,'f5510000-0000-4000-8000-000000000001');
+ values ('f5510000-0000-4000-8000-000000000060','f5510000-0000-4000-8000-000000000050','f5510000-0000-4000-8000-000000000010',((clock_timestamp() at time zone 'Europe/London')::date+14+(7-extract(dow from (clock_timestamp() at time zone 'Europe/London')::date+14)::integer)%7)-60,'f5510000-0000-4000-8000-000000000001');
 insert into public.weekly_source_client_policies(id,source_group_id,client_id,effective_from,authority_mode,document_mode,self_bill_enabled,candidate_queries_enabled,manager_queries_enabled,created_by_user_id)
- values ('f5510000-0000-4000-8000-000000000070','f5510000-0000-4000-8000-000000000050','f5510000-0000-4000-8000-000000000010',date '2026-11-01'-60,'SOURCE_AUTHORITY','CHECK_ONLY',true,false,false,'f5510000-0000-4000-8000-000000000001');
+ values ('f5510000-0000-4000-8000-000000000070','f5510000-0000-4000-8000-000000000050','f5510000-0000-4000-8000-000000000010',((clock_timestamp() at time zone 'Europe/London')::date+14+(7-extract(dow from (clock_timestamp() at time zone 'Europe/London')::date+14)::integer)%7)-60,'SOURCE_AUTHORITY','CHECK_ONLY',true,false,false,'f5510000-0000-4000-8000-000000000001');
 insert into public.weekly_source_cycles(id,source_group_id,scope_client_id,finalisation_week_ending,cutoff_at_utc)
- values ('f5510000-0000-4000-8000-000000000080','f5510000-0000-4000-8000-000000000050','f5510000-0000-4000-8000-000000000010',date '2026-11-01',((date '2026-11-01'+3)+time '23:59') at time zone 'Europe/London');
+ values ('f5510000-0000-4000-8000-000000000080','f5510000-0000-4000-8000-000000000050','f5510000-0000-4000-8000-000000000010',((clock_timestamp() at time zone 'Europe/London')::date+14+(7-extract(dow from (clock_timestamp() at time zone 'Europe/London')::date+14)::integer)%7),((((clock_timestamp() at time zone 'Europe/London')::date+14+(7-extract(dow from (clock_timestamp() at time zone 'Europe/London')::date+14)::integer)%7)+3)+time '23:59') at time zone 'Europe/London');
+-- Temporary test adapter. The actual public OFF_RULE owner revalidates the
+-- registered immutable authorization, current release, actor, scope and parent.
+create function pg_temp.f5_native(p_auth jsonb,p_operation text,p_request jsonb)
+returns jsonb language plpgsql as $function$
+begin
+ if p_operation not in ('weekly_source_upload_stage_begin_atomic_v1','weekly_source_upload_stage_rows_atomic_v1',
+  'weekly_source_upload_seal_atomic_v1','weekly_source_invoice_hold_release_atomic_v1') then raise exception 'F5_NATIVE_OPERATION_REFUSED';end if;
+ return public.weekly_source_group_rule_feature_set_atomic_v1(jsonb_build_object(
+  'actor_user_id',p_auth->>'journey_actor_user_id','agency_id',p_auth->>'agency_id','environment','TEST',
+  'qualification_action','OFF_RULE_COMMAND','source_cycle_id',p_auth->>'source_cycle_id',
+  'native_operation',p_operation,'native_request',p_request));
+end;
+$function$;
+
+-- Replace only fixture identities in the exact existing bounded source input.
+-- This adapts fixture metadata; it does not create authorization or source money.
+create function pg_temp.f5_native_request(p_request jsonb,p_auth jsonb)
+returns jsonb language plpgsql as $function$
+declare body text:=p_request::text;
+begin
+ body:=replace(body,'f5510000-0000-4000-8000-000000000001',p_auth->>'journey_actor_user_id');
+ body:=replace(body,'f5510000-0000-4000-8000-000000000099',p_auth->>'agency_id');
+ body:=replace(body,'f5510000-0000-4000-8000-000000000050',p_auth->>'source_group_id');
+ body:=replace(body,'f5510000-0000-4000-8000-000000000080',p_auth->>'source_cycle_id');
+ body:=replace(body,'f5510000-0000-4000-8000-000000000010',p_auth#>>'{fixture_manifest,client_ids,0}');
+ p_request:=body::jsonb;
+ if p_request ? 'coverage_confirmed_at_utc' then
+  p_request:=jsonb_set(p_request,'{coverage_confirmed_at_utc}',to_jsonb(to_char(clock_timestamp() at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')));
+ end if;
+ return p_request;
+end;
+$function$;
+
+-- Same exact native tables/columns as the retained query-prefix economics
+-- witness. No TS/TF/invoice/document is constructed by this F5 journey.
+create function pg_temp.f5_economics(p_timesheet_ids uuid[])
+returns jsonb language sql stable as $function$
+ select jsonb_build_object(
+  'timesheets',(select jsonb_agg(to_jsonb(t) order by t.timesheet_id) from public.timesheets t where t.timesheet_id=any(p_timesheet_ids)),
+  'workflows',(select jsonb_agg(to_jsonb(w) order by w.id) from public.candidate_submission_workflows w where w.id in(select candidate_workflow_id from public.timesheets where timesheet_id=any(p_timesheet_ids))),
+  'approval_requests',(select jsonb_agg(to_jsonb(a) order by a.id) from public.candidate_approval_requests a where a.workflow_id in(select candidate_workflow_id from public.timesheets where timesheet_id=any(p_timesheet_ids))),
+  'components',(select jsonb_agg(to_jsonb(c) order by c.id) from public.candidate_submission_components c where c.workflow_id in(select candidate_workflow_id from public.timesheets where timesheet_id=any(p_timesheet_ids))),
+  'timesheet_evidence',(select jsonb_agg(to_jsonb(e) order by e.id) from public.timesheet_evidence e where e.timesheet_id=any(p_timesheet_ids)),
+  'document_assets',(select jsonb_agg(to_jsonb(a) order by a.id) from public.invoice_document_assets a where a.id in(select manual_document_asset_id from public.timesheets where timesheet_id=any(p_timesheet_ids))
+   or a.id in(select document_asset_id from public.timesheet_evidence where timesheet_id=any(p_timesheet_ids))),
+  'financials',(select jsonb_agg(to_jsonb(f) order by f.id) from public.timesheets_financials f where f.timesheet_id=any(p_timesheet_ids)),
+  'invoices',(select jsonb_agg(to_jsonb(i) order by i.id) from public.invoices i where i.id in(select invoice_id from public.invoice_lines where timesheet_id=any(p_timesheet_ids))),
+  'invoice_lines',(select jsonb_agg(to_jsonb(l) order by l.id) from public.invoice_lines l where l.invoice_id in(select invoice_id from public.invoice_lines where timesheet_id=any(p_timesheet_ids))),
+  'document_versions',(select jsonb_agg(to_jsonb(d) order by d.id) from public.invoice_document_versions d where
+   (d.entity_type='TIMESHEET' and d.entity_id=any(p_timesheet_ids)) or(d.entity_type='INVOICE' and d.entity_id in(select invoice_id from public.invoice_lines where timesheet_id=any(p_timesheet_ids)))));
+$function$;
+
 create temporary table f5_owner_proof(name text primary key,value jsonb);
 do $verify$
 declare base jsonb:='{"actor_user_id":"f5510000-0000-4000-8000-000000000001","agency_id":"f5510000-0000-4000-8000-000000000099","environment":"TEST","source_group_id":"f5510000-0000-4000-8000-000000000050"}'::jsonb;
  saved jsonb; assigned jsonb; enabled jsonb; begun jsonb; staged jsonb; sealed jsonb; released jsonb; request jsonb;
- row_id uuid; row_hash text; cycle_version bigint; latest private.cloudtms_database_releases%rowtype; sig text; role_name text;
+ row_id uuid; row_hash text; cycle_version bigint; latest private.cloudtms_database_releases%rowtype; sig text; role_name text; auth jsonb; n integer; actual_client uuid; protected_ids uuid[]; before_economics jsonb;
 begin
  saved:=public.weekly_source_rule_set_version_save_atomic_v1(base||jsonb_build_object('request_id','f5510000-0000-4000-8000-000000000100',
    'rule_set',jsonb_build_object('id',null,'code','F5_VERIFY_RULES','display_name','F5 source money','expected_version',0),'values','{"checking_profile_kind":"HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1","invoice_sender":"CLIENT_SELF_BILL","invoice_amount_basis":"SOURCE_AMOUNT","source_amount_basis":"EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY","invoice_membership":"FINALISED_IN_CYCLE_WINDOW","line_vat_method":"LINE_GROSS_MINUS_NET_FROM_SOURCE","rate_difference_policy":"FLAG_ALLOW_IGNORE"}'::jsonb));
  assigned:=public.weekly_source_group_rule_assign_atomic_v1(base||jsonb_build_object('request_id','f5510000-0000-4000-8000-000000000110',
-   'rule_set_version_id',saved->>'rule_set_version_id','effective_from_week_ending','2026-11-01','expected_group_version',1));
+   'rule_set_version_id',saved->>'rule_set_version_id','effective_from_week_ending',((clock_timestamp() at time zone 'Europe/London')::date+14+(7-extract(dow from (clock_timestamp() at time zone 'Europe/London')::date+14)::integer)%7),'expected_group_version',1));
  perform pg_temp.f5_assert(private.weekly_source_effective_rule_set_v1('f5510000-0000-4000-8000-000000000010','f5510000-0000-4000-8000-000000000080') is null,'saved assignment remains OFF');
- select * into strict latest from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
- perform pg_temp.f5_assert(latest.status='VERIFIED','actual latest release VERIFIED');
- enabled:=public.weekly_source_group_rule_feature_set_atomic_v1(base||jsonb_build_object('request_id','f5510000-0000-4000-8000-000000000120',
-   'assignment_id',assigned->>'assignment_id','rule_set_version_id',saved->>'rule_set_version_id','effective_from_week_ending','2026-11-01',
-   'expected_assignment_version',1,'feature_enabled',true,'feature_purpose','RULE_SET','release_id',latest.release_id,'reason','F5 rollback staging fixture only'));
- begun:=public.weekly_source_upload_stage_begin_atomic_v1('{"actor_user_id":"f5510000-0000-4000-8000-000000000001","environment":"TEST","agency_id":"f5510000-0000-4000-8000-000000000099","source_group_id":"f5510000-0000-4000-8000-000000000050","source_cycle_id":"f5510000-0000-4000-8000-000000000080","report_scope_id":null,"client_id":"f5510000-0000-4000-8000-000000000010","original_filename":"f5-verify-money.xlsx","content_sha256":"4b9aea615d5c56577f9e4e6b1281ce8d35e5e0f3ec9d69e2682a5acac2aa1c1d","byte_count":16924,"profile_code":"HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1","profile_version":"1","parser_version":"WEEKLY_SOURCE_STRICT_V1","normaliser_version":"HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1:1:WEEKLY_SOURCE_UPLOAD_ADAPTER_V1","workbook_part_and_sheet_fingerprint":"eed8437846c189d5ea34040dff4521c8ace2e30984d8a52d45cbd91fd17ac7fe","header_coordinate_map_json":{"requestId":{"column_index":1,"column":"A","coordinate":"A1"},"workerName":{"column_index":2,"column":"B","coordinate":"B1"},"date":{"column_index":3,"column":"C","coordinate":"C1"},"plannedStart":{"column_index":4,"column":"D","coordinate":"D1"},"plannedEnd":{"column_index":5,"column":"E","coordinate":"E1"},"plannedBreak":{"column_index":6,"column":"F","coordinate":"F1"},"actualStart":{"column_index":7,"column":"G","coordinate":"G1"},"actualEnd":{"column_index":8,"column":"H","coordinate":"H1"},"actualBreak":{"column_index":9,"column":"I","coordinate":"I1"},"actualTotal":{"column_index":10,"column":"J","coordinate":"J1"},"finalisedDate":{"column_index":11,"column":"K","coordinate":"K1"},"finalisedBy":{"column_index":12,"column":"L","coordinate":"L1"},"sourceNet":{"column_index":13,"column":"M","coordinate":"M1"},"sourceGross":{"column_index":14,"column":"N","coordinate":"N1"}},"money_lexical_authority_version":null,"purpose":"ORDINARY","correction_session_id":null,"suggested_coverage_start_local_date":"2026-10-26","suggested_coverage_end_local_date":"2026-10-26","confirmed_coverage_start_local_date":"2026-10-26","confirmed_coverage_end_local_date":"2026-11-01","coverage_timezone":"Europe/London","coverage_confirmation_version":"WEEKLY_SOURCE_OFFICE_COVERAGE_CONFIRMATION_V1","coverage_confirmed_at_utc":"2026-10-13T12:00:00Z","coverage_shrink_acknowledged":false,"coverage_state":"COMPLETE","coverage_proof_kind":"HEALTHROSTER_COMPLETE_EXPORT_ATTESTATION","physical_row_count":2,"header_count":1,"trailer_count":0,"continuation_count":0,"accepted_count":1,"blocking_economic_duplicate_count":0,"malformed_count":0,"blocked_count":0,"file_metadata_json":{"client_id":"f5510000-0000-4000-8000-000000000010","import_use":"CHECKING","source_file_r2_key":null,"saved_finalisation_profile_map":{"requestId":{"column_index":1,"column":"A","header_coordinate":"A1"},"workerName":{"column_index":2,"column":"B","header_coordinate":"B1"},"date":{"column_index":3,"column":"C","header_coordinate":"C1"},"plannedStart":{"column_index":4,"column":"D","header_coordinate":"D1"},"plannedEnd":{"column_index":5,"column":"E","header_coordinate":"E1"},"plannedBreak":{"column_index":6,"column":"F","header_coordinate":"F1"},"actualStart":{"column_index":7,"column":"G","header_coordinate":"G1"},"actualEnd":{"column_index":8,"column":"H","header_coordinate":"H1"},"actualBreak":{"column_index":9,"column":"I","header_coordinate":"I1"},"actualTotal":{"column_index":10,"column":"J","header_coordinate":"J1"},"finalisedDate":{"column_index":11,"column":"K","header_coordinate":"K1"},"finalisedBy":{"column_index":12,"column":"L","header_coordinate":"L1"},"sourceNet":{"column_index":13,"column":"M","header_coordinate":"M1"},"sourceGross":{"column_index":14,"column":"N","header_coordinate":"N1"}}},"parser_summary_json":{"parser_version":"WEEKLY_SOURCE_STRICT_V1","adapter_version":"WEEKLY_SOURCE_UPLOAD_ADAPTER_V1","source_kind":"XLSX","selected_worksheet":{"name":"Export","index":0,"partPath":"xl/worksheets/sheet1.xml","physicalRowCount":2,"physicalOrdinalSpan":2,"physicalCellCount":30,"firstPhysicalRow":1,"lastPhysicalRow":2,"workbookPartAndSheetFingerprint":"eed8437846c189d5ea34040dff4521c8ace2e30984d8a52d45cbd91fd17ac7fe"},"row_counts":{"total":1,"finalisedWorked":1,"unfinalised":0,"explicitZero":0,"blocked":0},"warning_count":1}}'::jsonb);
+  select * into strict latest from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  perform pg_temp.f5_assert(latest.status='VERIFIED' and latest.completed_at_utc is not null,'actual latest release VERIFIED');
+  select count(*),jsonb_agg(value)->0 into n,auth
+   from jsonb_array_elements(latest.evidence_json->'weekly_source_protected_test_setup_authorizations') value
+   where value->>'schema_version'='WEEKLY_SOURCE_OFF_RULE_TEST_AUTHORIZATION_V1'
+    and value->>'purpose'='SOURCE_FIXTURE_SETUP'
+    and value->>'source_cycle_id'=(select value#>>'{proof,source_cycle_id}' from f5_generated_input)
+    and value->>'week_ending'=(select value#>>'{proof,week_ending}' from f5_generated_input)
+    and value->'allowed_operations' @> '["weekly_source_upload_stage_begin_atomic_v1","weekly_source_upload_stage_rows_atomic_v1","weekly_source_upload_seal_atomic_v1","weekly_source_invoice_hold_release_atomic_v1"]'::jsonb;
+  perform pg_temp.f5_assert(n=1,'one genuinely registered current F5 OFF_RULE authorization; never manufacture one');
+  auth:=private.weekly_source_rule_qualification_authorization_v1((auth->>'source_cycle_id')::uuid,(auth->>'journey_actor_user_id')::uuid,'SOURCE_FIXTURE_SETUP');
+  perform private.weekly_source_rule_qualification_scope_assert_v1(auth,(auth->>'journey_actor_user_id')::uuid,true);
+  perform pg_temp.f5_assert(exists(select 1 from public.weekly_source_cycles c cross join f5_generated_input g
+   where c.id=(auth->>'source_cycle_id')::uuid and c.source_group_id=(auth->>'source_group_id')::uuid
+    and c.finalisation_week_ending::text=g.value#>>'{proof,week_ending}'
+    and c.cutoff_at_utc=(g.value#>>'{proof,window_end_at_utc}')::timestamptz
+    and (g.value#>>'{proof,finalised_at_utc}')::timestamptz<=c.cutoff_at_utc
+    and (g.value#>>'{proof,finalised_at_utc}')::timestamptz>coalesce((select max(prior.cutoff_at_utc) from public.weekly_source_cycles prior
+      where prior.source_group_id=c.source_group_id and prior.cutoff_at_utc<c.cutoff_at_utc),
+      ((c.cutoff_at_utc at time zone 'Europe/London')-interval '7 days') at time zone 'Europe/London')
+    and c.cutoff_at_utc<clock_timestamp() and c.current_complete_upload_id is null and c.current_projection_publication_id is null
+    and c.current_final_revision_id is null and c.state not in('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')),'actual past open native cycle and exact generated source window');
+  perform pg_temp.f5_assert(jsonb_array_length(auth#>'{fixture_manifest,client_ids}')=1,'one actual authorized Client');
+  actual_client:=(auth#>>'{fixture_manifest,client_ids,0}')::uuid;
+  perform pg_temp.f5_assert(private.weekly_source_effective_rule_set_v1(actual_client,(auth->>'source_cycle_id')::uuid) is null,'actual fixture remains operationally OFF');
+  perform pg_temp.f5_assert((select values_json->>'invoice_amount_basis'='SOURCE_AMOUNT'
+    and values_json->>'source_amount_basis'='EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY'
+    from public.weekly_source_rule_set_versions where id=(auth->>'rule_set_version_id')::uuid),'genuine existing Source-money rule values');
+  select coalesce(array_agg(t.timesheet_id order by t.timesheet_id),'{}'::uuid[]) into protected_ids from public.timesheets t
+   where t.contract_id in(select value::uuid from jsonb_array_elements_text(auth#>'{fixture_manifest,contract_ids}') value);
+  before_economics:=pg_temp.f5_economics(protected_ids);
+  enabled:=public.weekly_source_group_rule_feature_set_atomic_v1(jsonb_build_object(
+   'actor_user_id',auth->>'setup_actor_user_id','agency_id',auth->>'agency_id','environment','TEST',
+   'qualification_action','OFF_RULE_OPEN','source_cycle_id',auth->>'source_cycle_id',
+   'journey_actor_user_id',auth->>'journey_actor_user_id','purpose','SOURCE_FIXTURE_SETUP','reason','F5 mandatory pre-publication rollback positive journey'));
+
+  begun:=pg_temp.f5_native(auth,'weekly_source_upload_stage_begin_atomic_v1',pg_temp.f5_native_request((select value->'begin_request' from f5_generated_input),auth));
  perform pg_temp.f5_assert(begun->>'status'='STAGING','actual stage begin');
- staged:=public.weekly_source_upload_stage_rows_atomic_v1('{"physical_rows":[{"source_row_ordinal":1,"bounded_raw_cells_json":{"A":{"coordinate":"A1","kind":"STRING","originalToken":"Request Id","decodedToken":"Request Id","tokenTruncated":false},"B":{"coordinate":"B1","kind":"STRING","originalToken":"Staff","decodedToken":"Staff","tokenTruncated":false},"C":{"coordinate":"C1","kind":"STRING","originalToken":"Date","decodedToken":"Date","tokenTruncated":false},"D":{"coordinate":"D1","kind":"STRING","originalToken":"From","decodedToken":"From","tokenTruncated":false},"E":{"coordinate":"E1","kind":"STRING","originalToken":"To","decodedToken":"To","tokenTruncated":false},"F":{"coordinate":"F1","kind":"STRING","originalToken":"Break","decodedToken":"Break","tokenTruncated":false},"G":{"coordinate":"G1","kind":"STRING","originalToken":"Start","decodedToken":"Start","tokenTruncated":false},"H":{"coordinate":"H1","kind":"STRING","originalToken":"End","decodedToken":"End","tokenTruncated":false},"I":{"coordinate":"I1","kind":"STRING","originalToken":"Actual Break","decodedToken":"Actual Break","tokenTruncated":false},"J":{"coordinate":"J1","kind":"STRING","originalToken":"Hours","decodedToken":"Hours","tokenTruncated":false},"K":{"coordinate":"K1","kind":"STRING","originalToken":"Finalised Date","decodedToken":"Finalised Date","tokenTruncated":false},"L":{"coordinate":"L1","kind":"STRING","originalToken":"Timesheet Finalised By","decodedToken":"Timesheet Finalised By","tokenTruncated":false},"M":{"coordinate":"M1","kind":"STRING","originalToken":"Agency Worker Pay","decodedToken":"Agency Worker Pay","tokenTruncated":false},"N":{"coordinate":"N1","kind":"STRING","originalToken":"Actual Cost","decodedToken":"Actual Cost","tokenTruncated":false},"O":{"coordinate":"O1","kind":"STRING","originalToken":"Agency Commission Amount","decodedToken":"Agency Commission Amount","tokenTruncated":false}},"classification":"HEADER"},{"source_row_ordinal":2,"bounded_raw_cells_json":{"A":{"coordinate":"A2","kind":"STRING","originalToken":"F5-000123","decodedToken":"F5-000123","tokenTruncated":false},"B":{"coordinate":"B2","kind":"STRING","originalToken":"F5 Worker","decodedToken":"F5 Worker","tokenTruncated":false},"C":{"coordinate":"C2","kind":"STRING","originalToken":"2026-10-26","decodedToken":"2026-10-26","tokenTruncated":false},"D":{"coordinate":"D2","kind":"STRING","originalToken":"09:00","decodedToken":"09:00","tokenTruncated":false},"E":{"coordinate":"E2","kind":"STRING","originalToken":"17:00","decodedToken":"17:00","tokenTruncated":false},"F":{"coordinate":"F2","kind":"NUMBER","originalToken":"0","decodedToken":"0","tokenTruncated":false},"G":{"coordinate":"G2","kind":"STRING","originalToken":"09:00","decodedToken":"09:00","tokenTruncated":false},"H":{"coordinate":"H2","kind":"STRING","originalToken":"17:00","decodedToken":"17:00","tokenTruncated":false},"I":{"coordinate":"I2","kind":"NUMBER","originalToken":"0","decodedToken":"0","tokenTruncated":false},"J":{"coordinate":"J2","kind":"STRING","originalToken":"8:00","decodedToken":"8:00","tokenTruncated":false},"K":{"coordinate":"K2","kind":"STRING","originalToken":"28/10/2026 23:59","decodedToken":"28/10/2026 23:59","tokenTruncated":false},"L":{"coordinate":"L2","kind":"STRING","originalToken":"F5 Manager","decodedToken":"F5 Manager","tokenTruncated":false},"M":{"coordinate":"M2","kind":"STRING","originalToken":"100.00","decodedToken":"100.00","tokenTruncated":false},"N":{"coordinate":"N2","kind":"STRING","originalToken":"120.02","decodedToken":"120.02","tokenTruncated":false},"O":{"coordinate":"O2","kind":"STRING","originalToken":"DO NOT MAP FEES","decodedToken":"DO NOT MAP FEES","tokenTruncated":false}},"classification":"ACCEPTED_SHIFT"}],"normalised_rows":[{"source_row_ordinal":2,"external_source_key":"F5-000123","source_candidate_identity":"F5 Worker","source_client_identity":"f5510000-0000-4000-8000-000000000010","work_date":"2026-10-26","start_at_local":"2026-10-26T09:00:00","end_at_local":"2026-10-26T17:00:00","break_minutes":0,"actual_net_minutes":480,"row_finalisation_state":"SOURCE_WORKED","finalised_by":"F5 Manager","role_band_source":null,"source_commission_pence":null,"source_total_cost_pence":null,"source_shift_charge_pence":"10000","source_money_parse_state":"VALID","source_qualification_profile_version":"SOURCE_INVOICE_MONEY_PENCE_V1","source_gross_pence":"12002","source_vat_pence":"2002","finalised_at_utc":"2026-10-28T23:59:00.000Z","source_expense_pence":null,"source_expense_parse_state":"NOT_APPLICABLE","bounded_raw_columns_json":{"worker_name":"F5 Worker","request_id":"F5-000123","finalised_by":"F5 Manager","source_invoice_money":{"netPence":"10000","grossPence":"12002","vatPence":"2002","vatFit":false,"normalisations":[],"evidence":{"net":{"coordinate":"M2","sourceKind":"XLSX","cellKind":"STRING","formulaPresent":false,"originalToken":"100.00","decodedToken":"100.00","tokenTruncated":false},"gross":{"coordinate":"N2","sourceKind":"XLSX","cellKind":"STRING","formulaPresent":false,"originalToken":"120.02","decodedToken":"120.02","tokenTruncated":false}}}}}],"money_evidence":[{"source_row_ordinal":2,"source_column_index":13,"cell_coordinate":"M2","source_kind":"XLSX_STRING_TOKEN","original_token":"100.00","decoded_token":"100.00","cell_type_marker":"STRING","formula_present":false,"parse_state":"VALID","parsed_pence":"10000","source_file_sha256":"4b9aea615d5c56577f9e4e6b1281ce8d35e5e0f3ec9d69e2682a5acac2aa1c1d","money_field_kind":"SOURCE_NET"},{"source_row_ordinal":2,"source_column_index":14,"cell_coordinate":"N2","source_kind":"XLSX_STRING_TOKEN","original_token":"120.02","decoded_token":"120.02","cell_type_marker":"STRING","formula_present":false,"parse_state":"VALID","parsed_pence":"12002","source_file_sha256":"4b9aea615d5c56577f9e4e6b1281ce8d35e5e0f3ec9d69e2682a5acac2aa1c1d","money_field_kind":"SOURCE_GROSS"}],"expense_evidence":[]}'::jsonb||jsonb_build_object('actor_user_id','f5510000-0000-4000-8000-000000000001','upload_id',begun->>'logical_upload_id'));
+  staged:=pg_temp.f5_native(auth,'weekly_source_upload_stage_rows_atomic_v1',pg_temp.f5_native_request((select value->'stage_request' from f5_generated_input)||jsonb_build_object('actor_user_id',auth->>'journey_actor_user_id','upload_id',begun->>'logical_upload_id'),auth));
  perform pg_temp.f5_assert(staged->>'status'='STAGING','actual money evidence stage');
- sealed:=public.weekly_source_upload_seal_atomic_v1(jsonb_build_object('actor_user_id','f5510000-0000-4000-8000-000000000001','upload_id',begun->>'logical_upload_id'));
+  sealed:=pg_temp.f5_native(auth,'weekly_source_upload_seal_atomic_v1',pg_temp.f5_native_request(jsonb_build_object('actor_user_id','f5510000-0000-4000-8000-000000000001','upload_id',begun->>'logical_upload_id'),auth));
  perform pg_temp.f5_assert(sealed->>'status'='CURRENT','actual immutable seal: '||sealed::text);
  select r.id,encode(r.normalised_row_hash,'hex') into strict row_id,row_hash from public.weekly_source_upload_rows r where r.upload_id=(begun->>'logical_upload_id')::uuid;
- select version into strict cycle_version from public.weekly_source_cycles where id='f5510000-0000-4000-8000-000000000080';
- perform pg_temp.f5_assert((select source_shift_charge_pence=10000 and source_vat_pence=2002 and source_gross_pence=12002 and finalised_at_utc='2026-10-28 23:59Z'::timestamptz from public.weekly_source_upload_rows where id=row_id),'native stored literal money and real timestamp');
- request:=jsonb_build_object('actor_user_id','f5510000-0000-4000-8000-000000000001','source_cycle_id','f5510000-0000-4000-8000-000000000080','upload_row_id',row_id,
+ select version into strict cycle_version from public.weekly_source_cycles where id=(auth->>'source_cycle_id')::uuid;
+ perform pg_temp.f5_assert((select source_shift_charge_pence=10000 and source_vat_pence=2002 and source_gross_pence=12002 and finalised_at_utc=(select (value#>>'{proof,finalised_at_utc}')::timestamptz from f5_generated_input) from public.weekly_source_upload_rows where id=row_id),'native stored literal money and real timestamp');
+ request:=jsonb_build_object('actor_user_id',auth->>'journey_actor_user_id','source_cycle_id',auth->>'source_cycle_id','upload_row_id',row_id,
    'expected_source_row_hash',row_hash,'expected_authority_scope_version',cycle_version,'hold_kind','VAT_FIT');
  perform pg_temp.f5_refuses(format('select public.weekly_source_invoice_hold_release_atomic_v1(%L::jsonb)',request||jsonb_build_object('actor_user_id','f5510000-0000-4000-8000-000000000002')),'WEEKLY_SOURCE_SETTINGS_ADMIN_REQUIRED');
  perform pg_temp.f5_refuses(format('select public.weekly_source_invoice_hold_release_atomic_v1(%L::jsonb)',request||jsonb_build_object('expected_authority_scope_version',cycle_version+1)),'WEEKLY_SOURCE_INVOICE_HOLD_SCOPE_STALE');
- released:=public.weekly_source_invoice_hold_release_atomic_v1(request);
+  released:=pg_temp.f5_native(auth,'weekly_source_invoice_hold_release_atomic_v1',pg_temp.f5_native_request(request,auth));
  perform pg_temp.f5_assert(released->>'action'='BILL_AT_NET_PLUS_20' and released->>'net_pence'='10000' and released->>'vat_pence'='2000' and released->>'gross_pence'='12000','native bounded default hold release');
- perform pg_temp.f5_assert((public.weekly_source_invoice_hold_release_atomic_v1(request)->>'idempotent')::boolean,'exact hold replay');
- perform pg_temp.f5_refuses(format('select public.weekly_source_invoice_hold_release_atomic_v1(%L::jsonb)',request||jsonb_build_object('action','BILL_AS_FILE')),'WEEKLY_SOURCE_INVOICE_HOLD_RELEASE_REPLAY_CONFLICT');
+ perform pg_temp.f5_assert((pg_temp.f5_native(auth,'weekly_source_invoice_hold_release_atomic_v1',request)->>'idempotent')::boolean,'exact hold replay');
+ perform pg_temp.f5_refuses(format('select pg_temp.f5_native(%L::jsonb,%L,%L::jsonb)',auth,'weekly_source_invoice_hold_release_atomic_v1',request||jsonb_build_object('action','BILL_AS_FILE')),'WEEKLY_SOURCE_INVOICE_HOLD_RELEASE_REPLAY_CONFLICT');
  perform pg_temp.f5_refuses(format('update public.weekly_source_invoice_hold_releases set action=action where id=%L::uuid',released->>'release_id'),'WEEKLY_SOURCE_IMMUTABLE_RECORD');
  perform pg_temp.f5_refuses(format('delete from public.weekly_source_invoice_hold_releases where id=%L::uuid',released->>'release_id'),'WEEKLY_SOURCE_IMMUTABLE_RECORD');
  perform pg_temp.f5_assert((select count(*)=2 from public.weekly_source_money_cell_evidence where upload_id=(begun->>'logical_upload_id')::uuid),'two exact source evidence cells; no fee');
  perform pg_temp.f5_assert(not exists(select 1 from public.weekly_source_final_revisions where source_cycle_id='f5510000-0000-4000-8000-000000000080') and not exists(select 1 from public.weekly_source_billing_movements where actual_client_id='f5510000-0000-4000-8000-000000000010'),'no fabricated financial producer');
- insert into f5_owner_proof values ('hold_release',released),('native_seal',sealed),('feature_gate',enabled);
+  perform pg_temp.f5_assert(before_economics=pg_temp.f5_economics(protected_ids),'exact original TS/TF/workflow/approval/component/invoice/document equality');
+  perform pg_temp.f5_assert(protected_ids=(select coalesce(array_agg(t.timesheet_id order by t.timesheet_id),'{}'::uuid[]) from public.timesheets t
+   where t.contract_id in(select value::uuid from jsonb_array_elements_text(auth#>'{fixture_manifest,contract_ids}') value)),'no new native Timesheet');
+  perform pg_temp.f5_assert(not exists(select 1 from public.weekly_source_final_revisions where source_cycle_id=(auth->>'source_cycle_id')::uuid)
+   and not exists(select 1 from public.weekly_source_billing_movements where actual_client_id=actual_client),'no Source final/financial publication');
+  perform pg_temp.f5_assert(not exists(select 1 from public.weekly_source_group_rule_assignments where source_group_id=(auth->>'source_group_id')::uuid and feature_enabled)
+   and private.weekly_source_effective_rule_set_v1(actual_client,(auth->>'source_cycle_id')::uuid) is null,'features and ordinary effective rules remain OFF after native command');
+  perform public.weekly_source_group_rule_feature_set_atomic_v1(jsonb_build_object(
+   'actor_user_id',auth->>'setup_actor_user_id','agency_id',auth->>'agency_id','environment','TEST',
+   'qualification_action','OFF_RULE_CLOSE','source_cycle_id',auth->>'source_cycle_id',
+   'journey_actor_user_id',auth->>'journey_actor_user_id','purpose','SOURCE_FIXTURE_SETUP','reason','F5 rollback journey complete; no operational activation'));
+  insert into f5_owner_proof values ('hold_release',released),('native_seal',sealed),('nonoperational_off_rule_scope',enabled);
+
 end;
 $verify$;
 select * from f5_owner_proof order by name;

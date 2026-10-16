@@ -5,6 +5,8 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {validateConnectionProof,selectDispatchedRun,classifyApplicationPaths,publicationStages} from './automatic-test-release-policy.mjs';
 import {connectTurnControl,runOwnedTurnChild,abortableDelay} from './healthroster-turn-control.mjs';
+import {canonicalContractHash} from './cloudtms-db-release-lib.mjs';
+import {loadF5PrepublicationReceipt} from './healthroster-f5-prepublication.mjs';
 
 export async function requestTestRelease({root=process.cwd(),args=process.argv.slice(2),env=process.env,deps={}}={}) {
  const options=Object.fromEntries(args.map(s=>{
@@ -93,6 +95,10 @@ export async function requestTestRelease({root=process.cwd(),args=process.argv.s
    if(selected&&!receipt.databaseRunId){receipt.databaseRunId=selected.id;receipt.databaseRunUrl=selected.html_url;save();}return selected;
   },r=>r?.status==='completed'&&r.conclusion==='success',r=>r?.status==='completed'&&r.conclusion!=='success',120);
   await guard('after-protected-result');stage('database',{status:'VERIFIED_OR_EXACT_UNCHANGED',runId:run.id,url:run.html_url});
+  receipt.f5Gate=await loadF5PrepublicationReceipt({root,command,api,gh,run,expectedCommit:sha,
+   expectedContractSha256:canonicalContractHash(JSON.parse(fs.readFileSync(path.join(root,'supabase/release/current-contract.json'),'utf8')))});
+  await guard('after-f5-prepublication');stage('f5',{status:'ROLLBACK_SQL_PASS',releaseId:receipt.f5Gate.release_id,
+   protectedRunId:receipt.f5Gate.protected_run_id,protectedArtifactId:receipt.f5Gate.protected_artifact_id});
   for(const [name,worker,branch,paths] of targets){
    await guard('before-publication-'+worker);
    const previous=(await git(['ls-remote','origin',`refs/heads/${branch}`])).split(/\s/)[0];

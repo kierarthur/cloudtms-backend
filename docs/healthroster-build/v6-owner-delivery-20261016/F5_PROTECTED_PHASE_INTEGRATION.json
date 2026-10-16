@@ -1,0 +1,132 @@
+{
+  "version": "HEALTHROSTER_F5_PROTECTED_PHASE_INTEGRATION_V1",
+  "status": "SOURCE_INTEGRATED_NATIVE_REQUIRED_NOT_RUN",
+  "rootBeforeIntegration": "3b2d5a63",
+  "frozenSourceCommit": "d49de3d59e7ba0d1bde8233a3bc42f957f631797",
+  "recipeSha256": "e48ff614bd0fb3b91ac3f29b0aa2211f82f4df012f70ad98802b34655cdc19d6",
+  "sourceManifestSha256": "2ae44f38a5c64b59cde3a6c020ab002bb09957e112ad4d89d116c4d64aed83a6",
+  "sourceClosureSha256": "7ac03cdf62f9176baebf1fb9f3abb0bc651c1985f55ab525efa39ec1989c3a17",
+  "files": [
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "sha256": "7daf9acc89cc8cfbb387524d180fd55e2482326e51b4fee6eadccb6a6ee434a8"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "sha256": "db7997e05a36792aa7911f96ebf1d71afaadbfe6ded3ecf07887e4c7a56b2a4f"
+    },
+    {
+      "file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef"
+    },
+    {
+      "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "sha256": "f59d1d21587dfa604d95a97b2bb2f2d7af2642feb55c267686ab1bb9b948c3b1"
+    },
+    {
+      "file": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "sha256": "8fe0a27903933b01f372c55636bf3e3142314dfeda039d26c71c12ec0d2efdf9"
+    },
+    {
+      "file": "scripts/healthroster-f5-native-setup.mjs",
+      "sha256": "3f576f8b9b8bb938ef98a48763cb058b713f774310d043f63c11a72eeda9b007"
+    },
+    {
+      "file": "scripts/healthroster-f5-post-verified-gate.mjs",
+      "sha256": "dfd1454e057c27e6693a012aef107382f9bc0479322fd0e3ae09b35bb19e99a3"
+    },
+    {
+      "file": "scripts/healthroster-f5-prepublication.mjs",
+      "sha256": "be4bfe3145cf1e873f566f537262ee3f9601e053ad7d070f447c0dce81bf6526"
+    },
+    {
+      "file": "scripts/healthroster-f5-synthetic-fixture.mjs",
+      "sha256": "d9223bcfc5448b9d01636463d60c42312bdd2107ade9881f08d70cfcc9380a66"
+    },
+    {
+      "file": "scripts/healthroster-f5-restoration.sql",
+      "sha256": "4ef25ca2d9ebc83730e712aa09e943a3ed820f7c615e9c4327a50e74f1094e0a"
+    },
+    {
+      "file": "scripts/cloudtms-db-release.mjs",
+      "sha256": "ba0fd695d90ca14a5af38e8a0d2f735338d87530ad94dfe961a3d4987c2da976"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "38d6f50d942f972e2bf06a76d452b3203d9f76bd3ad89458ed13c8c14c40437b"
+    },
+    {
+      "file": "scripts/cloudtms-auto-test-release.mjs",
+      "sha256": "d1ee83d646e30646b185cd8acd0243455588bdf7b14a02c93e17a104fe12e7c3"
+    },
+    {
+      "file": "scripts/request-test-release.mjs",
+      "sha256": "0758ef6a10a34b1b9884ffb05c4d4c8fcb564f9718154b75c710cbd61fc51693"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "4a1028a416528b400821abeae9a78b15dfe1b6215358698864427a3a4c6080e7"
+    },
+    {
+      "file": "tests/managed-database-release.test.mjs",
+      "sha256": "ef624373d855acadcf4a1e632e8de078b1abb629e5c36c7bc44065f55d7ecf6b"
+    },
+    {
+      "file": "tests/healthroster-install1-full-rehearsal.test.mjs",
+      "sha256": "96ef1cb24b109db7e1d3b2f517ac70a0ff3ee02e820a51ae470eb8b73efad371"
+    },
+    {
+      "file": "tests/request-test-release-turn.test.mjs",
+      "sha256": "17294b74962a9802dc173540ed736fb1c24d33e0021155bc8973c0d4eefe5b28"
+    },
+    {
+      "file": "tests/fixtures/f5-publication-artifact-model.mjs",
+      "sha256": "dd623981d50dd85e66514a9bffd3d68f6ff64e1886ad37f5a6300a0176934bf8"
+    }
+  ],
+  "behavior": [
+    "Original F5 verifier remains exactly once in both current mandatory lists; preinstall records required post-VERIFIED phase, never a pass or optional safety exclusion. Original16safety exclusions unchanged.",
+    "Exact agency TEST callback is required before durable application and executes after real committed VERIFIED while writer remains held. Failure preserves factual structural VERIFIED and holds publication.",
+    "Every AUTO route, including approved component and NO_DATABASE_CHANGE, executes the mandatory genuine F5 rollback journey before DATABASE_READY.",
+    "Desktop loads the selected successful source-bound protected AUTO artifact through the actual guarded command before first Worker or Office publication. No dependency or environment bypass.",
+    "Receipt-only registration normalization uses existing actual audit/committed-source proof. Base release ID now binds real BASE-mode-installedCommitPrefix in gate and existing registration owner.",
+    "Same actual parser/adapter generates an explicitly synthetic fresh file for a genuinely observed past open TEST cycle. No old genuine upload is relabelled; current native clocks, economic assertions and original history stay intact.",
+    "Local disposable contract seal remains structural only and cannot claim hosted positive F5 or publication acceptance."
+  ],
+  "verification": {
+    "managedAndRehearsalTests": 53,
+    "desktopActualArtifactLoaderTests": 9,
+    "routeProtocolTurnResourceObserverTests": 64,
+    "frozenF5SourceTests": 30,
+    "totalSourceModelTests": 156,
+    "offlineGrammar": {
+      "version": "PG17_pglast7.20",
+      "statements": 28,
+      "plpgsqlBodies": 9,
+      "innerSqlExpressions": 210,
+      "failures": 0,
+      "rowtypeAliasParserOnly": true
+    },
+    "databaseSourceIntegrity": {
+      "migrations": 407,
+      "repeatables": 1074,
+      "status": "PASS"
+    },
+    "native": "NOT_RUN",
+    "api": "NOT_RUN",
+    "publication": "NOT_RUN",
+    "contractSeal": "PENDING_FINAL_SOURCE_COMPOSITION"
+  },
+  "remaining": [
+    "Obtain genuine current reserved TEST Client/Contracts/Candidates/ROSTER group and past vacant cycle through approved native owner.",
+    "Actual native OFF-rule controls and historical disabled assignment, measured committed setup authorization and existing native post-VERIFIED registration.",
+    "Current complete verifier effects review and freshly generated reviewed PostgreSQL17 contract/locks before protected installation.",
+    "Full preinstall rollback rehearsal under SEND7, actual mandatory post-VERIFIED positive journey and fresh restoration before publication."
+  ],
+  "install1": "COMPLETE_UNCHANGED",
+  "install2": "NOT_INSTALLED",
+  "features": "OFF",
+  "sourceOnlyModelsAreNotNativeProof": true,
+  "bankingEditsOrMessages": false,
+  "secretsReturned": false
+}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {inventory} from '../scripts/cloudtms-db-release-lib.mjs';
 import {digest,scanManagedSql} from '../scripts/cloudtms-managed-release-sql.mjs';
-import {assertFreshNativeGate,assertFreshRestoration,compileFullRehearsal,runFullRehearsalWithinOwnedTurn,
+import {assertReview,assertFreshNativeGate,assertFreshRestoration,compileFullRehearsal,runFullRehearsalWithinOwnedTurn,
  restorationSnapshotSql,activityGuardSql,REHEARSAL_VERSION} from '../scripts/healthroster-install1-full-rehearsal.mjs';
 import {executePsqlWithinOwnedTurn,assertInstalledRehearsalContract,reviewedDiagnosticCodes,expectedContractDigestSql} from '../scripts/healthroster-install1-full-rehearsal.mjs';
 import {renderFullRehearsalUnits,neutraliseReviewedVerifierEnvelope,closedRehearsalDiagnostic} from '../scripts/healthroster-full-rehearsal-protocol.mjs';
@@ -254,4 +254,19 @@ test('expected contract digest is derived by read-only PostgreSQL jsonb conversi
  assert.equal(scanManagedSql(sql).statements.length,1);assert.equal(scanManagedSql(sql).statements[0].tokens[0],'SELECT');
  assert.ok(sql.includes('::jsonb::text'));assert.ok(sql.includes('customer_key is null'));
  assert.throws(()=>expectedContractDigestSql({expectedContractHash:'0'.repeat(64)}),/DRIFT/);
+});
+
+test('F5 remains mandatory post-VERIFIED and cannot be turned into a passed preinstall or safety exclusion',()=>{
+ const file='supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql';
+ const row={file,sourceSqlHash:hash,effectGraphHash:hash,reason:'Genuine VERIFIED and registered OFF-rule positive journey executes before publication.',
+ decision:'REQUIRED_POST_VERIFIED',executionPhase:'POST_VERIFIED',mandatory:true,
+ status:'REQUIRED_POST_VERIFIED_NOT_EXECUTABLE_PREINSTALL',positives_pending:true,provider_or_runtime_acceptance:false,assertionBodyDisposition:'KEEP_COMPLETE'};
+ const reviewed=delta=>({version:REHEARSAL_VERSION,verifiers:[{...row,...delta}]});
+ assert.equal(assertReview(reviewed({}),{verificationFiles:[file]}).verifiers[0].mandatory,true);
+ for(const delta of [{decision:'INCLUDE'},{decision:'EXCLUDE'},{mandatory:false},{positives_pending:false},
+  {status:'PASS'},{executionPhase:'PREINSTALL'},{provider_or_runtime_acceptance:true},{assertionBodyDisposition:'TRIM'}]){
+  assert.throws(()=>assertReview(reviewed(delta),{verificationFiles:[file]}),/F5_PHASE_REQUIRED|REQUIRED_POST_VERIFIED_PHASE_REFUSED/);
+ }
+ const other='supabase/verification/another.sql';
+ assert.throws(()=>assertReview(reviewed({file:other}),{verificationFiles:[other]}),/REQUIRED_POST_VERIFIED_PHASE_REFUSED/);
 });

@@ -119,7 +119,7 @@ begin
     raise exception 'WEEKLY_SOURCE_OFF_RULE_COMMAND_INVALID' using errcode='22023'; end if;
   actor:=(p_request->>'actor_user_id')::uuid;cycle_id:=(p_request->>'source_cycle_id')::uuid;op:=p_request->>'native_operation';req:=p_request->'native_request';
   if op in ('weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1','weekly_source_upload_stage_rows_atomic_v1',
-    'weekly_source_upload_seal_atomic_v1','weekly_source_projection_begin_atomic_v1','weekly_source_projection_rows_apply_atomic_v1',
+    'weekly_source_upload_seal_atomic_v1','weekly_source_invoice_hold_release_atomic_v1','weekly_source_projection_begin_atomic_v1','weekly_source_projection_rows_apply_atomic_v1',
     'weekly_source_projection_publish_atomic_v1','weekly_source_import_prepare_atomic_v1','weekly_source_finalise_atomic_v1',
     'weekly_source_finalisation_pay_open_atomic_v1','weekly_source_finalisation_pay_task_start_atomic_v1',
     'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE') then
@@ -161,6 +161,7 @@ begin
     when 'weekly_source_upload_stage_begin_atomic_v1' then result:=public.weekly_source_upload_stage_begin_atomic_v1(req);
     when 'weekly_source_upload_stage_rows_atomic_v1' then result:=public.weekly_source_upload_stage_rows_atomic_v1(req);
     when 'weekly_source_upload_seal_atomic_v1' then result:=public.weekly_source_upload_seal_atomic_v1(req);
+    when 'weekly_source_invoice_hold_release_atomic_v1' then result:=public.weekly_source_invoice_hold_release_atomic_v1(req);
     when 'weekly_source_projection_begin_atomic_v1' then result:=public.weekly_source_projection_begin_atomic_v1(req);
     when 'weekly_source_projection_rows_apply_atomic_v1' then result:=public.weekly_source_projection_rows_apply_atomic_v1(
       (req->>'p_actor_user_id')::uuid,(req->>'p_publication_id')::uuid,req->'p_rows');

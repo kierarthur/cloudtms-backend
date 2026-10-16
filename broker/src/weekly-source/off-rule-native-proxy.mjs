@@ -3,7 +3,7 @@
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 export const sourceOperations=Object.freeze(['weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1',
- 'weekly_source_upload_stage_rows_atomic_v1','weekly_source_upload_seal_atomic_v1','weekly_source_projection_begin_atomic_v1',
+ 'weekly_source_upload_stage_rows_atomic_v1','weekly_source_upload_seal_atomic_v1','weekly_source_invoice_hold_release_atomic_v1','weekly_source_projection_begin_atomic_v1',
  'weekly_source_projection_rows_apply_atomic_v1','weekly_source_projection_publish_atomic_v1','weekly_source_import_prepare_atomic_v1',
  'weekly_source_finalise_atomic_v1','weekly_source_finalisation_pay_open_atomic_v1','weekly_source_finalisation_pay_task_start_atomic_v1',
  'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE']);

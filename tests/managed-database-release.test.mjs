@@ -299,7 +299,7 @@ function modelWriter(state,failAt) {
   const writer={failure:null,finished:false,async close(){this.finished=true;if(owns)state.lock=false;},async execute(sql){
     state.calls.push(sql);
     if(sql===acquireWriterSql){if(state.lock)return 'f';state.lock=true;owns=true;return 't';}
-    if(sql==='select pg_catalog.current_database();')return 'test-managed-db';
+    if(sql==='select pg_catalog.current_database();')return state.database??'test-managed-db';
     if(sql.includes("to_regclass('private.cloudtms_database_releases')"))return String(state.control);
     if(sql.startsWith('select count(*)'))return String(state.control?1:state.foreignObjects??0);
     if(sql.startsWith('select exists(select 1 from private.cloudtms_database_releases r'))return String(state.receipt);
@@ -316,7 +316,7 @@ function modelWriter(state,failAt) {
       state.next++;if(failAt==='after'){this.failure=new ManagedPsqlError('CONNECTION_CLOSED');throw this.failure;}
     }
     if(sql.includes("set status='VERIFIED'"))state.verified=true;
-    if(sql.includes("set status='FAILED'"))state.failed=true;
+    if(sql.includes("set status='FAILED'")&&!state.verified)state.failed=true;
     return '';
   }};return writer;
 }
@@ -431,4 +431,43 @@ test('release with no Source qualification does not invent a legacy clone-only s
   assert.throws(() => assertManagedPrerequisiteEvidence(context(), {weekly_source_protected_prerequisite_qualifications: null}, repoRoot), /PREREQUISITE_MANAGED_SCOPE_INVALID/);
   assert.throws(() => assertManagedPrerequisiteEvidence(context(), {weekly_source_protected_prerequisite_qualifications: [{schema_version: 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_QUALIFICATION_V1'}]}, repoRoot), /QUALIFICATION_MANAGED_SCOPE_INVALID/);
   assert.throws(() => assertManagedPrerequisiteEvidence(context(), {weekly_source_protected_prerequisite_qualifications: [{schema_version: 'WEEKLY_SOURCE_PROTECTED_CAPABILITY_PREREQUISITE_QUALIFICATION_V2'}]}, repoRoot), /PREREQUISITE_MANAGED_RECEIPT_INVALID/);
+});
+
+// Explicit transport/control-flow models; no native PostgreSQL acceptance.
+function agencyTestApply(repository,state,postVerified) {
+ const c={...modelContext('NEW'),expectedDatabase:'cloudtms_test_clone',customerKey:''};
+ state.database=c.expectedDatabase;
+ return applyManagedRelease({...repository,context:c,openSession:()=>modelWriter(state),
+  preapply:()=>{},verify:modelVerification,postVerified});
+}
+function modelF5Receipt(c) { return {contract:'F5_POST_VERIFIED_ROLLBACK_GATE_V1',database:c.expectedDatabase,
+ release_id:c.releaseId,database_source_commit:c.gitCommit,source_commit:c.gitCommit,contract_sha256:c.expectedHash,
+ qualification:'ROLLBACK_SQL_PASS',features_remain_off:true,provider_or_runtime_acceptance:false}; }
+test('agency TEST missing F5 callback refuses before opening a writer or applying SQL',async()=>{
+ const repository=smallRepository(),state=modelState();
+ try { await assert.rejects(()=>agencyTestApply(repository,state),/F5_MANDATORY_POST_VERIFIED_CALLBACK_REQUIRED/);
+  assert.equal(state.calls.length,0);assert.equal(state.bootstrap,0); } finally {fs.rmSync(repository.root,{recursive:true});}
+});
+test('agency TEST F5 callback runs only after real VERIFIED commit while writer remains held',async()=>{
+ const repository=smallRepository(),state=modelState();let calls=0;
+ try { const result=await agencyTestApply(repository,state,c=>{calls++;assert.equal(state.verified,true);
+  assert.equal(state.lock,true);assert.match(state.calls.at(-1),/set status='VERIFIED'[\s\S]*commit;/);return modelF5Receipt(c);});
+  assert.equal(calls,1);assert.equal(state.lock,false);assert.equal(result.f5Gate.qualification,'ROLLBACK_SQL_PASS');
+ }finally{fs.rmSync(repository.root,{recursive:true});}
+});
+test('failed or malformed post-VERIFIED F5 never returns success or rewrites structural VERIFIED',async()=>{
+ for(const callback of [()=>{throw Error('NATIVE_F5_ASSERTION_FAILED');},()=>undefined,c=>({...modelF5Receipt(c),release_id:'foreign'})]){
+  const repository=smallRepository(),state=modelState();
+  try {await assert.rejects(()=>agencyTestApply(repository,state,callback),/NATIVE_F5_ASSERTION_FAILED|F5_POST_VERIFIED_NATIVE_RECEIPT_REQUIRED/);
+   assert.equal(state.verified,true);assert.equal(state.failed,undefined);assert.equal(state.lock,false);
+   const attemptedFailure=state.calls.find(s=>s.includes("set status='FAILED'"));assert.match(attemptedFailure,/r.status='APPLYING'/);
+  }finally{fs.rmSync(repository.root,{recursive:true});}
+ }
+});
+test('disposable local contract seal remains structural without a hosted F5 acceptance claim',async()=>{
+ const repository=smallRepository(),state=modelState();state.database='banking_modal_v2_test';
+ try {const result=await applyManagedRelease({...repository,context:{...modelContext('NEW'),expectedDatabase:state.database},
+  openSession:()=>modelWriter(state),preapply:()=>{},verify:modelVerification});
+  assert.equal(state.verified,true);assert.equal(result.f5Gate,undefined);
+ }finally{fs.rmSync(repository.root,{recursive:true});}
 });

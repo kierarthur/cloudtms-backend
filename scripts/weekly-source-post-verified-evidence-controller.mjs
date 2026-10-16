@@ -66,7 +66,10 @@ export function preparePostVerifiedRequest({root,execution,actorUserId,expectedE
  const {value:manifest}=committedJson(root,receiptInputCommit,sourceInventory.manifest);
  // This commit records receipt data. It cannot claim to be another installed
  // release, even though the generic historical tree proof permits that field.
- if(manifest.releaseId!==execution.release_id)fail('POST_VERIFIED_RELEASE_ID_RELABELLED');
+ const {value:installedManifest}=committedJson(root,execution.source_commit,sourceInventory.manifest);
+ // Same base manifest and real native CLI release identity, not BASE==fullID.
+ if(manifest.releaseId!==installedManifest.releaseId||!['NEW','UPGRADE','ADOPT','LEGACY_UPGRADE'].some(mode=>
+  execution.release_id===`${installedManifest.releaseId}-${mode.toLowerCase()}-${execution.source_commit.slice(0,12)}`))fail('POST_VERIFIED_RELEASE_ID_RELABELLED');
  const readBundle=key=>{
   const descriptor=manifest[key];exact(descriptor,['path','sha256'],'POST_VERIFIED_BUNDLE_DESCRIPTOR_INVALID');
   if(descriptor.path!==sourceInventory.receiptBundles[key]||!hex.test(descriptor.sha256))fail('POST_VERIFIED_BUNDLE_DESCRIPTOR_INVALID');

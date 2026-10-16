@@ -424,11 +424,13 @@ export function managedReleaseContext({ root, current, release, context, baselin
 // pre-apply security rehearsal and fresh-connection verifiers remain separate.
 export async function applyManagedRelease({ root, current, release, context: input,
   mapSource = value=>value, executableFile, openSession, deadlockRetries = ()=>0,
-  preapply, verify, protectedCapabilityJourneys = [], protectedTestSetupAuthorizations = [], log = ()=>{}, delay = ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+  preapply, verify, postVerified, protectedCapabilityJourneys = [], protectedTestSetupAuthorizations = [], log = ()=>{}, delay = ms=>new Promise(resolve=>setTimeout(resolve,ms)),
   baselinePrefix=BASELINE_MIGRATION_PREFIX }) {
   // Dependency injection is only for the finite control-flow unit model. The
   // CLI never takes a baseline-prefix override from arguments/environment.
   const context = managedReleaseContext({root,current,release,context:input,baselinePrefix});
+  const requiresPostVerified = context.environment === 'TEST' && context.expectedDatabase === 'cloudtms_test_clone';
+  if (requiresPostVerified && typeof postVerified !== 'function') throw Error('F5_MANDATORY_POST_VERIFIED_CALLBACK_REQUIRED');
   let session, admitted = false, failure;
   const execute = sql => session.execute(sql);
   const options = {root,mapSource,executableFile};
@@ -610,7 +612,20 @@ export async function applyManagedRelease({ root, current, release, context: inp
       do $verified$ begin if not exists(select 1 from private.cloudtms_database_releases r
         where r.release_id=${literal(context.releaseId)} and ${releaseMatch(context)} and r.status='VERIFIED')
         then raise exception 'MANAGED_RELEASE_VERIFIED_RECEIPT_MISSING'; end if; end $verified$; commit;`);
-    return {releaseId:context.releaseId,manifestHash:context.manifestHash};
+    // This call occurs after the genuine VERIFIED commit and before writer
+    // unlock. Failure holds publication; the APPLYING-only catch preserves the
+    // factual structural VERIFIED receipt. Local contract seals are structural.
+    let f5Gate;
+    if (requiresPostVerified) {
+      f5Gate = await postVerified(context);
+      if (f5Gate?.contract !== 'F5_POST_VERIFIED_ROLLBACK_GATE_V1'
+        || f5Gate.database !== context.expectedDatabase || f5Gate.release_id !== context.releaseId
+        || f5Gate.database_source_commit !== context.gitCommit || f5Gate.source_commit !== context.gitCommit
+        || f5Gate.contract_sha256 !== context.expectedHash || f5Gate.qualification !== 'ROLLBACK_SQL_PASS'
+        || f5Gate.features_remain_off !== true || f5Gate.provider_or_runtime_acceptance !== false)
+        throw Error('F5_POST_VERIFIED_NATIVE_RECEIPT_REQUIRED');
+    }
+    return {releaseId:context.releaseId,manifestHash:context.manifestHash,...(f5Gate?{f5Gate}:{})};
   } catch(error) {
     failure=error;
     // Never open an unguarded second writer to mark failure. A disconnected
