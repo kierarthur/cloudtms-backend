@@ -1,0 +1,36 @@
+{
+  "schema_version": "HEALTH_REPORT_LANE_SOURCE_PUBLISH_RECEIPT_V1",
+  "observed_at_utc": "2026-10-16T07:16:23.214111+00:00",
+  "repository": "kierarthur/cloudtms-backend",
+  "branch": "codex/healthroster-v2-report-build-13102026",
+  "remote_observed_tip": "b45eae27977007991ba449c1345890c7a4ee5f85",
+  "published_slices": [
+    {
+      "proposal": "v6-expense-daily-ingress-20261016",
+      "source_commit": "f0172356c678695a68db80cd066ed69e80648a29",
+      "mount_sha256": "6c2ef26d8dbb17d2a6217a8bb7e5752344ee558dd53f70fb763867367861aecd",
+      "native": "NOT_RUN"
+    },
+    {
+      "proposal": "v6-f5-native-participants-20261016",
+      "source_commit": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074",
+      "mount_sha256": "86eb865f21e3c505ee454f181456a59e721362d0cf94109e87895f00942ad1e4",
+      "native": "NOT_RUN"
+    },
+    {
+      "proposal": "v6-claim-native-pending-20261016",
+      "source_commit": "b45eae27977007991ba449c1345890c7a4ee5f85",
+      "mount_sha256": "90370acf2f334ed5fd2584ebe0790ba0cdf879f1097afbfb7a791844faae8294",
+      "native": "NOT_RUN"
+    }
+  ],
+  "receipt_is_not_native_qualification": true,
+  "database_execution_performed": false,
+  "runtime_or_release_performed": false,
+  "provider_email_sender_calls": false,
+  "jobs_schedules_changed": false,
+  "shared_root_office_bank_mytms_edits": false,
+  "preserved_report_query": "2775cfd745c79197ddc9b36d1aac3df8b18a9ec3",
+  "preserved_mytms_factual_source": "f8aba9d7b7a7a5ba9c67d4c5ece424d594e3bd79",
+  "remaining_genuine_native_inputs": "Current protected setup participants/Contracts/plans/actor/VERIFIED registration plus genuine native pending/cancellation/allocation fixtures and two-session concurrency/restoration; no synthetic authority or acceptance supplied."
+}
