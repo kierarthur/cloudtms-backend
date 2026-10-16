@@ -70,7 +70,7 @@ export function validatePreview(v,{daily=false}={}){
   closed(v,['version','operation_id','review_id','review_digest','state_revision','ready_to_confirm','current_timesheet_id',...(!daily?['to_contract_id']:[]),'summary','known_blockers','confirm','links']);
   if(v.version!==(daily?DAILY:CONTRACT))invalid('$.version');for(const k of ['operation_id','review_id','current_timesheet_id'])uuid(v[k],'$.'+k);if(!daily)uuid(v.to_contract_id,'$.to_contract_id');
   hash(v.review_digest,'$.review_digest');revision(v.state_revision,'$.state_revision',false);bool(v.ready_to_confirm,'$.ready_to_confirm');summary(v.summary,'$.summary');array(v.known_blockers,blocker,'$.known_blockers');actions(v.links,'$.links');
-  if(v.ready_to_confirm){confirm(v.confirm,'$.confirm',v.version);if(v.known_blockers.length||v.confirm.review_id!==v.review_id||v.confirm.review_digest!==v.review_digest||v.confirm.expected_state_revision!==v.state_revision)invalid('$.confirm.binding');}
+  if(v.ready_to_confirm){confirm(v.confirm,'$.confirm',v.version);if(!v.summary.worked_facts_preserved||v.known_blockers.length||v.confirm.review_id!==v.review_id||v.confirm.review_digest!==v.review_digest||v.confirm.expected_state_revision!==v.state_revision)invalid('$.confirm.binding');}
   else if(v.confirm!==null)invalid('$.confirm');return v;
 }
 export function validateResult(v,{financialVisible=true,billingVisible=true,retainedNativePending=false}={}){

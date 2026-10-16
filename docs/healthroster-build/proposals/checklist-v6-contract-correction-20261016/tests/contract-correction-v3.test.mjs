@@ -23,7 +23,7 @@ test('readiness requires matching immutable review and no known blockers',()=>{
  const v=preview();assert.equal(validatePreview(v),v);
  for(const k of Object.keys(v)){const bad=copy(v);delete bad[k];rejects(validatePreview,bad);}
  const blocked=copy(v);blocked.ready_to_confirm=false;blocked.confirm=null;blocked.known_blockers=[{code:'NATIVE_RATE_MISSING',native_owner:'BANKING',field_key:'pay_day',permitted_action:null}];assert.equal(validatePreview(blocked),blocked);
- const contradictions=[{...v,known_blockers:blocked.known_blockers},{...v,confirm:null},{...blocked,confirm:v.confirm},{...v,confirm:{...v.confirm,review_id:id(90)}},{...v,confirm:{...v.confirm,expected_state_revision:'2'}}];contradictions.forEach(x=>rejects(validatePreview,x));
+ const contradictions=[{...v,summary:{...v.summary,worked_facts_preserved:false}},{...v,known_blockers:blocked.known_blockers},{...v,confirm:null},{...blocked,confirm:v.confirm},{...v,confirm:{...v.confirm,review_id:id(90)}},{...v,confirm:{...v.confirm,expected_state_revision:'2'}}];contradictions.forEach(x=>rejects(validatePreview,x));
 });
 test('every public nested object rejects unknown fields and missing fields',()=>{
  for(const path of [[],['placement'],['financial'],['billing'],['financial','summary'],['billing','visible_summary']]){

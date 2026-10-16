@@ -1,0 +1,16 @@
+// Sole Health More host supplies the actual native current Timesheet row and
+// its real shared V3 action dispatcher. No Reference widget/Timesheet shell.
+function openNativeDailyRateCorrection(timesheet,runAction){
+  const actor=SESSION?.user;
+  if(!actor?.id||actor.role!=='admin'||timesheet?.sheet_scope!=='DAILY'||timesheet.contract_id!==null
+    ||timesheet.line_type!=='HOURS'||timesheet.is_adjustment!==false||timesheet.parent_timesheet_id!==null||timesheet.correction_id!==null
+    ||timesheet.is_current!==true||timesheet.archived_at_utc!==null)throw new Error('DAILY_RATE_CURRENT_CONTEXT_REQUIRED');
+  const adapter=window.CloudTMSDailyRateCorrectionHttpV1.create({
+    timesheetId:timesheet.timesheet_id,actorUserId:actor.id,runAction,
+    request:(path,init)=>{
+      if(SESSION?.user?.id!==actor.id)throw new Error('DAILY_RATE_ACTOR_CHANGED');
+      return authFetch(API(path),{...init,auth401Mode:'return'});
+    }
+  });
+  return window.CloudTMSDailyRateCorrectionV1.open({timesheetId:timesheet.timesheet_id,adapter});
+}

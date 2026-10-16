@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "originalReturn": "DAILY-RATE-ADMISSION-01 / DY02/04/05/06/10",
+  "reviewedFinalContentSha256": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
+  "status": "INDEPENDENT_SOURCE_IMPLEMENTED_NATIVE_DEPENDENCY_HELD",
+  "schema": {"source":"forward/sql/physical-schema.sqlinc","sha256":"5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115","rule":"Unchanged from 7d1be386. Preserve root allocated immutable schema bytes; no schema allocator or new Daily store."},
+  "mounts": [
+    {"target":"broker/src/daily-rate-correction.js","payload":"../../../../broker/src/daily-rate-correction.js","mode":"new complete Health module; imports sole canonical Daily calculator and existing closed DTO source"},
+    {"target":"broker/src/daily-canonical-authority.js","payload":"../../../../broker/src/daily-canonical-authority.js","mode":"finite reviewed correction-context diff plus exact existing native role/band helpers exported; ordinary arithmetic unchanged"},
+    {"target":"broker/src/index.js import block","payload":"forward/host/daily-rate-correction.import.jsinc","mode":"root sole host mount"},
+    {"target":"broker/src/index.js current authenticated fetch dispatch beside invoice/Weekly Source","payload":"forward/host/daily-rate-correction.dispatch.jsinc","mode":"root sole host mount; only exact three Daily paths instantiate dependencies"},
+    {"target":"supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc","payload":"forward/sql/04b_daily_context.sqlinc","mode":"genuine actor/current native context, selector provenance and Client mutex triggers"},
+    {"target":"supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc","payload":"forward/sql/04c_daily_admission.sqlinc","mode":"actual same-ID approved immutable revision admission and completion assertions"},
+    {"target":"supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc","payload":"forward/sql/04d_daily_requests.sqlinc","mode":"private strict request/replay helpers; actual fresh Review/Accept/Result final composition awaits true Bank interface"},
+    {"target":"js/correction-contract-v3.js","payload":"forward/office/js/correction-contract-v3.js","mode":"generated from sole Health closed decoder; build-office.mjs --check proves exact generation"},
+    {"target":"js/daily-rate-correction-http-adapter.js","payload":"forward/office/js/daily-rate-correction-http-adapter.js","mode":"Health own exact three-route browser adapter through existing authenticated request"},
+    {"target":"js/daily-rate-correction.js","payload":"forward/office/js/daily-rate-correction.js","mode":"Health own UMD open({timesheetId,adapter}); existing Timesheet More host only"},
+    {"target":"css/daily-rate-correction.css","payload":"forward/office/css/daily-rate-correction.css","mode":"local component CSS; no shared/global stylesheet overwrite"},
+    {"target":"js/main.js sole Health More host","payload":"forward/host/daily-rate-correction.office.jsinc","mode":"root only; binds actual SESSION, API, authFetch plus actual shared native V3 action dispatcher supplied by root"}
+  ],
+  "officeLoadOrder": ["js/correction-contract-v3.js","js/daily-rate-correction-http-adapter.js","js/daily-rate-correction.js"],
+  "officeHostRules": [
+    "Mount Apply updated rates only for positively current standalone native Daily HOURS with explicit Contract NULL and active Office administrator; server repeats exact permission/identity checks.",
+    "All Daily omit Contract Move/chooser controls, including historical contracted Daily; do not create a linked-Daily exception.",
+    "The actual parent shared V3 action dispatcher is required, never a dummy callback or second financial dialog.",
+    "The scoped sessionStorage cache contains exact Accept IDs/digest/revision only, keyed by actual current actor and Timesheet; no money, Summary, secret, queue or business ledger.",
+    "Existing authFetch gets auth401Mode return, preserves original body on refresh; root must retain existing privacy rules and avoid debug logging Daily request/reply bodies.",
+    "No Office worktree or shared root has been edited by this lane. Root owns script/CSS registration and existing More/menu integration."
+  ],
+  "serviceRequests": {
+    "context":{"rpc":"public.timesheet_daily_rate_correction_context_v1(jsonb)","p_args":["timesheet_id","actor_user_id"]},
+    "preview":{"rpc":"public.timesheet_daily_rate_correction_preview_v1(jsonb)","p_args":["version","request_id","actor_user_id","timesheet_id","context_digest","calculation_snapshot","rate_provenance","reason"]},
+    "accept":{"rpc":"public.timesheet_daily_rate_correction_accept_v1(jsonb)","p_args":["version","request_id","actor_user_id","operation_id","review_id","review_digest","expected_state_revision"]},
+    "result":{"rpc":"public.timesheet_daily_rate_correction_result_v1(jsonb)","p_args":["version","operation_id","actor_user_id"]}
+  },
+  "replay": "Private preview_replay validates current Office actor and immutable original browser request hash first; derived context/pricing are excluded from that request identity. Existing saved replay can return when trusted preparation fields are NULL after current preparation fails. A genuinely fresh Review must require non-NULL current context digest and full validated canonical snapshot, true native pay/freeze/Summary preflight and real invoice inspection before metadata/Ready. No probe action, new endpoint or fake review is supplied.",
+  "freshReviewRequiredComposition": "Actual locked current context + snapshot_assert/normalized_snapshot owner + exact real Bank paid/frozen/Summary/freeze seam + genuine scope + invoice inspect(physical,daily,actor,lock); enroll metadata and immutable review/request with actual cut/certificate hashes, then strict DailyPreview. Bank seam is still absent; no invented cut/hash/Ready.",
+  "freshAcceptRequiredComposition": "Exact accepted request replay before fresh authority; actual native pay/freeze preflight and Client/Candidate/family/context/rates locks, immutable review/CAS/Invoice recheck; same-ID member map and live DAILY_RATE_REVISION context; revision_admit; genuine Bank daily publisher once; real same-ID revision receipt; cleanup; invoice prepare + exclusive obligation; daily_assert and COMPLETE plus immutable request receipt in the same transaction. Actual Bank preflight interface remains absent; no lock across Worker/network or dummy wrapper.",
+  "resultRequiredComposition": "Actual current native financial SummaryDTO/read and invoice billing_read with current role redaction, correlated saved operation and actual physical receipt. No generic job status or nominal money fallback.",
+  "qualification": {"sharedAndCalculatorTests":32,"httpTransportUnitTests":12,"isolatedChromiumComponentTests":5,"databaseExecution":"NOT_RUN","nativeApiAcceptance":"NOT_RUN","installedOfficeIntegration":"NOT_RUN","bankFinancialAcceptance":"NOT_RUN","note":"RPC/adapters in unit/component tests are isolated mocks; not native receipts or database fixtures. Existing numeric golden cases unchanged."}
+}

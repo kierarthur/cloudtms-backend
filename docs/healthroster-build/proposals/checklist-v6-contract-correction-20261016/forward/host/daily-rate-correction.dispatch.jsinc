@@ -1,0 +1,10 @@
+// Root fetch composition, beside current invoice/Weekly Source dispatch.
+// Mount only with actual qualified native Daily SQL/Bank producer closure.
+if(/^\/api\/timesheets\/(?:[^/]+\/daily-rate-correction\/(?:preview|accept)|daily-rate-correction\/operations\/[^/]+)$/.test(new URL(req.url).pathname)){
+const dailyRateCorrectionResponse=await dispatchDailyRateCorrectionRequest(req,env,ctx,{
+  requireUser,
+  rpc:createDailyRateCorrectionRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)}),
+  toLocalParts,subtractBreak,classifyMinutes,resolveEffectivePayChannel
+});
+if(dailyRateCorrectionResponse)return withCORS(env,req,dailyRateCorrectionResponse);
+}

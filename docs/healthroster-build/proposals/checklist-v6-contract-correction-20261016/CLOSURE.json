@@ -45,24 +45,29 @@
       "bytes": 38061
     },
     {
+      "file": "forward/sql/04d_daily_requests.sqlinc",
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "bytes": 4862
+    },
+    {
       "file": "forward/sql/physical-schema.sqlinc",
       "sha256": "5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115",
       "bytes": 15551
     },
     {
       "file": "forward/sql/05_acl.sqlinc",
-      "sha256": "4be798a9f43e23d72b7db7f5cb604d79306c5be624e85bcaa4315bf68555f667",
-      "bytes": 3664
+      "sha256": "a092da99c35e7e42989155e6a08b7a42694105212c2bdb785d6ab6aa157bdac8",
+      "bytes": 3852
     },
     {
       "file": "forward/contracts/contract-correction-v3.mjs",
-      "sha256": "d18e100685e90376e4358377863adfb6ecf3503e060ebe40b3373bb55d3779e3",
-      "bytes": 12383
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087",
+      "bytes": 12418
     },
     {
       "file": "tests/contract-correction-v3.test.mjs",
-      "sha256": "a1da556ef72c68020a840740127a07f34fa2057a762cafbd2963948920f73b69",
-      "bytes": 9882
+      "sha256": "4247fd01517c8331aecc8a76aed6ec3e04e718e1a6e829b46e2b2c68b78744e9",
+      "bytes": 9941
     },
     {
       "file": "tests/parse-source.py",
@@ -76,8 +81,8 @@
     },
     {
       "file": "verification/catalogue.sql",
-      "sha256": "33f5111100073fff28a6004c3d86fe436141e8b0f17b8a32e25095f98448e9a9",
-      "bytes": 8029
+      "sha256": "f52895da1f2bf6418d084b077736678324b389f37785b0fddb5d0e0fb48a9ebe",
+      "bytes": 8220
     },
     {
       "file": "build-native-guards.py",
@@ -86,8 +91,8 @@
     },
     {
       "file": "build-closure.mjs",
-      "sha256": "18eec997967ae51e8d9ae90afe5f3a08ecde19cfecb2edf5fae626f2ccaa2abf",
-      "bytes": 14222
+      "sha256": "fb7b2e3b3446e42891f8a2d2ffb41cca6d4c6706400568cf614a879724063e3a",
+      "bytes": 16449
     },
     {
       "file": "NATIVE_GUARD_INPUTS.json",
@@ -111,18 +116,78 @@
     },
     {
       "file": "tests/daily-native-scalars.sql",
-      "sha256": "7be6db86f9f2680d5f40dff1801dc631335c6fda4877ae6fb9467dee4335cefe",
-      "bytes": 1362
+      "sha256": "20436f60b634c2f2fca5b60a28e3c4e87ff299ae93a3c6a9c19f5f89446c6b64",
+      "bytes": 2985
     },
     {
       "file": "../../../../broker/src/daily-canonical-authority.js",
-      "sha256": "495c7d267006a25ba45a78a3c4755a16b15e8c396b4abfabae66cc03b91805cf",
-      "bytes": 17788
+      "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942",
+      "bytes": 18725
     },
     {
       "file": "../../../../tests/daily-canonical-authority.test.mjs",
       "sha256": "28fab39ac84477b3a86d742d014d05b2877fd5f23c99bcc3a1e7adbe3ed62038",
       "bytes": 20670
+    },
+    {
+      "file": "../../../../broker/src/daily-rate-correction.js",
+      "sha256": "556bf86944ce00f2aa3d51fbc811b61bdf967cc809652f6d749aec718d1e62de",
+      "bytes": 14199
+    },
+    {
+      "file": "tests/daily-rate-http.test.mjs",
+      "sha256": "96f723b625563a04a2af36b5105e8f96456e519364a5a10be01cf5898fccd0b5",
+      "bytes": 11170
+    },
+    {
+      "file": "tests/daily-rate-office.test.mjs",
+      "sha256": "2d87c35f22a97375bc9e817283734e19ab3c2d6a1695db42d998d5e043149edf",
+      "bytes": 10381
+    },
+    {
+      "file": "build-office.mjs",
+      "sha256": "8ff692de0c4b3058e23f85267e54efe9c8c8ad99a43039ca06ea1a28f74a9428",
+      "bytes": 1130
+    },
+    {
+      "file": "DAILY_INTEGRATION_RECIPE.json",
+      "sha256": "892c78b75b28043f201f338a1e2bcaedda6a01b59d92996e563cb9b59ae5fdb8",
+      "bytes": 7100
+    },
+    {
+      "file": "forward/office/js/correction-contract-v3.js",
+      "sha256": "19cd7b652b1c58c310f011dfbfb5af8eec96130fa2aa7a4ea4ad847561b5ee27",
+      "bytes": 12803
+    },
+    {
+      "file": "forward/office/js/daily-rate-correction.js",
+      "sha256": "a58f703e822745ee7af610e1a542767c21d6e6d2da62b607c80a0cfdc925a2e1",
+      "bytes": 10094
+    },
+    {
+      "file": "forward/office/js/daily-rate-correction-http-adapter.js",
+      "sha256": "7cf1917c0f6aedf4df3254fabc0afac1d4873d74bbd508cac45f408be38909f8",
+      "bytes": 3278
+    },
+    {
+      "file": "forward/office/css/daily-rate-correction.css",
+      "sha256": "2909ef0063e1d30d3b517e9e71044b7dd2f7b60de0eb3675db644c8f8f907a26",
+      "bytes": 1824
+    },
+    {
+      "file": "forward/host/daily-rate-correction.import.jsinc",
+      "sha256": "9c12a999a7ef6e1f7d3ff70bb220e34deeddadfc1a8044ebe4f0a267f9502c1b",
+      "bytes": 108
+    },
+    {
+      "file": "forward/host/daily-rate-correction.dispatch.jsinc",
+      "sha256": "f94c92a866ffb385a98ce81edd583aa32ec66faef6266e8087f739e8f273d9b1",
+      "bytes": 658
+    },
+    {
+      "file": "forward/host/daily-rate-correction.office.jsinc",
+      "sha256": "248cd89afed178184f24d0cc0aeb80326f41849bc1ec5f62de7b745b395059fa",
+      "bytes": 1036
     }
   ],
   "functions": [
@@ -604,6 +669,33 @@
       "searchPathControlled": true,
       "executeRoles": [],
       "sourceDeclarationSha256": "382baeeef5a90e656e79f35b990059dd9107965e0061c4fd6df20a35ce88e675"
+    },
+    {
+      "signature": "private.daily_rate_correction_request_assert_v1(jsonb,text)",
+      "source": "forward/sql/04d_daily_requests.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "618f4ef294c83ed3d1687d58845243426c653755bc016ddbbd27204fe2d13556"
+    },
+    {
+      "signature": "private.daily_rate_correction_request_hash_v1(jsonb,text)",
+      "source": "forward/sql/04d_daily_requests.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "7ea5bb7b68f8116040c5473abac94fd5d02b30559492f01c78ec9131ed66c98c"
+    },
+    {
+      "signature": "private.daily_rate_correction_preview_replay_v1(jsonb)",
+      "source": "forward/sql/04d_daily_requests.sqlinc",
+      "owner": "CURRENT_USER (audited release owner)",
+      "security": "SECURITY DEFINER",
+      "searchPathControlled": true,
+      "executeRoles": [],
+      "sourceDeclarationSha256": "a239f57ec4c74fc4f2c2ea0f106463c084be23f5d46b5d9a4bf1dd25e3365db2"
     }
   ],
   "triggers": [
@@ -726,15 +818,17 @@
       "02_physical_apply.sqlinc",
       "03_native_guards.sqlinc",
       "04_atomic_assert.sqlinc",
+      "04a_accept_composition.sqlinc",
       "04b_daily_context.sqlinc",
       "04c_daily_admission.sqlinc",
-      "04a_accept_composition.sqlinc",
+      "04d_daily_requests.sqlinc",
       "05_acl.sqlinc"
     ],
     "mount": "Finite Health owned fragments only. Root applies selected seven-module composition; no stale parent transplant.",
     "sourceIngressConsumer": "private.timesheet_contract_current_placement_v1(uuid) exact CURRENT_CONTRACT_PLACEMENT_V1",
     "daily": "04b context belongs to health_review_context; 04c admission/assertion belongs to health_native_apply. Shared 00_identity adds a deferred member/operation completion guard; 02 review enrollment delegates genuine Daily scope. No Daily aliases/Contract allocator. Calculator is an exact bounded extension of sole existing owner, baseline SHA256 64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b; root source-carries only its reviewed diff.",
-    "evidenceCompatibility": "Existing Contract-only 7d1be386 closure receives only exact replacement body forward/compat/timesheet_contract_move_evidence_source_v1.sqlinc. It is byte-identical to the function in 02_physical_apply, and is an alternative finite replacement, not a second definition to include alongside 02. Physical schema is unchanged."
+    "evidenceCompatibility": "Existing Contract-only 7d1be386 closure receives only exact replacement body forward/compat/timesheet_contract_move_evidence_source_v1.sqlinc. It is byte-identical to the function in 02_physical_apply, and is an alternative finite replacement, not a second definition to include alongside 02. Physical schema is unchanged.",
+    "dailyRuntimeRecipe": "DAILY_INTEGRATION_RECIPE.json gives exact finite Worker/Office targets, real current host dependency names and supplied bodies. No shared index/Office file edited. 04d private service validation/request identity/preview replay is Health composition. New Worker module imports the same Health closed DTO source; Office UMD is generated by build-office.mjs from that sole decoder. Ready requires preserved worked facts."
   },
   "dependencies": [
     {
@@ -813,7 +907,9 @@
     "sourceGate": "Run npm run db:check again before handoff; proposal files are not selected release roots.",
     "evidenceCompatibilityAssertions": "tests/evidence-compatibility.sql invokes real NULL/unregistered alias paths, supplied for root rollback rehearsal; parsed only here, NOT_RUN. Genuine registered aliases still enter strict H103/current-alias resolution.",
     "dailyCalculatorTests": "20 tests passed (9 correction cases plus 11 existing Daily regressions); existing baseline economic golden unchanged.",
-    "dailyWrappers": "Genuine service-only context wrapper supplied; Preview/Accept/Result remain dependency-held on exact native paid/frozen/Summary/freeze-preview seam. Same-record admission/assertion implemented without a fake publisher or new queue. Full REGISTERED native publication asserted; no unprovided NOT_REQUIRED certificate inferred.",
-    "dailyNativeScalarAssertions": "NOT_RUN: executable tests/daily-native-scalars.sql invokes real rounding helper with missing/zero/binary boundary assertions; no stubs or business fixtures."
+    "dailyWrappers": "Genuine service-only context wrapper plus private request/assert/hash/preview-replay supplied. Worker exact specified HTTP routes and Office UMD components implemented separately. Fresh SQL Review/Accept/current Result final composition remains dependency-held on actual Bank paid/frozen/Summary/freeze-preview seam and publication, not a fabricated cut/valuation/zero/status or dummy wrapper. Existing saved preview replay admits NULL trusted calculation fields only before the fresh native validation branch.",
+    "dailyNativeScalarAssertions": "NOT_RUN: executable tests/daily-native-scalars.sql invokes real rounding helper with missing/zero/binary boundary assertions; no stubs or business fixtures.",
+    "dailyHttpSource": "12 transport/calculator unit tests passed, real canonical calculator with isolated RPC replies. Exact specified Preview/Accept/GET handlers and native transport implemented; no automatic financial retry or new endpoint. Uncertain Accept retains original UUID/body.",
+    "dailyOfficeSource": "5 real Chromium isolated component/adapter tests passed; phone render inspected. Original request session cache survives reload, pending GET never fabricates completion, REGISTERED/native invoice preparation permits COMPLETE without APPLIED/PDF. Actual Office host integration and native API acceptance NOT_RUN."
   }
 }

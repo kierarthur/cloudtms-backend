@@ -25,6 +25,27 @@ const missingUsedRates = (hours, pay, charge) => {
   );
 };
 
+// Exact native TSFIN Daily context helpers extracted from its existing local
+// owner. New consumers use these exports rather than out-of-scope index locals.
+export const normaliseCanonicalDailyRole = value => String(value || '').trim().replace(/\s+/g, ' ').trim().toUpperCase();
+export function normaliseCanonicalDailyBand(value) {
+  const s = String(value || '').trim();
+  if (!s) return null;
+  let m = s.match(/^\s*band\s*([0-9]+)\s*$/i);
+  if (!m) m = s.match(/^\s*b\s*([0-9]+)\s*$/i);
+  if (!m) m = s.match(/^\s*([0-9]+)\s*$/);
+  if (m && m[1]) return `Band ${parseInt(m[1], 10)}`;
+  return s;
+}
+export function parseCanonicalDailyRoleCodes(value) {
+  try {
+    let roles = value;
+    if (typeof roles === 'string') roles = JSON.parse(roles);
+    if (!Array.isArray(roles)) return [];
+    return roles.map(r => r && typeof r === 'object' ? r.code : r).map(normaliseCanonicalDailyRole).filter(Boolean);
+  } catch { return []; }
+}
+
 export function deriveCanonicalDailyFinancialContext({
   effectiveTimesheetId,
   context,
