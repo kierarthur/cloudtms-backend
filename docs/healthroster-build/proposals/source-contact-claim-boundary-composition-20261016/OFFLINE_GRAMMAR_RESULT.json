@@ -1,6 +1,6 @@
 {
   "version": "CONTACT_CLAIM_OFFLINE_GRAMMAR_V1",
-  "source_sha256": "a9313d7e4e1d91c8176520b74149c51de416b5ba88bb778d8a7764f547f57f6f",
+  "source_sha256": "3b013f5156a61a0b17a2f3545885f5cd0f89ba050d9418d71973b1003ef291ca",
   "postgresql_major": 17,
   "sql_statements": 1,
   "complete_plpgsql_bodies": 1,

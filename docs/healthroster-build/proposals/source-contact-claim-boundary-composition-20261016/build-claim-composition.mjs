@@ -11,7 +11,7 @@ const sha=value=>createHash('sha256').update(value).digest('hex');
 function input(ref,file){return execFileSync('git',['show',`${ref}:${file}`],{cwd:root,encoding:'utf8',maxBuffer:4e6}).replace(/\r\n/g,'\n');}
 export function frozenClaim(sql){const start=sql.indexOf('create or replace function public.email_outbox_claim_ready_batch(');
  const end=sql.indexOf('$function$;',sql.indexOf('as $function$',start));
- if(start<0||end<0)throw Error('Frozen claim definition missing');return sql.slice(start,end+12)+'\n';}
+ if(start<0||end<0)throw Error('Frozen claim definition missing');return sql.slice(start,end+12).trimEnd()+'\n';}
 export const SELECTOR=`(mo.type<>'TIMESHEET_QUERY' or(p_contact_bridge and exists(
           select 1 from public.hr_issue_email_deliveries d join public.hr_issue_email_deliveries original on original.id=d.original_delivery_id
           where d.mail_outbox_id=mo.id and d.contact_managed and d.legacy_claim_lease_token is null

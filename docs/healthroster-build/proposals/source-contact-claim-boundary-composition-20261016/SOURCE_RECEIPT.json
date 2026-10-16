@@ -5,7 +5,7 @@
     "commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
     "path": "supabase/repeatable/04102026_0558_banking_pay_next_legacy_email_claim_boundary_v1.sql",
     "sha256_normalized_lf": "fd5bc5ed576d81d02aade82b0111bb560e3ce51707259b76871b469f29e1fb9c",
-    "complete_claim_sha256": "8298182fa86ccbc151b44a775777326f0be7e6f10616aba74c2a7af2ad218e84"
+    "complete_claim_sha256": "45ea668b108460c472151004cc016eebb3a2eb2dc374de38ce4b400ea5a86926"
   },
   "current_contact_inputs": [
     {
@@ -21,7 +21,7 @@
   ],
   "output": {
     "path": "forward/01_complete_native_claim_core.sqlinc",
-    "sha256": "a9313d7e4e1d91c8176520b74149c51de416b5ba88bb778d8a7764f547f57f6f",
+    "sha256": "3b013f5156a61a0b17a2f3545885f5cd0f89ba050d9418d71973b1003ef291ca",
     "signature": "public._email_outbox_contact_claim_core_v1(integer,text,integer,boolean,uuid,text)"
   },
   "exact_edit_recipe": [
