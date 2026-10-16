@@ -32,7 +32,7 @@ Service-helper and RESULT ACL statements are an explicitly finite singleton eval
    ```
 
    Choose the owner-request mode only after reviewing its explicitly modeled scope. The CLI refuses an existing directory. Frozen sample packets are review evidence; use a fresh build for a native run.
-3. Root submits the generated `REQUEST.json` fields exactly (`database=agency_test`, `sql`, `verification_sql`, `continue_on_error=false`) through the current Kier rollback tool. Do not insert BEGIN/COMMIT, split the protected transaction, substitute a route, or call the public functions outside it. Current hard bound is 100 statements; these packets contain 17/18/18, respectively, and less than 16 KB of SQL. Every request includes its required label; the validator also requires the returned databaseTarget=agency_test.
+3. Root submits the generated `REQUEST.json` fields exactly (`database=agency_test`, `sql`, `verification_sql`, `continue_on_error=false`) through the current Kier rollback tool. Do not insert BEGIN/COMMIT, split the protected transaction, substitute a route, or call the public functions outside it. This component deliberately caps SQL at 2 MB and 100 statements, within the current Kier route envelope of 8 MB and 1,000 parsed statements; these packets contain 17/18/18, respectively, and less than 16 KB of SQL. Every request includes its required label; the validator also requires the returned databaseTarget=agency_test.
 4. Save the tool's direct result object in an ignored local evidence file. The validator accepts that direct object, not a chat/content wrapper:
 
    ```powershell

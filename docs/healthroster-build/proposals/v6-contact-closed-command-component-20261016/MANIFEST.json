@@ -222,8 +222,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 10262,
-      "sha256": "dfd4708062788d4e57078cb8767cd2bb801b50f034a249de1de5a16ea255b455"
+      "bytes": 10365,
+      "sha256": "0cb6bf89d9713286a9a4a7657f9574fe028308aa9cca60431314e968efcf5d06"
     },
     {
       "path": "seal.mjs",
