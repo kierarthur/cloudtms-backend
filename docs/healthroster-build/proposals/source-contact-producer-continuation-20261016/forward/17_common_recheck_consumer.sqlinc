@@ -1,17 +1,24 @@
 -- One bounded native observation per selected original task and call. The
 -- cursor is a real native UUID in an explicit phase; no pass claims the whole
 -- task complete after visiting only manager work or a truncated result set.
-create or replace function private.weekly_contact_recheck_task_v1(p_task uuid)
+create or replace function private.weekly_contact_recheck_task_selected_v1(p_task uuid,p_expected_selection jsonb,p_selection_at timestamptz)
 returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
 as $function$
 declare task public.weekly_contact_recheck_tasks%rowtype;scope public.weekly_contact_pause_scopes%rowtype;
  progress public.weekly_contact_recheck_progress%rowtype;checking jsonb;native uuid;result jsonb;phase text;at_utc timestamptz;next_due timestamptz;
+ selection jsonb;pair jsonb;selection_at timestamptz;
 begin
  select * into strict task from public.weekly_contact_recheck_tasks where id=p_task;
  select * into strict scope from public.weekly_contact_pause_scopes where id=task.scope_id;
  perform private.weekly_contact_deployment_lock_v1(scope.agency_id,scope.environment);
  perform private.weekly_contact_context_v1(scope.agency_id,scope.environment);
- perform private.weekly_contact_scope_lock_v1(scope.agency_id,scope.environment,scope.candidate_id,scope.client_id);
+ selection_at:=coalesce(p_selection_at,clock_timestamp());selection:=private.weekly_contact_recheck_selection_scope_facts_v1(task.id,selection_at);
+ if p_expected_selection is not null and selection is distinct from p_expected_selection then
+  raise exception 'CONTACT_RECHECK_SELECTION_STALE' using errcode='40001';end if;
+ for pair in select value from jsonb_array_elements(selection->'pairs')order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+  perform private.weekly_contact_scope_lock_v1(scope.agency_id,scope.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ if private.weekly_contact_recheck_selection_scope_facts_v1(task.id,selection_at)is distinct from selection then
+  raise exception 'CONTACT_RECHECK_SELECTION_STALE' using errcode='40001';end if;
  select * into strict scope from public.weekly_contact_pause_scopes where id=scope.id;
  select * into strict task from public.weekly_contact_recheck_tasks where id=p_task for update;
  at_utc:=clock_timestamp();
@@ -29,6 +36,8 @@ begin
   phase:=progress.phase;
   select native_id into native from private.weekly_contact_recheck_native_ids_v1(scope.id,phase,progress.last_native_id) order by native_id limit 1;
   if native is not null then
+   if(phase,native)is distinct from(selection->>'phase',(selection->>'native_id')::uuid)then
+    raise exception 'CONTACT_RECHECK_SELECTION_STALE' using errcode='40001';end if;
    if phase='SOURCE_ACTIVATION' then
     result:=private.weekly_contact_source_scope_first_activation_v1(scope.id,native);
    elsif phase in('SOURCE_WORKER','SOURCE_MANAGER') then
@@ -66,11 +75,17 @@ begin
 end;
 $function$;
 
+create or replace function private.weekly_contact_recheck_task_v1(p_task uuid)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin return private.weekly_contact_recheck_task_selected_v1(p_task,null,null);end;
+$function$;
+
 create or replace function public.weekly_source_contact_recheck_batch_v1(p_request jsonb)
 returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
 as $function$
 declare agency uuid;deployment_environment text;worker text;batch_limit integer;selected record;result jsonb;results jsonb:='[]';
- processed integer:=0;held integer:=0;
+ processed integer:=0;held integer:=0;selection_at timestamptz;selections jsonb:='[]';selection jsonb;pair record;valid_selections jsonb:='[]';
 begin
  perform private.weekly_source_query_require_service_v1();
  perform private.weekly_contact_assert_closed_v1(p_request,array['version','agency_id','environment','worker_id','limit'],
@@ -84,16 +99,40 @@ begin
  worker:=p_request->>'worker_id';batch_limit:=(p_request->>'limit')::integer;
  perform private.weekly_contact_deployment_lock_v1(agency,deployment_environment);
  perform private.weekly_contact_context_v1(agency,deployment_environment);
+ selection_at:=clock_timestamp();
  for selected in select task.id from public.weekly_contact_recheck_tasks task join public.weekly_contact_pause_scopes scope on scope.id=task.scope_id
-  where scope.agency_id=agency and scope.environment=deployment_environment and task.due_at_utc<=clock_timestamp()
-   and(task.state='READY' or(task.state='LEASED' and task.lease_expires_at_utc<=clock_timestamp()))
+  where scope.agency_id=agency and scope.environment=deployment_environment and task.due_at_utc<=selection_at
+   and(task.state='READY' or(task.state='LEASED' and task.lease_expires_at_utc<=selection_at))
   order by task.due_at_utc,task.id limit batch_limit loop
   begin
-   result:=private.weekly_contact_recheck_task_v1(selected.id);processed:=processed+1;
+   selections:=selections||jsonb_build_array(private.weekly_contact_recheck_selection_scope_facts_v1(selected.id,selection_at));
+  exception when others then
+   held:=held+1;results:=results||jsonb_build_array(jsonb_build_object('version','CONTACT_RECHECK_TASK_RESULT_V1','task_id',selected.id,
+    'disposition','HELD_DEPENDENCY','code','CONTACT_RECHECK_ITEM_HELD'));
+  end;
+ end loop;
+ -- All actual connected native bodies in this existing bounded batch precede
+ -- every task/progress/native row mutation, in the shared sorted scope order.
+ for pair in select distinct(native_pair.value->>'candidate_id')::uuid candidate_id,(native_pair.value->>'client_id')::uuid client_id
+  from jsonb_array_elements(selections)selected_fact(value) cross join lateral jsonb_array_elements(selected_fact.value->'pairs')native_pair(value) order by 1,2 loop
+  perform private.weekly_contact_scope_lock_v1(agency,deployment_environment,pair.candidate_id,pair.client_id);end loop;
+ for selection in select value from jsonb_array_elements(selections)loop
+  begin
+   if private.weekly_contact_recheck_selection_scope_facts_v1((selection->'task'->>'id')::uuid,selection_at)is distinct from selection then
+    raise exception 'CONTACT_RECHECK_SELECTION_STALE' using errcode='40001';end if;
+   valid_selections:=valid_selections||jsonb_build_array(selection);
+  exception when others then
+   held:=held+1;results:=results||jsonb_build_array(jsonb_build_object('version','CONTACT_RECHECK_TASK_RESULT_V1','task_id',(selection->'task'->>'id')::uuid,
+    'disposition','HELD_DEPENDENCY','code','CONTACT_RECHECK_ITEM_HELD'));
+  end;
+ end loop;
+ for selection in select value from jsonb_array_elements(valid_selections)loop
+  begin
+   result:=private.weekly_contact_recheck_task_selected_v1((selection->'task'->>'id')::uuid,selection,selection_at);processed:=processed+1;
   exception when others then
    -- The per-item subtransaction rolls back every partial child/cursor. The
    -- original task and sender owners remain available for the same retry.
-   held:=held+1;result:=jsonb_build_object('version','CONTACT_RECHECK_TASK_RESULT_V1','task_id',selected.id,
+   held:=held+1;result:=jsonb_build_object('version','CONTACT_RECHECK_TASK_RESULT_V1','task_id',(selection->'task'->>'id')::uuid,
     'disposition','HELD_DEPENDENCY','code','CONTACT_RECHECK_ITEM_HELD');
   end;
   results:=results||jsonb_build_array(result);

@@ -6,7 +6,10 @@ declare review public.weekly_contact_manual_reviews%rowtype;accepted public.week
  receipt_groups jsonb:='[]';receipt_members jsonb;intent_id uuid;receipt jsonb;
 begin
  perform private.weekly_contact_manual_request_assert_v1(p_request,true);
- perform private.weekly_contact_manual_scopes_lock_v1(p_request);
+ -- Serialize original request identity before immutable replay. Replaying an
+ -- accepted request must not depend on today's route/eligibility/member facts.
+ perform private.weekly_contact_deployment_lock_v1((p_request->>'agency_id')::uuid,p_request->>'environment');
+ perform private.weekly_contact_context_v1((p_request->>'agency_id')::uuid,p_request->>'environment');
  base_request:=p_request-array['review_id','review_digest'];
  request_hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_REQUEST_V1',base_request);
  select * into accepted from public.weekly_contact_manual_acceptances where request_id=(p_request->>'request_id')::uuid;
@@ -18,6 +21,7 @@ begin
   -- A replay returns this immutable receipt even after later pause/reply/expiry.
   return accepted.receipt_json;
  end if;
+ perform private.weekly_contact_manual_scopes_lock_v1(p_request);
  select * into review from public.weekly_contact_manual_reviews where id=(p_request->>'review_id')::uuid
   and request_id=(p_request->>'request_id')::uuid;
  if not found then raise exception 'CONTACT_MANUAL_ENQUIRY_REVIEW_STALE' using errcode='40001';end if;

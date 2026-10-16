@@ -12,7 +12,7 @@ const sourceFiles=['READ_SOURCE_CHECKPOINT.json','REGISTER_DELTA_WIP.json','NATI
  'SUBMISSION_CALLER_OWNER_INPUTS.json','SUBMISSION_CONSUMER_INVENTORY.json','SUBMISSION_COHORT_DELTA_PROPOSAL.md','CANDIDATE_CONTACT_ENTRY_INPUTS.json',
  'EXACT_NATIVE_LOCK_OWNER_INPUTS.json','OFFLINE_GRAMMAR_INPUTS.json','OFFLINE_GRAMMAR_RESULT.json'];
 writeFileSync(path.join(base,'WIP_SUCCESSOR_RECEIPT.json'),JSON.stringify({version:'CONTACT_NATIVE_CONTINUATION_WIP_SUCCESSOR_RECEIPT_V1',
- status:'NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN',prior_source_checkpoint:'03b444e0ead2f70ab193101dbf8f151e64efccaf',
+ status:'NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN',prior_source_checkpoint:'b33021b5019bff30e2300f202bbe5f191a68efca',
  source_files:sourceFiles.map(file=>({path:file,sha256:sha(readFileSync(path.join(base,file)))})),frozen_7161:frozen,
  source_only_tests:{pass:33,native:false,scope:'Request/shared parser, strict service reply and actual finite current host orchestration with mocked RPC/senders'},
  sql_scan:{statements:checkpoint.sql_statement_count,PLpgSQL:'OPAQUE_NOT_PARSED',fixtures_excluded:true},

@@ -54,12 +54,20 @@ $function$;
 create or replace function private.weekly_contact_manual_scopes_lock_v1(p_request jsonb)
 returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
 as $function$
-declare scope jsonb;
+declare scope jsonb;issue_ids uuid[];extra_pairs jsonb;
 begin
  -- The caller has already validated the exact request and actor. No native
  -- target/command/route row is acquired before this shared sorted scope vector.
  perform private.weekly_contact_deployment_lock_v1((p_request->>'agency_id')::uuid,p_request->>'environment');
  perform private.weekly_contact_context_v1((p_request->>'agency_id')::uuid,p_request->>'environment');
+ if p_request->>'audience'='MANAGER' and p_request?'review_id' then
+  select array_agg(value::uuid order by value::uuid)into issue_ids from jsonb_array_elements(p_request->'scopes')selected
+   cross join lateral jsonb_array_elements_text(selected->'selected_issue_ids')value;
+  select jsonb_agg(jsonb_build_object('candidate_id',value->'candidate_id','client_id',value->'client_id'))into extra_pairs
+   from jsonb_array_elements(p_request->'scopes');
+  perform private.weekly_contact_source_manager_selection_lock_v1(issue_ids,extra_pairs);
+  return;
+ end if;
  for scope in select value from jsonb_array_elements(p_request->'scopes')
   order by (value->>'candidate_id')::uuid,(value->>'client_id')::uuid
  loop

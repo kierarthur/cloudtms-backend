@@ -1,15 +1,15 @@
 {
   "version": "CONTACT_NATIVE_CONTINUATION_WIP_SUCCESSOR_RECEIPT_V1",
   "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
-  "prior_source_checkpoint": "03b444e0ead2f70ab193101dbf8f151e64efccaf",
+  "prior_source_checkpoint": "b33021b5019bff30e2300f202bbe5f191a68efca",
   "source_files": [
     {
       "path": "READ_SOURCE_CHECKPOINT.json",
-      "sha256": "dc241bc4cd793e93c9d06870b635f91e7dc7c9bc4b060e737c5fb535429e4d9b"
+      "sha256": "015e93c5665c25694df0ae984f9efa232084fced2761b4e020a1a8ba55a07a82"
     },
     {
       "path": "REGISTER_DELTA_WIP.json",
-      "sha256": "c3d82eb52b4a1248291b4ca4e7a63cc1c4a24913f90960cb0ac5c9c5ea0833bf"
+      "sha256": "ead70d8b2f3229d9e81f2070d16b9c1c28f2d787f63a6fd12bf3cdfec228a1ac"
     },
     {
       "path": "NATIVE_OWNER_INPUTS.json",
@@ -57,11 +57,11 @@
     },
     {
       "path": "OFFLINE_GRAMMAR_INPUTS.json",
-      "sha256": "7629b40fef58079b0d50b3e095934fb3769e97ab821ed15fe35f525a1463b4d4"
+      "sha256": "66c7f324434998d6a9573fecbff0b46938a2aea3b4b778d41a98717bed99d706"
     },
     {
       "path": "OFFLINE_GRAMMAR_RESULT.json",
-      "sha256": "49dd0a119bf4236c7e0c938c72e55ab5747005aaa0d2df6fa109434aadc5a000"
+      "sha256": "6c1a1057df1af2b8afcfd6994590a35918e523cbfbb07ed7b4bb2ad4d434c140"
     }
   ],
   "frozen_7161": {
@@ -74,21 +74,21 @@
     "scope": "Request/shared parser, strict service reply and actual finite current host orchestration with mocked RPC/senders"
   },
   "sql_scan": {
-    "statements": 342,
+    "statements": 366,
     "PLpgSQL": "OPAQUE_NOT_PARSED",
     "fixtures_excluded": true
   },
   "offline_grammar": {
     "version": "CONTACT_SOURCE_OFFLINE_PG17_RESULT_V1",
-    "input_manifest_sha256": "7629b40fef58079b0d50b3e095934fb3769e97ab821ed15fe35f525a1463b4d4",
+    "input_manifest_sha256": "66c7f324434998d6a9573fecbff0b46938a2aea3b4b778d41a98717bed99d706",
     "qualification": "OFFLINE_ONLY_NATIVE_COMPILE_AND_FIRST_USE_NOT_RUN",
     "counts": {
-      "sqlLeaves": 49,
-      "sqlStatements": 345,
-      "plpgsqlBodies": 89,
+      "sqlLeaves": 52,
+      "sqlStatements": 369,
+      "plpgsqlBodies": 97,
       "sqlLanguageBodies": 7,
       "doBodies": 7,
-      "rowVariables": 247
+      "rowVariables": 258
     },
     "errors": []
   },

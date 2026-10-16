@@ -1,14 +1,14 @@
 {
   "version": "CONTACT_SOURCE_OFFLINE_PG17_RESULT_V1",
-  "input_manifest_sha256": "7629b40fef58079b0d50b3e095934fb3769e97ab821ed15fe35f525a1463b4d4",
+  "input_manifest_sha256": "66c7f324434998d6a9573fecbff0b46938a2aea3b4b778d41a98717bed99d706",
   "qualification": "OFFLINE_ONLY_NATIVE_COMPILE_AND_FIRST_USE_NOT_RUN",
   "counts": {
-    "sqlLeaves": 49,
-    "sqlStatements": 345,
-    "plpgsqlBodies": 89,
+    "sqlLeaves": 52,
+    "sqlStatements": 369,
+    "plpgsqlBodies": 97,
     "sqlLanguageBodies": 7,
     "doBodies": 7,
-    "rowVariables": 247
+    "rowVariables": 258
   },
   "errors": []
 }

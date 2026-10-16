@@ -81,6 +81,7 @@ begin
  select * into strict sg from public.weekly_source_groups where id=i.source_group_id;
  perform private.weekly_contact_deployment_lock_v1(sg.agency_id,sg.environment);
  perform private.weekly_contact_context_v1(sg.agency_id,sg.environment);
+ perform private.weekly_contact_source_manager_selection_lock_v1(array[i.id],'[]');
  scope_id:=private.weekly_contact_scope_lock_v1(sg.agency_id,sg.environment,i.candidate_id,i.client_id);
  p_at:=clock_timestamp();state:=private.weekly_contact_source_manager_followup_state_v1(i.id,p_at);
  if state->>'reason'<>'SCHEDULED' or state->>'mode'<>'AUTOMATIC' or(state->>'due_at_utc')::timestamptz>p_at then

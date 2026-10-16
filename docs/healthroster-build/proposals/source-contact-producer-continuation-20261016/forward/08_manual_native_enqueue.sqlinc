@@ -7,8 +7,12 @@ declare member jsonb;context jsonb;route_id uuid;generation public.weekly_manage
  route public.weekly_manager_recipient_routes%rowtype;native_intent record;activation uuid;cohort uuid;generation_number integer;
  membership jsonb;ordinal integer:=0;i public.weekly_discrepancy_incidents%rowtype;c public.weekly_issue_comparison_revisions%rowtype;
  w public.weekly_work_events%rowtype;old_generation_id uuid;due_event public.weekly_manager_cohort_due_events%rowtype;
- due_hash bytea;due_source jsonb;new_due_id uuid;
+ due_hash bytea;due_source jsonb;new_due_id uuid;selected_ids uuid[];
 begin
+ select array_agg((value->>'issue_id')::uuid order by(value->>'issue_id')::uuid) into selected_ids from jsonb_array_elements(p_members);
+ -- The actual complete retained route work is locked before cohort ensure,
+ -- activation or generation rows can be written. Callers may already hold it.
+ perform private.weekly_contact_source_manager_selection_lock_v1(selected_ids,'[]');
  for member in select value from jsonb_array_elements(p_members) order by value->>'candidate_id',value->>'client_id',value->>'issue_id' loop
   select * into strict i from public.weekly_discrepancy_incidents where id=(member->>'issue_id')::uuid;
   select * into strict c from public.weekly_issue_comparison_revisions where id=i.current_comparison_revision_id;
