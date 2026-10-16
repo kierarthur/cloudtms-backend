@@ -1,0 +1,137 @@
+{
+  "version": "HEALTH_V6_COMPLETENESS_READ_AUDIT_V1",
+  "qualification": "READ_ONLY_SOURCE_COMPLETENESS_NOT_PART_B_NOT_NATIVE_ACCEPTANCE",
+  "initial_i2_commit": "77c629dba2efe39fa0e676e551e12bf5cf442664",
+  "latest_i2_observed": "e246b40ef3c301faccaf18d719fd2dad78f75a5a",
+  "office_commit": "db25784674882a4b1c3b0ca3530cee1db2399260",
+  "mytms_commit": "a7a1526e697cec792db4123a5b0aa1b1deee9303",
+  "reviewed_pack_content": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
+  "prepared_edits_sha256": "6b0e589bc69fe70102e045f3137f5335fec5460381d78564591e87f7551d70f6",
+  "adoption_reconciliation": {
+    "exact_trace_rows": 326,
+    "original_schema_objects": 92,
+    "objects_with_additive_current_qualification_fields": 53,
+    "added_field_names": [
+      "source_qualification_20261016",
+      "source_runtime_continuation_20261016",
+      "legacy_query_source_qualification_20261016",
+      "source_logical_membership_qualification_20261016",
+      "contact_control_view_qualification",
+      "global_contact_timing_source_qualification"
+    ],
+    "text_spans_normalized_LF": 16,
+    "total_reconciled": 434,
+    "material_required_field_differences": [],
+    "statuses_preserved": true,
+    "no_new_checklist_or_overlay": true
+  },
+  "current_status_interpretation": "326 V5_REQUIRED_NOT_RUN and92 REQUIRED_NOT_IMPLEMENTED_BY_THIS_REGISTER are retained historical states; separate current-continuation records identify authored/mounted source. Not326/92 missing implementations.",
+  "concrete_missing_behavior": [
+    "Health Contract Preview and role-redacted current result read/native public composition",
+    "Health Daily public Preview/Accept/Result composition",
+    "Source public READ_RESULT actual B051-dependent current financial child/projection and parent dispatch",
+    "Health sole current shared fetch/Office More/Finance/action/result/settings-host integration of genuine Banking contributions",
+    "Moved-expense/correction-pair/carrier supported native mutation and real full document/recovery journeys remain uncompleted/unqualified"
+  ],
+  "integration_updates": {
+    "invoice": "e246 source-mounted while audit ran; no native/release qualification",
+    "candidate": "f566 root mount in progress; final joined source not new missing authoring",
+    "source_pending": "e8cc reviewed source plus Report1808 full duty successor awaiting root",
+    "contact": "e466 full continuation published WIP awaiting full root/native review; existing strict controllers not parent-mounted",
+    "source_native": "d863 full SQL/application/adoption depends actual Bank closure; Worker modules already integrated"
+  },
+  "banking_boundary": {
+    "read_source_or_checklist": false,
+    "edits": false,
+    "messages": false,
+    "claim_of_fresh_bank_implementation_status": false,
+    "required_returns": "Contract financial producers/current B; Daily publisher/Summary; Source cut4/begin4/stage4/member/binder/status/B051; CM16/CM17/cash/AUTO fragments; F17 only NEXT-dependent native/activation"
+  },
+  "source_pins": [
+    {
+      "scope": "pack",
+      "path": "START_HERE_DRAFT.md",
+      "sha256": "ba2973ff2adee5c33be0e8ce5fc09c9c57adbd4f003bc5c93fb958a280603fdf"
+    },
+    {
+      "scope": "pack",
+      "path": "HEALTHROSTER_BUILDER_INSTRUCTIONS.md",
+      "sha256": "3058fef487c8761170c09fa593a884a0f962bfc2af503dd27da464368f4b3350"
+    },
+    {
+      "scope": "pack",
+      "path": "FINAL_REVIEW_RECORD.md",
+      "sha256": "f294c37445b6736d88421e3c83c050d73ec4774f53cac1e796c702ea9787f668"
+    },
+    {
+      "scope": "pack",
+      "path": "OWNERSHIP.md",
+      "sha256": "928794146dc8d89d0f72409214fbcf052971d7591470e819f9855ea2a418b9a5"
+    },
+    {
+      "scope": "i2",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/ADOPTION_RECEIPT.json",
+      "sha256": "eb86fe649ffb038c2895ccd2f094e7d43bdb891b0f1c8c179f19c7367e921b6f"
+    },
+    {
+      "scope": "i2",
+      "path": "docs/healthroster-build/v5-amendment-20261015/CHANGE_TRACEABILITY.json",
+      "sha256": "4483432db9e212fd7fb11e26187ce1f8b40d34eb1637a29231fc707bc3c374ad"
+    },
+    {
+      "scope": "i2",
+      "path": "docs/healthroster-build/v5-amendment-20261015/SCHEMA_INTERFACE_REGISTER.json",
+      "sha256": "da8611f0e478ae9812376b6a2d5689b2581b8fe74fc7a4e682d884723b1a9ebf"
+    },
+    {
+      "scope": "i2",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_SQL_SOURCE_INTEGRATION.json",
+      "sha256": "99e90bdb2df1c92a0702b8a46ffbbb8a1e1cab2fe48a100f9ec3856220496280"
+    },
+    {
+      "scope": "i2",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_RUNTIME_INTEGRATION.json",
+      "sha256": "12bf01dc2611b373e0125ea4ed702497738eef0fad8fe70c15c210ba08e0e393"
+    },
+    {
+      "scope": "i2",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_NATIVE_SQL_SOURCE_INTEGRATION.json",
+      "sha256": "8a8fa23e7427f44f564a3345a76c17b7eb348d7090fb90b993c35bba051cc02d"
+    },
+    {
+      "scope": "i2",
+      "path": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "sha256": "d900ad23fbc0b4b5130b6c8138767ba9d7827b3e8506feefcac12e12cbaaae10"
+    },
+    {
+      "scope": "i2",
+      "path": "broker/src/weekly-source/routes.js",
+      "sha256": "ed92abc085aaac15fc72aa58de649ebced8e1ae580d0bfac9d8c3a2078ac0242"
+    },
+    {
+      "scope": "i2",
+      "path": "broker/src/index.js",
+      "sha256": "f5bff8ca19712b957eea1e51a1732d54b4f8584d79fe4f57a3a018b782b1b21f"
+    },
+    {
+      "scope": "office",
+      "path": "js/main.js",
+      "sha256": "d86f2ef841f53243997c7f5bb73b913a4a04a2c563378ab47e58d1a5ee82c847"
+    },
+    {
+      "scope": "office",
+      "path": "js/modal-modernisation.js",
+      "sha256": "d54278e9d763fa6a9a5d9c7d34a4eccaa553db92bccf6353894a104107e0023b"
+    }
+  ],
+  "audit_sha256": "c9d935b7c8764efbd239f606f50e640fe7a49fef2cdcce5ed4628721d1d184a6",
+  "effects": {
+    "database_connections": 0,
+    "application_source_edits": 0,
+    "root_worktree_edits": 0,
+    "banking_edits_or_messages": 0,
+    "deployments": 0,
+    "secrets_printed": false,
+    "files_authored": "This own-worktree audit Markdown/JSON only"
+  }
+}
