@@ -1052,5 +1052,16 @@
       ],
       "executionApproval": false
     }
+  ],
+  "targetedNativeEvidence": [
+    {
+      "indices": [
+        161,
+        167
+      ],
+      "status": "PASS_TWO_COMPLETE_ORIGINAL_DATA_FREE_DO_BLOCKS",
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/native-f2-magnit-scalar/NATIVE_RECEIPT.json",
+      "fullRehearsalApproval": false
+    }
   ]
 }

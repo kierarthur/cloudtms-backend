@@ -1,0 +1,547 @@
+{
+  "version": "HEALTHROSTER_F2_MAGNIT_NATIVE_RECEIPT_V1",
+  "status": "PASS_TWO_COMPLETE_DATA_FREE_VERIFIER_BLOCKS",
+  "sourceUnitCommit": "eba70f2a",
+  "account": "kier@arthur-rai.co.uk",
+  "database": "cloudtms_test_clone",
+  "baseline": {
+    "accepted": true,
+    "databaseTarget": "agency_test",
+    "database": "cloudtms_test_clone",
+    "label": "HEALTHROSTER_F2_MAGNIT_BASELINE",
+    "sqlSha256": "ac4ff84a902ffbc2f6338556eb9235aa4b52a42e0f06493ee14c403857d7cc77",
+    "statementCount": 2,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "signatures": [
+                {
+                  "acl": null,
+                  "owner": null,
+                  "present": false,
+                  "signature": "private.weekly_source_authority_subset_v1(jsonb)",
+                  "definition_md5": null
+                },
+                {
+                  "acl": "{dee50tht=X/dee50tht}",
+                  "owner": "dee50tht",
+                  "present": true,
+                  "signature": "private.weekly_source_final_state_fingerprint_v1(jsonb)",
+                  "definition_md5": "3dc2b6a400d3668b2aa382c96f7ba1a3"
+                },
+                {
+                  "acl": null,
+                  "owner": null,
+                  "present": false,
+                  "signature": "private.weekly_source_final_value_vector_v1(jsonb)",
+                  "definition_md5": null
+                },
+                {
+                  "acl": null,
+                  "owner": null,
+                  "present": false,
+                  "signature": "private.weekly_source_invoice_economics_fingerprint_v1(jsonb,text,numeric)",
+                  "definition_md5": null
+                },
+                {
+                  "acl": null,
+                  "owner": null,
+                  "present": false,
+                  "signature": "private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)",
+                  "definition_md5": null
+                },
+                {
+                  "acl": null,
+                  "owner": null,
+                  "present": false,
+                  "signature": "private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)",
+                  "definition_md5": null
+                },
+                {
+                  "acl": "{dee50tht=X/dee50tht}",
+                  "owner": "dee50tht",
+                  "present": true,
+                  "signature": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+                  "definition_md5": "354b58a843b29b343dd68b62b1e05abd"
+                },
+                {
+                  "acl": "{dee50tht=X/dee50tht}",
+                  "owner": "dee50tht",
+                  "present": true,
+                  "signature": "private.weekly_source_sha256_text_v1(text,text)",
+                  "definition_md5": "1a8e435257287fa2a86204345ad0300d"
+                }
+              ]
+            }
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "current_definitions"
+        ],
+        "rows": [
+          {
+            "current_definitions": [
+              {
+                "signature": "private.weekly_source_final_state_fingerprint_v1(jsonb)",
+                "definition": "CREATE OR REPLACE FUNCTION private.weekly_source_final_state_fingerprint_v1(p_state jsonb)\n RETURNS bytea\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'private', 'pg_catalog', 'pg_temp'\nAS $function$\n  select private.weekly_source_sha256_jsonb_v1(\n    'WEEKLY_SOURCE_FINAL_STATE_V1',coalesce(p_state,'null'::jsonb)\n  );\n$function$\n"
+              },
+              {
+                "signature": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+                "definition": "CREATE OR REPLACE FUNCTION private.weekly_source_sha256_jsonb_v1(p_domain text, p_value jsonb)\n RETURNS bytea\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog', 'private', 'extensions', 'pg_temp'\nAS $function$\n  select private.weekly_source_sha256_text_v1(\n    p_domain,\n    coalesce(p_value,'null'::jsonb)::text\n  );\n$function$\n"
+              },
+              {
+                "signature": "private.weekly_source_sha256_text_v1(text,text)",
+                "definition": "CREATE OR REPLACE FUNCTION private.weekly_source_sha256_text_v1(p_domain text, p_value text)\n RETURNS bytea\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog', 'extensions', 'pg_temp'\nAS $function$\n  select extensions.digest(\n    pg_catalog.convert_to(\n      coalesce(p_domain,'') || pg_catalog.chr(31) || coalesce(p_value,''),\n      'UTF8'\n    ),\n    'sha256'\n  );\n$function$\n"
+              }
+            ]
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "jsonb_build_object"
+          ],
+          "rows": [
+            {
+              "jsonb_build_object": {
+                "signatures": [
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.weekly_source_authority_subset_v1(jsonb)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": "{dee50tht=X/dee50tht}",
+                    "owner": "dee50tht",
+                    "present": true,
+                    "signature": "private.weekly_source_final_state_fingerprint_v1(jsonb)",
+                    "definition_md5": "3dc2b6a400d3668b2aa382c96f7ba1a3"
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.weekly_source_final_value_vector_v1(jsonb)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.weekly_source_invoice_economics_fingerprint_v1(jsonb,text,numeric)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": "{dee50tht=X/dee50tht}",
+                    "owner": "dee50tht",
+                    "present": true,
+                    "signature": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+                    "definition_md5": "354b58a843b29b343dd68b62b1e05abd"
+                  },
+                  {
+                    "acl": "{dee50tht=X/dee50tht}",
+                    "owner": "dee50tht",
+                    "present": true,
+                    "signature": "private.weekly_source_sha256_text_v1(text,text)",
+                    "definition_md5": "1a8e435257287fa2a86204345ad0300d"
+                  }
+                ]
+              }
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+    ]
+  },
+  "trial": {
+    "accepted": true,
+    "databaseTarget": "agency_test",
+    "database": "cloudtms_test_clone",
+    "label": "HEALTHROSTER_F2_MAGNIT_COMPLETE_SCALAR",
+    "sqlSha256": "7d638672dd7f8f1ebd816c358ec987999825a5b866655969d91b2f68d3fe0c1d",
+    "statementCount": 28,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 8,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 9,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 10,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 11,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 12,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 13,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 14,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 15,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 16,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 17,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 18,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 19,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 20,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 21,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 22,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 23,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 24,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 25,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 26,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 27,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 28,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "result"
+        ],
+        "rows": [
+          {
+            "result": {
+              "result": "PASS_IF_REACHED",
+              "version": "HEALTHROSTER_F2_MAGNIT_SCALAR_V1",
+              "complete_verifier_blocks": 2
+            }
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "jsonb_build_object"
+          ],
+          "rows": [
+            {
+              "jsonb_build_object": {
+                "signatures": [
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.weekly_source_authority_subset_v1(jsonb)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": "{dee50tht=X/dee50tht}",
+                    "owner": "dee50tht",
+                    "present": true,
+                    "signature": "private.weekly_source_final_state_fingerprint_v1(jsonb)",
+                    "definition_md5": "3dc2b6a400d3668b2aa382c96f7ba1a3"
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.weekly_source_final_value_vector_v1(jsonb)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.weekly_source_invoice_economics_fingerprint_v1(jsonb,text,numeric)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.weekly_source_magnit_bucket_assert_v1(jsonb,jsonb)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": null,
+                    "owner": null,
+                    "present": false,
+                    "signature": "private.weekly_source_magnit_contract_price_assert_v1(jsonb,jsonb)",
+                    "definition_md5": null
+                  },
+                  {
+                    "acl": "{dee50tht=X/dee50tht}",
+                    "owner": "dee50tht",
+                    "present": true,
+                    "signature": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+                    "definition_md5": "354b58a843b29b343dd68b62b1e05abd"
+                  },
+                  {
+                    "acl": "{dee50tht=X/dee50tht}",
+                    "owner": "dee50tht",
+                    "present": true,
+                    "signature": "private.weekly_source_sha256_text_v1(text,text)",
+                    "definition_md5": "1a8e435257287fa2a86204345ad0300d"
+                  }
+                ]
+              }
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+    ]
+  },
+  "proof": {
+    "pass": true,
+    "baselineExactlyRestored": true
+  },
+  "sharedLock": {
+    "key": [
+      20261013,
+      1
+    ],
+    "turnBackendPid": 162405,
+    "session": 68074,
+    "released": true,
+    "processExitCode": 0
+  },
+  "scope": "Only eight complete scalar helper definitions, exact original private owner/ACL and entire original F2/Magnit DO blocks; no business fixture or external effect. Not full native integration/financial journey/current release contract or full-rehearsal approval.",
+  "install2": "NOT_INSTALLED"
+}
