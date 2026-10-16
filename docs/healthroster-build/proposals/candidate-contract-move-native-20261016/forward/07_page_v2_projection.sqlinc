@@ -44,4 +44,3 @@ begin
   return pg_catalog.jsonb_set(v_page,'{items}',v_items);
 end;
 $function$;
-

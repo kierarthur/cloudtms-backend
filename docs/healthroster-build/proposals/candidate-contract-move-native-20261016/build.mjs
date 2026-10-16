@@ -190,6 +190,5 @@ paperContext=replace(paperContext,"  const timesheet = await restOne(env, 'times
 paperContext=replace(paperContext,"`timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true`", "`timesheet_id=eq.${encodeURIComponent(id)}${move ? '' : '&is_current=eq.true'}`");
 fs.writeFileSync(path.join(here,'forward/11_broker_native_contexts.mjsinc'),managerResult+'\n\n'+paperContext+'\n');
 fs.writeFileSync(path.join(here,'BROKER_INPUT.json'),JSON.stringify({path:'broker/src/candidate-app-backend.js',sha256:hash(fs.readFileSync(path.join(root,'broker/src/candidate-app-backend.js'))),completeFunctions:['managerStartResult','candidatePaperPackContext'],import:'decodeCandidateContractMove from candidate-contract-move.mjs'},null,2)+'\n');
+for(const name of fs.readdirSync(path.join(here,'forward'))){const p=path.join(here,'forward',name);fs.writeFileSync(p,read(p).trimEnd()+'\n');}
 console.log(JSON.stringify({written:fs.readdirSync(path.join(here,'forward')),sourceOnly:true}));
-
-

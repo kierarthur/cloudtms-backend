@@ -136,4 +136,3 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
     state: execution.state, execution, complete, outbox
   };
 }
-

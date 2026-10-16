@@ -502,4 +502,3 @@ begin
   )||case when v_contract_move is null then '{}'::jsonb else jsonb_build_object('contract_move',v_contract_move->'dto') end;
 end;
 $function$;
-

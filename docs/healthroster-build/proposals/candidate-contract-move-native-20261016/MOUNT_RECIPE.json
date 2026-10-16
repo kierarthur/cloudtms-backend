@@ -194,8 +194,8 @@
     },
     {
       "path": "build.mjs",
-      "sha256": "df4ab43d46498ec21ca3a222a544b8131b18dcd81f962e8ba4a854dbd8e47d5f",
-      "bytes": 19774
+      "sha256": "de0b3c7e5d7c8f06166b3e5b79c35009ebdaa25d7cbd741483d43e0297d72483",
+      "bytes": 19917
     },
     {
       "path": "forward/00_evidence_seals.sqlinc",
@@ -209,8 +209,8 @@
     },
     {
       "path": "forward/02_scope_successor.sqlinc",
-      "sha256": "4a62ab7584d1ecc4469b828793fb3bbd0d324b5c269b9b8abfb30fc2117fa238",
-      "bytes": 9858
+      "sha256": "2d3eb8da4dcdf329225bb0f8eaa96dd4df8a9466304d0d52fc48ab88960c0cad",
+      "bytes": 9857
     },
     {
       "path": "forward/03_candidate_projection.sqlinc",
@@ -219,43 +219,43 @@
     },
     {
       "path": "forward/04_workflow_card_mapping.sqlinc",
-      "sha256": "616581bb2ab72a25eacc43e6a0ba2271876f7f1b6f9cacfcb9dc97c607fbbe81",
-      "bytes": 3691
+      "sha256": "80c1e9c8f88fdd2d0bd3e4d9e8f6fa3c6284b9f638e7aee0efde7032cd5d4238",
+      "bytes": 3690
     },
     {
       "path": "forward/05_detail_successor.sqlinc",
-      "sha256": "d8530fef4da7349aa7a0e09bb266fee93f5c3339a2f5846680dabf94ddf89fde",
-      "bytes": 28987
+      "sha256": "039cd2fdef8c82427816d965364fdbd85f553ec1a7d35b6c32d81989cc16bd04",
+      "bytes": 28986
     },
     {
       "path": "forward/06_page_successor.sqlinc",
-      "sha256": "10b7f9b435a104593ec254747aee2dfa26fffc6dddca0287eaa4a329a2c7ea41",
-      "bytes": 53451
+      "sha256": "10284ab645fc39e248a49c063f52f49da99211c5479714b933e1f1ec565e4ec7",
+      "bytes": 53450
     },
     {
       "path": "forward/07_page_v2_projection.sqlinc",
-      "sha256": "12c699813ea540ee8949694908cf4c932367d0ea862166d74bd6f9f719da94c7",
-      "bytes": 2139
+      "sha256": "57f8ff24290725fc22009350c7c272334a6a4488662b661fccfb99c83e5b4950",
+      "bytes": 2138
     },
     {
       "path": "forward/08_summary_touch_successor.sqlinc",
-      "sha256": "3183c508899483496047b8685cde4e1aab96c9aa77bf39cee8a536a4dc08326e",
-      "bytes": 2212
+      "sha256": "c6e768ca7a8def4175cde6d4df10b8ead6384506f3e8f3b18a93e7f1ccedea3c",
+      "bytes": 2211
     },
     {
       "path": "forward/09_manager_start_successor.sqlinc",
-      "sha256": "02e05673ac5278e1cdc89461ebbf02f4068b872892ecb2c9c6af5deb349c9de5",
-      "bytes": 245798
+      "sha256": "8dfc7344ed5940f49e16b350eb6c7831cd372d0b592ea7b6fadc853d7e92f6f1",
+      "bytes": 245797
     },
     {
       "path": "forward/10_workflow_revision_trigger_successor.sqlinc",
-      "sha256": "c9a1d86a72b5e55971a212eb715b64486750f76fc511967445ada24fef16f3c7",
-      "bytes": 2268
+      "sha256": "44182d1b337368617c875f5bd25c75b9aa4de5f63d15661790b7f51c055ac433",
+      "bytes": 2267
     },
     {
       "path": "forward/11_broker_native_contexts.mjsinc",
-      "sha256": "026f0662367b8fcd1a058580edd3842b5677f08b7cb43a4071b4fa251531011e",
-      "bytes": 6927
+      "sha256": "c0a4c3ef0f34c482ca943a71043daf0d48bfe641024da12678f740c367d28835",
+      "bytes": 6926
     },
     {
       "path": "forward/12_acceptance_summary_invalidation.sqlinc",

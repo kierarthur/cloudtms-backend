@@ -105,4 +105,3 @@ begin
  return result||jsonb_build_object('scope_sha256',encode(private.timesheet_contract_move_row_hash_v1(result),'hex'));
 end;
 $function$;
-
