@@ -1,0 +1,138 @@
+{
+  "version": "HEALTHROSTER_MANUAL_ENQUIRY_COMPONENT_SOURCE_V1",
+  "status": "SOURCE_COMPONENTS_IMPLEMENTED_NOT_MOUNTED_NATIVE_NOT_RUN",
+  "parentBackendCommit": "dae1e3362f09fccd672c59475db865413bcbc54d",
+  "parentOfficeCommit": "86a1d4cdf8db6f895f5b5636becd8cd0596cf4c2",
+  "sourceContract": {
+    "producerPath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/source-contact-producer-continuation-20261016/runtime/contact-manual-enquiry.d.ts",
+    "producerSha256": "d946b2a2ec0b68afc0941e7bd822cff313f860c505938d089690bf09dcc7c61e",
+    "producerStatus": "COMMISSIONED_WIP_NOT_PUBLISHED_NOT_NATIVE_PROOF"
+  },
+  "backendFiles": [
+    {
+      "file": "broker/src/weekly-source/contact-manual-enquiry-contract.mjs",
+      "sha256": "7a09db1979fb176f2c954aea6a5f2d097047f53523245cc16c4a9ba636afe0da"
+    },
+    {
+      "file": "tests/contact-manual-enquiry-contract.test.mjs",
+      "sha256": "12ad2493352402d5639b404cfb1d4fefe2f41d3e0631fc5e58dcfdc5a8df3974"
+    },
+    {
+      "file": "tests/fixtures/contact-manual-enquiry-contract-fixture.mjs",
+      "sha256": "d6361f267b4e79db52924dbc6aa4f3acefa522e2f26f3e755e7c5ea214d8310c"
+    }
+  ],
+  "officeFiles": [
+    {
+      "file": "js/contract-correction-v3.mjs",
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
+    },
+    {
+      "file": "js/weekly-source/contact-manual-enquiry-contract.mjs",
+      "sha256": "7a09db1979fb176f2c954aea6a5f2d097047f53523245cc16c4a9ba636afe0da"
+    },
+    {
+      "file": "js/weekly-source/contact-manual-enquiry-controls.mjs",
+      "sha256": "0cb763667200637db63c596018e3cedb20f279b909637ed87a8a572c366b78b2"
+    },
+    {
+      "file": "tests/unit/helpers/contact-manual-enquiry-fixture.mjs",
+      "sha256": "d6361f267b4e79db52924dbc6aa4f3acefa522e2f26f3e755e7c5ea214d8310c"
+    },
+    {
+      "file": "tests/unit/contact-manual-enquiry-controls.test.mjs",
+      "sha256": "2c9b2a01e71d8d29e6dc71c343599a23f13e7d1486d4dbe8832577b2282f22ab"
+    },
+    {
+      "file": "tests/ui/contact-manual-enquiry-local-browser.mjs",
+      "sha256": "cfa9a72d448126d944e38049bf5ff9ee509e381700a17e7cfdeddf324c22cc57"
+    },
+    {
+      "file": "css/weekly-source.css",
+      "sha256": "81d2e2120d60db10b51e27200fd0eb0c6094a4db4e08e60d1f146ed35d5cd97e"
+    }
+  ],
+  "canonicalSharedDecoder": {
+    "backend": "broker/src/contract-correction-v3.mjs",
+    "office": "js/contract-correction-v3.mjs",
+    "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087",
+    "byteIdentical": true,
+    "newPrivateVariant": false
+  },
+  "tests": {
+    "workerContract": {
+      "passed": 26,
+      "failed": 0
+    },
+    "officeController": {
+      "passed": 8,
+      "failed": 0
+    },
+    "browser": {
+      "scope": "LOCAL_ES_MODULE_COMPONENT_REAL_DOM_MOCK_COMMANDS_NOT_NATIVE_OR_INSTALLED_ACCEPTANCE",
+      "results": [
+        {
+          "viewport": {
+            "width": 1366,
+            "height": 900
+          },
+          "exact_confirmation_retry": true,
+          "stale_preview_removed": true,
+          "revision_strings": true,
+          "external_requests": 0,
+          "page_errors": 0
+        },
+        {
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "exact_confirmation_retry": true,
+          "stale_preview_removed": true,
+          "revision_strings": true,
+          "external_requests": 0,
+          "page_errors": 0
+        }
+      ],
+      "screenshots": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-office-13102026\\.codex-tmp\\contact-manual-enquiry-local-browser-20261016"
+    },
+    "browserStyling": "Actual saved modal stylesheet plus isolated local fixture shell; not full Office workspace/phone acceptance",
+    "visual": "Both390review and390currentrecord screenshots inspected; current record remains accessible in the existing bounded scroll table"
+  },
+  "semantics": [
+    "Every requested issue has exact scope/member coverage; groups partition only eligible issues",
+    "Manager route may be absent before real native ensure; actual worker question generation required",
+    "Manual model hash excludes future credential URL and is distinct from final native provider body hash",
+    "Aliases of one native logical member retain one saved ordinal",
+    "Canonical bigint strings and six-fraction UTC facts retain original bytes",
+    "Server-sampled cooldown_remaining_seconds is labelled At review; no browser clock authority",
+    "Unknown review/confirmation result retains exact original request; known stale refusal requires a new review",
+    "Original saved acknowledgement is queued intent only and does not claim provider acceptance",
+    "Read context is a distinct row property; original seven-field pause DTO retained",
+    "Hard prohibition absent in actual structured settings; real report cutoff is REPORT_ONLY"
+  ],
+  "mounted": {
+    "workerCommand": false,
+    "nativeSchema": false,
+    "combinedRead": false,
+    "officeParent": false,
+    "indexScript": false
+  },
+  "requiredNext": [
+    "Review complete commissioned native journals/helpers/preview/accept wrappers and actual refusal mapping",
+    "Mount genuine native producer/ACL and distinct row read under current Admin/contact guard only",
+    "Mount strict Worker commands and one actual existing More/parent caller with retained pending controllers",
+    "Rerun actual parent/actor/permission/browser and native business/restoration acceptance"
+  ],
+  "temporaryFolders": [
+    {
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026/.codex-tmp/contact-manual-enquiry-local-browser-20261016",
+      "purpose": "Local mocked-command browser screenshots/receipt; no private business data",
+      "deletionRefused": false
+    }
+  ],
+  "databaseCalls": 0,
+  "providerCalls": 0,
+  "deployments": 0,
+  "bankingMessages": 0
+}

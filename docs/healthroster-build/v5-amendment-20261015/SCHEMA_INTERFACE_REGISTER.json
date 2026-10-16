@@ -6286,5 +6286,21 @@
     "fetch_and_office_mount": "DEPENDENCY_HELD",
     "installed": false,
     "original_objects_and_statuses_unchanged": true
+  },
+  "manual_enquiry_source_continuation_20261016": {
+    "status": "SOURCE_COMPONENTS_IMPLEMENTED_NOT_MOUNTED_NATIVE_NOT_RUN",
+    "record": "docs/healthroster-build/v6-owner-delivery-20261016/MANUAL_ENQUIRY_COMPONENT_SOURCE.json",
+    "contracts": [
+      "CONTACT_MANUAL_ENQUIRY_ROW_V1",
+      "CONTACT_MANUAL_ENQUIRY_REVIEW_V1",
+      "CONTACT_MANUAL_ENQUIRY_RECEIPT_V1",
+      "CONTACT_CUTOFF_CLASSIFICATION_V1"
+    ],
+    "runtimeDecoder": {
+      "file": "broker/src/weekly-source/contact-manual-enquiry-contract.mjs",
+      "sha256": "7a09db1979fb176f2c954aea6a5f2d097047f53523245cc16c4a9ba636afe0da"
+    },
+    "nativeMount": "REQUIRED_NOT_RUN",
+    "historicalObjectsPreserved": true
   }
 }
