@@ -7,6 +7,7 @@ import { projectWeeklySourceC1ComponentEconomics, buildWeeklySourceC1Components 
   from '../../broker/src/banking-pay/weekly-source-c1-components.mjs';
 import { decodeSourceUnprotectReviewContext, normalizeSourceNativeCalculationContext }
   from '../../broker/src/weekly-source/source-native-contract.mjs';
+import { nativeSnapshotFixture,nativeSegmentFixture } from './helpers/source-native-snapshot-fixture.mjs';
 
 const id = n => `93000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const hash = 'a'.repeat(64);
@@ -26,15 +27,16 @@ function fixture(moved = false) {
     provider: { source_pay_method: 'PAYE', target_pay_method: 'PAYE', source_document_sha256: hash },
     source_expenses: [], next_source_segments: null };
   const schedule = [{ date: '2026-10-12', start: '09:00', end: '17:00', break_mins: 30, work_event_id: id(12), protected_target_state: 'WAIT' }];
-  const snapshot = { timesheet_id: current, timesheet_version: 1, candidate_id: id(10), client_id: id(11), pay_method: 'PAYE',
-    policy_snapshot_json: { calculation: 'native', tax: 'PAYE' }, rate_source_refs_json: { contract_id: contract },
-    hours_day: 7.5, pay_day: 12, charge_day: 20, total_pay_ex_vat: 90, total_charge_ex_vat: 150,
+  const snapshot = nativeSnapshotFixture({ timesheet_id: current, candidate_id: id(10), client_id: id(11),contract_id:contract,
+    policy:{ calculation:'native',tax:'PAYE' } },{
+    hours_day: 7.5,total_hours:7.5,pay_day: 12, charge_day: 20, total_pay_ex_vat: 96, total_charge_ex_vat: 160,margin_ex_vat:64,
     additional_units_json: { BONUS: { unit_count: '2.000000', pay_rate: '3.000000', charge_rate: '5.000000', pay_ex_vat: '6.00', charge_ex_vat: '10.00' } },
-    mileage_units: '0.000000', mileage_evidence_manifest: { immutable_document: id(15) }, expenses_pay_ex_vat: 0,
-    invoice_breakdown_json: { mode: 'SEGMENTS', segments: [{ date: '2026-10-12', segment_id: 'native-existing-segment',
-      segment_key: 'native-key', segment_stable_key: id(12), hours_day: 7.5, hours_night: 0, hours_sat: 0, hours_sun: 0, hours_bh: 0,
-      pay_amount: 90, charge_amount: 150, exclude_from_pay: false, weekly_protected_component_identity: { source_component_id: id(16) } }] } };
+    additional_pay_ex_vat:6,additional_charge_ex_vat:10,additional_margin_ex_vat:4,
+    mileage_units: 0, mileage_evidence_manifest: { immutable_document: id(15) }, expenses_pay_ex_vat: 0,
+    invoice_breakdown_json: { mode: 'SEGMENTS', segments: [nativeSegmentFixture(id(12))],
+      totals:{total_pay_ex_vat:96,total_charge_ex_vat:160,margin_ex_vat:64} } });
   return { context, schedule, calculation: { ok: true, snapshot }, sourceObservationSha256: hash,
+    contextSha256:hash,
     quantityPartition: [{ member_key: id(2), supported: { unit: 'MINUTE', quantity: '0' }, excluded: { unit: 'MINUTE', quantity: '450' } }],
     priorCommitmentCutSha256: 'd'.repeat(64) };
 }
@@ -53,10 +55,10 @@ test('Native JSON hashing rejects unsupported values instead of silently droppin
 });
 test('Newly authored numeric tokens do not normalize existing native receipt bytes or decimal money strings', async () => {
   const one = JSON.parse('{"value":1}');const scaled = JSON.parse('{"value":1.00}');
-  assert.equal(await hashSourceNativeJson('SOURCE_UNPROTECT_CALCULATION_POLICY_V1', one),
-    await hashSourceNativeJson('SOURCE_UNPROTECT_CALCULATION_POLICY_V1', scaled));
-  assert.notEqual(await hashSourceNativeJson('SOURCE_UNPROTECT_CALCULATION_POLICY_V1', { value: '1' }),
-    await hashSourceNativeJson('SOURCE_UNPROTECT_CALCULATION_POLICY_V1', { value: '1.00' }));
+  assert.equal(await hashSourceNativeJson('SOURCE_NEW_JSON_NUMERIC_FIXTURE_V1', one),
+    await hashSourceNativeJson('SOURCE_NEW_JSON_NUMERIC_FIXTURE_V1', scaled));
+  assert.notEqual(await hashSourceNativeJson('SOURCE_NEW_JSON_NUMERIC_FIXTURE_V1', { value: '1' }),
+    await hashSourceNativeJson('SOURCE_NEW_JSON_NUMERIC_FIXTURE_V1', { value: '1.00' }));
   // Exact known native JSONB textual bytes stay distinct. This is a byte
   // fixture, not a claim that PostgreSQL was executed by this unit test.
   for (const domain of ['WEEKLY_PROTECTED_LOCAL_RESULT_V1','SOURCE_NATIVE_COMPOSED_RESULT_V1','SOURCE_NATIVE_LOCAL_RECEIPT_ROW_V1']) {
@@ -90,11 +92,11 @@ test('Reviewed economics retain the complete native snapshot and all stable evid
   assert.equal(result.economic_target.root_timesheet_id, id(2));
   assert.equal(result.economic_target.tsfin_snapshot_json.timesheet_id, id(4));
   assert.equal(result.economic_target.accepted_placement_sha256, 'c'.repeat(64));
-  assert.equal(result.economic_target.tsfin_snapshot_json.invoice_breakdown_json.segments[0].weekly_protected_component_identity.source_component_id, id(16));
+  assert.equal(result.economic_target.tsfin_snapshot_json.invoice_breakdown_json.segments[0].weekly_protected_component_identity.work_event_id, id(12));
   for (const mutate of [v => { v.calculation.snapshot.pay_day = 12.01; }, v => { v.calculation.snapshot.additional_units_json.BONUS.unit_count = '3.000000'; },
     v => { v.calculation.snapshot.invoice_breakdown_json.segments[0].charge_amount = 151; }, v => { v.calculation.snapshot.mileage_evidence_manifest.immutable_document = id(18); },
     v => { v.quantityPartition[0].excluded.quantity = '449'; }, v => { v.context.provider.target_pay_method = 'UMBRELLA'; },
-    v => { v.context.current_entitlement.contract_record.rates_json.pay_day = '13.00'; }, v => { v.priorCommitmentCutSha256 = 'e'.repeat(64); }]) {
+    v => { v.context.current_entitlement.contract_record.rates_json.pay_day = '13.00';v.contextSha256='f'.repeat(64); }, v => { v.priorCommitmentCutSha256 = 'e'.repeat(64); }]) {
     const changed = fixture(true); mutate(changed);
     assert.notEqual((await buildSourceUnprotectEconomicTarget(changed)).economic_target_sha256, result.economic_target_sha256);
   }
@@ -103,6 +105,26 @@ test('New run/request transport identity does not change reviewed economics', as
   const one = fixture(); const two = fixture();
   one.context.orchestration_run_id = id(20); two.context.orchestration_run_id = id(21);
   assert.equal((await buildSourceUnprotectEconomicTarget(one)).economic_target_sha256, (await buildSourceUnprotectEconomicTarget(two)).economic_target_sha256);
+});
+
+test('new Source policy witness consumes only the genuine opaque server context and preserves native numeric byte domains',async()=>{
+  const serverHash=raw=>createHash('sha256').update(`SOURCE_UNPROTECT_NATIVE_CONTEXT_V1\x1f${raw}`).digest('hex');
+  // Exact byte fixtures model the existing server owner; PostgreSQL was not
+  // executed by this test. Both native source numerics parse to the same JS1.
+  const one=fixture();const scaled=fixture();
+  one.contextSha256=serverHash('{"policy": {"rate": 1}}');scaled.contextSha256=serverHash('{"policy": {"rate": 1.00}}');
+  assert.equal(JSON.parse('{"rate":1}').rate,JSON.parse('{"rate":1.00}').rate);
+  const a=await buildSourceUnprotectEconomicTarget(one);const b=await buildSourceUnprotectEconomicTarget(scaled);
+  assert.equal(a.calculation_policy_sha256,await hashSourceNativeJson('SOURCE_UNPROTECT_CALCULATION_POLICY_V1',{context_sha256:one.contextSha256}));
+  assert.notEqual(a.calculation_policy_sha256,b.calculation_policy_sha256);
+  const roundtrip=fixture();roundtrip.contextSha256=one.contextSha256;
+  roundtrip.context.current_entitlement.contract_record.native_numeric=JSON.parse('1.00');
+  assert.equal((await buildSourceUnprotectEconomicTarget(roundtrip)).calculation_policy_sha256,a.calculation_policy_sha256,
+    'raw Contract numeric tokens do not acquire a new JS hash domain');
+  for(const mutate of [f=>f.contextSha256='bad',f=>f.calculation.snapshot.policy_snapshot_json.tax='OTHER',
+    f=>f.calculation.snapshot.rate_source_refs_json.contract_id=id(99),f=>f.calculation.snapshot.timesheet_id=id(99)]){
+    const changed=fixture();mutate(changed);await assert.rejects(buildSourceUnprotectEconomicTarget(changed));
+  }
 });
 test('Missing prerequisite and an original-A snapshot cannot silently become a moved B target', async () => {
   const f = fixture(true); f.calculation.snapshot.timesheet_id = id(2);

@@ -285,8 +285,8 @@
         },
         {
           "path": "forward/22_full_native_payload_preparation.sqlinc",
-          "sha256": "56b11e9497b7940867a852ae72b2ea2221a5a4245689eb3d8dc40f8549ae11f4",
-          "bytes": 14135,
+          "sha256": "eb6deac3df606e6a56a95b0dfa8fe2635f127953f9c8079bcef7884e5747ebce",
+          "bytes": 14726,
           "packaging_statements": 4,
           "functions": [
             "public.weekly_source_pay_decision_unprotect_prepare_v1(p_request jsonb)"
@@ -413,8 +413,8 @@
         },
         {
           "path": "forward/35_native_preview_quote_registration.sqlinc",
-          "sha256": "ca0bad7ef3798a328665f6c7bfce9961a6e2001aa531c62424ca3af9fc41e082",
-          "bytes": 8249,
+          "sha256": "79388312c0e4fcc359ad7fb69b39a7d005e6ee61af65d979df3cbb0c3678916f",
+          "bytes": 8987,
           "packaging_statements": 4,
           "functions": [
             "public.weekly_source_pay_decision_preview_quote_v1(p_request jsonb)"
@@ -499,6 +499,15 @@
             "public.weekly_exceptional_pay_prepare_action_v1(p_request jsonb)",
             "private.weekly_source_protected_action_placement_assert_v1(p_request jsonb,p_placement jsonb)"
           ]
+        },
+        {
+          "path": "forward/44_strict_native_snapshot_validation.sqlinc",
+          "sha256": "f79ed9d89b6ad8295b9b25af58d54f21f0d3368d1443532523d576665cd27f15",
+          "bytes": 13972,
+          "packaging_statements": 2,
+          "functions": [
+            "private.weekly_source_pay_decision_native_snapshot_assert_v1(p_snapshot jsonb,p_facts jsonb)"
+          ]
         }
       ]
     },
@@ -556,13 +565,18 @@
     },
     {
       "path": "broker/src/weekly-source/source-native-economic.mjs",
-      "sha256": "0a4f573f5ff20024b8c64822a6fbad54ebada369f701ad8b9a13c33788027d35",
-      "bytes": 8498
+      "sha256": "da934f5a52cf5e8a073db70b3ccb79e38437d82f90fe4dd302fbfce493d54062",
+      "bytes": 8866
+    },
+    {
+      "path": "broker/src/weekly-source/source-native-snapshot.mjs",
+      "sha256": "8bc6d963837df988c32583730b155375a898df9b7e7e57e0413d47c7e2276f76",
+      "bytes": 9675
     },
     {
       "path": "broker/src/weekly-source/source-unprotect-worker.mjs",
-      "sha256": "79119506ea25acf118d072ab80f14af340554645347312512a6af57d13447376",
-      "bytes": 12411
+      "sha256": "28c6eb0d0260620babbb102e2bbb68279c6cbc74b318222a62294aea70c71f73",
+      "bytes": 12484
     },
     {
       "path": "broker/src/weekly-source/source-current-financial.mjs",
@@ -621,13 +635,28 @@
     },
     {
       "path": "tests/weekly-source/source-native-economic.test.mjs",
-      "sha256": "0df1b7d731ab124b1d40a7dd90c6911b8303c131572f69a3603679047c0e77b0",
-      "bytes": 11837
+      "sha256": "529144c267f5b60f754929fcb859fb29fcd9f94eafd1beacd6d486e8a755cad3",
+      "bytes": 13491
+    },
+    {
+      "path": "tests/weekly-source/source-native-snapshot.test.mjs",
+      "sha256": "db010e84fd88625a1d58f537cf2b7d67edebb9eaf7f3f9fd0da0b66c1424276e",
+      "bytes": 4993
+    },
+    {
+      "path": "tests/weekly-source/helpers/source-native-snapshot-fixture.mjs",
+      "sha256": "9eecfa24dcc0d5b4f10c79c04b2492e951ffca608dcd9a6718fa6c478a98e5b9",
+      "bytes": 1992
+    },
+    {
+      "path": "tests/weekly-source/protected-component-calculator-owner.test.mjs",
+      "sha256": "f6a90d175855be01b51fa53e9c7f5693ca54d98a7e2420e349e267915779a245",
+      "bytes": 8203
     },
     {
       "path": "tests/weekly-source/source-unprotect-worker.test.mjs",
-      "sha256": "8563f966968c147ac0ab32c22348da3ae5f967ebcc0199801b3a457115197181",
-      "bytes": 20252
+      "sha256": "1d2d0cc3d5bf72206757a298096c582e0e983fafd485560b2b71cc90bd09ed58",
+      "bytes": 20274
     },
     {
       "path": "tests/weekly-source/source-native-generators.test.mjs",
@@ -641,8 +670,8 @@
     },
     {
       "path": "tests/weekly-source/source-pay-decision-worker.test.mjs",
-      "sha256": "099df0cbe04a7e459af88d7ab0165d6fa49d4cb34b7e0c02e2a39b061ececdfc",
-      "bytes": 16931
+      "sha256": "df47674dba2d44fc1c08840a001474ead211ce4294e73d6ab4f7a46f04f4b164",
+      "bytes": 16933
     }
   ],
   "open_health_owners": [
@@ -651,6 +680,7 @@
     "Current-B NEXT wrapper/producer integration beyond actual current Local writer/context consumers",
     "Full current-B Source Local native writer/qualification effects and historical read qualification remain REQUIRED_NOT_RUN",
     "Actual Source binding/contact/canonical receipt orchestration is authored; native producer effects/qualification remain REQUIRED_NOT_RUN",
+    "Strict native quote snapshot/current policy/rate-ref validation and independently authored new Source policy witness are authored; PostgreSQL/native full acceptance REQUIRED_NOT_RUN",
     "Exact final B051 public READ_RESULT current-financial wrapper/child projection remains genuine producer dependency"
   ],
   "external_dependencies": [
@@ -721,7 +751,9 @@
       "Later B-to-C retains genuine accepted native Local B receipt via immutable stage/physical operation/member proof",
       "Fresh moved AMEND/WITHDRAW/RECONCILE/RECORD_NOT_WORKED uses actual physical family lock and immutable original family tuple",
       "Actual native action prepare before-state seals certified B; B-to-C before fresh native Local/NEXT stage refuses before first business write",
-      "Unmoved action before-state domain/bytes and immutable saved-prepare replay remain unchanged; first-APPROVE native prepare owner is separate"
+      "Unmoved action before-state domain/bytes and immutable saved-prepare replay remain unchanged; first-APPROVE native prepare owner is separate",
+      "Full actual native snapshot schema/current policy/rate refs and exact stable segment/identity/NEXT-preview children refuse missing/extra/wrong-type/foreign facts",
+      "New Source policy witness is independently authored in SQL from opaque actual context hash and compared to quote/economic witnesses; raw Contract numeric scale never roundtrips into JS hashing"
     ],
     "confirmation_preparation_recovery": [
       "Exact common confirmation context validates original nested browser body/actor/current scope/review/digest/prior/three hashes and immutable RESUME reason",
@@ -743,5 +775,15 @@
     "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087",
     "used_export": "validateAction",
     "state": "EXACT_PUBLISHED_DEPENDENCY_COPY_NO_COMPETING_BODY"
+  },
+  "current_snapshot_host": {
+    "source_commit": "459559aead8b07e1013ac7d3086a9d478a985f03",
+    "state": "SOURCE_PRESENT",
+    "option": "retain_protected_next_preview_facts: input.retainNextPreviewFacts===true",
+    "qualification": "NATIVE_RUNTIME_REQUIRED_NOT_RUN"
+  },
+  "native_snapshot_validation_receipt": {
+    "path": "NATIVE_SNAPSHOT_VALIDATOR_RECEIPT.json",
+    "sha256": "25db5e7a455887e4718d0271086e1d6cf27bef4f221b6d583866af0c70288683"
   }
 }

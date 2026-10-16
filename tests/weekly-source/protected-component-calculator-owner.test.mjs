@@ -5,11 +5,30 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import Module from 'node:module';
+import {execFileSync} from 'node:child_process';
 import { build } from 'esbuild';
 import { projectWeeklyProtectedComponentIdentity as project } from '../../broker/src/weekly-source/protected-component-identity.mjs';
+import { decodeSourceNativeCalculationSnapshot } from '../../broker/src/weekly-source/source-native-snapshot.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
-const source = await readFile(path.join(root, 'broker/src/index.js'), 'utf8');
+const savedSource = await readFile(path.join(root, 'broker/src/index.js'), 'utf8');
+// Root's actual published calculator has the retained NEXT-facts option. This
+// historical feature worktree host predates that owner. Execute its exact full
+// function in memory, retaining the real native helpers; never overwrite host.
+const publishedSource=execFileSync('git',['show','459559aead8b07e1013ac7d3086a9d478a985f03:broker/src/index.js'],
+ {cwd:root,encoding:'utf8',maxBuffer:24*1024*1024});
+for(const helper of ['weekly-rate-owner.js','protected-next-preview.mjs']){
+ const relative=`broker/src/weekly-source/${helper}`;
+ const published=execFileSync('git',['show',`459559aead8b07e1013ac7d3086a9d478a985f03:${relative}`],{cwd:root,encoding:'utf8'});
+ assert.equal(await readFile(path.join(root,relative),'utf8'),published,'actual native calculator helper must match the published producer');
+}
+const body=text=>{const start=text.indexOf('async function buildWeeklyScheduleSegmentsSnapshot(');
+ const end=text.indexOf('\nasync function rebuildFromExistingSegmentsEvidence(',start);
+ assert.ok(start>=0&&end>start);return text.slice(start,end);};
+let source=savedSource.replace(body(savedSource),body(publishedSource));
+if(!/\bimport\s*\{[^}]*\bretainWeeklyProtectedPreviewFacts\b[^}]*\}\s*from/.test(savedSource)){
+ source="import { retainWeeklyProtectedPreviewFacts } from './weekly-source/protected-next-preview.mjs';\n"+source;
+}
 const bundled = await build({ stdin: {
   contents: `${source}\nexport { buildWeeklyScheduleSegmentsSnapshot };`,
   resolveDir: path.join(root, 'broker/src'), sourcefile: 'identity-calculator-owner.js',
@@ -47,6 +66,8 @@ test('actual calculator preserves exact schedule ordinal through overnight and r
       { write_now: false, policy_override: policy, ignore_locked_segments_for_preview: true });
     assert.equal(raw.ok, true);
     const output = project({ calculation: raw, schedule, approvedComponents: [] });
+    assert.equal(decodeSourceNativeCalculationSnapshot(output.snapshot, { current: { root_timesheet_id: ts.timesheet_id,
+      timesheet: ts, candidate_id: contract.candidate_id, client_id: contract.client_id, contract_id: contract.id, policy } }), output.snapshot);
     const segments = output.snapshot.invoice_breakdown_json.segments;
     assert.equal(segments.length, schedule.length);
     const hours = segment => ['day', 'night', 'sat', 'sun', 'bh']
@@ -69,4 +90,22 @@ test('actual calculator preserves exact schedule ordinal through overnight and r
     assert(segments[4].hours_sat > 0);
     assert.deepEqual(output.snapshot.invoice_breakdown_json.totals, raw.snapshot.invoice_breakdown_json.totals);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('actual calculator emits closed NEXT preview facts and a genuine empty withdrawal snapshot',async()=>{
+  const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{throw new Error('NETWORK_FORBIDDEN_IN_CALCULATOR_PROOF');};
+  try{
+    const schedule=[{...shift(1,'2026-09-09','09:00','17:00',30),breaks:[{start:'12:00',end:'12:30'}]}];
+    const ts={timesheet_id:id(93),version:1,actual_schedule_json:schedule};
+    const current={root_timesheet_id:ts.timesheet_id,timesheet:ts,candidate_id:contract.candidate_id,client_id:contract.client_id,contract_id:contract.id,policy};
+    const raw=await calculate({},ts,{week_ending_date:'2026-09-13'},contract,{},
+      {write_now:false,policy_override:policy,ignore_locked_segments_for_preview:true,retain_protected_next_preview_facts:true});
+    assert.equal(decodeSourceNativeCalculationSnapshot(raw.snapshot,{current,nextRoute:true}),raw.snapshot);
+    assert.equal(raw.snapshot.invoice_breakdown_json.segments[0].work_event_id,schedule[0].work_event_id);
+    assert.equal(raw.snapshot.invoice_breakdown_json.segments[0].protected_next_preview.calculator_owner,'buildWeeklyScheduleSegmentsSnapshot');
+    const empty=await calculate({}, {...ts,actual_schedule_json:[]},{week_ending_date:'2026-09-13'},contract,{},
+      {write_now:false,policy_override:policy,ignore_locked_segments_for_preview:true});
+    assert.equal(decodeSourceNativeCalculationSnapshot(empty.snapshot,{current}),empty.snapshot);
+    assert.deepEqual(empty.snapshot.invoice_breakdown_json.segments,[]);
+  }finally{globalThis.fetch=originalFetch;}
 });

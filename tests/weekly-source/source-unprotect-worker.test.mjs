@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { calculateSourceUnprotectPreviewQuote, calculateSourceUnprotectAssemblyQuote, prepareSourcePayDecisionServiceRequest } from '../../broker/src/weekly-source/source-unprotect-worker.mjs';
 import { hashSourceNativeJson } from '../../broker/src/weekly-source/source-native-economic.mjs';
+import { nativeSnapshotFixture } from './helpers/source-native-snapshot-fixture.mjs';
 const id = n => `94000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const hash = 'a'.repeat(64);
 const expires = '2099-10-16T19:30:00Z';
@@ -35,9 +36,8 @@ function context() {
     current_entitlement: { timesheet, contract_record: contract, current_financial: financial, current_approval_work_id: null } };
 }
 function calculator(calls) { return async args => {
-  calls.push(['calculator', args]);return { ok: true, snapshot: { timesheet_id: args.context.root_timesheet_id, timesheet_version: 1,
-    candidate_id: id(9), client_id: id(10), policy_snapshot_json: {}, rate_source_refs_json: {},
-    additional_units_json: {}, expenses_pay_ex_vat: 0, invoice_breakdown_json: { mode: 'SEGMENTS', segments: [] } } };
+  calls.push(['calculator', args]);return { ok: true, snapshot: nativeSnapshotFixture({ timesheet_id: args.context.root_timesheet_id,
+    candidate_id:id(9),client_id:id(10),contract_id:args.context.contract_id,policy:args.context.policy }) };
 }; }
 function owner(calls, mutate = () => {}) { return async (fn, args) => {
   calls.push([fn, args]);
@@ -178,7 +178,7 @@ test('Changed full post-confirmation snapshot or cross-request reviewed quote st
         const result = await calculator(calls)(args);
         if (mutation === 'snapshot') result.snapshot.tax_or_other_complete_native_field = 'changed';
         return result;
-      } }), error => ['SOURCE_NATIVE_RESULT_INVALID','SOURCE_PAY_DECISION_REVIEW_CHANGED'].includes(error.code));
+      } }), error => ['SOURCE_NATIVE_RESULT_INVALID','SOURCE_PAY_DECISION_REVIEW_CHANGED','SOURCE_NATIVE_ECONOMIC_SNAPSHOT_INVALID'].includes(error.code));
     assert.equal(calls.some(([fn]) => fn === 'weekly_source_pay_decision_unprotect_prepare_v1'), false);
   }
 });

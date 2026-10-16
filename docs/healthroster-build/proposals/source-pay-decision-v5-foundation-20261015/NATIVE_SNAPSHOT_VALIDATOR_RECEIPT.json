@@ -1,0 +1,49 @@
+{
+  "version": "SOURCE_NATIVE_SNAPSHOT_VALIDATION_SOURCE_V1",
+  "producers": [
+    {
+      "commit": "a934ee1d460b444939234e812babccb90dc3ddff",
+      "source": "broker/src/index.js",
+      "complete_calculator_sha256": "e2f581794539af2456a464681fe6a1d58040496fda2016d2f7700fa38de0eaab",
+      "required_snapshot_keys": 48
+    },
+    {
+      "commit": "459559aead8b07e1013ac7d3086a9d478a985f03",
+      "source": "broker/src/index.js",
+      "complete_calculator_sha256": "e2f581794539af2456a464681fe6a1d58040496fda2016d2f7700fa38de0eaab",
+      "required_snapshot_keys": 48
+    }
+  ],
+  "helpers": [
+    {
+      "commit": "459559aead8b07e1013ac7d3086a9d478a985f03",
+      "source": "broker/src/weekly-source/weekly-rate-owner.js",
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "commit": "459559aead8b07e1013ac7d3086a9d478a985f03",
+      "source": "broker/src/weekly-source/protected-next-preview.mjs",
+      "sha256": "49ed6b5e24c1ebf6afd9dbada7de0d9d321c8297584491610353c1ee2a2bfc4a"
+    }
+  ],
+  "calculator_bodies_equal": true,
+  "output": "forward/44_strict_native_snapshot_validation.sqlinc",
+  "sha256": "f79ed9d89b6ad8295b9b25af58d54f21f0d3368d1443532523d576665cd27f15",
+  "current_host": {
+    "commit": "459559aead8b07e1013ac7d3086a9d478a985f03",
+    "state": "SOURCE_PRESENT",
+    "option": "retain_protected_next_preview_facts: input.retainNextPreviewFacts===true",
+    "qualification": "NATIVE_RUNTIME_REQUIRED_NOT_RUN"
+  },
+  "policy_witness": {
+    "domain": "SOURCE_UNPROTECT_CALCULATION_POLICY_V1",
+    "operand": {
+      "context_sha256": "opaque actual server SOURCE_UNPROTECT_NATIVE_CONTEXT_V1 hash"
+    },
+    "scope": "UNINSTALLED_INTERNAL_NEW_SOURCE_DOMAIN_SEMANTIC_CORRECTION",
+    "existing_native_policy_and_three_receipt_domains_changed": false,
+    "numeric_normalization": false,
+    "sql_independent_witness_owner": "forward/35_native_preview_quote_registration.sqlinc + forward/22_full_native_payload_preparation.sqlinc"
+  },
+  "qualification": "SOURCE_ONLY_POSTGRESQL_NATIVE_BANK_FULL_ACCEPTANCE_REQUIRED_NOT_RUN"
+}

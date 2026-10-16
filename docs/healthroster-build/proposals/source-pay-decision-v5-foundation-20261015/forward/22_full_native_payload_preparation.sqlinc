@@ -5,7 +5,7 @@ declare prep private.weekly_source_pay_decision_unprotect_preparations%rowtype;
  quote private.weekly_source_pay_decision_preview_quotes%rowtype;cut private.bpay_next_source_pay_decision_cut%rowtype;
  confirmation private.weekly_source_pay_decision_requests%rowtype;
  payload jsonb;facts jsonb;observation jsonb;validated jsonb;economic jsonb;quantities jsonb;components jsonb;
- context_hash bytea;payload_hash bytea;target_hash bytea;placement_hash bytea;actor uuid;native_request jsonb;
+ context_hash bytea;payload_hash bytea;target_hash bytea;placement_hash bytea;policy_hash bytea;actor uuid;native_request jsonb;
 begin
  if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
   raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
@@ -56,13 +56,17 @@ begin
    raise exception 'SOURCE_NATIVE_PREREQUISITE_NOT_PREPARED' using errcode='55000';end if;
   observation:=private.weekly_source_unprotect_source_observation_v1(prep.family_id,(facts->>'source_cycle_id')::uuid,(facts->>'work_event_id')::uuid,facts);
   context_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_NATIVE_CONTEXT_V1',facts);
+  policy_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_CALCULATION_POLICY_V1',jsonb_build_object('context_sha256',encode(context_hash,'hex')));
   placement_hash:=private.weekly_exceptional_hex_sha256_v1(facts#>>'{protected_current_placement,placement_certificate_sha256}');
   if context_hash is distinct from private.weekly_exceptional_hex_sha256_v1(quote.quote_json->>'context_sha256')
+   or quote.quote_json->>'calculation_policy_sha256' is distinct from encode(policy_hash,'hex')
+   or quote.quote_json#>>'{economic_target,policy_sha256}' is distinct from encode(policy_hash,'hex')
    or observation->>'source_observation_sha256' is distinct from quote.quote_json->>'source_observation_sha256'
    or facts->>'family_bound_version' is distinct from prep.family_bound_version::text then
    raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='P0001';end if;
   -- Run-bearing validation invokes the complete actual native preflight and
   -- returns before its first financial/control INSERT. No ensure fallback.
+  perform private.weekly_source_pay_decision_native_snapshot_assert_v1(quote.quote_json#>'{economic_target,tsfin_snapshot_json}',facts);
   if prep.route='NEXT' then
    native_request:=payload->'publish_request';
    validated:=private.weekly_source_pay_decision_native_next_payload_validate_v1(native_request,prep.id);
@@ -97,7 +101,8 @@ begin
   if jsonb_array_length(quantities)=0 then raise exception 'SOURCE_UNPROTECT_PREPARATION_INVALID' using errcode='23514';end if;
   -- The saved quote came from the same native calculator. Reconstruct ALL its
   -- economic fields from the admitted complete bundle + unchanged native facts,
-  -- retaining its reviewed policy hash bound by the exact current context hash.
+  -- retaining the new Source policy witness independently authored above from
+  -- the exact opaque current server context hash. Existing native hashes stay.
   economic:=jsonb_build_object('version','SOURCE_UNPROTECT_ECONOMIC_TARGET_V1','family_id',prep.family_id,
    'root_timesheet_id',facts->'root_timesheet_id','work_event_id',facts->'work_event_id',
    'accepted_placement_sha256',case when facts#>'{protected_current_placement,moved}'='true'::jsonb

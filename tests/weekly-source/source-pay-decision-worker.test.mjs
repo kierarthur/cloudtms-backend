@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {nativeSnapshotFixture} from './helpers/source-native-snapshot-fixture.mjs';
 import { previewSourcePayDecision,confirmSourcePayDecision,abandonSourcePayDecisionPreview,readSourcePayDecisionSource } from '../../broker/src/weekly-source/source-pay-decision-worker.mjs';
 import { decodeSourcePayDecisionReview,decodeSourcePayDecisionReceipt,decodeSourcePreviewBegin,decodeSourceInvoiceCertificate,decodeSourceQuantity,decodeSourcePayDecisionSourceRead } from '../../broker/src/weekly-source/source-pay-decision-contract.mjs';
 const id=n=>`98000000-0000-4000-8000-${String(n).padStart(12,'0')}`;const hash='a'.repeat(64);
@@ -115,8 +116,8 @@ test('Protected PREVIEW composes actual run-free calculation and quote before RE
   if(name==='weekly_source_pay_decision_preview_v1')return review();
   assert.fail('Unexpected native mutation '+name);
  };
- const calculateWeeklySnapshot=async args=>{calls.push(['calculator',args]);return {ok:true,snapshot:{timesheet_id:root,timesheet_version:1,candidate_id:id(5),client_id:id(6),
-  policy_snapshot_json:{},rate_source_refs_json:{},additional_units_json:{},expenses_pay_ex_vat:0,invoice_breakdown_json:{mode:'SEGMENTS',segments:[]}}};};
+ const calculateWeeklySnapshot=async args=>{calls.push(['calculator',args]);return {ok:true,snapshot:nativeSnapshotFixture({timesheet_id:root,candidate_id:id(5),client_id:id(6),
+  contract_id:args.context.contract_id,policy:args.context.policy})};};
  assert.deepEqual(await previewSourcePayDecision({request:preview(),actorUserId:actor,dataRpc,calculateWeeklySnapshot}),review());
  assert.deepEqual(calls.map(x=>x[0]),['weekly_source_pay_decision_preview_begin_v1','weekly_source_pay_decision_preview_quote_context_v1','calculator',
   'weekly_source_pay_decision_preview_quote_v1','weekly_source_pay_decision_preview_ready_v1','weekly_source_pay_decision_preview_v1']);

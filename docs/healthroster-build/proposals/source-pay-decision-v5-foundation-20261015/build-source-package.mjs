@@ -67,7 +67,8 @@ const stages = [
     'forward/40_actual_publication_and_source_binding.sqlinc',
     'forward/41_atomic_source_acceptance.sqlinc',
     'forward/42_native_contact_reimport_match.sqlinc',
-    'forward/43_current_native_action_preparation.sqlinc'] },
+    'forward/43_current_native_action_preparation.sqlinc',
+    'forward/44_strict_native_snapshot_validation.sqlinc'] },
   { id: 'CURRENT_NATIVE_ENTRY_FENCES', requires: [
     'private.bpay_next_source_decision_native_status_v1(uuid,uuid,uuid)',
     'Complete current native bodies pinned by NATIVE_ENTRY_RECEIPT.json; root final owner composition'], files: [
@@ -89,6 +90,7 @@ const manifest = {
     'Current-B NEXT wrapper/producer integration beyond actual current Local writer/context consumers',
     'Full current-B Source Local native writer/qualification effects and historical read qualification remain REQUIRED_NOT_RUN',
     'Actual Source binding/contact/canonical receipt orchestration is authored; native producer effects/qualification remain REQUIRED_NOT_RUN',
+    'Strict native quote snapshot/current policy/rate-ref validation and independently authored new Source policy witness are authored; PostgreSQL/native full acceptance REQUIRED_NOT_RUN',
     'Exact final B051 public READ_RESULT current-financial wrapper/child projection remains genuine producer dependency',
   ],
   external_dependencies: [
@@ -120,6 +122,8 @@ const manifest = {
     'Fresh moved AMEND/WITHDRAW/RECONCILE/RECORD_NOT_WORKED uses actual physical family lock and immutable original family tuple',
     'Actual native action prepare before-state seals certified B; B-to-C before fresh native Local/NEXT stage refuses before first business write',
     'Unmoved action before-state domain/bytes and immutable saved-prepare replay remain unchanged; first-APPROVE native prepare owner is separate',
+    'Full actual native snapshot schema/current policy/rate refs and exact stable segment/identity/NEXT-preview children refuse missing/extra/wrong-type/foreign facts',
+    'New Source policy witness is independently authored in SQL from opaque actual context hash and compared to quote/economic witnesses; raw Contract numeric scale never roundtrips into JS hashing',
   ], confirmation_preparation_recovery: [
     'Exact common confirmation context validates original nested browser body/actor/current scope/review/digest/prior/three hashes and immutable RESUME reason',
     'Context allocates no journal/run/preparation/native financial rows; positive/no-active-protection required set is genuinely empty',
@@ -135,6 +139,10 @@ const manifest = {
     source: 'docs/healthroster-build/proposals/checklist-v6-contract-correction-20261016/forward/contracts/contract-correction-v3.mjs',
     mount: 'broker/src/contract-correction-v3.mjs', sha256: '57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087',
     used_export: 'validateAction', state: 'EXACT_PUBLISHED_DEPENDENCY_COPY_NO_COMPETING_BODY' },
+  current_snapshot_host: { source_commit:'459559aead8b07e1013ac7d3086a9d478a985f03',state:'SOURCE_PRESENT',
+    option:'retain_protected_next_preview_facts: input.retainNextPreviewFacts===true',qualification:'NATIVE_RUNTIME_REQUIRED_NOT_RUN' },
+  native_snapshot_validation_receipt:{path:'NATIVE_SNAPSHOT_VALIDATOR_RECEIPT.json',
+    sha256:sha(readFileSync(path.join(base,'NATIVE_SNAPSHOT_VALIDATOR_RECEIPT.json'),'utf8'))},
 };
 const declarations = new Set();
 for (const stage of stages) {
@@ -161,6 +169,7 @@ for (const relative of [
   'broker/src/weekly-source/source-pay-decision-request.mjs',
   'broker/src/weekly-source/source-pay-decision-preparation.mjs',
   'broker/src/weekly-source/source-native-economic.mjs',
+  'broker/src/weekly-source/source-native-snapshot.mjs',
   'broker/src/weekly-source/source-unprotect-worker.mjs',
   'broker/src/weekly-source/source-current-financial.mjs',
   'broker/src/contract-correction-v3.mjs',
@@ -174,6 +183,9 @@ for (const relative of [
   'tests/weekly-source/source-protected-placement.test.mjs',
   'tests/weekly-source/source-native-package.test.mjs',
   'tests/weekly-source/source-native-economic.test.mjs',
+  'tests/weekly-source/source-native-snapshot.test.mjs',
+  'tests/weekly-source/helpers/source-native-snapshot-fixture.mjs',
+  'tests/weekly-source/protected-component-calculator-owner.test.mjs',
   'tests/weekly-source/source-unprotect-worker.test.mjs',
   'tests/weekly-source/source-native-generators.test.mjs',
   'tests/weekly-source/source-current-financial.test.mjs',

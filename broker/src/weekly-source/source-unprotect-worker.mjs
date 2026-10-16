@@ -63,7 +63,7 @@ export async function calculateSourceUnprotectPreviewQuote({ reviewContext, quan
   if (typeof calculateWeeklySnapshot !== 'function') fail('SOURCE_UNPROTECT_DEPENDENCIES_REQUIRED');
   const { target, calculation } = await calculate(reviewed.context, calculateWeeklySnapshot);
   const economics = await buildSourceUnprotectEconomicTarget({ context: reviewed.context, calculation, schedule: target.segments,
-    sourceObservationSha256: reviewed.source_observation_sha256, quantityPartition, priorCommitmentCutSha256 });
+    sourceObservationSha256: reviewed.source_observation_sha256, quantityPartition, priorCommitmentCutSha256,contextSha256:reviewed.context_sha256 });
   return Object.freeze({ member_key: reviewed.member_key, context_sha256: reviewed.context_sha256,
     source_observation_sha256: reviewed.source_observation_sha256, calculation_owner: 'buildWeeklyScheduleSegmentsSnapshot',
     calculation_policy_sha256: economics.calculation_policy_sha256, economic_target: economics.economic_target,
@@ -128,7 +128,7 @@ export async function prepareSourcePayDecisionServiceRequest({ request, actorUse
     const { target, calculation } = await calculate(context, owner.calculateWeeklySnapshot);
     const economics = await buildSourceUnprotectEconomicTarget({ context, calculation, schedule: target.segments,
       quantityPartition: quote.quantity_partition, priorCommitmentCutSha256: quote.prior_commitment_cut_sha256,
-      sourceObservationSha256: quote.source_observation_sha256 });
+      sourceObservationSha256: quote.source_observation_sha256,contextSha256:quote.context_sha256 });
     if (economics.economic_target_sha256 !== quote.economic_target_sha256) fail('SOURCE_PAY_DECISION_REVIEW_CHANGED');
     const currentFinancialSource = member.route === 'NEXT' ? null : await loadWeeklyProtectedCurrentFinancialSource({ context,
       actorUserId, dataRpc: owner.dataRpc });

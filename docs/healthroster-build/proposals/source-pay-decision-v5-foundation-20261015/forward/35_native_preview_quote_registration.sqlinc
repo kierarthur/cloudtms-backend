@@ -1,7 +1,7 @@
 create or replace function public.weekly_source_pay_decision_preview_quote_v1(p_request jsonb)
 returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms' as $function$
 declare actor uuid;a private.weekly_source_pay_decision_preview_assemblies%rowtype;q private.weekly_source_pay_decision_preview_quotes%rowtype;
- quote jsonb;economic jsonb;operands jsonb;facts jsonb;manifest jsonb;quote_hash bytea;economic_hash bytea;target jsonb;component jsonb;keys text[];
+ quote jsonb;economic jsonb;operands jsonb;facts jsonb;manifest jsonb;quote_hash bytea;economic_hash bytea;context_hash bytea;policy_hash bytea;target jsonb;component jsonb;keys text[];
 begin
  if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
   raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
@@ -57,6 +57,14 @@ begin
    or economic#>>'{tsfin_snapshot_json,invoice_breakdown_json,mode}' is distinct from 'SEGMENTS'
    or jsonb_typeof(economic#>'{tsfin_snapshot_json,invoice_breakdown_json,segments}') is distinct from 'array'
    or octet_length(convert_to(quote::text,'UTF8'))>2097152 then
+   raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
+  perform private.weekly_source_pay_decision_native_snapshot_assert_v1(economic->'tsfin_snapshot_json',facts);
+  context_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_NATIVE_CONTEXT_V1',facts);
+  policy_hash:=private.weekly_source_sha256_jsonb_v1('SOURCE_UNPROTECT_CALCULATION_POLICY_V1',
+    jsonb_build_object('context_sha256',encode(context_hash,'hex')));
+  if quote->>'context_sha256' is distinct from encode(context_hash,'hex')
+   or quote->>'calculation_policy_sha256' is distinct from encode(policy_hash,'hex')
+   or economic->>'policy_sha256' is distinct from encode(policy_hash,'hex') then
    raise exception 'SOURCE_PAY_DECISION_REVIEW_CHANGED' using errcode='40001';end if;
   -- Existing pure native manifest validates complete source/protection schedule
   -- and actual calculator segment identity, with current B financial target.

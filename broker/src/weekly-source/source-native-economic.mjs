@@ -1,6 +1,7 @@
 import { projectWeeklySourceC1ComponentEconomics } from '../banking-pay/weekly-source-c1-components.mjs';
 import { decodeSourceProtectedCurrentPlacement, sourceNativeClosed } from './source-native-contract.mjs';
 import { buildWeeklyProtectedNextTarget } from './protected-next-preview.mjs';
+import { decodeSourceNativeCalculationSnapshot } from './source-native-snapshot.mjs';
 
 const encoder = new TextEncoder();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -92,10 +93,10 @@ export function sourceProtectedCalculationContext(context) {
 }
 
 export async function buildSourceUnprotectEconomicTarget({ context, calculation, schedule, sourceObservationSha256,
-  quantityPartition, priorCommitmentCutSha256 }) {
+  quantityPartition, priorCommitmentCutSha256, contextSha256 }) {
   object(context); object(calculation);
   if (context.action !== 'WITHDRAW' || !UUID.test(context.work_event_id) || !HASH.test(sourceObservationSha256)
-      || !HASH.test(priorCommitmentCutSha256) || !Array.isArray(schedule) || !Array.isArray(quantityPartition)
+      || !HASH.test(priorCommitmentCutSha256) || !HASH.test(contextSha256) || !Array.isArray(schedule) || !Array.isArray(quantityPartition)
       || quantityPartition.length > 1000) fail('SOURCE_NATIVE_ECONOMIC_CONTEXT_INVALID');
   const placement = decodeSourceProtectedCurrentPlacement(context.protected_current_placement, { family_id: context.family_id,
     original_root_timesheet_id: context.root_timesheet_id });
@@ -107,10 +108,11 @@ export async function buildSourceUnprotectEconomicTarget({ context, calculation,
       || snapshot.invoice_breakdown_json?.mode !== 'SEGMENTS' || !Array.isArray(snapshot.invoice_breakdown_json.segments)) {
     fail('SOURCE_NATIVE_ECONOMIC_SNAPSHOT_INVALID');
   }
-  const policySha256 = await hashSourceNativeJson('SOURCE_UNPROTECT_CALCULATION_POLICY_V1', {
-    policy: snapshot.policy_snapshot_json, rate_source_refs: snapshot.rate_source_refs_json,
-    contract_record: current.contract_record,
-  });
+  decodeSourceNativeCalculationSnapshot(snapshot,{current,nextRoute:context.next_source_segments !== null});
+  // This NEW Source witness consumes the genuine opaque server context hash.
+  // Full current policy/rate refs are independently bound above/by SQL. Native
+  // policy/receipt domains retain their original bytes, including numeric scale.
+  const policySha256 = await hashSourceNativeJson('SOURCE_UNPROTECT_CALCULATION_POLICY_V1', { context_sha256: contextSha256 });
   const components = context.next_source_segments === null
     ? projectWeeklySourceC1ComponentEconomics({ root_timesheet_id: placement.current_timesheet_id,
       financial_snapshot: snapshot, expenses: context.source_expenses })
