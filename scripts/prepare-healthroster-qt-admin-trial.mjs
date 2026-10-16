@@ -13,10 +13,13 @@ const roundArgs = process.argv.slice(2).filter(value => value.startsWith('--roun
 assert(roundArgs.length <= 1 && roundArgs.every(value => /^--round=[1-3]$/.test(value)), 'invalid trial round');
 const round = Number(roundArgs[0]?.slice('--round='.length) || '1');
 const dispatch = process.argv.includes('--dispatch');
-const contact = dispatch || process.argv.includes('--contact');
+const globalTiming = process.argv.includes('--global-timing');
+const contact = dispatch || globalTiming || process.argv.includes('--contact');
 const calendar = contact || process.argv.includes('--calendar');
-assert(process.argv.slice(2).every(value => ['--calendar','--contact','--dispatch'].includes(value) || /^--round=[1-3]$/.test(value)), 'unknown trial option');
-const output = path.resolve(root, dispatch ? '.codex-tmp/push-dispatch-consume-native-20261016'
+assert(!(globalTiming && dispatch), 'distinct bounded trial scopes required');
+assert(process.argv.slice(2).every(value => ['--calendar','--contact','--dispatch','--global-timing'].includes(value) || /^--round=[1-3]$/.test(value)), 'unknown trial option');
+const output = path.resolve(root, globalTiming ? '.codex-tmp/global-contact-timing-native-20261016'
+  : dispatch ? '.codex-tmp/push-dispatch-consume-native-20261016'
   : contact ? '.codex-tmp/contact-pause-native-20261016'
   : calendar ? '.codex-tmp/qt-calendar-native-20261016' : '.codex-tmp/qt-admin-native-20261016') + (round > 1 ? `-r${round}` : '');
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -25,6 +28,7 @@ const sources = [
   'supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql',
   'tests/weekly-source/push-timing-admin-native.sql'
 ];
+if (globalTiming) sources.unshift('supabase/migrations/13102026_1456_weekly_source_protection_query_support_v1.sql');
 if (calendar) sources.push('supabase/repeatable/15102026_0801_candidate_push_calendar_v1.sql',
   'tests/weekly-source/push-timing-calendar-native.sql');
 if (contact) sources.push('supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql',
@@ -34,6 +38,9 @@ if (dispatch) sources.push('supabase/migrations/16102026_0135_weekly_contact_nat
   'supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql',
   'supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql',
   'tests/weekly-source/push-dispatch-consume-native.sql');
+if (globalTiming) sources.push('supabase/migrations/16102026_0244_weekly_contact_global_timing_schema.sql',
+  'supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc',
+  'tests/weekly-source/global-contact-timing-native.sql');
 const sha = value => createHash('sha256').update(value).digest('hex');
 const functions = [
   'private.weekly_contact_assert_closed_v1(jsonb,text[],text[],text)',
@@ -60,8 +67,11 @@ if (dispatch) functions.push('private.weekly_contact_push_dispatch_context_v1(uu
   'private.weekly_contact_push_calendar_witness_v1(jsonb,jsonb,timestamp with time zone)',
   'public.candidate_push_timing_for_dispatch_v1(jsonb)', 'public.weekly_contact_submission_consume_v1(jsonb)',
   'private.weekly_contact_source_result_v1(uuid,text,text,jsonb,jsonb)');
+if (globalTiming) functions.push('private.weekly_source_manager_interval_valid_v1(integer,text,boolean)',
+  'private.weekly_source_manager_followups_valid_v1(jsonb)','private.weekly_source_global_settings_receipt_guard_v1()');
 const contactTables = contact ? ['weekly_contact_pause_scopes','weekly_contact_pause_commands','weekly_contact_pause_events',
   'weekly_contact_submission_permits','weekly_contact_delivery_memberships','weekly_contact_recheck_tasks'] : [];
+if (globalTiming) contactTables.push('weekly_source_global_settings_receipts');
 const contactAbsence = contactTables.map(name => `to_regclass('public.${name}') is null`).join(' and ');
 const dispatchAbsence = dispatch ? " and not exists(select 1 from public.weekly_source_groups where id='f7160000-0000-4000-8000-000000000300' or code='HR_QT_DISPATCH_ROLLBACK') and not exists(select 1 from public.weekly_source_cycles where id='f7160000-0000-4000-8000-000000000301') and not exists(select 1 from public.candidate_app_accounts where id='f7160000-0000-4000-8000-000000000305' or email_normalized='healthroster-qt-dispatch@example.invalid') and not exists(select 1 from public.candidate_app_global_membership_links where membership_id='f7160000-0000-4000-8000-000000000306') and not exists(select 1 from public.candidate_notifications where candidate_id='f7160000-0000-4000-8000-000000000010')" : '';
 const names = functions.map(value => `'${value}'`).join(',');
@@ -71,6 +81,15 @@ const frame = `select jsonb_build_object(
  'functions_absent',not exists(select 1 from unnest(array[${names}]) n where to_regprocedure(n) is not null),
  'fixture_absent',not exists(select 1 from public.tms_users where id='f7160000-0000-4000-8000-000000000001' or email='healthroster-qt-rollback-only@example.invalid')${calendar ? " and not exists(select 1 from public.candidates where id='f7160000-0000-4000-8000-000000000010' or email='healthroster-qt-calendar@example.invalid' or key_norm='HR_QT_CALENDAR_ROLLBACK') and not exists(select 1 from public.clients where id='f7160000-0000-4000-8000-000000000011') and not exists(select 1 from public.client_settings where client_id='f7160000-0000-4000-8000-000000000011')" : ''},
  'dispatch_fixture_absent',true${dispatchAbsence},
+ ${globalTiming ? `'global_settings_row',(select md5(to_jsonb(s)::text) from public.weekly_source_global_settings s where singleton),
+ 'global_relations',(select md5(string_agg(x,'|' order by x)) from (
+  select c.relname||':'||a.attname||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull::text x
+   from pg_class c join pg_namespace n on n.oid=c.relnamespace join pg_attribute a on a.attrelid=c.oid
+   where n.nspname='public' and c.relname in('weekly_source_global_settings','weekly_manager_cohort_due_events') and a.attnum>0 and not a.attisdropped
+  union all select c.relname||':'||k.conname||':'||pg_get_constraintdef(k.oid,true) from pg_class c join pg_namespace n on n.oid=c.relnamespace join pg_constraint k on k.conrelid=c.oid
+   where n.nspname='public' and c.relname in('weekly_source_global_settings','weekly_manager_cohort_due_events'))f),
+ 'global_owners',(select md5(string_agg(pg_get_functiondef(p.oid),'|' order by p.proname)) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='public' and p.proname in('weekly_source_global_settings_get_v1','weekly_source_global_settings_save_atomic_v1')),` : ''}
  'legacy_one',exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1),
  'migration_ledger',(select md5(coalesce(string_agg(to_jsonb(t)::text,'|' order by to_jsonb(t)::text),'')) from private.cloudtms_migration_ledger t),
  'repeatable_ledger',(select md5(coalesce(string_agg(to_jsonb(t)::text,'|' order by to_jsonb(t)::text),'')) from private.cloudtms_repeatable_ledger t));\n`;
@@ -103,7 +122,9 @@ const manifest = {
   source_commit: sourceCommit, round, sources: pins, sql_bytes: Buffer.byteLength(sql), sql_sha256: sha(sql),
   statements: scanManagedSql(sql).statements.length, fingerprint_sha256: sha(frame),
   account: 'kier@arthur-rai.co.uk', native_server: 'cloudtms-miget-operations-kier-codex', database: 'agency_test',
-  scope: dispatch
+  scope: globalTiming
+    ? 'Actual global singleton GET/save CAS/immutable receipt/137-11 preservation/large string revisions/admin replay loss/RLS and ACL, after complete QT/calendar/pause control prerequisites. Native manager generation/scheduler/follow-up/common START/Office API/UI/races/full release NOT_RUN.'
+    : dispatch
     ? 'QT/pause prerequisites plus saved-target advisory and already-admitted synthetic native-attempt consume/permit-result constructor only; original START/claim/native result/membership-budget/race/producer/API/full-release acceptance NOT_RUN'
     : contact
     ? 'QT/calendar plus actual pause GET/PAUSE/RESUME control and empty permit stores only; no dispatch/START/consume/send, race, configured bootstrap or full-release acceptance'

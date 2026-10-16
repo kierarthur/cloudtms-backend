@@ -44,7 +44,8 @@ begin
         'candidate_cohort_id',cohort.id,
         'candidate_generation_id',cohort.current_generation_id,
         'incident_id',incident.id,
-        'comparison_revision_id',incident.current_comparison_revision_id
+        'comparison_revision_id',incident.current_comparison_revision_id,
+        'initial_purpose',private.weekly_source_manager_initial_purpose_v1(incident.id,activation.route_mode)
       ) order by private.weekly_source_query_ascii_fold_v1(client.name) collate "C",
                  client.id::text collate "C",
                  private.weekly_source_query_ascii_fold_v1(coalesce(
@@ -232,18 +233,20 @@ begin
 
   select * into strict v_settings from public.weekly_source_global_settings where singleton;
   for v_row in
-    select distinct membership.candidate_cohort_id,activation.route_mode
+    select distinct membership.candidate_cohort_id,cohort.client_id,
+      private.weekly_source_manager_initial_purpose_v1(membership.incident_id,activation.route_mode) as route_mode
     from public.weekly_manager_recipient_memberships membership
     join public.weekly_route_activations activation on activation.id=membership.route_activation_id
+    join public.weekly_candidate_cohorts cohort on cohort.id=membership.candidate_cohort_id
     where membership.recipient_generation_id=v_new.id
-    order by membership.candidate_cohort_id
+    order by membership.candidate_cohort_id,route_mode
   loop
     v_candidate_generation.id:=null;
     v_candidate_generation.started_at_utc:=null;
     v_candidate_generation.deadline_at_utc:=null;
     if v_row.route_mode='MANAGER_DIRECT' then
       v_event_kind:='EARLY_ALL';
-      v_due:=p_started_at_utc;
+      v_due:=private.weekly_source_manager_interval_due_v1(v_row.client_id,p_started_at_utc,v_settings.manager_first_delay_value,v_settings.manager_first_delay_unit);
     else
       select * into v_candidate_generation
       from public.weekly_candidate_outreach_generations
@@ -255,10 +258,10 @@ begin
       v_due:=v_candidate_generation.started_at_utc+v_settings.manager_partial_digest_after;
     end if;
     v_trigger_hash:=private.weekly_source_sha256_jsonb_v1(
-      'WEEKLY_MANAGER_COHORT_DUE_V1',
+      'WEEKLY_MANAGER_INITIAL_PURPOSE_DUE_V1',
       pg_catalog.jsonb_build_object(
         'recipient_generation_id',v_new.id,'candidate_cohort_id',v_row.candidate_cohort_id,
-        'event_kind',v_event_kind,'due_at_utc',v_due
+        'event_kind',v_event_kind,'due_at_utc',to_char(v_due at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'initial_purpose',v_row.route_mode
       )
     );
     insert into public.weekly_manager_cohort_due_events(
@@ -272,10 +275,10 @@ begin
       v_event_kind:='T12_REMAINDER';
       v_due:=v_candidate_generation.deadline_at_utc;
       v_trigger_hash:=private.weekly_source_sha256_jsonb_v1(
-        'WEEKLY_MANAGER_COHORT_DUE_V1',
+        'WEEKLY_MANAGER_INITIAL_PURPOSE_DUE_V1',
         pg_catalog.jsonb_build_object(
           'recipient_generation_id',v_new.id,'candidate_cohort_id',v_row.candidate_cohort_id,
-          'event_kind',v_event_kind,'due_at_utc',v_due
+          'event_kind',v_event_kind,'due_at_utc',to_char(v_due at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'initial_purpose',v_row.route_mode
         )
       );
       insert into public.weekly_manager_cohort_due_events(

@@ -1,129 +1,110 @@
--- Complete current global owners; absent optional key preserves configured actor.
-create or replace function public.weekly_source_global_settings_get_v1(
-  p_request jsonb
-) returns jsonb
-language plpgsql
-stable
-security definer
-set search_path to 'pg_catalog','pg_temp'
+-- Existing global settings singleton/GET/save are the sole authority.
+create or replace function public.weekly_source_global_settings_get_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','private','pg_temp'
 as $function$
-declare
-  v_actor uuid;
-  v_agency uuid;
-  v_settings public.weekly_source_global_settings%rowtype;
+declare actor uuid;agency uuid;s public.weekly_source_global_settings%rowtype;
 begin
-  perform private._weekly_source_settings_assert_request_v1(
-    p_request,array['actor_user_id','agency_id','environment'],
-    'WEEKLY_SOURCE_GLOBAL_SETTINGS_GET_REQUEST_INVALID'
-  );
-  begin
-    v_actor:=(p_request->>'actor_user_id')::uuid;
-    v_agency:=(p_request->>'agency_id')::uuid;
-  exception when others then
-    raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_GET_REQUEST_INVALID' using errcode='22023';
-  end;
-  perform private._weekly_source_settings_require_admin_v1(v_actor);
-  perform private._weekly_source_settings_deployment_v1(v_agency,p_request->>'environment');
-  select * into strict v_settings from public.weekly_source_global_settings where singleton;
-  return pg_catalog.jsonb_build_object(
-    'ok',true,'settings_version',v_settings.version,
-    'settings',pg_catalog.jsonb_build_object(
-      'candidate_reminder_minutes',extract(epoch from v_settings.candidate_reminder_after)::bigint/60,
-      'candidate_response_deadline_minutes',extract(epoch from v_settings.candidate_response_deadline_after)::bigint/60,
-      'manager_digest_minutes',extract(epoch from v_settings.manager_partial_digest_after)::bigint/60,
-      'manager_manual_resend_cooldown_minutes',extract(epoch from v_settings.manager_manual_send_cooldown)::bigint/60,
-      'candidate_manual_reminder_cooldown_minutes',extract(epoch from v_settings.candidate_manual_reminder_cooldown)::bigint/60,
-      'manager_secure_link_days',extract(epoch from v_settings.manager_secure_link_lifetime)::bigint/86400,
-      'automatic_reconcile_actor_user_id',v_settings.automatic_reconcile_actor_user_id
-    )
-  );
+ perform private._weekly_source_settings_assert_request_v1(p_request,array['actor_user_id','agency_id','environment'],'WEEKLY_SOURCE_GLOBAL_SETTINGS_GET_REQUEST_INVALID');
+ actor:=private.weekly_contact_uuid_v1(p_request->'actor_user_id');agency:=private.weekly_contact_uuid_v1(p_request->'agency_id');
+ perform private._weekly_source_settings_require_admin_v1(actor);
+ if jsonb_typeof(p_request->'environment') is distinct from 'string' or not coalesce(p_request->>'environment' in('TEST','LIVE'),false) then
+  raise exception 'WEEKLY_SOURCE_SETTINGS_DEPLOYMENT_INVALID' using errcode='22023';end if;
+ perform private._weekly_source_settings_deployment_v1(agency,p_request->>'environment');
+ select x.* into strict s from public.weekly_source_global_settings x where x.singleton;
+ return jsonb_build_object('ok',true,'settings_version',s.version::text,'policy_revision',s.version::text,
+  'settings',jsonb_build_object(
+   'candidate_reminder_minutes',extract(epoch from s.candidate_reminder_after)::bigint/60,
+   'candidate_response_deadline_minutes',extract(epoch from s.candidate_response_deadline_after)::bigint/60,
+   'manager_digest_minutes',extract(epoch from s.manager_partial_digest_after)::bigint/60,
+   'manager_manual_resend_cooldown_minutes',extract(epoch from s.manager_manual_send_cooldown)::bigint/60,
+   'candidate_manual_reminder_cooldown_minutes',extract(epoch from s.candidate_manual_reminder_cooldown)::bigint/60,
+   'manager_secure_link_days',extract(epoch from s.manager_secure_link_lifetime)::bigint/86400,
+   'automatic_reconcile_actor_user_id',s.automatic_reconcile_actor_user_id,
+   'manager_first_delay_value',s.manager_first_delay_value,'manager_first_delay_unit',s.manager_first_delay_unit,
+   'manager_followups',s.manager_followups,'manager_recent_completed_weeks',s.manager_recent_completed_weeks,
+   'manager_max_work_age_days',s.manager_max_work_age_days),
+  'cutoff',jsonb_build_object('kind','CLIENT_CUTOFF_PRECEDENCE','editable',false,
+   'explanation','The actual Client cut-off overrides these routine contact limits.'),
+  'actions',jsonb_build_array(jsonb_build_object('action','SAVE_GLOBAL_CONTACT_TIMING','enabled',true,'reason',null)));
 end;
 $function$;
 
-create or replace function public.weekly_source_global_settings_save_atomic_v1(
-  p_request jsonb
-) returns jsonb
-language plpgsql
-volatile
-security definer
-set search_path to 'pg_catalog','pg_temp'
+create or replace function public.weekly_source_global_settings_save_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','private','pg_temp'
 as $function$
-declare
-  v_actor uuid;
-  v_agency uuid;
-  v_expected bigint;
-  v_settings_json jsonb;
-  v_settings public.weekly_source_global_settings%rowtype;
-  v_candidate_reminder integer;
-  v_candidate_deadline integer;
-  v_manager_digest integer;
-  v_manager_cooldown integer;
-  v_candidate_cooldown integer;
-  v_link_days integer;
-  v_automatic_actor uuid;
+declare actor uuid;agency uuid;v_request_id uuid;expected bigint;settings jsonb;key text;digest bytea;receipt public.weekly_source_global_settings_receipts%rowtype;
+ s public.weekly_source_global_settings%rowtype;next_s public.weekly_source_global_settings%rowtype;result jsonb;v_now timestamptz:=transaction_timestamp();
+ required text[]:=array['candidate_reminder_minutes','candidate_response_deadline_minutes','manager_digest_minutes',
+  'manager_manual_resend_cooldown_minutes','candidate_manual_reminder_cooldown_minutes','manager_secure_link_days',
+  'manager_first_delay_value','manager_first_delay_unit','manager_followups','manager_recent_completed_weeks','manager_max_work_age_days'];
 begin
-  perform private._weekly_source_settings_assert_request_v1(
-    p_request,array['actor_user_id','agency_id','environment','expected_settings_version','settings'],
-    'WEEKLY_SOURCE_GLOBAL_SETTINGS_SAVE_REQUEST_INVALID'
-  );
-  v_settings_json:=p_request->'settings';
-  perform private._weekly_source_settings_assert_request_v1(
-    v_settings_json,array[
-      'candidate_reminder_minutes','candidate_response_deadline_minutes',
-      'manager_digest_minutes','manager_manual_resend_cooldown_minutes',
-      'candidate_manual_reminder_cooldown_minutes','manager_secure_link_days','automatic_reconcile_actor_user_id'
-    ],'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID'
-  );
-  begin
-    v_actor:=(p_request->>'actor_user_id')::uuid;
-    v_agency:=(p_request->>'agency_id')::uuid;
-    v_expected:=(p_request->>'expected_settings_version')::bigint;
-    v_candidate_reminder:=(v_settings_json->>'candidate_reminder_minutes')::integer;
-    v_candidate_deadline:=(v_settings_json->>'candidate_response_deadline_minutes')::integer;
-    v_manager_digest:=(v_settings_json->>'manager_digest_minutes')::integer;
-    v_manager_cooldown:=(v_settings_json->>'manager_manual_resend_cooldown_minutes')::integer;
-    v_candidate_cooldown:=(v_settings_json->>'candidate_manual_reminder_cooldown_minutes')::integer;
-    v_link_days:=(v_settings_json->>'manager_secure_link_days')::integer;
-    if v_settings_json ? 'automatic_reconcile_actor_user_id' then
-      if jsonb_typeof(v_settings_json->'automatic_reconcile_actor_user_id') not in ('string','null') then
-        raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID' using errcode='22023'; end if;
-      v_automatic_actor:=nullif(v_settings_json->>'automatic_reconcile_actor_user_id','')::uuid;
-      if v_automatic_actor is not null and not exists(select 1 from public.tms_users where id=v_automatic_actor) then
-        raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID' using errcode='22023'; end if;
-    end if;
-  exception when others then
-    raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_SAVE_REQUEST_INVALID' using errcode='22023';
-  end;
-  perform private._weekly_source_settings_require_admin_v1(v_actor);
-  perform private._weekly_source_settings_deployment_v1(v_agency,p_request->>'environment');
-  if v_candidate_reminder<1 or v_candidate_reminder>=720
-     or v_candidate_deadline<=v_candidate_reminder or v_candidate_deadline>10080
-     or v_manager_digest<1 or v_manager_digest>10080
-     or v_manager_cooldown<5 or v_manager_cooldown>1440
-     or v_candidate_cooldown<60 or v_candidate_cooldown>10080
-     or v_link_days<1 or v_link_days>30 then
-    raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID' using errcode='22023';
-  end if;
-  select * into strict v_settings
-  from public.weekly_source_global_settings where singleton for update;
-  if v_settings.version<>v_expected then
-    raise exception 'WEEKLY_SOURCE_SETTINGS_STALE' using errcode='40001';
-  end if;
-  update public.weekly_source_global_settings
-  set candidate_reminder_after=pg_catalog.make_interval(mins=>v_candidate_reminder),
-      candidate_response_deadline_after=pg_catalog.make_interval(mins=>v_candidate_deadline),
-      manager_partial_digest_after=pg_catalog.make_interval(mins=>v_manager_digest),
-      manager_manual_send_cooldown=pg_catalog.make_interval(mins=>v_manager_cooldown),
-      candidate_manual_reminder_cooldown=pg_catalog.make_interval(mins=>v_candidate_cooldown),
-      manager_secure_link_lifetime=pg_catalog.make_interval(days=>v_link_days),
-      automatic_reconcile_actor_user_id=case when v_settings_json ? 'automatic_reconcile_actor_user_id'
-        then v_automatic_actor else automatic_reconcile_actor_user_id end,
-      version=version+1,updated_by_user_id=v_actor,
-      updated_at_utc=pg_catalog.transaction_timestamp()
-  where singleton;
-  return public.weekly_source_global_settings_get_v1(pg_catalog.jsonb_build_object(
-    'actor_user_id',v_actor,'agency_id',v_agency,'environment',p_request->>'environment'
-  ));
+ perform private.weekly_contact_assert_closed_v1(p_request,array['actor_user_id','agency_id','environment','request_id','expected_settings_version','settings'],
+  array['actor_user_id','agency_id','environment','request_id','expected_settings_version','settings'],'WEEKLY_SOURCE_GLOBAL_SETTINGS_SAVE_REQUEST_INVALID');
+ actor:=private.weekly_contact_uuid_v1(p_request->'actor_user_id');agency:=private.weekly_contact_uuid_v1(p_request->'agency_id');
+ v_request_id:=private.weekly_contact_uuid_v1(p_request->'request_id');expected:=private.weekly_contact_revision_v1(p_request->'expected_settings_version',true);
+ perform private._weekly_source_settings_require_admin_v1(actor);
+ if jsonb_typeof(p_request->'environment') is distinct from 'string' or not coalesce(p_request->>'environment' in('TEST','LIVE'),false) then
+  raise exception 'WEEKLY_SOURCE_SETTINGS_DEPLOYMENT_INVALID' using errcode='22023';end if;
+ perform private._weekly_source_settings_deployment_v1(agency,p_request->>'environment');
+ settings:=p_request->'settings';
+ perform private.weekly_contact_assert_closed_v1(settings,required||array['automatic_reconcile_actor_user_id'],required,'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID');
+ foreach key in array array['candidate_reminder_minutes','candidate_response_deadline_minutes','manager_digest_minutes',
+  'manager_manual_resend_cooldown_minutes','candidate_manual_reminder_cooldown_minutes','manager_secure_link_days',
+  'manager_first_delay_value','manager_recent_completed_weeks','manager_max_work_age_days'] loop
+  if jsonb_typeof(settings->key) is distinct from 'number' or settings->>key !~ '^[0-9]+$' or length(settings->>key)>5 then
+   raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID' using errcode='22023';end if;
+ end loop;
+ if not private.weekly_source_manager_followups_valid_v1(settings->'manager_followups')
+  or not private.weekly_source_manager_interval_valid_v1((settings->>'manager_first_delay_value')::integer,settings->>'manager_first_delay_unit',true)
+  or (settings->>'candidate_reminder_minutes')::integer not between 1 and 719
+  or (settings->>'candidate_response_deadline_minutes')::integer not between (settings->>'candidate_reminder_minutes')::integer+1 and 10080
+  or (settings->>'manager_digest_minutes')::integer not between 1 and 10080
+  or (settings->>'manager_manual_resend_cooldown_minutes')::integer not between 5 and 1440
+  or (settings->>'candidate_manual_reminder_cooldown_minutes')::integer not between 60 and 10080
+  or (settings->>'manager_secure_link_days')::integer not between 1 and 30
+  or (settings->>'manager_recent_completed_weeks')::integer not between 1 and 52
+  or (settings->>'manager_max_work_age_days')::integer not between 1 and 366 then
+  raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID' using errcode='22023';end if;
+ if settings?'automatic_reconcile_actor_user_id' and settings->'automatic_reconcile_actor_user_id'<>'null'::jsonb then
+  perform 1 from public.tms_users u where u.id=private.weekly_contact_uuid_v1(settings->'automatic_reconcile_actor_user_id');
+  if not found then raise exception 'WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID' using errcode='22023';end if;
+ end if;
+ digest:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_GLOBAL_SETTINGS_SAVE_V1',p_request);
+ -- One singleton lock serializes first-use request journals and the actual CAS.
+ select x.* into strict s from public.weekly_source_global_settings x where x.singleton for update;
+ select x.* into receipt from public.weekly_source_global_settings_receipts x where x.request_id=v_request_id;
+ if found then
+  if receipt.request_digest is distinct from digest or receipt.actor_user_id<>actor or receipt.agency_id<>agency
+   or receipt.environment is distinct from p_request->>'environment' then raise exception 'WEEKLY_SOURCE_SETTINGS_REQUEST_REUSED' using errcode='40001';end if;
+  return receipt.response_json;
+ end if;
+ if s.version<>expected then raise exception 'WEEKLY_SOURCE_SETTINGS_STALE' using errcode='40001';end if;
+ next_s:=s;
+ next_s.candidate_reminder_after:=make_interval(mins=>(settings->>'candidate_reminder_minutes')::integer);
+ next_s.candidate_response_deadline_after:=make_interval(mins=>(settings->>'candidate_response_deadline_minutes')::integer);
+ next_s.manager_partial_digest_after:=make_interval(mins=>(settings->>'manager_digest_minutes')::integer);
+ next_s.manager_manual_send_cooldown:=make_interval(mins=>(settings->>'manager_manual_resend_cooldown_minutes')::integer);
+ next_s.candidate_manual_reminder_cooldown:=make_interval(mins=>(settings->>'candidate_manual_reminder_cooldown_minutes')::integer);
+ next_s.manager_secure_link_lifetime:=make_interval(days=>(settings->>'manager_secure_link_days')::integer);
+ if settings?'automatic_reconcile_actor_user_id' then next_s.automatic_reconcile_actor_user_id:=(settings->>'automatic_reconcile_actor_user_id')::uuid;end if;
+ next_s.manager_first_delay_value:=(settings->>'manager_first_delay_value')::integer;next_s.manager_first_delay_unit:=settings->>'manager_first_delay_unit';
+ next_s.manager_followups:=settings->'manager_followups';next_s.manager_recent_completed_weeks:=(settings->>'manager_recent_completed_weeks')::integer;
+ next_s.manager_max_work_age_days:=(settings->>'manager_max_work_age_days')::integer;
+ if to_jsonb(next_s) is distinct from to_jsonb(s) then
+  if s.version=9223372036854775807 then raise exception 'WEEKLY_SOURCE_SETTINGS_VERSION_EXHAUSTED' using errcode='22003';end if;
+  update public.weekly_source_global_settings set candidate_reminder_after=next_s.candidate_reminder_after,
+   candidate_response_deadline_after=next_s.candidate_response_deadline_after,manager_partial_digest_after=next_s.manager_partial_digest_after,
+   manager_manual_send_cooldown=next_s.manager_manual_send_cooldown,candidate_manual_reminder_cooldown=next_s.candidate_manual_reminder_cooldown,
+   manager_secure_link_lifetime=next_s.manager_secure_link_lifetime,automatic_reconcile_actor_user_id=next_s.automatic_reconcile_actor_user_id,
+   manager_first_delay_value=next_s.manager_first_delay_value,manager_first_delay_unit=next_s.manager_first_delay_unit,
+   manager_followups=next_s.manager_followups,manager_recent_completed_weeks=next_s.manager_recent_completed_weeks,
+   manager_max_work_age_days=next_s.manager_max_work_age_days,version=version+1,updated_by_user_id=actor,updated_at_utc=v_now where singleton;
+ end if;
+ result:=public.weekly_source_global_settings_get_v1(jsonb_build_object('actor_user_id',actor,'agency_id',agency,'environment',p_request->>'environment'));
+ insert into public.weekly_source_global_settings_receipts(request_id,agency_id,environment,actor_user_id,request_digest,
+  expected_settings_version,accepted_settings_version,response_json,created_at_utc,completed_at_utc)
+ values(v_request_id,agency,p_request->>'environment',actor,digest,expected,(result->>'settings_version')::bigint,result,v_now,v_now);
+ return result;
 end;
 $function$;
 

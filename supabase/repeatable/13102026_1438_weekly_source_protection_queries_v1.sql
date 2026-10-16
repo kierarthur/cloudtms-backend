@@ -16,6 +16,9 @@ begin;
 \ir 13102026_1438_weekly_source_protection_queries/09_expected_week_materialiser.sqlinc
 \ir 13102026_1438_weekly_source_protection_queries/10_publication_recheck.sqlinc
 \ir 13102026_1438_weekly_source_protection_queries/10a_expected_question_scope.sqlinc
+-- SQL-language scope predicates require these actual current-row timing readers.
+\ir includes/weekly_contact_timing/010_timing_validation.sqlinc
+\ir includes/weekly_contact_timing/040_native_timing.sqlinc
 \ir 13102026_1438_weekly_source_protection_queries/11_manager_due_scope.sqlinc
 \ir 13102026_1438_weekly_source_protection_queries/12_manager_owned_facts.sqlinc
 \ir 13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc
@@ -33,5 +36,7 @@ begin;
 \ir 13102026_1438_weekly_source_protection_queries/25_bulk_stage_proof.sqlinc
 \ir 13102026_1438_weekly_source_protection_queries/26_bulk_command.sqlinc
 \ir 13102026_1438_weekly_source_protection_queries/27_automatic_reconcile.sqlinc
+-- Reassert owner-only readers and established service RPCs in this changed closure.
+\ir includes/weekly_contact_timing/070_acl.sqlinc
 notify pgrst, 'reload schema';
 commit;

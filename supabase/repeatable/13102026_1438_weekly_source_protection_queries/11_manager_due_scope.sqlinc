@@ -8,7 +8,7 @@ as $function$
     join public.weekly_candidate_cohorts cohort on cohort.id=event.candidate_cohort_id
     join public.weekly_discrepancy_incidents incident
       on incident.id=p_incident_id and incident.candidate_id=cohort.candidate_id
-      and incident.source_cycle_id=cohort.source_cycle_id
+      and incident.source_cycle_id=cohort.source_cycle_id and incident.client_id=cohort.client_id
     join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
     join public.weekly_work_events work_event on work_event.id=incident.work_event_id
     left join public.weekly_timesheet_submission_request_memberships requested on requested.id=event.requested_week_membership_id
@@ -18,7 +18,27 @@ as $function$
         and (comparison.issue_family='HEALTHROSTER_NOT_FINALISED' or private.weekly_source_expected_week_question_v1(incident.id))
         and private.weekly_source_is_import_authoritative_v1(incident.client_id,comparison.contract_id,work_event.work_date)
         else not ((comparison.issue_family='HEALTHROSTER_NOT_FINALISED' or private.weekly_source_expected_week_question_v1(incident.id))
-          and private.weekly_source_is_import_authoritative_v1(incident.client_id,comparison.contract_id,work_event.work_date)) end)
+          and private.weekly_source_is_import_authoritative_v1(incident.client_id,comparison.contract_id,work_event.work_date))
+          or private.weekly_source_manager_matching_pending_v1(incident.id) end)
+      -- New initial events are purpose tagged using their saved immutable native
+      -- identity. Legacy EARLY_ALL/all-responded/requested-week scopes retain
+      -- their existing predicate; this does not retag historical events.
+      and (case
+        when event.trigger_hash=private.weekly_source_sha256_jsonb_v1('WEEKLY_MANAGER_INITIAL_PURPOSE_DUE_V1',
+          jsonb_build_object('recipient_generation_id',event.recipient_generation_id,'candidate_cohort_id',event.candidate_cohort_id,
+            'event_kind',event.event_kind,'due_at_utc',to_char(event.due_at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'initial_purpose','MANAGER_DIRECT'))
+          then exists(select 1 from public.weekly_manager_recipient_memberships m
+            join public.weekly_route_activations a on a.id=m.route_activation_id
+            where m.recipient_generation_id=event.recipient_generation_id and m.incident_id=incident.id
+              and private.weekly_source_manager_initial_purpose_v1(incident.id,a.route_mode)='MANAGER_DIRECT')
+        when event.trigger_hash=private.weekly_source_sha256_jsonb_v1('WEEKLY_MANAGER_INITIAL_PURPOSE_DUE_V1',
+          jsonb_build_object('recipient_generation_id',event.recipient_generation_id,'candidate_cohort_id',event.candidate_cohort_id,
+            'event_kind',event.event_kind,'due_at_utc',to_char(event.due_at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'initial_purpose','CANDIDATE_FIRST'))
+          then exists(select 1 from public.weekly_manager_recipient_memberships m
+            join public.weekly_route_activations a on a.id=m.route_activation_id
+            where m.recipient_generation_id=event.recipient_generation_id and m.incident_id=incident.id
+              and private.weekly_source_manager_initial_purpose_v1(incident.id,a.route_mode)='CANDIDATE_FIRST')
+        else true end)
       and (event.requested_week_membership_id is null
       or (requested.state='SUBMITTED_WITH_ISSUES' and requested.client_id=incident.client_id
         and requested.contract_id=comparison.contract_id

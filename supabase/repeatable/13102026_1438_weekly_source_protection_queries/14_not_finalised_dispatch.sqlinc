@@ -8,7 +8,8 @@ declare
   v_publication public.weekly_source_projection_publications%rowtype;
   v_cycle public.weekly_source_cycles%rowtype; v_row record; v_context jsonb; v_generation jsonb;
   v_week date; v_count integer; v_monday timestamptz; v_key text; v_trigger bytea;
-  v_route uuid; v_generation_id uuid; v_due_id uuid; v_intent uuid;
+  v_route uuid; v_generation_id uuid; v_due_id uuid; v_intent uuid; v_due timestamptz;
+  v_settings public.weekly_source_global_settings%rowtype;
   v_deferred integer:=0; v_queued integer:=0; v_no_route integer:=0;
 begin
   perform private.weekly_source_query_require_service_v1();
@@ -75,17 +76,27 @@ begin
     v_generation:=private.weekly_source_query_manager_generation_v1(v_route,'EARLY_ALL',v_publication.published_at_utc,false);
     v_generation_id:=nullif(v_generation->>'recipient_generation_id','')::uuid;
     if v_generation_id is null then raise exception 'WEEKLY_SOURCE_NOT_FINALISED_GENERATION_UNAVAILABLE' using errcode='55000'; end if;
+    -- Native13 already owns the matching pending member's purpose-qualified
+    -- direct event. Do not create a second immediate ingress for the same work.
+    -- Unmatched not-finalised work retains this original exact revision scope.
+    if private.weekly_source_manager_matching_pending_v1(v_row.id) then continue; end if;
+    select * into strict v_settings from public.weekly_source_global_settings where singleton;
+    v_due:=private.weekly_source_manager_interval_due_v1(v_row.client_id,v_publication.published_at_utc,
+      v_settings.manager_first_delay_value,v_settings.manager_first_delay_unit);
     v_trigger:=private.weekly_source_sha256_jsonb_v1('WEEKLY_NOT_FINALISED_MANAGER_DUE_V1',
       jsonb_build_object('incident_id',v_row.id,'comparison_revision_id',v_row.comparison_id,
         'week_ending_date',v_week,'first_monday_at_utc',v_monday));
     insert into public.weekly_manager_cohort_due_events(recipient_generation_id,candidate_cohort_id,event_kind,
       cohort_started_at_utc,due_at_utc,state,trigger_hash,not_finalised_comparison_revision_id)
     values(v_generation_id,(v_context->>'cohort_id')::uuid,'EARLY_ALL',v_publication.published_at_utc,
-      v_publication.published_at_utc,'PENDING',v_trigger,v_row.comparison_id)
+      v_due,'PENDING',v_trigger,v_row.comparison_id)
     on conflict(recipient_generation_id,candidate_cohort_id,event_kind,trigger_hash) do nothing;
     select id into strict v_due_id from public.weekly_manager_cohort_due_events where recipient_generation_id=v_generation_id
       and candidate_cohort_id=(v_context->>'cohort_id')::uuid and event_kind='EARLY_ALL' and trigger_hash=v_trigger;
     if exists(select 1 from public.weekly_manager_cohort_due_events where id=v_due_id and state='CONSUMED') then continue; end if;
+    -- A future event remains with the existing scheduler; it is not staged as
+    -- a future-due email and it consumes no send allowance here.
+    if v_due>clock_timestamp() then v_deferred:=v_deferred+1; continue; end if;
     if not private.weekly_source_manager_due_event_covers_v1(v_due_id,v_row.id) then
       raise exception 'WEEKLY_SOURCE_NOT_FINALISED_DUE_SCOPE_INVALID' using errcode='55000'; end if;
     v_intent:=private.weekly_source_query_manager_intent_v1(v_route,v_generation_id,array[v_due_id],

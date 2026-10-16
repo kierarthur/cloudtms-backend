@@ -1,3 +1,4 @@
+import {readGlobalContactSettingsSave,decodeGlobalContactSettingsState,globalContactSettingsOwner} from './global-contact-timing.mjs';
 import { parseWeeklySourceFile } from './index.js';
 import {
   isManagedRootGuardRefusal,
@@ -505,19 +506,19 @@ async function handleSettingsGet(req, env, dependencies, user, kind, id = null) 
   };
   const [rpcName, idKey] = definitions[kind] || [];
   if (!rpcName) fail('WEEKLY_SOURCE_SETTINGS_ROUTE_INVALID', 'This settings route is unavailable.', 404);
-  const result = await (kind === 'rules' ? callRuleSettingsRpc : callRpc)(dependencies, rpcName, {
+  const result = await (kind === 'global' ? (...args) => globalContactSettingsOwner(() => callRpc(...args)) : kind === 'rules' ? callRuleSettingsRpc : callRpc)(dependencies, rpcName, {
     actor_user_id: user.id,
     ...deployment,
     ...query,
     ...(idKey ? { [idKey]: canonicalUuid(id, 'WEEKLY_SOURCE_SETTINGS_ID_INVALID', kind) } : {}),
   });
-  return jsonResponse(200, result);
+  return jsonResponse(200, kind === 'global' ? decodeGlobalContactSettingsState(result) : result);
 }
 
 async function handleSettingsPut(req, env, dependencies, user, kind, id = null) {
   const deployment = weeklySourceDeploymentContext(env);
   settingsQuery(new URL(req.url));
-  const body = await readJsonBody(req, 64 * 1024);
+  const body = kind === 'global' ? await readGlobalContactSettingsSave(req) : await readJsonBody(req, 64 * 1024);
   assertNoBrowserDeploymentScope(body);
   assertNoBrowserFinancialFacts(body);
   if (kind === 'rules' || kind === 'groupRules') {
@@ -545,13 +546,13 @@ async function handleSettingsPut(req, env, dependencies, user, kind, id = null) 
   };
   const [rpcName, idKey] = definitions[kind] || [];
   if (!rpcName) fail('WEEKLY_SOURCE_SETTINGS_ROUTE_INVALID', 'This settings route is unavailable.', 404);
-  const result = await (kind === 'rules' || kind === 'groupRules' ? callRuleSettingsRpc : callRpc)(dependencies, rpcName, {
+  const result = await (kind === 'global' ? (...args) => globalContactSettingsOwner(() => callRpc(...args)) : kind === 'rules' || kind === 'groupRules' ? callRuleSettingsRpc : callRpc)(dependencies, rpcName, {
     ...body,
     actor_user_id: user.id,
     ...deployment,
     ...(idKey ? { [idKey]: canonicalUuid(id, 'WEEKLY_SOURCE_SETTINGS_ID_INVALID', kind) } : {}),
   });
-  return jsonResponse(200, result);
+  return jsonResponse(200, kind === 'global' ? decodeGlobalContactSettingsState(result) : result);
 }
 
 async function handleWorkspace(req, env, dependencies, user) {

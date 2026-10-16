@@ -1,0 +1,42 @@
+{
+  "version": "V6_GLOBAL_CONTACT_TIMING_INTEGRATION_V1",
+  "status": "SOURCE_CHECKPOINT_NATIVE_PENDING",
+  "proposal_commit": "48db6e9ad82d04b846b959f91640a47ba9834667",
+  "fixture_correction_commit": "0c7e90ce5faf4b1da72f312d5c1173a3d871124c",
+  "proposal_manifest_sha256": "5e63389823641ebffa4205e9b88c91a526528298ef5cd01002f210230d0d5c47",
+  "backend_parent": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+  "office_parent": "efd6f4dd6b2f8974bbc24dd6f2c324424cc60f8b",
+  "migration": "supabase/migrations/16102026_0244_weekly_contact_global_timing_schema.sql",
+  "repeatable": "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql",
+  "source_checks": {
+    "backend_focused_tests": 64,
+    "office_focused_tests": 31,
+    "offline_grammar": {
+      "files": 6,
+      "procedures": 12,
+      "inner_sql_expressions": 225,
+      "rowtype_alias": "PARSER_ONLY_NO_CATALOG_BINDING"
+    },
+    "fixture_grammar": {
+      "procedures": 2,
+      "inner_sql_expressions": 48
+    },
+    "source_integrity": {
+      "migrations": 406,
+      "repeatables": 1071
+    }
+  },
+  "root_amendments": [
+    "Bound request streams at 65536 bytes before allocation; strict duplicate-key and UTF8 validation retained.",
+    "Native14 exact matching-pending members use Native13 purpose-qualified direct event once; other original not-finalised revision scope retains ingress with same current first delay.",
+    "Timing readers mounted before SQL-language Native11 predicate; both changed recursive closures finish in current ACL.",
+    "Earlier settings fixture envelopes updated to the new closed request/response; Client/Contract/source-group assertions retained."
+  ],
+  "pending": [
+    "Native singleton GET/save/CAS/receipt/ACL trial",
+    "Native purpose split/scheduler/render/current admission/follow-up budget/real Office route and browser acceptance",
+    "Full generated contract/registry/security replay/rehearsal/Install2 and activation"
+  ],
+  "database_installed": false,
+  "provider_calls": false
+}

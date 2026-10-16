@@ -5659,6 +5659,15 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "global_contact_timing_source_qualification": {
+        "version": "V6_GLOBAL_CONTACT_TIMING_INTEGRATION_V1",
+        "migration": "supabase/migrations/16102026_0244_weekly_contact_global_timing_schema.sql",
+        "repeatable": "supabase/repeatable/16102026_0244_weekly_contact_global_timing_v1.sql",
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/GLOBAL_CONTACT_TIMING_IMPLEMENTATION.json",
+        "native": "REQUIRED_NOT_RUN",
+        "source_tests": "64 backend / 31 Office focused PASS; offline grammar only",
+        "preserve_original_status": true
       }
     },
     {

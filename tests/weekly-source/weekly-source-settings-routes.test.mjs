@@ -13,12 +13,16 @@ const env = Object.freeze({
   CANDIDATE_APP_ENVIRONMENT: 'TEST',
 });
 
+
+const globalSettings = () => ({candidate_reminder_minutes:360,candidate_response_deadline_minutes:720,manager_digest_minutes:137,manager_manual_resend_cooldown_minutes:11,candidate_manual_reminder_cooldown_minutes:60,manager_secure_link_days:7,automatic_reconcile_actor_user_id:null,manager_first_delay_value:0,manager_first_delay_unit:'HOURS',manager_followups:[],manager_recent_completed_weeks:1,manager_max_work_age_days:14});
+const globalState = () => ({ok:true,settings_version:'9007199254740993',policy_revision:'9007199254740993',settings:globalSettings(),cutoff:{kind:'CLIENT_CUTOFF_PRECEDENCE',editable:false,explanation:'The actual Client cut-off overrides these routine contact limits.'},actions:[{action:'SAVE_GLOBAL_CONTACT_TIMING',enabled:true,reason:null}]});
+
 function dependencies(calls) {
   return {
     requireUser: async () => ({ id: ACTOR, role: 'admin', is_active: true }),
     rpc: async (name, args) => {
       calls.push({ name, args });
-      return { ok: true, name, request: args.p_request };
+      return name.startsWith('weekly_source_global_settings_') ? globalState() : { ok: true, name, request: args.p_request };
     },
   };
 }
@@ -26,7 +30,7 @@ function dependencies(calls) {
 test('all Client, Contract, global and source-group settings routes reach their exact RPC owners', async () => {
   const cases = [
     ['GET', '/api/weekly-source/v1/settings/global', null, 'weekly_source_global_settings_get_v1'],
-    ['PUT', '/api/weekly-source/v1/settings/global', { expected_settings_version: 1, settings: {} }, 'weekly_source_global_settings_save_atomic_v1'],
+    ['PUT', '/api/weekly-source/v1/settings/global', {request_id:GROUP,expected_settings_version:'9007199254740993',settings:globalSettings()}, 'weekly_source_global_settings_save_atomic_v1'],
     ['GET', '/api/weekly-source/v1/settings/source-groups', null, 'weekly_source_source_groups_get_v1'],
     ['PUT', `/api/weekly-source/v1/settings/clients/${CLIENT}`, { expected_settings_version: 'client-v1', settings: {} }, 'weekly_source_client_settings_save_atomic_v1'],
     ['GET', `/api/weekly-source/v1/settings/contracts/${CONTRACT}`, null, 'weekly_source_contract_settings_get_v1'],
@@ -152,7 +156,7 @@ test('Browser cannot select an Agency, environment or actor for settings', async
       dependencies(calls),
     );
     assert.equal(response.status, 400);
-    assert.equal((await response.json()).error_code, 'WEEKLY_SOURCE_SETTINGS_SCOPE_FORBIDDEN');
+    assert.equal((await response.json()).error_code, 'WEEKLY_SOURCE_GLOBAL_SETTINGS_SAVE_REQUEST_INVALID');
     assert.equal(calls.length, 0);
   }
 });
