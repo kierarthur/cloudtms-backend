@@ -1,0 +1,108 @@
+{
+  "version": "SOURCE_CLASSIFIER_DELEGATION_REVIEW_MANIFEST_V1",
+  "qualification": "BOUNDED_SOURCE_RECOMMENDATION_NOT_NATIVE_HISTORY_OR_EFFECT_QUALIFICATION",
+  "rootCommit": "1f2824aa954ae81ec348777ac533858e700c0aa0",
+  "reviewSha256": "5d68b3e1c95547efc2b35b301dcd00c65763b0f836dc03946601bad42f58223a",
+  "files": [
+    {
+      "path": "bodies/01.sqlinc",
+      "bytes": 4412,
+      "sha256": "83c869d2060148612b66c9f4d185a3e4e6ffeeb85373c46a482199fd4303615e"
+    },
+    {
+      "path": "bodies/02.sqlinc",
+      "bytes": 991,
+      "sha256": "82410ac3e78553759094c6299f9a3c374f036a3db3415b16152fc4259f3c03fa"
+    },
+    {
+      "path": "bodies/03.sqlinc",
+      "bytes": 6657,
+      "sha256": "cbc671065fefa41025ce7b850b477206422221f33c186fa444a9264a33b1a7da"
+    },
+    {
+      "path": "bodies/04.sqlinc",
+      "bytes": 1845,
+      "sha256": "63a34ba045063ccd8054df0b60693a9857893b00476febd396ab6d1bafb84ea4"
+    },
+    {
+      "path": "bodies/05.sqlinc",
+      "bytes": 3316,
+      "sha256": "9b0a833310d116efa11be4d81a413b90dd51fcd8fc7da30521cbd22f1d4d7961"
+    },
+    {
+      "path": "bodies/06.sqlinc",
+      "bytes": 5167,
+      "sha256": "53fa48ae17e1b71fb0d756d76532ba8885e737ec058108fc3a50a2efb67d2a02"
+    },
+    {
+      "path": "bodies/07.sqlinc",
+      "bytes": 2080,
+      "sha256": "f2979d2ce68d24c9d8d95f5d73b3644042cff3160f69b591f9726d81e911d2b5"
+    },
+    {
+      "path": "bodies/08.sqlinc",
+      "bytes": 2804,
+      "sha256": "2b9a6416e07aac0653109256f507718259b47633cc03d18013f4a664d7b1dc76"
+    },
+    {
+      "path": "bodies/09.sqlinc",
+      "bytes": 3344,
+      "sha256": "ad18772fc0655671cb8f7bd1aa9d51c3e4d8be1f00f1cf23d26bd554336607e3"
+    },
+    {
+      "path": "bodies/10.sqlinc",
+      "bytes": 3931,
+      "sha256": "85ef5f1709ae9b0c67cc9d8c6b33b89e77acce62070d5fe421ed6b0369b559c4"
+    },
+    {
+      "path": "bodies/11.sqlinc",
+      "bytes": 13531,
+      "sha256": "d75971649d2bf35e2bb4aea8a645aa9eec1fd17977172681662ff81144e87a62"
+    },
+    {
+      "path": "bodies/12.sqlinc",
+      "bytes": 271,
+      "sha256": "caf17343e5b3728fcb795b667b2fa70e1e1c4802d43237804ef91ded3c5f3b7b"
+    },
+    {
+      "path": "bodies/13.sqlinc",
+      "bytes": 717,
+      "sha256": "80d90af64421f44ec05a66f713b68df1be77329e7de74021bfce7e864f62667b"
+    },
+    {
+      "path": "extract.mjs",
+      "bytes": 3545,
+      "sha256": "d0d79bc42722a637175b3ad21e7796db29a26085ae0ad17d27bd96c757fcc906"
+    },
+    {
+      "path": "EXTRACTION.json",
+      "bytes": 30210,
+      "sha256": "fe7989d90221195a74c5986a2d96540df665506d58f63b52f8834f66de78b879"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4317,
+      "sha256": "559cc71e1cb452b2cdc13327cf1753e45f569230346913567620ca8bf4c59cdd"
+    },
+    {
+      "path": "REVIEW.json",
+      "bytes": 43012,
+      "sha256": "5d68b3e1c95547efc2b35b301dcd00c65763b0f836dc03946601bad42f58223a"
+    },
+    {
+      "path": "review.mjs",
+      "bytes": 10384,
+      "sha256": "cbbf91e816c0e35c574a0dd214bbfa263ba9568cbe553e3fd2e81eab3873995b"
+    },
+    {
+      "path": "seal.mjs",
+      "bytes": 1317,
+      "sha256": "7feb65665d3690e98f583da60365df8118f6fc81aa152279e0fab977248aa40c"
+    }
+  ],
+  "excludesSelf": true,
+  "native": "NOT_RUN",
+  "rootEdits": 0,
+  "bankingEdits": 0,
+  "dbConnections": 0
+}

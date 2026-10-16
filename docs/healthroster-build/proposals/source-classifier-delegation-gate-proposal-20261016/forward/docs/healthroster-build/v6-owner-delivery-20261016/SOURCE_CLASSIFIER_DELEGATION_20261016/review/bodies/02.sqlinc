@@ -1,0 +1,16 @@
+create or replace function private.timesheet_contract_native_pending_for_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare p private.timesheet_contract_current_placements%rowtype; result jsonb; placement jsonb;
+begin
+ select v.* into p from private.timesheet_contract_current_placements v
+  join private.timesheet_contract_family_aliases a on a.family_root_id=v.family_root_id and a.member_key=v.member_key
+  where a.timesheet_id=p_timesheet_id;
+ if not found or p.current_timesheet_id is not null then return null;end if;
+ placement:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
+ result:=private.timesheet_contract_native_pending_v1(to_jsonb(p),false);
+ if result is null or placement->'current_timesheet_id' is distinct from 'null'::jsonb then
+  raise exception 'CURRENT_PLACEMENT_NATIVE_PENDING_UNBOUND' using errcode='55000';end if;
+ return result;
+end;
+$function$;
