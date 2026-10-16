@@ -1,0 +1,25 @@
+{
+  "scope": "OFFLINE_SYNTHETIC_SOURCE_ONLY_NOT_NATIVE_RECEIPTS",
+  "adapterTests": 31,
+  "unchangedFixedReaderTests": 10,
+  "total": 41,
+  "pass": 41,
+  "fail": 0,
+  "pg17Cases": 6,
+  "finalIndices": [
+    12,
+    14,
+    12,
+    14,
+    16,
+    18
+  ],
+  "allOldBStatementsExceptSnapshotRawAndASTIdentical": true,
+  "unchangedCanonicalWeakMapQualifier": true,
+  "completeMapsPersisted": false,
+  "proposedBOnlyKierMcp": true,
+  "databaseCalls": 0,
+  "credentialFilesRead": 0,
+  "native": "NOT_RUN",
+  "PartB": "NOT_RUN"
+}

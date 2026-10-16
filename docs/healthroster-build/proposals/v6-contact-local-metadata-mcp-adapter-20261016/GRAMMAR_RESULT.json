@@ -1,0 +1,84 @@
+{
+  "scope": "OFFLINE_POSTGRES17_GRAMMAR_AND_RAW_AST_REVERSE_ONLY",
+  "pglast": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "cases": [
+    {
+      "caseId": "contact20-lock1",
+      "statements": 12,
+      "expectedFinalLockIndex": 12,
+      "wholeOriginalRawReverse": true,
+      "allRetainedStatementsASTIdentical": true,
+      "allRetainedStatementsRawIdentical": true,
+      "smallFreshStatements": 3,
+      "freshOriginalFirstLastASTIdentical": true,
+      "secondGenuineFixtureProofStatements": 2,
+      "doGuardParsed": true
+    },
+    {
+      "caseId": "contact20-lock2",
+      "statements": 14,
+      "expectedFinalLockIndex": 14,
+      "wholeOriginalRawReverse": true,
+      "allRetainedStatementsASTIdentical": true,
+      "allRetainedStatementsRawIdentical": true,
+      "smallFreshStatements": 3,
+      "freshOriginalFirstLastASTIdentical": true,
+      "secondGenuineFixtureProofStatements": 2,
+      "doGuardParsed": true
+    },
+    {
+      "caseId": "contact30-lock1",
+      "statements": 12,
+      "expectedFinalLockIndex": 12,
+      "wholeOriginalRawReverse": true,
+      "allRetainedStatementsASTIdentical": true,
+      "allRetainedStatementsRawIdentical": true,
+      "smallFreshStatements": 3,
+      "freshOriginalFirstLastASTIdentical": true,
+      "secondGenuineFixtureProofStatements": 2,
+      "doGuardParsed": true
+    },
+    {
+      "caseId": "contact30-lock2",
+      "statements": 14,
+      "expectedFinalLockIndex": 14,
+      "wholeOriginalRawReverse": true,
+      "allRetainedStatementsASTIdentical": true,
+      "allRetainedStatementsRawIdentical": true,
+      "smallFreshStatements": 3,
+      "freshOriginalFirstLastASTIdentical": true,
+      "secondGenuineFixtureProofStatements": 2,
+      "doGuardParsed": true
+    },
+    {
+      "caseId": "contact30-lock3",
+      "statements": 16,
+      "expectedFinalLockIndex": 16,
+      "wholeOriginalRawReverse": true,
+      "allRetainedStatementsASTIdentical": true,
+      "allRetainedStatementsRawIdentical": true,
+      "smallFreshStatements": 3,
+      "freshOriginalFirstLastASTIdentical": true,
+      "secondGenuineFixtureProofStatements": 2,
+      "doGuardParsed": true
+    },
+    {
+      "caseId": "contact30-lock4",
+      "statements": 18,
+      "expectedFinalLockIndex": 18,
+      "wholeOriginalRawReverse": true,
+      "allRetainedStatementsASTIdentical": true,
+      "allRetainedStatementsRawIdentical": true,
+      "smallFreshStatements": 3,
+      "freshOriginalFirstLastASTIdentical": true,
+      "secondGenuineFixtureProofStatements": 2,
+      "doGuardParsed": true
+    }
+  ],
+  "native": "NOT_RUN",
+  "fixedMetadataReader": "Unchanged7fda; six complete fixed read-only programs previously grammar checked; source-pinned"
+}

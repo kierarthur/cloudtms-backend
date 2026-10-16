@@ -1,0 +1,26 @@
+{
+  "scope": "READ_ONLY_SAFE_FRAME_SHAPE_FROM_HISTORICAL_HELD_ATTEMPT",
+  "source": ".codex-tmp/contact-six-mcp-20261016-contact20-lock1-attempt3/NATIVE_RESULT.json",
+  "sourceSha256": "0049c040f46318e69f3b4b3b90b8e11257b9b4492721852499a5e0ffe5c2ea79",
+  "failedStatement": 13,
+  "sqlstate": "55P03",
+  "topKeys": [
+    "statement",
+    "error"
+  ],
+  "errorKeys": [
+    "message",
+    "code",
+    "routine"
+  ],
+  "noRowsTruncatedProperty": true,
+  "rawValuesRetained": false,
+  "fatalErrorKeys": [
+    "message",
+    "code",
+    "routine"
+  ],
+  "fatalErrorMatchesFailedRow": true,
+  "handling": "Exact final statement/error-only branch; successful rows still require rowsTruncated=false; partial error payload or unknown keys refused; never mutate native result",
+  "qualification": "HELD_HISTORICAL_NOT_NATIVE_PASS"
+}

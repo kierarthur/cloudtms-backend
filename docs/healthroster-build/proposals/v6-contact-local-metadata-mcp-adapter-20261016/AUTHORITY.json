@@ -1,0 +1,50 @@
+{
+  "scope": "SOURCE_ONLY_FIXED_METADATA_KIER_MCP_SUCCESSOR",
+  "rootHead": "51101a033972fc4ac986988a6be0ed9cc7f9395b",
+  "originalMcpCommit": "6f131e34e2b4ae93f801bc0cc9420f95b38b9398",
+  "heldChunkTransport": "737b82cadea8d9e73b73421de1d4f36565e5b29e",
+  "fixedReaderCommit": "7fda1321502f1576487dd86889aa22ebe7896766",
+  "pinnedPredecessorFiles": [
+    {
+      "file": "../v6-contact-large-frame-feasibility-20261016/fixed-metadata-reader.mjs",
+      "sha256": "9e0bce9e142266e28ed24a777ae97d26fcc54eab52f4e5b7656344228a18b556"
+    },
+    {
+      "file": "../v6-contact-large-frame-feasibility-20261016/SOURCE_PINS.json",
+      "sha256": "d05359d8b43c8197b4f33f4953d3c1baf3673a07575f1e21c1cc2f175249abd8"
+    },
+    {
+      "file": "../v6-contact-large-frame-feasibility-20261016/SOURCE_MANIFEST.json",
+      "sha256": "8e7fa5632e2ef84940042c9ae623429c3ff68dba618cdb3f9b5991c3c07e2f00"
+    },
+    {
+      "file": "../v6-contact-large-frame-feasibility-20261016/GRAMMAR_RESULT.json",
+      "sha256": "4be2a4cc248ff18d0ebdb0955ac038bad375b209c77799a52422a2e62b6966f1"
+    },
+    {
+      "file": "../v6-contact-six-lock-mcp-successor-20261016/input-builder.mjs",
+      "sha256": "15ab65b9e1253b207b393d696de77dd4cf4c2fbe9e1847b282991bf2d00e31cf"
+    },
+    {
+      "file": "../v6-contact-six-lock-mcp-successor-20261016/AUTHORITY.json",
+      "sha256": "832055c9bc87adb9cb60ad25d2c778404348b83316614a5b3b5f9a5aa16e83b9"
+    },
+    {
+      "file": "../v6-contact-six-lock-contention-20261016/prepare.mjs",
+      "sha256": "3f8008b3bb0fda7bc62ba7ab17442a1c21681d82279e64f09b31a72eec8f96ce"
+    },
+    {
+      "file": "../v6-contact-six-lock-contention-20261016/PLAN.json",
+      "sha256": "156718044e8bb5b4fdeb19eb1ad650dcfbb391f9fe42e429c7ba0306cb182e13"
+    }
+  ],
+  "fixedReaderUnchanged": {
+    "stdoutBytes": 67108864,
+    "childMilliseconds": 70000,
+    "sourceSha256": "9e0bce9e142266e28ed24a777ae97d26fcc54eab52f4e5b7656344228a18b556"
+  },
+  "metadataAuthority": "Exact SEND5B before/fresh-after fixed metadata phases under actual SEND7 root callback; proposed B only Kier MCP",
+  "caseCount": 6,
+  "fullMaps": "PROCESS_MEMORY_ONLY; original qualifier/WeakMap/fresh restoration unchanged",
+  "native": "NOT_RUN"
+}
