@@ -9,9 +9,26 @@ const repoRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),d
 const proof=JSON.parse(fs.readFileSync(path.join(dir,'REVERSE_PROOF.json'))),root=repoRoot;
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const read=p=>fs.readFileSync(path.join(dir,p),'utf8').replaceAll('\r\n','\n');
-for(const input of proof.inputs)assert.equal(hash(fs.readFileSync(path.join(root,input.path))),input.path===proof.routes.source?'34c284a8b19be9ad3320b88b2db62e4d805e297a84e3fa3b0fb245373a910121':input.rawSha256,input.path);
+// Reverse only the exact reviewed Source contribution before the older Manual
+// parent guards. Runtime cases below still execute the full current router.
+const sourceRecipeBytes=fs.readFileSync(path.join(root,'docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PAY_HTTP_PARENT_REVIEW_20261016/PARENT_EDITS.json'));
+assert.equal(hash(sourceRecipeBytes),'b9f136f94a0be936682d07c92943a7e1e0db912977b70ed4f3e17b9cfee33980');
+const sourceRecipe=JSON.parse(sourceRecipeBytes);
+assert.equal(sourceRecipe.checkpoint,'39aa5b30042711956b83a7bf899f416d2f3b4771');
+const sourceRoute=sourceRecipe.files.find(row=>row.target===proof.routes.source);
+assert.equal(sourceRoute.edits.length,4);
+const actualRouteRaw=fs.readFileSync(path.join(root,proof.routes.source),'utf8');
+assert.equal(hash(actualRouteRaw),sourceRoute.postimageSha256);
+let manualOnlyRaw=actualRouteRaw;
+for(const {before,after,beforeSha256,afterSha256} of [...sourceRoute.edits].reverse()){
+ assert.equal(hash(before),beforeSha256);assert.equal(hash(after),afterSha256);
+ assert.equal(manualOnlyRaw.split(after).length,2);manualOnlyRaw=manualOnlyRaw.replace(after,before);
+}
+assert.equal(hash(manualOnlyRaw),sourceRoute.preimageSha256);
+for(const input of proof.inputs)assert.equal(hash(input.path===proof.routes.source?Buffer.from(manualOnlyRaw):fs.readFileSync(path.join(root,input.path))),input.path===proof.routes.source?'34c284a8b19be9ad3320b88b2db62e4d805e297a84e3fa3b0fb245373a910121':input.rawSha256,input.path);
 const proposed=fs.readFileSync(path.join(root,proof.routes.source),'utf8').replaceAll('\r\n','\n');
-assert.equal(hash(proposed),proof.routes.afterLfSha256);
+const manualOnly=manualOnlyRaw.replaceAll('\r\n','\n');
+assert.equal(hash(manualOnly),proof.routes.afterLfSha256);
 // Execute the complete proposed route; only URL resolution is adapted so its
 // actual pinned I2 dependencies are loaded without writing that worktree.
 const rootRoute=pathToFileURL(path.join(root,'broker/src/weekly-source/routes.js'));
@@ -29,7 +46,7 @@ async function run(action,options={}){
  return {status:response.status,value:await response.json(),calls,payload};
 }
 test('four route contributions and one complete native read successor reverse to entire pinned parents',()=>{
- let restored=proposed;for(const {before,after} of [...proof.routes.replacements].reverse()){assert.equal(restored.split(after).length,2);restored=restored.replace(after,before);}
+ let restored=manualOnly;for(const {before,after} of [...proof.routes.replacements].reverse()){assert.equal(restored.split(after).length,2);restored=restored.replace(after,before);}
  assert.equal(restored,read('reference/routes.parent.js.txt'));assert.equal(hash(restored),proof.routes.beforeLfSha256);
  const sql=fs.readFileSync(path.join(root,'supabase/repeatable/includes/weekly_contact_manual_enquiry_office_rows_v1.sqlinc'),'utf8').replaceAll('\r\n','\n');
  assert.equal(hash(sql),proof.read.afterLfSha256);

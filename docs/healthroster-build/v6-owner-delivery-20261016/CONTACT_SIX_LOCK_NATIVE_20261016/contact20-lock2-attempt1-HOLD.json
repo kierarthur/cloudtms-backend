@@ -1,0 +1,48 @@
+{
+  "version": "CONTACT_NATIVE_FRESH_PROOF_POOL_REUSE_HOLD_V1",
+  "caseId": "contact20-lock2",
+  "sourceAdapterCommit": "bf11b6f2c4dbdcba4d381f02a302922ea510b755",
+  "status": "HOLD_NOT_QUALIFIED",
+  "diagnosis": "SECOND_MCP_MAIN_REUSED_ORIGINAL_B_PHYSICAL_PID; STRICT_FRESH_FIXTURE_PROOF_REFUSED",
+  "expectedError": {
+    "statement": 14,
+    "code": "55P03",
+    "accepted": false,
+    "rolledBack": true,
+    "firstToolFresh": true
+  },
+  "proof": {
+    "accepted": true,
+    "rolledBack": true,
+    "toolFreshFlag": true,
+    "originalB": 193235,
+    "proofBackend": 193235,
+    "originalTransactionStatus": "aborted",
+    "allReportedFixtureCountsZero": true,
+    "proofSource": "SECOND_TOOL_MAIN_NOT_PHYSICALLY_FRESH_FROM_ORIGINAL_B"
+  },
+  "holder": {
+    "caseId": "contact20-lock2",
+    "backendPid": 193387,
+    "physicalDatabase": "cloudtms_test_clone",
+    "witnessLocksGone": true,
+    "status": "HOLD_ABORTED",
+    "turnReleasedAt": "2026-10-16T13:01:10.054Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true
+  },
+  "hold": {
+    "status": "HOLD",
+    "caseId": "contact20-lock2",
+    "code": "REHEARSAL_FIXTURE_ABSENCE_UNPROVED",
+    "witnessCleanupProved": true,
+    "sharedTurnCompletion": "SEE_CANONICAL_OWNER_PROGRESS_LOG_NO_SYNTHETIC_CLOSE_PROOF",
+    "nativeResultRequiredBeforeAnyNextTrial": true,
+    "elapsedMilliseconds": 81984,
+    "completeMapsPersisted": false
+  },
+  "fullRestorationClaim": "NOT_QUALIFIED",
+  "mapsPersisted": false,
+  "externalMcpCallsCollected": true,
+  "noNextTrialUntilReviewedFreshVerificationSuccessor": true
+}

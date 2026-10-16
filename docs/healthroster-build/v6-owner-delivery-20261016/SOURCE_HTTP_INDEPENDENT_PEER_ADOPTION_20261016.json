@@ -1,0 +1,20 @@
+{
+  "version": "HEALTH_SOURCE_HTTP_ROOT_PEER_ADOPTION_V1",
+  "peerCommit": "aee7612ea50e2132fd0e7b5d196fb74c0783e701",
+  "peerManifestSha256": "c00fbe3be86f0679d0449a2d1e2eb3e304e242af4ec5744b4d3fd7e3d3d8c48a",
+  "reviewSha256": "e79f3e73c490b8ff4b7d8d2c6d5a65c1a249b86c70212426d9a850ff32c211b5",
+  "verifiedPeerFiles": 51,
+  "verdict": "NO_NEW_SOURCE_BLOCKER_IN_EXACT_PARTIAL_HTTP_CONTRIBUTION",
+  "sourceBlockers": [],
+  "authorTests": 41,
+  "independentTests": 19,
+  "rootIndependentTestsRerun": 19,
+  "parentReverse": "EXACT_SOURCE_TO_DAILY_ONLY_TO_39AA",
+  "requiredHolds": [
+    "Exact public current Source Result outer and genuine current financial child/compositor remain absent; this GET intentionally returns503 after genuine private read reproof.",
+    "Health host correction-entry capability/client visibility projection remains separate and unimplemented; no SQL capability or guessed DTO field grants entry.",
+    "Native/API/installed role/currentness/concurrency/financial publication and owner final PartB acceptance are NOT_RUN; source tests use mocked RPC."
+  ],
+  "native": "NOT_RUN",
+  "finalPartB": "NOT_RUN"
+}

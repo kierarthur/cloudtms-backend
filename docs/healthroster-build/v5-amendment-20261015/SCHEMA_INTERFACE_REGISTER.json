@@ -6963,6 +6963,18 @@
     "positiveConstructors": "NOT_RUN",
     "outerRepeatableReadCurrentness": "NOT_QUALIFIED",
     "fullInstallRehearsal": "NOT_RUN",
+    "finalPartB": "NOT_RUN",
+    "heldAttempts": [
+      "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_SIX_LOCK_NATIVE_20261016/contact20-lock2-attempt1-HOLD.json"
+    ],
+    "nextProofCorrection": "UNCHANGED_CANONICAL_FIXTURE_PROOF_IN_SECOND_TOOL_FRESH_READ_ONLY_VERIFICATION_SQL; NO_PID_WAIVER"
+  },
+  "source_http_independent_peer_continuation_20261016": {
+    "peerCommit": "aee7612ea50e2132fd0e7b5d196fb74c0783e701",
+    "manifestSha256": "c00fbe3be86f0679d0449a2d1e2eb3e304e242af4ec5744b4d3fd7e3d3d8c48a",
+    "verdict": "NO_NEW_SOURCE_BLOCKER_IN_EXACT_PARTIAL_HTTP_CONTRIBUTION",
+    "independentTests": 19,
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_HTTP_INDEPENDENT_PEER_ADOPTION_20261016.json",
     "finalPartB": "NOT_RUN"
   }
 }
