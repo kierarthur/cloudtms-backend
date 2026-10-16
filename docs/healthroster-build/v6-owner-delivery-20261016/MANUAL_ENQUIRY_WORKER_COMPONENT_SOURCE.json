@@ -1,7 +1,7 @@
 {
   "version": "CONTACT_MANUAL_ENQUIRY_WORKER_COMPONENT_SOURCE_V1",
   "status": "SOURCE_IMPLEMENTED_NOT_ROUTED_NATIVE_NOT_RUN",
-  "parentBackend": "1e40fc6c",
+  "parentBackend": "1859790b0596761f405a10c258394a1d47ca304e",
   "source": {
     "commit": "7161b1732fb682f78f9387e8ed9c9fe89c4e59f5",
     "worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026",
@@ -21,7 +21,7 @@
     },
     {
       "path": "broker/src/weekly-source/contact-manual-enquiry-office.mjs",
-      "sha256": "d024eb3eea52595ab08cb796f6a87a6f19f594279bb07a6d6982cf3537b58411"
+      "sha256": "d75605c2d485e3162116e5e592917a78941724c9e01bca7738f4573816a6d932"
     },
     {
       "path": "broker/src/weekly-source/contact-manual-enquiry-contract.mjs",
@@ -29,7 +29,7 @@
     },
     {
       "path": "tests/contact-manual-enquiry-office.test.mjs",
-      "sha256": "fd82d7f802a62ec53d76a86b23787526d61f0d27f168994248ad9c12ee502d21"
+      "sha256": "98ce2315627ef0ceda1add5d457579c7b30317d8bfe024c9c4a04220214dafe4"
     }
   ],
   "refusalHttpStatus": {
@@ -73,5 +73,6 @@
   "databaseCalls": 0,
   "providerCalls": 0,
   "deployments": 0,
-  "bankingMessages": 0
+  "bankingMessages": 0,
+  "refusalTypeSuccessor": "Unknown native JSON message values must be strings before finite code lookup, preventing malformed object-key coercion from escaping the bounded failure response.31 transport cases pass, including object/null messages."
 }

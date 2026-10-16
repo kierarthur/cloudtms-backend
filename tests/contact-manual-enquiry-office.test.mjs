@@ -58,7 +58,9 @@ test('foreign RPC, untrusted code and arbitrary native faults return only bounde
  for(const fault of [{fn:'another_rpc',json:{message:'CONTACT_SCOPE_NOT_FOUND'}},
   {code:'CONTACT_SCOPE_NOT_FOUND',message:'private SQL row'},
   {fn:commands.CONTACT_MANUAL_ENQUIRY_PREVIEW,json:{message:'private secret diagnostic'}},
-  {fn:commands.CONTACT_MANUAL_ENQUIRY_PREVIEW,json:{message:'toString'}},null]){
+  {fn:commands.CONTACT_MANUAL_ENQUIRY_PREVIEW,json:{message:'toString'}},
+  {fn:commands.CONTACT_MANUAL_ENQUIRY_PREVIEW,json:{message:{toString:null}}},
+  {fn:commands.CONTACT_MANUAL_ENQUIRY_PREVIEW,json:{message:null}},null]){
   const h=harness();h.options.rpc=async()=>{throw fault;};const r=await result(h.options);
   assert.equal(r.status,503);assert.deepEqual(r.json,failure('CONTACT_MANUAL_ENQUIRY_DEPENDENCY_UNAVAILABLE'));
  }

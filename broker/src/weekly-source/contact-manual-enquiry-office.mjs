@@ -40,8 +40,8 @@ export async function handleContactManualEnquiryOfficeCommand({body,user,deploym
    ?decodeContactManualEnquiryReview(value,request):decodeContactManualEnquiryReceipt(value,request);
   return response(decoded);
  }catch(error){
-  const local=error instanceof ContactManualEnquiryError&&Object.hasOwn(CONTACT_MANUAL_ENQUIRY_REFUSALS,error.code);
-  const native=rpcName!==undefined&&error?.fn===rpcName
+  const local=error instanceof ContactManualEnquiryError&&typeof error.code==='string'&&Object.hasOwn(CONTACT_MANUAL_ENQUIRY_REFUSALS,error.code);
+  const native=rpcName!==undefined&&error?.fn===rpcName&&typeof error?.json?.message==='string'
    &&Object.hasOwn(CONTACT_MANUAL_ENQUIRY_REFUSALS,error?.json?.message);
   const code=local?error.code:native?error.json.message:unavailable;
   return response({ok:false,error_code:code},CONTACT_MANUAL_ENQUIRY_REFUSALS[code]);
