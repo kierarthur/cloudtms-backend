@@ -1,0 +1,187 @@
+{
+  "version": "CONTACT_LOCK_AND_GROUPING_INDEPENDENT_PEER_V1",
+  "physicalCommit": "bdb86a015c343b685f94682e5ae644f63fab7468",
+  "sourceAssemblyCommit": "bf7a321429969f2c43345ce05ad2679ce3dbe83c",
+  "proposalSha256": "06da6de8e47842bdf3b52c855ebc11526431fc07812a22d5351c7a142d465756",
+  "postgres": [
+    17,
+    7
+  ],
+  "library": "v7.20",
+  "rows": [
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "beforeSha256": "f721b4ef62f7066b9224843d6c46cd88531b66ef7d7fb503723c661757e0ab59",
+      "afterSha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17",
+      "wholeSourceReverseEqual": true,
+      "committedDiskEqual": true,
+      "rootSavedStillPreimage": false,
+      "rootSavedEqualsAfter": true,
+      "newLocks": [
+        {
+          "relations": [
+            {
+              "RangeVar": {
+                "schemaname": "public",
+                "relname": "weekly_manager_recipient_generations",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 517
+              }
+            }
+          ],
+          "mode": 8,
+          "nowait": true
+        },
+        {
+          "relations": [
+            {
+              "RangeVar": {
+                "schemaname": "public",
+                "relname": "weekly_message_dispatch_commands",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 605
+              }
+            }
+          ],
+          "mode": 8,
+          "nowait": true
+        }
+      ],
+      "allBeforeOriginalChecks": true,
+      "everyOriginalStatementAstEqual": true
+    },
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "beforeSha256": "e756703a139a9e2087d124fb09fba6b08d903481e6d76fd029a8bdf743b50fd5",
+      "afterSha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+      "wholeSourceReverseEqual": true,
+      "committedDiskEqual": true,
+      "rootSavedStillPreimage": false,
+      "rootSavedEqualsAfter": true,
+      "newLocks": [
+        {
+          "relations": [
+            {
+              "RangeVar": {
+                "schemaname": "public",
+                "relname": "weekly_candidate_cohorts",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 517
+              }
+            }
+          ],
+          "mode": 5,
+          "nowait": true
+        },
+        {
+          "relations": [
+            {
+              "RangeVar": {
+                "schemaname": "public",
+                "relname": "weekly_timesheet_submission_requests",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 582
+              }
+            }
+          ],
+          "mode": 8,
+          "nowait": true
+        },
+        {
+          "relations": [
+            {
+              "RangeVar": {
+                "schemaname": "public",
+                "relname": "weekly_candidate_outreach_generations",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 670
+              }
+            }
+          ],
+          "mode": 5,
+          "nowait": true
+        },
+        {
+          "relations": [
+            {
+              "RangeVar": {
+                "schemaname": "public",
+                "relname": "weekly_timesheet_submission_request_memberships",
+                "inh": true,
+                "relpersistence": "p",
+                "location": 748
+              }
+            }
+          ],
+          "mode": 5,
+          "nowait": true
+        }
+      ],
+      "allBeforeOriginalChecks": true,
+      "everyOriginalStatementAstEqual": true
+    },
+    {
+      "file": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/44_manager_selection_scope_locks.sqlinc",
+      "beforeSha256": "9d69e2f9fcaf43754855b58741682e7ec8e396d03a7a15f1c8671c55fcaf2289",
+      "afterSha256": "3de091d35163e0b7a1fb7b98d4b4685e70792d0a257a1315a04d4aa268b0b301",
+      "wholeSourceReverseEqual": true,
+      "committedDiskEqual": true,
+      "rootSavedStillPreimage": false,
+      "rootSavedEqualsAfter": true,
+      "completeForSelectAstEqual": true,
+      "oneOccurrenceOnly": true,
+      "completeFunctionReverseEqual": true,
+      "bothCompletePlpgsqlBodiesOfflineGrammar": "PASS"
+    }
+  ],
+  "completeNativeOwners": [
+    {
+      "signature": "private.weekly_source_submission_request_start_v1(jsonb,boolean)",
+      "completeStatementSha256": "186ec8f5eabbefcd11fb0db2051f1b99abf3a6a9698a337776f67d36b51dd896",
+      "currentRootCompleteSourcePinEqual": true
+    },
+    {
+      "signature": "public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
+      "completeStatementSha256": "1af77213fc5b04c89df295a4712740569393674133ff42cba4b6c0cad23bb508",
+      "currentRootCompleteSourcePinEqual": true
+    },
+    {
+      "signature": "private.weekly_source_submission_request_start_v1(jsonb,boolean)",
+      "completeStatementSha256": "68f9bb40b4dc00b29f5ca2194264cf83b6b9a88cfeec8939fd51dc267135be7b",
+      "currentRootCompleteSourcePinEqual": true
+    },
+    {
+      "signature": "public.weekly_source_timesheet_submission_complete_atomic_v1(jsonb)",
+      "completeStatementSha256": "1be32b056ca5e7c76de4926598872fea9e1c3a750272eca2f2d2cbea36399b25",
+      "currentRootCompleteSourcePinEqual": true
+    },
+    {
+      "signature": "private.weekly_source_query_manager_generation_v1(uuid,text,timestamp with time zone,boolean)",
+      "completeStatementSha256": "952a7feb8f999cfd52de87aa056f89dd156ff47aa06c3a842723e763d5b34270",
+      "currentRootCompleteSourcePinEqual": true
+    },
+    {
+      "signature": "private.weekly_contact_manual_manager_generation_v1(jsonb,uuid,timestamp with time zone)",
+      "completeStatementSha256": "7610f1f8aea2710549ecb1a03b5c34f2987cbf13ae95ea442c3d209ad912080f",
+      "currentRootCompleteSourcePinEqual": true
+    },
+    {
+      "signature": "public.weekly_source_message_render_stage_atomic_v1(jsonb)",
+      "completeStatementSha256": "770279ef007d387f7c4507a9fb204ced97762fd8ee801d4556280caf12974731",
+      "currentRootCompleteSourcePinEqual": true
+    }
+  ],
+  "totalNewLocks": 6,
+  "newAclGrantOrFunctionAbi": false,
+  "qualification": "PASS_BOUNDED_SOURCE_LOCK_GROUPING_SUCCESSOR_NATIVE_NOT_RUN",
+  "outerIsolation": "READ_COMMITTED_OR_NATIVE_OUTER_SNAPSHOT_CURRENTNESS_MUST_BE_QUALIFIED",
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "I2Edits": 0,
+  "PartB": "NOT_RUN"
+}
