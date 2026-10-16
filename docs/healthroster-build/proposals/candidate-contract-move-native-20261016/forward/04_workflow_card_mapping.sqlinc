@@ -1,0 +1,71 @@
+create or replace function private._candidate_workflow_maps_to_card_v1(
+  p_workflow_id uuid,
+  p_timesheet_id uuid,
+  p_contract_week_id uuid
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_card_timesheet public.timesheets%rowtype;
+  v_anchor public.timesheets%rowtype;
+  v_target public.timesheets%rowtype;
+  v_parent public.timesheets%rowtype;
+  v_move jsonb;
+begin
+  if p_workflow_id is null then return false; end if;
+  select * into v_workflow from public.candidate_submission_workflows where id=p_workflow_id;
+  if not found then return false; end if;
+  if p_timesheet_id is not null and exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=p_timesheet_id) then
+    v_move:=private.candidate_contract_move_context_v1(v_workflow.environment,v_workflow.candidate_id,p_timesheet_id,null);
+    return p_workflow_id in(select value::uuid from jsonb_array_elements_text(v_move->'workflow_ids'))
+      and (p_contract_week_id is null or p_contract_week_id in((v_move->>'current_week_id')::uuid,(v_move->>'original_week_id')::uuid));
+  end if;
+  if p_timesheet_id is not null and v_workflow.workflow_kind='DAILY' then
+    select * into v_card_timesheet from public.timesheets
+      where timesheet_id=p_timesheet_id and sheet_scope='DAILY';
+    if not found then return false; end if;
+    return exists(select 1 from public.timesheets origin
+      where origin.timesheet_id in (v_workflow.anchor_timesheet_id,v_workflow.target_timesheet_id)
+        and origin.sheet_scope='DAILY' and origin.booking_id=v_card_timesheet.booking_id
+        and nullif(btrim(origin.booking_id),'') is not null
+        and origin.week_ending_date=v_card_timesheet.week_ending_date);
+  end if;
+  if p_contract_week_id is null then return false; end if;
+  if v_workflow.contract_week_id=p_contract_week_id then return true; end if;
+  if p_timesheet_id is null
+     or not (v_workflow.workflow_kind='CONTRACT_EXPENSE'
+       or v_workflow.rejection_scope='COMPLETE_EXPENSE_CLAIM') then return false; end if;
+  select * into v_card_timesheet from public.timesheets where timesheet_id=p_timesheet_id;
+  if not found then return false; end if;
+  if v_workflow.anchor_timesheet_id is not null then
+    select * into v_anchor from public.timesheets where timesheet_id=v_workflow.anchor_timesheet_id;
+    if found and (
+      v_anchor.timesheet_id=v_card_timesheet.timesheet_id
+      or (nullif(btrim(coalesce(v_anchor.booking_id,'')),'') is not null
+        and v_anchor.booking_id=v_card_timesheet.booking_id
+        and v_anchor.contract_id is not distinct from v_card_timesheet.contract_id
+        and v_anchor.week_ending_date is not distinct from v_card_timesheet.week_ending_date)
+    ) then return true; end if;
+  end if;
+  if v_workflow.target_timesheet_id is not null then
+    select * into v_target from public.timesheets where timesheet_id=v_workflow.target_timesheet_id;
+    if found and v_target.parent_timesheet_id is not null then
+      select * into v_parent from public.timesheets where timesheet_id=v_target.parent_timesheet_id;
+      if found and (
+        v_parent.timesheet_id=v_card_timesheet.timesheet_id
+        or (nullif(btrim(coalesce(v_parent.booking_id,'')),'') is not null
+          and v_parent.booking_id=v_card_timesheet.booking_id
+          and v_parent.contract_id is not distinct from v_card_timesheet.contract_id
+          and v_parent.week_ending_date is not distinct from v_card_timesheet.week_ending_date)
+      ) then return true; end if;
+    end if;
+  end if;
+  return false;
+end;
+$function$;
+

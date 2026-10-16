@@ -1,0 +1,9 @@
+{
+  "path": "broker/src/candidate-app-backend.js",
+  "sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd",
+  "completeFunctions": [
+    "managerStartResult",
+    "candidatePaperPackContext"
+  ],
+  "import": "decodeCandidateContractMove from candidate-contract-move.mjs"
+}

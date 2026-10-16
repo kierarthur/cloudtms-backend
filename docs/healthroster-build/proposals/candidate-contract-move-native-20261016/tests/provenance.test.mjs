@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+const base=new URL('../',import.meta.url);
+const recipe=JSON.parse(fs.readFileSync(new URL('MOUNT_RECIPE.json',base)));
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+test('all reviewed payload bytes match the finite mount manifest',()=>{for(const f of recipe.payloads){const bytes=fs.readFileSync(new URL(f.path,base));assert.equal(sha(bytes),f.sha256,f.path);assert.equal(bytes.length,f.bytes,f.path);}});
+test('exact current native SQL and complete broker source inputs remain pinned',()=>{for(const f of [...recipe.sourceInputs.files,recipe.brokerInput])assert.equal(sha(fs.readFileSync(`${recipe.sourceInputs.root}/${f.path}`)),f.sha256,f.path);});
+test('every new/current helper has an exact final owner-only or service-only ACL',()=>{const sql=fs.readFileSync(new URL('forward/13_acl.sqlinc',base),'utf8');assert.equal(recipe.functions.length,17);for(const f of recipe.functions){assert.ok(sql.includes(`revoke all on function ${f.signature} from public,anon,authenticated,service_role;`));assert.equal(sql.includes(`grant execute on function ${f.signature} to service_role;`),f.exposure==='service_role');}});
+test('current manager correction enrichment remains outside the two exact replacement functions',()=>{const broker=fs.readFileSync(`${recipe.sourceInputs.root}/${recipe.brokerInput.path}`,'utf8');assert.ok(broker.includes('deps, env, managerStartResult(result, routeAuthority), request'));assert.ok(broker.includes('return correctionCapability(request) ? { ...result, correction: summary } : result;'));assert.deepEqual(recipe.brokerInput.completeFunctions,['managerStartResult','candidatePaperPackContext']);});
+test('protected physical 7d schema stays byte-identical and lifecycle gate remains explicit',()=>{assert.equal(sha(fs.readFileSync(new URL('../checklist-v6-contract-correction-20261016/forward/sql/physical-schema.sqlinc',base))),'5b2509ffe94bdb19e52f7bcda77ffd22686bd4b18e63b2ab1f8783a63b6b5115');assert.equal(recipe.qualification,'SOURCE_ONLY_NATIVE_NOT_RUN');assert.ok(recipe.ownedRemaining.some(v=>v.includes('finalizer')));assert.equal(recipe.verification.databaseCalls,0);});

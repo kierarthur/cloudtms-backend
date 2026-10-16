@@ -1,0 +1,58 @@
+create or replace function private.timesheet_contract_move_evidence_live_v1(p_timesheet_id uuid)
+returns jsonb language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ select jsonb_build_object('timesheet',jsonb_build_object(
+   'week_ending_date',t.week_ending_date,'actual_schedule_json',t.actual_schedule_json,'worked_start_iso',t.worked_start_iso,'worked_end_iso',t.worked_end_iso,
+   'worked_minutes',t.worked_minutes,'break_start_iso',t.break_start_iso,'break_end_iso',t.break_end_iso,'break_minutes',t.break_minutes,
+   'additional_units_week',t.additional_units_week,'additional_units_per_day',t.additional_units_per_day,
+   'reference_number',t.reference_number,'day_references_json',t.day_references_json,
+   'candidate_workflow_id',t.candidate_workflow_id,'candidate_workflow_generation',t.candidate_workflow_generation,
+   'authorised_at_server',t.authorised_at_server,'auth_name',t.auth_name,'auth_job_title',t.auth_job_title,
+   'r2_nurse_key',t.r2_nurse_key,'r2_auth_key',t.r2_auth_key,'img_sha256_nurse',t.img_sha256_nurse,'img_sha256_auth',t.img_sha256_auth,
+   'manual_document_asset_id',t.manual_document_asset_id,'manual_pdf_r2_key',t.manual_pdf_r2_key,
+   'qr_payload_json',t.qr_payload_json,'qr_signed_at_utc',t.qr_signed_at_utc,'qr_signed_hash',t.qr_signed_hash),
+  'evidence',coalesce((select jsonb_agg(to_jsonb(e) order by e.id) from public.timesheet_evidence e where e.timesheet_id=t.timesheet_id),'[]'::jsonb),
+  'workflows',coalesce((select jsonb_agg(jsonb_build_object('id',w.id,'generation',w.generation,
+    'environment',w.environment,'candidate_id',w.candidate_id,'workflow_kind',w.workflow_kind,'route',w.route,'contract_id',w.contract_id,'contract_week_id',w.contract_week_id,
+    'anchor_timesheet_id',w.anchor_timesheet_id,'target_timesheet_id',w.target_timesheet_id,'work_date',w.work_date,
+    'worker_submitted_at_utc',w.worker_submitted_at_utc,'manager_name',w.manager_name,'manager_position',w.manager_position,
+    'input_snapshot_json',w.input_snapshot_json,'immutable_submission_json',w.immutable_submission_json,'immutable_submission_sha256',w.immutable_submission_sha256,
+    'candidate_signature_component_id',w.candidate_signature_component_id,'candidate_signature_sha256',w.candidate_signature_sha256,
+    'manager_signature_component_id',w.manager_signature_component_id,'manager_signature_sha256',w.manager_signature_sha256,
+    'candidate_signed_at_utc',w.candidate_signed_at_utc,'manager_approved_at_utc',w.manager_approved_at_utc)
+   order by w.id) from public.candidate_submission_workflows w
+   where w.id=t.candidate_workflow_id or w.anchor_timesheet_id=t.timesheet_id or w.target_timesheet_id=t.timesheet_id),'[]'::jsonb),
+  'submission_sources',private.candidate_contract_move_sources_v1(coalesce((select array_agg(w.id order by w.id) from public.candidate_submission_workflows w where w.id=t.candidate_workflow_id or w.anchor_timesheet_id=t.timesheet_id or w.target_timesheet_id=t.timesheet_id),'{}'::uuid[])),
+  'components',coalesce((select jsonb_agg(to_jsonb(e)-array['component_generation','owning_timesheet_id','agency_authorisation_state','updated_at_utc'] order by e.expense_component_id)
+    from public.candidate_expense_components e where e.owning_timesheet_id=t.timesheet_id
+     or exists(select 1 from public.candidate_submission_workflows w where w.id=e.workflow_id
+      and (w.id=t.candidate_workflow_id or w.anchor_timesheet_id=t.timesheet_id or w.target_timesheet_id=t.timesheet_id))),'[]'::jsonb))
+ from public.timesheets t where t.timesheet_id=p_timesheet_id;
+$function$;
+
+
+create or replace function private.timesheet_contract_move_evidence_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare source_member jsonb; snapshot jsonb; a private.timesheet_contract_family_aliases%rowtype;
+begin
+ select v.* into a from private.timesheet_contract_family_aliases v where v.timesheet_id=p_timesheet_id;
+ if not found then return private.timesheet_contract_move_evidence_live_v1(p_timesheet_id);end if;
+ -- The original alias is immutable and points directly at its first accepted
+ -- operation. No latest-version/chain walk or current workflow state is the seal.
+ select value into source_member from private.timesheet_contract_family_aliases original_alias
+  join private.timesheet_contract_move_operations o on o.id=original_alias.accepted_operation_id
+  join private.timesheet_contract_move_reviews r on r.id=o.accepted_review_id and r.operation_id=o.id
+  join private.timesheet_contract_move_members m on m.operation_id=o.id and m.member_key=original_alias.member_key
+  cross join lateral jsonb_array_elements(r.manifest_json#>'{physical,members}') value
+  where original_alias.timesheet_id=a.original_timesheet_id and original_alias.original_timesheet_id=a.original_timesheet_id
+   and (o.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(o.id)) and value->>'member_key'=a.member_key
+   and value->>'original_timesheet_id'=a.original_timesheet_id::text
+   and m.member_hash=private.timesheet_contract_move_row_hash_v1(value)
+   and m.immutable_evidence_hash=private.timesheet_contract_move_row_hash_v1(value->'original_evidence');
+ snapshot:=source_member->'original_evidence';
+ if snapshot is null then raise exception 'CONTRACT_MOVE_ORIGINAL_EVIDENCE_UNBOUND' using errcode='23514';end if;
+ perform private.candidate_contract_move_evidence_snapshot_assert_v1(a.original_timesheet_id,snapshot);
+ return snapshot;
+end;
+$function$;

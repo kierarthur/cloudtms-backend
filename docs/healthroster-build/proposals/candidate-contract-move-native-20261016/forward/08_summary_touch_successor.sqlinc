@@ -1,0 +1,45 @@
+create or replace function private._candidate_timesheet_summary_revision_touch_workflow_v1(p_workflow_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path=pg_catalog,public,private,extensions,pg_temp
+as $function$
+declare
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_current_timesheet_id uuid;
+  v_move jsonb;
+  v_current_week_id uuid;
+begin
+  if p_workflow_id is null then return; end if;
+  select workflow_row.* into v_workflow
+  from public.candidate_submission_workflows as workflow_row
+  where workflow_row.id=p_workflow_id;
+  if not found then return; end if;
+
+  v_current_timesheet_id:=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id);
+  if exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=v_current_timesheet_id) then
+    v_move:=private.candidate_contract_move_context_v1(v_workflow.environment,v_workflow.candidate_id,v_current_timesheet_id,null);
+    v_current_timesheet_id:=(v_move#>>'{dto,current_timesheet_id}')::uuid;
+    v_current_week_id:=(v_move->>'current_week_id')::uuid;
+    perform private._candidate_timesheet_summary_revision_upsert_v1('TIMESHEET',v_current_timesheet_id,v_current_timesheet_id,v_current_week_id);
+    perform private._candidate_timesheet_summary_revision_upsert_v1('CONTRACT_WEEK',v_current_week_id,v_current_timesheet_id,v_current_week_id);
+  end if;
+  if v_workflow.contract_week_id is not null then
+    perform private._candidate_timesheet_summary_revision_upsert_v1(
+      'CONTRACT_WEEK',v_workflow.contract_week_id,v_current_timesheet_id,v_workflow.contract_week_id
+    );
+  end if;
+  if v_workflow.anchor_timesheet_id is not null then
+    perform private._candidate_timesheet_summary_revision_upsert_v1(
+      'TIMESHEET',v_workflow.anchor_timesheet_id,v_current_timesheet_id,v_workflow.contract_week_id
+    );
+  end if;
+  if v_workflow.target_timesheet_id is not null
+     and v_workflow.target_timesheet_id is distinct from v_workflow.anchor_timesheet_id then
+    perform private._candidate_timesheet_summary_revision_upsert_v1(
+      'TIMESHEET',v_workflow.target_timesheet_id,v_current_timesheet_id,v_workflow.contract_week_id
+    );
+  end if;
+end;
+$function$;
+

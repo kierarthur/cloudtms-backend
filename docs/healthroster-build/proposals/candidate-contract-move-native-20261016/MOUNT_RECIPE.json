@@ -1,0 +1,311 @@
+{
+  "version": 1,
+  "qualification": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "scope": "Candidate producer/read-manager-paper/summary checkpoint; native mutation/finalizer/reset follow-on remains incomplete",
+  "rootReviewedSqlBase": "5feaeae37d1909e44cc3c415f80bf448dda7cbfd",
+  "physicalSchemaCheckpoint": "7d1be386431f5a88b7206d24c9af37b504c36f4e",
+  "dailyCheckpoint": "00f25571ac7fb65f44351a52beced0710211138e",
+  "sourceInputs": {
+    "version": 1,
+    "root": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "files": [
+      {
+        "path": "supabase/repeatable/10102026_1347_import_expense_qr_approval_v1.sql",
+        "sha256": "a0a0b47eca6667fed5ea890abf71de2118adbcbeb2e39ad4b1a7007a51ce445c"
+      },
+      {
+        "path": "supabase/repeatable/13102026_1331_candidate_finalize_next_import_expense_authority_v1.sql",
+        "sha256": "5845f7ee77cb9164da6150bddbdbb90bd4e1c062fc556fa2e2207c78cc5e66fe"
+      },
+      {
+        "path": "supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql",
+        "sha256": "8b6d78ca518aeb780bfd2a32430511bda3c53978adac3c80916de76121624d3f"
+      },
+      {
+        "path": "supabase/repeatable/27082026_1916_candidate_timesheet_summary_refresh_v1.sql",
+        "sha256": "e18d02b6c9a0fd3d7914481002fec9aa173949e1035de70157a2f5f5c33f0375"
+      },
+      {
+        "path": "supabase/repeatable/03102026_1540_candidate_approved_hours_visible.sql",
+        "sha256": "872ea1bea30acf0a0a510d6546dd4138773e6257610aebce9880fb386f43a0e2"
+      },
+      {
+        "path": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+        "sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21"
+      },
+      {
+        "path": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+        "sha256": "42a3b830a53ea3ffad232dbe414d06d38771e4d6c4736a16518053a14df811ed"
+      }
+    ]
+  },
+  "brokerInput": {
+    "path": "broker/src/candidate-app-backend.js",
+    "sha256": "8c35a472595ea3f8f24049e445697c939f291f42cb928d8186138e6a765cb6dd",
+    "completeFunctions": [
+      "managerStartResult",
+      "candidatePaperPackContext"
+    ],
+    "import": "decodeCandidateContractMove from candidate-contract-move.mjs"
+  },
+  "mount": {
+    "kind": "new_final_owner_repeatable_after_actual_physical_and_invoice_prerequisites",
+    "suggestedRoot": "supabase/repeatable/16102026_0507_candidate_contract_move_native_projection_v1.sql",
+    "orderedSqlPayloads": [
+      "forward/00_evidence_seals.sqlinc",
+      "forward/01_evidence_capture.sqlinc",
+      "forward/02_scope_successor.sqlinc",
+      "forward/03_candidate_projection.sqlinc",
+      "forward/04_workflow_card_mapping.sqlinc",
+      "forward/05_detail_successor.sqlinc",
+      "forward/06_page_successor.sqlinc",
+      "forward/07_page_v2_projection.sqlinc",
+      "forward/08_summary_touch_successor.sqlinc",
+      "forward/09_manager_start_successor.sqlinc",
+      "forward/10_workflow_revision_trigger_successor.sqlinc",
+      "forward/12_acceptance_summary_invalidation.sqlinc",
+      "forward/13_acl.sqlinc"
+    ],
+    "brokerModule": {
+      "from": "forward/candidate-contract-move.mjs",
+      "to": "broker/src/candidate-contract-move.mjs"
+    },
+    "brokerCompleteFunctionPayload": "forward/11_broker_native_contexts.mjsinc",
+    "brokerFunctions": [
+      "managerStartResult",
+      "candidatePaperPackContext"
+    ],
+    "preserveOuterCaller": "handleManagerAction START still invokes enrichManagerCorrection(deps,env,managerStartResult(result,routeAuthority),request); no replacement of the outer correction owner",
+    "schema": "no new store/column; existing immutable reviews.manifest_json physical.members[].original_evidence +from_evidence companion snapshots",
+    "existingRowsGate": "Must prove no previously accepted legacy move without the required original_evidence/from_evidence snapshot. Never synthesize snapshots from a later mutable workflow."
+  },
+  "functions": [
+    {
+      "signature": "private.candidate_contract_move_component_source_v1(jsonb)",
+      "path": "forward/00_evidence_seals.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.candidate_contract_move_sources_v1(uuid[])",
+      "path": "forward/00_evidence_seals.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.candidate_contract_move_claim_snapshot_assert_v1(jsonb)",
+      "path": "forward/00_evidence_seals.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.candidate_contract_move_evidence_snapshot_assert_v1(uuid,jsonb)",
+      "path": "forward/00_evidence_seals.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.timesheet_contract_move_evidence_live_v1(uuid)",
+      "path": "forward/01_evidence_capture.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.timesheet_contract_move_evidence_v1(uuid)",
+      "path": "forward/01_evidence_capture.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.timesheet_contract_move_scope_v1(uuid,boolean)",
+      "path": "forward/02_scope_successor.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.candidate_contract_move_facts_v1(jsonb,jsonb)",
+      "path": "forward/03_candidate_projection.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.candidate_contract_move_context_v1(text,uuid,uuid,uuid)",
+      "path": "forward/03_candidate_projection.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private._candidate_workflow_maps_to_card_v1(uuid,uuid,uuid)",
+      "path": "forward/04_workflow_card_mapping.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamptz)",
+      "path": "forward/05_detail_successor.sqlinc",
+      "exposure": "service_role"
+    },
+    {
+      "signature": "public.candidate_app_timesheet_page_v1(uuid,text,text,text,integer,timestamptz)",
+      "path": "forward/06_page_successor.sqlinc",
+      "exposure": "service_role"
+    },
+    {
+      "signature": "public.candidate_app_timesheet_page_v2(uuid,text,text,text,integer,timestamptz)",
+      "path": "forward/07_page_v2_projection.sqlinc",
+      "exposure": "service_role"
+    },
+    {
+      "signature": "private._candidate_timesheet_summary_revision_touch_workflow_v1(uuid)",
+      "path": "forward/08_summary_touch_successor.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)",
+      "path": "forward/09_manager_start_successor.sqlinc",
+      "exposure": "service_role"
+    },
+    {
+      "signature": "private._candidate_timesheet_summary_workflow_revision_trg_v1()",
+      "path": "forward/10_workflow_revision_trigger_successor.sqlinc",
+      "exposure": "owner_only"
+    },
+    {
+      "signature": "private.candidate_contract_move_summary_invalidate_v1()",
+      "path": "forward/12_acceptance_summary_invalidation.sqlinc",
+      "exposure": "owner_only"
+    }
+  ],
+  "trueDependencies": [
+    "Published physical identity/stage/guard source (not only 7d schema) mounted in exact owner order",
+    "Actual Banking Contract cut/stage/publish/approved current revision and invoice obligation owners for genuine Move fixtures",
+    "Root central/private/final ACL + final-definer metadata reviewed for these exact signatures/root; preserve every historical companion",
+    "Root native/current-contract/rollback/browser ACL proof; no native qualification conferred here"
+  ],
+  "ownedRemaining": [
+    "Native mutation/finalizer/withdraw/reset current-placement composition and genuine financial snapshot seam",
+    "Native rotation/current-placement synchronization",
+    "Original archived paper PREPARING task continuation authority; existing READY pack read is covered",
+    "Signed correction request/cancel/authorise current placement consumer closure"
+  ],
+  "verification": {
+    "nodeTests": 15,
+    "offlineGrammar": "13 SQL payloads plus pure fact scalar assertions; actual %ROWTYPE catalogue field checks",
+    "native": "NOT_RUN",
+    "databaseCalls": 0,
+    "sharedRootEdits": 0,
+    "protectedBoundaryEdits": 0
+  },
+  "payloads": [
+    {
+      "path": "BROKER_INPUT.json",
+      "sha256": "1c58fb282c169fe5b978ef87a7d26626eae8f4996ce2e38aee60be4c8cb6b166",
+      "bytes": 296
+    },
+    {
+      "path": "build.mjs",
+      "sha256": "df4ab43d46498ec21ca3a222a544b8131b18dcd81f962e8ba4a854dbd8e47d5f",
+      "bytes": 19774
+    },
+    {
+      "path": "forward/00_evidence_seals.sqlinc",
+      "sha256": "1e0336d313d9e7fb6409f524237d1a23d0f8084604b826bd3758589d5e9ba276",
+      "bytes": 8692
+    },
+    {
+      "path": "forward/01_evidence_capture.sqlinc",
+      "sha256": "06dba897df4ce43b44d37b6a230bcb937720f93d65c6136b4bdb3ad77144c73b",
+      "bytes": 5593
+    },
+    {
+      "path": "forward/02_scope_successor.sqlinc",
+      "sha256": "4a62ab7584d1ecc4469b828793fb3bbd0d324b5c269b9b8abfb30fc2117fa238",
+      "bytes": 9858
+    },
+    {
+      "path": "forward/03_candidate_projection.sqlinc",
+      "sha256": "6d8b5b8969fc64faf13dea2f260db465ca1c183535e8c3c71b326d690078f931",
+      "bytes": 10717
+    },
+    {
+      "path": "forward/04_workflow_card_mapping.sqlinc",
+      "sha256": "616581bb2ab72a25eacc43e6a0ba2271876f7f1b6f9cacfcb9dc97c607fbbe81",
+      "bytes": 3691
+    },
+    {
+      "path": "forward/05_detail_successor.sqlinc",
+      "sha256": "d8530fef4da7349aa7a0e09bb266fee93f5c3339a2f5846680dabf94ddf89fde",
+      "bytes": 28987
+    },
+    {
+      "path": "forward/06_page_successor.sqlinc",
+      "sha256": "10b7f9b435a104593ec254747aee2dfa26fffc6dddca0287eaa4a329a2c7ea41",
+      "bytes": 53451
+    },
+    {
+      "path": "forward/07_page_v2_projection.sqlinc",
+      "sha256": "12c699813ea540ee8949694908cf4c932367d0ea862166d74bd6f9f719da94c7",
+      "bytes": 2139
+    },
+    {
+      "path": "forward/08_summary_touch_successor.sqlinc",
+      "sha256": "3183c508899483496047b8685cde4e1aab96c9aa77bf39cee8a536a4dc08326e",
+      "bytes": 2212
+    },
+    {
+      "path": "forward/09_manager_start_successor.sqlinc",
+      "sha256": "02e05673ac5278e1cdc89461ebbf02f4068b872892ecb2c9c6af5deb349c9de5",
+      "bytes": 245798
+    },
+    {
+      "path": "forward/10_workflow_revision_trigger_successor.sqlinc",
+      "sha256": "c9a1d86a72b5e55971a212eb715b64486750f76fc511967445ada24fef16f3c7",
+      "bytes": 2268
+    },
+    {
+      "path": "forward/11_broker_native_contexts.mjsinc",
+      "sha256": "026f0662367b8fcd1a058580edd3842b5677f08b7cb43a4071b4fa251531011e",
+      "bytes": 6927
+    },
+    {
+      "path": "forward/12_acceptance_summary_invalidation.sqlinc",
+      "sha256": "f085969fcf242e0de30d9ac42be59821b7979e275271ee24679cc5d697347142",
+      "bytes": 1708
+    },
+    {
+      "path": "forward/13_acl.sqlinc",
+      "sha256": "c89ba8029423698b0a5166e173ff6cfb782145b190bb45c1feba5e508b518a74",
+      "bytes": 4555
+    },
+    {
+      "path": "forward/candidate-contract-move.mjs",
+      "sha256": "172e9f0e1c513751c9713c7581fa869c4055f6342195fcd8e523b0308d7ef6b3",
+      "bytes": 3126
+    },
+    {
+      "path": "README.md",
+      "sha256": "6c60a3f8df68508997bd082a1368f0931a53d550fed435732276610620b8efae",
+      "bytes": 5818
+    },
+    {
+      "path": "seal.py",
+      "sha256": "ce951e34e509cd462cd4c917dce640e6dc555ae99f4c3912935db8aab5f87d39",
+      "bytes": 2379
+    },
+    {
+      "path": "SOURCE_INPUTS.json",
+      "sha256": "354cee2258e54e19b138c2f6a2aee7ead5d97a19772b9b7fadfcc06bfc7d4e72",
+      "bytes": 1488
+    },
+    {
+      "path": "tests/native-contexts.test.mjs",
+      "sha256": "9b1be144b692d83d24c93348bb394ac4754e3e6dadf2daf2789fd29a987590e2",
+      "bytes": 7384
+    },
+    {
+      "path": "tests/native-facts-scalars.sql",
+      "sha256": "45c07f7af242632b599c70b7af0d07cb20204717ccfcefbe971cbfabfc7efc69",
+      "bytes": 2821
+    },
+    {
+      "path": "tests/NATIVE_ACCEPTANCE.md",
+      "sha256": "1f94ae7ab1ba4790a3820ac0c939c4c471e4b2d1fb7796ab110744c21f18297f",
+      "bytes": 3902
+    },
+    {
+      "path": "tests/provenance.test.mjs",
+      "sha256": "71b7169ad4bc0bf92116037a460641224665530f85d06cdc9a9de35fd3c1cae6",
+      "bytes": 2262
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+create or replace function private._candidate_timesheet_summary_workflow_revision_trg_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path=pg_catalog,public,private,extensions,pg_temp
+as $function$
+declare
+  v_current_timesheet_id uuid;
+  v_contract_week_id uuid;
+  v_identity_id uuid;
+  v_timesheet_ids uuid[];
+  v_contract_week_ids uuid[];
+begin
+  if tg_op='INSERT' then
+    v_current_timesheet_id:=coalesce(new.target_timesheet_id,new.anchor_timesheet_id);
+    v_contract_week_id:=new.contract_week_id;
+    v_timesheet_ids:=array_remove(array[new.anchor_timesheet_id,new.target_timesheet_id]::uuid[],null);
+    v_contract_week_ids:=array_remove(array[new.contract_week_id]::uuid[],null);
+  elsif tg_op='UPDATE' then
+    v_current_timesheet_id:=coalesce(new.target_timesheet_id,new.anchor_timesheet_id);
+    v_contract_week_id:=coalesce(new.contract_week_id,old.contract_week_id);
+    v_timesheet_ids:=array_remove(array[
+      old.anchor_timesheet_id,old.target_timesheet_id,new.anchor_timesheet_id,new.target_timesheet_id
+    ]::uuid[],null);
+    v_contract_week_ids:=array_remove(array[old.contract_week_id,new.contract_week_id]::uuid[],null);
+  else
+    v_current_timesheet_id:=coalesce(old.target_timesheet_id,old.anchor_timesheet_id);
+    v_contract_week_id:=old.contract_week_id;
+    v_timesheet_ids:=array_remove(array[old.anchor_timesheet_id,old.target_timesheet_id]::uuid[],null);
+    v_contract_week_ids:=array_remove(array[old.contract_week_id]::uuid[],null);
+  end if;
+
+  for v_identity_id in
+    select distinct identity_id from unnest(v_timesheet_ids) as ids(identity_id)
+  loop
+    perform private._candidate_timesheet_summary_revision_upsert_v1(
+      'TIMESHEET',v_identity_id,coalesce(v_current_timesheet_id,v_identity_id),v_contract_week_id
+    );
+  end loop;
+  for v_identity_id in
+    select distinct identity_id from unnest(v_contract_week_ids) as ids(identity_id)
+  loop
+    perform private._candidate_timesheet_summary_revision_upsert_v1(
+      'CONTRACT_WEEK',v_identity_id,v_current_timesheet_id,v_identity_id
+    );
+  end loop;
+
+  if tg_op<>'DELETE' then perform private._candidate_timesheet_summary_revision_touch_workflow_v1(new.id);end if;
+  if tg_op='DELETE' then return old; end if;
+  return new;
+end;
+$function$;
+

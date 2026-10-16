@@ -1,0 +1,47 @@
+create or replace function public.candidate_app_timesheet_page_v2(
+  p_session_id uuid,
+  p_environment text,
+  p_view text default 'CURRENT',
+  p_cursor text default null,
+  p_limit integer default 50,
+  p_now_utc timestamptz default now()
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_page jsonb;
+  v_item jsonb;
+  v_items jsonb:='[]'::jsonb;
+  v_approval jsonb;
+  v_context jsonb;
+  v_candidate_id uuid;
+  v_move jsonb;
+begin
+  v_page:=public.candidate_app_timesheet_page_v1(
+    p_session_id,p_environment,p_view,p_cursor,p_limit,p_now_utc);
+  v_context:=private._candidate_session_context_v1(p_session_id,p_environment,null,p_now_utc,false);
+  v_candidate_id:=nullif(v_context->>'selected_candidate_id','')::uuid;
+  if v_candidate_id is null then raise exception 'CANDIDATE_SELECTION_REQUIRED' using errcode='28000';end if;
+  for v_item in select value from pg_catalog.jsonb_array_elements(
+    coalesce(v_page->'items','[]'::jsonb)) loop
+    if v_item->>'route_family'='IMPORT_AUTHORITATIVE' then
+      v_approval:=private.weekly_source_candidate_list_approval_v1(
+        nullif(v_item->>'timesheet_id','')::uuid);
+      v_item:=v_item||pg_catalog.jsonb_build_object(
+        'approved_hours_state',v_approval->'state',
+        'approved_total_hours',v_approval->'total_hours');
+    end if;
+    v_move:=private.candidate_contract_move_context_v1(p_environment,v_candidate_id,nullif(v_item->>'timesheet_id','')::uuid,null);
+    if v_move is not null then v_item:=v_item||jsonb_build_object('contract_move',v_move->'dto');end if;
+    if v_move#>>'{dto,is_history}'='true' then
+      v_item:=v_item||jsonb_build_object('primary_action',null,
+        'actions',jsonb_build_object('can_edit_hours',false,'can_edit_expenses',false,'candidate_paper_submission_allowed',false,
+         'candidate_no_work_allowed',false,'can_reject_candidate_submission',false,'reject_scope',null));
+    end if;
+    v_items:=v_items||pg_catalog.jsonb_build_array(v_item);
+  end loop;
+  return pg_catalog.jsonb_set(v_page,'{items}',v_items);
+end;
+$function$;
+

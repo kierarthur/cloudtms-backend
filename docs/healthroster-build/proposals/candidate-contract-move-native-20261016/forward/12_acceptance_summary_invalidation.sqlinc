@@ -1,0 +1,23 @@
+-- Only the already-committed native acceptance/resume projection is invalidated.
+-- No new queue, workflow, financial publication or mutation authority is created.
+create or replace function private.candidate_contract_move_summary_invalidate_v1()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare m private.timesheet_contract_move_members%rowtype; identity_id uuid; week_id uuid;
+begin
+ if new.purpose<>'CONTRACT_CORRECTION' or new.state<>'COMPLETE' or old.state='COMPLETE' then return new;end if;
+ for m in select v.* from private.timesheet_contract_move_members v where v.operation_id=new.id order by v.member_key loop
+  for identity_id in select a.timesheet_id from private.timesheet_contract_family_aliases a
+   where a.family_root_id=m.family_root_id and a.member_key=m.member_key order by a.timesheet_id loop
+   select cw.id into week_id from public.contract_weeks cw where cw.timesheet_id=identity_id;
+   perform private._candidate_timesheet_summary_revision_upsert_v1('TIMESHEET',identity_id,m.to_timesheet_id,week_id);
+   if week_id is not null then perform private._candidate_timesheet_summary_revision_upsert_v1('CONTRACT_WEEK',week_id,m.to_timesheet_id,week_id);end if;
+  end loop;
+ end loop;
+ return new;
+end;
+$function$;
+drop trigger if exists candidate_contract_move_summary_invalidate_v1 on private.timesheet_contract_move_operations;
+create trigger candidate_contract_move_summary_invalidate_v1 after update of state on private.timesheet_contract_move_operations
+for each row when(new.state='COMPLETE' and old.state is distinct from new.state)
+execute function private.candidate_contract_move_summary_invalidate_v1();

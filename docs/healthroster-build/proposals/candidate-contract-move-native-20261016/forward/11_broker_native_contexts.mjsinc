@@ -1,0 +1,139 @@
+function managerStartResult(result, routeAuthority) {
+  const components = (Array.isArray(result?.ordered_components) ? result.ordered_components : [])
+    .map((component) => ({
+      component_id: requireUuid(component?.component_id, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+      ordinal: requireInteger(component?.ordinal, 'MANAGER_REVIEW_DOCUMENT_NOT_READY', 1),
+      component_kind: text(component?.component_kind),
+      media_type: normaliseMediaType(component?.media_type),
+      byte_size: requireInteger(component?.byte_size, 'MANAGER_REVIEW_DOCUMENT_NOT_READY', 1),
+      content_sha256: requireSha256(component?.content_sha256, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+      viewed: component?.viewed === true
+    }));
+  const reviewedCount = Number(result?.reviewed_count || 0);
+  if (!components.length || !Number.isSafeInteger(reviewedCount) || reviewedCount < 0
+      || reviewedCount > components.length) {
+    throw new CandidateHttpError(409, 'MANAGER_REVIEW_DOCUMENT_NOT_READY');
+  }
+  const move = result?.contract_move == null ? null : decodeCandidateContractMove(result.contract_move);
+  return {
+    ...(move ? { contract_move: move } : {}),
+    ok: true,
+    workflow_id: requireUuid(result?.workflow_id, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+    workflow_generation: requireInteger(
+      result?.workflow_generation, 'MANAGER_REVIEW_DOCUMENT_NOT_READY', 1
+    ),
+    approval_request_id: requireUuid(
+      result?.approval_request_id, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'
+    ),
+    authority_kind: routeAuthority?.authority_kind || (upper(result?.method) === 'PHONE'
+      ? 'MANAGER_PHONE' : 'MANAGER_EMAIL'),
+    submission_type: managerSubmissionType(result?.workflow_kind),
+    expires_at_utc: new Date(result?.expires_at_utc).toISOString(),
+    manifest_sha256: requireSha256(result?.manifest_sha256, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+    page_count: components.length,
+    ordered_components: components,
+    reviewed_count: reviewedCount,
+    all_pages_viewed: reviewedCount === components.length,
+    can_approve: result?.can_approve === true,
+    can_refuse: result?.can_refuse === true
+  };
+}
+
+
+async function candidatePaperPackContext(request, env, deps, timesheetId) {
+  const access = await verifyCandidateAccess(request, env);
+  const requestedId = requireUuid(timesheetId, 'CANDIDATE_TIMESHEET_NOT_FOUND');
+  let id = requestedId;
+
+  // Reuse the Candidate-safe detail authority as the ownership/capability gate.
+  // The subsequent service reads resolve only the already-authorised current row;
+  // neither a raw R2 identity nor a database document identity is exposed.
+  const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+    p_timesheet_id: requestedId,
+    p_contract_week_id: null,
+    p_workflow_id: null
+  }));
+
+  const move = detail?.contract_move == null ? null : decodeCandidateContractMove(detail.contract_move);
+  if (move) {
+    if (![move.original_timesheet_id, move.current_timesheet_id].includes(requestedId) && move.is_history !== true) {
+      throw new CandidateHttpError(409, 'CANDIDATE_CONTEXT_STALE');
+    }
+    id = move.evidence_origin_timesheet_id;
+  }
+  // A moved original is an immutable source. The preceding native detail proof
+  // authorises this exact source ID; ordinary requests retain the current-only read.
+  const timesheet = await restOne(env, 'timesheets',
+    `timesheet_id=eq.${encodeURIComponent(id)}${move ? '' : '&is_current=eq.true'}`
+    + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
+    + 'document_revision,document_state,current_document_version_id,'
+    + 'active_document_operation_id,manual_pdf_r2_key');
+  const qrRoute = text(timesheet?.qr_token)
+    && ['PENDING', 'SENT', 'READY'].includes(upper(timesheet?.qr_status));
+  if (!timesheet || upper(timesheet.sheet_scope) !== 'WEEKLY') {
+    throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
+  }
+  const workflows = await activePaperWorkflowsForTimesheet(env, id);
+  if (workflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
+  if (!workflows.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
+  const targetlessExpense = upper(workflows[0].workflow_kind) === 'CONTRACT_EXPENSE'
+    && !text(workflows[0].target_timesheet_id);
+  if (!qrRoute && !targetlessExpense) {
+    throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
+  }
+
+  let version = null;
+  if (targetlessExpense) {
+    const sourceAuthoritySha256 = text(workflows[0].immutable_submission_sha256)
+      .replace(/^\\x/i, '').toLowerCase();
+    if (!SHA256_RE.test(sourceAuthoritySha256)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+    }
+    version = {
+      id: null,
+      r2_key: null,
+      sha256: sourceAuthoritySha256,
+      status: 'READY',
+      source_kind: 'WORKFLOW_IMMUTABLE_SUBMISSION'
+    };
+  } else if (upper(timesheet.document_state) === 'READY'
+      && UUID_RE.test(text(timesheet.current_document_version_id))) {
+    version = await restOne(env, 'invoice_document_versions',
+      `id=eq.${encodeURIComponent(timesheet.current_document_version_id)}`
+      + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
+      + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
+  }
+  let outbox = null;
+  let outboxError = null;
+  try {
+    outbox = await requireCandidatePaperOutbox(env, workflows[0], timesheet);
+  } catch (error) {
+    const code = knownErrorCode(error);
+    if (!['CANDIDATE_PAPER_OUTBOX_FAILED', 'CANDIDATE_PAPER_OUTBOX_CONFLICT',
+      'CANDIDATE_PAPER_OUTBOX_NOT_READY'].includes(code)) throw error;
+    outboxError = code;
+  }
+  let complete = null;
+  // Once released, the immutable complete-pack receipt is the authority for
+  // this exact workflow generation and manifest. Expected QR delivery-state
+  // updates can invalidate the generic Timesheet document pointer; they must
+  // not make status polling manufacture a second pack for the same submission.
+  if (outbox) {
+    complete = await readyPaperPackReceiptFromOutbox(
+      env, workflows[0], timesheet, outbox
+    );
+  }
+  if (!complete && version?.sha256) {
+    const verifiedPack = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
+    if (verifiedPack?.ready === true) complete = verifiedPack;
+  }
+  const execution = candidatePaperExecutionState(workflows[0], outbox, timesheet, complete);
+  if (!outbox && outboxError === 'CANDIDATE_PAPER_OUTBOX_CONFLICT') execution.state = 'STALE';
+  if (!outbox && outboxError === 'CANDIDATE_PAPER_OUTBOX_FAILED') execution.state = 'FAILED_TERMINAL';
+  const ready = execution.state === 'READY' && complete?.ready === true;
+  return {
+    id, workflow: workflows[0], timesheet, version, key: complete?.key || null, ready,
+    state: execution.state, execution, complete, outbox
+  };
+}
+

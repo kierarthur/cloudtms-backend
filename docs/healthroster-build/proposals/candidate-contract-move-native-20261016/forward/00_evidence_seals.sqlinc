@@ -1,0 +1,112 @@
+-- Health-owned current native evidence/source domains; no new store or capability phase.
+create or replace function private.candidate_contract_move_component_source_v1(p_component jsonb)
+returns jsonb language sql immutable strict security definer set search_path=pg_catalog,pg_temp
+as $function$
+ select jsonb_build_object('id',p_component->'id','workflow_id',p_component->'workflow_id',
+  'workflow_generation',p_component->'workflow_generation','component_no',p_component->'component_no',
+  'component_kind',p_component->'component_kind','expense_category',p_component->'expense_category',
+  'document_role',p_component->'document_role','source_component_id',p_component->'source_component_id',
+  'storage_key',p_component->'storage_key','media_type',p_component->'media_type','byte_size',p_component->'byte_size',
+  'source_content_sha256',p_component->'source_content_sha256','expected_source_content_sha256',p_component->'expected_source_content_sha256',
+  'immutable_at_utc',p_component->'immutable_at_utc','required',p_component->'required',
+  'review_ordinal',p_component->'review_ordinal','paper_return_page_key',p_component->'paper_return_page_key');
+$function$;
+
+-- Roots belong to the exact native workflow generation (FINALISED uses its real
+-- submitted generation). Only explicit same-workflow source_component_id edges
+-- add older upload receipts. No all-history, booking/week, or neighbouring claim join.
+create or replace function private.candidate_contract_move_sources_v1(p_workflow_ids uuid[])
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare result jsonb;
+begin
+ with recursive ancestry(id,workflow_id,path,cycle) as (
+  select c.id,c.workflow_id,array[c.id],false from public.candidate_submission_components c
+   join public.candidate_submission_workflows w on w.id=c.workflow_id
+   where w.id=any(p_workflow_ids) and c.immutable_at_utc is not null
+    and c.workflow_generation=case when w.state='FINALISED' then greatest(w.generation-1,1) else w.generation end
+  union all
+  select parent.id,parent.workflow_id,a.path||parent.id,parent.id=any(a.path)
+   from ancestry a join public.candidate_submission_components child on child.id=a.id
+   join public.candidate_submission_components parent on parent.id=child.source_component_id and parent.workflow_id=a.workflow_id
+   where not a.cycle and cardinality(a.path)<65 and parent.immutable_at_utc is not null
+ ), selected as (select distinct id from ancestry)
+ select jsonb_build_object('invalid',exists(select 1 from ancestry where cycle or cardinality(path)>64)
+  or exists(select 1 from ancestry a join public.candidate_submission_components c on c.id=a.id
+    where c.source_component_id is not null and not exists(select 1 from public.candidate_submission_components parent
+      where parent.id=c.source_component_id and parent.workflow_id=a.workflow_id and parent.immutable_at_utc is not null)),
+  'sources',coalesce((select jsonb_agg(private.candidate_contract_move_component_source_v1(to_jsonb(c)) order by c.id)
+   from public.candidate_submission_components c join selected s on s.id=c.id),'[]'::jsonb)) into result;
+ if result->'invalid' is distinct from 'false'::jsonb then raise exception 'CANDIDATE_MOVE_COMPONENT_ANCESTRY_INVALID' using errcode='23514';end if;
+ return result->'sources';
+end;
+$function$;
+
+-- Preserve original signed claim facts. A genuine subsequent lifecycle transition
+-- must be connected by the real append-only native before/after event chain.
+-- Finance refresh's four known mutable columns remain a separate native domain.
+create or replace function private.candidate_contract_move_claim_snapshot_assert_v1(p_snapshot jsonb)
+returns void language plpgsql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare actual jsonb; proved boolean;
+begin
+ select to_jsonb(c)-array['component_generation','owning_timesheet_id','agency_authorisation_state','updated_at_utc']
+  into actual from public.candidate_expense_components c
+  where c.expense_component_id=(p_snapshot->>'expense_component_id')::uuid and c.workflow_id=(p_snapshot->>'workflow_id')::uuid;
+ if actual is not distinct from p_snapshot then return;end if;
+ with recursive edges(old_row,new_row) as (
+  select e.before_state_json-array['component_generation','owning_timesheet_id','agency_authorisation_state','updated_at_utc'],
+   e.after_state_json-array['component_generation','owning_timesheet_id','agency_authorisation_state','updated_at_utc']
+  from public.candidate_expense_component_events e
+  where e.expense_component_id=(p_snapshot->>'expense_component_id')::uuid and e.workflow_id=(p_snapshot->>'workflow_id')::uuid
+   and e.before_state_json->>'expense_component_id'=p_snapshot->>'expense_component_id'
+   and e.after_state_json->>'expense_component_id'=p_snapshot->>'expense_component_id'
+   and e.before_state_json->>'workflow_id'=p_snapshot->>'workflow_id'
+   and e.after_state_json->>'workflow_id'=p_snapshot->>'workflow_id'
+   and (e.after_state_json->>'component_generation')::integer=e.component_generation
+ ), reachable(row_json) as (
+  select p_snapshot union select e.new_row from reachable r join edges e on e.old_row=r.row_json
+ ) select exists(select 1 from reachable r where r.row_json=actual) into proved;
+ if proved is distinct from true then raise exception 'CANDIDATE_MOVE_ORIGINAL_CLAIM_EVENT_UNPROVED' using errcode='23514';end if;
+end;
+$function$;
+
+create or replace function private.candidate_contract_move_evidence_snapshot_assert_v1(p_original_id uuid,p_snapshot jsonb)
+returns void language plpgsql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare live jsonb; frozen jsonb; actual jsonb; workflow public.candidate_submission_workflows%rowtype;
+begin
+ live:=private.timesheet_contract_move_evidence_live_v1(p_original_id);
+ if live is null or p_snapshot->'timesheet' is distinct from live->'timesheet'
+  or p_snapshot->'evidence' is distinct from live->'evidence'
+  or jsonb_typeof(p_snapshot->'submission_sources') is distinct from 'array' then
+  raise exception 'CONTRACT_MOVE_ORIGINAL_EVIDENCE_CHANGED' using errcode='23514';end if;
+ for frozen in select value from jsonb_array_elements(p_snapshot->'workflows') loop
+  select w.* into workflow from public.candidate_submission_workflows w where w.id=(frozen->>'id')::uuid;
+  if workflow.id is null or workflow.generation<(frozen->>'generation')::integer
+   or jsonb_build_object('id',workflow.id,'environment',workflow.environment,'candidate_id',workflow.candidate_id,
+     'workflow_kind',workflow.workflow_kind,'contract_id',workflow.contract_id,'contract_week_id',workflow.contract_week_id,
+     'anchor_timesheet_id',workflow.anchor_timesheet_id,'target_timesheet_id',workflow.target_timesheet_id,'work_date',workflow.work_date)
+    is distinct from frozen-array['route','generation','worker_submitted_at_utc','manager_name','manager_position',
+     'input_snapshot_json','immutable_submission_json','immutable_submission_sha256','candidate_signature_component_id','candidate_signature_sha256',
+     'manager_signature_component_id','manager_signature_sha256','candidate_signed_at_utc','manager_approved_at_utc'] then
+   raise exception 'CONTRACT_MOVE_ORIGINAL_WORKFLOW_IDENTITY_CHANGED' using errcode='23514';end if;
+ end loop;
+ -- Native approval fields may advance in the same generation. A captured
+ -- immutable signed body in that generation must still match exactly.
+ if exists(select 1 from jsonb_array_elements(p_snapshot->'workflows') captured
+  join public.candidate_submission_workflows w on w.id=(captured->>'id')::uuid
+  where w.generation=(captured->>'generation')::integer and captured->>'immutable_submission_sha256' is not null
+   and (to_jsonb(w.immutable_submission_json),to_jsonb(w.immutable_submission_sha256))
+     is distinct from (captured->'immutable_submission_json',captured->'immutable_submission_sha256')) then
+  raise exception 'CONTRACT_MOVE_ORIGINAL_SIGNED_BODY_CHANGED' using errcode='23514';end if;
+ for frozen in select value from jsonb_array_elements(p_snapshot->'submission_sources') loop
+  select private.candidate_contract_move_component_source_v1(to_jsonb(c)) into actual
+   from public.candidate_submission_components c where c.id=(frozen->>'id')::uuid and c.immutable_at_utc is not null;
+  if actual is distinct from frozen then raise exception 'CONTRACT_MOVE_ORIGINAL_COMPONENT_CHANGED' using errcode='23514';end if;
+ end loop;
+ for frozen in select value from jsonb_array_elements(p_snapshot->'components') loop
+  perform private.candidate_contract_move_claim_snapshot_assert_v1(frozen);
+ end loop;
+end;
+$function$;

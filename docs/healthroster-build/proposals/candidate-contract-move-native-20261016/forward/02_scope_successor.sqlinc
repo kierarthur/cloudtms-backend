@@ -1,0 +1,108 @@
+create or replace function private.timesheet_contract_move_scope_v1(p_operation_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype; c public.contracts%rowtype; t public.timesheets%rowtype;
+ f public.timesheets_financials%rowtype; placement jsonb; ids uuid[]; chain jsonb; member jsonb; members jsonb:='[]';
+ result jsonb; workflows uuid[]; expenses uuid[]; lineages uuid[]; evidence jsonb; original_id uuid; member_key text; member_role text; worked_schedule jsonb;
+begin
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=p_operation_id;
+ if not found or o.purpose<>'CONTRACT_CORRECTION' or not private.weekly_source_pay_actor_allowed_v1(o.created_by_user_id) then
+  raise exception 'CONTRACT_MOVE_SCOPE_NOT_ALLOWED' using errcode='42501';
+ end if;
+ if p_lock then placement:=private.timesheet_contract_move_family_lock_v1(o.from_timesheet_id);
+ else placement:=private.timesheet_contract_current_placement_v1(o.from_timesheet_id);end if;
+ if placement->>'current_timesheet_id' is distinct from o.from_timesheet_id::text then raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ if p_lock then
+  perform 1 from public.contracts v where v.id in(o.from_contract_id,o.to_contract_id) order by v.id for update;
+ end if;
+ select v.* into c from public.contracts v where v.id=o.to_contract_id;
+ if not found or c.id=o.from_contract_id or c.client_id<>o.actual_client_id or c.candidate_id is distinct from o.candidate_id then
+  raise exception 'CONTRACT_MOVE_DESTINATION_NOT_APPLICABLE' using errcode='22023';
+ end if;
+ select array_agg(p.current_timesheet_id order by p.member_key) into ids
+  from private.timesheet_contract_current_placements p where p.family_root_id=o.family_root_id;
+ if ids is null then
+  chain:=public.timesheet_correction_chain_scope_v1(o.from_timesheet_id,p_lock,32,100);
+  if chain->>'valid' is distinct from 'true' or chain->>'root_timesheet_id' is distinct from o.family_root_id::text then
+   raise exception 'CONTRACT_MOVE_NATIVE_FAMILY_UNBOUND' using errcode='55000';
+  end if;
+  select array_agg(x::uuid order by x) into ids from jsonb_array_elements_text(chain->'member_ids') x;
+  -- Exact native expense associations only. No Candidate/week/client proximity joins.
+  select array_agg(distinct x order by x) into ids from(
+   select unnest(ids) x union select e.owning_timesheet_id
+    from public.candidate_submission_workflows w join public.candidate_expense_components e on e.workflow_id=w.id
+    join public.timesheets ts on ts.timesheet_id=e.owning_timesheet_id
+    where w.anchor_timesheet_id=any(ids) and w.workflow_kind in('CONTRACT_EXPENSE','CONTRACT_COMBINED')
+     and ts.is_current and ts.archived_at_utc is null) v;
+ end if;
+ if cardinality(ids) not between 1 and 100 then raise exception 'CONTRACT_MOVE_NATIVE_SCOPE_LIMIT' using errcode='22023';end if;
+ if p_lock then
+  perform 1 from public.timesheets v where v.timesheet_id=any(ids) order by v.timesheet_id for update;
+  perform 1 from public.timesheets_financials v where v.timesheet_id=any(ids) and v.is_current order by v.id for update;
+  perform 1 from public.candidate_submission_workflows w where w.target_timesheet_id=any(ids) or w.anchor_timesheet_id=any(ids)
+   or w.id in(select ts.candidate_workflow_id from public.timesheets ts where ts.timesheet_id=any(ids)) order by w.id for update;
+  perform 1 from public.candidate_expense_components e where e.owning_timesheet_id=any(ids) order by e.expense_component_id for update;
+ end if;
+ for t in select v.* from public.timesheets v where v.timesheet_id=any(ids) order by v.timesheet_id loop
+  if t.sheet_scope::text<>'WEEKLY' or t.contract_id is null or not t.is_current or t.archived_at_utc is not null then
+   raise exception 'CONTRACT_MOVE_NATIVE_MEMBER_NOT_CURRENT' using errcode='55000';
+  end if;
+  if not exists(select 1 from public.contracts co where co.id=t.contract_id and co.client_id=o.actual_client_id and co.candidate_id=o.candidate_id) then
+   raise exception 'CONTRACT_MOVE_NATIVE_MEMBER_SCOPE_MISMATCH' using errcode='55000';
+  end if;
+  if (select count(*) from public.timesheets_financials v where v.timesheet_id=t.timesheet_id and v.is_current)>1 then
+   raise exception 'CONTRACT_MOVE_FINANCIAL_CURRENT_AMBIGUOUS' using errcode='55000';end if;
+  f:=null;select v.* into f from public.timesheets_financials v where v.timesheet_id=t.timesheet_id and v.is_current;
+  -- Used actual native dates only. Accepted financial schedule remains a genuine source fact when header lacks it.
+  worked_schedule:=coalesce(t.actual_schedule_json,f.actual_schedule_json);
+  if coalesce(f.total_hours,0)>0 and t.worked_start_iso is null
+   and (jsonb_typeof(worked_schedule) is distinct from 'array' or worked_schedule='[]'::jsonb) then
+   raise exception 'CONTRACT_MOVE_ACTUAL_DATES_MISSING' using errcode='55000';end if;
+  if jsonb_typeof(worked_schedule)='array' and exists(select 1 from jsonb_array_elements(worked_schedule) d
+   where nullif(d->>'date','') is null or (d->>'date')::date<c.start_date or (d->>'date')::date>c.end_date) then
+   raise exception 'CONTRACT_MOVE_ACTUAL_DATE_OUTSIDE_DESTINATION' using errcode='22023';end if;
+  if t.worked_start_iso is not null and ((t.worked_start_iso at time zone 'Europe/London')::date<c.start_date
+    or (t.worked_start_iso at time zone 'Europe/London')::date>c.end_date) then
+   raise exception 'CONTRACT_MOVE_ACTUAL_DATE_OUTSIDE_DESTINATION' using errcode='22023';end if;
+  select coalesce(array_agg(e.expense_component_id order by e.expense_component_id),'{}'::uuid[]) into expenses
+   from public.candidate_expense_components e where e.owning_timesheet_id=t.timesheet_id;
+  select coalesce(array_agg(l.id order by l.id),'{}'::uuid[]) into lineages from public.weekly_source_row_timesheet_lineages l where l.timesheet_id=t.timesheet_id;
+  original_id:=t.timesheet_id;member_key:=t.timesheet_id::text;
+  member_role:=case when t.timesheet_id=o.from_timesheet_id then 'WORK' when cardinality(expenses)>0 and t.parent_timesheet_id is null then 'EXPENSE_CARRIER' else 'CORRECTION_MEMBER' end;
+  select a.original_timesheet_id,a.member_key,a.member_role into original_id,member_key,member_role
+   from private.timesheet_contract_family_aliases a where a.timesheet_id=t.timesheet_id;
+  if not found then original_id:=t.timesheet_id;member_key:=t.timesheet_id::text;
+   member_role:=case when t.timesheet_id=o.from_timesheet_id then 'WORK' when cardinality(expenses)>0 and t.parent_timesheet_id is null then 'EXPENSE_CARRIER' else 'CORRECTION_MEMBER' end;end if;
+  evidence:=private.timesheet_contract_move_evidence_v1(original_id);
+  -- A-anchored claim/workflow identities survive B->C. Current B-owned native
+  -- workflows are added only through an exact member Timesheet association.
+  select coalesce(array_agg(distinct w.id order by w.id),'{}'::uuid[]) into workflows
+   from public.candidate_submission_workflows w where w.id=t.candidate_workflow_id
+    or w.target_timesheet_id=t.timesheet_id or w.anchor_timesheet_id=t.timesheet_id
+    or w.id in(select (value->>'id')::uuid from jsonb_array_elements(evidence->'workflows'));
+  if p_lock then perform 1 from public.candidate_submission_workflows w where w.id=any(workflows) order by w.id for update;end if;
+  member:=jsonb_build_object('member_key',member_key,'role',member_role,'from_timesheet_id',t.timesheet_id,
+   'from_version',t.version,'from_financial_id',f.id,'from_contract_id',t.contract_id,'to_contract_id',o.to_contract_id,
+   'parent_timesheet_id',t.parent_timesheet_id,
+   'original_timesheet_id',original_id,'source_row_sha256',encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(t)),'hex'),
+   'financial_row_sha256',case when f.id is null then null else encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(f)),'hex') end,
+   'financial_economics_sha256',case when f.id is null then null else encode(private.timesheet_contract_move_row_hash_v1(private.timesheet_contract_move_financial_economics_v1(to_jsonb(f))),'hex') end,
+   'original_evidence',evidence,'from_evidence',private.timesheet_contract_move_evidence_live_v1(t.timesheet_id),
+   'immutable_evidence_hash',encode(private.timesheet_contract_move_row_hash_v1(evidence),'hex'),
+   'approval_evidence_hash',encode(private.timesheet_contract_move_row_hash_v1(evidence->'workflows'),'hex'),
+   'expense_component_ids',to_jsonb(expenses),'workflow_ids',to_jsonb(workflows),'source_lineage_ids',to_jsonb(lineages),
+   'original_booking_id',(select original_t.booking_id from public.timesheets original_t where original_t.timesheet_id=original_id),'week_ending_date',t.week_ending_date,
+   'destination_settings_authority',private._contract_settings_effective_core_v1(o.actual_client_id,o.to_contract_id,t.week_ending_date,'WEEKLY',null)-'resolved_at_utc');
+  members:=members||jsonb_build_array(member);
+ end loop;
+ if exists(select 1 from jsonb_array_elements(members) child where child->>'parent_timesheet_id' is not null
+  and not exists(select 1 from jsonb_array_elements(members) parent where parent->>'from_timesheet_id'=child->>'parent_timesheet_id')) then
+  raise exception 'CONTRACT_MOVE_NATIVE_PARENT_OUTSIDE_SCOPE' using errcode='55000';end if;
+ result:=jsonb_build_object('version','CONTRACT_MOVE_SCOPE_V1','operation_id',o.id,'family_root_id',o.family_root_id,
+  'current_placement',placement,'from_contract_id',o.from_contract_id,'to_contract_id',o.to_contract_id,
+  'candidate_id',o.candidate_id,'actual_client_id',o.actual_client_id,'members',members,
+  'destination_contract_sha256',encode(private.timesheet_contract_move_row_hash_v1(to_jsonb(c)),'hex'));
+ return result||jsonb_build_object('scope_sha256',encode(private.timesheet_contract_move_row_hash_v1(result),'hex'));
+end;
+$function$;
+
