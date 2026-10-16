@@ -1,0 +1,45 @@
+{
+  "version": "HEALTHROSTER_OWNER_RESTART_PAUSE_20261016",
+  "status": "PAUSED_BY_OWNER_SOURCE_ONLY_NOT_RELEASE_READY",
+  "account": "kier@arthur-rai.co.uk",
+  "sourceParent": "8af28a98efe4594594997a068ea3d4c4f2de16fb",
+  "dailyAuthor": "00f25571ac7fb65f44351a52beced0710211138e",
+  "databaseSessionHeld": false,
+  "sharedLockHeld": false,
+  "deployment": false,
+  "files": [
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "sha256": "00d7ed67ac696e84ac7867b56662495589267300a7acec32b556237c74f1f3dc"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "sha256": "6c419edd7a1fe95cb5dfd7a501a3d1a4c8cd105917664eb3563d60e495695025"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/04_final_acl.sqlinc",
+      "sha256": "a092da99c35e7e42989155e6a08b7a42694105212c2bdb785d6ab6aa157bdac8"
+    },
+    {
+      "path": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "0139e080736ebe8095ed01bc52182e1ef4bfc92d64a2a46bac97ee9af7789744"
+    }
+  ],
+  "checks": {
+    "integrity": "PASS407/1077",
+    "offlinePg17Grammar": "PASS21statements16bodies338innerExpressions",
+    "focusedTests": "ENVIRONMENTAL_FAILURE_WINDOWS_COMMIT_MEMORY_EXHAUSTED_RETRY_REQUIRED",
+    "sourceDefiners": "NOT_QUALIFIED_RETRY_REQUIRED"
+  },
+  "resumeNotes": "docs/healthroster-build/PROGRESS.md",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_COMPLETE"
+}

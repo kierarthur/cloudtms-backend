@@ -22124,6 +22124,216 @@
       ],
       "owner": "HealthRoster protected TEST native fixture setup; source-only, native proof pending",
       "baselineSource": "b287ef0cddf6bb434d5cceb0435d69de3dbb6074"
+    },
+    {
+      "signature": "private.daily_rate_authority_lock_v1()",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_authority_v1(jsonb,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "public.timesheet_daily_rate_correction_context_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_scope_v1(uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_calculator_round_assert_v1(double precision,numeric)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_snapshot_assert_v1(jsonb,jsonb,jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_normalized_snapshot_v1(jsonb,jsonb,jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_financial_id_v1(uuid,text)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_revision_admit_v1(uuid,text)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_accepting_v1(uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_assert_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_request_assert_v1(jsonb,text)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_request_hash_v1(jsonb,text)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_preview_replay_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
     }
   ],
   "editorChains": [
