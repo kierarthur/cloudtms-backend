@@ -1,0 +1,258 @@
+{
+  "sourceCommit": "c1ebb691feb6a11324060e0c28210e2bd735624a",
+  "qualification": "OFFLINE_SOURCE_PROVENANCE_TYPE_CARDINALITY_AND_PG17_GRAMMAR_ONLY",
+  "parser": {
+    "pglastVersion": "v7.20",
+    "postgresqlVersion": [
+      17,
+      7
+    ]
+  },
+  "checks": [
+    {
+      "name": "All exact source commits agree",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact census38 diagnostics and finite37 points",
+      "result": "PASS"
+    },
+    {
+      "name": "Artifact digest DISCOVERY.json",
+      "result": "PASS"
+    },
+    {
+      "name": "Artifact digest REVIEW.json",
+      "result": "PASS"
+    },
+    {
+      "name": "Artifact digest PROVENANCE.json",
+      "result": "PASS"
+    },
+    {
+      "name": "Artifact digest CORRECTION_RECEIPT.json",
+      "result": "PASS"
+    },
+    {
+      "name": "Original joined file supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact corrected joined file supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "Original joined file supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "Exact corrected joined file supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "16 exact producer complete functions",
+      "result": "PASS"
+    },
+    {
+      "name": "No old whole-function approval transferred",
+      "result": "PASS"
+    },
+    {
+      "name": "JSON hazard excluded from all extension points",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 1",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 2",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 3",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 4",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 5",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 6",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 7",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 8",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 9",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 10",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 11",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 12",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 13",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 14",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 15",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 16",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 17",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 18",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 19",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 20",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 21",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 22",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 24",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 25",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 26",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 27",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 28",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 29",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 30",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 31",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 32",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 33",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 34",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 35",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 36",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 37",
+      "result": "PASS"
+    },
+    {
+      "name": "Point signature/body/statement/key 38",
+      "result": "PASS"
+    },
+    {
+      "name": "26 exact one-relation declared whole-row proofs",
+      "result": "PASS"
+    },
+    {
+      "name": "64 scalar input expressions59 old plus5fresh",
+      "result": "PASS"
+    },
+    {
+      "name": "Four UUID statements preserve narrow guards",
+      "result": "PASS"
+    },
+    {
+      "name": "Complete predecessor source hash",
+      "result": "PASS"
+    },
+    {
+      "name": "Complete successor source hash",
+      "result": "PASS"
+    },
+    {
+      "name": "Only exact grouping change in complete successor",
+      "result": "PASS"
+    },
+    {
+      "name": "One CREATE statement parses under PG17",
+      "result": "PASS"
+    },
+    {
+      "name": "Original and explicitly grouped expression PG17 AST equal",
+      "result": "PASS"
+    },
+    {
+      "name": "Expression AST equals exact receipt digest",
+      "result": "PASS"
+    },
+    {
+      "name": "No permissions or unrelated SQL added",
+      "result": "PASS"
+    }
+  ],
+  "passed": 60,
+  "native": "NOT_RUN",
+  "dbConnection": "NOT_OPENED",
+  "rootFilesEdited": false,
+  "genericFencesEdited": false
+}
