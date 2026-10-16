@@ -3751,6 +3751,22 @@
         "stage_proposal": "HISTORICAL_NOT_ACTIVE",
         "native": "REQUIRED_NOT_RUN",
         "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      },
+      "source_qualification_20261016": {
+        "private_source_arm": {
+          "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+          "sha256": "0d4832a5bbed99f5e9da4430bb41d5a1691835d90cb7b472382bd2eb3b730fa2",
+          "functions": [
+            "private.weekly_contact_source_membership_v1(uuid,uuid,text)",
+            "private.weekly_contact_source_admission_v1(jsonb)",
+            "private.weekly_contact_source_permit_v1(uuid,uuid,jsonb)"
+          ],
+          "source_status": "PRIVATE_SOURCE_ARM_ONLY_NOT_WIRED",
+          "offline": "PG17 grammar3procedures/160inner expressions and14declared row variables passed",
+          "native": "REQUIRED_NOT_RUN",
+          "remaining": "Public common tagged union, actual legacy outbox admission/recomposition and original native START/claim/result/accepted-membership/race/API integration required before activation",
+          "installed": false
+        }
       }
     },
     {
