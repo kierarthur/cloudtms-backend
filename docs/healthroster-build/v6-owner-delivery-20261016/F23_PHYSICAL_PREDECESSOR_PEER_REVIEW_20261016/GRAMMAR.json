@@ -1,0 +1,13 @@
+{
+  "status": "PASS_OFFLINE_GRAMMAR_ONLY",
+  "pglastVersion": "v7.20",
+  "postgresqlParserVersion": [
+    17,
+    7
+  ],
+  "sourceSha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50",
+  "topLevelStatements": 2,
+  "completeDoBodies": 1,
+  "databaseCalls": 0,
+  "native": "NOT_RUN"
+}

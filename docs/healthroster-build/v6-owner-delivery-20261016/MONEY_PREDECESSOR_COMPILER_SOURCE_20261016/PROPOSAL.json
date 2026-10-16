@@ -1,0 +1,196 @@
+{
+  "version": "HEALTHROSTER_1430_PREBODY_IMPLEMENTATION_PROPOSAL_V1",
+  "status": "SOURCE_PROPOSAL_ONLY_ROOT_INTEGRATION_AND_NATIVE_NOT_RUN",
+  "rootCommit": "5623005b91e4bc425e79587a88b1c5cad168d5eb",
+  "rootPath": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "pins": [
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "beforeSha256": "a52b9b1e1ad2f121096cebbcf514a06fac021069e8692fb28a86d52a512c1a8c",
+      "afterSha256": "1dccee6a3b635f36946e27550db722f4ee5d3f62cf13f0e1cc213245cf7de0c8"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "beforeSha256": "c645182b08c6e7b6d5af01ee88d4d24f86072a024c2ca68e01bc3da6cc0720ff",
+      "afterSha256": "ff6e2ce20804ecfd859543d6e76dc3b9da19b033eafc6c3b86c05640c4d4a27e"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json",
+      "beforeSha256": "8ff793324b5c02a5081a4a1afc63a94b8624a8b7e4a23d5a34340654f0f49fda",
+      "afterSha256": "59c6695da15d52bd5f512fa2cf259337caeb4a9794649e6462a7849d15680e32",
+      "onlySemanticChange": "existingNativeGate.ownerSourceHash; exact gate literal and sha unchanged"
+    },
+    {
+      "file": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "beforeSha256": "46b8ec1ad483808c8e9ea17cc022ca32caea2f26f5588cd866571f4d3268fe0e",
+      "afterSha256": "932e3769fbad6c361c82e533663c76ce9e782ba300dbee43bb4d8eed55a61277"
+    }
+  ],
+  "edits": [
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "expectedCount": 1,
+      "from": "import { CONTACT_CLAIM_MIGRATION,contactClaimMigrationCompanionFor,contactClaimMigrationSql } from './healthroster-contact-claim-boundary.mjs';",
+      "to": "import { CONTACT_CLAIM_MIGRATION,contactClaimMigrationCompanionFor,contactClaimMigrationSql } from './healthroster-contact-claim-boundary.mjs';\nimport { MONEY_PREDECESSOR_MIGRATION,moneyPredecessorCompanionFor,moneyPredecessorMigrationSql } from './healthroster-money-predecessor-boundary.mjs';"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "expectedCount": 1,
+      "from": "    contact_claim_atomic_companion_version: CONTACT_CLAIM_MIGRATION.version,",
+      "to": "    contact_claim_atomic_companion_version: CONTACT_CLAIM_MIGRATION.version,\n    money_check_prebody_companion_version: MONEY_PREDECESSOR_MIGRATION.version,\n    money_check_prebody_companion_sha256: MONEY_PREDECESSOR_MIGRATION.companionSha256,"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "expectedCount": 1,
+      "from": "  const contactClaimCompanion = contactClaimMigrationCompanionFor(closure,kind,{root,mapSource});",
+      "to": "  const contactClaimCompanion = contactClaimMigrationCompanionFor(closure,kind,{root,mapSource});\n  const moneyPredecessorCompanion = moneyPredecessorCompanionFor(closure,kind,{root,mapSource});"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "expectedCount": 1,
+      "from": "ownerRlsEnvelope, immutableGuardDependency,contactClaimCompanion };",
+      "to": "ownerRlsEnvelope, immutableGuardDependency,contactClaimCompanion,moneyPredecessorCompanion };"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "expectedCount": 1,
+      "from": "  if(unit.contactClaimCompanion||unit.item.path===CONTACT_CLAIM_MIGRATION.path){",
+      "to": "  if(unit.moneyPredecessorCompanion||unit.item.path===MONEY_PREDECESSOR_MIGRATION.path){\n    const prebody=moneyPredecessorMigrationSql(unit,mapExecutableSqlSource);\n    return `begin;\\n${assertWriterSql}\\n${prebody}\\n${unit.body}\\n${assertWriterSql}\\n${ledger}\\ncommit;`;\n  }\n  if(unit.contactClaimCompanion||unit.item.path===CONTACT_CLAIM_MIGRATION.path){"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "expectedCount": 1,
+      "from": "      contactClaimAtomicCompanion: CONTACT_CLAIM_MIGRATION,",
+      "to": "      contactClaimAtomicCompanion: CONTACT_CLAIM_MIGRATION,\n      moneyCheckPrebodyCompanion: MONEY_PREDECESSOR_MIGRATION,"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "expectedCount": 1,
+      "from": "import { CONTACT_CLAIM_MIGRATION,contactClaimMigrationSql } from './healthroster-contact-claim-boundary.mjs';",
+      "to": "import { CONTACT_CLAIM_MIGRATION,contactClaimMigrationSql } from './healthroster-contact-claim-boundary.mjs';\nimport { MONEY_PREDECESSOR_MIGRATION,moneyPredecessorMigrationSql } from './healthroster-money-predecessor-boundary.mjs';"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "expectedCount": 1,
+      "from": "const releaseInputFiles=['scripts/cloudtms-db-release-lib.mjs','scripts/cloudtms-managed-release.mjs',",
+      "to": "const releaseInputFiles=['scripts/cloudtms-db-release-lib.mjs','scripts/cloudtms-managed-release.mjs',\n 'scripts/healthroster-money-predecessor-boundary.mjs',MONEY_PREDECESSOR_MIGRATION.companionPath,MONEY_PREDECESSOR_MIGRATION.evidencePath,"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "expectedCount": 1,
+      "from": "  // A protected release's exception may contain transaction commits or gexec.\n  // It cannot be silently flattened into this rollback-only outer transaction.\n  requireThat(!compiled.exception&&!compiled.ownerRlsEnvelope&&!compiled.immutableGuardDependency,'REHEARSAL_SPECIAL_MANAGED_ENVELOPE_REVIEW_REQUIRED');\n  const companion=compiled.contactClaimCompanion||item.path===CONTACT_CLAIM_MIGRATION.path\n   ?contactClaimMigrationSql(compiled,mapExecutableSqlSource):'';\n  const sql=compiled.body+(companion?'\\n'+companion:'');\n  units.push({file:item.path,kind,sql,sqlHash:digest(sql),sourceSqlHash:item.sha256,phase:kind,\n   sourceFiles:[...(compiled.closure?.ordered.map(x=>({file:x.path,sha256:digest(x.source)}))??[]),\n    ...(compiled.contactClaimCompanion?.sourceFiles??[])],\n   ...(companion?{atomicContactClaimCompanion:{version:compiled.contactClaimCompanion.version,\n    statementSha256:compiled.contactClaimCompanion.statementSha256,nativeProof:'NOT_RUN'}}:{})});",
+      "to": "  units.push(compiledAtomicRehearsalUnit(compiled));"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "expectedCount": 1,
+      "from": "// This compiler takes the freshly observed installed ledgers.",
+      "to": "// Same atomic compilation used by release and rollback harness; no SQL execution.\nexport function compiledAtomicRehearsalUnit(compiled){\n const {item,kind}=compiled;\n // A protected exception cannot be silently flattened into this outer rollback.\n requireThat(!compiled.exception&&!compiled.ownerRlsEnvelope&&!compiled.immutableGuardDependency,'REHEARSAL_SPECIAL_MANAGED_ENVELOPE_REVIEW_REQUIRED');\n const prebody=compiled.moneyPredecessorCompanion||item.path===MONEY_PREDECESSOR_MIGRATION.path\n  ?moneyPredecessorMigrationSql(compiled,mapExecutableSqlSource):'';\n const companion=compiled.contactClaimCompanion||item.path===CONTACT_CLAIM_MIGRATION.path\n  ?contactClaimMigrationSql(compiled,mapExecutableSqlSource):'';\n const sql=(prebody?prebody+'\\n':'')+compiled.body+(companion?'\\n'+companion:'');\n return {file:item.path,kind,sql,sqlHash:digest(sql),sourceSqlHash:item.sha256,phase:kind,\n  sourceFiles:[...(compiled.closure?.ordered.map(x=>({file:x.path,sha256:digest(x.source)}))??[]),\n   ...(compiled.contactClaimCompanion?.sourceFiles??[]),...(compiled.moneyPredecessorCompanion?.sourceFiles??[])],\n  ...(companion?{atomicContactClaimCompanion:{version:compiled.contactClaimCompanion.version,\n   statementSha256:compiled.contactClaimCompanion.statementSha256,nativeProof:'NOT_RUN'}}:{}),\n  ...(prebody?{atomicMoneyPredecessorCompanion:{version:compiled.moneyPredecessorCompanion.version,\n   companionSha256:compiled.moneyPredecessorCompanion.companionSha256,\n   statementSha256:compiled.moneyPredecessorCompanion.statementSha256,\n   placement:compiled.moneyPredecessorCompanion.placement,\n   evidenceFiles:compiled.moneyPredecessorCompanion.evidenceFiles,nativeProof:'NOT_RUN'}}:{})};\n}\n\n// This compiler takes the freshly observed installed ledgers."
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "expectedCount": 1,
+      "from": " const diagnosticCodes=[...new Set([...reviewedDiagnosticCodes(review),'REHEARSAL_MARKER_CONTRACT_SHAPE_REFUSED',",
+      "to": " const diagnosticReview={...review,sourceFiles:[...review.sourceFiles,\n  ...units.filter(unit=>unit.atomicMoneyPredecessorCompanion).flatMap(unit=>unit.sourceFiles\n   .filter(row=>row.file===MONEY_PREDECESSOR_MIGRATION.companionPath))]};\n const diagnosticCodes=[...new Set([...reviewedDiagnosticCodes(diagnosticReview),'REHEARSAL_MARKER_CONTRACT_SHAPE_REFUSED',"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "expectedCount": 1,
+      "from": "  units:rendered.units.map((x,i)=>({...x,phase:units[i].phase,sourceFiles:units[i].sourceFiles??[],clientVariables:units[i].clientVariables??[]})),",
+      "to": "  units:rendered.units.map((x,i)=>({...x,phase:units[i].phase,sourceFiles:units[i].sourceFiles??[],clientVariables:units[i].clientVariables??[],\n   ...(units[i].atomicMoneyPredecessorCompanion?{atomicMoneyPredecessorCompanion:units[i].atomicMoneyPredecessorCompanion}:{})})),"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json",
+      "expectedCount": 1,
+      "from": "\"ownerSourceHash\": \"a52b9b1e1ad2f121096cebbcf514a06fac021069e8692fb28a86d52a512c1a8c\"",
+      "to": "\"ownerSourceHash\": \"1dccee6a3b635f36946e27550db722f4ee5d3f62cf13f0e1cc213245cf7de0c8\""
+    },
+    {
+      "file": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "expectedCount": 1,
+      "from": "const reviewHash='8ff793324b5c02a5081a4a1afc63a94b8624a8b7e4a23d5a34340654f0f49fda';",
+      "to": "const reviewHash='59c6695da15d52bd5f512fa2cf259337caeb4a9794649e6462a7849d15680e32';"
+    }
+  ],
+  "preservation": [
+    {
+      "sourceCommit": "58d3c16d73d42fcbe767d6055b6394383a9aeb96",
+      "source": "docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/16102026_0943_money_prebody_assertion_proposal.sqlinc",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/16102026_0943_money_prebody_assertion_proposal.sqlinc",
+      "sha256": "96f5f4e37f330ca510eed591eb36eb86e78e982b4bf93176e4f126231e04fa50"
+    },
+    {
+      "sourceCommit": "58d3c16d73d42fcbe767d6055b6394383a9aeb96",
+      "source": "docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/16102026_0959_capability_predecessor_catalogue_recipe.sql",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/16102026_0959_capability_predecessor_catalogue_recipe.sql",
+      "sha256": "41345fb67d44e75ece9fb9aaa2de325c8aa087d4a2bccba87d81c79248a8cc1a"
+    },
+    {
+      "sourceCommit": "58d3c16d73d42fcbe767d6055b6394383a9aeb96",
+      "source": "docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/AGGREGATE_CLASSIFIER_PEER_REVIEW.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/AGGREGATE_CLASSIFIER_PEER_REVIEW.json",
+      "sha256": "1c65eba9147bb288d31e2b5c64ace3ddac3ae7e0ab5d2fa482a3e1420fe3f0a3"
+    },
+    {
+      "sourceCommit": "58d3c16d73d42fcbe767d6055b6394383a9aeb96",
+      "source": "docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/CAPABILITY_NATIVE_CENSUS_RECIPE.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/CAPABILITY_NATIVE_CENSUS_RECIPE.json",
+      "sha256": "7b308e8a13cc5919a3ce7236261bf8741c8ed51450e42733d32373bb5cb8049a"
+    },
+    {
+      "sourceCommit": "58d3c16d73d42fcbe767d6055b6394383a9aeb96",
+      "source": "docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/check_grammar.py",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/check_grammar.py",
+      "sha256": "6f83820748358e72f9be6d2135b80d4a13fdae230e4947b8028bd5a9b3065de5"
+    },
+    {
+      "sourceCommit": "58d3c16d73d42fcbe767d6055b6394383a9aeb96",
+      "source": "docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/GRAMMAR.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/GRAMMAR.json",
+      "sha256": "38fb32357e4753ce7d1203a0315928aee08cf259b0b6d9c4b33b9145b405b652"
+    },
+    {
+      "sourceCommit": "58d3c16d73d42fcbe767d6055b6394383a9aeb96",
+      "source": "docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/peer_review_aggregate.mjs",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/peer_review_aggregate.mjs",
+      "sha256": "30c478ee8ee17a6230914dda5f8762e1409bf3e93d6d78b2c4cb10b8965b9ac1"
+    },
+    {
+      "sourceCommit": "58d3c16d73d42fcbe767d6055b6394383a9aeb96",
+      "source": "docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/REVIEW.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/REVIEW.json",
+      "sha256": "10573f03cf4d6667627efe08d9e614a8a71d18d77dab9b70f259bf006a688799"
+    },
+    {
+      "sourceCommit": "58d3c16d73d42fcbe767d6055b6394383a9aeb96",
+      "source": "docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/REVIEW.md",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/REVIEW.md",
+      "sha256": "640ef6504219d5f4562ecc4bb84b58b50384764fa627ffc61f1b7d12c7e95395"
+    },
+    {
+      "sourceCommit": "58d3c16d73d42fcbe767d6055b6394383a9aeb96",
+      "source": "docs/healthroster-build/proposals/f23-native-predecessor-review-20261016/review.mjs",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PHYSICAL_PREDECESSOR_PEER_REVIEW_20261016/review.mjs",
+      "sha256": "9b15d21d1df5e7ba725ad66cec9d5741f9bbae1d929a8cd7f201bac3efeea365"
+    }
+  ],
+  "newFiles": [
+    "scripts/healthroster-money-predecessor-boundary.mjs",
+    "supabase/release/16102026_0943_healthroster_money_predecessor_assertion.sqlinc",
+    "tests/healthroster-money-predecessor-boundary.test.mjs"
+  ],
+  "invariants": [
+    "Original407 migration bytes/locks untouched.",
+    "Exact LOCK+assertion precedes unchanged1430 body within existing transaction/writer/ledger guards.",
+    "Managed manifest/admission now bind exact prebody descriptor and program hash.",
+    "Rehearsal uses same checked prebody before body; source binding includes helper/program/evidence.",
+    "Contact companion remains after its own unchanged0339 body; Invoice native gate literal and callee audit unchanged.",
+    "Capability0400 absent from companion descriptor and unqualified pending-prefix native census.",
+    "No F23 dynamic classification or generic exception added."
+  ],
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "bankEdits": 0,
+  "deployments": 0
+}

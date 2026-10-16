@@ -1,0 +1,14 @@
+{
+  "version": "HEALTH_1430_PREBODY_SOURCE_TESTS_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "rootCommit": "5623005b91e4bc425e79587a88b1c5cad168d5eb",
+  "tests": 14,
+  "passed": 14,
+  "failed": 0,
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "dockerResources": 0,
+  "releaseOrDeployment": 0,
+  "temporarySourceFixtures": "Created only inside exact task-prefixed OS temp directories and removed by tests"
+}

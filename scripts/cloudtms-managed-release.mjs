@@ -12,6 +12,7 @@ import { READER_PREPARATION, readerReleasePhases, readerActivationSql } from './
 import { logicalPostgresExecutablePolicy, mapExecutableSqlSource } from './cloudtms-db-release-lib.mjs';
 import { closeFinalDefinerSelection, routineDefinitions } from './bpay-next-final-definers.mjs';
 import { CONTACT_CLAIM_MIGRATION,contactClaimMigrationCompanionFor,contactClaimMigrationSql } from './healthroster-contact-claim-boundary.mjs';
+import { MONEY_PREDECESSOR_MIGRATION,moneyPredecessorCompanionFor,moneyPredecessorMigrationSql } from './healthroster-money-predecessor-boundary.mjs';
 
 const json = value => `${literal(JSON.stringify(value))}::jsonb`;
 const readJson = (root, file) => JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
@@ -84,6 +85,8 @@ export function managedEvidence(context, extra = {}) {
     owner_rls_envelope_version: OWNER_RLS_ENVELOPE.version,
     immutable_guard_dependency_version: IMMUTABLE_GUARD_DEPENDENCY.version,
     contact_claim_atomic_companion_version: CONTACT_CLAIM_MIGRATION.version,
+    money_check_prebody_companion_version: MONEY_PREDECESSOR_MIGRATION.version,
+    money_check_prebody_companion_sha256: MONEY_PREDECESSOR_MIGRATION.companionSha256,
     expected_database: context.expectedDatabase, environment: context.environment, customer_key: context.customerKey,
     bootstrap_complete: context.mode === 'NEW' }, ...extra };
 }
@@ -160,6 +163,7 @@ export function compileManagedUnit(item, kind, { root, mapSource = value => valu
   const ownerRlsEnvelope = ownerRlsEnvelopeFor(closure, kind);
   const immutableGuardDependency = immutableGuardDependencyFor(closure, kind, root);
   const contactClaimCompanion = contactClaimMigrationCompanionFor(closure,kind,{root,mapSource});
+  const moneyPredecessorCompanion = moneyPredecessorCompanionFor(closure,kind,{root,mapSource});
   // Dollar bodies remain opaque to the packaging lexer. This conservative
   // refusal is additional guard integrity, not a claim that arbitrary DO
   // effects were proved safe by their statement head.
@@ -179,7 +183,7 @@ export function compileManagedUnit(item, kind, { root, mapSource = value => valu
     }
     return { item, kind, closure, exception, script: `\\ir ${quotePsqlPath(executable)}\n` };
   }
-  try { return { item, kind, closure, body: exactAtomicBody(closure.expanded), ownerRlsEnvelope, immutableGuardDependency,contactClaimCompanion }; }
+  try { return { item, kind, closure, body: exactAtomicBody(closure.expanded), ownerRlsEnvelope, immutableGuardDependency,contactClaimCompanion,moneyPredecessorCompanion }; }
   catch (error) { throw Error(`MANAGED_EXECUTION_ENVELOPE_UNCLASSIFIED: ${item.path} (${error.message})`); }
 }
 
@@ -345,6 +349,10 @@ export function quotePsqlPath(file) {
 
 export function unitCheckpointSql(unit, context) {
   const ledger = unit.kind === 'migration' ? migrationLedgerSql(unit.item,context) : repeatableLedgerSql(unit.item,context);
+  if(unit.moneyPredecessorCompanion||unit.item.path===MONEY_PREDECESSOR_MIGRATION.path){
+    const prebody=moneyPredecessorMigrationSql(unit,mapExecutableSqlSource);
+    return `begin;\n${assertWriterSql}\n${prebody}\n${unit.body}\n${assertWriterSql}\n${ledger}\ncommit;`;
+  }
   if(unit.contactClaimCompanion||unit.item.path===CONTACT_CLAIM_MIGRATION.path){
     const companion=contactClaimMigrationSql(unit,mapExecutableSqlSource);
     return `begin;\n${assertWriterSql}\n${unit.body}\n${companion}\n${assertWriterSql}\n${ledger}\ncommit;`;
@@ -424,6 +432,7 @@ export function managedReleaseContext({ root, current, release, context, baselin
       ownerRlsEnvelope: OWNER_RLS_ENVELOPE,
       immutableGuardDependency: IMMUTABLE_GUARD_DEPENDENCY,
       contactClaimAtomicCompanion: CONTACT_CLAIM_MIGRATION,
+      moneyCheckPrebodyCompanion: MONEY_PREDECESSOR_MIGRATION,
       logicalOwnerMapping: logicalPostgresExecutablePolicy() }}) };
   validateContext(result); return result;
 }
