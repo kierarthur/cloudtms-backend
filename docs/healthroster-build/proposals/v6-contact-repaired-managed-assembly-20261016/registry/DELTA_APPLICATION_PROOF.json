@@ -1,0 +1,13 @@
+{
+  "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "baseSha256": "8c2d26a3ec001409976ab98c90cfcc6def620ec33f8c94b095c22fe48fac9c7f",
+  "baseChains": 1462,
+  "resultChains": 1561,
+  "resultCanonicalJsonSha256": "e81bf88ec8c7fcd15a94746532452df56b649449c229bd3a79b4847d6fbd1b51",
+  "updated": 12,
+  "added": 99,
+  "unrelatedChainsPreserved": 1450,
+  "editorAndTopLevelFieldsPreserved": true,
+  "source13RegistryUpdatesAndAddsRetained": true,
+  "fullRegistryFileEmitted": false
+}

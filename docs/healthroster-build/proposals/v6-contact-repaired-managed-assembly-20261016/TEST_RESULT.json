@@ -1,0 +1,30 @@
+{
+  "version": "CONTACT_REPAIRED_FOCUSED_SOURCE_RUNTIME_REGRESSION_RESULT_V1",
+  "qualification": "PASS_SOURCE_AND_ACTUAL_RUNTIME_WITH_EXPLICIT_TRANSPORT_DOUBLES_ONLY",
+  "exitCode": 0,
+  "tests": 13,
+  "passed": 13,
+  "failed": 0,
+  "validatedInputs": {
+    "ASSEMBLY_MANIFEST.json": "67b7c30b5076cd32d5745139c0adea9edcd82ca5e65691393dd248bccdf04dc4",
+    "assembly.test.mjs": "94c5a7ccf970470370be58b878121cdf37b440aa64624f61dd5881b6d1a6817d",
+    "build-proposal.mjs": "5fe58477e791e51450c9b3f24fee0bfd485b04b2008dcd4293f0c4794996aad1",
+    "REPAIR_PROVENANCE.json": "bb9d49b75f696fdbb6d68023942384563da5fe4ca80279caf6b99ff2daf36b4b",
+    "registry/FINAL_DEFINER_DELTA.json": "aad329a8a9559b0b6925834812105652d538f2548df661b0cd12cd544d1e6f97"
+  },
+  "regressions": [
+    "Frozen unsafe command START resurrection rejected",
+    "Later duplicate/open owner resurrection rejected",
+    "Closed refusal changed to nominal success rejected",
+    "Complete actual target START/common admission/bound permit and original RESULT retained",
+    "Actual delivery uses target START/RESULT and suppresses send/result on refusal or replay",
+    "Current1462 registry retains1450 unrelated chains plus all editor/top-level fields"
+  ],
+  "nativeCompile": "NOT_RUN",
+  "effectiveAcl": "NOT_RUN",
+  "database": false,
+  "provider": false,
+  "api": "NOT_RUN",
+  "concurrency": "NOT_RUN",
+  "partB": "NOT_RUN"
+}

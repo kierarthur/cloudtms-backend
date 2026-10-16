@@ -1,0 +1,83 @@
+create or replace function public.weekly_source_contact_manual_enquiry_accept_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare review public.weekly_contact_manual_reviews%rowtype;accepted public.weekly_contact_manual_acceptances%rowtype;
+ base_request jsonb;request_hash bytea;fresh jsonb;expected_hash bytea;at_utc timestamptz;group_json jsonb;members jsonb;
+ receipt_groups jsonb:='[]';receipt_members jsonb;intent_id uuid;receipt jsonb;
+begin
+ perform private.weekly_contact_manual_request_assert_v1(p_request,true);
+ -- Serialize original request identity before immutable replay. Replaying an
+ -- accepted request must not depend on today's route/eligibility/member facts.
+ perform private.weekly_contact_deployment_lock_v1((p_request->>'agency_id')::uuid,p_request->>'environment');
+ perform private.weekly_contact_context_v1((p_request->>'agency_id')::uuid,p_request->>'environment');
+ base_request:=p_request-array['review_id','review_digest'];
+ request_hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_REQUEST_V1',base_request);
+ select * into accepted from public.weekly_contact_manual_acceptances where request_id=(p_request->>'request_id')::uuid;
+ if found then
+  if accepted.actor_user_id<>(p_request->>'actor_user_id')::uuid or accepted.request_digest<>request_hash
+   or accepted.review_id<>(p_request->>'review_id')::uuid
+   or accepted.receipt_json->>'review_digest' is distinct from p_request->>'review_digest' then
+   raise exception 'CONTACT_MANUAL_ENQUIRY_IDEMPOTENCY_CONFLICT' using errcode='40001';end if;
+  -- A replay returns this immutable receipt even after later pause/reply/expiry.
+  return accepted.receipt_json;
+ end if;
+ perform private.weekly_contact_manual_scopes_lock_v1(p_request);
+ select * into review from public.weekly_contact_manual_reviews where id=(p_request->>'review_id')::uuid
+  and request_id=(p_request->>'request_id')::uuid;
+ if not found then raise exception 'CONTACT_MANUAL_ENQUIRY_REVIEW_STALE' using errcode='40001';end if;
+ if review.actor_user_id<>(p_request->>'actor_user_id')::uuid or review.request_digest<>request_hash
+  or review.request_json is distinct from base_request or review.review_digest<>decode(p_request->>'review_digest','hex') then
+  raise exception 'CONTACT_MANUAL_ENQUIRY_IDEMPOTENCY_CONFLICT' using errcode='40001';end if;
+ expected_hash:=private.weekly_source_sha256_jsonb_v1('CONTACT_MANUAL_REVIEW_V1',jsonb_build_object('review_id',review.id,
+  'request',review.request_json,'manifest',private.weekly_contact_manual_manifest_seal_v1(review.manifest_json),
+  'expires_at_utc',to_char(review.expires_at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')));
+ if expected_hash<>review.review_digest then raise exception 'CONTACT_MANUAL_ENQUIRY_DEPENDENCY_UNAVAILABLE' using errcode='55000';end if;
+ at_utc:=clock_timestamp();
+ if review.expires_at_utc<=at_utc then raise exception 'CONTACT_MANUAL_ENQUIRY_REVIEW_EXPIRED' using errcode='40001';end if;
+ fresh:=private.weekly_contact_manual_manifest_v1(base_request,at_utc);
+ if fresh->'cas_matches' is distinct from 'true'::jsonb then
+  raise exception 'CONTACT_MANUAL_ENQUIRY_REVISION_CONFLICT' using errcode='40001';end if;
+ if private.weekly_contact_manual_manifest_seal_v1(fresh) is distinct from private.weekly_contact_manual_manifest_seal_v1(review.manifest_json) then
+  raise exception 'CONTACT_MANUAL_ENQUIRY_REVIEW_STALE' using errcode='40001';end if;
+ if jsonb_array_length(fresh->'groups')=0 then raise exception 'CONTACT_MANUAL_ENQUIRY_NOT_ELIGIBLE' using errcode='40001';end if;
+ for group_json in select value from jsonb_array_elements(fresh->'groups') loop
+  select jsonb_agg(member order by member->>'issue_id') into members from jsonb_array_elements(fresh->'members')member
+   where member->'eligible'='true'::jsonb and member->'issue_id' in(select value from jsonb_array_elements(group_json->'selected_issue_ids'));
+  intent_id:=private.weekly_contact_manual_enqueue_v1(base_request,group_json,members,at_utc);
+  select jsonb_agg(jsonb_build_object('issue_id',member->'issue_id','logical_contact_key',member->'logical_contact_key',
+   'send_ordinal',member->'send_ordinal','contact_kind','EXPLICIT_MANUAL') order by member->>'issue_id') into receipt_members
+   from jsonb_array_elements(members)member;
+  receipt_groups:=receipt_groups||jsonb_build_array(jsonb_build_object('group_key',group_json->'group_key','message_intent_id',intent_id,'members',receipt_members));
+ end loop;
+ receipt:=jsonb_build_object('ok',true,'version','CONTACT_MANUAL_ENQUIRY_RECEIPT_V1','request_id',base_request->'request_id',
+  'review_id',review.id,'review_digest',encode(review.review_digest,'hex'),'audience',base_request->'audience','reason',base_request->'reason',
+  'accepted_at_utc',to_char(at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'scope_results',review.preview_json->'scope_results','groups',receipt_groups,'provider_submission_started',false);
+ insert into public.weekly_contact_manual_acceptances(request_id,review_id,actor_user_id,request_digest,receipt_json,accepted_at_utc)
+ values(review.request_id,review.id,review.actor_user_id,request_hash,receipt,at_utc);
+ return receipt;
+exception when others then
+ perform private.weekly_contact_manual_raise_public_v1(SQLERRM,SQLSTATE);return null;
+end;
+$function$;
+
+-- Finite public error vocabulary. The wrapper never returns native row bodies,
+-- policy JSON, credentials, SQL detail, another deployment's facts or a stack.
+create or replace function private.weekly_contact_manual_raise_public_v1(p_message text,p_state text)
+returns void language plpgsql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+begin
+ if p_state='23505' then raise exception 'CONTACT_MANUAL_ENQUIRY_IDEMPOTENCY_CONFLICT' using errcode='40001';end if;
+ if p_message in('CONTACT_MANUAL_ENQUIRY_IDEMPOTENCY_CONFLICT','CONTACT_MANUAL_ENQUIRY_REVISION_CONFLICT',
+  'CONTACT_MANUAL_ENQUIRY_REVIEW_STALE','CONTACT_MANUAL_ENQUIRY_REVIEW_EXPIRED','CONTACT_MANUAL_ENQUIRY_NOT_ELIGIBLE',
+  'CONTACT_SOURCE_ORDINAL_EXHAUSTED','CONTACT_CHECKING_REVISION_EXHAUSTED') then raise exception '%',p_message using errcode='40001';end if;
+ if p_message in('WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED','WEEKLY_SOURCE_OFFICE_ACTOR_INACTIVE') then
+  raise exception 'WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED' using errcode='42501';end if;
+ if p_state='42501' then raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+ if p_message in('CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID','CONTACT_REQUEST_INVALID') or p_state in('22P02','22023') then
+  raise exception 'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID' using errcode='22023';end if;
+ if p_message in('CONTACT_DEPLOYMENT_UNAVAILABLE','PUSH_TIMING_DEPLOYMENT_UNAVAILABLE','WEEKLY_SOURCE_SETTINGS_DEPLOYMENT_INVALID') then
+  raise exception 'CONTACT_DEPLOYMENT_UNAVAILABLE' using errcode='P0001';end if;
+ raise exception 'CONTACT_MANUAL_ENQUIRY_DEPENDENCY_UNAVAILABLE' using errcode='P0001';
+end;
+$function$;

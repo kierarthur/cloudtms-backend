@@ -1,0 +1,15 @@
+create or replace function public.weekly_contact_submission_start_v1(p_request jsonb) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'pg_catalog','private','pg_temp'
+as $function$
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if p_request is null or jsonb_typeof(p_request) is distinct from 'object' then
+  raise exception 'CONTACT_REQUEST_INVALID' using errcode='22023';end if;
+ case p_request->>'owner_kind'
+  when 'WEEKLY_SOURCE_TARGET' then return private.weekly_contact_source_admission_v1(p_request);
+  when 'TIMESHEET_QUERY_OUTBOX' then return private.weekly_contact_query_admission_v1(p_request);
+  else raise exception 'CONTACT_REQUEST_INVALID' using errcode='22023';
+ end case;
+end;
+$function$;

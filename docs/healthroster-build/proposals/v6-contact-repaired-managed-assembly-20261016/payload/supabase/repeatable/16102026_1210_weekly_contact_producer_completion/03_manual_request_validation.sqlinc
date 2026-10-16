@@ -1,0 +1,78 @@
+create or replace function private.weekly_contact_manual_request_assert_v1(p_request jsonb,p_accept boolean)
+returns void language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare keys text[]:=array['version','request_id','audience','reason','scopes','actor_user_id','agency_id','environment'];
+ scope jsonb;issue jsonb;pairs text[]:='{}';issues uuid[]:='{}';key text;issue_id uuid;
+ actor uuid;agency uuid;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if p_accept is null then raise exception 'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID' using errcode='22023';end if;
+ if p_accept then keys:=keys||array['review_id','review_digest'];end if;
+ perform private.weekly_contact_assert_closed_v1(p_request,keys,keys,'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID');
+ if p_request->>'version' is distinct from 'CONTACT_MANUAL_ENQUIRY_V1'
+  or p_request->>'audience' is null or p_request->>'audience' not in('WORKER','MANAGER')
+  or jsonb_typeof(p_request->'reason') is distinct from 'string' or char_length(p_request->>'reason') not between 1 and 1000
+  or p_request->>'reason' !~ '[^[:space:]]'
+  or jsonb_typeof(p_request->'scopes') is distinct from 'array' or jsonb_array_length(p_request->'scopes') not between 1 and 100
+  or jsonb_typeof(p_request->'environment') is distinct from 'string' or p_request->>'environment' not in('TEST','LIVE') then
+  raise exception 'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID' using errcode='22023';end if;
+ perform private.weekly_contact_uuid_v1(p_request->'request_id');
+ actor:=private.weekly_contact_uuid_v1(p_request->'actor_user_id');agency:=private.weekly_contact_uuid_v1(p_request->'agency_id');
+ if p_accept then
+  perform private.weekly_contact_uuid_v1(p_request->'review_id');
+  if jsonb_typeof(p_request->'review_digest') is distinct from 'string' or p_request->>'review_digest' !~ '^[0-9a-f]{64}$' then
+   raise exception 'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID' using errcode='22023';end if;
+ end if;
+ perform private.weekly_source_office_authority_v1(actor,'ASK_CANDIDATES',null,null,null);
+ perform private._weekly_source_settings_deployment_v1(agency,p_request->>'environment');
+ for scope in select value from jsonb_array_elements(p_request->'scopes') loop
+  perform private.weekly_contact_assert_closed_v1(scope,
+   array['candidate_id','client_id','selected_issue_ids','expected_scope_revision','expected_checking_revision'],
+   array['candidate_id','client_id','selected_issue_ids','expected_scope_revision','expected_checking_revision'],'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID');
+  key:=private.weekly_contact_uuid_v1(scope->'candidate_id')::text||'/'||private.weekly_contact_uuid_v1(scope->'client_id')::text;
+  if key=any(pairs) then raise exception 'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID' using errcode='22023';end if;
+  pairs:=array_append(pairs,key);
+  perform private.weekly_contact_revision_v1(scope->'expected_scope_revision',false);
+  perform private.weekly_contact_revision_v1(scope->'expected_checking_revision',false);
+  if jsonb_typeof(scope->'selected_issue_ids') is distinct from 'array'
+   or jsonb_array_length(scope->'selected_issue_ids') not between 1 and 500 then
+   raise exception 'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID' using errcode='22023';end if;
+  for issue in select value from jsonb_array_elements(scope->'selected_issue_ids') loop
+   issue_id:=private.weekly_contact_uuid_v1(issue);
+   if issue_id=any(issues) then raise exception 'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID' using errcode='22023';end if;
+   issues:=array_append(issues,issue_id);
+   if cardinality(issues)>500 then raise exception 'CONTACT_MANUAL_ENQUIRY_REQUEST_INVALID' using errcode='22023';end if;
+   if not exists(select 1 from public.weekly_discrepancy_incidents i join public.weekly_source_groups g on g.id=i.source_group_id
+    where i.id=issue_id and i.candidate_id=(scope->>'candidate_id')::uuid and i.client_id=(scope->>'client_id')::uuid
+     and g.agency_id=agency and g.environment=p_request->>'environment') then
+    raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
+  end loop;
+ end loop;
+end;
+$function$;
+
+create or replace function private.weekly_contact_manual_scopes_lock_v1(p_request jsonb)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare scope jsonb;issue_ids uuid[];extra_pairs jsonb;
+begin
+ -- The caller has already validated the exact request and actor. No native
+ -- target/command/route row is acquired before this shared sorted scope vector.
+ perform private.weekly_contact_deployment_lock_v1((p_request->>'agency_id')::uuid,p_request->>'environment');
+ perform private.weekly_contact_context_v1((p_request->>'agency_id')::uuid,p_request->>'environment');
+ if p_request->>'audience'='MANAGER' and p_request?'review_id' then
+  select array_agg(value::uuid order by value::uuid)into issue_ids from jsonb_array_elements(p_request->'scopes')selected
+   cross join lateral jsonb_array_elements_text(selected->'selected_issue_ids')value;
+  select jsonb_agg(jsonb_build_object('candidate_id',value->'candidate_id','client_id',value->'client_id'))into extra_pairs
+   from jsonb_array_elements(p_request->'scopes');
+  perform private.weekly_contact_source_manager_selection_lock_v1(issue_ids,extra_pairs);
+  return;
+ end if;
+ for scope in select value from jsonb_array_elements(p_request->'scopes')
+  order by (value->>'candidate_id')::uuid,(value->>'client_id')::uuid
+ loop
+  perform private.weekly_contact_scope_lock_v1((p_request->>'agency_id')::uuid,p_request->>'environment',
+   (scope->>'candidate_id')::uuid,(scope->>'client_id')::uuid);
+ end loop;
+end;
+$function$;

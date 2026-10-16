@@ -1,0 +1,68 @@
+-- INTERNAL composition only. Existing public start still returns ONE exact
+-- native request receipt or refuses its whole operation atomically.
+create or replace function private.weekly_contact_source_submission_partition_v1(p_request jsonb,p_automatic boolean)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare v_cycle_id uuid;v_candidate_id uuid;v_publication_id uuid;source_group public.weekly_source_groups%rowtype;
+ v_member jsonb;child record;receipt jsonb;aliases jsonb;guard jsonb;code text;
+ results jsonb:='[]';exclusions jsonb:='[]';contract public.contracts%rowtype;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ if jsonb_typeof(p_request) is distinct from 'object' or p_automatic is null
+  or exists(select 1 from jsonb_object_keys(p_request)key where key not in('actor_user_id','source_cycle_id','projection_publication_id','candidate_id','scopes'))
+  or jsonb_typeof(p_request->'scopes') is distinct from 'array' or jsonb_array_length(p_request->'scopes')<1 then
+  raise exception 'WEEKLY_SOURCE_TIMESHEET_REQUEST_INVALID' using errcode='22023';end if;
+ v_cycle_id:=(p_request->>'source_cycle_id')::uuid;v_candidate_id:=(p_request->>'candidate_id')::uuid;
+ v_publication_id:=(p_request->>'projection_publication_id')::uuid;
+ guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
+ select * into strict source_group from public.weekly_source_groups where id=(guard->>'source_group_id')::uuid;
+ if not p_automatic then perform private.weekly_source_office_authority_v1((p_request->>'actor_user_id')::uuid,'ASK_CANDIDATES',
+  source_group.id,null,(guard->>'finalisation_week_ending')::date);end if;
+ -- Validate the whole original set before producing any child. There is no
+ -- truncation or silent deduplication of an invalid/ambiguous membership.
+ for v_member in select value from jsonb_array_elements(p_request->'scopes') loop
+  if jsonb_typeof(v_member) is distinct from 'object' or exists(select 1 from jsonb_object_keys(v_member)key
+   where key not in('week_ending','client_id','contract_id','expected_source_fingerprint'))
+   or v_member->>'week_ending' is null or v_member->>'client_id' is null or v_member->>'contract_id' is null then
+   raise exception 'WEEKLY_SOURCE_TIMESHEET_SCOPE_INVALID' using errcode='22023';end if;
+  select * into strict contract from public.contracts where id=(v_member->>'contract_id')::uuid
+   and contracts.candidate_id=v_candidate_id and client_id=(v_member->>'client_id')::uuid;
+  perform(v_member->>'week_ending')::date;
+  perform private.weekly_source_query_hex32_v1(v_member->>'expected_source_fingerprint','WEEKLY_SOURCE_SCOPE_FINGERPRINT_INVALID');
+ end loop;
+ if exists(select 1 from jsonb_array_elements(p_request->'scopes')member group by member->>'client_id',member->>'contract_id',
+  (member->>'week_ending')::date having count(*)<>1) then raise exception 'WEEKLY_SOURCE_TIMESHEET_SCOPE_INVALID' using errcode='22023';end if;
+ perform private.weekly_contact_source_submission_lock_v1(v_cycle_id,v_candidate_id,p_request->'scopes',v_publication_id);
+ perform pg_advisory_xact_lock(hashtextextended('weekly-source-import-outreach:'||v_cycle_id::text||':'||v_candidate_id::text,0));
+ for child in select(value->>'client_id')::uuid client_id,jsonb_agg(value order by(value->>'week_ending')::date,
+  (value->>'contract_id')::uuid) scopes from jsonb_array_elements(p_request->'scopes') group by(value->>'client_id')::uuid order by 1 loop
+  begin
+   receipt:=private.weekly_source_submission_request_start_v1(jsonb_set(p_request,'{scopes}',child.scopes),p_automatic);
+   if receipt->'ok' is distinct from 'true'::jsonb or receipt->>'status' not in('CREATED','UNCHANGED')
+    or receipt->>'submission_request_id' is null or receipt->>'candidate_generation_id' is null then
+    raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+   perform private.weekly_contact_submission_request_assert_v1((receipt->>'submission_request_id')::uuid);
+   select jsonb_agg(jsonb_build_object('client_id',native.client_id,'contract_id',native.contract_id,'week_ending',native.week_ending,
+    'membership_id',native.id) order by native.week_ending,native.contract_id) into aliases
+   from public.weekly_timesheet_submission_request_memberships native
+   join jsonb_array_elements(child.scopes)selected on(native.client_id,native.contract_id,native.week_ending)=
+    ((selected->>'client_id')::uuid,(selected->>'contract_id')::uuid,(selected->>'week_ending')::date)
+   where native.submission_request_id=(receipt->>'submission_request_id')::uuid;
+   if jsonb_array_length(aliases) is distinct from jsonb_array_length(child.scopes) then
+    raise exception 'CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED' using errcode='55000';end if;
+   results:=results||jsonb_build_array(jsonb_build_object('client_id',child.client_id,'requested_scopes',child.scopes,
+    'native_members',aliases,'receipt',receipt));
+  exception when object_not_in_prerequisite_state then
+   get stacked diagnostics code=message_text;
+   if code not in('CONTACT_PAUSED','CONTACT_SOURCE_SUBMISSION_SCOPE_CONFLICT','CONTACT_SOURCE_SUBMISSION_IDENTITY_UNRESOLVED') then raise;end if;
+   guard:=private.weekly_contact_scope_guard_v1(v_candidate_id,child.client_id,'WORKER',clock_timestamp());
+   exclusions:=exclusions||jsonb_build_array(jsonb_build_object('client_id',child.client_id,'requested_scopes',child.scopes,
+    'status',code,'next_allowed_utc',case when code='CONTACT_PAUSED' then guard->'next_allowed_utc' else 'null'::jsonb end));
+  end;
+ end loop;
+ return jsonb_build_object('version','CONTACT_SOURCE_SUBMISSION_PARTITION_V1','source_cycle_id',v_cycle_id,
+  'projection_publication_id',v_publication_id,'candidate_id',v_candidate_id,'results',results,'exclusions',exclusions);
+exception when invalid_text_representation or numeric_value_out_of_range or datetime_field_overflow then
+ raise exception 'WEEKLY_SOURCE_TIMESHEET_REQUEST_INVALID' using errcode='22023';
+end;
+$function$;

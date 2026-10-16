@@ -1,0 +1,180 @@
+{
+  "version": "CONTACT_COMPLETE_CLOSED_START_REPLACEMENT_REVERSE_V1",
+  "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "originalProposalCommit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+  "repairCommit": "230c3bd58049406ea6ba87662160823dc43e2e52",
+  "peerReviewCommit": "8559c2a239c202b5734ac704086e56f366e7a992",
+  "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+  "selectedLeaf": "supabase/repeatable/16102026_1210_weekly_contact_producer_completion/38_native_submission_readers.sqlinc",
+  "oldLeafSha256": "dccdc8e5843aee7fd6d18e0bebca9ab76a57a9e7691ddd3e1b216b11346861c4",
+  "newLeafSha256": "71e27752fc91e9177992fdad51c131a7d71626da43d5067ab8b0de30c7d7db47",
+  "oldCompleteStatementSha256": "de9458f5f3b8b6f9413c060dafcbc5c82c6af5e1d165a5167aee4c653e57c8ce",
+  "newCompleteStatementSha256": "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d",
+  "completeRepairFileSha256": "524fd763e1f0822b64cf3f471b99b22461083516df3a3be2daa07085bf037628",
+  "oldSpan": {
+    "start": 20300,
+    "endExclusive": 34777
+  },
+  "wholeLeafReverseEqualsFrozen": true,
+  "otherLeafFunctionStatementsByteIdentical": true,
+  "nativeClosedStatementEqualsActualRegistered": true,
+  "nativePriorChain": {
+    "signature": "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+    "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+    "finalPhysical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+    "allowedPhysical": [
+      "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+    ],
+    "predecessors": [
+      "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+    ],
+    "finalClosures": [
+      "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+    ],
+    "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+    "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+  },
+  "nativeDispatchOwnerPins": [
+    {
+      "signature": "public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "start": 303,
+      "end": 16040,
+      "sha256": "dcb6bbcf13aa17cff9677c79ca2b7ddffd044eaa3d761cd801694df2ceab94b2",
+      "sourceFileSha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152",
+      "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d"
+    },
+    {
+      "signature": "public.weekly_source_message_dispatch_target_result_atomic_v1(jsonb)",
+      "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "start": 1710,
+      "end": 11139,
+      "sha256": "6e265536d45a92b1822c468647e98b7d46ed6300b30b4228db7b0e3fb7ada5b8",
+      "sourceFileSha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+      "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d"
+    },
+    {
+      "signature": "public.weekly_contact_submission_start_v1(jsonb)",
+      "path": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+      "start": 17017,
+      "end": 17770,
+      "sha256": "a504905cc74936020cf6888b62a150d046d01d9f4a8f3dfe33e9d0b4f2cb636d",
+      "sourceFileSha256": "80444bae062ff20c901dcb636921ab4ec382d478d7c336c8b631a6ff84beb938",
+      "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d"
+    },
+    {
+      "signature": "private.weekly_contact_source_admission_v1(jsonb)",
+      "path": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "start": 9412,
+      "end": 18240,
+      "sha256": "e268fcd05eb2bc9ac5fe81ad50a5ffb04a9c6f7c9c34a744fd027f5208443714",
+      "sourceFileSha256": "3b44a121db9bffd51351e579c251556c631ce19985d7a3b79b3c09c0f525c88f",
+      "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d"
+    }
+  ],
+  "protectedOwnerSignatures": [
+    "public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)",
+    "public.weekly_source_message_dispatch_result_atomic_v1(jsonb)",
+    "public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)",
+    "public.weekly_source_message_dispatch_target_result_atomic_v1(jsonb)",
+    "public.weekly_contact_submission_start_v1(jsonb)",
+    "public.weekly_contact_submission_consume_v1(jsonb)",
+    "private.weekly_contact_source_result_v1(uuid,text,text,jsonb,jsonb)",
+    "private.weekly_contact_source_memberships_v1(uuid,boolean)",
+    "private.weekly_contact_source_membership_accept_v1(uuid)"
+  ],
+  "legacyCommandResultRetained": {
+    "chain": {
+      "signature": "public.weekly_source_message_dispatch_result_atomic_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "finalPhysical": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql"
+      ],
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    "completeStatementSha256": "840d2edb81b7f2aa3c4fcdc718533d34dc8560ee01f4a24ce7275d35cb378467"
+  },
+  "historicalSourcePins": [
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/metadata/CONTACT_SOURCE_COMPLETION_RECIPE_REVIEWED_SUCCESSOR.json",
+      "sha256": "f294792ed773277d01f8a7389f7332ad44e53a855cd2027e1851d51b991d558e"
+    },
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/metadata/RUNTIME_CONTRIBUTION_REVIEWED_SUCCESSOR.json",
+      "sha256": "5ec424eca893b004a114d7988941cb4b443695afb3bf21ab6be1a43f0e1f6454"
+    },
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/metadata/ORDINAL_GUARD_CORRECTION.json",
+      "sha256": "b98fc1f587202506b7d74bbdf3d06b5286c042dd66bd9b6ebfaeb0b8db2d6802"
+    },
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/PREREQUISITE_SOURCE_PROOF.json",
+      "sha256": "af58bf7cbb139d6ea3538ef3a3f31a1d0b14d76b167083a512716fc9206606da"
+    },
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/ASSEMBLY_MANIFEST.json",
+      "sha256": "f09ebd7bb1dd25afddbbc5321aa126e87bcca1e79aae73d77d4455277583ba05"
+    },
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/SOURCE_MANIFEST.json",
+      "sha256": "65d10811c1a92ef751e59a8a3de4cce40367659ff4e54c57507bccf1586e88b5"
+    },
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/TEST_RESULT.json",
+      "sha256": "5414bc471351a8bc613a1406fe0c3556ffe17b35d916eb4552584906b781edbd"
+    },
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/DEPENDENCY_REVIEW.json",
+      "sha256": "7cd1537554e6e5afb738ff0d419e6ca4f20ee0724132b1b112228b4dfc19485e"
+    },
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/PREREQUISITE_RELATION_REVIEW.json",
+      "sha256": "40d678453f4e74f76f928a9480b56ba544cb72001a8a4337b07bb8ccf563358d"
+    },
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/RUNTIME_REVERSE_PROOF.json",
+      "sha256": "39b26b93ec1a27b2d460fbbe8fc8cdf7e9ecbcc0e48484523ad8038d3d8ea705"
+    },
+    {
+      "commit": "2d74b1fdced14d4a60882720d7e590ad83f8dd5a",
+      "path": "docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/registry/FINAL_DEFINER_DELTA.json",
+      "sha256": "b1766bc4cd7bffd59a5fe30f33f2b1248f5ace5c04d7c3f32b32b3535fe8f1ed"
+    }
+  ],
+  "reviewPins": [
+    {
+      "commit": "230c3bd58049406ea6ba87662160823dc43e2e52",
+      "path": "docs/healthroster-build/proposals/v6-contact-assembly-review-20261016/REVIEW.json",
+      "sha256": "b91f2254e3ee69ba0f2ed1194604c642ccad5d33db7beddc5399d43a97764963"
+    },
+    {
+      "commit": "8559c2a239c202b5734ac704086e56f366e7a992",
+      "path": "docs/healthroster-build/proposals/v6-contact-dispatch-authority-review-20261016/EVIDENCE.json",
+      "sha256": "5c0b14c492c86c4082659e5d0b0e6c459f6c50627ff017353254ebe670cabfd8"
+    }
+  ],
+  "rootExplicitSelection": "Replace only complete open START function span within complete leaf38, retain frozen originals in Git/history; no additional late reassert declaration.",
+  "native": "NOT_RUN"
+}

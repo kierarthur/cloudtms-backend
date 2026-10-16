@@ -1,0 +1,965 @@
+{
+  "version": "CONTACT_PREREQUISITE_EXACT_SOURCE_RELATIONS_V1",
+  "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "qualification": "Manually read all five full functions and mapped each referenced native field to actual pinned CREATE/ADD source. Presence evidence is not native catalogue/type/constraint acceptance.",
+  "relations": [
+    {
+      "relation": "public.weekly_message_dispatch_commands",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "message_render_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "attempt_count",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "provider_accepted_at_utc",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "environment",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "agency_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "tranche_sequence",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "tranche_kind",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_message_provider_attempts",
+      "columns": [
+        {
+          "column": "dispatch_command_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_message_dispatch_targets",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_2310_weekly_source_delivery_targets.sql",
+              "sha256": "4a8d11cecf697329b4cd019f7a194276476e79d2f43714a946ac8217c7f62b96"
+            }
+          ]
+        },
+        {
+          "column": "dispatch_command_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_2310_weekly_source_delivery_targets.sql",
+              "sha256": "4a8d11cecf697329b4cd019f7a194276476e79d2f43714a946ac8217c7f62b96"
+            }
+          ]
+        },
+        {
+          "column": "attempt_count",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_2310_weekly_source_delivery_targets.sql",
+              "sha256": "4a8d11cecf697329b4cd019f7a194276476e79d2f43714a946ac8217c7f62b96"
+            }
+          ]
+        },
+        {
+          "column": "state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_2310_weekly_source_delivery_targets.sql",
+              "sha256": "4a8d11cecf697329b4cd019f7a194276476e79d2f43714a946ac8217c7f62b96"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_message_target_attempts",
+      "columns": [
+        {
+          "column": "dispatch_target_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_2310_weekly_source_delivery_targets.sql",
+              "sha256": "4a8d11cecf697329b4cd019f7a194276476e79d2f43714a946ac8217c7f62b96"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_message_renders",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_candidate_outreach_generations",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "request_kind",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "candidate_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "client_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "source_cycle_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "candidate_cohort_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "generation_number",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "membership_hash",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_cycles",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "current_projection_publication_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_groups",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "environment",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "agency_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_discrepancy_incidents",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "candidate_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "client_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "source_cycle_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "source_group_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "candidate_action_state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "current_comparison_revision_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "work_event_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "episode_number",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "manager_action_state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "manager_potential_state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_candidate_outreach_memberships",
+      "columns": [
+        {
+          "column": "candidate_generation_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "incident_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "comparison_revision_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_issue_comparison_revisions",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "contract_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_work_events",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "work_date",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_timesheet_submission_requests",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "candidate_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "current_projection_publication_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "candidate_cohort_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "request_generation",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "source_cycle_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "membership_hash",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_timesheet_submission_request_memberships",
+      "columns": [
+        {
+          "column": "submission_request_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "client_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "contract_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "week_ending",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "state",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.timesheets",
+      "columns": [
+        {
+          "column": "contract_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        },
+        {
+          "column": "week_ending_date",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        },
+        {
+          "column": "is_current",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        },
+        {
+          "column": "revoked_at",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        },
+        {
+          "column": "archived_at_utc",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            },
+            {
+              "path": "supabase/migrations/12072026_1428_migrations.sql",
+              "sha256": "9aedd750700f3e968c80c8ebba422655001d6ca58238e9e964e7330a932e2482"
+            }
+          ]
+        },
+        {
+          "column": "sheet_scope",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        },
+        {
+          "column": "line_type",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        },
+        {
+          "column": "r2_nurse_key",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        },
+        {
+          "column": "img_sha256_nurse",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_contact_delivery_memberships",
+      "columns": [
+        {
+          "column": "incident_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+              "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+            }
+          ]
+        },
+        {
+          "column": "incident_episode",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+              "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+            }
+          ]
+        },
+        {
+          "column": "delivery_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+              "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+            }
+          ]
+        },
+        {
+          "column": "audience",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+              "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+            }
+          ]
+        },
+        {
+          "column": "purpose",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+              "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+            }
+          ]
+        },
+        {
+          "column": "send_ordinal",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15102026_0802_weekly_contact_pause_permits.sql",
+              "sha256": "743eeb8f124926209e90561e1a2b54990a90468e808b84ea7ba665c564ee8673"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_manager_review_items",
+      "columns": [
+        {
+          "column": "incident_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "incident_episode",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "review_batch_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_manager_review_batches",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "message_render_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_manager_recipient_routes",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "source_cycle_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "protected_recipient_address",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.weekly_source_global_settings",
+      "columns": [
+        {
+          "column": "singleton",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+              "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+            }
+          ]
+        },
+        {
+          "column": "manager_recent_completed_weeks",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/16102026_0244_weekly_contact_global_timing_schema.sql",
+              "sha256": "36d9470a7b8033899ad2fe9c6ef37e4cf428f397290eed4e4caab575dfb93d40"
+            }
+          ]
+        },
+        {
+          "column": "manager_max_work_age_days",
+          "sourceEvidence": [
+            {
+              "path": "supabase/migrations/16102026_0244_weekly_contact_global_timing_schema.sql",
+              "sha256": "36d9470a7b8033899ad2fe9c6ef37e4cf428f397290eed4e4caab575dfb93d40"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "relation": "public.contracts",
+      "columns": [
+        {
+          "column": "id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        },
+        {
+          "column": "candidate_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        },
+        {
+          "column": "client_id",
+          "sourceEvidence": [
+            {
+              "path": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+              "sha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "missingColumns": [],
+  "native": "NOT_RUN",
+  "original2d74ProofSha256": "40d678453f4e74f76f928a9480b56ba544cb72001a8a4337b07bb8ccf563358d"
+}

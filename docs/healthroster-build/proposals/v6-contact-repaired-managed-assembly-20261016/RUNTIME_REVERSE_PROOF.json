@@ -1,0 +1,29 @@
+{
+  "version": "CONTACT_REPAIRED_CURRENT_PARENT_REVERSE_V1",
+  "rootCommit": "34b8e2584b7500a6e7aad9db32fa2061b484977d",
+  "parentPath": "broker/src/weekly-source/delivery-runtime.mjs",
+  "parentCanonicalLfSha256": "cda0983c5292f6f86c6c812cccd176057ce8dc34059753e3009d25bcf398ea75",
+  "resultCanonicalLfSha256": "b5b7109136fe51b26b643a4b4381d411e56efc8009a7ff0ce67e6b7c763cdaa5",
+  "anchorCounts": [
+    1,
+    1,
+    1
+  ],
+  "edits": [
+    {
+      "before": "import { weeklySourceDeploymentContext } from './routes.js';",
+      "after": "import { weeklySourceDeploymentContext } from './routes.js';\nimport { runWeeklySourceContactRecheck } from './contact-recheck-runtime.mjs';"
+    },
+    {
+      "before": "  const renders = await renderDueIntents(env, dependencies, limit);",
+      "after": "  // This consumes the existing contact tasks after actual native due-step\n  // creation. An unavailable item/RPC cannot interrupt unrelated safe targets;\n  // every original final START still independently enforces current admission.\n  let contactRecheck;\n  try {\n    contactRecheck = await runWeeklySourceContactRecheck(dependencies, {\n      deployment: weeklySourceDeploymentContext(env), workerId, limit,\n    });\n  } catch {\n    contactRecheck = { ok: false, error_code: 'CONTACT_RECHECK_UNAVAILABLE', processed: 0, held: 0, results: [] };\n  }\n  const renders = await renderDueIntents(env, dependencies, limit);"
+    },
+    {
+      "before": "    scheduler,\n    renders,",
+      "after": "    scheduler,\n    contact_recheck: contactRecheck,\n    renders,"
+    }
+  ],
+  "completeReverseEqualsActualParent": true,
+  "leafSha256": "6bf1eed7b3dd86b984217c91b37a4a8d6b786511f712ea6daa87cf8f0a41e8ff",
+  "qualifiedAs": "Finite actual runtime contribution, no native or provider qualification"
+}
