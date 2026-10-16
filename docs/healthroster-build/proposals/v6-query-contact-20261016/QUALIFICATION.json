@@ -1,0 +1,74 @@
+{
+  "database_execution": false,
+  "installation": false,
+  "native": "REQUIRED_NOT_RUN",
+  "source_tests": {
+    "passed": 11,
+    "failed": 0,
+    "command": "node --test source.test.mjs"
+  },
+  "grammar": {
+    "command": "python parse-source.py C:/tmp/healthroster-v6-invoice-parser-20261016",
+    "parser": "pglast7.20",
+    "sql_files": 11,
+    "fixture_functions": 4,
+    "failures": 0
+  },
+  "native_source_checks": {
+    "command": "python native-source-check.py C:/tmp/healthroster-v6-invoice-parser-20261016",
+    "rowtype_variables": 35,
+    "contact_fixture_aliases": "actual Sep schema PASS",
+    "root0226_composed_grammar": "PASS",
+    "native_render_attachment_queries_ast_unchanged": 3
+  },
+  "javascript_syntax": [
+    "query-only module PASS",
+    "exact composed native drain PASS"
+  ],
+  "input_currency": [
+    {
+      "file": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+      "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql",
+      "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql",
+      "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "selected_saved_owner_matches_current": true
+    },
+    {
+      "file": "broker/src/index.js",
+      "selected_saved_owner_matches_current": true
+    }
+  ],
+  "scope": "Proposal only; no root/shared/Office/Bank/DB/provider changes",
+  "required_native": [
+    "Additive existing-store schema/constraints/owner/ACL and full fresh rollback restoration",
+    "Actual mixedA/T pause, eligible-only render and attachment proof, repeated pause/resume same/different set",
+    "Original enqueue retry after acceptedA cannot reallocate original ordinal/root",
+    "Genuine accepted result replay/native sent_count once plus callback/history reconciliation",
+    "Creator permission loss or reply/pause afterSTART still records true original accepted result",
+    "Actual unknown original + expired/reclaimed lease retains original ownership",
+    "Provider missing/duplicate/FAILED uncertainty and original receipt loss; noautomaticresend",
+    "Actual Worker drain/provider boundary and ordinary other-type regression",
+    "Shared-worker PDF requires genuine native rebuilding evidence before it can proceed"
+  ]
+}

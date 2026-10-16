@@ -1,0 +1,83 @@
+-- Genuine native identities/receipts are inputs. Invoke only inside root's
+-- server-owned TEST rollback. These functions never contact a provider.
+create or replace function pg_temp.query_contact_mixed_prepare_assert_v1(p_original_delivery uuid,p_agency uuid,p_environment text,p_eligible_action text,p_paused_action text)
+returns jsonb language plpgsql as $function$
+declare root public.hr_issue_email_deliveries%rowtype;before_payload jsonb;after_payload jsonb;r jsonb;child public.hr_issue_email_deliveries%rowtype;ids text[];
+begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ select * into strict root from public.hr_issue_email_deliveries where id=p_original_delivery and original_delivery_id=id;
+ if not exists(select 1 from public.hr_issue_email_delivery_items where delivery_id=root.id and action_id=p_eligible_action)
+  or not exists(select 1 from public.hr_issue_email_delivery_items where delivery_id=root.id and action_id=p_paused_action) then raise exception 'GENUINE_ORIGINAL_ITEMS_REQUIRED';end if;
+ before_payload:=private.weekly_contact_query_saved_payload_v1(root.mail_outbox_id,root.id);
+ r:=private.weekly_contact_query_recompose_v1(root.id,p_agency,p_environment);
+ if r->>'disposition'<>'RECOMPOSED' or jsonb_array_length(r->'replacements')<>1 then raise exception 'MIXED_RECOMPOSITION_FAILED';end if;
+ select * into strict child from public.hr_issue_email_deliveries where id=(r->'replacements'->0->>'query_delivery_id')::uuid;
+ select array_agg(action_id order by action_id) into ids from public.hr_issue_email_delivery_items where delivery_id=child.id;
+ if ids is distinct from array[p_eligible_action] or child.original_delivery_id<>root.id or child.payload_revision<2 or child.reminder_sequence<>root.reminder_sequence then
+  raise exception 'ORIGINAL_MEMBER_ORDINAL_OR_LINEAGE_CHANGED';end if;
+ after_payload:=private.weekly_contact_query_saved_payload_v1(root.mail_outbox_id,root.id);
+ if before_payload is distinct from after_payload or not exists(select 1 from public.hr_issue_email_deliveries where id=root.id and status='RETIRED') then
+  raise exception 'FROZEN_PARENT_NOT_RETAINED';end if;
+ if private.weekly_contact_query_recompose_v1(root.id,p_agency,p_environment)->'replacements' is distinct from r->'replacements' then
+  raise exception 'SAME_ELIGIBLE_SET_DID_NOT_REPLAY';end if;
+ return r;
+end;
+$function$;
+
+create or replace function pg_temp.query_contact_resume_after_accept_assert_v1(p_original_delivery uuid,p_agency uuid,p_environment text,p_accepted_action text,p_remaining_action text)
+returns jsonb language plpgsql as $function$
+declare r jsonb;ids text[];root public.hr_issue_email_deliveries%rowtype;child public.hr_issue_email_deliveries%rowtype;original_count bigint;native_replay jsonb;selected jsonb;
+begin
+ select * into strict root from public.hr_issue_email_deliveries where id=p_original_delivery and original_delivery_id=id;
+ if not exists(select 1 from public.hr_issue_email_delivery_items item join public.hr_issue_email_deliveries d on d.id=item.delivery_id
+  where d.original_delivery_id=root.id and item.action_id=p_accepted_action and d.status='SENT' and item.marked_sent_at_utc is not null) then
+  raise exception 'GENUINE_ACCEPTED_NATIVE_MEMBER_REQUIRED';end if;
+ r:=private.weekly_contact_query_recompose_v1(root.id,p_agency,p_environment);
+ select * into strict child from public.hr_issue_email_deliveries where id=(r->'replacements'->0->>'query_delivery_id')::uuid;
+ select array_agg(action_id order by action_id) into ids from public.hr_issue_email_delivery_items where delivery_id=child.id;
+ if ids is distinct from array[p_remaining_action] or child.reminder_sequence<>root.reminder_sequence
+  or child.original_delivery_id<>root.id then raise exception 'RESUME_RECONTACTED_ACCEPTED_MEMBER_OR_REFILLED_ORDINAL';end if;
+ select count(*) into original_count from public.hr_issue_email_deliveries where operation_id=root.operation_id and original_delivery_id=id;
+ select jsonb_agg(action_id order by action_id) into selected from public.hr_issue_email_delivery_items where delivery_id=root.id;
+ native_replay:=public.timesheet_query_email_enqueue_v1(root.import_id,root.operation_id,selected,root.created_by_user_id,5000,100);
+ if original_count<>(select count(*) from public.hr_issue_email_deliveries where operation_id=root.operation_id and original_delivery_id=id)
+  or not exists(select 1 from jsonb_array_elements(native_replay->'groups')g where g->>'delivery_id'=root.id::text
+    and(g->>'reminder_sequence')::integer=root.reminder_sequence) then raise exception 'ORIGINAL_ENQUEUE_RETRY_REFILLED_BUDGET';end if;
+ return r;
+end;
+$function$;
+
+create or replace function pg_temp.query_contact_result_replay_assert_v1(p_exact_result_request jsonb)
+returns void language plpgsql as $function$
+declare p public.weekly_contact_submission_permits%rowtype;before_counts jsonb;after_counts jsonb;r jsonb;
+begin
+ select * into strict p from public.weekly_contact_submission_permits where id=(p_exact_result_request->>'contact_permit_id')::uuid;
+ if p.status<>'ACCEPTED' or p.accepted_result_json->'provider_result' is distinct from p_exact_result_request->'provider_result' then
+  raise exception 'GENUINE_ACCEPTED_ORIGINAL_RESULT_REQUIRED';end if;
+ select jsonb_agg(jsonb_build_object('issue_id',e.id,'sent_count',e.sent_count,'last_successful_delivery_id',e.last_successful_delivery_id) order by e.id)
+ into before_counts from public.hr_issue_emails e join public.hr_issue_email_delivery_items item on item.issue_id=e.id where item.delivery_id=p.query_delivery_id;
+ r:=public.timesheet_query_email_contact_result_v1(p_exact_result_request);
+ select jsonb_agg(jsonb_build_object('issue_id',e.id,'sent_count',e.sent_count,'last_successful_delivery_id',e.last_successful_delivery_id) order by e.id)
+ into after_counts from public.hr_issue_emails e join public.hr_issue_email_delivery_items item on item.issue_id=e.id where item.delivery_id=p.query_delivery_id;
+ if before_counts is distinct from after_counts or r is distinct from p.accepted_result_json->'receipt' then raise exception 'RESULT_REPLAY_DOUBLE_COUNTED';end if;
+end;
+$function$;
+
+create or replace function pg_temp.query_contact_unknown_reclaim_assert_v1(p_original_permit uuid,p_worker_id text)
+returns void language plpgsql as $function$
+declare p public.weekly_contact_submission_permits%rowtype;o public.mail_outbox%rowtype;r jsonb;before_count bigint;
+begin
+ select * into strict p from public.weekly_contact_submission_permits where id=p_original_permit;
+ select * into strict o from public.mail_outbox where id=p.mail_outbox_id;
+ if p.owner_kind<>'TIMESHEET_QUERY_OUTBOX' or p.status not in('STARTED','AMBIGUOUS')
+  or p.lease_expires_at_utc>=clock_timestamp() or o.attempt_lease_token is null or o.attempt_lease_token=p.lease_token
+  or o.attempt_lease_expires_at_utc<=clock_timestamp() then raise exception 'GENUINE_EXPIRED_ORIGINAL_AND_CURRENT_NATIVE_RECLAIM_REQUIRED';end if;
+ select count(*) into before_count from public.weekly_contact_submission_permits where query_delivery_id=p.query_delivery_id;
+ r:=public.weekly_contact_submission_start_v1(jsonb_build_object('version','CONTACT_START_V1','owner_kind','TIMESHEET_QUERY_OUTBOX',
+  'mail_outbox_id',o.id,'query_delivery_id',p.query_delivery_id,'attempt_lease_token',o.attempt_lease_token,'worker_id',p_worker_id,
+  'agency_id',p.agency_id,'environment',p.environment));
+ if r->>'reason'<>'CHECK_ORIGINAL_ATTEMPT' or r->'call_once'<>'false'::jsonb
+  or before_count<>(select count(*) from public.weekly_contact_submission_permits where query_delivery_id=p.query_delivery_id) then
+  raise exception 'LEASE_RECLAIM_ALLOCATED_DUPLICATE_SUBMISSION';end if;
+end;
+$function$;

@@ -1,0 +1,94 @@
+{
+  "parser": "pglast v7.20",
+  "database_execution": false,
+  "fixture_grammar_checks": [
+    {
+      "file": "fixtures/native-query-contact-assertions.sqlinc",
+      "sql_statements": 4,
+      "plpgsql_functions": 4,
+      "inner_sql_expressions": 36,
+      "native": "REQUIRED_NOT_RUN"
+    }
+  ],
+  "checks": [
+    {
+      "file": "010_existing_delivery_lineage.sqlinc",
+      "sql_statements": 12,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "file": "020_native_member.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 20,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "021_native_payload.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 14,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "030_native_enqueue_core.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 75,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "040_native_recomposition.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 85,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "050_native_entrypoints.sqlinc",
+      "sql_statements": 3,
+      "plpgsql_functions": 3,
+      "inner_sql_expressions": 35,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "060_native_result.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 47,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "065_native_followup.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 13,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "070_native_mark.sqlinc",
+      "sql_statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 20,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "080_native_integrity.sqlinc",
+      "sql_statements": 4,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 36,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "090_acl.sqlinc",
+      "sql_statements": 26,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    }
+  ],
+  "failures": [],
+  "native": "REQUIRED_NOT_RUN"
+}

@@ -1,0 +1,174 @@
+{
+  "version": "V6_NATIVE_QUERY_CONTACT_SOURCE_V1",
+  "native": "REQUIRED_NOT_RUN",
+  "database_execution": false,
+  "source_inputs": "SOURCE_INPUTS.json",
+  "ordered_sql": [
+    "forward/010_existing_delivery_lineage.sqlinc",
+    "forward/020_native_member.sqlinc",
+    "forward/021_native_payload.sqlinc",
+    "forward/030_native_enqueue_core.sqlinc",
+    "forward/040_native_recomposition.sqlinc",
+    "forward/050_native_entrypoints.sqlinc",
+    "forward/060_native_result.sqlinc",
+    "forward/065_native_followup.sqlinc",
+    "forward/070_native_mark.sqlinc",
+    "forward/080_native_integrity.sqlinc",
+    "forward/090_acl.sqlinc"
+  ],
+  "functions": [
+    {
+      "name": "private.weekly_contact_query_member_v1",
+      "signature": "private.weekly_contact_query_member_v1(uuid,uuid)",
+      "payload": "forward/020_native_member.sqlinc"
+    },
+    {
+      "name": "private.weekly_contact_query_saved_payload_v1",
+      "signature": "private.weekly_contact_query_saved_payload_v1(uuid,uuid)",
+      "payload": "forward/021_native_payload.sqlinc"
+    },
+    {
+      "name": "private.weekly_contact_query_enqueue_core_v1",
+      "signature": "private.weekly_contact_query_enqueue_core_v1(uuid,uuid,jsonb,uuid,integer,integer,uuid,bigint)",
+      "payload": "forward/030_native_enqueue_core.sqlinc"
+    },
+    {
+      "name": "private.weekly_contact_query_recompose_v1",
+      "signature": "private.weekly_contact_query_recompose_v1(uuid,uuid,text,uuid,text)",
+      "payload": "forward/040_native_recomposition.sqlinc"
+    },
+    {
+      "name": "public.timesheet_query_email_enqueue_v1",
+      "signature": "public.timesheet_query_email_enqueue_v1(uuid,uuid,jsonb,uuid,integer,integer)",
+      "payload": "forward/050_native_entrypoints.sqlinc"
+    },
+    {
+      "name": "public.timesheet_query_email_recompose_v1",
+      "signature": "public.timesheet_query_email_recompose_v1(jsonb)",
+      "payload": "forward/050_native_entrypoints.sqlinc"
+    },
+    {
+      "name": "public.timesheet_query_email_recompose_ready_v1",
+      "signature": "public.timesheet_query_email_recompose_ready_v1(jsonb)",
+      "payload": "forward/050_native_entrypoints.sqlinc"
+    },
+    {
+      "name": "public.timesheet_query_email_contact_result_v1",
+      "signature": "public.timesheet_query_email_contact_result_v1(jsonb)",
+      "payload": "forward/060_native_result.sqlinc"
+    },
+    {
+      "name": "private.weekly_contact_query_complete_v1",
+      "signature": "private.weekly_contact_query_complete_v1(uuid,uuid,uuid)",
+      "payload": "forward/065_native_followup.sqlinc"
+    },
+    {
+      "name": "public._timesheet_query_email_delivery_mark_core_v1",
+      "signature": "public._timesheet_query_email_delivery_mark_core_v1(uuid,text,text,timestamptz,uuid)",
+      "payload": "forward/070_native_mark.sqlinc"
+    },
+    {
+      "name": "private.weekly_contact_query_integrity_v1",
+      "signature": "private.weekly_contact_query_integrity_v1()",
+      "payload": "forward/080_native_integrity.sqlinc"
+    }
+  ],
+  "schema": {
+    "target": "New root-allocated protected migration only",
+    "payload": "forward/010_existing_delivery_lineage.sqlinc",
+    "note": "Existing delivery store only; root self identity and genuine revision1, no timestamp backfill."
+  },
+  "root0226": {
+    "target": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+    "recipe": "ROOT0226_PATCH.json",
+    "note": "Apply finite exact anchors to current owner; never replace wholeRoot0226 from the reference."
+  },
+  "original_owners": [
+    {
+      "target": "public.timesheet_query_email_enqueue_v1(uuid,uuid,jsonb,uuid,integer,integer)",
+      "payload": "forward/050_native_entrypoints.sqlinc",
+      "core": "forward/030_native_enqueue_core.sqlinc",
+      "preserved": "Original two render CTEs/attachments/native issue and event owners"
+    },
+    {
+      "target": "public._timesheet_query_email_delivery_mark_core_v1(uuid,text,text,timestamptz,uuid)",
+      "payload": "forward/070_native_mark.sqlinc"
+    }
+  ],
+  "worker": {
+    "module_target": "broker/src/weekly-source/query-contact-drain.mjs",
+    "module": "forward/query-contact-drain.mjs",
+    "target": "broker/src/index.js",
+    "recipe": "INDEX_DRAIN_PATCH.json",
+    "scope": "drainEmailOutboxOnce only"
+  },
+  "files": [
+    {
+      "file": "forward/010_existing_delivery_lineage.sqlinc",
+      "sha256": "10ed2aa070ab247f4da427aa963664ca13b4a79042814fa6f6bc94d2e77a4845"
+    },
+    {
+      "file": "forward/020_native_member.sqlinc",
+      "sha256": "fc8c7e3f3ec942984a22fb5756c89f7e3f7315d067143b91c04cc1a00e665cfa"
+    },
+    {
+      "file": "forward/021_native_payload.sqlinc",
+      "sha256": "f7b74f5bda6d2bc5c3b009af10c5260b1b9928f2b7eeeab5d97d91417823aa37"
+    },
+    {
+      "file": "forward/030_native_enqueue_core.sqlinc",
+      "sha256": "80e333e33685204838b49ae2c67a055d5df5bf2534d9c66026a58955111d25de"
+    },
+    {
+      "file": "forward/040_native_recomposition.sqlinc",
+      "sha256": "2e422cfdcfe1dd9ed66443bbf35d23390f52edf7eeaa706ff4097c774e84aac8"
+    },
+    {
+      "file": "forward/050_native_entrypoints.sqlinc",
+      "sha256": "0958ee3673664c3f7b82860c0522d09db21bd73f25da67d35ac7d4ffc9a9476f"
+    },
+    {
+      "file": "forward/060_native_result.sqlinc",
+      "sha256": "9f0294f2aba86d207959eef9e3578736158c45595cc12693c01d39b8e06792b8"
+    },
+    {
+      "file": "forward/065_native_followup.sqlinc",
+      "sha256": "44847094bae7a1a33200a03540421c99d4f2bf1a69fcd7cb208f7a7da7ebc3e4"
+    },
+    {
+      "file": "forward/070_native_mark.sqlinc",
+      "sha256": "a76b9149dbadd5e9375a00eae5e2018d3bc74a5ced34b5f0b6fbaf4c0ed39705"
+    },
+    {
+      "file": "forward/080_native_integrity.sqlinc",
+      "sha256": "421892f2021459e02a92aeb1c9c6f9c68ee5088da7be45d0f0bdf3990e719706"
+    },
+    {
+      "file": "forward/090_acl.sqlinc",
+      "sha256": "a91f166a2de1ed15f8f618c28600e548028ab2ac9eacfa2f028dbfe6b4170a49"
+    },
+    {
+      "file": "forward/query-contact-drain.mjs",
+      "sha256": "bab6c7c1d885c914d17d7942abc29c6d92347ad880572fdb86b9d3bba71232a9"
+    },
+    {
+      "file": "ROOT0226_PATCH.json",
+      "sha256": "30d7603dbccfeb85d212e35ca6669a84d296b8318bb8160a147a2b5b748f8b86"
+    },
+    {
+      "file": "INDEX_DRAIN_PATCH.json",
+      "sha256": "8486b7d56364949ca923ff70e85347544d70e3efb5a8c0ef5433bcde0f075ca3"
+    },
+    {
+      "file": "fixtures/native-query-contact-assertions.sqlinc",
+      "sha256": "b840f1626f03a17d0af5d4839ed3741cdf4fe851abdbda851e6ee5055ce37dbd"
+    }
+  ],
+  "focused_dependencies": [
+    "Actual current Root0226 common START/permit and Root contact primitives must be mounted with finite patches.",
+    "A PDF key genuinely shared with excluded workers holds for native per-Timesheet evidence rebuild; no guessed document command or page filtering.",
+    "Pre-existing legacy DELIVERY_UNCERTAIN with no genuine new permit remains held for original outcome review; no fabricated provenance.",
+    "Quiesce old TIMESHEET_QUERY runtime across protected database/Worker upgrade; the old sender cannot perform the new START.",
+    "Genuine schema/transaction/Office history/provider-result/runtime fixtures remain NOT_RUN."
+  ]
+}

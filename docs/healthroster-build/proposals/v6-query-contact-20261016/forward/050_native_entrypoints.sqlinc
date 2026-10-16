@@ -1,0 +1,78 @@
+create or replace function public.timesheet_query_email_enqueue_v1(
+ p_import_id uuid,p_operation_id uuid,p_selected_action_ids jsonb,p_actor_user_id uuid default null,p_max_actions integer default 5000,p_max_groups integer default 100
+) returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare deployment public.candidate_push_timing_policy%rowtype;pair record;r jsonb;group_row jsonb;prepared jsonb;results jsonb:='[]';
+begin
+ perform private.weekly_source_query_require_service_v1();perform public._import_review_assert_actor_v1(p_actor_user_id);
+ select * into strict deployment from public.candidate_push_timing_policy where deployment_slot;
+ perform private.weekly_contact_deployment_lock_v1(deployment.agency_id,deployment.environment);
+ perform private.weekly_contact_context_v1(deployment.agency_id,deployment.environment);
+ -- Native core still validates the exact whole committed operation action set.
+ for pair in select distinct a.candidate_id,a.client_id from public.import_review_decisions a
+  join public.import_review_action_outcomes x on x.action_id=a.action_id and x.operation_id=p_operation_id and x.import_id=p_import_id
+  where a.import_id=p_import_id and a.action_kind in('EMAIL_ISSUE','EMAIL_REMINDER')
+  and a.action_id in(select value from jsonb_array_elements_text(p_selected_action_ids)) order by a.candidate_id,a.client_id loop
+  perform private.weekly_contact_scope_lock_v1(deployment.agency_id,deployment.environment,pair.candidate_id,pair.client_id);
+ end loop;
+ perform 1 from public.mail_outbox o join public.hr_issue_email_deliveries d on d.mail_outbox_id=o.id
+  where d.operation_id=p_operation_id order by o.id for update of o;
+ perform 1 from public.hr_issue_email_deliveries d where d.operation_id=p_operation_id order by d.id for update;
+ r:=private.weekly_contact_query_enqueue_core_v1(p_import_id,p_operation_id,p_selected_action_ids,p_actor_user_id,p_max_actions,p_max_groups,null,1);
+ for group_row in select value from jsonb_array_elements(r->'groups') loop
+  prepared:=private.weekly_contact_query_recompose_v1((group_row->>'delivery_id')::uuid,deployment.agency_id,deployment.environment);
+  results:=results||jsonb_build_array(prepared);
+ end loop;
+ return r||jsonb_build_object('contact_recomposition',results);
+end;
+$function$;
+
+create or replace function public.timesheet_query_email_recompose_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ perform private.weekly_source_query_require_service_v1();
+ perform private.weekly_contact_assert_closed_v1(p_request,array['version','mail_outbox_id','query_delivery_id','attempt_lease_token','worker_id','agency_id','environment'],
+  array['version','mail_outbox_id','query_delivery_id','attempt_lease_token','worker_id','agency_id','environment'],'CONTACT_REQUEST_INVALID');
+ if p_request->>'version' is distinct from 'TIMESHEET_QUERY_RECOMPOSE_V1' or not coalesce(p_request->>'environment' in('TEST','LIVE'),false)
+  or jsonb_typeof(p_request->'attempt_lease_token') is distinct from 'string' or char_length(p_request->>'attempt_lease_token') not between 1 and 500
+  or jsonb_typeof(p_request->'worker_id') is distinct from 'string' or char_length(p_request->>'worker_id') not between 1 and 200 then
+  raise exception 'CONTACT_REQUEST_INVALID' using errcode='22023';end if;
+ return private.weekly_contact_query_recompose_v1(private.weekly_contact_uuid_v1(p_request->'query_delivery_id'),
+  private.weekly_contact_uuid_v1(p_request->'agency_id'),p_request->>'environment',
+  private.weekly_contact_uuid_v1(p_request->'mail_outbox_id'),p_request->>'attempt_lease_token');
+end;
+$function$;
+
+-- Bounded native wake at the existing drain: no second sender or queue. Early
+-- RESUME is discovered from the real scope revision's update time; expiry from
+-- the actual retired root's next native recheck time. Neither implies outcome.
+create or replace function public.timesheet_query_email_recompose_ready_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare v_agency uuid;v_environment text;v_limit integer;row record;results jsonb:='[]';r jsonb;
+begin
+ perform private.weekly_source_query_require_service_v1();
+ perform private.weekly_contact_assert_closed_v1(p_request,array['version','limit','worker_id','agency_id','environment'],array['version','limit','worker_id','agency_id','environment'],'CONTACT_REQUEST_INVALID');
+ if p_request->>'version' is distinct from 'TIMESHEET_QUERY_RECOMPOSE_READY_V1' or jsonb_typeof(p_request->'limit') is distinct from 'number'
+  or p_request->>'limit'!~'^[0-9]{1,3}$' or (p_request->>'limit')::integer not between 1 and 100
+  or not coalesce(p_request->>'environment' in('TEST','LIVE'),false) or jsonb_typeof(p_request->'worker_id') is distinct from 'string'
+  or char_length(p_request->>'worker_id') not between 1 and 200 then raise exception 'CONTACT_REQUEST_INVALID' using errcode='22023';end if;
+ v_agency:=private.weekly_contact_uuid_v1(p_request->'agency_id');v_environment:=p_request->>'environment';v_limit:=(p_request->>'limit')::integer;
+ perform private.weekly_contact_deployment_lock_v1(v_agency,v_environment);perform private.weekly_contact_context_v1(v_agency,v_environment);
+ for row in select d.id from public.hr_issue_email_deliveries d join public.mail_outbox o on o.id=d.mail_outbox_id
+  where d.original_delivery_id=d.id and d.status='RETIRED' and d.contact_managed
+   and ((o.next_attempt_at_utc is not null and o.next_attempt_at_utc<=clock_timestamp()) or exists(
+    select 1 from public.hr_issue_email_delivery_items item join public.import_review_decisions a on a.action_id=item.action_id
+    join public.weekly_contact_pause_scopes s on s.candidate_id=a.candidate_id and s.client_id=a.client_id and s.agency_id=v_agency and s.environment=v_environment
+    where item.delivery_id=d.id and s.updated_at_utc>coalesce(d.contact_rechecked_at_utc,d.created_at_utc)))
+  order by coalesce(o.next_attempt_at_utc,d.retired_at_utc),d.id limit v_limit loop
+  begin
+   r:=private.weekly_contact_query_recompose_v1(row.id,v_agency,v_environment);results:=results||jsonb_build_array(r);
+  exception when sqlstate '42501' or sqlstate '55000' or sqlstate '40001' then
+   results:=results||jsonb_build_array(jsonb_build_object('query_delivery_id',row.id,'disposition','HELD_NATIVE_RECHECK','reason',sqlerrm));
+  end;
+ end loop;
+ return jsonb_build_object('ok',true,'version','TIMESHEET_QUERY_RECOMPOSE_READY_RESULT_V1','results',results);
+end;
+$function$;

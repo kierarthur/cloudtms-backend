@@ -1,0 +1,25 @@
+-- Existing native lifecycle reconciliation, using real accepted action
+-- coverage rather than requiring retired audit parents to become SENT.
+create or replace function private.weekly_contact_query_complete_v1(p_import_id uuid,p_operation_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare state public.import_review_states%rowtype;op public.import_apply_operations%rowtype;result jsonb;
+begin
+ select * into strict state from public.import_review_states where import_id=p_import_id for update;
+ select * into strict op from public.import_apply_operations where id=p_operation_id and import_id=p_import_id for update;
+ if state.last_operation_id is distinct from op.id then return null;end if;
+ if exists(select 1 from jsonb_array_elements_text(coalesce(op.response_json->'post_commit_email_action_ids','[]'::jsonb)) planned(action_id)
+  join public.import_review_decisions a on a.action_id=planned.action_id and a.import_id=p_import_id
+  where a.is_current and a.selected and not exists(
+   select 1 from public.hr_issue_email_delivery_items item join public.hr_issue_email_deliveries d on d.id=item.delivery_id
+   where item.action_id=a.action_id and item.marked_sent_at_utc is not null and d.status='SENT')) then return null;end if;
+ if op.response_json->>'review_email_follow_up_status'='COMPLETE' then return jsonb_build_object('follow_up_status',state.follow_up_status);end if;
+ update public.import_apply_operations set response_json=response_json||jsonb_build_object('review_email_follow_up_status','COMPLETE'),updated_at_utc=clock_timestamp() where id=op.id;
+ result:=public._import_review_follow_up_reconcile_core_v1(p_import_id,p_operation_id,p_actor_user_id);
+ select * into strict state from public.import_review_states where import_id=p_import_id;
+ insert into public.import_review_events(import_id,state_version,operation_id,event_code,actor_user_id,event_context_json)
+ values(p_import_id,state.state_version,p_operation_id,'QUERY_EMAIL_FOLLOW_UP_COMPLETE',p_actor_user_id,
+  jsonb_build_object('contact_disposition','ACCEPTED_OR_NO_CURRENT_ACTION','changes_sent_history',false));
+ return result;
+end;
+$function$;

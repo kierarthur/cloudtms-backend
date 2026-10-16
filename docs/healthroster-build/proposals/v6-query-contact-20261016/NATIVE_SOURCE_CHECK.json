@@ -1,0 +1,184 @@
+{
+  "database_execution": false,
+  "rowtype_checks": [
+    {
+      "file": "020_native_member.sqlinc",
+      "variable": "v_delivery",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "020_native_member.sqlinc",
+      "variable": "v_item",
+      "table": "public.hr_issue_email_delivery_items"
+    },
+    {
+      "file": "020_native_member.sqlinc",
+      "variable": "v_action",
+      "table": "public.import_review_decisions"
+    },
+    {
+      "file": "020_native_member.sqlinc",
+      "variable": "v_issue",
+      "table": "public.hr_issue_emails"
+    },
+    {
+      "file": "020_native_member.sqlinc",
+      "variable": "v_ts",
+      "table": "public.timesheets"
+    },
+    {
+      "file": "021_native_payload.sqlinc",
+      "variable": "v_mail",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "021_native_payload.sqlinc",
+      "variable": "v_delivery",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "021_native_payload.sqlinc",
+      "variable": "v_root",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "030_native_enqueue_core.sqlinc",
+      "variable": "v_source",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "030_native_enqueue_core.sqlinc",
+      "variable": "v_state",
+      "table": "public.import_review_states"
+    },
+    {
+      "file": "030_native_enqueue_core.sqlinc",
+      "variable": "v_operation",
+      "table": "public.import_apply_operations"
+    },
+    {
+      "file": "040_native_recomposition.sqlinc",
+      "variable": "requested",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "040_native_recomposition.sqlinc",
+      "variable": "root",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "040_native_recomposition.sqlinc",
+      "variable": "d",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "040_native_recomposition.sqlinc",
+      "variable": "o",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "040_native_recomposition.sqlinc",
+      "variable": "item",
+      "table": "public.hr_issue_email_delivery_items"
+    },
+    {
+      "file": "050_native_entrypoints.sqlinc",
+      "variable": "deployment",
+      "table": "public.candidate_push_timing_policy"
+    },
+    {
+      "file": "060_native_result.sqlinc",
+      "variable": "permit",
+      "table": "public.weekly_contact_submission_permits"
+    },
+    {
+      "file": "060_native_result.sqlinc",
+      "variable": "mail",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "060_native_result.sqlinc",
+      "variable": "delivery",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "065_native_followup.sqlinc",
+      "variable": "state",
+      "table": "public.import_review_states"
+    },
+    {
+      "file": "065_native_followup.sqlinc",
+      "variable": "op",
+      "table": "public.import_apply_operations"
+    },
+    {
+      "file": "070_native_mark.sqlinc",
+      "variable": "d",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "070_native_mark.sqlinc",
+      "variable": "o",
+      "table": "public.mail_outbox"
+    },
+    {
+      "file": "070_native_mark.sqlinc",
+      "variable": "v_state",
+      "table": "public.import_review_states"
+    },
+    {
+      "file": "080_native_integrity.sqlinc",
+      "variable": "d",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "080_native_integrity.sqlinc",
+      "variable": "r",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "080_native_integrity.sqlinc",
+      "variable": "p",
+      "table": "public.weekly_contact_submission_permits"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "variable": "root",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "variable": "child",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "variable": "root",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "variable": "child",
+      "table": "public.hr_issue_email_deliveries"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "variable": "p",
+      "table": "public.weekly_contact_submission_permits"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "variable": "p",
+      "table": "public.weekly_contact_submission_permits"
+    },
+    {
+      "file": "native-query-contact-assertions.sqlinc",
+      "variable": "o",
+      "table": "public.mail_outbox"
+    }
+  ],
+  "root0226_composition_grammar": "PASS",
+  "native_render_attachment_ast_queries_unchanged": 3,
+  "failures": [],
+  "native": "REQUIRED_NOT_RUN"
+}

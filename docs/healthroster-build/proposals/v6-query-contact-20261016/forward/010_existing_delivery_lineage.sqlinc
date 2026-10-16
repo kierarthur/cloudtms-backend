@@ -1,0 +1,44 @@
+-- Minimal additive lineage in the existing native store. No new queue/store.
+alter table public.hr_issue_email_deliveries
+ add column original_delivery_id uuid,
+ add column payload_revision bigint not null default 1 check(payload_revision>=1),
+ add column next_payload_revision bigint not null default 2 check(next_payload_revision>=2),
+ add column contact_managed boolean not null default false,
+ add column contact_rechecked_at_utc timestamptz,
+ add column retired_at_utc timestamptz,
+ add column retirement_reason text check(retirement_reason is null or retirement_reason in('CONTACT_PAUSED','CONTACT_OBSOLETE','CONTACT_RECOMPOSED','CONTACT_ACCEPTED_ELSEWHERE'));
+-- Preserve genuine existing identities/timestamps; original is itself, never a
+-- guessed latest row. Existing accepted legacy history remains legacy history.
+update public.hr_issue_email_deliveries set original_delivery_id=id;
+update public.hr_issue_email_deliveries d set contact_managed=true
+ where d.status<>'SENT' and not exists(select 1 from public.mail_outbox o where o.id=d.mail_outbox_id and(o.status::text='SENT' or o.sent_at is not null));
+alter table public.hr_issue_email_deliveries alter column original_delivery_id set not null;
+alter table public.hr_issue_email_deliveries alter column contact_managed set default true;
+alter table public.hr_issue_email_deliveries add constraint hr_issue_email_deliveries_original_fk
+ foreign key(original_delivery_id) references public.hr_issue_email_deliveries(id) on delete restrict;
+alter table public.hr_issue_email_deliveries add constraint hr_issue_email_deliveries_root_revision_uq unique(original_delivery_id,payload_revision);
+alter table public.hr_issue_email_deliveries drop constraint hr_issue_email_deliveries_scope_ck;
+alter table public.hr_issue_email_deliveries add constraint hr_issue_email_deliveries_scope_ck check(
+ recipient_scope in('CLIENT_DEFAULT','CONTRACT_OVERRIDE') and reminder_sequence>=0 and length(recipient_email) between 3 and 320
+ and length(recipient_route_fingerprint)=64 and recipient_route_fingerprint~'^[0-9a-f]{64}$'
+ and length(issue_set_fingerprint)=64 and issue_set_fingerprint~'^[0-9a-f]{64}$'
+ and status in('QUEUED','ACCEPTED','SENT','FAILED','RETIRED')
+ and ((status='RETIRED' and retired_at_utc is not null and retirement_reason is not null)
+  or(status<>'RETIRED' and retired_at_utc is null and retirement_reason is null)));
+-- Match the genuine old uniqueness by its exact column vector, retaining all
+-- other constraints. Its generated name can be truncated by PostgreSQL.
+do $migration$
+declare constraint_name text;
+begin
+ select c.conname into strict constraint_name from pg_constraint c
+ where c.conrelid='public.hr_issue_email_deliveries'::regclass and c.contype='u'
+ and (select array_agg(a.attname::text order by key.ordinality) from unnest(c.conkey)with ordinality key(attnum,ordinality)
+  join pg_attribute a on a.attrelid=c.conrelid and a.attnum=key.attnum)
+ =array['operation_id','recipient_scope_key','issue_set_fingerprint','reminder_sequence'];
+ execute format('alter table public.hr_issue_email_deliveries drop constraint %I',constraint_name);
+end;
+$migration$;
+alter table public.hr_issue_email_deliveries add constraint hr_issue_email_deliveries_content_revision_uq
+ unique(operation_id,recipient_scope_key,issue_set_fingerprint,reminder_sequence,payload_revision);
+create index hr_issue_email_deliveries_contact_retired_idx on public.hr_issue_email_deliveries(retired_at_utc,id)
+ where status='RETIRED' and original_delivery_id=id;

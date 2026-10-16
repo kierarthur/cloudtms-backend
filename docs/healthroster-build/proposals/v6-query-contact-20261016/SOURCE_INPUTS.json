@@ -1,0 +1,55 @@
+{
+  "native": "REQUIRED_NOT_RUN",
+  "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "inputs": [
+    {
+      "file": "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "sha256": "0d4832a5bbed99f5e9da4430bb41d5a1691835d90cb7b472382bd2eb3b730fa2",
+      "reference": "reference/source-admission.sql"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0226_weekly_contact_query_outbox_admission_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "sha256": "a8b3f8343faf3ec6a2f290e875a2b9cde60caea75ce115fc0608b6732c430c6b",
+      "reference": "reference/query-admission.sql"
+    },
+    {
+      "file": "supabase/repeatable/includes/weekly_contact_source_native_start_v1.sqlinc",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152",
+      "reference": "reference/native-start.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "sha256": "5e7e51c44f2c0ef713df0fd35fe284b9e264f437efaff72da33811b6eaf26a4c",
+      "reference": "reference/issued-query.sql"
+    },
+    {
+      "file": "supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "sha256": "3106e43bbc693e3c2ecf406c62b83845bafea8fe62e2c4e3cbb3a4de5cce8eef",
+      "reference": "reference/query-rpcs.sql"
+    },
+    {
+      "file": "supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "sha256": "dcc7b965fc9bab19aece8a2f78f555c89e1939d35ba7cf93f2c51f1a58eb07c1",
+      "reference": "reference/claim.sql"
+    },
+    {
+      "file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "sha256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9",
+      "reference": "reference/query-evidence.sql"
+    },
+    {
+      "file": "broker/src/index.js",
+      "commit": "35fcc8979fd16836e5d404f8eab2d8b79d651990",
+      "sha256": "0a1eb678acd1b8d79f8652bcf88c5da2248fc6a15abf8b027700b64da5bf6865",
+      "reference": "reference/drainEmailOutboxOnce.jsinc",
+      "selection": "drainEmailOutboxOnce only"
+    }
+  ]
+}

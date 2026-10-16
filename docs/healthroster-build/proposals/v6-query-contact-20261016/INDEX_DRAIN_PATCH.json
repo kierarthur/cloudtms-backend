@@ -1,0 +1,27 @@
+{
+  "target": "broker/src/index.js",
+  "add_import": "import {createTimesheetQueryContactDrain} from './weekly-source/query-contact-drain.mjs';",
+  "scope": "Exact anchors inside drainEmailOutboxOnce only; other outbox types retain original branches",
+  "patches": [
+    {
+      "before": "  const patchMailOutboxRows = async (query, body) => {",
+      "after": "  let queryContactDeployment = null;\n  try { queryContactDeployment = weeklySourceDeploymentContext(env); } catch {}\n  const queryContact = createTimesheetQueryContactDrain({\n    rpc: (name,args) => sbRpc(env,name,args,{timeoutMs:15000}), deployment:queryContactDeployment,\n    workerId:'cloudtms:email-outbox-drain',leaseToken:attemptLeaseToken\n  });\n\n  const patchMailOutboxRows = async (query, body) => {"
+    },
+    {
+      "before": "  const claimed = await claimEmailOutboxReadyBatch(claimTake);",
+      "after": "  // Existing drain owns the bounded retired-payload wake; this does not send.\n  if (!typeFilterSet || typeFilterSet.has('TIMESHEET_QUERY')) {\n    const queryWake = await queryContact.wake();\n    if (!queryWake.ok) errors.push({error:queryWake.reason,contact_query_wake_held:true});\n  }\n  const claimed = await claimEmailOutboxReadyBatch(claimTake);"
+    },
+    {
+      "before": "      const payloadBase = await buildEmailPayloadFromOutboxRow(env, row);",
+      "after": "      const queryPreparation = await queryContact.prepare(row);\n      if (queryPreparation.applicable && !queryPreparation.allowed) {\n        deferred += 1; errors.push({id:row.id,error:queryPreparation.reason,deferred:true,contact_query_held:true});\n        continue;\n      }\n      const payloadBase = await buildEmailPayloadFromOutboxRow(env, row);"
+    },
+    {
+      "before": "        batchJobs.push(candidateJobs[itemIndex]);",
+      "after": "        // Last query admission before this native provider batch. No cached\n        // pause boolean or browser fields can replace the actual START owner.\n        const queryStart = await queryContact.start(claimedRow);\n        if (queryStart.applicable && !queryStart.allowed) {\n          deferred += 1; errors.push({id:rowId,error:queryStart.reason,deferred:true,contact_query_held:true});\n          continue;\n        }\n        batchJobs.push(candidateJobs[itemIndex]);"
+    },
+    {
+      "before": "  const reconcileBatchResult = async (res, rowIds, currentLeaseToken) => {",
+      "after": "  const reconcileBatchResult = async (res, rowIds, currentLeaseToken) => {\n    const queryOutcomes = await queryContact.reconcileProviderBatch(res,rowIds,claimedRowsById);\n    const handledQueries = new Set(queryOutcomes.map(result => String(result.id)));\n    for (const result of queryOutcomes) {\n      if (result.disposition === 'ACCEPTED') {\n        sent += 1;\n        await recordEmailAudit(env,null,'EMAIL_SENT',{outbox_id:result.id,provider_message_id:result.provider_message_id,type:'TIMESHEET_QUERY'});\n      } else {\n        deferred += 1;\n        errors.push({id:result.id,error:result.reason || 'CONTACT_QUERY_ORIGINAL_ATTEMPT_AMBIGUOUS',\n          checking_original_attempt:true,automatic_resend:false});\n      }\n    }\n    rowIds = rowIds.filter(id => !handledQueries.has(String(id)));\n    if (!rowIds.length) return;"
+    }
+  ]
+}

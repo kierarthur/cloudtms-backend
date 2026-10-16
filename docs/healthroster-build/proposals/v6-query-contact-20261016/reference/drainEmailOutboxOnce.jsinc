@@ -1,0 +1,880 @@
+async function drainEmailOutboxOnce(env, { limit, types } = {}) {
+  const enc = encodeURIComponent;
+  // This is a shared factual-email drain, not an old Banking Pay owner. An
+  // unavailable owner holds financial mail only; ordinary mail still proceeds.
+  const legacyMailAllowed = async () => {
+    try {
+      return (await bpayNextOwnerStatusRpc(env)()).active_owner === 'LEGACY';
+    } catch { return false; }
+  };
+  const legacyMailAtClaim = await legacyMailAllowed();
+  const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+
+  const toPositiveInt = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+  };
+
+  const maxPerCall = Math.max(
+    1,
+    toPositiveInt(env.EMAIL_DRAIN_MAX_PER_CALL) || 200
+  );
+  const maxCallsPerDrain = Math.max(
+    1,
+    toPositiveInt(env.EMAIL_DRAIN_MAX_CALLS_PER_DRAIN) || 25
+  );
+  const maxDrainJobs = Math.max(1, maxPerCall * maxCallsPerDrain);
+
+  const requestedTake =
+    toPositiveInt(limit) ||
+    toPositiveInt(env.EMAIL_DRAIN_LIMIT_DEFAULT) ||
+    maxDrainJobs;
+
+  const take = Math.max(1, Math.min(requestedTake, maxDrainJobs));
+  const typeFilter = Array.isArray(types) && types.length ? types : null;
+  const typeFilterSet = typeFilter
+    ? new Set(typeFilter.map((tp) => String(tp || '').trim().toUpperCase()).filter(Boolean))
+    : null;
+
+  let sent = 0;
+  let failed = 0;
+  let deferred = 0;
+  const errors = [];
+
+  // Exactly one bounded recovery sweep runs after each drain, including an
+  // otherwise idle drain.  It closes the race where cancellation completed
+  // before the original remittance became durably SENT, without adding one RPC
+  // per email or delaying the cancellation request itself.
+  const finishDrainReport = async (report) => {
+    let cancellationNoticeRecovery;
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) {
+      return { ...report, payment_cancellation_notice_recovery: {
+        ok: true, skipped: true, code: 'BPAY_NEXT_LEGACY_MAIL_HELD', calls: 0
+      } };
+    }
+    try {
+      cancellationNoticeRecovery = await reconcilePaymentCancellationNoticesBounded(env);
+    } catch {
+      cancellationNoticeRecovery = {
+        ok: false,
+        code: 'PAYMENT_CANCELLATION_NOTICE_RECOVERY_FAILED',
+        calls: 1,
+        queued: 0,
+        already_present: 0,
+        skipped: 0,
+        has_more: false,
+        recovery_claim_contended: false,
+        reason_codes: []
+      };
+    }
+    observePaymentCancellationNoticeReconcile('MAIL_OUTBOX_DRAIN_COMPLETE', cancellationNoticeRecovery);
+    return {
+      ...report,
+      payment_cancellation_notice_recovery: cancellationNoticeRecovery
+    };
+  };
+
+  const nowIsoUtc = () => new Date().toISOString();
+  const nowPlusMinutesIso = (mins) => {
+    const ms = Date.now() + Math.max(1, Number(mins) || 5) * 60 * 1000;
+    return new Date(ms).toISOString();
+  };
+
+  const recordMyTmsOutcomeSafe = async (row, outcome, providerMessageId = null) => {
+    try {
+      const result = await recordMyTmsInvitationOutboxOutcome(
+        env, row, outcome, providerMessageId
+      );
+      if (result?.applicable && !result.recorded) {
+        errors.push({
+          id: row?.id || null,
+          error: 'MYTMS_INVITATION_DELIVERY_RECEIPT_NOT_RECORDED',
+          mytms_delivery_receipt_failed: true
+        });
+      }
+    } catch (error) {
+      if (String(row?.context_kind || '').trim().toUpperCase() === 'MYTMS_INVITATION') {
+        errors.push({
+          id: row?.id || null,
+          error: 'MYTMS_INVITATION_DELIVERY_RECEIPT_FAILED',
+          error_code: MYTMS_OFFICE_SAFE_ERROR_CODES.has(String(error?.code || '').toUpperCase())
+            ? String(error.code).toUpperCase() : 'DEPENDENCY_UNAVAILABLE',
+          mytms_delivery_receipt_failed: true
+        });
+      }
+    }
+  };
+
+  const leaseMinutes = 5;
+  const attemptLeaseToken =
+    (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+      ? globalThis.crypto.randomUUID()
+      : `lease_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+  const patchMailOutboxRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?${query}`, {
+      method: 'PATCH',
+      headers: {
+        ...sbHeaders(env),
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `mail_outbox patch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const clearClaimedLease = async (rowId, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}`,
+      {
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const holdLegacyFinancialMail = async (rowId) => {
+    try {
+      await clearClaimedLease(rowId, attemptLeaseToken);
+    } catch {
+      // A failed lease-only release is not a failed email. Leave the original
+      // lease to expire; do not stamp delivery, move its date or audit a send.
+      errors.push({ id: rowId, error: 'BPAY_NEXT_LEGACY_MAIL_HOLD_RELEASE_UNCERTAIN',
+        financial_mail_held: true });
+    }
+  };
+
+  const patchClaimedRowFailed = async (
+    rowId, msg, currentLeaseToken, myTmsOutcome = 'FAILED'
+  ) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}&sent_at=is.null`,
+      {
+        status: 'FAILED',
+        failed_at: nowIsoUtc(),
+        last_error: String(msg || 'FAILED'),
+        provider_status: 'FAILED',
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    const updatedRow = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    if (updatedRow) await recordMyTmsOutcomeSafe(updatedRow, myTmsOutcome);
+    return updatedRow;
+  };
+
+  const patchClaimedRowSent = async (rowId, providerMessageId, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}`,
+      {
+        status: 'SENT',
+        sent_at: nowIsoUtc(),
+        provider_message_id: providerMessageId || null,
+        provider_status: 'ACCEPTED',
+        delivered_at: null,
+        read_at: null,
+        last_error: null,
+        failed_at: null,
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    const updatedRow = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    if (updatedRow) {
+      await recordMyTmsOutcomeSafe(updatedRow, 'PROVIDER_ACCEPTED', providerMessageId);
+    }
+    return updatedRow;
+  };
+
+  const markTimesheetQueryDeliverySent = async (row) => {
+    if (String(row?.type || '').trim().toUpperCase() !== 'TIMESHEET_QUERY') return null;
+    const actorUserId = String(row?.created_by || '').trim();
+    if (!actorUserId) throw new Error('TIMESHEET_QUERY_DELIVERY_ACTOR_MISSING');
+    return sbRpc(env, 'timesheet_query_email_delivery_mark_v1', {
+      p_mail_outbox_id: row.id,
+      p_provider_message_id: row.provider_message_id || null,
+      p_provider_status: row.provider_status || 'ACCEPTED',
+      p_accepted_at_utc: row.sent_at || null,
+      p_actor_user_id: actorUserId
+    }, { timeoutMs: 15000 });
+  };
+
+  const patchClaimedRowDeferred = async (rowId, msg, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}&sent_at=is.null`,
+      {
+        status: 'QUEUED',
+        last_error: String(msg || 'DEFERRED'),
+        next_attempt_at_utc: nowPlusMinutesIso(10),
+        failed_at: null,
+        provider_status: null,
+        provider_message_id: null,
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const claimEmailOutboxReadyBatch = async (takeCount) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/email_outbox_claim_ready_batch`, {
+      method: 'POST',
+      headers: sbHeaders(env),
+      body: JSON.stringify({
+        p_limit: takeCount,
+        p_attempt_lease_token: attemptLeaseToken,
+        p_lease_minutes: leaseMinutes
+      })
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `email_outbox_claim_ready_batch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  const fetchSentRemittanceRowsForStateRetry = async () => {
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) return [];
+    const retryLimitRaw =
+      toPositiveInt(env.EMAIL_SENT_REMITTANCE_STATE_RETRY_LIMIT) ||
+      toPositiveInt(env.EMAIL_SENT_REMITTANCE_MARK_RETRY_LIMIT) ||
+      25;
+    const retryLimit = Math.max(0, Math.min(retryLimitRaw, 100));
+    if (!retryLimit) return [];
+
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=*&type=eq.REMITTANCE&status=eq.SENT&context_kind=in.(pay_batch,pay_batches)&context_id=not.is.null&order=sent_at.desc.nullslast,created_at_utc.desc&limit=${retryLimit}`,
+      {
+        method: 'GET',
+        headers: sbHeaders(env)
+      }
+    );
+
+    if (!res.ok) return [];
+    const rows = await res.json().catch(() => []);
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  const toScopeArray = (value) => {
+    if (Array.isArray(value)) return value.map((entry) => String(entry || '').trim()).filter(Boolean);
+    const single = String(value || '').trim();
+    return single ? [single] : [];
+  };
+
+  const sentRemittanceRowNeedsStateRetry = async (row) => {
+    if (!row || typeof row !== 'object') return false;
+    const paymentScope = safeObject(row.payment_scope_json);
+    const payBatchId = String(row.context_id || paymentScope.pay_batch_id || '').trim();
+    if (!payBatchId) return false;
+
+    const payBatchCandidateIds = [
+      ...toScopeArray(paymentScope.pay_batch_candidate_ids),
+      ...toScopeArray(paymentScope.pay_batch_candidate_id)
+    ];
+    const candidateIds = [
+      ...toScopeArray(paymentScope.candidate_ids),
+      ...toScopeArray(paymentScope.candidate_id)
+    ];
+
+    let query = `pay_batch_id=eq.${enc(payBatchId)}&remittance_sent_at_utc=is.null&select=id&limit=1`;
+    if (payBatchCandidateIds.length > 0) {
+      query += `&id=in.(${payBatchCandidateIds.map(enc).join(',')})`;
+    } else if (candidateIds.length > 0) {
+      query += `&candidate_id=in.(${candidateIds.map(enc).join(',')})`;
+    }
+
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/pay_batch_candidates?${query}`, {
+      method: 'GET',
+      headers: sbHeaders(env)
+    });
+
+    if (!res.ok) return false;
+    const rows = await res.json().catch(() => []);
+    return Array.isArray(rows) && rows.length > 0;
+  };
+
+  const claimTake = typeFilterSet ? maxDrainJobs : take;
+  const claimed = await claimEmailOutboxReadyBatch(claimTake);
+
+  const noClaimedRows = claimed.length === 0;
+
+  const picked = [];
+  const toRelease = [];
+
+  if (typeFilterSet) {
+    for (const row of claimed) {
+      const rowType = String(row && row.type ? row.type : '').trim().toUpperCase();
+      if (typeFilterSet.has(rowType) && picked.length < take) {
+        picked.push(row);
+      } else {
+        toRelease.push(row);
+      }
+    }
+  } else {
+    picked.push(...claimed.slice(0, take));
+    toRelease.push(...claimed.slice(take));
+  }
+
+  for (const row of toRelease) {
+    try {
+      await clearClaimedLease(row.id, attemptLeaseToken);
+    } catch {}
+  }
+
+  // Defence in depth for an older installed claim RPC during ordered rollout.
+  // Release only OUR lease; do not mark held mail failed or reschedule it.
+  if (!legacyMailAtClaim) {
+    for (let i = picked.length - 1; i >= 0; i--) {
+      if (!isBpayNextLegacyFinancialEmail(picked[i])) continue;
+      await holdLegacyFinancialMail(picked[i].id);
+      picked.splice(i, 1);
+    }
+  }
+
+  const noPickedRows = picked.length === 0;
+
+  const claimedRowsById = new Map();
+  for (const row of picked) {
+    const rowId = row && row.id != null ? String(row.id).trim() : '';
+    if (rowId) claimedRowsById.set(rowId, row);
+  }
+
+  const isRemittancePayBatchRow = (row) => {
+    if (!row || typeof row !== 'object') return false;
+    const rowType = String(row.type || '').trim().toUpperCase();
+    const contextKind = String(row.context_kind || '').trim().toLowerCase();
+    const contextId = String(row.context_id || '').trim();
+    return rowType === 'REMITTANCE' && (contextKind === 'pay_batches' || contextKind === 'pay_batch') && !!contextId;
+  };
+
+  const buildRemittanceDrainEntry = (row, updatedRow, triggerStatus, errorText = null, providerMessageId = null) => {
+    const sourceRow = (updatedRow && typeof updatedRow === 'object') ? updatedRow : ((row && typeof row === 'object') ? row : {});
+    const originalRow = (row && typeof row === 'object') ? row : sourceRow;
+    const paymentScope = safeObject(sourceRow.payment_scope_json || originalRow.payment_scope_json);
+    const recipientKindRaw = String(sourceRow.recipient_kind || originalRow.recipient_kind || paymentScope.recipient_kind || '').trim().toUpperCase();
+    const payeeEntityKind = recipientKindRaw === 'UMBRELLA' ? 'UMBRELLA' : 'CANDIDATE';
+    const payeeEntityId = String(sourceRow.recipient_id || originalRow.recipient_id || paymentScope.recipient_id || '').trim() || null;
+    const reference = String(sourceRow.reference || originalRow.reference || '').trim() || null;
+    const deterministicOutboxKey = String(sourceRow.deterministic_outbox_key || originalRow.deterministic_outbox_key || paymentScope.deterministic_outbox_key || '').trim() || null;
+    const mailOutboxId = String(sourceRow.id || originalRow.id || '').trim() || null;
+    const toEmail = String(sourceRow.to || originalRow.to || '').trim() || null;
+    const candidateId = String(paymentScope.candidate_id || (Array.isArray(paymentScope.candidate_ids) ? paymentScope.candidate_ids[0] : '') || (payeeEntityKind === 'CANDIDATE' ? payeeEntityId : '') || '').trim() || null;
+    const umbrellaId = String(paymentScope.umbrella_id || (Array.isArray(paymentScope.umbrella_ids) ? paymentScope.umbrella_ids[0] : '') || (payeeEntityKind === 'UMBRELLA' ? payeeEntityId : '') || '').trim() || null;
+    const providerStatus = String(sourceRow.provider_status || originalRow.provider_status || '').trim() || null;
+    const deliveryStatus = String(sourceRow.delivery_status || sourceRow.status || originalRow.delivery_status || originalRow.status || '').trim() || null;
+    const sentAtUtc = String(sourceRow.sent_at || sourceRow.sent_at_utc || originalRow.sent_at || originalRow.sent_at_utc || '').trim() || null;
+
+    return {
+      comm_kind: reference && reference.startsWith('payout_notice:') ? 'PAYOUT_NOTICE' : 'REMITTANCE',
+      job_kind: String(paymentScope.remittance_type || paymentScope.job_kind || '').trim() || null,
+      payee_entity_kind: payeeEntityKind,
+      payee_entity_id: payeeEntityId,
+      candidate_id: candidateId,
+      umbrella_id: umbrellaId,
+      remittance_scope_id: String(paymentScope.remittance_scope_id || '').trim() || null,
+      pay_batch_candidate_id: String(paymentScope.pay_batch_candidate_id || (Array.isArray(paymentScope.pay_batch_candidate_ids) ? paymentScope.pay_batch_candidate_ids[0] : '') || '').trim() || null,
+      recipient_kind: recipientKindRaw || null,
+      recipient_id: payeeEntityId,
+      to: toEmail,
+      reference,
+      deterministic_outbox_key: deterministicOutboxKey,
+      context_kind: String(sourceRow.context_kind || originalRow.context_kind || '').trim() || null,
+      context_id: String(sourceRow.context_id || originalRow.context_id || '').trim() || null,
+      mail_outbox_id: mailOutboxId,
+      trigger_status: String(triggerStatus || '').trim().toUpperCase() || null,
+      provider_message_id: providerMessageId || String(sourceRow.provider_message_id || originalRow.provider_message_id || '').trim() || null,
+      provider_status: providerStatus,
+      delivery_status: deliveryStatus,
+      sent_at_utc: sentAtUtc,
+      error: errorText == null ? null : String(errorText).slice(0, 1000)
+    };
+  };
+
+  const markRemittanceDrainResult = async (rowId, updatedRow, outcome, details = {}) => {
+    const row = claimedRowsById.get(String(rowId || '').trim()) || updatedRow || null;
+    if (!isRemittancePayBatchRow(row)) return;
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) return;
+
+    const payBatchId = String((updatedRow && updatedRow.context_id) || row.context_id || '').trim();
+    if (!payBatchId) return;
+
+    const actorUserId = String(
+      (updatedRow && updatedRow.created_by) ||
+      row.created_by ||
+      (env && env.PAY_ACTOR_USER_ID) ||
+      (env && env.INVOICE_ACTOR_USER_ID) ||
+      (env && env.TSFIN_ACTOR_USER_ID) ||
+      ''
+    ).trim();
+    if (!actorUserId) return;
+
+    const reference = String((updatedRow && updatedRow.reference) || row.reference || '').trim();
+    const isPayoutNotice = reference.startsWith('payout_notice:');
+    const messageKind = isPayoutNotice ? 'PAYOUT_NOTICE' : 'REMITTANCE';
+    const resultKey = isPayoutNotice ? 'payout_notice_result' : 'remittance_result';
+    const normalisedOutcome = String(outcome || '').trim().toUpperCase();
+    const providerAccepted = normalisedOutcome === 'SUCCESS'
+      && String((updatedRow && updatedRow.status) || row.status || '').trim().toUpperCase() === 'SENT'
+      && ['ACCEPTED', 'SENT', 'SUCCESS', 'OK'].includes(String((updatedRow && updatedRow.provider_status) || row.provider_status || details.provider_status || 'ACCEPTED').trim().toUpperCase());
+    const shouldSendFailureResult = normalisedOutcome !== 'SUCCESS'
+      && String(env && env.PAY_REMITTANCE_MARK_FAILED_RESULTS || '').trim().toLowerCase() === 'true';
+
+    if (!providerAccepted && !shouldSendFailureResult) return;
+
+    const entry = buildRemittanceDrainEntry(
+      row,
+      updatedRow,
+      providerAccepted ? 'SENT_VIA_MAIL_OUTBOX' : (details.trigger_status || 'MAIL_OUTBOX_SEND_FAILED'),
+      details.error || null,
+      details.provider_message_id || null
+    );
+
+    const channelResult = {
+      message_kind: messageKind,
+      trigger_status: providerAccepted ? 'SENT_VIA_MAIL_OUTBOX' : (entry.trigger_status || 'MAIL_OUTBOX_SEND_FAILED'),
+      queued_count: 0,
+      skipped_count: 0,
+      sent_count: providerAccepted ? 1 : 0,
+      failed_count: providerAccepted ? 0 : 1,
+      sent: providerAccepted ? [entry] : [],
+      accepted: providerAccepted ? [entry] : [],
+      failed: providerAccepted ? [] : [entry]
+    };
+
+    try {
+      await sbRpc(env, 'pay_remittance_mark_sent', {
+        p_pay_batch_id: payBatchId,
+        p_scope: 'ALL',
+        p_results_json: {
+          message_kind: messageKind,
+          communication_mode: messageKind,
+          drain_result: true,
+          [resultKey]: channelResult
+        },
+        p_actor_user_id: actorUserId
+      });
+      try {
+        await touchBankingPayBatchPaymentStateChanged(env, payBatchId, {
+          actorUserId,
+          reason: providerAccepted
+            ? (isPayoutNotice ? 'PAYOUT_NOTICE_DELIVERY_RECORDED' : 'REMITTANCE_DELIVERY_RECORDED')
+            : (isPayoutNotice ? 'PAYOUT_NOTICE_DELIVERY_FAILED' : 'REMITTANCE_DELIVERY_FAILED'),
+          source: 'drainMailOutbox.markRemittanceDrainResult',
+          lanes: ['overview', 'remittances'],
+          bestEffort: true,
+          changeScopeJson: {
+            message_kind: messageKind,
+            mail_outbox_id: entry.mail_outbox_id,
+            recipient_kind: entry.recipient_kind,
+            delivery_status: entry.delivery_status,
+            trigger_status: entry.trigger_status
+          }
+        });
+      } catch (touchError) {
+        try {
+          console.warn('[MailOutboxDrain] remittance live refresh touch failed', {
+            pay_batch_id: payBatchId,
+            mail_outbox_id: entry.mail_outbox_id,
+            error: String(touchError?.message || touchError || 'Banking Pay live refresh touch failed').slice(0, 1000)
+          });
+        } catch {}
+      }
+      return true;
+    } catch (e) {
+      errors.push({
+        id: rowId,
+        error: String(e?.message || e || 'pay_remittance_mark_sent failed'),
+        remittance_state_update_failed: true
+      });
+      return false;
+    }
+  };
+
+  let sentStateRetryCount = 0;
+  const sentRowsForRetry = await fetchSentRemittanceRowsForStateRetry().catch(() => []);
+  for (const sentRow of sentRowsForRetry) {
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) break;
+    try {
+      if (await sentRemittanceRowNeedsStateRetry(sentRow)) {
+        const recorded = await markRemittanceDrainResult(sentRow.id, sentRow, 'SUCCESS', {
+          provider_message_id: sentRow.provider_message_id || null,
+          provider_status: sentRow.provider_status || 'ACCEPTED'
+        });
+        if (recorded === true) sentStateRetryCount += 1;
+      }
+    } catch (e) {
+      errors.push({
+        id: sentRow && sentRow.id,
+        error: String(e?.message || e || 'sent remittance state retry failed'),
+        remittance_state_retry_failed: true
+      });
+    }
+  }
+
+  if (noClaimedRows || noPickedRows) {
+    return finishDrainReport({ picked: 0, sent, failed, deferred, sent_state_retry_count: sentStateRetryCount, errors });
+  }
+
+  const routeBuckets = new Map();
+
+  const addJobToBucket = (bucketKey, bucketChannel, rowId, payload) => {
+    if (!routeBuckets.has(bucketKey)) {
+      routeBuckets.set(bucketKey, {
+        channel: bucketChannel,
+        jobs: [],
+        rowIds: []
+      });
+    }
+    const bucket = routeBuckets.get(bucketKey);
+    bucket.jobs.push(payload);
+    bucket.rowIds.push(rowId);
+  };
+
+  const reconcileBatchResult = async (res, rowIds, currentLeaseToken) => {
+    if (!res || !res.ok) {
+      const errMsg = String((res && res.body) || (res && `HTTP ${res.status}`) || 'Provider transport failure');
+      for (const rowId of rowIds) {
+        const updatedRow = await patchClaimedRowFailed(
+          rowId, errMsg, currentLeaseToken, 'DELIVERY_UNCERTAIN'
+        ).catch(() => null);
+        if (!updatedRow) continue;
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
+        await markRemittanceDrainResult(rowId, updatedRow, 'FAILURE', { error: errMsg, trigger_status: 'MAIL_OUTBOX_SEND_FAILED' });
+      }
+      return;
+    }
+
+    let results = null;
+    try {
+      const j = typeof res.body === 'string' ? JSON.parse(res.body) : res.body;
+      results = Array.isArray(j?.results) ? j.results : null;
+    } catch {
+      results = null;
+    }
+
+    if (!Array.isArray(results) || results.length === 0) {
+      const errMsg = 'Provider returned no per-item results (cannot reconcile)';
+      for (const rowId of rowIds) {
+        const updatedRow = await patchClaimedRowFailed(
+          rowId, errMsg, currentLeaseToken, 'DELIVERY_UNCERTAIN'
+        ).catch(() => null);
+        if (!updatedRow) continue;
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
+        await markRemittanceDrainResult(rowId, updatedRow, 'FAILURE', { error: errMsg, trigger_status: 'MAIL_OUTBOX_SEND_FAILED' });
+      }
+      return;
+    }
+
+    const byOutboxId = new Map();
+    for (const r of results) {
+      const oid =
+        r?.outbox_id ||
+        r?.outboxId ||
+        r?.meta?.outbox_id ||
+        r?.meta?.outboxId ||
+        r?.meta?.id ||
+        null;
+      if (!oid) continue;
+      byOutboxId.set(String(oid), r);
+    }
+
+    for (const rowId of rowIds) {
+      const r = byOutboxId.get(String(rowId)) || null;
+
+      if (!r) {
+        const errMsg = 'PROVIDER_RESULT_MISSING_FOR_ITEM';
+        const updatedRow = await patchClaimedRowFailed(
+          rowId, errMsg, currentLeaseToken, 'DELIVERY_UNCERTAIN'
+        ).catch(() => null);
+        if (!updatedRow) continue;
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
+        await markRemittanceDrainResult(rowId, updatedRow, 'FAILURE', { error: errMsg, trigger_status: 'MAIL_OUTBOX_SEND_FAILED' });
+        continue;
+      }
+
+      const status = String(r?.status || '').toUpperCase();
+      const isSuccess = status === 'SUCCESS';
+      const isFailed = status === 'FAILED' || status === 'FAIL' || status === 'ERROR';
+
+      if (isSuccess) {
+        const providerMessageId =
+          r?.provider_message_id ||
+          r?.providerMessageId ||
+          null;
+
+        const updatedRow = await patchClaimedRowSent(rowId, providerMessageId, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
+
+        sent += 1;
+        await recordEmailAudit(env, null, 'EMAIL_SENT', {
+          outbox_id: rowId,
+          provider_message_id: providerMessageId,
+          type: r?.meta?.type || 'BATCH'
+        });
+          const deliveryHistory = await reconcileTimesheetQueryDeliveryAfterProviderAcceptance({
+            row: updatedRow,
+            markDelivery: markTimesheetQueryDeliverySent,
+            reconcileDelivery: (sentRow) => sbRpc(env, 'timesheet_query_email_delivery_reconcile_v1', {
+              p_after_delivery_id: null,
+              p_limit: 25,
+              p_actor_user_id: sentRow.created_by
+            }, { timeoutMs: 15000 })
+          });
+          if (deliveryHistory.applicable && !deliveryHistory.history_marked) {
+            // Provider acceptance is authoritative. The outbox row stays SENT;
+            // this bounded repair path cannot invoke the provider or resend.
+            errors.push({
+              id: rowId,
+              error: 'TIMESHEET_QUERY_DELIVERY_MARK_FAILED',
+              delivery_history_mark_failed: true
+            });
+          }
+        await markRemittanceDrainResult(rowId, updatedRow, 'SUCCESS', { provider_message_id: providerMessageId });
+        continue;
+      }
+
+      if (isFailed) {
+        const errMsg = String(r?.error || r?.body || r?.message || 'Provider failed');
+        const updatedRow = await patchClaimedRowFailed(
+          rowId, errMsg, currentLeaseToken
+        ).catch(() => null);
+        if (!updatedRow) continue;
+
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: r?.meta?.type || 'BATCH'
+        });
+        await markRemittanceDrainResult(rowId, updatedRow, 'FAILURE', { error: errMsg, trigger_status: 'MAIL_OUTBOX_SEND_FAILED' });
+        continue;
+      }
+
+      {
+        const errMsg = String(r?.error || r?.body || r?.message || 'Unknown provider status');
+        const updatedRow = await patchClaimedRowFailed(
+          rowId, errMsg, currentLeaseToken, 'DELIVERY_UNCERTAIN'
+        ).catch(() => null);
+        if (!updatedRow) continue;
+
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
+        await markRemittanceDrainResult(rowId, updatedRow, 'FAILURE', { error: errMsg, trigger_status: 'MAIL_OUTBOX_SEND_FAILED' });
+      }
+    }
+  };
+
+  for (const row of picked) {
+    if (isBpayNextLegacyFinancialEmail(row) && !(await legacyMailAllowed())) {
+      await holdLegacyFinancialMail(row.id);
+      continue;
+    }
+    try {
+      if (isRemittancePayBatchRow(row) && String(row.status || '').trim().toUpperCase() === 'SENT') {
+        await markRemittanceDrainResult(row.id, row, 'SUCCESS', { provider_message_id: row.provider_message_id || null, provider_status: row.provider_status || 'ACCEPTED' });
+        await clearClaimedLease(row.id, attemptLeaseToken).catch(() => null);
+        continue;
+      }
+
+      const payloadBase = await buildEmailPayloadFromOutboxRow(env, row);
+      const payload = {
+        ...payloadBase,
+        meta: {
+          ...((payloadBase && payloadBase.meta && typeof payloadBase.meta === 'object') ? payloadBase.meta : {}),
+          outbox_id: row.id || null,
+          type: row.type || null,
+          reference: row.reference || null,
+          sender_user_id: row.created_by || null,
+          recipient_kind: row.recipient_kind || null,
+          recipient_id: row.recipient_id || null,
+          context_kind: row.context_kind || null,
+          context_id: row.context_id || null,
+          mailshot_run_id: row.mailshot_run_id || null,
+          document_template_id: row.document_template_id || null
+        }
+      };
+
+      const rowType = String(row && row.type ? row.type : '').trim().toUpperCase();
+      const senderUserId = (row && row.created_by != null) ? String(row.created_by).trim() : '';
+
+      if (rowType === 'MAILSHOT_EMAIL') {
+        if (!senderUserId) {
+          const msg = 'MAILSHOT_SENDER_USER_MISSING';
+          const updatedRow = await patchClaimedRowFailed(row.id, msg, attemptLeaseToken).catch(() => null);
+          if (!updatedRow) continue;
+          failed += 1;
+          errors.push({ id: row.id, error: msg });
+          await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: msg, type: row.type });
+          continue;
+        }
+
+        addJobToBucket(`mailshot:${senderUserId}`, { kind: 'mailshot', user_id: senderUserId }, row.id, payload);
+      } else {
+        addJobToBucket('finance', 'finance', row.id, payload);
+      }
+    } catch (e) {
+      const msg = String(e?.message || e);
+
+      if (msg.startsWith('PDF_NOT_READY:')) {
+        const updatedRow = await patchClaimedRowDeferred(row.id, msg, attemptLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
+        deferred += 1;
+        errors.push({ id: row.id, error: msg, deferred: true });
+        await recordEmailAudit(env, null, 'EMAIL_DEFERRED', {
+          outbox_id: row.id,
+          reason: msg,
+          type: row.type,
+        });
+        continue;
+      }
+
+      const updatedRow = await patchClaimedRowFailed(row.id, msg, attemptLeaseToken).catch(() => null);
+      if (!updatedRow) continue;
+      failed += 1;
+      errors.push({ id: row.id, error: msg });
+      await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: msg, type: row.type });
+    }
+  }
+
+  if (routeBuckets.size === 0) {
+    return finishDrainReport({ picked: picked.length, sent, failed, deferred, sent_state_retry_count: sentStateRetryCount, errors });
+  }
+
+  let outboundCallCount = 0;
+
+  for (const bucket of routeBuckets.values()) {
+    for (let start = 0; start < bucket.jobs.length; start += maxPerCall) {
+      if (outboundCallCount >= maxCallsPerDrain) break;
+
+      const candidateJobs = bucket.jobs.slice(start, start + maxPerCall);
+      const candidateRowIds = bucket.rowIds.slice(start, start + maxPerCall);
+      if (!candidateJobs.length) continue;
+
+      const batchJobs = [];
+      const batchRowIds = [];
+      const financialMailInBatch = candidateRowIds.some((id) =>
+        isBpayNextLegacyFinancialEmail(claimedRowsById.get(String(id || '').trim())));
+      const legacyMailAtSend = financialMailInBatch ? await legacyMailAllowed() : false;
+      for (let itemIndex = 0; itemIndex < candidateJobs.length; itemIndex += 1) {
+        const rowId = candidateRowIds[itemIndex];
+        const claimedRow = claimedRowsById.get(String(rowId || '').trim()) || null;
+        if (isBpayNextLegacyFinancialEmail(claimedRow) && !legacyMailAtSend) {
+          await holdLegacyFinancialMail(rowId);
+          continue;
+        }
+        let authority = null;
+        try {
+          authority = await candidatePaperProviderAuthorityCurrent({
+            env,
+            claimedRow,
+            currentLeaseToken: attemptLeaseToken,
+            fetchImpl: fetch,
+            headers: sbHeaders(env)
+          });
+        } catch {
+          authority = {
+            candidate_bound: true,
+            authorised: false,
+            reason: 'CANDIDATE_PAPER_PROVIDER_AUTHORITY_RECHECK_FAILED'
+          };
+        }
+        if (!authority.candidate_bound) {
+          try {
+            authority = await candidateManagerProviderAuthorityCurrent({
+              env,
+              claimedRow,
+              currentLeaseToken: attemptLeaseToken,
+              fetchImpl: fetch,
+              headers: sbHeaders(env)
+            });
+          } catch {
+            authority = {
+              candidate_bound: true,
+              authorised: false,
+              reason: 'CANDIDATE_MANAGER_PROVIDER_AUTHORITY_RECHECK_FAILED'
+            };
+          }
+        }
+        if (authority.candidate_bound && !authority.authorised) {
+          const reason = String(authority.reason || 'CANDIDATE_PAPER_PROVIDER_AUTHORITY_REVOKED');
+          const updatedRow = await patchClaimedRowDeferred(
+            rowId, reason, attemptLeaseToken
+          ).catch(() => null);
+          if (updatedRow) {
+            deferred += 1;
+            errors.push({ id: rowId, error: reason, deferred: true });
+            await recordEmailAudit(env, null, 'EMAIL_DEFERRED', {
+              outbox_id: rowId,
+              reason,
+              type: claimedRow && claimedRow.type
+            });
+          }
+          continue;
+        }
+        batchJobs.push(candidateJobs[itemIndex]);
+        batchRowIds.push(rowId);
+      }
+      if (!batchJobs.length) continue;
+
+      const batchPayload = { items: batchJobs };
+
+      let res = null;
+      try {
+        res = await postToPowerAutomate(env, batchPayload, bucket.channel);
+      } catch (e) {
+        res = {
+          ok: false,
+          status: 0,
+          body: String(e?.message || e || 'Provider transport failure')
+        };
+      }
+
+      await reconcileBatchResult(res, batchRowIds, attemptLeaseToken);
+      outboundCallCount += 1;
+    }
+
+    if (outboundCallCount >= maxCallsPerDrain) break;
+  }
+
+  return finishDrainReport({ picked: picked.length, sent, failed, deferred, sent_state_retry_count: sentStateRetryCount, errors });
+}
