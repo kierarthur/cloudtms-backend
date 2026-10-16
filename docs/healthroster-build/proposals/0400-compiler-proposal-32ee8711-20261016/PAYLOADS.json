@@ -1,0 +1,217 @@
+{
+  "version": "HEALTHROSTER_CAPABILITY0400_COMPLETE_FORWARD_PAYLOADS_V1",
+  "rootCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+  "status": "SOURCE_ONLY_ROOT_REVIEW_INTEGRATION_AND_NATIVE_REQUIRED",
+  "proposalSha256": "490bed913b8c1fcc637b59430bda96567410b1cdef5998a11961962ed7a5d7bb",
+  "testResultsSha256": "03f469749c1cea70cce958cd263060748642e705882462e3cc6c32fa9b0aac48",
+  "completeForwardFiles": 34,
+  "preservationCount": 27,
+  "files": [
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+      "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+      "canonicalLfSha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+      "bytes": 4604
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/build-proposal.mjs",
+      "sha256": "d5ae4c0a6485c0075d15e003fb5475b5f31d08376cae0210bc2fba0738d94019",
+      "canonicalLfSha256": "d5ae4c0a6485c0075d15e003fb5475b5f31d08376cae0210bc2fba0738d94019",
+      "bytes": 10503
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/check_expressions.py",
+      "sha256": "3caed0f8ac684841db69d308d827ab3afe6b0665c075db1993fc0a685fe51bb8",
+      "canonicalLfSha256": "3caed0f8ac684841db69d308d827ab3afe6b0665c075db1993fc0a685fe51bb8",
+      "bytes": 7664
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/EXPRESSION_REVIEW.json",
+      "sha256": "640ad6a503cf889e7b337eaac2269d61c2c0de5777d3de78ff32e89ca06245c4",
+      "canonicalLfSha256": "730f8126b447e64bf0a7d39c59fc9ffbb04ca63accc025ac7f8897bd6322ba48",
+      "bytes": 22859
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/CONSTRUCTOR_1133.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "canonicalLfSha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "bytes": 14951
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/IMMUTABLE_CONSUMER_0400.sql",
+      "sha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+      "canonicalLfSha256": "5f0a2fd5535897286601dc4d2c84d07f0a14cda9c0222158ac89168758a70a16",
+      "bytes": 1960
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/INPUT_RECEIPT_R1.json",
+      "sha256": "e0c99e59c94c70f49e3db388cd493fcb1684738558741dd189bc839c1116ee2a",
+      "canonicalLfSha256": "e0c99e59c94c70f49e3db388cd493fcb1684738558741dd189bc839c1116ee2a",
+      "bytes": 8678
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/NATIVE_PREDECESSOR_CENSUS.json",
+      "sha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6",
+      "canonicalLfSha256": "a482d9cb8fb9814ca2a33967bebc5e18138fea61d4c8611012c5a665d772bea6",
+      "bytes": 3375
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/NATIVE_R2.json",
+      "sha256": "0a8997f662d045996832a384866d1fa26c08f5f9db188f6f855d1fe4eb255086",
+      "canonicalLfSha256": "0a8997f662d045996832a384866d1fa26c08f5f9db188f6f855d1fe4eb255086",
+      "bytes": 12275
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PLAN.json",
+      "sha256": "e75b276f6e766f4d98d10729982352e4b9801bb2ec16bb8cc28f231e492399eb",
+      "canonicalLfSha256": "e75b276f6e766f4d98d10729982352e4b9801bb2ec16bb8cc28f231e492399eb",
+      "bytes": 7060
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_01_13102026_1112_healthroster_invoice_support_members_v1.sql",
+      "sha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b",
+      "canonicalLfSha256": "f0282ddc39e64c8522ee3f0d5a4916235436dbca1478a5e7f65d651ff20c7b5b",
+      "bytes": 788
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_02_13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+      "canonicalLfSha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+      "bytes": 4481
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_03_13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "canonicalLfSha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "bytes": 14951
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_04_13102026_1210_weekly_source_final_value_snapshot_authority.sql",
+      "sha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6",
+      "canonicalLfSha256": "0d0564eea33cff211efe8452d3c7d4cf0817aeb21854a967a4f7ad402966a7d6",
+      "bytes": 2683
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_05_13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "sha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+      "canonicalLfSha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+      "bytes": 8400
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_06_13102026_1430_weekly_source_invoice_money_origins.sql",
+      "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "canonicalLfSha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c",
+      "bytes": 16112
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_07_13102026_1456_weekly_source_protection_query_support_v1.sql",
+      "sha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17",
+      "canonicalLfSha256": "5869f480951c18794715807e5f4168b4f9154d29449757024e053f80c07aae17",
+      "bytes": 1006
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_08_13102026_1519_healthroster_correction_reason_bound_v1.sql",
+      "sha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2",
+      "canonicalLfSha256": "5012c6e0e79c28a53b7aa6d40003370f2bc088e673a3b7ebaed36aedd908a6a2",
+      "bytes": 428
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/PREFIX_09_13102026_1680_weekly_source_invoice_window_receipt_schema.sql",
+      "sha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+      "canonicalLfSha256": "b19dbf220c5661df5b8edc4851f8b22a9505429658b0a82bf18b18f2a2df81d0",
+      "bytes": 3770
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/RESTORATION.json",
+      "sha256": "582ba3016d5fcc9673036032e78ad786c5a3b88abeb472f40f3b1f73c896e1fc",
+      "canonicalLfSha256": "582ba3016d5fcc9673036032e78ad786c5a3b88abeb472f40f3b1f73c896e1fc",
+      "bytes": 4246
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/inputs/SUMMARY.json",
+      "sha256": "2617a9e826cf22eb8d52701771f889653bca47198536ca147638341c10b52627",
+      "canonicalLfSha256": "2617a9e826cf22eb8d52701771f889653bca47198536ca147638341c10b52627",
+      "bytes": 7995
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/MOUNT_PLAN.json",
+      "sha256": "006f98080472d362ec48317917c1927ae07c0b22d700084fdd0c8aa6b0aecde3",
+      "canonicalLfSha256": "006f98080472d362ec48317917c1927ae07c0b22d700084fdd0c8aa6b0aecde3",
+      "bytes": 3661
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/PROPOSAL.json",
+      "sha256": "ccdf7881bb4d2d728a00d66959cdb8846ead1027b9378c9f322d142c62946b9e",
+      "canonicalLfSha256": "ccdf7881bb4d2d728a00d66959cdb8846ead1027b9378c9f322d142c62946b9e",
+      "bytes": 12034
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/README.md",
+      "sha256": "7fd291b8dc98fb86feb06933931d90e7fbea2e1f3ac60e67716df27b990e9f91",
+      "canonicalLfSha256": "7fd291b8dc98fb86feb06933931d90e7fbea2e1f3ac60e67716df27b990e9f91",
+      "bytes": 5914
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/seal-review.mjs",
+      "sha256": "1dfa95956c5bbdc01e28876f8d702f08ee48a679ddf8c0bfa88efb8630ef03e5",
+      "canonicalLfSha256": "1dfa95956c5bbdc01e28876f8d702f08ee48a679ddf8c0bfa88efb8630ef03e5",
+      "bytes": 1513
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/TEST_RESULTS.json",
+      "sha256": "337a8fe8e6d6b4681db20d775b8693ff00d9c85fa9fe695b1e58052560ab8588",
+      "canonicalLfSha256": "337a8fe8e6d6b4681db20d775b8693ff00d9c85fa9fe695b1e58052560ab8588",
+      "bytes": 2554
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/F23_CAPABILITY_PREDECESSOR_REVIEW_20261016/test-proposal.mjs",
+      "sha256": "e97b9bcb0e8f3cae3b5a04c2f94f267af82b2766d7dd9e448996f443eaff0055",
+      "canonicalLfSha256": "e97b9bcb0e8f3cae3b5a04c2f94f267af82b2766d7dd9e448996f443eaff0055",
+      "bytes": 5103
+    },
+    {
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json",
+      "sha256": "57994305ab9fab1f9fabebb675e35be3028b4d2a3befc1fda0d5567ad4bb7f83",
+      "canonicalLfSha256": "57994305ab9fab1f9fabebb675e35be3028b4d2a3befc1fda0d5567ad4bb7f83",
+      "bytes": 75382
+    },
+    {
+      "target": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
+      "canonicalLfSha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
+      "bytes": 48153
+    },
+    {
+      "target": "scripts/healthroster-capability-predecessor-boundary.mjs",
+      "sha256": "e24e16cd1bd0cd8afe28b7e697a5fd7ec0c03a4edeb0e458ca81e1eecd47bbc3",
+      "canonicalLfSha256": "e24e16cd1bd0cd8afe28b7e697a5fd7ec0c03a4edeb0e458ca81e1eecd47bbc3",
+      "bytes": 16330
+    },
+    {
+      "target": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "canonicalLfSha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "bytes": 48190
+    },
+    {
+      "target": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "sha256": "53b92b41b522851a68126447f88d11862974e70895c829e9e79b1877ea86c19b",
+      "canonicalLfSha256": "53b92b41b522851a68126447f88d11862974e70895c829e9e79b1877ea86c19b",
+      "bytes": 6985
+    },
+    {
+      "target": "supabase/release/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+      "sha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+      "canonicalLfSha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+      "bytes": 4604
+    },
+    {
+      "target": "tests/healthroster-capability-predecessor-boundary.test.mjs",
+      "sha256": "10088697a6d05230d3d3dd357633d9fe8e335ae699a9297aa794bf7578d96fa6",
+      "canonicalLfSha256": "10088697a6d05230d3d3dd357633d9fe8e335ae699a9297aa794bf7578d96fa6",
+      "bytes": 18891
+    }
+  ],
+  "native": "NOT_RUN",
+  "rootEdits": 0
+}

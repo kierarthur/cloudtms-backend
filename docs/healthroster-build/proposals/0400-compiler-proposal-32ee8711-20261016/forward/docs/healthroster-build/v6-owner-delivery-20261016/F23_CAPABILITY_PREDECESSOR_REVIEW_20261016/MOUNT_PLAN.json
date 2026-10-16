@@ -1,0 +1,45 @@
+{
+  "version": "HEALTHROSTER_CAPABILITY0400_COMPANION_INTEGRATION_RECIPE_V1",
+  "status": "PROPOSED_SOURCE_DESIGN_ONLY_ROOT_SOLE_INTEGRATOR",
+  "targetProgram": "supabase/release/16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+  "sourceProgram": "16102026_1120_healthroster_capability_predecessor_assertion.sqlinc",
+  "programSha256": "72cc28893189715a73bf39258d4c1f5835033e381ea31670e842136b32e9a68c",
+  "bindingSource": "PROPOSAL.json",
+  "proposedReceipt": {
+    "field": "atomicCapabilityPredecessorCompanion",
+    "version": "HEALTHROSTER_CAPABILITY_CHECK_PREBODY_COMPANION_V1",
+    "placement": "BEFORE_IMMUTABLE_BODY_SAME_TRANSACTION",
+    "nativeProof": "NOT_RUN"
+  },
+  "requiredFiniteEdits": [
+    {
+      "path": "scripts/healthroster-capability-predecessor-boundary.mjs",
+      "action": "Root authors dedicated finite boundary. Accept only migration14102026_0400 with exact raw source, complete body, original closure and constructor pins fromPROPOSAL. Refuse wrong kind/path/closure/body/changed program or evidence. Add only the fixed LOCK+DO program before this immutable body; attach exact program statement hashes and complete source/evidence binding. No general migration pattern or dynamic waiver."
+    },
+    {
+      "path": "scripts/cloudtms-managed-release.mjs",
+      "action": "Integrate the dedicated boundary after actual immutable unit compilation, within existing atomic writer/context guards. Program and original migration body must occupy the same BEGIN through original-hash ledger COMMIT. SourceFiles/program/evidence receipts must be part of actual compiled unit; preserve original sourceSqlHash and all original migration bytes."
+    },
+    {
+      "path": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "action": "Use the same compiled boundary/receipt and exact prebody-before-unchanged-body sequence in compiledAtomicRehearsalUnit. Preserve existing writer/context/ledger/contact/money guards. Bind the new helper/program/evidence in actual source binding; do not use a fake packet or a separately committed preflight."
+    },
+    {
+      "path": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "action": "Add explicit new descriptor/version/program/body/closure/evidence admission only for this exact unit and sealed current compiler/harness. Do not copy1430/contact approval. Missing/edited/wrong-placement receipt must refuse."
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/REHEARSAL_MANAGED_ENVELOPE_REVIEW.json",
+      "action": "Root seals the complete actual amended compiler/harness/source/program/descriptor after independently reviewing finite edits and actual packet tests. Preserve this complete proposal/native capture/expression evidence under a dedicated immutable evidence folder, keeping historicalfalse flags."
+    }
+  ],
+  "requiredQualification": [
+    "Actual integrated compiler/harness meaningful refusal and same-transaction packet-order/source-binding tests.",
+    "Actual canonical pending prefix, exact positive prebody and unchanged0400 body with catalogue successor/retained-check assertions, all inside authorized rollback.",
+    "Native rename/NOTVALID/extra matching/changed expression/key/metadata/count refusals with exact55000 and subtransaction restoration.",
+    "Two-session DDL lock race and complete fresh-connection restoration under the actual shared turn."
+  ],
+  "classification": "Historicalc1ebb 0400 dynamic point remains withheld until a separately reviewed exact integration/native successor. No generic permission or source-hash renewal.",
+  "nativeCompanion": "NOT_RUN",
+  "databaseCalls": 0
+}

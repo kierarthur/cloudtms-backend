@@ -1,0 +1,15 @@
+{
+  "version": "HEALTHROSTER_CAPABILITY0400_COMPILER_SOURCE_TESTS_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "rootCommit": "32ee8711f54829b5a13a0c59dabc9c29a39a2aa3",
+  "tests": 20,
+  "passed": 20,
+  "failed": 0,
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "bankEdits": 0,
+  "dockerResources": 0,
+  "deployments": 0,
+  "temporarySourceFixtures": "Task-prefixed OS source fixtures and missing proposal-local source-binding inputs, verified and removed."
+}
