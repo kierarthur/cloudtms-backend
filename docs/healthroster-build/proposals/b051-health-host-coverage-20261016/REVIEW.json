@@ -1,0 +1,216 @@
+{
+  "version": "B051_HEALTH_HOST_COVERAGE_V1",
+  "status": "INTERIM_ASSIGNED_HEALTH_IMPLEMENTATION_GAPS",
+  "office": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026",
+  "commit": "045c95cecf2dcbb632c0a5827f19c38548ee3a11",
+  "sourcePins": [
+    {
+      "file": "FINAL_REVIEW_RECORD.md",
+      "bytes": 9859,
+      "sha256": "f294c37445b6736d88421e3c83c050d73ec4774f53cac1e796c702ea9787f668"
+    },
+    {
+      "file": "Health_CODE_AUDIT.md",
+      "bytes": 252094,
+      "sha256": "36ddfdb380e221d2bcda4738b4607f45df43ce3d70d1199ec5690750fa49de05"
+    },
+    {
+      "file": "OWNERSHIP.md",
+      "bytes": 20040,
+      "sha256": "928794146dc8d89d0f72409214fbcf052971d7591470e819f9855ea2a418b9a5"
+    },
+    {
+      "file": "MOVE_STAGE_CONTRACT.md",
+      "bytes": 87319,
+      "sha256": "e8fd1cbff0165343b7460d52a4c73d41d6ee1fc7b4cb6b624f5df3eedf55262f"
+    },
+    {
+      "file": "SOURCE_NATIVE_ACCEPTANCE_CONTRACT.md",
+      "bytes": 70328,
+      "sha256": "274d2e7d40cb22796df12e397affff3f8e852dbd74db2c0aee4675a21a201cc0"
+    },
+    {
+      "file": "UI_POLICY_AND_COPY.md",
+      "bytes": 76926,
+      "sha256": "23d5e17da5b8783f34c7ba760a004833a73edfde8c9e21e55f6766d6671dfb87"
+    },
+    {
+      "file": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json",
+      "bytes": 282941,
+      "sha256": "213c4ff9afc09b9fbf3be54b75b4d3629342647ba6f32119a9b13d269eec7c8f"
+    },
+    {
+      "file": "WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "bytes": 23611,
+      "sha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1"
+    }
+  ],
+  "pins": [
+    {
+      "file": "js/main.js",
+      "bytes": 17832956,
+      "sha256": "d86f2ef841f53243997c7f5bb73b913a4a04a2c563378ab47e58d1a5ee82c847",
+      "savedEqualFrozenAtReview": true
+    },
+    {
+      "file": "index.html",
+      "bytes": 98395,
+      "sha256": "2cae93e06450386762827e26a75a5e71c6b571476e85b5de7b15388fe4e200fd",
+      "savedEqualFrozenAtReview": true
+    },
+    {
+      "file": "js/contract-correction-v3.mjs",
+      "bytes": 12418,
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087",
+      "savedEqualFrozenAtReview": true
+    },
+    {
+      "file": "js/timesheet-correction-office-context.js",
+      "bytes": 6550,
+      "sha256": "03d2a43688e3b62dd74d17630970b17cf95df9cd6688ebf9d519993244fa3a12",
+      "savedEqualFrozenAtReview": true
+    },
+    {
+      "file": "js/weekly-source/workspace-actions.js",
+      "bytes": 114149,
+      "sha256": "80128cb485d8e72ba52595c9d78a16bbe924fe1aed8fbaee87868581b54b93ee",
+      "savedEqualFrozenAtReview": true
+    },
+    {
+      "file": "js/weekly-source/import-workspace.js",
+      "bytes": 166803,
+      "sha256": "1064233f1ffb870c76d7a5788717b2b6f67e7bebe1d7150a23b42f0cd65b8b5b",
+      "savedEqualFrozenAtReview": true
+    }
+  ],
+  "reviewedPackContent": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
+  "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+  "exactHealthTargets": [
+    {
+      "target_key": "js:office:js/main.js#openTimesheet",
+      "role": "DEFINITION",
+      "author": "HEALTH",
+      "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+    },
+    {
+      "target_key": "js:office:js/main.js#renderTimesheetOverviewTab",
+      "role": "DEFINITION",
+      "author": "HEALTH",
+      "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+    },
+    {
+      "target_key": "js:office:js/main.js#renderTimesheetFinanceTab",
+      "role": "DEFINITION",
+      "author": "HEALTH",
+      "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+    },
+    {
+      "target_key": "js:office:js/main.js#openTimesheetContractMoveReview",
+      "role": "DEFINITION",
+      "author": "HEALTH",
+      "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+    },
+    {
+      "target_key": "host-hunk:office:js/main.js#openTimesheet::contractMoveMore",
+      "role": "INTEGRATION",
+      "author": "HEALTH",
+      "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+    },
+    {
+      "target_key": "host-hunk:office:js/main.js#showModal::timesheetMoveClose",
+      "role": "INTEGRATION",
+      "author": "HEALTH",
+      "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+    },
+    {
+      "target_key": "host-hunk:office:js/main.js#closeModal::timesheetMoveClose",
+      "role": "INTEGRATION",
+      "author": "HEALTH",
+      "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+    }
+  ],
+  "existing": [
+    {
+      "name": "openTimesheet",
+      "definitionLines": [
+        368128
+      ]
+    },
+    {
+      "name": "renderTimesheetOverviewTab",
+      "definitionLines": [
+        364340
+      ]
+    },
+    {
+      "name": "renderTimesheetFinanceTab",
+      "definitionLines": [
+        366449
+      ]
+    },
+    {
+      "name": "showModal",
+      "definitionLines": [
+        326170
+      ]
+    },
+    {
+      "name": "closeModal",
+      "definitionLines": [
+        351778
+      ]
+    }
+  ],
+  "absentFromCompleteMain": [
+    "openTimesheetContractMoveReview",
+    "typedContractMove",
+    "SourceNativeComposedResultV1",
+    "CURRENT_CONTRACT_PLACEMENT_V1",
+    "TIMESHEET_CONTRACT_CORRECTION_V3",
+    "DAILY_RATE_CORRECTION_V1",
+    "CloudTMSTimesheetContractMoveV1",
+    "CloudTMSDailyRateCorrectionV1"
+  ],
+  "absentTrackedModules": [
+    "js/timesheet-contract-move.js",
+    "js/daily-rate-correction.js",
+    "js/daily-rate-correction-http-adapter.js",
+    "js/correction-contract-v3.js"
+  ],
+  "currentDecoder": {
+    "file": "js/contract-correction-v3.mjs",
+    "strictSharedContractDailyResult": true,
+    "currentPlacementDecoder": true,
+    "onlyExistingRuntimeImport": "Contact manual enquiry imports validateAction; main/index have no correction decoder or host import"
+  },
+  "currentLoader": {
+    "contractModule": false,
+    "dailyModule": false
+  },
+  "healthWork": [
+    "Mount one actual Timesheet Overview More host; no Bulk/checking-record Move and no Daily Change Contract.",
+    "Bind actual actor, native frame/context/token/open generation/stack and selected tab; route overlay Close/Escape without popping parent; dispose scoped overlay on native teardown.",
+    "Use the declared CM17 open/createTimesheetOverlayAdapter ABI when its real reviewed component and native capability are supplied; never author a second Contract dialog or invent capability JSON fields.",
+    "Strictly decode current placement/result; refetch actual current B immediately after genuine COMMITTED result independently of REGISTERED/PROCESSING or invoice PDF progress; preserve selected tab and immutable historical receipts.",
+    "Mount the existing Health Daily UI/HTTP contribution with exact same-physical result and active native role checks, uncertainty journal and closed native dependency.",
+    "Resolve only exact CommonAction typed targets into existing owners; no arbitrary URL navigation or private outer Source receipt presented as ordinary public result."
+  ],
+  "separateDependencies": [
+    "Bank CM16 HTTP adapter/registration and CM17 universal dialog/overlay adapter, plus its bounded nested payment-summary fragment. This review does not inspect Bank source or claim producer completion/absence outside Office.",
+    "Actual authenticated public native Preview/current result/capability projection; Source lane owns READ_RESULT and SourceNativeComposedResultV1 source closure.",
+    "Native/installed/role/concurrency/financial/document/API/phone acceptance and final Part B remain separate."
+  ],
+  "preservedRules": [
+    "Exact 045c Manual New Enquiry parent",
+    "Independent Source versus Banking pending/history",
+    "Current B visible without all-PDF/all-APPLIED gate",
+    "No fresh Move repair wizard or mandatory reason essay",
+    "Source original invoice/member/amount/document unchanged",
+    "Issued originals/credits and original paid/frozen history remain immutable; no automatic Issue/Unissue/email",
+    "A→B→A requires genuine new typed acknowledgement linked to immutable A; never resurrect an old receipt"
+  ],
+  "native": "NOT_RUN",
+  "partB": "NOT_RUN",
+  "bankComponentAudit": false,
+  "productEditsByThisReview": false
+}
