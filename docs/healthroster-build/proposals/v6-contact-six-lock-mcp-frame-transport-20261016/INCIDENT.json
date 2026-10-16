@@ -1,0 +1,35 @@
+{
+  "version": "CONTACT_SCALAR_TRANSPORT_INCIDENT_SOURCE_RECORD_V1",
+  "priorSourceCommit": "6f131e34e2b4ae93f801bc0cc9420f95b38b9398",
+  "caseId": "contact20-lock1",
+  "status": "EXPECTED_LOCK_REFUSAL_ROLLBACK_OBSERVED_QUALIFICATION_HELD_TRUNCATED_CANONICAL_FRAME",
+  "nativeResultSha256": "9c769b8ced39a53a1db7fec88dd5cedc6a45283d25356a18094d250655139d2d",
+  "inputReceiptSha256": "d51b5e406b57b82aca34b087f2a341e76e0afe259dd8d278fd4d5390ce096f8b",
+  "sqlSha256": "30c2f496cfefe25cbe2d4beff6765c268bd0326616adc375a17633102dd57d07",
+  "accepted": false,
+  "expectedErrorStatement": 13,
+  "actualError": "55P03",
+  "rolledBack": true,
+  "connectedFresh": true,
+  "database": "cloudtms_test_clone",
+  "before": {
+    "statement": 7,
+    "utf16Length": 20001,
+    "utf8Bytes": 20003,
+    "trailingEllipsis": true,
+    "rowsTruncated": false,
+    "cellSha256": "20ce7beb94db8f85d0872093560cdcc2d348b240f3474db4d644da660f10f29e"
+  },
+  "after": {
+    "statement": 2,
+    "utf16Length": 20001,
+    "utf8Bytes": 20003,
+    "trailingEllipsis": true,
+    "rowsTruncated": false,
+    "cellSha256": "20ce7beb94db8f85d0872093560cdcc2d348b240f3474db4d644da660f10f29e"
+  },
+  "holderRelease": "Parent reported immediate ABORT followed by rollback/unlock/close; no qualification PASS",
+  "rawResultCopied": false,
+  "rawCanonicalFramePrinted": false,
+  "newTransportNative": "NOT_RUN"
+}

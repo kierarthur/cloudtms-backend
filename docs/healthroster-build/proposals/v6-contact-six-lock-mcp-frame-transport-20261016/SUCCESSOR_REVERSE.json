@@ -1,0 +1,16 @@
+{
+  "version": "EXACT_TRANSPORT_ONLY_SUCCESSOR_V1",
+  "historicalCommit": "6f131e34e2b4ae93f801bc0cc9420f95b38b9398",
+  "holderSourceBytesUnchanged": true,
+  "holderSha256": "c2e0dbcb77a23a70d72e7b6b46be2bc27770241c957d34a3e63142faddc10cc3",
+  "stageOneCompleteAuthorityReverseEqual": true,
+  "stageOneBeforeSha256": "1e805242b1723aee1022f70a4ab003de0001677f8f9ea42237cbf2b7216fc731",
+  "stageOneAfterSha256": "de75445569261d03e86c3a57264ffd4559dec2dae33abfb8443ac3b59c0d1ade",
+  "stageOneEdits": "Exactly before/fresh scalar decoding to verified chunk decoding",
+  "completeCanonicalLiveAuthorityBytesUnchanged": true,
+  "canonicalLiveAuthoritySha256": "1d2b660f874ad2b7f22087578455b3288c559229f65bd05cc6bf64cb971d6d13",
+  "fullRawQueryReverseForSixCases": true,
+  "terminalDelimiterRestored": true,
+  "fixtureProof": "Canonical complete query wrapped and de-embeds exactly; no content rewrite",
+  "native": "NOT_RUN"
+}

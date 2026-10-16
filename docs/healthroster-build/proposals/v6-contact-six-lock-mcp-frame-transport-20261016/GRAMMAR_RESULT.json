@@ -1,0 +1,43 @@
+{
+  "scope": "OFFLINE_POSTGRES17_GRAMMAR_ONLY",
+  "cases": [
+    {
+      "case": "contact20-lock1",
+      "statements": 13,
+      "verificationStatements": 3,
+      "canonicalFullReverse": true
+    },
+    {
+      "case": "contact20-lock2",
+      "statements": 15,
+      "verificationStatements": 3,
+      "canonicalFullReverse": true
+    },
+    {
+      "case": "contact30-lock1",
+      "statements": 13,
+      "verificationStatements": 3,
+      "canonicalFullReverse": true
+    },
+    {
+      "case": "contact30-lock2",
+      "statements": 15,
+      "verificationStatements": 3,
+      "canonicalFullReverse": true
+    },
+    {
+      "case": "contact30-lock3",
+      "statements": 17,
+      "verificationStatements": 3,
+      "canonicalFullReverse": true
+    },
+    {
+      "case": "contact30-lock4",
+      "statements": 19,
+      "verificationStatements": 3,
+      "canonicalFullReverse": true
+    }
+  ],
+  "wrappedFixtureQuery": "PASS",
+  "native": "NOT_RUN"
+}
