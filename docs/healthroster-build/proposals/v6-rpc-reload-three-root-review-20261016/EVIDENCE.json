@@ -1,0 +1,240 @@
+{
+  "version": "THREE_ROOT_EXACT_POSTGREST_RELOAD_PEER_V1",
+  "baselineRootCommit": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "currentRootHead": "fae51b0e0bb33e3e3d62cce47bb6aa96da9b3fbe",
+  "verdict": "NO_SOURCE_BLOCKER_THREE_NOTIFY_ONLY_SUCCESSORS",
+  "effect": "notify pgrst, 'reload schema';",
+  "results": [
+    {
+      "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+      "placement": "beforeCommit",
+      "beforeSha256": "60bdf030e045ffc523efb727ec23adb11a65fd1a4ca2faca7ba4ab97f9f9fae6",
+      "afterSha256": "82a4edda0a81355c75a0a74d1b4494d991c6be8ea6d5ebf0e8f10c9a901bcd15",
+      "beforeClosureSha256": "c03f440043b54ffddfea70f6885f9defe2b38e20c728faa999a9fccd6a82ac68",
+      "afterClosureSha256": "1c60ee3b880836c9fb1660fe4fcf272b2e3abb60c09082e08e72de1715ef65f9",
+      "rawRootReverseEqual": true,
+      "completeExpandedReverseEqual": true,
+      "completeFunctionHashesUnchanged": true,
+      "completeFunctionStatements": 9,
+      "functions": [
+        "9cd3682f486ad32fbf1a18330259a44872846ed578e2996d10002a520dc90842",
+        "5a4142c7f9e26861401dab3570a08cd88f31564353c29165dc89d2dfc93baa03",
+        "25237288803a32090a9be2c70de034bd9c030bb04c669a40f9ed013744ff5a50",
+        "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+        "04005f6ebeb8253059a3c3733be2483d6964e19f7934f22363d158ee95a787a0",
+        "19514a02b4a2c50ad5124b26333b483ee917415400a2f760d8fa991033b063b0",
+        "5ed7022c65f5cf78a276c319cebed414aa410fcc540db4edd4ddc32d667fb4e6",
+        "d0f6a3db517ddd975cd21a8484f044d535902338b5dd8580fb60adf9505050fb",
+        "967b2e826ff0f197a954448bc2e18eb011412e4324c3ecef18c44c5f2e921ddd"
+      ],
+      "includedOccurrences": 8,
+      "uniqueIncludedFiles": 8,
+      "inputs": [
+        {
+          "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+          "beforeSha256": "60bdf030e045ffc523efb727ec23adb11a65fd1a4ca2faca7ba4ab97f9f9fae6",
+          "afterSha256": "82a4edda0a81355c75a0a74d1b4494d991c6be8ea6d5ebf0e8f10c9a901bcd15",
+          "unchanged": false
+        },
+        {
+          "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+          "beforeSha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+          "afterSha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/01_invoice_apply_edits.sqlinc",
+          "beforeSha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e",
+          "afterSha256": "2061927c1178989d0b45a23fe930d605cdf8e960042afed584859934acbdd85e",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+          "beforeSha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693",
+          "afterSha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/03_invoice_issue_validate.sqlinc",
+          "beforeSha256": "3d04a8f41daa61980f733d279f6fa3bb0ea3c37bc6a9a4c66ce240b4d75839ef",
+          "afterSha256": "3d04a8f41daa61980f733d279f6fa3bb0ea3c37bc6a9a4c66ce240b4d75839ef",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/04_invoice_move_atomic.sqlinc",
+          "beforeSha256": "dc198c718436d8135c4ba6282896bc3aa7dab5099c3ba63650e9fa5aca2681fb",
+          "afterSha256": "dc198c718436d8135c4ba6282896bc3aa7dab5099c3ba63650e9fa5aca2681fb",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/05_invoice_edit_context.sqlinc",
+          "beforeSha256": "6b3a87eb80d738755eeb92b21e92f52d65685ae7c1a3abfbb2f670b47396ebbb",
+          "afterSha256": "6b3a87eb80d738755eeb92b21e92f52d65685ae7c1a3abfbb2f670b47396ebbb",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/06_native_acl.sqlinc",
+          "beforeSha256": "62a8884633d4d3f5d7dc9bca09f9efa0f04b6230c9eeab7f74d0e455e9c77f4d",
+          "afterSha256": "62a8884633d4d3f5d7dc9bca09f9efa0f04b6230c9eeab7f74d0e455e9c77f4d",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/07_new_owner_acl.sqlinc",
+          "beforeSha256": "6015f8338bc103b7e0355067667ca0be1688ba06b5ad8c87d2cbb7407fd166c2",
+          "afterSha256": "6015f8338bc103b7e0355067667ca0be1688ba06b5ad8c87d2cbb7407fd166c2",
+          "unchanged": true
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "placement": "afterIncludes",
+      "beforeSha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c",
+      "afterSha256": "b7b5dc446ee62b11818362ce5880667acef4f1e4b02b1d3c32962ae637a10b3c",
+      "beforeClosureSha256": "4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53",
+      "afterClosureSha256": "3b276d4fe9cdd614aa10d5779c299f233ffae59e792b47e155a89a831e8d923c",
+      "rawRootReverseEqual": true,
+      "completeExpandedReverseEqual": true,
+      "completeFunctionHashesUnchanged": true,
+      "completeFunctionStatements": 64,
+      "functions": [
+        "7da44c59a47e208a6f13553a31ba61b30ce43e4b295bd77b5b3afebe8ba5ddc7",
+        "5c6d15b96f4dc874c3c4c34d848c04959c6ee7762568f3f38d54f99f9e69597f",
+        "6e265536d45a92b1822c468647e98b7d46ed6300b30b4228db7b0e3fb7ada5b8",
+        "3af85b27bd5a224691e41568ea0548709b7ff5eb57897abe447e275b9591b00d",
+        "840d2edb81b7f2aa3c4fcdc718533d34dc8560ee01f4a24ce7275d35cb378467",
+        "00d1cc2122848f9fee38f3214f5438b5b93ae20e3b066f320eba89df995f3bd8",
+        "30ef1a379b34601fb464365ab0af5d644520a0742e50a6d9256fe54a1dcaae4c",
+        "4d7dd22bc52370075847298fd57dee23d2605460ad35dbfce9df62d1995fd679",
+        "12e39abeff7ee247f01258f091fc63da2042200eb0ba295b2b4687919782573d",
+        "3035dcc26a202c0d69312bf0becb01dea8f33bf3573d4484887ca1079afcb02a",
+        "4ab85b6ee2146a4a011598fe695c026646138b05cc4750a2641be271348d1c43",
+        "a29c03bc465263b804559b628f4fde6365595fa6e8c00c55a7e7791341a7f3eb",
+        "d04fa144cbe72c96cb33d620f1d22d703cd110ff8fe7a269324020cc9557a1cc",
+        "3509eb000dce13dae7606af09ca16419ee50f63347f1c21873360dfbd1f9324f",
+        "0b40a92c29db84fbfc9b0bac463331fb1808bd2a88b8a0fc7baa5b73e6aa061d",
+        "83d8b610606abd6299bcd5be3b3cf2987d245ee34c83fbbd33e63060ff78de1c",
+        "7b422fa7d7eaaa5e36e2cb60df618699806905ea4291dfe303752962e5c85a1b",
+        "705fd170b82fef0127253017949df31fd7f14111a3140549b08288f657525f26",
+        "9384da593794b88cb521f22a80a1ab10a8fe65dc0c44133ed667d229a4d47365",
+        "64b6dfc40d5fecf91efbf5c310847d8948a6367eb1548a16ce6958b9f19b8b4f",
+        "b7cabee0ba1511e37bec9cd495197adaf543a95477ec6c8de3a69846c53218c6",
+        "8c1ca3230798206dd7b661935f29240b52e2a006629963f2b0d1066a08fe06ba",
+        "5eb7e486c1d5a5ba62b2ac4a2b97c3a9fa9377db5815f4fd4b63b2443109b74d",
+        "5318a28f684b9f3e413f0e4f2487a04340899ff714d9ca4344ed790049568e96",
+        "863af39907bdda6260e252ddefca17a622ad785c87229c21de13a59c0d2c44f2",
+        "7a6535fd864551bacab9cd4e784c9f6e472ac88536086cf380c7857f6d2f570f",
+        "285df06923e8ee6c5d8c33bae7e8ec9af46ed8f74ff4aa0d67d6f7ef09508a65",
+        "43faae84d856a17ed4b67abe738c62e21e8d68443133e56e9771c95af4f398b5",
+        "7c7e7c808f8e533b80e26b8b66ab154fd674fb21b0e8612ac962f1c056208677",
+        "242ee76d407026b7e355c7a6c8d077bc3dd32029a79652de067134217297c944",
+        "d7d1d2f56491aa471a7f93487e446844ecc6ded14de024d5d48019772174be91",
+        "1f3aed860da9e1766e65295ec72423d22d8a5fc849ddaaede663d5db832cd050",
+        "82639e58b6d69d2536ea6851c362ffcb4d9e5ef0cba037e58bee12ce335a3c3e",
+        "256a40bc30a31288f4f4462b00d989d72756751549e250d3c5f5a030353e9a6f",
+        "9772c469dabece0943b8eb9bed726875e828af05d254fe74ee58d99a84cd2b4d",
+        "9b508926a18954d75541b40d960a5cdb2ca4602f0b6f7b45439f5d80b0aeac19",
+        "9d450fa410c7706afd64dcd18f3c8409a199b1efa1a2909d68da2f37f07fc358",
+        "f2d5bdbeacf356007cf69d632a2830c1269a4fea62d6800c5dc8f5fa8de6a086",
+        "9a6e95341e6190820395f4d800612808a0e371495d76600e84bd303092e551d4",
+        "02f80e36aa73bd30ab13dfcd339ab24b320a1d782a7decbcdd34e6467ea038b2",
+        "9519b83be1ec9779b894eb069849ff302f271e463330db724bf6ee47677cda87",
+        "bcb3aaab0b2607961a541b82639d97511cc27e9256584a9dbd79384d8c98e0c2",
+        "c591bc20d7c29b57b5ceadf51055155788f1d7c661726292c9d6b7c3dab53041",
+        "35ae0025a596f499228ad59b92d3585f32c563b68c9bdf0c41090ff64dae8da8",
+        "1c2fa02af51afce238e1b2ad674279b4034984f120a1e2a699ba35f904f62e9f",
+        "b4ae3a3599cf111bd57860e74f40f54df985081ec4803a0f8ff443497e745be2",
+        "35b7dc3e6890c9683c5077bb499975c7b8b83d0570468f4e565a2c66b0f6e0a4",
+        "958b720bd3ff0853256fb15855a8f991bf9425064d32f3bfdcb118a6a3659857",
+        "9dafced8e0a8edeccaf47f0cc0a6bc4845cb7d7a7079b6e4332ac1906a92e60d",
+        "ecb9671f3faa3bd3b1f844ac254c9a63f04746c0bebf5abe3b94f48102acfcd3",
+        "fa8197726db961cdf37a587ecaa9a0df84abe629bf9acf9da025c43548d6d135",
+        "8499790a70de893f97759ee1bba15470302f41831eb39b26ca65072c7f74a9d9",
+        "3524e50b56d2b31d8688a605d8a5896793d7f7708ea46628f0111792ff120a12",
+        "dd6d92a095507f82f64b86da993f1f3184459f7a9080e3f4aa3866183b6fa6c7",
+        "027b92f52555ab53e3636ae512d931b8c6f323e14247def9a26df017778106c1",
+        "01ab56c89c1e7e5e4ac7a3ba53de33442708a83b97acdcf891f1076d3292f79f",
+        "6ceb3bbf60f5d5643f37336dbd18a6a2f49a335c2669277db4099c50fd2872d2",
+        "75753810aa9d4851c24943899ec37ef2ad6945d22cc0f54fd9f8e2d7c522ecf2",
+        "932eadc4a371078ba226e025dcf848add3f58fb1226952af2f01b5d9bb8a4b62",
+        "cf6f066b82de946415603e3e3d6a097be8882cf27b81ea255944d8c739550863",
+        "6023e0bc10fb3a6bfd71d6732bc7b1cb0da4e41aa0d84a8b8f1a27a4c3c5f54c",
+        "7a1ba1c6b3f066eaaae46ee8977298f1873c9b9ee723d3383645448c5cb94ea6",
+        "ac2a629861064047d8f104f4f4aa26f5af6793cf459f2b8891d19939c5649bb0",
+        "f878ede36dfcfa92a5286054b162ebf53b05810b86adef5135d5836edf9f7f5f"
+      ],
+      "includedOccurrences": 5,
+      "uniqueIncludedFiles": 5,
+      "inputs": [
+        {
+          "file": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+          "beforeSha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c",
+          "afterSha256": "b7b5dc446ee62b11818362ce5880667acef4f1e4b02b1d3c32962ae637a10b3c",
+          "unchanged": false
+        },
+        {
+          "file": "supabase/repeatable/08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1.sql",
+          "beforeSha256": "fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e",
+          "afterSha256": "fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+          "beforeSha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+          "afterSha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+          "beforeSha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff",
+          "afterSha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+          "beforeSha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+          "afterSha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21",
+          "unchanged": true
+        },
+        {
+          "file": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+          "beforeSha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d",
+          "afterSha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d",
+          "unchanged": true
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+      "placement": "beforeCommit",
+      "beforeSha256": "25adbc44ae6579662134de37a40e02725f56ab7e3177165c95a3a186f633beca",
+      "afterSha256": "aa77a2c396b0b7c5c26edb4b80159cd76b5182b2edbb7d6debe975a73f167c61",
+      "beforeClosureSha256": "e2a2011d2455bfd081eb4b9e83544c6874522c88a6afeb3869b3863e23037052",
+      "afterClosureSha256": "d714e72181ffef10619223ca67b18658aede1ea29930aaa251c2411b67e5d17d",
+      "rawRootReverseEqual": true,
+      "completeExpandedReverseEqual": true,
+      "completeFunctionHashesUnchanged": true,
+      "completeFunctionStatements": 1,
+      "functions": [
+        "624dd39a6f3eca71671583d438a2734ad3a0706f869e590e0beb2a5192a48b89"
+      ],
+      "includedOccurrences": 0,
+      "uniqueIncludedFiles": 0,
+      "inputs": [
+        {
+          "file": "supabase/repeatable/13102026_1706_healthroster_automatic_credit_candidates_v1.sql",
+          "beforeSha256": "25adbc44ae6579662134de37a40e02725f56ab7e3177165c95a3a186f633beca",
+          "afterSha256": "aa77a2c396b0b7c5c26edb4b80159cd76b5182b2edbb7d6debe975a73f167c61",
+          "unchanged": false
+        }
+      ]
+    }
+  ],
+  "sourceGate73RpcDiagnostic": "Root reported selector PASS0; no independent full-gate PASS substituted",
+  "I2Edits": 0,
+  "BankingBodyEdits": 0,
+  "databaseCalls": 0,
+  "native": "NOT_RUN",
+  "PostgrestApiCache": "NOT_RUN",
+  "sourceGateWaiver": false
+}
