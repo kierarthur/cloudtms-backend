@@ -1,0 +1,63 @@
+{
+  "version": "CONTACT_FIVE_GENUINE_PREREQUISITE_CONTINUATION_V1",
+  "status": "SOURCE_ONLY_NATIVE_NOT_RUN",
+  "initialDirectMissing": 3,
+  "additionalTransitiveMissing": 2,
+  "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+  "root": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites_v1.sql",
+  "orderedFunctions": [
+    {
+      "signature": "private.weekly_contact_source_render_attempted_v1(uuid)",
+      "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/07_native_unsubmitted_recomposition.sqlinc",
+      "wholeFileSha256": "98e721a035422ae94af1c3e7cf21dcb26130ae70e4e510472d8bcf847f077238",
+      "completeFunctionStatementSha256": "deba2fa62884eaf3bc0cacb3a5c0e5f9b2d06cae362eca82a2d6cfa3cb257075",
+      "wholeFunctionUnchanged": true
+    },
+    {
+      "signature": "private.weekly_contact_source_candidate_render_assert_v1(uuid)",
+      "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/01_current_native_members.sqlinc",
+      "wholeFileSha256": "5d176a81113d2f9e39225831b9e2e31cc94d4fc70463941c0690d405778528cd",
+      "completeFunctionStatementSha256": "c7d54bbd048a52f1d8c7c48d86da753ba44412083654a23072ee1f672d782bb3",
+      "wholeFunctionUnchanged": true
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_initial_owned_v1(uuid)",
+      "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/01_current_native_members.sqlinc",
+      "wholeFileSha256": "5d176a81113d2f9e39225831b9e2e31cc94d4fc70463941c0690d405778528cd",
+      "completeFunctionStatementSha256": "6ecf46eb3c847a7850b611e91ae293134d349f680a3a81849e1956955eb66a65",
+      "wholeFunctionUnchanged": true
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_current_need_v1(uuid,uuid,timestamp with time zone)",
+      "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/01_current_native_members.sqlinc",
+      "wholeFileSha256": "5d176a81113d2f9e39225831b9e2e31cc94d4fc70463941c0690d405778528cd",
+      "completeFunctionStatementSha256": "4ff854c06eb693c390bc2ede6ca7e91ed94192943b30f8d89fa4e27666d46c43",
+      "wholeFunctionUnchanged": true
+    },
+    {
+      "signature": "private.weekly_contact_source_manager_member_eligible_v1(uuid,uuid,timestamp with time zone)",
+      "sourceCommit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/01_current_native_members.sqlinc",
+      "wholeFileSha256": "5d176a81113d2f9e39225831b9e2e31cc94d4fc70463941c0690d405778528cd",
+      "completeFunctionStatementSha256": "897e57ce9196358c591251b07197cfd9b9135b30ef21225cadb09389aa3c2efc",
+      "wholeFunctionUnchanged": true
+    }
+  ],
+  "acl": {
+    "sourcePath": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/99_acl.sqlinc",
+    "wholeFileSha256": "75bc5d2f258d1a10183ac10cae111073a9dbbcab8652ffe632216f5ea009d18a",
+    "target": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/02_original_private_acl.sqlinc",
+    "statements": 10,
+    "exactSelectedOriginalStatements": true,
+    "serviceOrBrowserExecute": false
+  },
+  "targetFunctionPath": "supabase/repeatable/16102026_1209_weekly_contact_producer_prerequisites/01_complete_native_helpers.sqlinc",
+  "functionLeafSha256": "122fcfc460ced0ac3037bab34207261dedee4018a0cdd8800c9e358ff176cd14",
+  "closureSha256": "e63b7a9e965f4ee3a89bcb74243b82a0ddabcf8d2ac5f96b73f7cf2661949f0f",
+  "authority": "Root explicitly commissioned exact5 finite genuine Health prerequisite continuation after transitive review; original review416e remains historical.",
+  "qualification": "Complete source definitions/ACL only; native catalogue, compilation, first-use and races NOT_RUN."
+}

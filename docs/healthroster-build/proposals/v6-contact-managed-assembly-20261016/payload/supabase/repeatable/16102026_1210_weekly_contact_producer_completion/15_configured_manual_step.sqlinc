@@ -1,0 +1,13 @@
+-- Compatibility composition for the existing private configured-MANUAL ABI.
+-- The complete native owner performs one classified selection/body/cooldown.
+create or replace function private.weekly_contact_source_manager_manual_step_v1(p_actor uuid,p_cycle uuid,p_publication uuid,
+ p_incidents uuid[],p_workspace_version text)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ if p_workspace_version is null or p_workspace_version!~'^[0-9a-f]{64}$'then
+  raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_INVALID'using errcode='22023';end if;
+ return public.weekly_source_query_send_manager_now_atomic_v1(jsonb_build_object('actor_user_id',p_actor,'source_cycle_id',p_cycle,
+  'projection_publication_id',p_publication,'incident_ids',to_jsonb(p_incidents)));
+end;
+$function$;

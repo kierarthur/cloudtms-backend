@@ -1,0 +1,35 @@
+{
+  "version": "CONTACT_MANAGED_ASSEMBLY_FOCUSED_SOURCE_TEST_RESULT_V1",
+  "status": "PASS_SOURCE_AND_MOCKED_TRANSPORT_ONLY",
+  "command": "node --test docs/healthroster-build/proposals/v6-contact-managed-assembly-20261016/assembly.test.mjs",
+  "exitCode": 0,
+  "tests": 11,
+  "passed": 11,
+  "failed": 0,
+  "skipped": 0,
+  "durationMs": 5558.0733,
+  "validatedInputs": {
+    "ASSEMBLY_MANIFEST.json": "f09ebd7bb1dd25afddbbc5321aa126e87bcca1e79aae73d77d4455277583ba05",
+    "assembly.test.mjs": "dde738720eadd131e7fda90f6bfcca0d10fddb782b50aec2da7539fe584d903a",
+    "build-proposal.mjs": "a4cf0e5576fc3504b2a400cd46bf0fa31958c21fb47af216633fd33316377233"
+  },
+  "coverage": [
+    "All56 complete frozen raw payloads and exact schema wrapper reverse",
+    "Complete guard one-delta reverse and final ACL ordering",
+    "Five complete original prerequisite functions and exact original private ACL",
+    "Qualified full callee census, manually mapped source relation fields and SQL creation order",
+    "Complete registry preservation and changed1210 selection of1209",
+    "Two exact one-field metadata semantic reverses",
+    "Complete current delivery parent three-anchor forward/reverse",
+    "Actual contributed runtime function body and actual leaf against explicit native-owner/transport doubles",
+    "Unknown/malformed recheck failure isolation and retained original delivery/release owners",
+    "Historical416e review preservation and explicit native NOT_RUN limits"
+  ],
+  "nativeCompile": "NOT_RUN",
+  "nativeFirstUse": "NOT_RUN",
+  "effectiveAcl": "NOT_RUN",
+  "concurrency": "NOT_RUN",
+  "api": "NOT_RUN",
+  "provider": "NOT_RUN",
+  "partB": "NOT_RUN"
+}
