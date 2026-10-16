@@ -1,15 +1,15 @@
 {
   "version": "CONTACT_NATIVE_CONTINUATION_WIP_SUCCESSOR_RECEIPT_V1",
   "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
-  "prior_source_checkpoint": "745d19a30488a0604d4f93dfa0a8c612b420bf64",
+  "prior_source_checkpoint": "03b444e0ead2f70ab193101dbf8f151e64efccaf",
   "source_files": [
     {
       "path": "READ_SOURCE_CHECKPOINT.json",
-      "sha256": "c0569b16a5017897495f1f5cb7bb38d502a51e9379c87ae0db5066bd479eb31d"
+      "sha256": "dc241bc4cd793e93c9d06870b635f91e7dc7c9bc4b060e737c5fb535429e4d9b"
     },
     {
       "path": "REGISTER_DELTA_WIP.json",
-      "sha256": "c08c156d9a065e359fb42c3da7dfa39cc93480d803ea3ebb97c8d746588d6034"
+      "sha256": "c3d82eb52b4a1248291b4ca4e7a63cc1c4a24913f90960cb0ac5c9c5ea0833bf"
     },
     {
       "path": "NATIVE_OWNER_INPUTS.json",
@@ -17,7 +17,7 @@
     },
     {
       "path": "MANAGER_ACTION_OWNER_INPUTS.json",
-      "sha256": "09a12bee81e4179807a3d5f05f89f6a26106db9e6edf2ec759ef0469ad976fca"
+      "sha256": "cd2f49469675871fc78d86097903b78f11558890b697cfd1f122544b2a83710a"
     },
     {
       "path": "SCHEDULER_NOTIFICATION_OWNER_INPUTS.json",
@@ -29,11 +29,11 @@
     },
     {
       "path": "SUBMISSION_PAUSE_OWNER_INPUTS.json",
-      "sha256": "8b1b2221469f9c3584b33d0588d7adf5a26871904ca647a9d63d9d514c0bd426"
+      "sha256": "599e863e14bfc71dae84e6b00f1a0b1d9dc25b99537037db18d91a20ac3baa8f"
     },
     {
       "path": "SUBMISSION_READER_OWNER_INPUTS.json",
-      "sha256": "16de57a6ba26bd067acb895ccc1571bf732e3ce3b0e659ea66675aef72f49499"
+      "sha256": "5b3c266db0c21b79436a67c9645ba10c5d9551b166461b4758a30c985cf08474"
     },
     {
       "path": "SUBMISSION_CALLER_OWNER_INPUTS.json",
@@ -49,7 +49,19 @@
     },
     {
       "path": "CANDIDATE_CONTACT_ENTRY_INPUTS.json",
-      "sha256": "a84bf9b68c181773f6bc47f4ddec9e3e3ce4f5ce49a8257f946b52a734309a59"
+      "sha256": "328d51a50ea48c0055a277e1ec638b780236b3cf8af1f5c062f7d1399318ab24"
+    },
+    {
+      "path": "EXACT_NATIVE_LOCK_OWNER_INPUTS.json",
+      "sha256": "87e591be975a9c48a7ee317d411621e8ee25b1b00489ddd182c5c89a12ec38fc"
+    },
+    {
+      "path": "OFFLINE_GRAMMAR_INPUTS.json",
+      "sha256": "7629b40fef58079b0d50b3e095934fb3769e97ab821ed15fe35f525a1463b4d4"
+    },
+    {
+      "path": "OFFLINE_GRAMMAR_RESULT.json",
+      "sha256": "49dd0a119bf4236c7e0c938c72e55ab5747005aaa0d2df6fa109434aadc5a000"
     }
   ],
   "frozen_7161": {
@@ -62,9 +74,23 @@
     "scope": "Request/shared parser, strict service reply and actual finite current host orchestration with mocked RPC/senders"
   },
   "sql_scan": {
-    "statements": 305,
+    "statements": 342,
     "PLpgSQL": "OPAQUE_NOT_PARSED",
     "fixtures_excluded": true
+  },
+  "offline_grammar": {
+    "version": "CONTACT_SOURCE_OFFLINE_PG17_RESULT_V1",
+    "input_manifest_sha256": "7629b40fef58079b0d50b3e095934fb3769e97ab821ed15fe35f525a1463b4d4",
+    "qualification": "OFFLINE_ONLY_NATIVE_COMPILE_AND_FIRST_USE_NOT_RUN",
+    "counts": {
+      "sqlLeaves": 49,
+      "sqlStatements": 345,
+      "plpgsqlBodies": 89,
+      "sqlLanguageBodies": 7,
+      "doBodies": 7,
+      "rowVariables": 247
+    },
+    "errors": []
   },
   "database_actions": "NONE",
   "work_continues": true

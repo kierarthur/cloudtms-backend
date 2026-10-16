@@ -1,0 +1,60 @@
+-- Exact already-validated native selection, never the whole filtered cycle for
+-- an explicit action. Every additional scope is an actual original request or
+-- native route body that the selected composition can change.
+create or replace function private.weekly_contact_source_bulk_scope_facts_v1(p_request jsonb)
+returns jsonb language sql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+ with selected as materialized(
+  select query.* from private.weekly_source_office_query_groups_v1((p_request->>'source_cycle_id')::uuid,
+   (p_request->>'projection_publication_id')::uuid,coalesce(p_request->'selection'->'filters','{}'))query
+  where((p_request->'selection'->>'mode'='ALL_FILTERED' and not exists(select 1
+    from jsonb_array_elements_text(coalesce(p_request->'selection'->'excluded_group_keys','[]'))excluded where excluded=query.group_key))
+   or(p_request->'selection'->>'mode'='EXPLICIT' and exists(select 1
+    from jsonb_array_elements_text(p_request->'selection'->'group_keys')chosen where chosen=query.group_key)))
+ ),original_requests as materialized(
+  select distinct request.id from selected query cross join lateral jsonb_array_elements(query.missing_scopes)scope
+   join public.weekly_timesheet_submission_request_memberships member on(member.client_id,member.contract_id,member.week_ending)=
+    ((scope->>'client_id')::uuid,(scope->>'contract_id')::uuid,(scope->>'week_ending')::date)
+   join public.weekly_timesheet_submission_requests request on request.id=member.submission_request_id
+    and request.source_cycle_id=(p_request->>'source_cycle_id')::uuid and request.candidate_id=query.candidate_id
+    and request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+  where p_request->>'action'='ASK_CANDIDATES'
+ ),routes as materialized(
+  select distinct route.id from selected query join public.weekly_manager_recipient_routes route
+   on route.source_cycle_id=(p_request->>'source_cycle_id')::uuid and route.normalised_recipient_hash=query.manager_recipient_route_key
+  where p_request->>'action'='SEND_MANAGER_NOW' and query.manager_eligible
+ ),route_facts as materialized(select private.weekly_contact_source_route_scope_facts_v1(id)fact from routes),pairs as(
+  select candidate_id,client_id from selected
+  union select request.candidate_id,member.client_id from original_requests join public.weekly_timesheet_submission_requests request on request.id=original_requests.id
+   join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+  union select(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid from route_facts cross join lateral jsonb_array_elements(fact->'pairs')pair
+ )select jsonb_build_object('version','CONTACT_NATIVE_BULK_SCOPE_FACTS_V1',
+  'selected_groups',coalesce((select jsonb_agg(jsonb_build_object('group_key',group_key,'candidate_id',candidate_id,'client_id',client_id,
+   'incident_ids',to_jsonb(incident_ids),'missing_scopes',missing_scopes)order by group_key)from selected),'[]'),
+  'original_request_ids',coalesce((select jsonb_agg(id order by id)from original_requests),'[]'),
+  'route_facts',coalesce((select jsonb_agg(fact order by fact->>'route_id')from route_facts),'[]'),
+  'pairs',coalesce((select jsonb_agg(jsonb_build_object('candidate_id',candidate_id,'client_id',client_id)order by candidate_id,client_id)from pairs),'[]'))
+$function$;
+
+create or replace function private.weekly_contact_source_bulk_lock_v1(p_request jsonb)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare guard jsonb;source_group public.weekly_source_groups%rowtype;facts jsonb;pair jsonb;
+begin
+ guard:=private.weekly_source_query_current_publication_v1((p_request->>'source_cycle_id')::uuid,(p_request->>'projection_publication_id')::uuid);
+ if p_request->>'action' not in('ASK_CANDIDATES','SEND_MANAGER_NOW') then
+  raise exception 'WEEKLY_SOURCE_BULK_REQUEST_INVALID' using errcode='22023';end if;
+ perform private.weekly_source_office_authority_v1((p_request->>'actor_user_id')::uuid,
+  case p_request->>'action' when 'ASK_CANDIDATES' then 'ASK_CANDIDATES' else 'SEND_MANAGER' end,
+  (guard->>'source_group_id')::uuid,null,(guard->>'finalisation_week_ending')::date);
+ select * into strict source_group from public.weekly_source_groups where id=(guard->>'source_group_id')::uuid;
+ perform private.weekly_contact_deployment_lock_v1(source_group.agency_id,source_group.environment);
+ perform private.weekly_contact_context_v1(source_group.agency_id,source_group.environment);
+ perform private.weekly_source_query_current_publication_v1((p_request->>'source_cycle_id')::uuid,(p_request->>'projection_publication_id')::uuid);
+ facts:=private.weekly_contact_source_bulk_scope_facts_v1(p_request);
+ for pair in select value from jsonb_array_elements(facts->'pairs') order by(value->>'candidate_id')::uuid,(value->>'client_id')::uuid loop
+  perform private.weekly_contact_scope_lock_v1(source_group.agency_id,source_group.environment,(pair->>'candidate_id')::uuid,(pair->>'client_id')::uuid);end loop;
+ if private.weekly_contact_source_bulk_scope_facts_v1(p_request) is distinct from facts then
+  raise exception 'WEEKLY_SOURCE_BULK_SELECTION_STALE' using errcode='40001';end if;
+end;
+$function$;

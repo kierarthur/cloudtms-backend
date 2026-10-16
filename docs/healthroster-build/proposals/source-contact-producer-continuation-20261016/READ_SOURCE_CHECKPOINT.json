@@ -90,7 +90,7 @@
     },
     {
       "path": "forward/07_capture_native_reads.sqlinc",
-      "sha256": "be3a71643ebd18fdd5e14e85d5b1fbff78ab7800f7256bebd3fc7ce1aa80b80b"
+      "sha256": "20c8a3864902ece9ac72fb36e2e5b211594c7969b9664bc16f3cb9a721c89a4e"
     },
     {
       "path": "forward/08_manual_native_enqueue.sqlinc",
@@ -114,7 +114,7 @@
     },
     {
       "path": "forward/13_recompose_native_intents.sqlinc",
-      "sha256": "6392623cd141b9f7624890bf4299b953aa92d8a5ea2d9f55cd22c0e4f4086281"
+      "sha256": "d6377b6e182174c42be7e22a8982328b0dec66af1d5fae95990dc33f080a7c7d"
     },
     {
       "path": "forward/14_manager_action_current_witness.sqlinc",
@@ -146,11 +146,11 @@
     },
     {
       "path": "forward/21_native_render_input.sqlinc",
-      "sha256": "9fc1d720c8c96c5a89c9a0381a3829cc9e5dc4a6a2d68776e9b5b9c55a4695ba"
+      "sha256": "bf0dc43d725483075d2abf7c6b37d67cb36a5bab9e533f21f882ccd693eccede"
     },
     {
       "path": "forward/22_native_render_stage.sqlinc",
-      "sha256": "ad9ee0ed805e39574fa291730b5a82731686e5714cfc392b799961497f1b9426"
+      "sha256": "70ea1582a5a882dc7df492a856959e426bc0d2222cfa3321fbe64c5017a0bea4"
     },
     {
       "path": "forward/23_native_logical_members.sqlinc",
@@ -178,7 +178,7 @@
     },
     {
       "path": "forward/29_native_contact_bulk.sqlinc",
-      "sha256": "0191d438e127b12d0d0d54c131b2c2c8a4af9c9cd3a2266bbdcb81f4e208b05d"
+      "sha256": "dad7baeaaaa1bc2f254a361a4138e1b6d5e0205d7ba18dc8bf9809fcf716c668"
     },
     {
       "path": "forward/30_native_notification_retirement.sqlinc",
@@ -194,19 +194,19 @@
     },
     {
       "path": "forward/33_native_submission_pause.sqlinc",
-      "sha256": "c5f13e5d5287351988b6c4907a16e45dfe66464954bed4caad765c616ca00d1a"
+      "sha256": "ff8d76ddada432abaa5537a36b3e260e395e76fb437e8f9ea2990c84334677a2"
     },
     {
       "path": "forward/34_scope_first_activation.sqlinc",
-      "sha256": "cc8cb8998f7905c988a1cd4f3af3b223a424f96fee8a0eacdf4af8aff2ca7cba"
+      "sha256": "cda3b720b45d2a8f05e05a59a15271e32b40d838d846baaa79270b06cb7f869b"
     },
     {
       "path": "forward/35_native_cycle_scope_lock.sqlinc",
-      "sha256": "82d5c2831f0a3220969b803910cb7b9a5f25bef18e669b3308704f7c9d66e1b8"
+      "sha256": "a01a4f8f6958252972d61e8aaf8b134c9d97a3d52acb6d705c9c45c274f04aff"
     },
     {
       "path": "forward/36_submission_identity_and_guard.sqlinc",
-      "sha256": "4f01ebf84c360d3980aa8a2490b1e3ca172373a6daec88c53dd403c07214df82"
+      "sha256": "258ed5e3acab342c3f01bc72dc1bea2300d4308f997bb801f7a96cff87f0e3ad"
     },
     {
       "path": "forward/37_submission_partition.sqlinc",
@@ -214,7 +214,7 @@
     },
     {
       "path": "forward/38_native_submission_readers.sqlinc",
-      "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac"
+      "sha256": "dccdc8e5843aee7fd6d18e0bebca9ab76a57a9e7691ddd3e1b216b11346861c4"
     },
     {
       "path": "forward/39_native_submission_callers.sqlinc",
@@ -222,11 +222,23 @@
     },
     {
       "path": "forward/40_candidate_contact_entry_owners.sqlinc",
-      "sha256": "a5bc0083766a1dea9788c264ae583a86af874edd817163b594e042871fb5a594"
+      "sha256": "d19f35d16792445dc2b74c871609e248da98b55e39f9a7c9c8d3248d69caefd5"
+    },
+    {
+      "path": "forward/41_exact_native_scope_locks.sqlinc",
+      "sha256": "2b7eb1aee7b876382c6aae78e7e01fd2720080198bc32cab292f81ebca324b7c"
+    },
+    {
+      "path": "forward/42_exact_native_lock_owners.sqlinc",
+      "sha256": "057c359c98c9c2df733237b2bf1a93704df6751937919c07436e0966e478d5b4"
+    },
+    {
+      "path": "forward/43_exact_bulk_scope_locks.sqlinc",
+      "sha256": "7f1f8e98060f7c45b2eeb0cf374c54e22752ebffa0e0c51c180eba7e2d7b82a9"
     },
     {
       "path": "forward/99_acl.sqlinc",
-      "sha256": "a589d60345ed8e892a0f5330451fcdc086848fdb0a28682f36f2f33fcd972f5a"
+      "sha256": "68bafa3c27f823930c7273d93d156d5103529501fe5011809570f6556d5e88de"
     },
     {
       "path": "runtime/contact-manual-enquiry.mjs",
@@ -242,7 +254,7 @@
     },
     {
       "path": "NATIVE_CONTINUATION_WIP.md",
-      "sha256": "c538a216f0dfba4d387cc9000d823e060605669fb23727455334327c915ba88c"
+      "sha256": "84fc6c114ab2bd72898fa7b440c90118a65c452d651e3a55de10876f9ec9e269"
     },
     {
       "path": "NATIVE_OWNER_INPUTS.json",
@@ -250,11 +262,11 @@
     },
     {
       "path": "REGISTER_DELTA_WIP.json",
-      "sha256": "c08c156d9a065e359fb42c3da7dfa39cc93480d803ea3ebb97c8d746588d6034"
+      "sha256": "c3d82eb52b4a1248291b4ca4e7a63cc1c4a24913f90960cb0ac5c9c5ea0833bf"
     },
     {
       "path": "MANAGER_ACTION_OWNER_INPUTS.json",
-      "sha256": "09a12bee81e4179807a3d5f05f89f6a26106db9e6edf2ec759ef0469ad976fca"
+      "sha256": "cd2f49469675871fc78d86097903b78f11558890b697cfd1f122544b2a83710a"
     },
     {
       "path": "SCHEDULER_NOTIFICATION_OWNER_INPUTS.json",
@@ -270,11 +282,11 @@
     },
     {
       "path": "SUBMISSION_PAUSE_OWNER_INPUTS.json",
-      "sha256": "8b1b2221469f9c3584b33d0588d7adf5a26871904ca647a9d63d9d514c0bd426"
+      "sha256": "599e863e14bfc71dae84e6b00f1a0b1d9dc25b99537037db18d91a20ac3baa8f"
     },
     {
       "path": "SUBMISSION_READER_OWNER_INPUTS.json",
-      "sha256": "16de57a6ba26bd067acb895ccc1571bf732e3ce3b0e659ea66675aef72f49499"
+      "sha256": "5b3c266db0c21b79436a67c9645ba10c5d9551b166461b4758a30c985cf08474"
     },
     {
       "path": "SUBMISSION_CALLER_OWNER_INPUTS.json",
@@ -286,23 +298,43 @@
     },
     {
       "path": "CANDIDATE_CONTACT_ENTRY_INPUTS.json",
-      "sha256": "a84bf9b68c181773f6bc47f4ddec9e3e3ce4f5ce49a8257f946b52a734309a59"
+      "sha256": "328d51a50ea48c0055a277e1ec638b780236b3cf8af1f5c062f7d1399318ab24"
+    },
+    {
+      "path": "EXACT_NATIVE_LOCK_OWNER_INPUTS.json",
+      "sha256": "87e591be975a9c48a7ee317d411621e8ee25b1b00489ddd182c5c89a12ec38fc"
+    },
+    {
+      "path": "OFFLINE_GRAMMAR_INPUTS.json",
+      "sha256": "7629b40fef58079b0d50b3e095934fb3769e97ab821ed15fe35f525a1463b4d4"
+    },
+    {
+      "path": "OFFLINE_GRAMMAR_RESULT.json",
+      "sha256": "49dd0a119bf4236c7e0c938c72e55ab5747005aaa0d2df6fa109434aadc5a000"
     },
     {
       "path": "build-candidate-contact-entry-owners.mjs",
-      "sha256": "a38d31c1f22c20221838247215fe0b1eec46f62ddf868e461aa0e71a9bc38736"
+      "sha256": "1b601103c25ec5014c2e50cbde267eedcbafe3739e61dd85dfd56415260d08c0"
     },
     {
       "path": "build-current-owners.mjs",
-      "sha256": "f8cdf049428376b5eb121369504d896353d8be2e8ea251b232d16bcadecf0e46"
+      "sha256": "da0c425efab60c3d643a3d6ed7975f0fba1624552e5370933c980ba5b979b899"
+    },
+    {
+      "path": "build-exact-native-lock-owners.mjs",
+      "sha256": "a1daf48dbde17ae4d44b81d5423bf513d31a08fb7b4cfdd44cd9804bb2f803f9"
     },
     {
       "path": "build-manager-action-owners.mjs",
-      "sha256": "2f3a3d88f3746888b1e1cf6bfa889d7863f2bec3b4d975cc7552e2dd40547cd9"
+      "sha256": "94fe7d31ff579f75ac317f22a87b6502839c1d4ba0697e4a4907559761b9ccfd"
+    },
+    {
+      "path": "build-offline-grammar-inputs.mjs",
+      "sha256": "b8c3e8d817ea13fdc4849da36dd526de57275bbd6fe1b6703aa327c5ee8ffc9c"
     },
     {
       "path": "build-read-checkpoint.mjs",
-      "sha256": "639ab014d44c7501f8fa75d93a8b466dae95c1e2abdfa230a50479fa9b05750a"
+      "sha256": "193e231d82f495806ec6343594483bad4d4f9e7ca767e8380999804fb364996d"
     },
     {
       "path": "build-register-delta.mjs",
@@ -326,15 +358,15 @@
     },
     {
       "path": "build-submission-pause-owner.mjs",
-      "sha256": "99750fa2433ea625b23c15b54df9ca899b720e2a784b3b54ac5fe8597c719266"
+      "sha256": "5bd32934caa0a4cd1f37d041173a38ac625fd47ddd453d126fd516346a9b4366"
     },
     {
       "path": "build-submission-readers.mjs",
-      "sha256": "4f0e2ee9f4a02964bbf9f2f2cf7bb595cab2fe6e13b78acbf3f761374776b852"
+      "sha256": "3dc512d65eb3d39c94d93c3936d396c5bdd42e3ce41d79b319b71b17d1a6d369"
     },
     {
       "path": "build-wip-receipt.mjs",
-      "sha256": "22adc587d804d08e633577304057376c5bb7335dc5b134dd1e24c6744fac6637"
+      "sha256": "38300916cddb62a358a22f944a0a057a098734919bde5162d2208092fc4b9986"
     },
     {
       "path": "runtime/contact-recheck-runtime.mjs",
@@ -353,18 +385,22 @@
       "sha256": "abd04e11e7abe2286748b5da0346a18084a5122fd9a8e1e4fafbd6911e51f2c4"
     },
     {
+      "path": "tests/offline-source-check.py",
+      "sha256": "7e67e18e16eb0de53fb4bae94806b7f3c7af0b4cb72c60b6735cc15f78b19a99"
+    },
+    {
       "path": "tests/runtime-contribution.test.mjs",
       "sha256": "2c07397a89c45c55776e8b7215199680dd2266dd57037b8a36377c91c787eda9"
     }
   ],
-  "sql_statement_count": 305,
-  "private_owner_declarations": 80,
+  "sql_statement_count": 342,
+  "private_owner_declarations": 92,
   "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
   "readonly_row_owner": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
-  "native": "NOT_RUN; managed scanner treats PL/pgSQL bodies as opaque",
+  "native": "NOT_RUN; managed scanner treats PL/pgSQL bodies as opaque; separate exact-input OFFLINE_GRAMMAR_RESULT is grammar/declared-fields only",
   "unfinished": [
     "Actual PostgreSQL/current-contract/native qualification of authored first-activation/cohort/partition/retained-reader successors",
-    "Complete outer Candidate mutation and bounded scheduler contact lock-prefix review",
+    "Complete exact transaction footprint review for nested manager/manual/recheck composition and bounded scheduler lock-prefix selection",
     "Native review of manual mixed initial/followup group ineligibility and actual route grouping/throttle",
     "Complete retained capture/alias/rebase/notification native integrity review and first-use fixture assertions",
     "Root finite current runtime/combined-read/routes/Office/central ACL mount only after complete source review",

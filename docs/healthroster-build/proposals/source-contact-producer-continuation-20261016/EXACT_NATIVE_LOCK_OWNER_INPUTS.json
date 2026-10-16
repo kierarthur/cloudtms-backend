@@ -1,0 +1,30 @@
+{
+  "version": "CONTACT_EXACT_NATIVE_LOCK_OWNERS_V1",
+  "inputs": [
+    {
+      "path": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/03_native_route_prepare.sqlinc",
+      "source_commit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sha256_normalized_lf": "f45a023c20107bec723720e0e4651778e5e7782c57fa159f06da138ff8cc52ff"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/05_native_manager_generation.sqlinc",
+      "source_commit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sha256_normalized_lf": "791cfd405e851c02fbffabcc5c3c84e15f4876885d53a43e783f4b8111b23271"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/06_native_candidate_activation.sqlinc",
+      "source_commit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sha256_normalized_lf": "2f1f36e3782536f237abe0d94d4daedbd8a8f1902202a9c4131f9e3cefb4e64b"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-contact-recomposition-native-20261016/forward/07_native_unsubmitted_recomposition.sqlinc",
+      "source_commit": "18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb",
+      "sha256_normalized_lf": "98e721a035422ae94af1c3e7cf21dcb26130ae70e4e510472d8bcf847f077238"
+    }
+  ],
+  "output": {
+    "path": "forward/42_exact_native_lock_owners.sqlinc",
+    "sha256": "057c359c98c9c2df733237b2bf1a93704df6751937919c07436e0966e478d5b4"
+  },
+  "qualification": "Finite full checkpoint owners; exact generation/intent/route transaction footprints, no cycle-wide history locks for single work; native lock/concurrency qualification NOT_RUN."
+}

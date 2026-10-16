@@ -18,6 +18,7 @@ output=output.slice(0,oldStart)+`  -- Same current deployment and sorted scope p
   -- cohort/request/generation locks. Scope operands are the validated real
   -- Candidate/Client/Contract request members above, never a fake client.
   perform private.weekly_contact_source_submission_lock_v1(v_cycle_id,v_candidate_id,v_scopes,v_publication_id);
+  v_guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
   select * into strict v_contact_group from public.weekly_source_groups where id=(v_guard->>'source_group_id')::uuid;
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
     'weekly-source-import-outreach:'||v_cycle_id::text||':'||v_candidate_id::text,0));
@@ -65,6 +66,14 @@ output=output.slice(0,oldStart)+`  -- Same current deployment and sorted scope p
   if exists(select 1 from public.weekly_timesheet_submission_requests where candidate_cohort_id=v_cohort.id
     and state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')) then
     -- Do not append a new week to an already sent link or restart its clock.
+    raise exception 'CONTACT_SOURCE_SUBMISSION_SCOPE_CONFLICT' using errcode='55000';end if;
+  if exists(select 1 from public.weekly_timesheet_submission_requests request
+    join public.weekly_timesheet_submission_request_memberships member on member.submission_request_id=request.id
+    where request.source_cycle_id=v_cycle_id and request.candidate_id=v_candidate_id
+      and request.state in('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+      and exists(select 1 from jsonb_array_elements(v_scopes)scope where member.client_id=(scope->>'client_id')::uuid)) then
+    -- A legacy A-owned mixed question may already own B's older week. Its
+    -- cohort identity cannot authorize a fresh B question for a new week.
     raise exception 'CONTACT_SOURCE_SUBMISSION_SCOPE_CONFLICT' using errcode='55000';end if;
   v_contact_now:=clock_timestamp();
 `+output.slice(oldEnd);

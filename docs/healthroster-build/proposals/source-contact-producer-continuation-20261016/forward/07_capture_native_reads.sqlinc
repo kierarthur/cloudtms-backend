@@ -173,7 +173,7 @@ begin
   if cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION') then
    followup:=private.weekly_contact_source_manager_followup_state_v1(m.incident_id,p_at);
    if followup->>'reason' is distinct from 'SCHEDULED'
-    or followup->>'mode' is distinct from case when i.tranche_kind='MANAGER_AUTOMATIC_FOLLOWUP' then 'AUTOMATIC' else 'MANUAL' end
+    or followup->>'mode' is distinct from (case when i.tranche_kind='MANAGER_AUTOMATIC_FOLLOWUP' then 'AUTOMATIC' else 'MANUAL' end)
     or(followup->>'due_at_utc')::timestamptz>p_at
     or(followup->>'routine_sequence')::integer is distinct from m.routine_step
     or followup->>'last_accepted_at_utc' is distinct from sealed_fact->'followup_state'->>'last_accepted_at_utc'

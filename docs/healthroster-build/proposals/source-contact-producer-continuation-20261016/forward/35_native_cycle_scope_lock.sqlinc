@@ -1,24 +1,10 @@
 create or replace function private.weekly_contact_source_cycle_lock_v1(p_cycle_id uuid)
-returns void language plpgsql volatile security definer
-set search_path='pg_catalog','public','private','pg_temp'
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
 as $function$
-declare g public.weekly_source_groups%rowtype;pair record;
 begin
- perform private.weekly_source_query_require_service_v1();
- select source_group.* into strict g from public.weekly_source_cycles cycle
- join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id where cycle.id=p_cycle_id;
- perform private.weekly_contact_deployment_lock_v1(g.agency_id,g.environment);
- perform private.weekly_contact_context_v1(g.agency_id,g.environment);
- -- Lock the complete actual native cycle scope set. Closed unrelated history
- -- cannot impose an invented lifetime1000-scope capacity on eligible work.
- for pair in
-  select candidate_id,client_id from public.weekly_candidate_cohorts where source_cycle_id=p_cycle_id
-  union select candidate_id,client_id from public.weekly_discrepancy_incidents where source_cycle_id=p_cycle_id
-  union select r.candidate_id,m.client_id from public.weekly_timesheet_submission_requests r
-   join public.weekly_timesheet_submission_request_memberships m on m.submission_request_id=r.id where r.source_cycle_id=p_cycle_id
-  order by candidate_id,client_id
- loop
-  perform private.weekly_contact_scope_lock_v1(g.agency_id,g.environment,pair.candidate_id,pair.client_id);
- end loop;
+ -- Whole-publication callers only. Single question/render/route entries use
+ -- exact generation/intent/route footprints, never this broader operation.
+ perform private.weekly_contact_source_submission_lock_v1(p_cycle_id,null,'[]',
+  (select current_projection_publication_id from public.weekly_source_cycles where id=p_cycle_id));
 end;
 $function$;

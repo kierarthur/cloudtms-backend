@@ -21,7 +21,7 @@ reminder=once(reminder,`  select * into strict v_generation from public.weekly_c
   perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication_id);
   perform private.weekly_source_office_authority_v1(v_actor,'ASK_CANDIDATES',v_cycle.source_group_id,
     v_generation.client_id,v_cycle.finalisation_week_ending);
-  perform private.weekly_contact_source_submission_lock_v1(v_cycle.id,null,'[]',v_publication_id);
+  perform private.weekly_contact_source_generation_lock_v1(v_generation.id,v_generation.candidate_id);
   -- Original native locking/currentness/authority/cooldown checks revalidate.
   select * into strict v_generation from public.weekly_candidate_outreach_generations
   where id=v_generation_id for update;`);
@@ -58,7 +58,7 @@ submit=once(submit,'  -- SP-12: existing admission only; no producer/version evi
   select * into strict v_generation from public.weekly_candidate_outreach_generations
     where id=p_request_id and candidate_id=v_candidate_id;
   select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
-  perform private.weekly_contact_source_submission_lock_v1(v_cycle.id,null,'[]',v_cycle.current_projection_publication_id);
+  perform private.weekly_contact_source_generation_lock_v1(v_generation.id,v_candidate_id);
   -- SP-12: existing admission only; no producer/version evidence.`);
 const output=(reminder+'\n'+submit).trimEnd()+'\n';
 writeFileSync(path.join(base,'forward/40_candidate_contact_entry_owners.sqlinc'),output);

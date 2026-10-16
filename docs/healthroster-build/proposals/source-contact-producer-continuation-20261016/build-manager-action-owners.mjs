@@ -48,6 +48,14 @@ bulk=once(bulk,`  select * into strict v_cycle from public.weekly_source_cycles
   end if;
   select * into strict v_cycle from public.weekly_source_cycles
   where id=v_cycle_id for update;`);
+bulk=once(bulk,`  if v_action='SEND_MANAGER_NOW' then
+    perform private.weekly_contact_source_manager_action_lock_v1(v_actor,v_cycle_id,v_publication_id,v_filters);
+  elsif v_action='ASK_CANDIDATES' then
+    perform private.weekly_contact_source_submission_lock_v1(v_cycle_id,null,'[]',v_publication_id);
+  end if;`,`  if v_action in('SEND_MANAGER_NOW','ASK_CANDIDATES') then
+    perform private.weekly_contact_source_bulk_lock_v1(jsonb_set(jsonb_set(p_request,'{action}',to_jsonb(v_action)),
+      '{selection}',v_selection||jsonb_build_object('mode',v_mode,'filters',v_filters)));
+  end if;`);
 bulk=once(bulk,'  v_current_version:=private.weekly_source_office_workspace_version_v1(v_cycle_id,v_publication_id);',
  `  if v_action='SEND_MANAGER_NOW' then
     v_manager_action:=private.weekly_contact_source_manager_action_v1(v_actor,v_cycle_id,v_publication_id,v_filters);

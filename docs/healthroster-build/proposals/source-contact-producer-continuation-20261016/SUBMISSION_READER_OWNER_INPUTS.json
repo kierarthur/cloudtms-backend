@@ -68,7 +68,7 @@
   ],
   "output": {
     "path": "forward/38_native_submission_readers.sqlinc",
-    "sha256": "ba34f351c6795f6a32a52e0f13ddbc7dad8b9a7420913d785b821353b7249cac"
+    "sha256": "dccdc8e5843aee7fd6d18e0bebca9ab76a57a9e7691ddd3e1b216b11346861c4"
   },
   "qualification": "Finite complete current Health-owned readers only; native/ABI/concurrency NOT_RUN; original financial/admission bodies preserved except exact request identity operands."
 }

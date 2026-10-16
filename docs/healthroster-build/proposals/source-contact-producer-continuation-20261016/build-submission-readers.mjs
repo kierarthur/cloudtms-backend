@@ -50,7 +50,7 @@ materialise=once(materialise,'  -- SP-12: existing admission only; no producer/v
     select * into strict v_generation from public.weekly_candidate_outreach_generations
       where id=v_candidate_generation_id and candidate_id=v_candidate_id and request_kind=v_kind;
     select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
-    perform private.weekly_contact_source_submission_lock_v1(v_cycle.id,null,'[]',v_projection_publication_id);
+    perform private.weekly_contact_source_generation_lock_v1(v_generation.id,v_candidate_id);
   end if;
   -- SP-12: existing admission only; no producer/version evidence.`);
 materialise=once(materialise,`    where id=v_scope_id and submission_request_id=v_submission.id and state='WAITING'
@@ -68,7 +68,15 @@ compare=once(compare,`    where candidate_cohort_id=v_generation.candidate_cohor
       and candidate_id=v_generation.candidate_id`);outputs.push(compare);
 compare=once(compare,'      and current_projection_publication_id=v_publication.id\n','');
 compare=once(compare,'  perform private.weekly_source_pay_query_admit_v2();',
- `  perform private.weekly_contact_source_submission_lock_v1(v_discovered_cycle_id,null,'[]',p_projection_publication_id);
+ `  if p_candidate_generation_id is not null then
+    perform private.weekly_contact_source_generation_lock_v1(p_candidate_generation_id,
+      (select candidate_id from public.weekly_candidate_outreach_generations where id=p_candidate_generation_id));
+  else
+    perform private.weekly_contact_source_submission_lock_v1(v_discovered_cycle_id,
+      (select candidate_id from public.contracts where id=v_discovered_timesheet.contract_id),
+      jsonb_build_array(jsonb_build_object('client_id',(select client_id from public.contracts where id=v_discovered_timesheet.contract_id))),
+      p_projection_publication_id);
+  end if;
   perform private.weekly_source_pay_query_admit_v2();`);
 compare=once(compare,`    where id=p_membership_id and submission_request_id=v_submission.id
       and state='WAITING'

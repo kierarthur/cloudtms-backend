@@ -14,7 +14,8 @@ begin
  select * into strict source_group from public.weekly_source_groups where id=cycle.source_group_id;
  if(source_group.agency_id,source_group.environment) is distinct from(scope.agency_id,scope.environment) then
   raise exception 'CONTACT_SCOPE_NOT_FOUND' using errcode='42501';end if;
- perform private.weekly_contact_source_submission_lock_v1(cycle.id,null,'[]',cycle.current_projection_publication_id);
+ perform private.weekly_contact_deployment_lock_v1(scope.agency_id,scope.environment);
+ perform private.weekly_contact_context_v1(scope.agency_id,scope.environment);
  select * into strict cycle from public.weekly_source_cycles where id=cycle.id;
  perform private.weekly_source_query_current_publication_v1(cycle.id,cycle.current_projection_publication_id);
  select * into strict publication from public.weekly_source_projection_publications where id=cycle.current_projection_publication_id;
@@ -40,6 +41,8 @@ begin
     and not exists(select 1 from public.weekly_route_activations activation where activation.source_cycle_id=cycle.id
      and activation.candidate_id=scope.candidate_id and activation.client_id=scope.client_id and activation.route_mode='MANAGER_DIRECT')
   )member;
+  perform private.weekly_contact_source_submission_lock_v1(cycle.id,scope.candidate_id,
+   case when jsonb_array_length(scopes)>0 then scopes else jsonb_build_array(jsonb_build_object('client_id',scope.client_id)) end,publication.id);
   if jsonb_array_length(scopes)>0 then
    result:=private.weekly_contact_source_submission_partition_v1(jsonb_build_object('source_cycle_id',cycle.id,
     'projection_publication_id',publication.id,'candidate_id',scope.candidate_id,'scopes',scopes),true);

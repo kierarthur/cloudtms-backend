@@ -32,8 +32,7 @@ begin
     raise exception 'WEEKLY_SOURCE_RENDER_INPUT_REQUEST_INVALID' using errcode='22023';
   end;
   -- Service-owned discovery, then shared pause locks BEFORE the native row locks.
-  perform private.weekly_contact_source_cycle_lock_v1((select source_cycle_id
-    from public.weekly_message_intents where id=v_intent_id));
+  perform private.weekly_contact_source_intent_lock_v1(v_intent_id);
   select * into strict v_intent from public.weekly_message_intents
   where id=v_intent_id and state='DUE';
   perform private.weekly_source_query_current_publication_v1(v_intent.source_cycle_id,v_publication_id);

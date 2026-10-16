@@ -22,6 +22,8 @@ manager=once(manager,' select * into strict v_intent from public.weekly_message_
  end if;`);
 write('20_native_manager_members.sqlinc',manager);
 let input=source(prior+'02_native_render_input.sqlinc',checkpoint);
+input=once(input,`perform private.weekly_contact_source_cycle_lock_v1((select source_cycle_id
+    from public.weekly_message_intents where id=v_intent_id))`,`perform private.weekly_contact_source_intent_lock_v1(v_intent_id)`);
 input=once(input,'    perform private.weekly_contact_source_candidate_render_assert_v1(v_candidate_generation.id);',`    if exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=v_intent.id) then
       if not private.weekly_contact_source_capture_current_v1(v_intent.id,clock_timestamp(),true) then
         raise exception 'WEEKLY_SOURCE_RENDER_MEMBERSHIP_STALE' using errcode='40001';end if;
@@ -33,6 +35,8 @@ input=once(input,'    perform private.weekly_contact_source_candidate_render_ass
 input=once(input,"'membership_hash',pg_catalog.encode(v_candidate_generation.membership_hash,'hex')","'membership_hash',pg_catalog.encode(v_membership_hash,'hex')");
 write('21_native_render_input.sqlinc',input);
 let stage=source(prior+'04_native_render_stage.sqlinc',checkpoint);
+stage=once(stage,`perform private.weekly_contact_source_cycle_lock_v1((select source_cycle_id
+    from public.weekly_message_intents where id=v_intent_id))`,`perform private.weekly_contact_source_intent_lock_v1(v_intent_id)`);
 stage=once(stage,`    perform private.weekly_contact_source_candidate_render_assert_v1(v_candidate_generation.id);
     v_membership_hash:=v_candidate_generation.membership_hash;`,`    if exists(select 1 from public.weekly_contact_source_intent_captures where message_intent_id=v_intent.id) then
       if not private.weekly_contact_source_capture_current_v1(v_intent.id,clock_timestamp(),true) then
@@ -69,9 +73,16 @@ cycleLock=once(cycleLock,'g public.weekly_source_groups%rowtype;pair record;n in
 const countStart=cycleLock.indexOf(' select count(*) into n from('),countEnd=cycleLock.indexOf(' for pair in',countStart);
 if(countStart<0||countEnd<=countStart||!cycleLock.slice(countStart,countEnd).includes("if n>1000 then raise exception 'CONTACT_SOURCE_SCOPE_CAPACITY_EXCEEDED'"))
  throw Error('Exact prior cycle capacity block missing');
-cycleLock=cycleLock.slice(0,countStart)+` -- Lock the complete actual native cycle scope set. Closed unrelated history
- -- cannot impose an invented lifetime1000-scope capacity on eligible work.
-`+cycleLock.slice(countEnd);
+cycleLock=`create or replace function private.weekly_contact_source_cycle_lock_v1(p_cycle_id uuid)
+returns void language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ -- Whole-publication callers only. Single question/render/route entries use
+ -- exact generation/intent/route footprints, never this broader operation.
+ perform private.weekly_contact_source_submission_lock_v1(p_cycle_id,null,'[]',
+  (select current_projection_publication_id from public.weekly_source_cycles where id=p_cycle_id));
+end;
+$function$;\n`;
 write('35_native_cycle_scope_lock.sqlinc',cycleLock);
 let push=extract(source('supabase/repeatable/15102026_0803_candidate_push_dispatch_read_v1.sql'),'private.weekly_contact_push_dispatch_context_v1');
 push=once(push,'and r.candidate_id=v_generation.candidate_id and r.source_cycle_id=v_command.source_cycle_id',

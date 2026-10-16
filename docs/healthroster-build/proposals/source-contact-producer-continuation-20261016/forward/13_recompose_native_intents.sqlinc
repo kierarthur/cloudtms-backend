@@ -9,7 +9,7 @@ declare original public.weekly_message_intents%rowtype;cap public.weekly_contact
  route_id uuid;old_kind text;kind text;manual_request uuid;at_utc timestamptz;event_ids uuid[];member jsonb;receipt_count integer;
 begin
  select * into strict original from public.weekly_message_intents where id=p_intent_id;
- perform private.weekly_contact_source_cycle_lock_v1(original.source_cycle_id);
+ perform private.weekly_contact_source_intent_lock_v1(original.id);
  perform target.id from public.weekly_message_dispatch_targets target join public.weekly_message_dispatch_commands command
   on command.id=target.dispatch_command_id where command.message_intent_id=original.id order by target.id for update of target;
  perform id from public.weekly_message_dispatch_commands where message_intent_id=original.id order by id for update;

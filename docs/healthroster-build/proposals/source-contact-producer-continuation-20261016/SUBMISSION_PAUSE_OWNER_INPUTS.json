@@ -5,7 +5,7 @@
   "source_sha256_normalized_lf": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
   "original_owner_sha256_normalized_lf": "65b0b5cb432b3a0429f59d926bae4ff74f6af5e4bb599c5536a0218e17a503ed",
   "successor_path": "forward/33_native_submission_pause.sqlinc",
-  "successor_sha256": "c5f13e5d5287351988b6c4907a16e45dfe66464954bed4caad765c616ca00d1a",
+  "successor_sha256": "ff8d76ddada432abaa5537a36b3e260e395e76fb437e8f9ea2990c84334677a2",
   "qualification": "SOURCE_ONLY_NOT_FOR_MOUNT_NATIVE_NOT_RUN",
   "unchanged": "Existing signature, same-scope actual UNCHANGED receipt and original hash/clock inputs retained.",
   "owner_delta": "Exact actual business membership lookup; genuine original generation/hash/clocks; no Candidate-wide supersession; per-cohort unique native creation after pause; public success shape unchanged. Private partition is separate internal composition.",

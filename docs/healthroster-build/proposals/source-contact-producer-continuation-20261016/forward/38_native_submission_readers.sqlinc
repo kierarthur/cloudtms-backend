@@ -1092,7 +1092,7 @@ begin
     select * into strict v_generation from public.weekly_candidate_outreach_generations
       where id=v_candidate_generation_id and candidate_id=v_candidate_id and request_kind=v_kind;
     select * into strict v_cycle from public.weekly_source_cycles where id=v_generation.source_cycle_id;
-    perform private.weekly_contact_source_submission_lock_v1(v_cycle.id,null,'[]',v_projection_publication_id);
+    perform private.weekly_contact_source_generation_lock_v1(v_generation.id,v_candidate_id);
   end if;
   -- SP-12: existing admission only; no producer/version evidence.
   if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
@@ -1646,7 +1646,15 @@ begin
       or not(v_publication_i1_context->'root_ids' ? p_timesheet_id::text) then
       raise exception 'WEEKLY_SOURCE_PUBLICATION_SIGNED_ROOT_SET_CHANGED' using errcode='40001'; end if;
   end if;
-  perform private.weekly_contact_source_submission_lock_v1(v_discovered_cycle_id,null,'[]',p_projection_publication_id);
+  if p_candidate_generation_id is not null then
+    perform private.weekly_contact_source_generation_lock_v1(p_candidate_generation_id,
+      (select candidate_id from public.weekly_candidate_outreach_generations where id=p_candidate_generation_id));
+  else
+    perform private.weekly_contact_source_submission_lock_v1(v_discovered_cycle_id,
+      (select candidate_id from public.contracts where id=v_discovered_timesheet.contract_id),
+      jsonb_build_array(jsonb_build_object('client_id',(select client_id from public.contracts where id=v_discovered_timesheet.contract_id))),
+      p_projection_publication_id);
+  end if;
   perform private.weekly_source_pay_query_admit_v2();
   v_family_lock:=private.weekly_source_lock_family_rows_v1(array[p_timesheet_id],null);
   if v_family_lock->>'ok' is distinct from 'true' then
