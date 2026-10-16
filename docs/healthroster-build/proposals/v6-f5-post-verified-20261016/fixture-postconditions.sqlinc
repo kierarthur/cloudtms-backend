@@ -1,0 +1,12 @@
+  perform pg_temp.f5_assert(before_economics=pg_temp.f5_economics(protected_ids),'exact original TS/TF/workflow/approval/component/invoice/document equality');
+  perform pg_temp.f5_assert(protected_ids=(select coalesce(array_agg(t.timesheet_id order by t.timesheet_id),'{}'::uuid[]) from public.timesheets t
+   where t.contract_id in(select value::uuid from jsonb_array_elements_text(auth#>'{fixture_manifest,contract_ids}') value)),'no new native Timesheet');
+  perform pg_temp.f5_assert(not exists(select 1 from public.weekly_source_final_revisions where source_cycle_id=(auth->>'source_cycle_id')::uuid)
+   and not exists(select 1 from public.weekly_source_billing_movements where actual_client_id=actual_client),'no Source final/financial publication');
+  perform pg_temp.f5_assert(not exists(select 1 from public.weekly_source_group_rule_assignments where source_group_id=(auth->>'source_group_id')::uuid and feature_enabled)
+   and private.weekly_source_effective_rule_set_v1(actual_client,(auth->>'source_cycle_id')::uuid) is null,'features and ordinary effective rules remain OFF after native command');
+  perform public.weekly_source_group_rule_feature_set_atomic_v1(jsonb_build_object(
+   'actor_user_id',auth->>'setup_actor_user_id','agency_id',auth->>'agency_id','environment','TEST',
+   'qualification_action','OFF_RULE_CLOSE','source_cycle_id',auth->>'source_cycle_id',
+   'journey_actor_user_id',auth->>'journey_actor_user_id','purpose','SOURCE_FIXTURE_SETUP','reason','F5 rollback journey complete; no operational activation'));
+  insert into f5_owner_proof values ('hold_release',released),('native_seal',sealed),('nonoperational_off_rule_scope',enabled);

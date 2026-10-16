@@ -1,0 +1,50 @@
+{
+  "parser": "pglast v7.20",
+  "database_calls": false,
+  "native": "NOT_RUN",
+  "checks": [
+    {
+      "path": "fixtures/current-past-open-cycle-discovery.sql",
+      "statements": 1,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "path": "fixtures/discovery-parser-only.sql",
+      "statements": 1,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "path": "fixtures/f5-post-verified.sql",
+      "statements": 24,
+      "plpgsql_functions": 6,
+      "inner_sql_expressions": 63,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/06_OFF_RULE_COMMAND.sqlinc",
+      "statements": 2,
+      "plpgsql_functions": 2,
+      "inner_sql_expressions": 125,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "statements": 1,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 22,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "path": "forward/f5-restoration.sqlinc",
+      "statements": 1,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    }
+  ],
+  "failures": []
+}

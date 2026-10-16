@@ -1,0 +1,128 @@
+{
+  "schema_version": "F5_POST_VERIFIED_SOURCE_MANIFEST_V1",
+  "files": [
+    {
+      "path": "F5_ASSERTION_MAP.json",
+      "bytes": 3718,
+      "sha256": "0c4175ae7cd186b52b075078f8a22fd7f1e9bcf869098956a551b2c176d18031"
+    },
+    {
+      "path": "fixture-admission.sqlinc",
+      "bytes": 3878,
+      "sha256": "6db466487aed2206156b6440cb7327f7d447e3f4ef359328fdeb5b1c8c761cb0"
+    },
+    {
+      "path": "fixture-helpers.sqlinc",
+      "bytes": 4368,
+      "sha256": "a5a7ca398ebe37f5d21e12ec6445409dcf0529ce07af59cc4345a54e9e76b022"
+    },
+    {
+      "path": "fixture-postconditions.sqlinc",
+      "bytes": 1673,
+      "sha256": "37fe1ce5cd2a94219a5ee706e780289a4f7cd7021374e6f4dcc265fa23543dae"
+    },
+    {
+      "path": "fixtures/current-past-open-cycle-discovery.sql",
+      "bytes": 2069,
+      "sha256": "86a75d21c63146d46fb9918836d5edda3f03182d461c6ea11925d558f1fa93f6"
+    },
+    {
+      "path": "fixtures/discovery-parser-only.sql",
+      "bytes": 4555,
+      "sha256": "ffde3a2a2de8fc4e9b7a380560e70fbe1a661bf2766cd6f9e0acb4e318e792e5"
+    },
+    {
+      "path": "fixtures/f5-post-verified.sql",
+      "bytes": 21540,
+      "sha256": "f59d1d21587dfa604d95a97b2bb2f2d7af2642feb55c267686ab1bb9b948c3b1"
+    },
+    {
+      "path": "forward/06_OFF_RULE_COMMAND.sqlinc",
+      "bytes": 19102,
+      "sha256": "7daf9acc89cc8cfbb387524d180fd55e2482326e51b4fee6eadccb6a6ee434a8"
+    },
+    {
+      "path": "forward/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "bytes": 5910,
+      "sha256": "db7997e05a36792aa7911f96ebf1d71afaadbfe6ded3ecf07887e4c7a56b2a4f"
+    },
+    {
+      "path": "forward/f5-restoration.sqlinc",
+      "bytes": 7843,
+      "sha256": "4ef25ca2d9ebc83730e712aa09e943a3ed820f7c615e9c4327a50e74f1094e0a"
+    },
+    {
+      "path": "forward/healthroster-f5-native-setup.mjs",
+      "bytes": 11119,
+      "sha256": "3f576f8b9b8bb938ef98a48763cb058b713f774310d043f63c11a72eeda9b007"
+    },
+    {
+      "path": "forward/healthroster-f5-post-verified-gate.mjs",
+      "bytes": 8087,
+      "sha256": "9a9afb25ba2741154bf61d41ab2a84bfd069247fbb19e3d0dc5a95155300968a"
+    },
+    {
+      "path": "forward/healthroster-f5-prepublication.mjs",
+      "bytes": 5695,
+      "sha256": "be4bfe3145cf1e873f566f537262ee3f9601e053ad7d070f447c0dce81bf6526"
+    },
+    {
+      "path": "forward/healthroster-f5-synthetic-fixture.mjs",
+      "bytes": 9442,
+      "sha256": "d9223bcfc5448b9d01636463d60c42312bdd2107ade9881f08d70cfcc9380a66"
+    },
+    {
+      "path": "forward/off-rule-native-proxy.mjs",
+      "bytes": 3685,
+      "sha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef"
+    },
+    {
+      "path": "INTEGRATION.md",
+      "bytes": 14764,
+      "sha256": "9ee787597678918cd1eee47114a43605317c43d5b50fea0b81b6df8eb34ff155"
+    },
+    {
+      "path": "MOUNT_RECIPE.json",
+      "bytes": 6854,
+      "sha256": "aafeef79125b3cbd8454eb9c3150093cea50b174cc3d1a72d6111e851180423c"
+    },
+    {
+      "path": "parse-source.py",
+      "bytes": 1597,
+      "sha256": "b2c45d56dd0ba634bafca3b91ef1ca9228997818d80259e5061e9672e1688805"
+    },
+    {
+      "path": "prepare-proposal.mjs",
+      "bytes": 9768,
+      "sha256": "9905de5d5a68a6312e8405f7faa02c4b085a16aab6b647a6ac84554611d64d3f"
+    },
+    {
+      "path": "proposal.test.mjs",
+      "bytes": 26974,
+      "sha256": "27390bb992c3f7e91446fcd81d52f942ff93878f3622eef494c2face3e293029"
+    },
+    {
+      "path": "QUALIFICATION.json",
+      "bytes": 458,
+      "sha256": "1b5005dec9a137f2723dd13ec2ea46c34251ce2f9911310e4179249441e1ca42"
+    },
+    {
+      "path": "SOURCE_INPUTS.json",
+      "bytes": 9358,
+      "sha256": "d33ccda83f2b697934c39a47d106b3f383929e2b2fbca7d09dcd2b3b36014635"
+    },
+    {
+      "path": "SOURCE_PARSE_RESULT.json",
+      "bytes": 1339,
+      "sha256": "adc00d2309894c682e544e664728966c3f184e82d69aad67970886bd12a9b21b"
+    },
+    {
+      "path": "write-review.mjs",
+      "bytes": 9374,
+      "sha256": "3a94dcb8598f54410da79875ca5fdc5c147ea94c52287973364e9406b2f0e88e"
+    }
+  ],
+  "closure_sha256": "094514a143f48dd9971b1e205f5af3445d1864aed4c705bab74b2d5703498402",
+  "native": "NOT_RUN",
+  "database_calls": false
+}

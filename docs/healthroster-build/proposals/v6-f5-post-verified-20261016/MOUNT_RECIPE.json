@@ -1,0 +1,102 @@
+{
+  "schema_version": "F5_POST_VERIFIED_SOURCE_MOUNT_V1",
+  "source_pin": "269e68075eb522ab4daa26597eb82cbee396e850",
+  "native": "NOT_RUN",
+  "root_only_integration": true,
+  "replacements": [
+    {
+      "target": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "payload": "forward/06_OFF_RULE_COMMAND.sqlinc",
+      "expected_before_sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360",
+      "after_sha256": "7daf9acc89cc8cfbb387524d180fd55e2482326e51b4fee6eadccb6a6ee434a8"
+    },
+    {
+      "target": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "payload": "forward/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "expected_before_sha256": "b400d184f791415db84c1badc31e9aee82fad7601512bfcbd78c267479dc468e",
+      "after_sha256": "db7997e05a36792aa7911f96ebf1d71afaadbfe6ded3ecf07887e4c7a56b2a4f"
+    },
+    {
+      "target": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "payload": "forward/off-rule-native-proxy.mjs",
+      "expected_before_sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579",
+      "after_sha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef"
+    },
+    {
+      "target": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "payload": "fixtures/f5-post-verified.sql",
+      "expected_before_sha256": "f44135e0379b733835591579d02131f270b66a1542f14f71a98b1e7d54b2f531",
+      "after_sha256": "f59d1d21587dfa604d95a97b2bb2f2d7af2642feb55c267686ab1bb9b948c3b1"
+    }
+  ],
+  "additions": [
+    {
+      "target": "scripts/healthroster-f5-native-setup.mjs",
+      "payload": "forward/healthroster-f5-native-setup.mjs",
+      "sha256": "3f576f8b9b8bb938ef98a48763cb058b713f774310d043f63c11a72eeda9b007"
+    },
+    {
+      "target": "scripts/healthroster-f5-post-verified-gate.mjs",
+      "payload": "forward/healthroster-f5-post-verified-gate.mjs",
+      "sha256": "9a9afb25ba2741154bf61d41ab2a84bfd069247fbb19e3d0dc5a95155300968a"
+    },
+    {
+      "target": "scripts/healthroster-f5-prepublication.mjs",
+      "payload": "forward/healthroster-f5-prepublication.mjs",
+      "sha256": "be4bfe3145cf1e873f566f537262ee3f9601e053ad7d070f447c0dce81bf6526"
+    },
+    {
+      "target": "scripts/healthroster-f5-synthetic-fixture.mjs",
+      "payload": "forward/healthroster-f5-synthetic-fixture.mjs",
+      "sha256": "d9223bcfc5448b9d01636463d60c42312bdd2107ade9881f08d70cfcc9380a66"
+    },
+    {
+      "target": "scripts/healthroster-f5-restoration.sql",
+      "payload": "forward/f5-restoration.sqlinc",
+      "sha256": "4ef25ca2d9ebc83730e712aa09e943a3ed820f7c615e9c4327a50e74f1094e0a"
+    }
+  ],
+  "finite_root_edits": [
+    {
+      "target": "scripts/cloudtms-db-release.mjs",
+      "owner": "verificationFilesForMode/runVerifiers + applyManagedRelease caller",
+      "recipe": "Require partitionF5VerificationFiles(release,mode) for agency TEST NEW/UPGRADE. Execute only preVerified in preinstall phase; return verificationFiles only actually run, and mandatory_post_verified_verification_files:[original F5 path], phase REQUIRED_POST_VERIFIED. Pass mandatory postVerified callback using actual psql/root/gitCommit/expectedHash/restoration bytes; preserve all other assertions/order."
+    },
+    {
+      "target": "scripts/cloudtms-managed-release.mjs",
+      "owner": "applyManagedRelease",
+      "recipe": "Require agency TEST postVerified callback before durable application. After the real VERIFIED commit and before return/writer unlock, await postVerified(); propagate failure and retain truthful VERIFIED (existing catch only updates APPLYING). No env/optional skip. Return actual F5 receipt."
+    },
+    {
+      "target": "scripts/cloudtms-auto-test-release.mjs",
+      "owner": "authorityUnchanged before chooseTestDatabaseRoute + before DATABASE_READY",
+      "recipe": "Keep actual pending migration/repeatable/contract/identity guards. Replace raw authority diff admission with assertF5AuthorityCompatibility. Exact authority equality uses original paths plus proxy. Receipt-only normalization must read actual current audit/execution via readF5VerifiedState and use existing ALL_TRACKED proveCommittedSources + assertPostVerifiedReceipt; failure leaves authorityUnchanged=false. Before DATABASE_READY unconditionally await runF5PostVerifiedGate on FULL_UPGRADE, approved component and NO_DATABASE_CHANGE. Save returned f5Gate and databaseRelease{release_id,source_commit:database_source_commit,contract_sha256}. Preserve original artifact upload path/name."
+    },
+    {
+      "target": "scripts/request-test-release.mjs",
+      "owner": "after stage('database',{status:'VERIFIED_OR_EXACT_UNCHANGED',...}) and before first targets for-loop",
+      "recipe": "Unconditionally await loadF5PrepublicationReceipt({root,command,api,gh,run,expectedCommit:sha,expectedContractSha256:canonicalContractHash(current-contract.json)}). Save actual returned receipt/stage before any Worker or Office publication. No dependency/env skip. Existing interruption/guard/publication ordering stays intact."
+    },
+    {
+      "target": "root full-rehearsal constructor and source/current176 census",
+      "owner": "root release harness",
+      "recipe": "F5 path remains registered exactly once in both existing mandatory verifier lists and current census. Preinstall rollback cannot fabricate genuine VERIFIED/catalogue/OFF-rule authority. Record REQUIRED_POST_VERIFIED_NOT_EXECUTABLE_PREINSTALL, mandatory:true, positives_pending:true, provider/runtime:false. This is a required execution phase boundary, not a passed or optional skipped check. Preserve all 16 original safety exclusions and every original F5 positive/negative; actual post-VERIFIED/prepublication pass plus restoration is mandatory."
+    }
+  ],
+  "setup_owner": {
+    "function": "prepareF5NativeSetup({session,actorUserId,sourceGroupId,sourceCycleId,buildAuthorization,turnBackendPid})",
+    "registration": "existing committed setup bundle + recordPostVerifiedEvidence slot weekly_source_protected_test_setup_authorizations",
+    "past_assignment": "existing private.weekly_source_historical_fixture_rule_assign_v1(uuid,jsonb), actual separate native turn lock + future reference + full row hash/native audit",
+    "inputs_required": [
+      "genuine reserved TEST Client/ROSTER group/past open cycle",
+      "actual overlapping fixture Contracts/Candidates",
+      "real current native OFF-rule controls",
+      "real protected owner and separate turn PID",
+      "actual measured/committed/registered authorization"
+    ],
+    "observed_native_fixture_ids": false
+  },
+  "database_calls": false,
+  "features_remain_off": true,
+  "query_checkpoint_unchanged": "2775cfd745c79197ddc9b36d1aac3df8b18a9ec3"
+}

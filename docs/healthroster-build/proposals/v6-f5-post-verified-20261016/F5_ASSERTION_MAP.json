@@ -1,0 +1,109 @@
+{
+  "schema_version": "F5_MANDATORY_ASSERTION_PHASE_MAP_V1",
+  "original_verifier": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+  "original_sha256": "f44135e0379b733835591579d02131f270b66a1542f14f71a98b1e7d54b2f531",
+  "original_positive_and_negative_assertions_retained": true,
+  "mandatory_phase": "POST_VERIFIED_PREPUBLICATION",
+  "preinstall_status": "REQUIRED_POST_VERIFIED_NOT_EXECUTABLE_PREINSTALL",
+  "native_status": "NOT_RUN",
+  "assertions": [
+    {
+      "original": "future fixture date",
+      "mapping": "temporary config date derives from actual native clock; fresh Source XLSX is generated for real past open window",
+      "mandatory": true
+    },
+    {
+      "original": "exact fixture vacancy",
+      "mapping": "same original f551 vacancy",
+      "mandatory": true
+    },
+    {
+      "original": "saved assignment remains OFF",
+      "mapping": "same actual native rule-save/assignment positive",
+      "mandatory": true
+    },
+    {
+      "original": "actual latest release VERIFIED",
+      "mapping": "actual post-VERIFIED release + completed/catalogue owner; never fabricated",
+      "mandatory": true
+    },
+    {
+      "original": "actual stage begin",
+      "mapping": "same native stage-begin through exact registered OFF owner",
+      "mandatory": true
+    },
+    {
+      "original": "actual money evidence stage",
+      "mapping": "same native stage-rows",
+      "mandatory": true
+    },
+    {
+      "original": "actual immutable seal",
+      "mapping": "same native seal",
+      "mandatory": true
+    },
+    {
+      "original": "native stored literal money and real timestamp",
+      "mapping": "same 10000/2002/12002; new parsed source finalisation inside actual cycle window",
+      "mandatory": true
+    },
+    {
+      "original": "WEEKLY_SOURCE_SETTINGS_ADMIN_REQUIRED",
+      "mapping": "same exact negative",
+      "mandatory": true
+    },
+    {
+      "original": "WEEKLY_SOURCE_INVOICE_HOLD_SCOPE_STALE",
+      "mapping": "same exact negative",
+      "mandatory": true
+    },
+    {
+      "original": "native bounded default hold release",
+      "mapping": "same 10000/2000/12000 BILL_AT_NET_PLUS_20",
+      "mandatory": true
+    },
+    {
+      "original": "exact hold replay",
+      "mapping": "same native replay",
+      "mandatory": true
+    },
+    {
+      "original": "WEEKLY_SOURCE_INVOICE_HOLD_RELEASE_REPLAY_CONFLICT",
+      "mapping": "same conflicting replay refusal",
+      "mandatory": true
+    },
+    {
+      "original": "WEEKLY_SOURCE_IMMUTABLE_RECORD",
+      "mapping": "both original UPDATE and DELETE refusals",
+      "mandatory": true
+    },
+    {
+      "original": "two exact source evidence cells; no fee",
+      "mapping": "same M2/N2 cells; fee unmapped",
+      "mandatory": true
+    },
+    {
+      "original": "no fabricated financial producer",
+      "mapping": "same original assertion + actual authorized Client/cycle no final/billing publication",
+      "mandatory": true
+    },
+    {
+      "original": "exact original TS/TF/workflow/approval/component/invoice/document equality",
+      "mapping": "additional actual protected row fingerprint before/after",
+      "mandatory": true
+    },
+    {
+      "original": "no new native Timesheet",
+      "mapping": "additional exact scoped identity equality",
+      "mandatory": true
+    },
+    {
+      "original": "features and ordinary effective rules remain OFF after native command",
+      "mapping": "additional OFF/close/restoration",
+      "mandatory": true
+    }
+  ],
+  "synthetic_source_file": "fresh actual XLSX/parser/adapter output; old Nov1 fixture unchanged historical",
+  "genuine_acceptance": false,
+  "provider_or_runtime_acceptance": false
+}

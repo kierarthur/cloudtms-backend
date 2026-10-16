@@ -1,0 +1,35 @@
+  select * into strict latest from private.cloudtms_database_releases order by started_at_utc desc,release_id desc limit 1;
+  perform pg_temp.f5_assert(latest.status='VERIFIED' and latest.completed_at_utc is not null,'actual latest release VERIFIED');
+  select count(*),jsonb_agg(value)->0 into n,auth
+   from jsonb_array_elements(latest.evidence_json->'weekly_source_protected_test_setup_authorizations') value
+   where value->>'schema_version'='WEEKLY_SOURCE_OFF_RULE_TEST_AUTHORIZATION_V1'
+    and value->>'purpose'='SOURCE_FIXTURE_SETUP'
+    and value->>'source_cycle_id'=(select value#>>'{proof,source_cycle_id}' from f5_generated_input)
+    and value->>'week_ending'=(select value#>>'{proof,week_ending}' from f5_generated_input)
+    and value->'allowed_operations' @> '["weekly_source_upload_stage_begin_atomic_v1","weekly_source_upload_stage_rows_atomic_v1","weekly_source_upload_seal_atomic_v1","weekly_source_invoice_hold_release_atomic_v1"]'::jsonb;
+  perform pg_temp.f5_assert(n=1,'one genuinely registered current F5 OFF_RULE authorization; never manufacture one');
+  auth:=private.weekly_source_rule_qualification_authorization_v1((auth->>'source_cycle_id')::uuid,(auth->>'journey_actor_user_id')::uuid,'SOURCE_FIXTURE_SETUP');
+  perform private.weekly_source_rule_qualification_scope_assert_v1(auth,(auth->>'journey_actor_user_id')::uuid,true);
+  perform pg_temp.f5_assert(exists(select 1 from public.weekly_source_cycles c cross join f5_generated_input g
+   where c.id=(auth->>'source_cycle_id')::uuid and c.source_group_id=(auth->>'source_group_id')::uuid
+    and c.finalisation_week_ending::text=g.value#>>'{proof,week_ending}'
+    and c.cutoff_at_utc=(g.value#>>'{proof,window_end_at_utc}')::timestamptz
+    and (g.value#>>'{proof,finalised_at_utc}')::timestamptz<=c.cutoff_at_utc
+    and (g.value#>>'{proof,finalised_at_utc}')::timestamptz>coalesce((select max(prior.cutoff_at_utc) from public.weekly_source_cycles prior
+      where prior.source_group_id=c.source_group_id and prior.cutoff_at_utc<c.cutoff_at_utc),
+      ((c.cutoff_at_utc at time zone 'Europe/London')-interval '7 days') at time zone 'Europe/London')
+    and c.cutoff_at_utc<clock_timestamp() and c.current_complete_upload_id is null and c.current_projection_publication_id is null
+    and c.current_final_revision_id is null and c.state not in('FINALISING','FINALISED','CORRECTION_IN_PROGRESS')),'actual past open native cycle and exact generated source window');
+  perform pg_temp.f5_assert(jsonb_array_length(auth#>'{fixture_manifest,client_ids}')=1,'one actual authorized Client');
+  actual_client:=(auth#>>'{fixture_manifest,client_ids,0}')::uuid;
+  perform pg_temp.f5_assert(private.weekly_source_effective_rule_set_v1(actual_client,(auth->>'source_cycle_id')::uuid) is null,'actual fixture remains operationally OFF');
+  perform pg_temp.f5_assert((select values_json->>'invoice_amount_basis'='SOURCE_AMOUNT'
+    and values_json->>'source_amount_basis'='EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY'
+    from public.weekly_source_rule_set_versions where id=(auth->>'rule_set_version_id')::uuid),'genuine existing Source-money rule values');
+  select coalesce(array_agg(t.timesheet_id order by t.timesheet_id),'{}'::uuid[]) into protected_ids from public.timesheets t
+   where t.contract_id in(select value::uuid from jsonb_array_elements_text(auth#>'{fixture_manifest,contract_ids}') value);
+  before_economics:=pg_temp.f5_economics(protected_ids);
+  enabled:=public.weekly_source_group_rule_feature_set_atomic_v1(jsonb_build_object(
+   'actor_user_id',auth->>'setup_actor_user_id','agency_id',auth->>'agency_id','environment','TEST',
+   'qualification_action','OFF_RULE_OPEN','source_cycle_id',auth->>'source_cycle_id',
+   'journey_actor_user_id',auth->>'journey_actor_user_id','purpose','SOURCE_FIXTURE_SETUP','reason','F5 mandatory pre-publication rollback positive journey'));

@@ -1,0 +1,219 @@
+{
+  "integrator_commit": "269e68075eb522ab4daa26597eb82cbee396e850",
+  "inputs": [
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "sha256": "b400d184f791415db84c1badc31e9aee82fad7601512bfcbd78c267479dc468e"
+    },
+    {
+      "path": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "sha256": "d3cce691e9beb7b32f22e0749ff31072012b9d3f40aa98e1581a05f69c87806b"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/02_HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "sha256": "ea11961b8fd26f352cd45ee28a2e6582f0781e68ccfef961cdbc5e52b8dad202"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/03_HISTORICAL_FIXTURE_SETUP_ASSERT.sqlinc",
+      "sha256": "62427e8448747206f82c9e533f615d469164b27a9fe0f5dc7e6208b16d948f28"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/04_13_complete_nullable_physical_qualification_scope.sqlinc",
+      "sha256": "230744af317821a507560e02b7cad2d0424a6de8b856cc397ce4a65c5e518433"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/22_POST_VERIFIED_SETUP_ASSERT.sqlinc",
+      "sha256": "0610fc771a322fa11e8cc4c0aca94d0c20a34bf873626aa8926ab0de22f072e0"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/27_POST_VERIFIED_EVIDENCE_RECORD.sqlinc",
+      "sha256": "9f8e8a6448ead46d3d35e539938a6d1b36996d3a39ce8688645d4db806e12238"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/29_11_complete_historical_fixture_native_assignment.sqlinc",
+      "sha256": "c1e8aa26fbea0b47aa4bd800efb5ca293469deb8363c1f51f61645d731b3b5ac"
+    },
+    {
+      "path": "scripts/cloudtms-db-release.mjs",
+      "sha256": "4cbdae6201d5f77205316e5ba0fdb587fbf2bcb2458f5ee13f4e7802709c79e8"
+    },
+    {
+      "path": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "4e4b827621a68011da46b72cbeac40c3b45d23a942b6eff5d0f97966800bde7a"
+    },
+    {
+      "path": "scripts/cloudtms-auto-test-release.mjs",
+      "sha256": "dbf10b0e4cfa4d4229ba30a9c98c24bdff589685283bb8f01d4bbb9a356adc6a"
+    },
+    {
+      "path": "scripts/request-test-release.mjs",
+      "sha256": "c03a773078fd01c73de733658599cc2cd78ca0d0742fe2806657eebfc88d6b75"
+    },
+    {
+      "path": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "path": ".github/workflows/database-release.yml",
+      "sha256": "33b01ad1c92058225d256292c92ab1d0da14ec2b6f4faf3363590f35d636d85c"
+    },
+    {
+      "path": "supabase/release/current-release.json",
+      "sha256": "9eb294e6417d9a30671f3cf5cdad01d58c0e3734947ae63f603e11dd5f92a9cb"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "path": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "sha256": "0641aedaa4e0fad09ad099af5d2294d9db9e624d145c4963dc76fc75c0ba4d61"
+    },
+    {
+      "path": "scripts/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "path": "scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2"
+    },
+    {
+      "path": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "sha256": "9f5ccebf26a9414f9789d98ba4ea9d551ff996df5039fce7ce72bc73666f3a1b"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+    },
+    {
+      "path": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "sha256": "01079224c18c5762c5626fb2924155f3f4cc97714b0670f2b6d9dadb412bb25a"
+    },
+    {
+      "path": "docs/healthroster-build/F5_PRODUCER_FIXTURE.json",
+      "sha256": "1ff454667b45a303b64c5be43611b329b56e8cefe71653b680a4ed7693e06acd"
+    },
+    {
+      "path": "broker/src/weekly-source/index.js",
+      "sha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662"
+    },
+    {
+      "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3"
+    },
+    {
+      "path": "broker/src/weekly-source/source-finalised-time.js",
+      "sha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa"
+    },
+    {
+      "path": "broker/src/weekly-source/healthroster-normalise.js",
+      "sha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698"
+    },
+    {
+      "path": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "sha256": "f44135e0379b733835591579d02131f270b66a1542f14f71a98b1e7d54b2f531"
+    },
+    {
+      "path": "broker/src/weekly-source/errors.js",
+      "sha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a"
+    },
+    {
+      "path": "broker/src/weekly-source/csv-evidence.js",
+      "sha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893"
+    },
+    {
+      "path": "broker/src/weekly-source/shared.js",
+      "sha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204"
+    },
+    {
+      "path": "broker/src/weekly-source/html-evidence.js",
+      "sha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928"
+    },
+    {
+      "path": "broker/src/weekly-source/source-invoice-money.js",
+      "sha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4"
+    },
+    {
+      "path": "broker/src/weekly-source/money.js",
+      "sha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c"
+    },
+    {
+      "path": "broker/src/weekly-source/nhsp-normalise.js",
+      "sha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2"
+    },
+    {
+      "path": "broker/src/weekly-source/roster-summary-normalise.js",
+      "sha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69"
+    },
+    {
+      "path": "broker/src/weekly-source/acacium-report-normalise.js",
+      "sha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88"
+    },
+    {
+      "path": "broker/src/weekly-source/rule-set-validation.js",
+      "sha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6"
+    },
+    {
+      "path": "broker/src/weekly-source/profiles.js",
+      "sha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb"
+    },
+    {
+      "path": "broker/src/weekly-source/xlsx-evidence.js",
+      "sha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a"
+    },
+    {
+      "path": "broker/src/weekly-source/weekly-rate-owner.js",
+      "sha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87"
+    },
+    {
+      "path": "broker/src/weekly-source/source-price-comparator.js",
+      "sha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9"
+    },
+    {
+      "path": "broker/src/weekly-source/economic-snapshot.js",
+      "sha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00"
+    },
+    {
+      "path": "broker/src/weekly-source/protected-target-schedule.js",
+      "sha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a"
+    },
+    {
+      "path": "broker/src/weekly-source/manager-email.js",
+      "sha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03"
+    },
+    {
+      "path": "broker/src/weekly-source/contract-qualification.js",
+      "sha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d"
+    },
+    {
+      "path": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816"
+    },
+    {
+      "path": "broker/src/weekly-source/coverage-warnings.mjs",
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143"
+    }
+  ],
+  "native": "NOT_RUN",
+  "database_calls": false
+}

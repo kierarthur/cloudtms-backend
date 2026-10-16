@@ -1,0 +1,17 @@
+{
+  "schema_version": "F5_SOURCE_QUALIFICATION_V1",
+  "source_tests": {
+    "cases": 30,
+    "passed": 30
+  },
+  "offline_parser": "pglast v7.20 PostgreSQL17",
+  "native": "NOT_RUN",
+  "database_calls": false,
+  "actual_fixture_observations": false,
+  "root_integration": "NOT_MOUNTED",
+  "release": "NOT_RUN",
+  "current_inputs_required": true,
+  "features_operationally_enabled": false,
+  "schedules_changed": false,
+  "query_checkpoint_preserved": true
+}
