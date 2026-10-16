@@ -1,0 +1,241 @@
+-- SOURCE PROPOSAL. NEW protected TEST provenance; not an old Candidate audit.
+-- No relation, ordinary endpoint, trigger bypass, sequence edit or sender.
+create or replace function private.weekly_source_native_fixture_participants_shape_v1(p_auth jsonb,p_execution jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare item jsonb; ids jsonb; key text;
+begin
+  if not private.weekly_source_qualification_closed_object_v1(p_auth,array['schema_version','authorization_id','purpose','setup_actor_user_id',
+    'expires_at_utc','participants','reason','release_id','source_commit','contract_sha256','authorization_sha256'])
+    or p_auth->>'schema_version' is distinct from 'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_V1'
+    or p_auth->>'purpose' is distinct from 'NATIVE_FIXTURE_PARTICIPANTS'
+    or p_execution is distinct from private.weekly_source_protected_qualification_release_v1()
+    or p_auth->>'release_id' is distinct from p_execution->>'release_id'
+    or p_auth->>'source_commit' is distinct from p_execution->>'source_commit'
+    or p_auth->>'contract_sha256' is distinct from p_execution->>'contract_sha256'
+    or p_auth->>'authorization_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_V1',p_auth-'authorization_sha256'),'hex')
+    or exists(select 1 from unnest(array['authorization_id','setup_actor_user_id']) k where coalesce(p_auth->>k,'')
+      !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    or char_length(coalesce(p_auth->>'reason','')) not between 1 and 1000
+    or coalesce(p_auth->>'expires_at_utc','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$'
+    or not private.weekly_source_qualification_closed_object_v1(p_auth->'participants',array['clients','candidates']) then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_INVALID' using errcode='22023'; end if;
+  for key in select unnest(array['clients','candidates']) loop
+    if jsonb_typeof(p_auth#>array['participants',key]) is distinct from 'array'
+      or jsonb_array_length(p_auth#>array['participants',key]) not between 1 and (case key when 'clients' then 4 else 16 end) then
+      raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_INVALID' using errcode='22023'; end if;
+    for item in select value from jsonb_array_elements(p_auth#>array['participants',key]) value loop
+      if not private.weekly_source_qualification_closed_object_v1(item,case key when 'clients' then array['id','name'] else array['id','first_name','last_name'] end)
+        or coalesce(item->>'id','') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        or (key='clients' and (jsonb_typeof(item->'name') is distinct from 'string' or char_length(item->>'name') not between 1 and 160))
+        or (key='candidates' and (jsonb_typeof(item->'first_name') is distinct from 'string' or char_length(item->>'first_name') not between 1 and 80
+          or jsonb_typeof(item->'last_name') is distinct from 'string' or char_length(item->>'last_name') not between 1 and 80)) then
+        raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_INVALID' using errcode='22023'; end if;
+    end loop;
+    select jsonb_agg(id order by id) into ids from(select distinct value->'id' id from jsonb_array_elements(p_auth#>array['participants',key]) value) d;
+    if ids is distinct from (select jsonb_agg(value->'id' order by ord) from jsonb_array_elements(p_auth#>array['participants',key]) with ordinality v(value,ord)) then
+      raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_INVALID' using errcode='22023'; end if;
+  end loop;
+  if exists(select 1 from jsonb_array_elements(p_auth#>'{participants,clients}') c join jsonb_array_elements(p_auth#>'{participants,candidates}') p
+    on c->>'id'=p->>'id') then raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_INVALID' using errcode='22023'; end if;
+  -- Parse the genuine timestamp; no client clock is accepted as a creation clock.
+  perform (p_auth->>'expires_at_utc')::timestamptz;
+exception when invalid_text_representation or datetime_field_overflow or invalid_datetime_format then
+  raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_INVALID' using errcode='22023';
+end;
+$function$;
+
+create or replace function private.weekly_source_native_fixture_participants_artifact_assert_v1(p_auth jsonb,p_execution jsonb)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare receipt jsonb; item jsonb; n integer;
+begin
+  perform private.weekly_source_native_fixture_participants_shape_v1(p_auth,p_execution);
+  perform private._weekly_source_settings_require_admin_v1((p_auth->>'setup_actor_user_id')::uuid);
+  select count(*),jsonb_agg(a.after_json)->0 into n,receipt from public.audit_events a
+    where a.object_type='weekly_source_native_fixture_participants' and a.object_id_text=p_auth->>'authorization_id'
+      and a.action='WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_CREATED' and a.event_sequence_is_authoritative;
+  if n>0 then
+    if n<>1 then raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_REPLAY_CHANGED' using errcode='40001'; end if;
+    for item in select value from jsonb_array_elements(receipt->'client_refs') value loop
+      if not private.weekly_source_test_fixture_reference_v1('CLIENT',(item->>'client_id')::uuid,item->>'cli_ref') then
+        raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_REPLAY_CHANGED' using errcode='40001'; end if;
+    end loop;
+    for item in select value from jsonb_array_elements(receipt->'candidate_refs') value loop
+      if not private.weekly_source_test_fixture_reference_v1('CANDIDATE',(item->>'candidate_id')::uuid,item->>'tms_ref') then
+        raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_REPLAY_CHANGED' using errcode='40001'; end if;
+    end loop;
+    return; -- Existing registered/completed identity only; no renewed admission.
+  end if;
+  if (p_auth->>'expires_at_utc')::timestamptz<=clock_timestamp()
+    or (p_auth->>'expires_at_utc')::timestamptz>clock_timestamp()+interval '1 hour'
+    or exists(select 1 from jsonb_array_elements(p_auth#>'{participants,clients}') p join public.clients c on c.id=(p->>'id')::uuid)
+    or exists(select 1 from jsonb_array_elements(p_auth#>'{participants,candidates}') p join public.candidates c on c.id=(p->>'id')::uuid)
+    or exists(select 1 from jsonb_array_elements(p_auth#>'{participants,clients}') p join public.candidates c on c.id=(p->>'id')::uuid)
+    or exists(select 1 from jsonb_array_elements(p_auth#>'{participants,candidates}') p join public.clients c on c.id=(p->>'id')::uuid)
+    or exists(select 1 from public.audit_events a where a.object_type='weekly_source_native_fixture_participants'
+      and a.object_id_text=p_auth->>'authorization_id' and a.event_sequence_is_authoritative) then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_NOT_VACANT' using errcode='55000'; end if;
+end;
+$function$;
+
+create or replace function private.weekly_source_native_fixture_participants_create_v1(p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)
+returns jsonb language plpgsql volatile security invoker set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare execution jsonb; auth jsonb; item jsonb; made jsonb; receipt jsonb; admitted jsonb;
+  clients jsonb:='[]'::jsonb; candidates jsonb:='[]'::jsonb; r private.cloudtms_database_releases%rowtype;
+  c public.clients%rowtype; p public.candidates%rowtype; n integer;
+  mutex bigint:=hashtextextended('cloudtms_database_release_admission_v1',0);
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  perform private._weekly_source_settings_require_admin_v1(p_actor_user_id);
+  if p_authorization_id is null or p_turn_backend_pid is null or not exists(select 1 from pg_locks l where l.locktype='advisory' and l.granted
+    and l.mode='ExclusiveLock' and l.pid=pg_backend_pid() and l.database=(select oid from pg_database where datname=current_database())
+    and l.objsubid=1 and l.classid=((mutex>>32)&4294967295)::oid and l.objid=(mutex&4294967295)::oid)
+    or not exists(select 1 from pg_locks l where l.locktype='advisory' and l.granted and l.mode='ExclusiveLock'
+      and l.database=(select oid from pg_database where datname=current_database()) and l.pid=p_turn_backend_pid and l.pid<>pg_backend_pid()
+      and l.classid=20261013::oid and l.objid=1::oid and l.objsubid=2) then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_OWNED_MUTEX_REQUIRED' using errcode='55000'; end if;
+  execution:=private.weekly_source_protected_qualification_release_v1();
+  select * into strict r from private.cloudtms_database_releases where release_id=execution->>'release_id' for update;
+  select value into strict auth from jsonb_array_elements(r.evidence_json->'weekly_source_protected_test_setup_authorizations') value
+    where value->>'schema_version'='WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_V1' and value->>'authorization_id'=p_authorization_id::text;
+  perform private.weekly_source_native_fixture_participants_shape_v1(auth,execution);
+  if auth->>'setup_actor_user_id' is distinct from p_actor_user_id::text or not exists(select 1 from public.audit_events a
+    where a.object_type='weekly_source_post_verified_evidence' and a.object_id_text=r.release_id
+      and a.action='WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECORDED' and a.actor_user_id=p_actor_user_id and a.event_sequence_is_authoritative
+      and a.after_json->'execution'=execution and a.after_json->>'artifact_slot'='weekly_source_protected_test_setup_authorizations'
+      and a.after_json->'artifacts' @> jsonb_build_array(auth)) then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_REGISTERED_ADMISSION_REQUIRED' using errcode='42501'; end if;
+  select count(*),jsonb_agg(a.after_json)->0 into n,receipt from public.audit_events a
+    where a.object_type='weekly_source_native_fixture_participants' and a.object_id_text=p_authorization_id::text
+      and a.action='WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_CREATED' and a.event_sequence_is_authoritative and a.actor_user_id=p_actor_user_id;
+  if n>0 then
+    if n<>1 or receipt->'execution' is distinct from execution or receipt->>'authorization_sha256' is distinct from auth->>'authorization_sha256'
+      or receipt->>'receipt_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_RECEIPT_V1',receipt-'receipt_sha256'),'hex') then
+      raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_REPLAY_CHANGED' using errcode='40001'; end if;
+    for item in select value from jsonb_array_elements(receipt->'client_refs') value loop
+      if not private.weekly_source_test_fixture_reference_v1('CLIENT',(item->>'client_id')::uuid,item->>'cli_ref') then
+        raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_REPLAY_CHANGED' using errcode='40001'; end if;
+    end loop;
+    for item in select value from jsonb_array_elements(receipt->'candidate_refs') value loop
+      if not private.weekly_source_test_fixture_reference_v1('CANDIDATE',(item->>'candidate_id')::uuid,item->>'tms_ref') then
+        raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_REPLAY_CHANGED' using errcode='40001'; end if;
+    end loop;
+    return receipt; -- Exact existing result; never another INSERT or clock.
+  end if;
+  perform private.weekly_source_native_fixture_participants_artifact_assert_v1(auth,execution);
+  -- New truthful provenance, not fabricated CLIENT_CREATED/CANDIDATE_CREATED history.
+  admitted:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_ADMISSION_V1','execution',execution,
+    'authorization_sha256',auth->>'authorization_sha256','participants',auth->'participants','before_vacant',true,
+    'actor_user_id',p_actor_user_id,'backend_pid',pg_backend_pid(),'transaction_id',pg_current_xact_id()::text,
+    'turn_backend_pid',p_turn_backend_pid,'admitted_at_utc',clock_timestamp());
+  perform public._audit_insert('weekly_source_native_fixture_participants',p_authorization_id::text,
+    'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_ADMITTED',null,admitted,auth->>'reason',p_actor_user_id);
+  for item in select value from jsonb_array_elements(auth#>'{participants,clients}') value loop
+    made:=public.client_create_with_settings_v1((item->>'id')::uuid,jsonb_build_object('name',item->>'name'),p_actor_user_id,'{}'::jsonb,transaction_timestamp());
+    if made->'replay' is distinct from 'false'::jsonb then
+      raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_NOT_VACANT' using errcode='55000'; end if;
+    select * into strict c from public.clients where id=(item->>'id')::uuid;
+    if c.cli_ref is null or c.cli_ref !~ '^CLI-[0-9]+$' then raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_REFERENCE_INVALID' using errcode='55000'; end if;
+    clients:=clients||jsonb_build_array(jsonb_build_object('client_id',c.id,'cli_ref',c.cli_ref,'created_at',c.created_at,
+      'client_settings_id',made#>'{client_settings,id}','native_row',to_jsonb(c)));
+  end loop;
+  for item in select value from jsonb_array_elements(auth#>'{participants,candidates}') value loop
+    -- Same actual native table/default/ref/hooks as Office POST. Optional Office
+    -- job-title/alias assignment paths are absent by this CLOSED constructor.
+    insert into public.candidates(id,first_name,last_name,key_norm,job_title_id)
+      values((item->>'id')::uuid,item->>'first_name',item->>'last_name',null,null) returning * into p;
+    if p.tms_ref is null or p.tms_ref !~ '^CCR-[0-9]+$' or p.key_norm is not null or p.job_title_id is not null or p.nhsp_hr_name_aliases<>'[]'::jsonb then
+      raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_REFERENCE_INVALID' using errcode='55000'; end if;
+    candidates:=candidates||jsonb_build_array(jsonb_build_object('candidate_id',p.id,'tms_ref',p.tms_ref,'created_at',p.created_at,'native_row',to_jsonb(p)));
+  end loop;
+  receipt:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_RECEIPT_V1','execution',execution,
+    'authorization_id',p_authorization_id,'authorization_sha256',auth->>'authorization_sha256','actor_user_id',p_actor_user_id,
+    'admission',admitted,'client_refs',clients,'candidate_refs',candidates,'completed_at_utc',clock_timestamp());
+  if (receipt->>'completed_at_utc')::timestamptz>(auth->>'expires_at_utc')::timestamptz then
+    raise exception 'WEEKLY_SOURCE_NATIVE_FIXTURE_ADMISSION_EXPIRED' using errcode='55000'; end if;
+  receipt:=receipt||jsonb_build_object('receipt_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_RECEIPT_V1',receipt),'hex'));
+  perform public._audit_insert('weekly_source_native_fixture_participants',p_authorization_id::text,
+    'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_CREATED',null,receipt,auth->>'reason',p_actor_user_id);
+  return receipt;
+end;
+$function$;
+
+create or replace function private.weekly_source_test_fixture_reference_v1(p_kind text,p_id uuid,p_ref text)
+returns boolean language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare execution jsonb; auth jsonb; a public.audit_events%rowtype; receipt jsonb; item jsonb; actual jsonb; n integer;
+begin
+  if current_database()<>'cloudtms_test_clone' then return false; end if;
+  if p_kind='CLIENT' then
+    select jsonb_build_object('id',c.id,'ref',c.cli_ref,'created_at',c.created_at) into actual from public.clients c where c.id=p_id and c.cli_ref=p_ref;
+    if actual is null then return false; end if;
+    if p_ref ~ '^CLI-913013[0-9]{2}$' then return true; end if;
+    if p_ref !~ '^CLI-[0-9]+$' then return false; end if;
+  elsif p_kind='CANDIDATE' then
+    select jsonb_build_object('id',c.id,'ref',c.tms_ref,'created_at',c.created_at) into actual from public.candidates c where c.id=p_id and c.tms_ref=p_ref;
+    if actual is null then return false; end if;
+    if p_ref ~ '^CCR-913013[0-9]{2}$' then return true; end if;
+    if p_ref !~ '^CCR-[0-9]+$' then return false; end if;
+  else return false; end if;
+  execution:=private.weekly_source_protected_qualification_release_v1();
+  for auth in select value from private.cloudtms_database_releases r cross join lateral
+    jsonb_array_elements(r.evidence_json->'weekly_source_protected_test_setup_authorizations') value
+    where r.release_id=execution->>'release_id' and value->>'schema_version'='WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_V1' loop
+    perform private.weekly_source_native_fixture_participants_shape_v1(auth,execution);
+    if exists(select 1 from jsonb_array_elements(auth#>array['participants',case p_kind when 'CLIENT' then 'clients' else 'candidates' end]) p
+      where p->>'id'=p_id::text) then
+      select count(*) into n from public.audit_events event where event.object_type='weekly_source_native_fixture_participants'
+        and event.object_id_text=auth->>'authorization_id' and event.action='WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_CREATED'
+        and event.event_sequence_is_authoritative;
+      if n<>1 then return false; end if;
+      select * into strict a from public.audit_events event where event.object_type='weekly_source_native_fixture_participants'
+        and event.object_id_text=auth->>'authorization_id' and event.action='WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_CREATED' and event.event_sequence_is_authoritative;
+      receipt:=a.after_json;
+      if a.actor_user_id::text is distinct from auth->>'setup_actor_user_id' or receipt->'execution' is distinct from execution
+        or receipt->>'authorization_sha256' is distinct from auth->>'authorization_sha256'
+        or receipt->>'receipt_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+          'WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_RECEIPT_V1',receipt-'receipt_sha256'),'hex')
+        or receipt#>'{admission,before_vacant}' is distinct from 'true'::jsonb
+        or receipt#>'{admission,participants}' is distinct from auth->'participants'
+        or receipt#>>'{admission,actor_user_id}' is distinct from a.actor_user_id::text
+        or (receipt->>'completed_at_utc')::timestamptz>(auth->>'expires_at_utc')::timestamptz
+        or not exists(select 1 from public.audit_events event where event.object_type='weekly_source_native_fixture_participants'
+          and event.object_id_text=auth->>'authorization_id' and event.action='WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_ADMITTED'
+          and event.actor_user_id=a.actor_user_id and event.event_sequence_is_authoritative and event.event_sequence<a.event_sequence
+          and event.after_json=receipt->'admission')
+        or not exists(select 1 from public.audit_events event where event.object_type='weekly_source_post_verified_evidence'
+          and event.object_id_text=execution->>'release_id' and event.action='WEEKLY_SOURCE_POST_VERIFIED_EVIDENCE_RECORDED'
+          and event.actor_user_id=a.actor_user_id and event.event_sequence_is_authoritative and event.event_sequence<a.event_sequence
+          and event.after_json->'execution'=execution and event.after_json->>'artifact_slot'='weekly_source_protected_test_setup_authorizations'
+          and event.after_json->'artifacts' @> jsonb_build_array(auth)) then return false; end if;
+      select value into strict item from jsonb_array_elements(receipt->case p_kind when 'CLIENT' then 'client_refs' else 'candidate_refs' end) value
+        where value->>case p_kind when 'CLIENT' then 'client_id' else 'candidate_id' end=p_id::text;
+      if p_kind='CLIENT' and not exists(select 1 from public.audit_events e where e.object_type='client' and e.object_id_text=p_id::text
+        and e.action='CLIENT_CREATED_WITH_SETTINGS' and e.actor_user_id=a.actor_user_id and e.event_sequence_is_authoritative
+        and e.event_sequence<a.event_sequence and e.after_json->>'client_ref'=p_ref
+        and e.after_json->'client_settings_id'=item->'client_settings_id'
+        and e.correlation_id='client-create-with-settings:'||p_id::text
+        and exists(select 1 from public.audit_events admitted where admitted.object_type='weekly_source_native_fixture_participants'
+          and admitted.object_id_text=auth->>'authorization_id' and admitted.action='WEEKLY_SOURCE_NATIVE_FIXTURE_PARTICIPANTS_ADMITTED'
+          and admitted.event_sequence_is_authoritative and admitted.after_json=receipt->'admission' and admitted.event_sequence<e.event_sequence)) then
+        return false; end if;
+      return actual=jsonb_build_object('id',p_id,'ref',item->case p_kind when 'CLIENT' then 'cli_ref' else 'tms_ref' end,'created_at',item->'created_at');
+    end if;
+  end loop;
+  return false;
+end;
+$function$;
+
+alter function private.weekly_source_native_fixture_participants_shape_v1(jsonb,jsonb) owner to postgres;
+alter function private.weekly_source_native_fixture_participants_artifact_assert_v1(jsonb,jsonb) owner to postgres;
+alter function private.weekly_source_native_fixture_participants_create_v1(uuid,uuid,integer) owner to postgres;
+alter function private.weekly_source_test_fixture_reference_v1(text,uuid,text) owner to postgres;
+revoke all on function private.weekly_source_native_fixture_participants_shape_v1(jsonb,jsonb),
+  private.weekly_source_native_fixture_participants_artifact_assert_v1(jsonb,jsonb),
+  private.weekly_source_native_fixture_participants_create_v1(uuid,uuid,integer),
+  private.weekly_source_test_fixture_reference_v1(text,uuid,text) from public,anon,authenticated,service_role;

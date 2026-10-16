@@ -1,0 +1,222 @@
+{
+  "qualification": "SOURCE_SCHEMA_ONLY_NATIVE_NOT_RUN",
+  "checks": [
+    {
+      "file": "forward/001_native_participants.sqlinc",
+      "relation": "public.candidates",
+      "insert_columns": [
+        "id",
+        "first_name",
+        "last_name",
+        "key_norm",
+        "job_title_id"
+      ],
+      "current_contract_columns_pass": true
+    },
+    {
+      "file": "forward/001_native_participants.sqlinc",
+      "function": "create or replace function private.weekly_source_native_fixture_participants_create_v1(p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)",
+      "rowvar": "r",
+      "relation": "private.cloudtms_database_releases",
+      "fields": [
+        "evidence_json",
+        "release_id"
+      ],
+      "evidence": "Exact existing0430/27 owner uses same private release row/fields; private managed relation outside public contract relation export.",
+      "pass": true
+    },
+    {
+      "file": "forward/001_native_participants.sqlinc",
+      "function": "create or replace function private.weekly_source_native_fixture_participants_create_v1(p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)",
+      "rowvar": "c",
+      "relation": "public.clients",
+      "fields": [
+        "cli_ref",
+        "created_at",
+        "id"
+      ],
+      "evidence": "current-contract relation columns",
+      "pass": true
+    },
+    {
+      "file": "forward/001_native_participants.sqlinc",
+      "function": "create or replace function private.weekly_source_native_fixture_participants_create_v1(p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)",
+      "rowvar": "p",
+      "relation": "public.candidates",
+      "fields": [
+        "created_at",
+        "id",
+        "job_title_id",
+        "key_norm",
+        "nhsp_hr_name_aliases",
+        "tms_ref"
+      ],
+      "evidence": "current-contract relation columns",
+      "pass": true
+    },
+    {
+      "file": "forward/001_native_participants.sqlinc",
+      "function": "create or replace function private.weekly_source_test_fixture_reference_v1(p_kind text,p_id uuid,p_ref text)",
+      "rowvar": "a",
+      "relation": "public.audit_events",
+      "fields": [
+        "actor_user_id",
+        "after_json",
+        "event_sequence"
+      ],
+      "evidence": "current-contract relation columns",
+      "pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "function": "create or replace function private.weekly_source_native_fixture_source_artifact_assert_v1(p_auth jsonb,p_execution jsonb)",
+      "rowvar": "client",
+      "relation": "public.clients",
+      "fields": [
+        "cli_ref",
+        "id"
+      ],
+      "evidence": "current-contract relation columns",
+      "pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "function": "create or replace function private.weekly_source_native_fixture_source_artifact_assert_v1(p_auth jsonb,p_execution jsonb)",
+      "rowvar": "k",
+      "relation": "public.contracts",
+      "fields": [
+        "candidate_id",
+        "client_id",
+        "end_date",
+        "id",
+        "no_timesheet_required",
+        "self_bill",
+        "start_date",
+        "weekly_timesheet_source"
+      ],
+      "evidence": "current-contract relation columns",
+      "pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "relation": "public.weekly_source_groups",
+      "insert_columns": [
+        "id",
+        "environment",
+        "agency_id",
+        "code",
+        "display_name",
+        "source_family",
+        "timezone",
+        "cutoff_weekday",
+        "cutoff_local_time",
+        "active",
+        "updated_by_user_id"
+      ],
+      "current_contract_columns_pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "relation": "public.weekly_source_group_clients",
+      "insert_columns": [
+        "id",
+        "source_group_id",
+        "client_id",
+        "valid_from",
+        "valid_to",
+        "created_by_user_id"
+      ],
+      "current_contract_columns_pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "relation": "public.weekly_source_client_policies",
+      "insert_columns": [
+        "id",
+        "client_id",
+        "source_group_id",
+        "effective_from",
+        "effective_to",
+        "created_by_user_id",
+        "authority_mode",
+        "document_mode",
+        "self_bill_enabled",
+        "self_bill_correction_presentation",
+        "source_fixed_expenses_enabled",
+        "source_expense_vat_enabled",
+        "candidate_queries_enabled",
+        "manager_queries_enabled",
+        "completed_pack_copy_enabled"
+      ],
+      "current_contract_columns_pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "relation": "public.weekly_source_cycles",
+      "insert_columns": [
+        "id",
+        "source_group_id",
+        "scope_client_id",
+        "finalisation_week_ending",
+        "cutoff_at_utc",
+        "state",
+        "version",
+        "projection_state"
+      ],
+      "current_contract_columns_pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "function": "create or replace function private.weekly_source_native_fixture_source_create_v1(p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)",
+      "rowvar": "r",
+      "relation": "private.cloudtms_database_releases",
+      "fields": [
+        "evidence_json",
+        "release_id"
+      ],
+      "evidence": "Exact existing0430/27 owner uses same private release row/fields; private managed relation outside public contract relation export.",
+      "pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "function": "create or replace function private.weekly_source_native_fixture_source_create_v1(p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)",
+      "rowvar": "g",
+      "relation": "public.weekly_source_groups",
+      "fields": [
+        "cutoff_local_time",
+        "cutoff_weekday",
+        "id",
+        "timezone"
+      ],
+      "evidence": "current-contract relation columns",
+      "pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "function": "create or replace function private.weekly_source_native_fixture_source_create_v1(p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)",
+      "rowvar": "c",
+      "relation": "public.weekly_source_cycles",
+      "fields": [],
+      "evidence": "current-contract relation columns",
+      "pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "function": "create or replace function private.weekly_source_native_fixture_source_create_v1(p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)",
+      "rowvar": "member",
+      "relation": "public.weekly_source_group_clients",
+      "fields": [],
+      "evidence": "current-contract relation columns",
+      "pass": true
+    },
+    {
+      "file": "forward/002_source_metadata.sqlinc",
+      "function": "create or replace function private.weekly_source_native_fixture_source_create_v1(p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)",
+      "rowvar": "policy",
+      "relation": "public.weekly_source_client_policies",
+      "fields": [],
+      "evidence": "current-contract relation columns",
+      "pass": true
+    }
+  ]
+}

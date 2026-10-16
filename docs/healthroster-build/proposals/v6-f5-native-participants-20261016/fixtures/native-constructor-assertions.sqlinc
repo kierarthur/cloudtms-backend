@@ -1,0 +1,81 @@
+-- NOT_RUN. Install only inside the real protected owner's rollback transaction.
+-- Parameters MUST be actual committed + post-VERIFIED registered plans with
+-- presently vacant IDs, real active actor and separate actual turn-lock PID.
+-- Run PARTICIPANTS and SOURCE_METADATA separately at their genuine phase.
+-- No fake release, controls, audit, approval, upload, signature or provider.
+create or replace function pg_temp.f5_native_business_fingerprint_v1()
+returns jsonb language plpgsql stable security invoker set search_path='pg_catalog','pg_temp'
+as $function$
+declare relation_name text; signature text; result jsonb:='{}'::jsonb;
+begin
+  foreach relation_name in array array['timesheets','timesheets_financials','timesheet_evidence','invoices','invoice_lines',
+    'invoice_document_assets','invoice_document_versions','candidate_submission_workflows','candidate_submission_components',
+    'candidate_expense_components','candidate_expense_component_events'] loop
+    -- Full actual rows, including locks/status/IDs/amounts/keys. No selective
+    -- money equality or omission of immutable invoice/document/evidence rows.
+    execute format('select encode(private.weekly_source_sha256_jsonb_v1(''F5_NATIVE_UNCHANGED_BUSINESS_V1'',coalesce(jsonb_agg(row_json order by row_json::text),''[]''::jsonb)),''hex'') from (select to_jsonb(t) row_json from public.%I t) rows',relation_name)
+      into signature;
+    result:=result||jsonb_build_object(relation_name,signature);
+  end loop;
+  return result;
+end;
+$function$;
+
+create or replace function pg_temp.f5_native_constructor_assertions_v1(p_kind text,p_actor_user_id uuid,p_authorization_id uuid,p_turn_backend_pid integer)
+returns jsonb language plpgsql volatile security invoker set search_path='pg_catalog','pg_temp'
+as $function$
+declare before_rows jsonb; first_receipt jsonb; replay_receipt jsonb; auth jsonb; item jsonb; n integer; state_before jsonb; state_after jsonb;
+begin
+  perform private.weekly_source_protected_qualification_owner_v1();
+  if p_kind not in ('PARTICIPANTS','SOURCE_METADATA') then raise exception 'F5_GENUINE_CONSTRUCTOR_INPUT_REQUIRED';end if;
+  before_rows:=pg_temp.f5_native_business_fingerprint_v1();
+  if p_kind='PARTICIPANTS' then
+    first_receipt:=private.weekly_source_native_fixture_participants_create_v1(p_actor_user_id,p_authorization_id,p_turn_backend_pid);
+    replay_receipt:=private.weekly_source_native_fixture_participants_create_v1(p_actor_user_id,p_authorization_id,p_turn_backend_pid);
+    select value into strict auth from private.cloudtms_database_releases r cross join lateral
+      jsonb_array_elements(r.evidence_json->'weekly_source_protected_test_setup_authorizations') value
+      where r.release_id=first_receipt#>>'{execution,release_id}' and value->>'authorization_id'=p_authorization_id::text;
+    for item in select value from jsonb_array_elements(first_receipt->'client_refs') value loop
+      if not private.weekly_source_test_fixture_reference_v1('CLIENT',(item->>'client_id')::uuid,item->>'cli_ref')
+        or (item->>'created_at')::timestamptz<>transaction_timestamp() then raise exception 'F5_CLIENT_NATIVE_CREATION_NOT_PROVED';end if;
+    end loop;
+    for item in select value from jsonb_array_elements(first_receipt->'candidate_refs') value loop
+      if not private.weekly_source_test_fixture_reference_v1('CANDIDATE',(item->>'candidate_id')::uuid,item->>'tms_ref')
+        or (item->>'created_at')::timestamptz<>transaction_timestamp() then raise exception 'F5_CANDIDATE_NATIVE_CREATION_NOT_PROVED';end if;
+    end loop;
+    begin
+      perform private.weekly_source_native_fixture_participants_create_v1(p_actor_user_id,p_authorization_id,null);
+      raise exception 'F5_MISSING_TURN_ACCEPTED';
+    exception when sqlstate '55000' then null;end;
+  else
+    first_receipt:=private.weekly_source_native_fixture_source_create_v1(p_actor_user_id,p_authorization_id,p_turn_backend_pid);
+    replay_receipt:=private.weekly_source_native_fixture_source_create_v1(p_actor_user_id,p_authorization_id,p_turn_backend_pid);
+    if first_receipt#>>'{native_rows,cycle,state}'<>'OPEN'
+      or first_receipt#>'{native_rows,cycle,current_complete_upload_id}' is distinct from 'null'::jsonb
+      or first_receipt#>'{native_rows,cycle,current_projection_publication_id}' is distinct from 'null'::jsonb
+      or first_receipt#>'{native_rows,cycle,current_final_revision_id}' is distinct from 'null'::jsonb
+      or (first_receipt#>>'{native_rows,cycle,created_at_utc}')::timestamptz<>transaction_timestamp()
+      or (first_receipt#>>'{native_rows,cycle,cutoff_at_utc}')::timestamptz>=clock_timestamp()
+      or exists(select 1 from public.weekly_source_group_rule_assignments a
+        where a.source_group_id=(first_receipt#>>'{native_rows,group,id}')::uuid and a.feature_enabled)
+      or exists(select 1 from public.weekly_source_uploads u where u.source_cycle_id=(first_receipt#>>'{native_rows,cycle,id}')::uuid) then
+      raise exception 'F5_PAST_METADATA_NATIVE_CREATION_NOT_PROVED';end if;
+    begin
+      perform private.weekly_source_native_fixture_source_create_v1(p_actor_user_id,p_authorization_id,null);
+      raise exception 'F5_MISSING_TURN_ACCEPTED';
+    exception when sqlstate '55000' then null;end;
+  end if;
+  if first_receipt is distinct from replay_receipt then raise exception 'F5_CONSTRUCTOR_REPLAY_CHANGED';end if;
+  if pg_temp.f5_native_business_fingerprint_v1() is distinct from before_rows then raise exception 'F5_EXISTING_BUSINESS_ROWS_CHANGED';end if;
+  if private.weekly_source_test_fixture_reference_v1('CLIENT',gen_random_uuid(),'CLI-12345')
+    or private.weekly_source_test_fixture_reference_v1('CANDIDATE',gen_random_uuid(),'CCR-12345') then
+    raise exception 'F5_UNREGISTERED_NATIVE_REFERENCE_ACCEPTED';end if;
+  if exists(select 1 from unnest(array['anon','authenticated','service_role']) role_name cross join unnest(array[
+    'private.weekly_source_native_fixture_participants_create_v1(uuid,uuid,integer)',
+    'private.weekly_source_native_fixture_source_create_v1(uuid,uuid,integer)']) signature
+    where has_function_privilege(role_name,signature,'EXECUTE')) then raise exception 'F5_NATIVE_CONSTRUCTOR_ACL_EXPOSED';end if;
+  return jsonb_build_object('schema_version','F5_NATIVE_FIXTURE_CONSTRUCTOR_SQL_ASSERTIONS_V1','kind',p_kind,
+    'execution',first_receipt->'execution','actual_receipt',first_receipt,'business_before',before_rows,'business_after',pg_temp.f5_native_business_fingerprint_v1(),
+    'qualification','SQL_ONLY_PENDING_OUTER_ROLLBACK_AND_FRESH_RESTORATION','provider_or_runtime_acceptance',false);
+end;
+$function$;

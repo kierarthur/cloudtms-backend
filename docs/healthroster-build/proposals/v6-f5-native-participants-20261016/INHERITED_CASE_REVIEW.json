@@ -1,0 +1,14 @@
+{
+  "qualification": "OFFLINE_COMPLETE_EXACT_FUNCTION_GRAMMAR_ONLY",
+  "native": "NOT_RUN",
+  "routine": "private.weekly_source_rule_qualification_authorization_v1",
+  "preimage_commit": "3b9f5ab8cf5ed3bc93f3075f1f0b92483be3ad9c",
+  "old_error": "syntax error at end of input",
+  "only_change": "two CASE grouping parentheses",
+  "new_plpgsql_body_count": 1,
+  "equals_current_root_function": true,
+  "before_sha256_lf": "a5f389867532acbe0a2b43d1fdb99f0166653d09d2a4d226a5a10e1158a281f7",
+  "after_sha256_lf": "1712ec3d92197e7c8f8607cbef71589df6fa11507c2be405aeb0e8f5555a10a3",
+  "root_complete_01_sha256_lf": "bea5502f430a3933d3b0101a4c3e6a0fc759c4723c754233f2e2d06154076250",
+  "owner": "Root already corrected current repeatable; do not mount duplicate function from this proposal."
+}

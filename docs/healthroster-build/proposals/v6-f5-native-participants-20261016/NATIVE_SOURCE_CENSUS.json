@@ -1,0 +1,1495 @@
+{
+  "version": "NATIVE_FIXTURE_PARTICIPANTS_SOURCE_CENSUS_V1",
+  "native": "NOT_RUN",
+  "owners": {
+    "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql": "114fe1b3f66d44d45a7328e242f859bb1cc561203fd506e596cc9b45f5e8609d",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_03.sql": "189e041dd8158ff4841034ae6493b8be435d0fb2ab531f5f546cda1e3fc7a651",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_15.sql": "b8ac04a57624f2570ae1eb579e4631e58e96c73e2bc7bcf9b7afda5a7de0a1a7",
+    "supabase/repeatable/04102026_0555_banking_pay_next_factual_legacy_projection_boundary_v1.sql": "eba6b3596434aa6eecf133594579fb7833a7e3acdbe7d6fbd3676fbfb913db86",
+    "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c",
+    "supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql": "d9e466855f0c35fbb8fe1526020f38afecf7a799c1ba3a3eb4e35b0fda3eed1b",
+    "broker/src/index.js": "246158a7dbaef2138853e0f1f99758b395fbe9345f7096a9a21b2a808aa4e271",
+    "scripts/cloudtms-managed-release.mjs": "a52b9b1e1ad2f121096cebbcf514a06fac021069e8692fb28a86d52a512c1a8c",
+    "scripts/weekly-source-protected-execution-tree.mjs": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2",
+    "scripts/weekly-source-protected-release-qualification.mjs": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+    "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+  },
+  "table_insert_hooks": [
+    {
+      "name": "bpay_next_workbench_candidate_name_trigger",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_workbench_candidate_name_trigger AFTER UPDATE OF display_name, first_name, last_name, tms_ref, pay_method, umbrella_id, bank_details_hash, account_holder, sort_code, account_number ON candidates FOR EACH ROW EXECUTE FUNCTION private.bpay_next_workbench_candidate_name_trigger_v1()"
+    },
+    {
+      "name": "candidate_expense_candidate_identity_summary_refresh",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_candidate_identity_summary_refresh AFTER UPDATE OF display_name, first_name, last_name, tms_ref ON candidates FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
+    },
+    {
+      "name": "set_tms_ref",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER set_tms_ref BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_tms_ref()"
+    },
+    {
+      "name": "trg_candidates_set_bank_hash",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_candidates_set_bank_hash BEFORE INSERT OR UPDATE OF sort_code, account_number, account_holder ON candidates FOR EACH ROW EXECUTE FUNCTION _trg_candidates_set_bank_hash()"
+    },
+    {
+      "name": "trg_candidates_set_rev",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_candidates_set_rev BEFORE INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION trg_set_rev()"
+    },
+    {
+      "name": "trg_candidates_set_updated_at",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_candidates_set_updated_at BEFORE UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_cc_candidates",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_cc_candidates AFTER INSERT OR DELETE OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('candidates')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_candidates_i",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_i AFTER INSERT ON candidates REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_candidates_u",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_u AFTER UPDATE ON candidates REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
+    },
+    {
+      "name": "trg_pay_workbench_mark_candidate_dirty__candidates",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_pay_workbench_mark_candidate_dirty__candidates AFTER INSERT OR UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION pay_workbench_mark_candidate_dirty()"
+    },
+    {
+      "name": "trg_tsfin_candidates_wakeup_aiu",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_tsfin_candidates_wakeup_aiu AFTER INSERT OR UPDATE OF key_norm, nhsp_hr_name_aliases, pay_method, umbrella_id, active ON candidates FOR EACH ROW EXECUTE FUNCTION trg_tsfin_candidates_wakeup()"
+    },
+    {
+      "name": "candidate_expense_client_identity_summary_refresh",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_client_identity_summary_refresh AFTER UPDATE OF name, cli_ref ON clients FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
+    },
+    {
+      "name": "set_cli_ref",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER set_cli_ref BEFORE INSERT OR UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION trg_set_cli_ref()"
+    },
+    {
+      "name": "trg_cc_clients",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_cc_clients AFTER INSERT OR DELETE OR UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('clients')"
+    },
+    {
+      "name": "trg_clients_set_rev",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_clients_set_rev BEFORE INSERT OR UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION trg_set_rev()"
+    },
+    {
+      "name": "trg_clients_set_updated_at",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_clients_set_updated_at BEFORE UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_i",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_i AFTER INSERT ON clients REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_u",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_u AFTER UPDATE ON clients REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    }
+  ],
+  "required_columns_defaults": {
+    "candidates": [
+      {
+        "name": "active",
+        "type": "boolean",
+        "default": "true",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "default": "now()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "first_name",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "id",
+        "type": "uuid",
+        "default": "gen_random_uuid()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "job_title_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "key_norm",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "last_name",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "min_take_home_wtd",
+        "type": "numeric(12,2)",
+        "default": "0",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "nhsp_hr_name_aliases",
+        "type": "jsonb",
+        "default": "'[]'::jsonb",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "opt_in_email",
+        "type": "boolean",
+        "default": "false",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "opt_in_sms",
+        "type": "boolean",
+        "default": "false",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "opt_in_whatsapp",
+        "type": "boolean",
+        "default": "false",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "pay_method",
+        "type": "text",
+        "default": "'PAYE'::text",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "remittance_overrides_enabled",
+        "type": "boolean",
+        "default": "false",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "remittance_receive_enabled",
+        "type": "boolean",
+        "default": "false",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "remittance_receive_when_umbrella_paid",
+        "type": "boolean",
+        "default": "false",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "remittances_detailed_breakdown",
+        "type": "boolean",
+        "default": "false",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "tms_ref",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "default": "now()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      }
+    ],
+    "clients": [
+      {
+        "name": "cli_ref",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "default": "now()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "id",
+        "type": "uuid",
+        "default": "gen_random_uuid()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "name",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "payment_terms_days",
+        "type": "integer",
+        "default": "30",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "default": "now()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "vat_chargeable",
+        "type": "boolean",
+        "default": "true",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      }
+    ]
+  },
+  "controlling_reserved_namespace_guards": [
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/01_OFF_RULE_AUTHORITY.sqlinc",
+      "sha256_lf": "bea5502f430a3933d3b0101a4c3e6a0fc759c4723c754233f2e2d06154076250",
+      "action": "REPLACE_EXACT_OFF_RULE_REFERENCE_PREDICATES"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/02_HISTORICAL_FIXTURE_ASSIGNMENT.sqlinc",
+      "sha256_lf": "ea11961b8fd26f352cd45ee28a2e6582f0781e68ccfef961cdbc5e52b8dad202",
+      "action": "REPLACE_EXACT_OFF_RULE_REFERENCE_PREDICATES"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/16_10_complete_bulk_test_scope.sqlinc",
+      "sha256_lf": "1c91b6644e98967c1aac0f343c096c96fdc27f05b291f5919b0bb942828377e6",
+      "action": "UNCHANGED_BULK_ONLY_PRE_VERIFIED_NAMESPACE"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "sha256_lf": "db7997e05a36792aa7911f96ebf1d71afaadbfe6ded3ecf07887e4c7a56b2a4f",
+      "action": "REPLACE_EXACT_OFF_RULE_REFERENCE_PREDICATES"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/23_POST_VERIFIED_BULK_SETUP_ASSERT.sqlinc",
+      "sha256_lf": "81fbe2c9cd141d10a909072f140a734e8a759a39ce5102691b57ed25fd40982d",
+      "action": "UNCHANGED_BULK_ONLY_PRE_VERIFIED_NAMESPACE"
+    }
+  ],
+  "predecessor_0410_guards": "Historical definitions superseded by exact0430 controlling owners; unchanged.",
+  "source_metadata_schema": [
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "weekly_source_client_policies",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "authority_mode",
+          "type": "text",
+          "default": "'SOURCE_AUTHORITY'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_queries_enabled",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completed_pack_copy_enabled",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completed_pack_recipient",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "document_mode",
+          "type": "text",
+          "default": "'CHECK_ONLY'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "duration_break_tie_rule",
+          "type": "text",
+          "default": "'EARLIEST_LONGEST_PORTION'::text",
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "effective_from",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "effective_to",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "manager_queries_enabled",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "manager_query_recipient",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "self_bill_correction_presentation",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "self_bill_enabled",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_expense_vat_enabled",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_fixed_expenses_enabled",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_group_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "weekly_rate_classification_method",
+          "type": "text",
+          "default": "'SPLIT_RATE_WINDOWS'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "weekly_source_client_policies_effective_idx",
+          "definition": "CREATE INDEX weekly_source_client_policies_effective_idx ON public.weekly_source_client_policies USING btree (source_group_id, client_id, effective_from, effective_to)"
+        },
+        {
+          "name": "weekly_source_client_policies_no_overlap",
+          "definition": "CREATE INDEX weekly_source_client_policies_no_overlap ON public.weekly_source_client_policies USING gist (source_group_id, client_id, daterange(effective_from, COALESCE(effective_to, 'infinity'::date), '[]'::text))"
+        },
+        {
+          "name": "weekly_source_client_policies_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_client_policies_pkey ON public.weekly_source_client_policies USING btree (id)"
+        },
+        {
+          "name": "weekly_source_client_policies_source_group_id_client_id_eff_key",
+          "definition": "CREATE UNIQUE INDEX weekly_source_client_policies_source_group_id_client_id_eff_key ON public.weekly_source_client_policies USING btree (source_group_id, client_id, effective_from, effective_to) NULLS NOT DISTINCT"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "weekly_source_client_policie_self_bill_correction_present_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (self_bill_correction_presentation IS NULL OR (self_bill_correction_presentation = ANY (ARRAY['FULL_REVERSAL_REPLACEMENT'::text, 'NET_DIFFERENCE_PRESENTATION'::text])))"
+        },
+        {
+          "name": "weekly_source_client_policie_weekly_rate_classification_m_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (weekly_rate_classification_method = ANY (ARRAY['SPLIT_RATE_WINDOWS'::text, 'WHOLE_SHIFT_START_DAY'::text]))"
+        },
+        {
+          "name": "weekly_source_client_policies_authority_mode_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (authority_mode = ANY (ARRAY['SOURCE_AUTHORITY'::text, 'TIMESHEET_AUTHORITY'::text]))"
+        },
+        {
+          "name": "weekly_source_client_policies_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (effective_to IS NULL OR effective_to >= effective_from)"
+        },
+        {
+          "name": "weekly_source_client_policies_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (completed_pack_copy_enabled = false OR NULLIF(btrim(completed_pack_recipient), ''::text) IS NOT NULL)"
+        },
+        {
+          "name": "weekly_source_client_policies_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (authority_mode <> 'TIMESHEET_AUTHORITY'::text OR NOT self_bill_enabled AND document_mode = 'INVOICE_EVIDENCE_REQUIRED'::text)"
+        },
+        {
+          "name": "weekly_source_client_policies_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (authority_mode <> 'SOURCE_AUTHORITY'::text OR (document_mode = ANY (ARRAY['IMPORT_ONLY'::text, 'CHECK_ONLY'::text])))"
+        },
+        {
+          "name": "weekly_source_client_policies_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((weekly_rate_classification_method = 'SPLIT_RATE_WINDOWS'::text) = (duration_break_tie_rule IS NOT NULL))"
+        },
+        {
+          "name": "weekly_source_client_policies_client_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_client_policies_created_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_client_policies_document_mode_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (document_mode = ANY (ARRAY['IMPORT_ONLY'::text, 'CHECK_ONLY'::text, 'INVOICE_EVIDENCE_REQUIRED'::text]))"
+        },
+        {
+          "name": "weekly_source_client_policies_duration_break_tie_rule_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (duration_break_tie_rule IS NULL OR (duration_break_tie_rule = ANY (ARRAY['EARLIEST_LONGEST_PORTION'::text, 'LATEST_LONGEST_PORTION'::text])))"
+        },
+        {
+          "name": "weekly_source_client_policies_no_overlap",
+          "type": "x",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "EXCLUDE USING gist (source_group_id WITH =, client_id WITH =, daterange(effective_from, COALESCE(effective_to, 'infinity'::date), '[]'::text) WITH &&)"
+        },
+        {
+          "name": "weekly_source_client_policies_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "weekly_source_client_policies_source_group_id_client_id_eff_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE NULLS NOT DISTINCT (source_group_id, client_id, effective_from, effective_to)"
+        },
+        {
+          "name": "weekly_source_client_policies_source_group_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_group_id) REFERENCES weekly_source_groups(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "weekly_source_cycles",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "current_complete_upload_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "current_final_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "current_projection_publication_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cutoff_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "finalisation_week_ending",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "finalised_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "finalised_by_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "projection_state",
+          "type": "text",
+          "default": "'NONE'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "scope_client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_group_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "default": "'OPEN'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "weekly_source_cycles_group_week_client_uq",
+          "definition": "CREATE UNIQUE INDEX weekly_source_cycles_group_week_client_uq ON public.weekly_source_cycles USING btree (source_group_id, finalisation_week_ending, scope_client_id) NULLS NOT DISTINCT"
+        },
+        {
+          "name": "weekly_source_cycles_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_cycles_pkey ON public.weekly_source_cycles USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "weekly_source_cycles_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state <> 'FINALISED'::text OR finalised_at_utc IS NOT NULL AND finalised_by_user_id IS NOT NULL)"
+        },
+        {
+          "name": "weekly_source_cycles_current_final_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (current_final_revision_id) REFERENCES weekly_source_final_revisions(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_cycles_current_publication_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (current_projection_publication_id) REFERENCES weekly_source_projection_publications(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_cycles_current_upload_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (current_complete_upload_id) REFERENCES weekly_source_uploads(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_cycles_finalised_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (finalised_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_cycles_group_week_client_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE NULLS NOT DISTINCT (source_group_id, finalisation_week_ending, scope_client_id)"
+        },
+        {
+          "name": "weekly_source_cycles_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "weekly_source_cycles_projection_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (projection_state = ANY (ARRAY['NONE'::text, 'REBUILDING'::text, 'CURRENT'::text, 'FAILED'::text]))"
+        },
+        {
+          "name": "weekly_source_cycles_scope_client_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (scope_client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_cycles_source_group_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_group_id) REFERENCES weekly_source_groups(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_cycles_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state = ANY (ARRAY['OPEN'::text, 'FINALISABLE'::text, 'FINALISING'::text, 'FINALISED'::text, 'CORRECTION_IN_PROGRESS'::text]))"
+        },
+        {
+          "name": "weekly_source_cycles_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (version >= 0)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "weekly_source_group_clients",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_group_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "valid_from",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "valid_to",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "weekly_source_group_clients_lookup_idx",
+          "definition": "CREATE INDEX weekly_source_group_clients_lookup_idx ON public.weekly_source_group_clients USING btree (client_id, valid_from, valid_to, source_group_id)"
+        },
+        {
+          "name": "weekly_source_group_clients_no_overlap",
+          "definition": "CREATE INDEX weekly_source_group_clients_no_overlap ON public.weekly_source_group_clients USING gist (client_id, daterange(valid_from, COALESCE(valid_to, 'infinity'::date), '[]'::text))"
+        },
+        {
+          "name": "weekly_source_group_clients_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_group_clients_pkey ON public.weekly_source_group_clients USING btree (id)"
+        },
+        {
+          "name": "weekly_source_group_clients_source_group_id_client_id_valid_key",
+          "definition": "CREATE UNIQUE INDEX weekly_source_group_clients_source_group_id_client_id_valid_key ON public.weekly_source_group_clients USING btree (source_group_id, client_id, valid_from, valid_to) NULLS NOT DISTINCT"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "weekly_source_group_clients_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (valid_to IS NULL OR valid_to >= valid_from)"
+        },
+        {
+          "name": "weekly_source_group_clients_client_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_group_clients_created_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_group_clients_no_overlap",
+          "type": "x",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "EXCLUDE USING gist (client_id WITH =, daterange(valid_from, COALESCE(valid_to, 'infinity'::date), '[]'::text) WITH &&)"
+        },
+        {
+          "name": "weekly_source_group_clients_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "weekly_source_group_clients_source_group_id_client_id_valid_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE NULLS NOT DISTINCT (source_group_id, client_id, valid_from, valid_to)"
+        },
+        {
+          "name": "weekly_source_group_clients_source_group_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_group_id) REFERENCES weekly_source_groups(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "weekly_source_groups",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "active",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "agency_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cutoff_local_time",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cutoff_weekday",
+          "type": "smallint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "display_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "environment",
+          "type": "text",
+          "default": "'TEST'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "nhsp_report_heading_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_family",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timezone",
+          "type": "text",
+          "default": "'Europe/London'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_by_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "weekly_source_groups_environment_agency_id_code_key",
+          "definition": "CREATE UNIQUE INDEX weekly_source_groups_environment_agency_id_code_key ON public.weekly_source_groups USING btree (environment, agency_id, code)"
+        },
+        {
+          "name": "weekly_source_groups_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_groups_pkey ON public.weekly_source_groups USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "weekly_source_groups_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((source_family = 'NHSP'::text) = (nhsp_report_heading_name IS NOT NULL))"
+        },
+        {
+          "name": "weekly_source_groups_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (code ~ '^[A-Z][A-Z0-9_]{1,79}$'::text)"
+        },
+        {
+          "name": "weekly_source_groups_cutoff_weekday_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cutoff_weekday >= 0 AND cutoff_weekday <= 6)"
+        },
+        {
+          "name": "weekly_source_groups_display_name_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(btrim(display_name)) >= 1 AND char_length(btrim(display_name)) <= 160)"
+        },
+        {
+          "name": "weekly_source_groups_environment_agency_id_code_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (environment, agency_id, code)"
+        },
+        {
+          "name": "weekly_source_groups_environment_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (environment = ANY (ARRAY['TEST'::text, 'LIVE'::text]))"
+        },
+        {
+          "name": "weekly_source_groups_nhsp_report_heading_name_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (nhsp_report_heading_name IS NULL OR char_length(btrim(nhsp_report_heading_name)) >= 1 AND char_length(btrim(nhsp_report_heading_name)) <= 200)"
+        },
+        {
+          "name": "weekly_source_groups_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "weekly_source_groups_source_family_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_family = ANY (ARRAY['NHSP'::text, 'ROSTER'::text]))"
+        },
+        {
+          "name": "weekly_source_groups_timezone_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (timezone = 'Europe/London'::text)"
+        },
+        {
+          "name": "weekly_source_groups_updated_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (updated_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_groups_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (version >= 1)"
+        }
+      ],
+      "view_definition_sha256": null
+    }
+  ],
+  "source_metadata_hooks": []
+}

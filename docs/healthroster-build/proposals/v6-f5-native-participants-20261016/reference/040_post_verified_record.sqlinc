@@ -1,0 +1,56 @@
+create or replace function private.weekly_source_post_verified_artifact_assert_v1(p_slot text,p_artifacts jsonb,p_execution jsonb,p_receipt_commit text)
+returns void language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare artifact jsonb;
+begin
+  if jsonb_typeof(p_artifacts) is distinct from 'array' or jsonb_array_length(p_artifacts) not between 1 and 100 then
+    raise exception 'WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_INVALID' using errcode='22023'; end if;
+  case p_slot
+    when 'weekly_source_protected_prerequisite_qualifications' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        if artifact->'capabilities' is distinct from '["BULK_SIGNED"]'::jsonb then
+          raise exception 'WEEKLY_SOURCE_POST_VERIFIED_PREREQUISITE_SCOPE_REFUSED' using errcode='55000'; end if;
+        perform private.weekly_source_protected_prerequisite_release_assert_v2(artifact,(artifact->>'source_group_id')::uuid,
+          (artifact->>'effective_from_week_ending')::date,(artifact->>'effective_to_week_ending')::date,artifact->>'qualification_sha256');
+      end loop;
+    when 'weekly_source_protected_activation_probe_authorizations' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        perform private.weekly_source_protected_activation_probe_authorization_assert_v1(artifact,(artifact->>'source_group_id')::uuid,
+          (artifact->>'effective_from_week_ending')::date,(artifact->>'effective_to_week_ending')::date,artifact->>'probe_authorization_sha256');
+      end loop;
+    when 'weekly_source_protected_partial_native_evidence' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        perform private.weekly_source_post_verified_partial_artifact_assert_v1(artifact,p_execution);
+      end loop;
+    when 'weekly_source_protected_capability_qualifications' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        perform private.weekly_source_protected_operational_certificate_assert_v1(artifact,(artifact->>'source_group_id')::uuid,
+          (artifact->>'effective_from_week_ending')::date,(artifact->>'effective_to_week_ending')::date,artifact->>'qualification_sha256');
+      end loop;
+    when 'weekly_source_report_fin_native_comparisons' then
+      perform private.weekly_source_report_fin_native_comparisons_assert_v1(p_artifacts,p_execution,p_receipt_commit);
+    when 'weekly_source_report_fin_qualifications' then
+      perform private.weekly_source_report_fin_qualifications_assert_v1(p_artifacts,p_execution,p_receipt_commit);
+    when 'weekly_source_protected_test_setup_authorizations' then
+      for artifact in select value from jsonb_array_elements(p_artifacts) value loop
+        if artifact->>'schema_version'='WEEKLY_SOURCE_PROTECTED_TEST_SETUP_AUTHORIZATION_V1' then
+          perform private.weekly_source_post_verified_bulk_setup_artifact_assert_v1(artifact,p_execution);
+        else perform private.weekly_source_post_verified_setup_artifact_assert_v1(artifact,p_execution); end if;
+      end loop;
+    when 'weekly_source_off_rule_test_controls' then
+      if jsonb_array_length(p_artifacts)<>1 then raise exception 'WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_INVALID' using errcode='22023'; end if;
+      artifact:=p_artifacts->0;
+      if not private.weekly_source_qualification_closed_object_v1(artifact,array['schema_version','release_id','source_commit','contract_sha256',
+        'banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256','banking_first_install_complete','effective_acl_pass',
+        'browser_denied','source_effects_no_external_calls']) or artifact->>'schema_version' is distinct from 'WEEKLY_SOURCE_OFF_RULE_TEST_CONTROLS_V1'
+        or artifact->>'release_id' is distinct from p_execution->>'release_id' or artifact->>'source_commit' is distinct from p_execution->>'source_commit'
+        or artifact->>'contract_sha256' is distinct from p_execution->>'contract_sha256'
+        or exists(select 1 from unnest(array['banking_install_receipt_sha256','security_receipt_sha256','source_effects_review_sha256']) key
+          where coalesce(artifact->>key,'') !~ '^[0-9a-f]{64}$')
+        or exists(select 1 from unnest(array['banking_first_install_complete','effective_acl_pass','browser_denied','source_effects_no_external_calls']) key
+          where artifact->key is distinct from 'true'::jsonb) then
+        raise exception 'WEEKLY_SOURCE_POST_VERIFIED_ARTIFACT_INVALID' using errcode='22023'; end if;
+    else raise exception 'WEEKLY_SOURCE_POST_VERIFIED_SLOT_REFUSED' using errcode='42501';
+  end case;
+end;
+$function$;

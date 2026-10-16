@@ -1,0 +1,56 @@
+{
+  "qualification": "OFFLINE_GRAMMAR_ONLY",
+  "native": "NOT_RUN",
+  "pglast": "v7.20",
+  "checks": [
+    {
+      "path": "fixtures/native-constructor-assertions.sqlinc",
+      "statements": 2,
+      "plpgsql": 2,
+      "inner_sql": 26,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "path": "forward/001_native_participants.sqlinc",
+      "statements": 9,
+      "plpgsql": 4,
+      "inner_sql": 110,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/002_source_metadata.sqlinc",
+      "statements": 7,
+      "plpgsql": 3,
+      "inner_sql": 65,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/010_off_rule_scope.sqlinc",
+      "statements": 1,
+      "plpgsql": 1,
+      "inner_sql": 53,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/020_historical_assignment.sqlinc",
+      "statements": 1,
+      "plpgsql": 1,
+      "inner_sql": 27,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "path": "forward/030_off_rule_shape.sqlinc",
+      "statements": 1,
+      "plpgsql": 1,
+      "inner_sql": 22,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "path": "forward/040_post_verified_record.sqlinc",
+      "statements": 1,
+      "plpgsql": 1,
+      "inner_sql": 37,
+      "rowtype_parser_alias_only": false
+    }
+  ]
+}
