@@ -1,0 +1,265 @@
+{
+  "version": "HEALTH_SOURCE_PARENT_HTTP_PEER_MANIFEST_V1",
+  "reviewedCommit": "aa51acc6cb5f0d831099fb676b55ce9da5c69878",
+  "verdict": "NO_NEW_SOURCE_BLOCKER_IN_EXACT_PARTIAL_HTTP_CONTRIBUTION",
+  "files": [
+    {
+      "file": "AUTHOR_RERUN_RESULT.json",
+      "bytes": 2403,
+      "sha256": "2da18b54e4cde5a5719374dadfd187641c9f11ac57cb00c1c98e4cfbc5683d15"
+    },
+    {
+      "file": "DAILY_FROZEN_ASSEMBLY.json",
+      "bytes": 13118,
+      "sha256": "ca68d5078ed849e8f6c807e0336156ef5d00ad1c02845c76dee4d96716c6a1a2"
+    },
+    {
+      "file": "EXISTING_private_weekly_source_pay_actor_allowed_v1_uuid_.sqlinc",
+      "bytes": 493,
+      "sha256": "076f0daf27de0716811f1ce72f1cd3f5184ad3f66102c2800d775e77dbf4cdaf"
+    },
+    {
+      "file": "EXISTING_private_weekly_source_pay_decision_scope_access_v1_uuid_uuid_uuid_date_.sqlinc",
+      "bytes": 844,
+      "sha256": "839aa3f11d1c50400c34bf13ab69eae5b7f695c7a3f05353bb01e4f96c34359b"
+    },
+    {
+      "file": "EXISTING_public_weekly_source_pay_decision_read_source_v1_jsonb_.sqlinc",
+      "bytes": 1018,
+      "sha256": "2bcd4443c44da324b3501f7329d6275b27e1c92ae0b2ff05086a804c130c616f"
+    },
+    {
+      "file": "EXISTING_requireUser.jsinc",
+      "bytes": 1387,
+      "sha256": "7108146127fbeb4c71ed883f23fbf27add1b7aa9fa1d56da6f8f676246439d88"
+    },
+    {
+      "file": "EXISTING_sbGetUserById.jsinc",
+      "bytes": 409,
+      "sha256": "eece3432ab2217544974a1da3ee6eecd943ba69fcc40be72775cad53cc315016"
+    },
+    {
+      "file": "EXISTING_sbRpcRecordingGuardRefusal.jsinc",
+      "bytes": 669,
+      "sha256": "44a66cc97b06f098b07c4ed25fe1ffab017641d1969fc726697757048a260354"
+    },
+    {
+      "file": "existing-exact/broker/src/contract-correction-v3.mjs",
+      "bytes": 12418,
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
+    },
+    {
+      "file": "existing-exact/broker/src/payment-actor-permission.js",
+      "bytes": 2692,
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e"
+    },
+    {
+      "file": "existing-exact/broker/src/weekly-source/off-rule-transport-rpc.mjs",
+      "bytes": 3520,
+      "sha256": "0045fbc70f96b97ec7fd9dcc37aaf6ec39a8aa11f72c60ef27f5c2f9d3b980a1"
+    },
+    {
+      "file": "existing-exact/broker/src/weekly-source/protected-action-orchestrator.mjs",
+      "bytes": 38758,
+      "sha256": "b9580b3998760399d7dcf9d79cf4f4e3bba3bbd70173f3527c1bb465ac942737"
+    },
+    {
+      "file": "existing-exact/broker/src/weekly-source/push-timing-office.mjs",
+      "bytes": 8191,
+      "sha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa"
+    },
+    {
+      "file": "existing-exact/broker/src/weekly-source/source-native-contract.mjs",
+      "bytes": 25329,
+      "sha256": "1a7817a2465485481aa005d6296281467bde9d17b292d971423d7ff12860519a"
+    },
+    {
+      "file": "existing-exact/broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "bytes": 17252,
+      "sha256": "93bddf11b81dbb36ba42b05a7073981b36b1814d44e0665bd0d8b3b1450a1380"
+    },
+    {
+      "file": "existing-exact/broker/src/weekly-source/source-pay-decision-request.mjs",
+      "bytes": 9040,
+      "sha256": "d9288c5e34dcf18c3ba5dd6ee3c1dd9678d1884b5ebec1970297e8d201e0d93f"
+    },
+    {
+      "file": "existing-exact/broker/src/weekly-source/source-pay-decision-worker.mjs",
+      "bytes": 5789,
+      "sha256": "a24113b69ce4d05889a2742b0d91ed615e96981e7781d7c79f9eb2fdc7bc22b2"
+    },
+    {
+      "file": "existing-exact/broker/src/weekly-source/source-unprotect-worker.mjs",
+      "bytes": 12484,
+      "sha256": "28c6eb0d0260620babbb102e2bbb68279c6cbc74b318222a62294aea70c71f73"
+    },
+    {
+      "file": "frozen/build.mjs",
+      "bytes": 1245,
+      "sha256": "6b6ba2cc06ae2a6f92e0fe145f37532a365639c340a1e5e77b54358d5af11123"
+    },
+    {
+      "file": "frozen/CAPABILITY_ENTRY_PROPOSAL.json",
+      "bytes": 5408,
+      "sha256": "7756764494cf379fe43f75668b7f2a563bf6636e5693e6ff1ffca9e049b4fcc3"
+    },
+    {
+      "file": "frozen/CONTINUATION.json",
+      "bytes": 6077,
+      "sha256": "a8724a0e29bd15c7ab536b39fada626f62998f5cfe2dbe1a7a635336e6458820"
+    },
+    {
+      "file": "frozen/freeze-evidence.mjs",
+      "bytes": 5488,
+      "sha256": "5cf184b27233e6366b18c3d8def69e30e2a114b63fc34af5016ee1f6fcc2e374"
+    },
+    {
+      "file": "frozen/MANIFEST.json",
+      "bytes": 4451,
+      "sha256": "6658244da35bb8ea3683e8b3b0148294ec97e9270069a0e0a1ba14f74898881f"
+    },
+    {
+      "file": "frozen/PARENT_EDITS.json",
+      "bytes": 5860,
+      "sha256": "b9f136f94a0be936682d07c92943a7e1e0db912977b70ed4f3e17b9cfee33980"
+    },
+    {
+      "file": "frozen/PROPOSED_ROUTES.js",
+      "bytes": 69069,
+      "sha256": "5c639cd21f579f34ea3b7c9e2b832fa4d148f8caf3d9ecdceba88756b7013471"
+    },
+    {
+      "file": "frozen/README.md",
+      "bytes": 10913,
+      "sha256": "6e619781ce8f85df09b10f715be92560c6efe2c4582d07ebf80bc098ae40b4c0"
+    },
+    {
+      "file": "frozen/recipe.mjs",
+      "bytes": 6151,
+      "sha256": "c13d9c26410f4684e3f5a5597524a3390184eb6499ce0a5957bef6a26deed3ca"
+    },
+    {
+      "file": "frozen/runtime/source-pay-decision-http.mjs",
+      "bytes": 7885,
+      "sha256": "4e6e5f84839bce46b71fce26389a2a988e5ac073ca0b4bb29bb22345dd9a042d"
+    },
+    {
+      "file": "frozen/seal.mjs",
+      "bytes": 2579,
+      "sha256": "ede369d838ab2b4bf7f5f6af2cdc08608cb8875f81600c919a8644a2dc74f975"
+    },
+    {
+      "file": "frozen/SHARED_DECLARATIONS.json",
+      "bytes": 50456,
+      "sha256": "d39b7f08f78f8bb006039973cbe2ae2ad5807e7ab38fe57bdbf9488c87494213"
+    },
+    {
+      "file": "frozen/SOURCE_EVIDENCE.json",
+      "bytes": 13620,
+      "sha256": "b3db3b464c67f76695a625f6c29bd02308bf158d9320fac5ec75707cd6c3ef02"
+    },
+    {
+      "file": "frozen/sources/01_complete.sqlinc",
+      "bytes": 6657,
+      "sha256": "cbc671065fefa41025ce7b850b477206422221f33c186fa444a9264a33b1a7da"
+    },
+    {
+      "file": "frozen/sources/02_complete.sqlinc",
+      "bytes": 9857,
+      "sha256": "2d3eb8da4dcdf329225bb0f8eaa96dd4df8a9466304d0d52fc48ab88960c0cad"
+    },
+    {
+      "file": "frozen/sources/03_complete.sqlinc",
+      "bytes": 700,
+      "sha256": "04b999eb284b81eb29e619d83f75c601576bc65113d1c561c4105b230d65f97d"
+    },
+    {
+      "file": "frozen/sources/04_complete.sqlinc",
+      "bytes": 5188,
+      "sha256": "8b4ce285782595b7f1d111bb498eb44157991af69badaf3306275551f1fedc45"
+    },
+    {
+      "file": "frozen/sources/05_complete.sqlinc",
+      "bytes": 23442,
+      "sha256": "6ce4e6f1b8ae8a63e18e40455662fcb3659a651289fe83b6548ea03962fcd683"
+    },
+    {
+      "file": "frozen/sources/06_complete.sqlinc",
+      "bytes": 4588,
+      "sha256": "cd33b1dd1177b4a96256281b5599fa93d0db65d16a10b27920c47559ec7d393c"
+    },
+    {
+      "file": "frozen/sources/07_complete.sqlinc",
+      "bytes": 3143,
+      "sha256": "af7ee869363d020b7150920483a79c03b1bbb68e61852e8f90144263c5d7d9d9"
+    },
+    {
+      "file": "frozen/sources/08_complete.sqlinc",
+      "bytes": 14365,
+      "sha256": "06df8168074d0fcf270a51604147e84bd8010fda15dfa2b5ebb34433237c6994"
+    },
+    {
+      "file": "frozen/sources/09_complete.sqlinc",
+      "bytes": 14485,
+      "sha256": "803c4f832d3175199266274fe23fe457e05343e0742f7b4ac0c81b450cc421be"
+    },
+    {
+      "file": "frozen/TEST_RESULTS.json",
+      "bytes": 2403,
+      "sha256": "2da18b54e4cde5a5719374dadfd187641c9f11ac57cb00c1c98e4cfbc5683d15"
+    },
+    {
+      "file": "frozen/test.mjs",
+      "bytes": 19257,
+      "sha256": "69b65d4445b0abbf30019a060239cb257f5ede96190fa51e8c65fda8af026589"
+    },
+    {
+      "file": "MOUNTED_ROUTES.js",
+      "bytes": 69069,
+      "sha256": "5c639cd21f579f34ea3b7c9e2b832fa4d148f8caf3d9ecdceba88756b7013471"
+    },
+    {
+      "file": "MOUNTED_SOURCE_HTTP.mjs",
+      "bytes": 7885,
+      "sha256": "4e6e5f84839bce46b71fce26389a2a988e5ac073ca0b4bb29bb22345dd9a042d"
+    },
+    {
+      "file": "peer.test.mjs",
+      "bytes": 13787,
+      "sha256": "f91944e829049d78a5b0bdad1318ea382faf4d7924750feb8dbf024953bb2d61"
+    },
+    {
+      "file": "PLATFORM_REFERENCE.json",
+      "bytes": 956,
+      "sha256": "802de108975f87a790297e585c2d5de5b5c2710ba976e597c48746268fb9638e"
+    },
+    {
+      "file": "README.md",
+      "bytes": 6211,
+      "sha256": "53f26151ba598e91930f9be07d94226d7f16697160327e35419504e11d18e1f8"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 11310,
+      "sha256": "e79f3e73c490b8ff4b7d8d2c6d5a65c1a249b86c70212426d9a850ff32c211b5"
+    },
+    {
+      "file": "review.mjs",
+      "bytes": 12660,
+      "sha256": "7503c956cac2de6d801c87be0fd3495b12a7a753991ab4219463be2889197b01"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 978,
+      "sha256": "dcfeb3792d241b32829d4c56cf93833557265cea002ab09a64527bb9e75c103c"
+    },
+    {
+      "file": "TEST_RESULT.json",
+      "bytes": 696,
+      "sha256": "372d27d4b1872acdd1bd8c9d0c912c4163700ca92dc6a8b7f8efa0667b20c06f"
+    }
+  ],
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "finalPartB": "NOT_RUN"
+}

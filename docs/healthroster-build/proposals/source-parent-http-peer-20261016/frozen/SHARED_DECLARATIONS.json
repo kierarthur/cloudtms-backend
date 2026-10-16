@@ -1,0 +1,1078 @@
+{
+  "version": "SOURCE_B051_CURRENT_SHARED_DECLARATION_TRACE_V1",
+  "records": [
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/records/376",
+      "record": {
+        "recordId": "B051",
+        "status": "UNAPPROVED_DRAFT_NOT_FOR_BUILDERS",
+        "recordKind": "BANKING_EXISTING_MAP_ROW",
+        "currentClaims": [
+          {
+            "selector": "B051:BANK_FINANCIAL_PENDING_RESULT",
+            "target_key": "module:office:js/bpay-next-office.js",
+            "role": "DEFINITION",
+            "author": "BANKING",
+            "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:1; BANKING_CHANGE_MAP.csv:52"
+          },
+          {
+            "selector": "B051:BANK_FINANCIAL_PENDING_RESULT",
+            "target_key": "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice",
+            "role": "DEFINITION",
+            "author": "BANKING",
+            "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9"
+          },
+          {
+            "selector": "B051:BANK_FINANCIAL_PENDING_RESULT",
+            "target_key": "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice.open",
+            "role": "DEFINITION",
+            "author": "BANKING",
+            "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9; Health_CODE_AUDIT.md:346"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "js:office:js/main.js#openTimesheet",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "js:office:js/main.js#renderTimesheetOverviewTab",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "js:office:js/main.js#renderTimesheetFinanceTab",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "js:office:js/main.js#openTimesheetContractMoveReview",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "host-hunk:office:js/main.js#openTimesheet::contractMoveMore",
+            "role": "INTEGRATION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "host-hunk:office:js/main.js#showModal::timesheetMoveClose",
+            "role": "INTEGRATION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "host-hunk:office:js/main.js#closeModal::timesheetMoveClose",
+            "role": "INTEGRATION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "sql-function:private.timesheet_contract_move_read_v1(uuid,uuid)",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "sql-function:public.weekly_exceptional_pay_action_context_v1(jsonb)",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "sql-function:public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "sql-function:public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+          },
+          {
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "target_key": "contract:SourceNativeComposedResultV1",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+          }
+        ]
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/5/claims/2",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/25/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/26/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/31/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/182/claims/0",
+      "record": {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/183/claims/1",
+      "record": {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/223/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/224/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/230/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/231/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/279/claims/0",
+      "record": {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/509/claims/0",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/620/claims/2",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/623/claims/2",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/sameSymbolJoins/652/claims/2",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/5/claims/2",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/25/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/26/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/31/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/182/claims/0",
+      "record": {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/183/claims/1",
+      "record": {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/223/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/224/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/230/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/231/claims/1",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/279/claims/0",
+      "record": {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/509/claims/0",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/620/claims/2",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/623/claims/2",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "OWNERSHIP_REGISTER.json",
+      "pointer": "/exactTargetJoins/652/claims/2",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    },
+    {
+      "authority": "WORKING_PREPARATION/OWNERSHIP_EXACT_TARGET_DECLARATIONS_PROPOSED.json",
+      "pointer": "/proposals/64",
+      "record": {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT",
+        "status": "PROPOSED_COMPLETE_EXACT_SPLIT",
+        "expected_literal": "js/bpay-next-office.js current pending/result integration",
+        "claims": [
+          {
+            "target_key": "module:office:js/bpay-next-office.js",
+            "role": "DEFINITION",
+            "author": "BANKING",
+            "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:1; BANKING_CHANGE_MAP.csv:52",
+            "evidence_refs": [
+              "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:1",
+              "BANKING_CHANGE_MAP.csv:52"
+            ]
+          },
+          {
+            "target_key": "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice",
+            "role": "DEFINITION",
+            "author": "BANKING",
+            "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9",
+            "evidence_refs": [
+              "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9"
+            ]
+          },
+          {
+            "target_key": "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice.open",
+            "role": "DEFINITION",
+            "author": "BANKING",
+            "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9; Health_CODE_AUDIT.md:346",
+            "evidence_refs": [
+              "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9",
+              "Health_CODE_AUDIT.md:346"
+            ]
+          }
+        ],
+        "unresolved_declaration_gaps": []
+      }
+    },
+    {
+      "authority": "WORKING_PREPARATION/OWNERSHIP_EXACT_TARGET_DECLARATIONS_PROPOSED.json",
+      "pointer": "/proposals/65",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "status": "PARTIAL_EXACT_TARGETS_REQUIRES_AUTHOR_COMPLETION",
+        "expected_literal": "shared Timesheet current-placement/result caller and native Source wrapper",
+        "claims": [
+          {
+            "target_key": "js:office:js/main.js#openTimesheet",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+            "evidence_refs": [
+              "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+            ]
+          },
+          {
+            "target_key": "js:office:js/main.js#renderTimesheetOverviewTab",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+            "evidence_refs": [
+              "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+            ]
+          },
+          {
+            "target_key": "js:office:js/main.js#renderTimesheetFinanceTab",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+            "evidence_refs": [
+              "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+            ]
+          },
+          {
+            "target_key": "js:office:js/main.js#openTimesheetContractMoveReview",
+            "role": "DEFINITION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+            "evidence_refs": [
+              "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+            ]
+          },
+          {
+            "target_key": "host-hunk:office:js/main.js#openTimesheet::contractMoveMore",
+            "role": "INTEGRATION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+            "evidence_refs": [
+              "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+            ]
+          },
+          {
+            "target_key": "host-hunk:office:js/main.js#showModal::timesheetMoveClose",
+            "role": "INTEGRATION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+            "evidence_refs": [
+              "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+            ]
+          },
+          {
+            "target_key": "host-hunk:office:js/main.js#closeModal::timesheetMoveClose",
+            "role": "INTEGRATION",
+            "author": "HEALTH",
+            "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+            "evidence_refs": [
+              "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+            ]
+          }
+        ],
+        "unresolved_declaration_gaps": [
+          "The CM17 current host claims are exact; this broader pending/result Source-wrapper label still needs its exact native Source wrapper/current-placement adoption target list. Do not close it with CM17 hosts alone."
+        ]
+      }
+    },
+    {
+      "authority": "WORKING_PREPARATION/OWNERSHIP_EXACT_TARGET_DECLARATIONS_PROPOSED.json",
+      "pointer": "/aliases/56",
+      "record": {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT",
+        "expected_literal": "js/bpay-next-office.js current pending/result integration",
+        "claims": [
+          {
+            "target_key": "module:office:js/bpay-next-office.js",
+            "role": "DEFINITION",
+            "author": "BANKING",
+            "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:1; BANKING_CHANGE_MAP.csv:52",
+            "evidence_refs": [
+              "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:1",
+              "BANKING_CHANGE_MAP.csv:52"
+            ]
+          },
+          {
+            "target_key": "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice",
+            "role": "DEFINITION",
+            "author": "BANKING",
+            "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9",
+            "evidence_refs": [
+              "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9"
+            ]
+          },
+          {
+            "target_key": "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice.open",
+            "role": "DEFINITION",
+            "author": "BANKING",
+            "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9; Health_CODE_AUDIT.md:346",
+            "evidence_refs": [
+              "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9",
+              "Health_CODE_AUDIT.md:346"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "authority": "WORKING_PREPARATION/OWNERSHIP_EXACT_TARGET_DECLARATIONS_PROPOSED.json",
+      "pointer": "/unresolvedDeclarationGaps/8",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "status": "PARTIAL_EXACT_TARGETS_REQUIRES_AUTHOR_COMPLETION",
+        "expected_literal": "shared Timesheet current-placement/result caller and native Source wrapper",
+        "gaps": [
+          "The CM17 current host claims are exact; this broader pending/result Source-wrapper label still needs its exact native Source wrapper/current-placement adoption target list. Do not close it with CM17 hosts alone."
+        ]
+      }
+    },
+    {
+      "authority": "WORKING_PREPARATION/BANKING/PREPARED_RECORD_EDITS.json",
+      "pointer": "/parentContinuations/50/scopeParts/0/exact_target_declaration_source",
+      "record": {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT"
+      }
+    },
+    {
+      "authority": "WORKING_PREPARATION/BANKING/PREPARED_RECORD_EDITS.json",
+      "pointer": "/parentContinuations/50/scopeParts/1/exact_target_declaration_source",
+      "record": {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT"
+      }
+    }
+  ],
+  "currentContractResult": {
+    "version": "CORRECTION_PRESENTATION_V3",
+    "sole_projection_author": "HEALTH preview/accept/read wrappers; BANKING supplies genuine native SummaryDTO text inputs only",
+    "common_action_ref": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/sharedActionContract",
+    "objects": {
+      "Effect": {
+        "closed_union": [
+          {
+            "visibility": "FULL",
+            "text": "nonempty safe plain string <=500 Unicode characters, derived only from genuine native DTO/status"
+          },
+          {
+            "visibility": "REDACTED"
+          }
+        ],
+        "redacted_rule": "REDACTED permits exactly visibility: no text/amount/rate/quantity/currency/ID/child/economic keys. Render FULL text with textContent; no HTML/browser calculation."
+      },
+      "Summary": {
+        "closed": true,
+        "required": [
+          "worked_facts_preserved",
+          "pay_effect",
+          "invoice_effect"
+        ],
+        "fields": {
+          "worked_facts_preserved": "boolean",
+          "pay_effect": "Effect",
+          "invoice_effect": "Effect"
+        }
+      },
+      "KnownBlocker": {
+        "closed": true,
+        "required": [
+          "code",
+          "native_owner",
+          "field_key",
+          "permitted_action"
+        ],
+        "fields": {
+          "code": "nonempty existing native preflight code string",
+          "native_owner": "HEALTH|BANKING",
+          "field_key": "nonempty native field-key string or NULL",
+          "permitted_action": "CommonAction or NULL"
+        }
+      },
+      "Confirm": {
+        "closed": true,
+        "required": [
+          "request_version",
+          "review_id",
+          "review_digest",
+          "expected_state_revision"
+        ],
+        "fields": {
+          "request_version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+          "review_id": "uuid",
+          "review_digest": "hex64",
+          "expected_state_revision": "uint63-decimal-string"
+        }
+      },
+      "Preview": {
+        "closed": true,
+        "required": [
+          "version",
+          "operation_id",
+          "review_id",
+          "review_digest",
+          "state_revision",
+          "ready_to_confirm",
+          "current_timesheet_id",
+          "to_contract_id",
+          "summary",
+          "known_blockers",
+          "confirm",
+          "links"
+        ],
+        "fields": {
+          "version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+          "operation_id": "uuid",
+          "review_id": "uuid",
+          "review_digest": "hex64",
+          "state_revision": "uint63-decimal-string",
+          "ready_to_confirm": "boolean",
+          "current_timesheet_id": "uuid",
+          "to_contract_id": "uuid",
+          "summary": "Summary",
+          "known_blockers": "KnownBlocker[]",
+          "confirm": "Confirm or NULL",
+          "links": "CommonAction[]"
+        }
+      },
+      "Placement": {
+        "closed": true,
+        "required": [
+          "status",
+          "original_timesheet_id",
+          "current_timesheet_id",
+          "placement_revision",
+          "receipt_id"
+        ],
+        "fields": {
+          "status": "NOT_COMMITTED|COMMITTED|NATIVE_PENDING",
+          "original_timesheet_id": "uuid",
+          "current_timesheet_id": "uuid or NULL only genuine native pending without current allocation",
+          "placement_revision": "uint63-decimal-string",
+          "receipt_id": "uuid or NULL"
+        }
+      },
+      "Financial": {
+        "closed": true,
+        "required": [
+          "status",
+          "command_id",
+          "cut_id",
+          "summary"
+        ],
+        "fields": {
+          "status": "NOT_REQUIRED|REGISTERED|PROCESSING|APPLIED|ACTION_REQUIRED",
+          "command_id": "uuid or NULL",
+          "cut_id": "uuid or NULL",
+          "summary": "Effect or NULL"
+        }
+      },
+      "Billing": {
+        "closed": true,
+        "required": [
+          "status",
+          "revision",
+          "group_id",
+          "visible_summary"
+        ],
+        "fields": {
+          "status": "NOT_REQUIRED|PREPARING_DRAFTS|DRAFTS_READY|PARTIALLY_ISSUED|ISSUED|RETRY_WAIT|ACTION_REQUIRED",
+          "revision": "uint63-decimal-string",
+          "group_id": "uuid or NULL",
+          "visible_summary": "Effect or NULL"
+        }
+      },
+      "Result": {
+        "closed": true,
+        "required": [
+          "version",
+          "purpose",
+          "operation_id",
+          "state",
+          "state_revision",
+          "placement",
+          "financial",
+          "billing",
+          "next_actions",
+          "links"
+        ],
+        "fields": {
+          "version": "TIMESHEET_CONTRACT_CORRECTION_V3|DAILY_RATE_CORRECTION_V1",
+          "purpose": "CONTRACT_CORRECTION|DAILY_RATE_CORRECTION, correlated with version",
+          "operation_id": "uuid",
+          "state": "REVIEWED|COMPLETE|SUPERSEDED|PENDING_PLACEMENT (last exact retained native receipt only)",
+          "state_revision": "uint63-decimal-string",
+          "placement": "Placement",
+          "financial": "Financial",
+          "billing": "Billing",
+          "next_actions": "CommonAction[]",
+          "links": "CommonAction[]"
+        }
+      },
+      "DailyConfirm": {
+        "closed": true,
+        "required": [
+          "request_version",
+          "review_id",
+          "review_digest",
+          "expected_state_revision"
+        ],
+        "fields": {
+          "request_version": "DAILY_RATE_CORRECTION_V1",
+          "review_id": "uuid",
+          "review_digest": "hex64",
+          "expected_state_revision": "uint63-decimal-string"
+        }
+      },
+      "DailyPreview": {
+        "closed": true,
+        "required": [
+          "version",
+          "operation_id",
+          "review_id",
+          "review_digest",
+          "state_revision",
+          "ready_to_confirm",
+          "current_timesheet_id",
+          "summary",
+          "known_blockers",
+          "confirm",
+          "links"
+        ],
+        "fields": {
+          "version": "DAILY_RATE_CORRECTION_V1",
+          "operation_id": "uuid",
+          "review_id": "uuid",
+          "review_digest": "hex64",
+          "state_revision": "uint63-decimal-string",
+          "ready_to_confirm": "boolean",
+          "current_timesheet_id": "uuid",
+          "summary": "Summary",
+          "known_blockers": "KnownBlocker[]",
+          "confirm": "DailyConfirm or NULL",
+          "links": "CommonAction[]"
+        }
+      }
+    },
+    "scalars": {
+      "uuid": "lowercase canonical UUID string",
+      "hex64": "exactly64 lowercase hexadecimal characters",
+      "uint63-decimal-string": "canonical base10 digits, zero or nonzero without sign/leadingzero, <=9223372036854775807; never JSON Number"
+    },
+    "invariants": [
+      "Every listed field required, all other keys reject; explicit NULL is not omitted/zero. CommonAction refers solely to sharedActionContract.",
+      "Preview confirm NULL iff not ready; ready true requires zero known blockers and exact immutable review/currentness capability.",
+      "COMPLETE requires COMMITTED placement, real same-operation receipt/current Timesheet; genuine financial REGISTERED/PROCESSING remains asynchronous. NATIVE_PENDING is only the qualified original native exception.",
+      "Contract Result version TIMESHEET_CONTRACT_CORRECTION_V3/purpose CONTRACT_CORRECTION; Daily Result version DAILY_RATE_CORRECTION_V1/purpose DAILY_RATE_CORRECTION, equal original/current physical IDs and no Contract field/fake Work.",
+      "Financial NOT_REQUIRED has NULL command_id/cut_id; all published IDs genuine native only. Denied financial/billing identifiers are NULL and any non-NULL denied summary exactly REDACTED. Billing NOT_REQUIRED has NULL group_id/visible_summary.",
+      "FULL text uses canonical native SummaryDTO/accepted valuation/native billing state only. Preserve actual cash versus comparable earnings/NET/VAT distinctions; registration is not payment/Issue. Unknown money has no numeric display operand and uses its actual native insufficiency/status. Never embed private raw DTO JSON.",
+      "links/next_actions use exact CommonAction active correlated variants; omit invisible targets recursively. No new action/caption/URL family. Fresh completed V3 cannot emit REVIEW_RATES/REVIEW_EARLIER_PAYMENT/RESUME_FINANCIAL as a repair wizard; genuine Source/historical owners retain those actions separately.",
+      "Read only exact indexed operation/review/member/billing/command-manifest IDs, never global/history discovery. Dedupe kind+target+native extra keys; arrays are bounded by the complete admitted native manifest (at most active variant count per scoped actual target). Navigation never supplies economic coverage or truncates required native obligations.",
+      "Preview/Confirm are Contract V3 only; DailyPreview/DailyConfirm are the correlated DAILY_RATE_CORRECTION_V1 variants and forbid to_contract_id/any Contract field. Both use exactly Summary/Effect/KnownBlocker/CommonAction; actual Health Daily wrappers/module decode Daily variant and Bank native SummaryDTO consumers do not substitute Contract Preview."
+    ],
+    "native": "REQUIRED_NOT_RUN",
+    "reference_base": "V6 pack root"
+  },
+  "sharedActionContract": {
+    "version": "COMMON_NATIVE_NEXT_ACTION_V1",
+    "sole_definition_author": "HEALTH existing public/Source/native wrappers",
+    "closed": true,
+    "base_fields": {
+      "kind": "exact active enum below",
+      "target_type": "exact correlated enum below",
+      "target_id": "uuid except WAIT_FOR_FINAL_REPORT NULL",
+      "url": "server-generated authorised internal resource string; never arbitrary browser navigation",
+      "caption": "exact correlated caption below",
+      "enabled": "boolean",
+      "disabled_reason": "NULL if enabled; actual nonempty native denial string otherwise"
+    },
+    "variants": [
+      {
+        "kind": "READ_RESULT",
+        "target_type": "CONTRACT_MOVE_OPERATION",
+        "target_id": "uuid",
+        "caption": "Check saved result",
+        "extra_keys": {}
+      },
+      {
+        "kind": "READ_RESULT",
+        "target_type": "SOURCE_PAY_DECISION",
+        "target_id": "uuid",
+        "caption": "Check saved result",
+        "extra_keys": {}
+      },
+      {
+        "kind": "READ_RESULT",
+        "target_type": "NATIVE_UNPROTECT_RUN",
+        "target_id": "uuid",
+        "caption": "Check saved Unprotect result",
+        "extra_keys": {
+          "decision_id": "uuid",
+          "member_key": "nonempty native member-key string"
+        }
+      },
+      {
+        "kind": "OPEN_TIMESHEET",
+        "target_type": "TIMESHEET",
+        "target_id": "uuid",
+        "caption": "Open Timesheet",
+        "extra_keys": {}
+      },
+      {
+        "kind": "OPEN_INVOICE",
+        "target_type": "INVOICE",
+        "target_id": "uuid",
+        "caption": "Open invoice; actual native credit-note target: Open credit note",
+        "extra_keys": {}
+      },
+      {
+        "kind": "OPEN_DRAFT",
+        "target_type": "BANKING_RUN",
+        "target_id": "uuid",
+        "caption": "Open Draft",
+        "extra_keys": {}
+      },
+      {
+        "kind": "CHECK_PAYMENT_RESULT",
+        "target_type": "NATIVE_TRANSFER",
+        "target_id": "uuid",
+        "caption": "Open payment",
+        "extra_keys": {}
+      },
+      {
+        "kind": "REVIEW_RECOVERY",
+        "target_type": "FINANCE_CASE",
+        "target_id": "uuid",
+        "caption": "Review recovery",
+        "extra_keys": {}
+      },
+      {
+        "kind": "REVIEW_RATES",
+        "target_type": "TIMESHEET",
+        "target_id": "uuid",
+        "caption": "Review rates",
+        "extra_keys": {}
+      },
+      {
+        "kind": "OPEN_SOURCE_REVIEW",
+        "target_type": "SOURCE_ROW",
+        "target_id": "uuid",
+        "caption": "Review shift",
+        "extra_keys": {}
+      },
+      {
+        "kind": "REVIEW_EARLIER_PAYMENT",
+        "target_type": "CONTRACT_MOVE_HISTORY",
+        "target_id": "uuid",
+        "caption": "Review earlier payment",
+        "extra_keys": {}
+      },
+      {
+        "kind": "REVIEW_EARLIER_PAYMENT",
+        "target_type": "SOURCE_PAY_DECISION_HISTORY",
+        "target_id": "uuid",
+        "caption": "Review earlier payment",
+        "extra_keys": {}
+      },
+      {
+        "kind": "RESUME_FINANCIAL",
+        "target_type": "CONTRACT_MOVE_OPERATION",
+        "target_id": "uuid",
+        "caption": "Update pay result",
+        "extra_keys": {}
+      },
+      {
+        "kind": "RESUME_FINANCIAL",
+        "target_type": "SOURCE_PAY_DECISION",
+        "target_id": "uuid",
+        "caption": "Update pay result",
+        "extra_keys": {}
+      },
+      {
+        "kind": "WAIT_FOR_FINAL_REPORT",
+        "target_type": "SOURCE_REPORT_PERIOD",
+        "target_id": "null",
+        "caption": "Open Imports",
+        "extra_keys": {
+          "client_id": "uuid",
+          "period_start": "date YYYY-MM-DD",
+          "period_end": "date YYYY-MM-DD"
+        }
+      },
+      {
+        "kind": "RESUME_UNPROTECT",
+        "target_type": "NATIVE_UNPROTECT_RUN",
+        "target_id": "uuid",
+        "caption": "Retry Unprotect",
+        "extra_keys": {
+          "decision_id": "uuid",
+          "member_key": "nonempty native member-key string"
+        }
+      }
+    ],
+    "additional_keys": "Only selected variant extra_keys; reject every other kind/target/key combination.",
+    "native_permission_conditions": [
+      "| READ_RESULT | CONTRACT_MOVE_OPERATION / operation UUID; SOURCE_PAY_DECISION / decision UUID; NATIVE_UNPROTECT_RUN / run UUID plus `decision_id,member_key` | **Check saved result**, or **Check saved Unprotect result** for native Unprotect. Enabled for visible saved request; read current active Office scope, original native actor/access checks. Read only, same saved IDs/key. |",
+      "| OPEN_TIMESHEET | TIMESHEET / actual Timesheet UUID | **Open Timesheet**. Enabled if actual record visible; current native Timesheet read permission. Old/current target is explicit. |",
+      "| OPEN_INVOICE | INVOICE / actual invoice or credit-note UUID | **Open invoice**; for actual credit-note target caption **Open credit note**. Enabled if actual invoice visible; original invoice read permission. No edit/credit authority granted. |",
+      "| OPEN_DRAFT | BANKING_RUN / actual saved Draft/run UUID | **Open Draft**. This is also the concrete action behind prose “Review saved Draft”. Enabled for exact retained native run and existing Banking read permission; any cancellation retains its own actual mutation guards. |",
+      "| CHECK_PAYMENT_RESULT | NATIVE_TRANSFER / actual original transfer UUID | **Open payment**. Enabled for genuine original transfer; existing Payment Batches/status permission. Actual Record bank outcome/release remains its own qualified action. |",
+      "| REVIEW_EARLIER_PAYMENT | CONTRACT_MOVE_HISTORY / operation UUID; SOURCE_PAY_DECISION_HISTORY / decision UUID | **Review earlier payment**. Enabled with precise missing-artifact/evidence task and active financial review permission; opens existing/new bounded evidence reconciliation for that exact owner, no scalar cash override. |",
+      "| REVIEW_RECOVERY | FINANCE_CASE / actual native Case UUID | **Review recovery**. Enabled for genuine linked Case; existing actual Case permission (including its active-admin restriction where applicable). Recorded debt is not collected cash. |",
+      "| REVIEW_RATES | TIMESHEET / actual current Timesheet UUID | **Review rates**. Enabled for current unresolved native rate authority; actual existing rate-edit/pay action permission. If no Timesheet exists, emit OPEN_SOURCE_REVIEW instead. |",
+      "| RESUME_FINANCIAL | CONTRACT_MOVE_OPERATION / operation UUID; SOURCE_PAY_DECISION / decision UUID | **Update pay result**. Enabled after genuine native/evidence result and fresh review/cut plus current state revision; active financial actor and exact same-operation accept/resume owner. Never creates B again. |",
+      "| WAIT_FOR_FINAL_REPORT | SOURCE_REPORT_PERIOD / NULL; extra `client_id:uuid,period_start:date,period_end:date` | **Open Imports**. Enabled for visible actual client/closed report period even with no Timesheet, final scope or invoice; existing Imports read role. It opens exact selected client/period. It does not create a final report or require a new contact. |",
+      "| RESUME_UNPROTECT | NATIVE_UNPROTECT_RUN / genuine run UUID; extra `decision_id:uuid,member_key:string` | **Retry Unprotect**. Enabled only known retryable original run and active WP-PP pay predicate, source/current bound witnesses; resume exact saved child key. Unknown result emits READ_RESULT first. |",
+      "| OPEN_SOURCE_REVIEW | SOURCE_ROW / genuine saved upload-row UUID | **Review shift**. Enabled for visible source issue/row and actual Office review permission, including absent Timesheet. Uses real source scope/resolution, never made-up TS ID. |"
+    ],
+    "role_projection": "Omit entire invisible actions/links; no hidden UUID/money leaks via url/caption/disabled_reason/extras/error. Visible disabled action retains native reason/permission; no downstream authority.",
+    "retired_historical_variants": [
+      {
+        "kind": "REVIEW_INVOICE_MOVE",
+        "target_type": "CONTRACT_MOVE_OPERATION",
+        "extra_keys": {
+          "original_invoice_id": "uuid"
+        }
+      },
+      {
+        "kind": "RESUME_INVOICE_MOVE",
+        "target_type": "INVOICE_MOVE_SCOPE",
+        "extra_keys": {
+          "operation_id": "uuid"
+        }
+      },
+      {
+        "kind": "READ_RESULT",
+        "target_type": "INVOICE_MOVE_SCOPE",
+        "extra_keys": {
+          "operation_id": "uuid"
+        }
+      }
+    ],
+    "retired_rule": "Original historical decoding/evidence only, never fresh V3 emission/execution or public repair route.",
+    "source_evidence": {
+      "path": "../NHSP_AUTHORISATION_AUDIT_15102026_FINAL_RECONCILIATION/Health_CODE_AUDIT.md",
+      "sha256": "f0984fa9eb1ede29baaf72df20b51849e1df89c8629e17dcda62a8ca6a06d1af",
+      "lines": "103–124",
+      "adoption": "Exact current contract reproduced here and Health§4.1; builders need not reconcile the historical source."
+    }
+  },
+  "cm17HostBinding": {
+    "writer": "HEALTH",
+    "target": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-office-13102026\\js\\main.js",
+    "symbols": [
+      "openTimesheet",
+      "renderTimesheetOverviewTab",
+      "renderTimesheetFinanceTab",
+      "existing Timesheet action caller",
+      "openTimesheetContractMoveReview (new scoped Health host hook)"
+    ],
+    "bankingBoundedFragment": "Banking alone authors nested buildPaymentSummaryHtml cash/history contribution; Health applies it once without replacing parent Finance/Core hours/rates or any other tab job.",
+    "entryPlacement": "Existing single Timesheet More → Change Contract action launches the ONE CM17 dialog from the reviewed Overview/native Timesheet host, retaining its seven tabs/current selected tab. Overview current Contract remains factual with existing genuine Contract links; no second Overview Move button, Bulk Move or Daily Contract entry. Health sole shared-parent writer integrates Banking module/cash fragment exactly once; current R2/UI_POLICY_AND_COPY policy and matching final same-candidate release record settle placement/copy.",
+    "reuseGuard": "No second universal dialog in weekly-source/workspace-actions.js; preserve genuine checking/contact/Source duties. No Bulk Move, new All category, new native Timesheet for a checking row, global tab change or invented permission.",
+    "hostFunctionSignature": "async function openTimesheetContractMoveReview({timesheetId, triggerElement})",
+    "hostFunctionAuthor": "HEALTH sole writer in selected js/main.js; Banking supplies reviewed adapter/module bytes and its bounded caller contribution only",
+    "binding": "Capture __getModalFrame() actual Timesheet frame, frame._ctxRef, frame._token, currentTabKey, stack prefix, actual SESSION actor and native record/open generation. Require current genuine Timesheet and actual server Move capability. Reject Bulk/checking-only frame; do not infer permission from type or NEXT owner. Build createTimesheetOverlayAdapter using existing #modal; pass its mountReviewOverlay to the ONE module.open call.",
+    "nativeCloseContribution": "Health alone adds a Timesheet-only transient-handle guard at native showModal.handleSecondary before ordinary dirty/close/pop logic: if bound frame owns a live Move overlay, route requested Close to handle.requestClose and return, leaving Timesheet stack untouched. Apply equivalent narrow early guard to direct closeModal for that same owning Timesheet. Chain scoped cleanup through current frame._detachGlobal/_onDismiss without replacing earlier callbacks; native rerender/teardown invalidates/disposes overlay safely. Unrelated modal close/stack paths unchanged. Banking does not patch main.js or create a bpay-next-read frame for this review. Scoped cleanup wrappers restore previous hooks only when their own wrapper is still installed; do not overwrite a newer native listener/callback installed by rerender. The parent native onModalKey explicitly leaves Escape/Tab to this current overlay while bound, in addition to the adapter capture listener.",
+    "census_claims": [
+      {
+        "target_key": "js:office:js/main.js#openTimesheet",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+      },
+      {
+        "target_key": "js:office:js/main.js#renderTimesheetOverviewTab",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+      },
+      {
+        "target_key": "js:office:js/main.js#renderTimesheetFinanceTab",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+      },
+      {
+        "target_key": "js:office:js/main.js#openTimesheetContractMoveReview",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+      },
+      {
+        "target_key": "host-hunk:office:js/main.js#openTimesheet::contractMoveMore",
+        "role": "INTEGRATION",
+        "author": "HEALTH",
+        "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+      },
+      {
+        "target_key": "host-hunk:office:js/main.js#showModal::timesheetMoveClose",
+        "role": "INTEGRATION",
+        "author": "HEALTH",
+        "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+      },
+      {
+        "target_key": "host-hunk:office:js/main.js#closeModal::timesheetMoveClose",
+        "role": "INTEGRATION",
+        "author": "HEALTH",
+        "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+      }
+    ],
+    "bounded_fragment": {
+      "census_claims": [
+        {
+          "target_key": "host-hunk:office:js/main.js#renderTimesheetFinanceTab::buildPaymentSummaryHtmlCash",
+          "role": "DEFINITION",
+          "author": "BANKING",
+          "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+        },
+        {
+          "target_key": "host-hunk:office:js/main.js#renderTimesheetFinanceTab::buildPaymentSummaryHtmlCash",
+          "role": "INTEGRATION",
+          "author": "HEALTH",
+          "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged"
+        }
+      ],
+      "reference": "Current MOVE_STAGE_CONTRACT §§3/6–10/13; DAILY_RATE_CORRECTION_CONTRACT §§2–3; original Source §6 unchanged",
+      "parent_symbol": "renderTimesheetFinanceTab"
+    }
+  },
+  "canonicalPhasedRoots": [
+    {
+      "order": 1,
+      "componentAuthor": "HEALTH",
+      "kind": "migration",
+      "slug": "nhsp_v6_01_physical_source_review_schema",
+      "scope": "Physical family/operations/reviews/requests; Source decision/request/assembly/review stores",
+      "allocationCommand": "npm run db:new:migration -- --name=nhsp_v6_01_physical_source_review_schema",
+      "allocatedPathRule": "supabase/migrations/<existing scaffold Europe-London DDMMYYYY_HHMM>_nhsp_v6_01_physical_source_review_schema.sql",
+      "allocatedPhysicalPath": null,
+      "reason": "Future exact scaffold output receipt, not a missing design choice or manually fabricated timestamp. No file created here."
+    },
+    {
+      "order": 2,
+      "componentAuthor": "BANKING",
+      "kind": "migration",
+      "slug": "nhsp_v6_02_banking_move_source_cut_schema",
+      "scope": "Bank preview cuts and move component binding stores, exact genuine native keys",
+      "allocationCommand": "npm run db:new:migration -- --name=nhsp_v6_02_banking_move_source_cut_schema",
+      "allocatedPathRule": "supabase/migrations/<existing scaffold Europe-London DDMMYYYY_HHMM>_nhsp_v6_02_banking_move_source_cut_schema.sql",
+      "allocatedPhysicalPath": null,
+      "reason": "Future exact scaffold output receipt, not a missing design choice or manually fabricated timestamp. No file created here."
+    },
+    {
+      "order": 3,
+      "componentAuthor": "HEALTH",
+      "kind": "migration",
+      "slug": "nhsp_v6_03_source_application_adoption_schema",
+      "scope": "Health acceptance application/adoption TABLE definitions; no accepted runtime application inserted",
+      "allocationCommand": "npm run db:new:migration -- --name=nhsp_v6_03_source_application_adoption_schema",
+      "allocatedPathRule": "supabase/migrations/<existing scaffold Europe-London DDMMYYYY_HHMM>_nhsp_v6_03_source_application_adoption_schema.sql",
+      "allocatedPhysicalPath": null,
+      "reason": "Future exact scaffold output receipt, not a missing design choice or manually fabricated timestamp. No file created here."
+    },
+    {
+      "order": 4,
+      "componentAuthor": "BANKING",
+      "kind": "migration",
+      "slug": "nhsp_v6_04_banking_publication_member_constraints",
+      "scope": "Canonical publication/application/member relationships referencing real prerequisite unique keys",
+      "allocationCommand": "npm run db:new:migration -- --name=nhsp_v6_04_banking_publication_member_constraints",
+      "allocatedPathRule": "supabase/migrations/<existing scaffold Europe-London DDMMYYYY_HHMM>_nhsp_v6_04_banking_publication_member_constraints.sql",
+      "allocatedPhysicalPath": null,
+      "reason": "Future exact scaffold output receipt, not a missing design choice or manually fabricated timestamp. No file created here."
+    },
+    {
+      "order": 5,
+      "componentAuthor": "HEALTH",
+      "kind": "migration",
+      "slug": "nhsp_v6_05_health_publication_adoption_bridge",
+      "scope": "Distinct Health publication-adoptions bridge and final genuine composite FKs/UNIQUE, not duplicate pub_member store",
+      "allocationCommand": "npm run db:new:migration -- --name=nhsp_v6_05_health_publication_adoption_bridge",
+      "allocatedPathRule": "supabase/migrations/<existing scaffold Europe-London DDMMYYYY_HHMM>_nhsp_v6_05_health_publication_adoption_bridge.sql",
+      "allocatedPhysicalPath": null,
+      "reason": "Future exact scaffold output receipt, not a missing design choice or manually fabricated timestamp. No file created here."
+    },
+    {
+      "order": 6,
+      "componentAuthor": "HEALTH",
+      "kind": "repeatable",
+      "slug": "nhsp_v6_06_integrated_move_source_composition_v1",
+      "scope": "One selected integrated repeatable root, transaction wrapper, seven reviewed native include fragments and final current ACL/wrapper/assertion closure",
+      "allocationCommand": "npm run db:new:repeatable -- --name=nhsp_v6_06_integrated_move_source_composition_v1",
+      "allocatedPathRule": "supabase/repeatable/<existing scaffold Europe-London DDMMYYYY_HHMM>_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "allocatedPhysicalPath": null,
+      "reason": "Future exact scaffold output receipt, not a missing design choice or manually fabricated timestamp. No file created here."
+    }
+  ],
+  "allocationOrderGuard": "Existing SQL inventory sorts actual timestamp/date key then filename. The selected01..06 slug prefixes preserve dependency order for roots allocated in the same minute. Allocation receipts must also prove timestamp order across producers matches this schema sequence before final selected release; no out-of-order cross-tree scaffold, manual timestamp, migration rename/relock or silent partial closure. Body preparation can continue independently; exact root allocation uses the same existing producer/consumer return boundary.",
+  "signatureAuthority": "Exact overloads/types/closed schemas in HEALTH_CODE_AUDIT, BANKING_BUILDER_INSTRUCTIONS and SOURCE_NATIVE_ACCEPTANCE_CONTRACT. No inferred overload, merged action union, second application allocator or dummy row. Bank-owned body stays Bank-owned inside Health selected release.",
+  "native": "NOT_RUN"
+}

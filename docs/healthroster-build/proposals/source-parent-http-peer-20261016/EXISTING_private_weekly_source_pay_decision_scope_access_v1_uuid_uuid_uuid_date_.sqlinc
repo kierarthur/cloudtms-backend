@@ -1,0 +1,11 @@
+create or replace function private.weekly_source_pay_decision_scope_access_v1(p_actor uuid,p_group uuid,p_client uuid,p_date date)
+returns void language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+begin
+ if p_actor is null or not private.weekly_source_pay_actor_allowed_v1(p_actor) then
+  raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';end if;
+ if p_group is null or p_client is null or p_date is null or not exists(select 1 from public.weekly_source_groups g
+   join public.weekly_source_group_clients c on c.source_group_id=g.id and c.client_id=p_client
+    and p_date between c.valid_from and coalesce(c.valid_to,'infinity'::date) where g.id=p_group and g.active) then
+  raise exception 'SOURCE_PAY_DECISION_SCOPE_DENIED' using errcode='42501';end if;
+end;
+$function$;

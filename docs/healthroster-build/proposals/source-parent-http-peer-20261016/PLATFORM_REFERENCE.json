@@ -1,0 +1,22 @@
+{
+  "version": "SOURCE_HTTP_PEER_PLATFORM_REFERENCE_V1",
+  "retrievedDate": "2026-10-16",
+  "package": "@cloudflare/workers-types",
+  "retrievedVersion": "5.20261016.1",
+  "registryMetadata": "https://registry.npmjs.org/@cloudflare%2fworkers-types/latest",
+  "tarballSha256": "3cd008b9e7ad54b26fcaad0ad12ae27c8c9e3f0aedb20727a1df1162b368e7ea",
+  "indexTypesSha256": "dd24c1870cb19c1b9337cca57bbc0bd9a7ae9b14098dacd81ae7a712196ab5ca",
+  "observedReaderApis": {
+    "readReturnsPromiseOfReadableStreamReadResult": true,
+    "cancelReturnsPromiseOfVoid": true,
+    "releaseLockReturnsVoid": true
+  },
+  "documentation": [
+    "https://developers.cloudflare.com/workers/runtime-apis/streams/readablestreamdefaultreader/",
+    "https://developers.cloudflare.com/workers/best-practices/workers-best-practices/"
+  ],
+  "retrievalWasPublicSourceOnly": true,
+  "projectDependenciesChanged": false,
+  "configurationChanged": false,
+  "deployedRuntimeClaim": false
+}

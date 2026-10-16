@@ -1,0 +1,23 @@
+{
+  "author": {
+    "passed": 41,
+    "failed": 0,
+    "sourceTestUnchanged": true,
+    "recipeAdaptation": {
+      "originalSha256": "c13d9c26410f4684e3f5a5597524a3390184eb6499ce0a5957bef6a26deed3ca",
+      "adaptedSha256": "a6084060839da8cf3ec53acacdcee4c192c0dfeaa0b72d917675985b2cd0b466",
+      "oneLiteralChange": true,
+      "fullReverseEqual": true,
+      "onlyOwnedFixture": true
+    },
+    "outputSha256": "799b0d160721478c0a857182c311a36268b086fca6d41f0a8c8a4021b5a3ae4e"
+  },
+  "ownedFixtureRemoved": true,
+  "independent": {
+    "tests": 19,
+    "pass": 19,
+    "fail": 0,
+    "skipped": 0,
+    "outputSha256": "d1ea87a7ce27c5fe1934c56025c16a6b0e7760ca3270ccd2acd204cd23e831cc"
+  }
+}

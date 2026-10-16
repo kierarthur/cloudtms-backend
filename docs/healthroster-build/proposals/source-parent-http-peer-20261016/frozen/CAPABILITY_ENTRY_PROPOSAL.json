@@ -1,0 +1,54 @@
+{
+  "version": "HEALTH_CORRECTION_ENTRY_CONTRACT_PROPOSAL_V1",
+  "status": "ROOT_REVIEW_REQUIRED_NOT_IMPLEMENTED_OR_PUBLISHED_ABI",
+  "author": "HEALTH",
+  "purpose": "A narrowly scoped server decision allowing the existing native Timesheet host to open its one review. It never establishes Ready, acceptance, payment, billing permission or a transaction capability.",
+  "transport": {
+    "proposalOnly": true,
+    "browser": "GET /api/timesheets/:timesheet_id/correction-entry",
+    "query": "No query or body keys",
+    "actualActor": "Existing authenticated requireUser result; never browser JSON",
+    "serviceRpcProposal": "public.timesheet_correction_entry_v1(jsonb)",
+    "serviceRequest": ["version:TIMESHEET_CORRECTION_ENTRY_REQUEST_V1", "timesheet_id:uuid", "actor_user_id:uuid"],
+    "privateReaderProposal": "private.timesheet_correction_entry_v1(uuid,uuid) returns jsonb STABLE",
+    "acl": "No browser table/EXECUTE grants; public wrapper service-only; private helper owner-only. Exact current actor and native visibility are checked inside SQL."
+  },
+  "responseSchemaProposal": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["version", "requested_timesheet_id", "current_timesheet_id", "placement_revision", "purpose", "may_open_review", "disabled_reason"],
+    "properties": {
+      "version": {"const": "TIMESHEET_CORRECTION_ENTRY_V1"},
+      "requested_timesheet_id": {"type": "string", "format": "uuid"},
+      "current_timesheet_id": {"type": ["string", "null"], "format": "uuid"},
+      "placement_revision": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+      "purpose": {"enum": ["CONTRACT_CORRECTION", "DAILY_RATE_CORRECTION", null]},
+      "may_open_review": {"type": "boolean"},
+      "disabled_reason": {"type": ["string", "null"], "maxLength": 500}
+    }
+  },
+  "requiredNativeDerivation": [
+    "Fresh active actor and installed private.weekly_source_pay_actor_allowed_v1(uuid); no new blanket Admin gate for Contract entry.",
+    "Actual native Office Timesheet/client visibility for the current reader BEFORE returning identity or capability. The existing broad handleTimesheetDetails is Admin-gated; do not remove that gate or reuse its broad payload as a role-redacted reader.",
+    "Use the exact final Candidate1003 private.timesheet_contract_current_placement_v1(uuid), not the earlier0713 body, booking-only current lookup, highest version or a browser ID. Certified native pending with no current allocation disables entry; current_timesheet_id=NULL is permitted only for that exact pending proof.",
+    "A real WEEKLY current native Contract-bound row selects CONTRACT_CORRECTION. Genuine DAILY contract_id=NULL selects DAILY_RATE_CORRECTION on the same physical ID; no Daily Change Contract item, even disabled. Other/ambiguous rows get no invented route.",
+    "Decimal placement_revision remains a canonical unsigned int63 string. A returned current ID/revision must agree with the exact admitted native placement and requested record.",
+    "Entry is advisory and grants no SQL event capability. Never expose private.timesheet_contract_move_capabilities, issue a capability during GET, create an operation/review/Work/command, or invoke a Bank writer.",
+    "The actual full public Preview must exist with correct service ACL before opening. Destination eligibility, all genuine worked/claim dates, immutable evidence, current financial/paid/protected state, actual Bank cut/SummaryDTO and Invoice preflight remain complete Preview/locked Accept responsibilities. Do not derive Ready from entry or symbol existence.",
+    "Denied current visibility returns the native403 without private IDs. Enabled entry requires disabled_reason=NULL; disabled entry uses a bounded role-safe actual native reason. No private financial identifiers or rate/money payload appears here."
+  ],
+  "callerCensusProposal": [
+    {"owner":"HEALTH", "target":"broker/src/index.js#Timesheet correction-entry authenticated GET dispatch", "status":"NEW_BOUNDED_HOST_CONTRIBUTION_REQUIRES_REVIEW"},
+    {"owner":"HEALTH", "target":"public.timesheet_correction_entry_v1(jsonb) and private.timesheet_correction_entry_v1(uuid,uuid)", "status":"NEW_DECLARATIONS_REQUIRES_NATIVE_VISIBILITY_PREDICATE_RETURN"},
+    {"owner":"HEALTH", "target":"js/main.js#openTimesheetContractMoveReview / existing More entry guard", "status":"CONSUME_DECLARED_ENTRY_READ_AFTER_ROOT_SEAL; current Physical host remains closed"},
+    {"owner":"BANKING", "target":"CloudTMSTimesheetContractMoveV1.open(options) / createTimesheetOverlayAdapter", "status":"EXISTING_EXACT_PACK_OPTIONS_UNCHANGED; no new option or loose DTO"}
+  ],
+  "remainingInputs": [
+    "Root seals this new Health response/transport declaration; it is not an existing TimesheetDTO field.",
+    "Supply or author the actual current role-safe Office Timesheet/client visibility predicate for non-Admin WP-PP readers, with original denied-scope negatives. The operation-created actor predicate alone is not that read authority.",
+    "Finish the actual Health public Contract Preview/read and Daily public composer against genuine Bank cut/summary and Invoice preflight. Until then, opening remains closed and no Ready claim is made.",
+    "Genuine reviewed CM17 bytes remain separately required at the actual host; Health must not implement that Banking component."
+  ],
+  "native": "NOT_RUN",
+  "api": "NOT_RUN"
+}

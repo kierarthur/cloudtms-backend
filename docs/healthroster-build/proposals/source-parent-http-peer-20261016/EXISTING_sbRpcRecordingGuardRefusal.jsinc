@@ -1,0 +1,20 @@
+async function sbRpcRecordingGuardRefusal(env, fn, args, opts, context = null) {
+  const correlationId = (context && typeof context === 'object' && context.correlationId)
+    ? String(context.correlationId)
+    : weeklySourceGuardRefusalCorrelationId('broker');
+  try {
+    return await sbRpc(env, fn, args, opts);
+  } catch (error) {
+    await recordWeeklySourceGuardRefusal(
+      env,
+      error,
+      correlationId,
+      `broker:${String(fn || '').trim() || 'unknown'}`,
+      (context && typeof context === 'object' && context.actorUserId !== undefined)
+        ? context.actorUserId
+        : weeklySourceGuardRefusalActor(args)
+    );
+    throw error;
+  }
+}
+
