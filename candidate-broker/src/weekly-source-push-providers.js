@@ -122,7 +122,11 @@ async function admitProviderCall({env,target,attemptId,permitId,consumeBeforeUtc
       dispatch_target_id:target.dispatch_target_id,dispatch_command_id:target.dispatch_command_id,
       target_snapshot_hash:target.target_snapshot_hash,provider:target.provider,content_hash:target.content_hash
     });
-  } catch {
+  } catch (error) {
+    if (error?.code==='CONTACT_PERMIT_EXPIRED') return {
+      outcome:'TRANSIENT_FAILURE',bounded_provider_receipt:{proved_no_network:true},
+      bounded_error:{error_code:'CONTACT_PERMIT_EXPIRED_NO_SUBMISSION'}
+    };
     // The consume transaction may have committed. Its original native attempt
     // retains uncertainty; a transport failure cannot authorise another alert.
     return {outcome:'AMBIGUOUS',bounded_provider_receipt:{},

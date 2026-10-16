@@ -313,6 +313,7 @@ begin
       'dispatch_target_id',claimed.id,'dispatch_command_id',command.id,
       'lease_token',claimed.lease_token,'lease_expires_at_utc',claimed.lease_expires_at_utc,
       'channel',claimed.channel,'target_kind',claimed.target_kind,'provider',claimed.provider,
+      'tranche_kind',command.tranche_kind,
       'external_target_id',claimed.external_target_id,
       'target_fingerprint',pg_catalog.encode(claimed.keyed_target_fingerprint,'hex'),
       'target_snapshot_hash',pg_catalog.encode(claimed.target_snapshot_hash,'hex'),

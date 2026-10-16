@@ -13,7 +13,19 @@ async function requestTiming(env, body) {
   });
   const response = await binding.fetch(await signWeeklySourceDeliveryRequest(request, env));
   const value = await readPushTimingRequest(response);
-  if (!response.ok) throw new Error('PUSH_TIMING_DEPENDENCY_UNAVAILABLE');
+  if (!response.ok) {
+    // Only this exact authenticated, closed native refusal proves that the
+    // original permit was not consumed. A transport error or generic 409
+    // remains uncertain and must never be treated as permission to retry.
+    if (body.operation === 'CONSUME_START' && response.status === 409
+      && value && Object.keys(value).length === 2 && value.ok === false
+      && value.error_code === 'CONTACT_PERMIT_EXPIRED') {
+      const error = new Error('CONTACT_PERMIT_EXPIRED');
+      error.code = 'CONTACT_PERMIT_EXPIRED';
+      throw error;
+    }
+    throw new Error('PUSH_TIMING_DEPENDENCY_UNAVAILABLE');
+  }
   return decodePushTimingServiceReply(value, body);
 }
 export function readWeeklyPushTiming(env, request) { return requestTiming(env, { operation: 'READ_TIMING', request }); }

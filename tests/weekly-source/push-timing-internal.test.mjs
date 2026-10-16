@@ -110,6 +110,26 @@ test('consume uncertainty retains original AMBIGUOUS and does not call the fake 
   const f=await apnsFixture(()=>{throw new Error('lost committed response');});
   assert.equal((await sendWeeklySourcePush(f.source)).outcome,'AMBIGUOUS');assert.equal(f.calls(),0);
 });
+
+test('exact native unconsumed expiry is no-network on the original attempt',async()=>{
+  const f=await apnsFixture(()=>{throw new Error('CONTACT_PERMIT_EXPIRED');});
+  const result=await sendWeeklySourcePush(f.source);
+  assert.equal(result.outcome,'TRANSIENT_FAILURE');
+  assert.deepEqual(result.bounded_error,{error_code:'CONTACT_PERMIT_EXPIRED_NO_SUBMISSION'});
+  assert.deepEqual(result.bounded_provider_receipt,{proved_no_network:true});
+  assert.equal(f.calls(),0);
+});
+
+for(const [label,status,value]of[
+  ['extra field',409,{ok:false,error_code:'CONTACT_PERMIT_EXPIRED',call_once:true}],
+  ['wrong HTTP status',503,{ok:false,error_code:'CONTACT_PERMIT_EXPIRED'}],
+  ['generic conflict',409,{ok:false,error_code:'CONTACT_PERMIT_INVALID'}]
+])test(`untrusted expiry-shaped ${label} retains uncertainty without fetching`,async()=>{
+  const f=await apnsFixture(()=>consumed());
+  f.source.env.MYTMS_IDENTITY_DELIVERY={fetch:async()=>new Response(JSON.stringify(value),{status})};
+  assert.equal((await sendWeeklySourcePush(f.source)).outcome,'AMBIGUOUS');
+  assert.equal(f.calls(),0);
+});
 test('late consume response is proved no-network here and cannot fetch after call window',async()=>{
   const f=await apnsFixture(()=>consumed());f.source.consumeBeforeUtc=utc(-1);
   const result=await sendWeeklySourcePush(f.source);

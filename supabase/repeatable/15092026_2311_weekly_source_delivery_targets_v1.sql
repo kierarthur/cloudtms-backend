@@ -79,7 +79,7 @@ begin
      or pg_catalog.jsonb_typeof(v_receipt)<>'object'
      or pg_catalog.jsonb_typeof(v_error)<>'object'
      or exists(select 1 from pg_catalog.jsonb_object_keys(v_receipt) key
-               where key not in ('provider_status','provider_request_id','retirement_recorded'))
+               where key not in ('provider_status','provider_request_id','retirement_recorded','proved_no_network'))
      or exists(select 1 from pg_catalog.jsonb_object_keys(v_error) key
                where key not in ('error_code','provider_status','retry_after_seconds'))
      or pg_catalog.char_length(coalesce(v_provider_message_id,''))>500
@@ -130,6 +130,10 @@ begin
   if v_target.state<>'SUBMISSION_STARTED' or v_target.attempt_count<>v_attempt.attempt_number then
     raise exception 'WEEKLY_SOURCE_TARGET_RESULT_STALE' using errcode='40001';
   end if;
+
+  perform private.weekly_contact_source_result_v1(
+    v_attempt.id,v_outcome,v_provider_message_id,v_receipt,v_error
+  );
 
   update public.weekly_message_target_attempts
   set completed_at_utc=pg_catalog.transaction_timestamp(),outcome=v_outcome,
