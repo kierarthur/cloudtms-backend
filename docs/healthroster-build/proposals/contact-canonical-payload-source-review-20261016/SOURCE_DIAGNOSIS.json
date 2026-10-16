@@ -1,0 +1,274 @@
+{
+  "version": "CONTACT_CANONICAL_PAYLOAD_SOURCE_DIAGNOSIS_V1",
+  "qualification": "SAVED_SOURCE_AND_TRUNCATED_PREFIX_SIZE_GEOMETRY_NO_BUSINESS_VALUES",
+  "rootHeadAtReview": "39aa5b30042711956b83a7bf899f416d2f3b4771",
+  "sourcePins": [
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "bytes": 48190
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+      "bytes": 14597
+    }
+  ],
+  "nativeResult": {
+    "path": ".codex-tmp/contact-six-mcp-20261016-contact20-lock1-attempt3/NATIVE_RESULT.json",
+    "sha256": "0049c040f46318e69f3b4b3b90b8e11257b9b4492721852499a5e0ffe5c2ea79",
+    "accepted": false,
+    "errorCode": "55P03",
+    "rolledBack": true,
+    "connectedFresh": true,
+    "qualification": "HOLD_OVERSIZE_NO_CANONICAL_RESTORATION_PASS"
+  },
+  "before": {
+    "totalCanonicalChars": 27961220,
+    "totalCanonicalUtf8Bytes": 27961220,
+    "totalParts": 3496,
+    "canonicalSha256": "e69e3b4d6d4cd9a231923c738d2ac00af0957d4b3a21766b6db5ff8e317d57b9",
+    "returnedParts": 100,
+    "returnedCodepoints": 800000,
+    "toolRowsTruncated": false,
+    "finalReturnedEof": false,
+    "knownTopLevelPrefixFields": [
+      {
+        "key": "module",
+        "start": 11,
+        "end": 21,
+        "complete": true,
+        "observedUtf16Units": 10,
+        "observedCodepoints": 10
+      },
+      {
+        "key": "identityTest",
+        "start": 39,
+        "end": 43,
+        "complete": true,
+        "observedUtf16Units": 4,
+        "observedCodepoints": 4
+      },
+      {
+        "key": "markerAbsent",
+        "start": 61,
+        "end": 65,
+        "complete": true,
+        "observedUtf16Units": 4,
+        "observedCodepoints": 4
+      },
+      {
+        "key": "applyingCount",
+        "start": 84,
+        "end": 85,
+        "complete": true,
+        "observedUtf16Units": 1,
+        "observedCodepoints": 1
+      },
+      {
+        "key": "latestRelease",
+        "start": 104,
+        "end": 495,
+        "complete": true,
+        "observedUtf16Units": 391,
+        "observedCodepoints": 391
+      },
+      {
+        "key": "backgroundRows",
+        "start": 515,
+        "end": 800000,
+        "complete": false,
+        "observedUtf16Units": 799485,
+        "observedCodepoints": 799485
+      }
+    ],
+    "backgroundRowsPrefix": [
+      {
+        "key": "public.ts_financials_outbox",
+        "start": 547,
+        "end": 8822,
+        "complete": true,
+        "observedUtf16Units": 8275,
+        "observedCodepoints": 8275,
+        "completeArray": true,
+        "completeItems": 20,
+        "observedItemUtf16Units": 8235,
+        "minCompleteItemUtf16": 410,
+        "maxCompleteItemUtf16": 412
+      },
+      {
+        "key": "private.candidate_daily_batch_receipts",
+        "start": 8866,
+        "end": 800000,
+        "complete": false,
+        "observedUtf16Units": 791134,
+        "observedCodepoints": 791134,
+        "completeArray": false,
+        "completeItems": 2072,
+        "observedItemUtf16Units": 786910,
+        "minCompleteItemUtf16": 368,
+        "maxCompleteItemUtf16": 383
+      }
+    ],
+    "prefixOnly": true,
+    "noFullFieldSizeOrCountClaim": true
+  },
+  "after": {
+    "totalCanonicalChars": 27961603,
+    "totalCanonicalUtf8Bytes": 27961603,
+    "totalParts": 3496,
+    "canonicalSha256": "b042782e3068751b612f549f27879250092a72be534bf649a09a1f26f9dc8431",
+    "returnedParts": 100,
+    "returnedCodepoints": 800000,
+    "toolRowsTruncated": false,
+    "finalReturnedEof": false,
+    "knownTopLevelPrefixFields": [
+      {
+        "key": "module",
+        "start": 11,
+        "end": 21,
+        "complete": true,
+        "observedUtf16Units": 10,
+        "observedCodepoints": 10
+      },
+      {
+        "key": "identityTest",
+        "start": 39,
+        "end": 43,
+        "complete": true,
+        "observedUtf16Units": 4,
+        "observedCodepoints": 4
+      },
+      {
+        "key": "markerAbsent",
+        "start": 61,
+        "end": 65,
+        "complete": true,
+        "observedUtf16Units": 4,
+        "observedCodepoints": 4
+      },
+      {
+        "key": "applyingCount",
+        "start": 84,
+        "end": 85,
+        "complete": true,
+        "observedUtf16Units": 1,
+        "observedCodepoints": 1
+      },
+      {
+        "key": "latestRelease",
+        "start": 104,
+        "end": 495,
+        "complete": true,
+        "observedUtf16Units": 391,
+        "observedCodepoints": 391
+      },
+      {
+        "key": "backgroundRows",
+        "start": 515,
+        "end": 800000,
+        "complete": false,
+        "observedUtf16Units": 799485,
+        "observedCodepoints": 799485
+      }
+    ],
+    "backgroundRowsPrefix": [
+      {
+        "key": "public.ts_financials_outbox",
+        "start": 547,
+        "end": 8822,
+        "complete": true,
+        "observedUtf16Units": 8275,
+        "observedCodepoints": 8275,
+        "completeArray": true,
+        "completeItems": 20,
+        "observedItemUtf16Units": 8235,
+        "minCompleteItemUtf16": 410,
+        "maxCompleteItemUtf16": 412
+      },
+      {
+        "key": "private.candidate_daily_batch_receipts",
+        "start": 8866,
+        "end": 800000,
+        "complete": false,
+        "observedUtf16Units": 791134,
+        "observedCodepoints": 791134,
+        "completeArray": false,
+        "completeItems": 2072,
+        "observedItemUtf16Units": 786910,
+        "minCompleteItemUtf16": 368,
+        "maxCompleteItemUtf16": 383
+      }
+    ],
+    "prefixOnly": true,
+    "noFullFieldSizeOrCountClaim": true
+  },
+  "sourceExpectedWriters": {
+    "recordKind": "ROUTINE_HASH_AND_ACL_DESCRIPTORS_NOT_FULL_BODIES",
+    "contractSha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+    "writers": [
+      {
+        "schema": "private",
+        "identity": "_candidate_daily_json_sha256_v1(p_value jsonb)",
+        "sourceJsonUtf16Units": 344,
+        "sourceJsonUtf8Bytes": 344
+      },
+      {
+        "schema": "public",
+        "identity": "candidate_daily_projection_claim_v1(p_internal_context jsonb, p_claim_request_id uuid, p_idempotency_key text, p_target text, p_claimant text, p_max_items integer, p_lease_seconds integer, p_correlation_id text)",
+        "sourceJsonUtf16Units": 574,
+        "sourceJsonUtf8Bytes": 574
+      },
+      {
+        "schema": "public",
+        "identity": "tsfin_dequeue_batch_ids(p_limit integer)",
+        "sourceJsonUtf16Units": 454,
+        "sourceJsonUtf8Bytes": 454
+      },
+      {
+        "schema": "public",
+        "identity": "tsfin_work_fail(p_id uuid, p_error text)",
+        "sourceJsonUtf16Units": 454,
+        "sourceJsonUtf8Bytes": 454
+      }
+    ],
+    "totalSourceJsonUtf16Units": 1826,
+    "installedNativeSizeNotAttested": true
+  },
+  "outputFields": {
+    "fixedDigestChars": 64,
+    "fixedBusinessRelationCount": 8,
+    "unbounded": [
+      "backgroundRows.private.candidate_daily_batch_receipts",
+      "backgroundRows.public.ts_financials_outbox",
+      "backgroundSnapshotXip",
+      "backgroundWriterRoutines.extra_descriptors_if_schema_drift"
+    ],
+    "dominantBySource": "TWO_FULL_LIFETIME_BACKGROUND_ROW_METADATA_MAPS"
+  },
+  "existingDialects": {
+    "live": {
+      "boundedSummaryMintFound": false,
+      "completeBeforeAndAfterMapsUnconditionallyRequired": true,
+      "allKeysCountHashAndNativeAttributionRequired": true,
+      "weakMapBrandRequired": true
+    },
+    "strictQuiet": {
+      "exists": true,
+      "observeLiveBusiness": false,
+      "allOriginalFingerprintsMustEqual": true,
+      "actualFreshOtherActivityCountMustBeZero": true,
+      "changedFingerprintOrActiveJobAllowance": false,
+      "notInterchangeableWithLiveMode": true,
+      "existingContactMcpAdapterSelectsThisDialect": false,
+      "adapterSuccessorNeedsIndependentSourceReview": true
+    }
+  },
+  "sourceGap": "No existing source-approved finite-summary replacement for complete live maps. Reducing to a time window, dropping completed rows/maps, hash-only live acceptance, or status-only qualification would require a separately reviewed authority successor.",
+  "recommendation": "Do not raise row/cell budgets or retry blindly. Determine exact field sizes only via a separately reviewed size-only diagnostic if necessary; any live proof compression/aggregation needs exact full-domain and cross-snapshot proof review.",
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "businessDataCopied": false,
+  "rawMetadataPrinted": false,
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,42 @@
+{
+  "version": "CONTACT_CANONICAL_PAYLOAD_SIZE_SOURCE_REVIEW_V1",
+  "sourceDiagnosisSha256": "d63a17c79742ac5f0829308a8be3011131c2c390ca37fcc1e0615b09dfc51284",
+  "files": [
+    {
+      "file": "inputs/source/scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "bytes": 48190
+    },
+    {
+      "file": "inputs/source/scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+      "bytes": 14597
+    },
+    {
+      "file": "README.md",
+      "sha256": "6b37d1493eeb4a69c6af9b7a27839e9cd4f229badc9dcc74dadd2fd3fcb3fc06",
+      "bytes": 2918
+    },
+    {
+      "file": "review.mjs",
+      "sha256": "cf6e705995830e300466c0295f1acfcb009baad4d7b1df6d2779bbb9d488d370",
+      "bytes": 9198
+    },
+    {
+      "file": "seal.mjs",
+      "sha256": "d4fa660fa056da07fea829bae89aad0a088ab195612e2a913ad9f000b6d0987c",
+      "bytes": 1490
+    },
+    {
+      "file": "SOURCE_DIAGNOSIS.json",
+      "sha256": "d63a17c79742ac5f0829308a8be3011131c2c390ca37fcc1e0615b09dfc51284",
+      "bytes": 8591
+    }
+  ],
+  "sourceOnly": true,
+  "databaseCalls": 0,
+  "rootEdits": 0,
+  "businessDataCopied": false,
+  "native": "NOT_RUN",
+  "PartB": "NOT_APPROVED"
+}
