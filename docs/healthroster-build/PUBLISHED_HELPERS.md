@@ -183,3 +183,9 @@ Banking HR-06 may consume only the actual reviewed compatible publication receip
 The other stream's release for `e0a02bb5f86b1fb2134e540bbf0ccc52f6feec92` reached VERIFIED. Publication remains held by the unproved Banking first-install coordination window and remaining package/release gates. No substitute helper, duplicate producer or Banking message is authorised.
 
 PP source and temporary TEST actor/read/ACL rehearsal passed, with all changes rolled back and fresh original-definition/fixture-absence checks. This is development evidence, not the compatible publication receipt required above.
+
+## Complete native contact mail claim boundary composition — 16 October 2026
+
+Registered Money source `proposals/source-contact-claim-boundary-composition-20261016/` supplies a finite successor for root's current contact082 core, against the complete genuine04102026_0558 parent at90ffcf3f. It preserves the actual module owner assertion, both complete LEGACY/indexed factual branches, all existing financial/Candidate/Source authority predicates, invoker/RLS and lease/result recipe. Only the existing contact core operands, query selector, selected-row stamp and bridge cleanup are composed. Existing083 wrappers/signature/ACL remain controlling; no Banking body is reauthored and no F23 waiver is proposed.
+
+The complete core SHA256 is `a9313d7e4e1d91c8176520b74149c51de416b5ba88bb778d8a7764f547f57f6f`. The exact source receipt includes original complete-parent and current contact input hashes and the finite edit recipe. Twelve exact parent/composed-branch and hostile mutation checks PASS. Offline PG17 parses one complete SQL/PLpgSQL body; actual object resolution, execution, ACL, concurrency, first use and mount are **NOT_RUN**. Source-only proposal; Root alone reviews/classifies/mounts. No database/provider/deployment action occurred.

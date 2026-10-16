@@ -1,0 +1,42 @@
+{
+  "version": "CONTACT_CLAIM_BOUNDARY_COMPOSITION_SOURCE_V1",
+  "status": "SOURCE_ONLY_NOT_MOUNTED_NATIVE_REQUIRED_NOT_RUN",
+  "frozen_parent": {
+    "commit": "90ffcf3f40644280fcdb5b791a62a86613896d6e",
+    "path": "supabase/repeatable/04102026_0558_banking_pay_next_legacy_email_claim_boundary_v1.sql",
+    "sha256_normalized_lf": "fd5bc5ed576d81d02aade82b0111bb560e3ce51707259b76871b469f29e1fb9c",
+    "complete_claim_sha256": "8298182fa86ccbc151b44a775777326f0be7e6f10616aba74c2a7af2ad218e84"
+  },
+  "current_contact_inputs": [
+    {
+      "commit": "66c6e5ef2971a22d34264b829877d6546c49a1be",
+      "path": "supabase/repeatable/includes/weekly_contact_query/082_native_claim_kernel.sqlinc",
+      "sha256_normalized_lf": "9f9a54c9c3e650f6d71ccfd6fa0bd8181b9dfe816b6789e8be5907ea92a381dc"
+    },
+    {
+      "commit": "66c6e5ef2971a22d34264b829877d6546c49a1be",
+      "path": "supabase/repeatable/includes/weekly_contact_query/083_native_claim_bridge.sqlinc",
+      "sha256_normalized_lf": "659c5c8c7186f99696fefcfed804fab35716b8826b2c89bc32d780a79017c3e9"
+    }
+  ],
+  "output": {
+    "path": "forward/01_complete_native_claim_core.sqlinc",
+    "sha256": "a9313d7e4e1d91c8176520b74149c51de416b5ba88bb778d8a7764f547f57f6f",
+    "signature": "public._email_outbox_contact_claim_core_v1(integer,text,integer,boolean,uuid,text)"
+  },
+  "exact_edit_recipe": [
+    "Rename only the existing claim function and append the three existing contact-composition operands.",
+    "In BOTH complete native branches add the exact current TIMESHEET_QUERY selector ahead of the unchanged QUEUED predicate.",
+    "In BOTH selected-row lease CTEs add the current contact stamp and force it through the same picked rows before the unchanged lease update.",
+    "After the complete original LEGACY/factual branch append existing contact cleanup only when bridge=true."
+  ],
+  "retained": [
+    "One actual Banking module FOR SHARE owner assertion before mail locks, unchanged helper and true-LEGACY/failure-factual branch selection.",
+    "Separate indexed factual-only NEXT query and all exact Candidate, Source, completed-copy and invoice predicates.",
+    "Original INVOKER/RLS, search path, input bounds, SKIP LOCKED/order, leases and returned mail row recipe."
+  ],
+  "acl": "Retain current 083 wrappers and existing service-only core ACL; no new signature or browser grant. Do not mount historical public parent after the wrapper.",
+  "tests": "Exact whole-parent transformation and hostile branch/authority/lease mutation tests; no actual SQL execution or provider effect.",
+  "financial_owner_body_changed": false,
+  "database_actions": "NONE"
+}
