@@ -1,0 +1,61 @@
+async function handleSettingsGet(req, env, dependencies, user, kind, id = null) {
+  const deployment = weeklySourceDeploymentContext(env);
+  const query = settingsQuery(new URL(req.url), id ? ['effective_date'] : []);
+  const definitions = {
+    global: ['weekly_source_global_settings_get_v1', null],
+    groups: ['weekly_source_source_groups_get_v1', null],
+    rules: ['weekly_source_rule_sets_get_v1', null],
+    clients: ['weekly_source_client_settings_get_v1', 'client_id'],
+    contracts: ['weekly_source_contract_settings_get_v1', 'contract_id'],
+  };
+  const [rpcName, idKey] = definitions[kind] || [];
+  if (!rpcName) fail('WEEKLY_SOURCE_SETTINGS_ROUTE_INVALID', 'This settings route is unavailable.', 404);
+  const result = await (kind === 'global' ? (...args) => globalContactSettingsOwner(() => callRpc(...args)) : kind === 'rules' ? callRuleSettingsRpc : callRpc)(dependencies, rpcName, {
+    actor_user_id: user.id,
+    ...deployment,
+    ...query,
+    ...(idKey ? { [idKey]: canonicalUuid(id, 'WEEKLY_SOURCE_SETTINGS_ID_INVALID', kind) } : {}),
+  });
+  return jsonResponse(200, kind === 'global' ? decodeGlobalContactSettingsState(result) : result);
+}
+
+async function handleSettingsPut(req, env, dependencies, user, kind, id = null) {
+  const deployment = weeklySourceDeploymentContext(env);
+  settingsQuery(new URL(req.url));
+  const body = kind === 'global' ? await readGlobalContactSettingsSave(req) : await readJsonBody(req, 64 * 1024);
+  assertNoBrowserDeploymentScope(body);
+  assertNoBrowserFinancialFacts(body);
+  if (kind === 'rules' || kind === 'groupRules') {
+    const keys = kind === 'rules'
+      ? ['source_group_id', 'rule_set', 'values', 'request_id']
+      : ['rule_set_version_id', 'effective_from_week_ending', 'effective_to_week_ending', 'expected_group_version', 'request_id'];
+    if (Object.keys(body).some((key) => !keys.includes(key))) {
+      fail('WEEKLY_SOURCE_RULE_SETTINGS_REQUEST_INVALID', 'The source rules request is invalid.', 400);
+    }
+    if (kind === 'rules') {
+      // Syntax only. The DB owner resolves group, membership, cutoff and NEXT
+      // readiness again under locks; none comes from browser context.
+      body.values = validateRuleSetValues(body.values);
+      body.source_group_id = canonicalUuid(body.source_group_id, 'WEEKLY_SOURCE_SETTINGS_ID_INVALID', 'Source group');
+    }
+    body.request_id = canonicalUuid(body.request_id, 'WEEKLY_SOURCE_RULE_REQUEST_INVALID', 'Request');
+  }
+  const definitions = {
+    global: ['weekly_source_global_settings_save_atomic_v1', null],
+    groups: ['weekly_source_source_group_save_atomic_v1', null],
+    rules: ['weekly_source_rule_set_version_save_atomic_v1', null],
+    groupRules: ['weekly_source_group_rule_assign_atomic_v1', 'source_group_id'],
+    clients: ['weekly_source_client_settings_save_atomic_v1', 'client_id'],
+    contracts: ['weekly_source_contract_settings_save_atomic_v1', 'contract_id'],
+  };
+  const [rpcName, idKey] = definitions[kind] || [];
+  if (!rpcName) fail('WEEKLY_SOURCE_SETTINGS_ROUTE_INVALID', 'This settings route is unavailable.', 404);
+  const result = await (kind === 'global' ? (...args) => globalContactSettingsOwner(() => callRpc(...args)) : kind === 'rules' || kind === 'groupRules' ? callRuleSettingsRpc : callRpc)(dependencies, rpcName, {
+    ...body,
+    actor_user_id: user.id,
+    ...deployment,
+    ...(idKey ? { [idKey]: canonicalUuid(id, 'WEEKLY_SOURCE_SETTINGS_ID_INVALID', kind) } : {}),
+  });
+  return jsonResponse(200, kind === 'global' ? decodeGlobalContactSettingsState(result) : result);
+}
+

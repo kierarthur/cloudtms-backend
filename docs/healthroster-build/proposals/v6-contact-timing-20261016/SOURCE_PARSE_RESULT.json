@@ -1,0 +1,66 @@
+{
+  "parser": "pglast v7.20",
+  "database_execution": false,
+  "fixture_grammar_checks": [
+    {
+      "file": "fixtures/native-contact-assertions.sqlinc",
+      "sql_statements": 3,
+      "plpgsql_functions": 3,
+      "inner_sql_expressions": 36,
+      "native": "REQUIRED_NOT_RUN"
+    }
+  ],
+  "checks": [
+    {
+      "file": "010_timing_validation.sqlinc",
+      "sql_statements": 6,
+      "plpgsql_functions": 2,
+      "inner_sql_expressions": 10,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "file": "020_global_schema.sqlinc",
+      "sql_statements": 11,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 1,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "file": "030_global_owner.sqlinc",
+      "sql_statements": 2,
+      "plpgsql_functions": 2,
+      "inner_sql_expressions": 61,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "040_native_timing.sqlinc",
+      "sql_statements": 4,
+      "plpgsql_functions": 4,
+      "inner_sql_expressions": 51,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "050_manager_generation.sqlinc",
+      "sql_statements": 3,
+      "plpgsql_functions": 1,
+      "inner_sql_expressions": 50,
+      "rowtype_parser_alias_only": true
+    },
+    {
+      "file": "060_manager_due_scope.sqlinc",
+      "sql_statements": 3,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    },
+    {
+      "file": "070_acl.sqlinc",
+      "sql_statements": 18,
+      "plpgsql_functions": 0,
+      "inner_sql_expressions": 0,
+      "rowtype_parser_alias_only": false
+    }
+  ],
+  "failures": [],
+  "native": "REQUIRED_NOT_RUN"
+}

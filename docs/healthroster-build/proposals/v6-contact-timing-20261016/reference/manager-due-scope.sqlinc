@@ -1,0 +1,30 @@
+-- Complete native scope predicate; exact (a) revision does not broaden a cohort.
+create or replace function private.weekly_source_manager_due_event_covers_v1(p_event_id uuid,p_incident_id uuid)
+returns boolean language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select exists(
+    select 1 from public.weekly_manager_cohort_due_events event
+    join public.weekly_candidate_cohorts cohort on cohort.id=event.candidate_cohort_id
+    join public.weekly_discrepancy_incidents incident
+      on incident.id=p_incident_id and incident.candidate_id=cohort.candidate_id
+      and incident.source_cycle_id=cohort.source_cycle_id
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+    join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+    left join public.weekly_timesheet_submission_request_memberships requested on requested.id=event.requested_week_membership_id
+    where event.id=p_event_id and not private.weekly_source_covered_hours_incident_v1(incident.id)
+      and (case when event.not_finalised_comparison_revision_id is not null then
+        event.not_finalised_comparison_revision_id=comparison.id
+        and (comparison.issue_family='HEALTHROSTER_NOT_FINALISED' or private.weekly_source_expected_week_question_v1(incident.id))
+        and private.weekly_source_is_import_authoritative_v1(incident.client_id,comparison.contract_id,work_event.work_date)
+        else not ((comparison.issue_family='HEALTHROSTER_NOT_FINALISED' or private.weekly_source_expected_week_question_v1(incident.id))
+          and private.weekly_source_is_import_authoritative_v1(incident.client_id,comparison.contract_id,work_event.work_date)) end)
+      and (event.requested_week_membership_id is null
+      or (requested.state='SUBMITTED_WITH_ISSUES' and requested.client_id=incident.client_id
+        and requested.contract_id=comparison.contract_id
+        and work_event.work_date>requested.week_ending-7 and work_event.work_date<=requested.week_ending
+        and incident.candidate_action_state='NOT_REQUIRED'))
+  );
+$function$;
+alter function private.weekly_source_manager_due_event_covers_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_manager_due_event_covers_v1(uuid,uuid) from public,anon,authenticated,service_role;

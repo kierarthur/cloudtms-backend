@@ -1,0 +1,108 @@
+-- Native timing readers only. Admission/current need/pause/cutoff remain final START owners.
+create or replace function private.weekly_source_manager_interval_due_v1(
+ p_client_id uuid,p_from_utc timestamptz,p_value integer,p_unit text
+) returns timestamptz language plpgsql stable security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare local_start timestamp;d date;remaining integer:=p_value;searched integer:=0;effective jsonb;holidays jsonb;
+begin
+ if p_client_id is null or p_from_utc is null or not private.weekly_source_manager_interval_valid_v1(p_value,p_unit,true)
+  or not exists(select 1 from public.clients c where c.id=p_client_id) then
+  raise exception 'WEEKLY_SOURCE_MANAGER_TIMING_INVALID' using errcode='22023';end if;
+ if p_value=0 then return p_from_utc;end if;
+ if p_unit='HOURS' then return p_from_utc+make_interval(hours=>p_value);end if;
+ local_start:=p_from_utc at time zone 'Europe/London';d:=local_start::date;
+ if p_unit='CALENDAR_DAYS' then d:=d+p_value;
+ else
+  -- Read the same actual Client effective holiday list; its core already
+  -- normalizes bh_list UNION bh_feed_list. No second calendar/feed/store.
+  while remaining>0 loop
+   searched:=searched+1;if searched>1098 then raise exception 'WEEKLY_SOURCE_MANAGER_CALENDAR_UNAVAILABLE' using errcode='P0001';end if;
+   d:=d+1;
+   if extract(isodow from d) in(6,7) then continue;end if;
+   effective:=private._contract_settings_effective_core_v1(p_client_id,null,d,'OFFICE',null);
+   holidays:=effective->'values'->'bh_list';
+   if jsonb_typeof(holidays) is distinct from 'array' then raise exception 'WEEKLY_SOURCE_MANAGER_CALENDAR_UNAVAILABLE' using errcode='P0001';end if;
+   if not(holidays?d::text) then remaining:=remaining-1;end if;
+  end loop;
+ end if;
+ -- Shared London gap/overlap rule, retaining the genuine start's seconds.
+ return private.weekly_contact_london_boundary_v1(d,date_trunc('minute',local_start)::time,false)
+  +(local_start-date_trunc('minute',local_start));
+end;
+$function$;
+
+create or replace function private.weekly_source_manager_matching_pending_v1(p_incident_id uuid)
+returns boolean language sql stable security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+ select exists(
+  select 1 from public.weekly_discrepancy_incidents i
+  join public.weekly_issue_comparison_revisions c on c.id=i.current_comparison_revision_id
+  join public.weekly_work_events w on w.id=i.work_event_id
+  join public.timesheets t on t.timesheet_id=c.candidate_timesheet_id
+  where i.id=p_incident_id and i.state='OPEN' and c.candidate_timesheet_id is not null
+   and c.source_presence='UNFINALISED' and c.candidate_start_at_local is not null and c.candidate_end_at_local is not null
+   and exists(select 1 from private.weekly_source_candidate_current_rows_v1(
+    c.projection_publication_id,i.candidate_id,i.client_id,c.contract_id,
+    t.week_ending_date) r
+    where r.work_event_id=w.id and r.source_row_id=c.source_row_id and r.source_link_id=c.source_work_event_link_id
+     and r.row_finalisation_state='SOURCE_UNFINALISED' and r.work_date=w.work_date
+     and r.start_at_local=c.candidate_start_at_local and r.end_at_local=c.candidate_end_at_local
+     and r.break_minutes is not distinct from c.candidate_break_minutes))
+$function$;
+
+create or replace function private.weekly_source_manager_initial_purpose_v1(p_incident_id uuid,p_route_mode text)
+returns text language sql stable security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+ select case when p_route_mode='MANAGER_DIRECT' or private.weekly_source_manager_matching_pending_v1(p_incident_id)
+  then 'MANAGER_DIRECT' when p_route_mode='CANDIDATE_FIRST' then 'CANDIDATE_FIRST' else null end
+$function$;
+
+-- An accepted native membership is the provenance; callers cannot invent an
+-- accepted timestamp, reset a step, or use a generation/publication as budget.
+create or replace function private.weekly_source_manager_followup_timing_v1(p_accepted_membership_id uuid,p_at_utc timestamptz)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare m public.weekly_contact_delivery_memberships%rowtype;i public.weekly_discrepancy_incidents%rowtype;
+ w public.weekly_work_events%rowtype;s public.weekly_source_global_settings%rowtype;last_ordinal integer;accepted_count integer;
+ last_at timestamptz;step jsonb;due timestamptz;local_today date;last_completed_sunday date;routine boolean;reason text;
+begin
+ if p_at_utc is null then raise exception 'WEEKLY_SOURCE_MANAGER_TIMING_INVALID' using errcode='22023';end if;
+ select x.* into strict m from public.weekly_contact_delivery_memberships x where x.id=p_accepted_membership_id;
+ if m.audience<>'MANAGER' or m.accepted_at_utc is null or m.incident_id is null then
+  raise exception 'WEEKLY_SOURCE_MANAGER_ACCEPTED_SCOPE_INVALID' using errcode='42501';end if;
+ select x.* into strict i from public.weekly_discrepancy_incidents x where x.id=m.incident_id;
+ select x.* into strict w from public.weekly_work_events x where x.id=i.work_event_id;
+ if m.candidate_id<>i.candidate_id or m.client_id<>i.client_id or m.work_event_id is distinct from i.work_event_id
+  or m.incident_episode is distinct from i.episode_number then
+  raise exception 'WEEKLY_SOURCE_MANAGER_ACCEPTED_SCOPE_INVALID' using errcode='42501';end if;
+ if exists(select 1 from public.weekly_contact_delivery_memberships x where x.logical_contact_key=m.logical_contact_key
+  and (x.audience<>'MANAGER' or x.incident_id is distinct from m.incident_id or x.incident_episode is distinct from m.incident_episode
+   or x.candidate_id<>m.candidate_id or x.client_id<>m.client_id or x.work_event_id is distinct from m.work_event_id
+   or x.purpose<>m.purpose or x.budget_owner_key<>m.budget_owner_key)) then
+  raise exception 'WEEKLY_SOURCE_MANAGER_ACCEPTED_SCOPE_INVALID' using errcode='42501';end if;
+ select max(x.send_ordinal),count(*) into last_ordinal,accepted_count
+ from public.weekly_contact_delivery_memberships x where x.logical_contact_key=m.logical_contact_key and x.accepted_at_utc is not null;
+ if accepted_count<>last_ordinal then raise exception 'WEEKLY_SOURCE_MANAGER_ACCEPTED_SEQUENCE_INVALID' using errcode='55000';end if;
+ select x.accepted_at_utc into strict last_at from public.weekly_contact_delivery_memberships x
+ where x.logical_contact_key=m.logical_contact_key and x.send_ordinal=last_ordinal and x.accepted_at_utc is not null;
+ if last_at>p_at_utc or exists(select 1 from public.weekly_contact_delivery_memberships a
+  join public.weekly_contact_delivery_memberships b on b.logical_contact_key=a.logical_contact_key and b.send_ordinal=a.send_ordinal+1
+  where a.logical_contact_key=m.logical_contact_key and a.accepted_at_utc is not null and b.accepted_at_utc<a.accepted_at_utc) then
+  raise exception 'WEEKLY_SOURCE_MANAGER_ACCEPTED_SEQUENCE_INVALID' using errcode='55000';end if;
+ select x.* into strict s from public.weekly_source_global_settings x where x.singleton;
+ step:=s.manager_followups->(last_ordinal-1);
+ local_today:=(p_at_utc at time zone 'Europe/London')::date;
+ last_completed_sunday:=local_today-extract(isodow from local_today)::integer;
+ routine:=i.state='OPEN' and i.manager_action_state in('NOT_SENT','DUE','SENT')
+  and w.work_date<=last_completed_sunday and w.work_date>last_completed_sunday-7*s.manager_recent_completed_weeks
+  and w.work_date>=local_today-s.manager_max_work_age_days;
+ reason:=case when not routine then 'OUTSIDE_ROUTINE_SCOPE' when step is null then 'FOLLOWUPS_COMPLETE' else 'SCHEDULED' end;
+ if step is not null then due:=private.weekly_source_manager_interval_due_v1(m.client_id,last_at,(step->>'interval_value')::integer,step->>'interval_unit');end if;
+ return jsonb_build_object('version','MANAGER_FOLLOWUP_TIMING_V1','policy_revision',s.version::text,
+  'logical_contact_key',encode(m.logical_contact_key,'hex'),'incident_id',i.id,'incident_episode',i.episode_number,
+  'last_accepted_at_utc',to_char(last_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'next_send_ordinal',case when step is null then null else last_ordinal+1 end,'mode',step->>'mode',
+  'due_at_utc',case when due is null then null else to_char(due at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end,
+  'routine_in_scope',routine,'reason',reason,'requires_current_start_admission',true);
+end;
+$function$;

@@ -1,0 +1,19 @@
+{
+  "authority": "Owner SEND5D9 delegated isolated Health source commit/push; bounded CONTACT_PAUSE_SPEC global timing/SOL-16 task",
+  "database_execution": false,
+  "installation": false,
+  "native": "REQUIRED_NOT_RUN",
+  "source_tests": {"command": "node --test source.test.mjs", "passed": 10, "failed": 0},
+  "offline_grammar": {"command": "python parse-source.py C:/tmp/healthroster-v6-invoice-parser-20261016", "parser": "pglast 7.20", "sql_files": 7, "fixture_functions": 3, "failures": 0, "rowtype_alias": "Parser-only RECORD substitution; no executable SQL change or catalogue proof"},
+  "javascript_syntax": ["Full reference routes.js with only the supplied import/two-function overlay: PASS", "Complete proposed Office settings.js: PASS"],
+  "input_currency": "All seven saved reference hashes matched their actual current I2/Office saved owners immediately before publication",
+  "scope": "Separate proposal only; no root shared file, actual Office checkout, Banking, database, provider or deployment edit",
+  "native_required": [
+    "Protected additive schema/owner mapping/current catalogue/RLS/private and service ACL/rollback restoration",
+    "Actual global route Office render/edit/PUT/GET preserving137/11 plus unrelated values; strict aliases/revisions/CAS/replay/permission loss",
+    "Actual matching-pending direct08:00 and unanswered neighbour, existing candidate-first137-minute due and worker6h/12h clocks",
+    "Current configured holiday/weekend and London DST intervals",
+    "Accepted follow-up ordinal/vector/manual/automatic, skipped/deferred/reimport and final current policy checks",
+    "Native14/root scheduler/render/common START accepted-budget/current need/pause/cutoff composition"
+  ]
+}

@@ -1,0 +1,18 @@
+alter function private.weekly_source_manager_interval_valid_v1(integer,text,boolean) owner to postgres;
+revoke all on function private.weekly_source_manager_interval_valid_v1(integer,text,boolean) from public,anon,authenticated,service_role;
+alter function private.weekly_source_manager_followups_valid_v1(jsonb) owner to postgres;
+revoke all on function private.weekly_source_manager_followups_valid_v1(jsonb) from public,anon,authenticated,service_role;
+alter function private.weekly_source_global_settings_receipt_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_global_settings_receipt_guard_v1() from public,anon,authenticated,service_role;
+alter function private.weekly_source_manager_interval_due_v1(uuid,timestamptz,integer,text) owner to postgres;
+revoke all on function private.weekly_source_manager_interval_due_v1(uuid,timestamptz,integer,text) from public,anon,authenticated,service_role;
+alter function private.weekly_source_manager_matching_pending_v1(uuid) owner to postgres;
+revoke all on function private.weekly_source_manager_matching_pending_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_source_manager_initial_purpose_v1(uuid,text) owner to postgres;
+revoke all on function private.weekly_source_manager_initial_purpose_v1(uuid,text) from public,anon,authenticated,service_role;
+alter function private.weekly_source_manager_followup_timing_v1(uuid,timestamptz) owner to postgres;
+revoke all on function private.weekly_source_manager_followup_timing_v1(uuid,timestamptz) from public,anon,authenticated,service_role;
+alter function public.weekly_source_global_settings_get_v1(jsonb) owner to postgres;
+alter function public.weekly_source_global_settings_save_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_global_settings_get_v1(jsonb),public.weekly_source_global_settings_save_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_global_settings_get_v1(jsonb),public.weekly_source_global_settings_save_atomic_v1(jsonb) to service_role;

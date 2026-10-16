@@ -1,0 +1,32 @@
+create or replace function private.weekly_source_manager_interval_valid_v1(p_value integer,p_unit text,p_zero boolean)
+returns boolean language sql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+ select coalesce(p_value>=case when p_zero then 0 else 1 end and
+  ((p_unit='HOURS' and p_value<=8784) or (p_unit in('CALENDAR_DAYS','CLIENT_WORKING_DAYS') and p_value<=366)),false)
+$function$;
+
+create or replace function private.weekly_source_manager_followups_valid_v1(p_vector jsonb)
+returns boolean language plpgsql immutable security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare row jsonb;n integer:=0;
+begin
+ if jsonb_typeof(p_vector) is distinct from 'array' or jsonb_array_length(p_vector)>10 then return false;end if;
+ for row in select value from jsonb_array_elements(p_vector) loop
+  n:=n+1;
+  if jsonb_typeof(row) is distinct from 'object' or not(row ?& array['sequence','interval_value','interval_unit','mode'])
+   or row-array['sequence','interval_value','interval_unit','mode']<>'{}'::jsonb
+   or jsonb_typeof(row->'sequence') is distinct from 'number' or row->>'sequence' !~ '^[0-9]+$'
+   or jsonb_typeof(row->'interval_value') is distinct from 'number' or row->>'interval_value' !~ '^[0-9]+$'
+   or length(row->>'interval_value')>4 or row->>'sequence'<>n::text
+   or not coalesce(row->>'mode' in('MANUAL','AUTOMATIC'),false)
+   or jsonb_typeof(row->'interval_unit') is distinct from 'string' then return false;end if;
+  if not private.weekly_source_manager_interval_valid_v1((row->>'interval_value')::integer,row->>'interval_unit',false) then return false;end if;
+ end loop;
+ return true;
+end;
+$function$;
+
+alter function private.weekly_source_manager_interval_valid_v1(integer,text,boolean) owner to postgres;
+revoke all on function private.weekly_source_manager_interval_valid_v1(integer,text,boolean) from public,anon,authenticated,service_role;
+alter function private.weekly_source_manager_followups_valid_v1(jsonb) owner to postgres;
+revoke all on function private.weekly_source_manager_followups_valid_v1(jsonb) from public,anon,authenticated,service_role;

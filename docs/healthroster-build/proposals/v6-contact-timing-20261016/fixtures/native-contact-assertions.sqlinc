@@ -1,0 +1,90 @@
+-- Define and invoke ONLY inside the integrator's server-owned TEST rollback.
+-- Actual existing actor/Agency/Client/incident/generation identities are inputs.
+-- No fake source rows, provider submission or permanent settings changes.
+create or replace function pg_temp.contact_timing_settings_roundtrip_v1(p_actor uuid,p_agency uuid,p_environment text)
+returns jsonb language plpgsql as $function$
+declare context jsonb:=jsonb_build_object('actor_user_id',p_actor,'agency_id',p_agency,'environment',p_environment);
+ before_state jsonb;settings jsonb;request jsonb;first_state jsonb;saved jsonb;replayed jsonb;unchanged jsonb;refused boolean;
+begin
+ if current_database()<>'cloudtms_test_clone' then raise exception 'TEST_DATABASE_REQUIRED';end if;
+ before_state:=public.weekly_source_global_settings_get_v1(context);
+ settings:=before_state->'settings'||jsonb_build_object('candidate_reminder_minutes',121,'candidate_response_deadline_minutes',763,
+  'manager_digest_minutes',137,'manager_manual_resend_cooldown_minutes',11,'candidate_manual_reminder_cooldown_minutes',83,'manager_secure_link_days',9,
+  'manager_first_delay_value',0,'manager_first_delay_unit','HOURS');
+ first_state:=public.weekly_source_global_settings_save_atomic_v1(context||jsonb_build_object('request_id',gen_random_uuid(),
+  'expected_settings_version',before_state->'settings_version','settings',settings));
+ settings:=first_state->'settings'||jsonb_build_object('manager_first_delay_value',1,'manager_followups','[]'::jsonb);
+ request:=context||jsonb_build_object('request_id',gen_random_uuid(),'expected_settings_version',first_state->'settings_version','settings',settings);
+ saved:=public.weekly_source_global_settings_save_atomic_v1(request);
+ replayed:=public.weekly_source_global_settings_save_atomic_v1(request);
+ if saved is distinct from replayed or jsonb_typeof(saved->'settings_version')<>'string'
+  or (saved->'settings')-array['manager_first_delay_value','manager_followups'] is distinct from
+     (first_state->'settings')-array['manager_first_delay_value','manager_followups']
+  or saved->'settings'->>'manager_digest_minutes'<>'137' or saved->'settings'->>'manager_manual_resend_cooldown_minutes'<>'11' then
+  raise exception 'SETTINGS_ROUNDTRIP_OR_REPLAY_FAILED';end if;
+ refused:=false;
+ begin perform public.weekly_source_global_settings_save_atomic_v1(jsonb_set(request,'{settings,manager_first_delay_value}','2'));
+ exception when serialization_failure then refused:=sqlerrm='WEEKLY_SOURCE_SETTINGS_REQUEST_REUSED';end;
+ if not refused then raise exception 'ALTERED_REPLAY_NOT_REJECTED';end if;
+ refused:=false;
+ begin perform public.weekly_source_global_settings_save_atomic_v1(jsonb_set(request,'{request_id}',to_jsonb(gen_random_uuid())));
+ exception when serialization_failure then refused:=sqlerrm='WEEKLY_SOURCE_SETTINGS_STALE';end;
+ if not refused then raise exception 'STALE_CAS_NOT_REJECTED';end if;
+ unchanged:=public.weekly_source_global_settings_save_atomic_v1(context||jsonb_build_object('request_id',gen_random_uuid(),
+  'expected_settings_version',saved->'settings_version','settings',settings));
+ if unchanged is distinct from saved then raise exception 'UNCHANGED_SAVE_ADVANCED_VERSION';end if;
+ foreach settings in array array[
+  jsonb_set(saved->'settings','{manager_first_delay_unit}','"DAYS"'),
+  (saved->'settings')||jsonb_build_object('manager_partial_digest_minutes',360),
+  (saved->'settings')||jsonb_build_object('manager_manual_send_cooldown_minutes',5),
+  jsonb_set(saved->'settings','{manager_followups}','[{"sequence":2,"interval_value":1,"interval_unit":"HOURS","mode":"MANUAL"}]')
+ ] loop
+  refused:=false;
+  begin perform public.weekly_source_global_settings_save_atomic_v1(context||jsonb_build_object('request_id',gen_random_uuid(),
+   'expected_settings_version',saved->'settings_version','settings',settings));
+  exception when invalid_parameter_value then refused:=sqlerrm='WEEKLY_SOURCE_GLOBAL_SETTINGS_VALUES_INVALID';end;
+  if not refused then raise exception 'INVALID_SETTINGS_NOT_REJECTED';end if;
+ end loop;
+ return jsonb_build_object('ok',true,'version',saved->'settings_version','native_route_office_acceptance','REQUIRED_NOT_RUN');
+end;
+$function$;
+
+create or replace function pg_temp.contact_timing_generation_split_assert_v1(p_generation uuid,p_direct_incident uuid,p_candidate_first_incident uuid,p_eligible_start timestamptz)
+returns void language plpgsql as $function$
+declare direct_due timestamptz;candidate_due timestamptz;expected_candidate_due timestamptz;client uuid;s public.weekly_source_global_settings%rowtype;
+begin
+ if not private.weekly_source_manager_matching_pending_v1(p_direct_incident) then raise exception 'GENUINE_MATCHING_PENDING_REQUIRED';end if;
+ if private.weekly_source_manager_matching_pending_v1(p_candidate_first_incident) then raise exception 'GENUINE_CANDIDATE_FIRST_REQUIRED';end if;
+ select x.* into strict s from public.weekly_source_global_settings x where x.singleton;
+ select i.client_id into strict client from public.weekly_discrepancy_incidents i where i.id=p_direct_incident;
+ select min(e.due_at_utc) into direct_due from public.weekly_manager_cohort_due_events e
+ where e.recipient_generation_id=p_generation and e.event_kind='EARLY_ALL'
+  and private.weekly_source_manager_due_event_covers_v1(e.id,p_direct_incident);
+ select min(e.due_at_utc) into candidate_due from public.weekly_manager_cohort_due_events e
+ where e.recipient_generation_id=p_generation and e.event_kind='T6_RESPONDED'
+  and private.weekly_source_manager_due_event_covers_v1(e.id,p_candidate_first_incident);
+ select g.started_at_utc+s.manager_partial_digest_after into strict expected_candidate_due
+ from public.weekly_manager_recipient_memberships m
+ join public.weekly_candidate_outreach_generations g on g.id=m.candidate_generation_id
+ where m.recipient_generation_id=p_generation and m.incident_id=p_candidate_first_incident;
+ if direct_due is distinct from private.weekly_source_manager_interval_due_v1(client,p_eligible_start,s.manager_first_delay_value,s.manager_first_delay_unit)
+  or candidate_due is distinct from expected_candidate_due then raise exception 'DIRECT_OR_CANDIDATE_FIRST_CLOCK_CHANGED';end if;
+ if exists(select 1 from public.weekly_manager_cohort_due_events e where e.recipient_generation_id=p_generation
+  and e.event_kind in('EARLY_ALL','T6_RESPONDED') and e.trigger_hash=private.weekly_source_sha256_jsonb_v1('WEEKLY_MANAGER_INITIAL_PURPOSE_DUE_V1',
+   jsonb_build_object('recipient_generation_id',p_generation,'candidate_cohort_id',e.candidate_cohort_id,'event_kind',e.event_kind,'due_at_utc',to_char(e.due_at_utc at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+    'initial_purpose',case when e.event_kind='EARLY_ALL' then 'MANAGER_DIRECT' else 'CANDIDATE_FIRST' end))
+  and ((e.event_kind='EARLY_ALL' and private.weekly_source_manager_due_event_covers_v1(e.id,p_candidate_first_incident))
+    or(e.event_kind='T6_RESPONDED' and private.weekly_source_manager_due_event_covers_v1(e.id,p_direct_incident)))) then
+  raise exception 'PURPOSE_SCOPE_MIXED';end if;
+end;
+$function$;
+
+create or replace function pg_temp.contact_timing_calendar_assert_v1(p_actual_client uuid)
+returns void language plpgsql as $function$
+begin
+ if private.weekly_source_manager_interval_due_v1(p_actual_client,'2026-03-28T08:00:17Z',24,'HOURS') is distinct from '2026-03-29T08:00:17Z'::timestamptz
+  or private.weekly_source_manager_interval_due_v1(p_actual_client,'2026-03-28T08:00:17Z',1,'CALENDAR_DAYS') is distinct from '2026-03-29T07:00:17Z'::timestamptz
+  or private.weekly_source_manager_interval_due_v1(p_actual_client,'2026-10-24T07:00:17Z',1,'CALENDAR_DAYS') is distinct from '2026-10-25T08:00:17Z'::timestamptz then
+  raise exception 'ELAPSED_OR_LONDON_CALENDAR_ARITHMETIC_FAILED';end if;
+end;
+$function$;

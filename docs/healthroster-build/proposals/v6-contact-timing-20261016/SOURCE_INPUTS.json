@@ -1,0 +1,54 @@
+{
+  "native": "REQUIRED_NOT_RUN",
+  "inputs": [
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/06_automatic_actor_settings.sqlinc",
+      "root": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "abd5400e384a815aa2c3964cdb68848f43d5eb2d",
+      "sha256": "f8b1202086c2aacf119dca7b827c606e01921f34ef5f5e9c0a1f31e6d80df25e",
+      "reference": "reference/settings.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/13_manager_generation.sqlinc",
+      "root": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "abd5400e384a815aa2c3964cdb68848f43d5eb2d",
+      "sha256": "60ff40db4f380cc0b0e1b89a4f6f9b6f39f7ec301060243c68dcc9e62c9d264a",
+      "reference": "reference/manager-generation.sqlinc"
+    },
+    {
+      "file": "supabase/repeatable/13102026_1438_weekly_source_protection_queries/11_manager_due_scope.sqlinc",
+      "root": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "abd5400e384a815aa2c3964cdb68848f43d5eb2d",
+      "sha256": "ac1a66cdfb4eced48d133fae4ddaab641ac0d56a654419df00eff26e9032fb3d",
+      "reference": "reference/manager-due-scope.sqlinc"
+    },
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "root": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "abd5400e384a815aa2c3964cdb68848f43d5eb2d",
+      "sha256": "a5dad744a93f94f35fad745ccf326a9950c3ad902d6de4f02621aee98bba5cb1",
+      "reference": "reference/routes.js"
+    },
+    {
+      "file": "js/weekly-source/settings.js",
+      "root": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-v2-office-13102026",
+      "commit": "efd6f4dd6b2f8974bbc24dd6f2c324424cc60f8b",
+      "sha256": "796e1ce4628df3b203557b1c59bd2cbf149856aaba2aec02e3e24689f34b6879",
+      "reference": "reference/settings.js"
+    },
+    {
+      "file": "docs/healthroster-build/v5-amendment-20261015/authority/CONTACT_PAUSE_SPEC.md",
+      "root": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "abd5400e384a815aa2c3964cdb68848f43d5eb2d",
+      "sha256": "c49bfb3539f381c263c69e8f12e098760d366b1528eaa38435ba88186310c12b",
+      "reference": "reference/CONTACT_PAUSE_SPEC.md"
+    },
+    {
+      "file": "broker/src/weekly-source/push-timing-office.mjs",
+      "root": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "abd5400e384a815aa2c3964cdb68848f43d5eb2d",
+      "reference": "reference/dependencies/push-timing-office.mjs",
+      "sha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa"
+    }
+  ]
+}
