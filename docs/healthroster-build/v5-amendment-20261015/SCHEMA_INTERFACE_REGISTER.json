@@ -3692,7 +3692,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -3804,7 +3810,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -3884,7 +3896,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -3956,7 +3974,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -4075,7 +4099,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -4954,7 +4984,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -5049,7 +5085,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -5144,7 +5186,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -5239,7 +5287,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -5343,7 +5397,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -5447,7 +5507,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -5551,7 +5617,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -5623,7 +5695,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
@@ -5718,7 +5796,13 @@
         "source_integration": "AUTHORED_AND_SOURCE_CHECKED",
         "native": "REQUIRED_NOT_RUN",
         "full_acceptance": "REQUIRED_NOT_RUN",
-        "prior_approvals_and_history_preserved": true
+        "prior_approvals_and_history_preserved": true,
+        "schema_current_read_native": {
+          "record": "docs/healthroster-build/v6-owner-delivery-20261016/QUERY_CONTACT_SCHEMA_NATIVE_ROLLBACK.json",
+          "status": "PASS",
+          "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
+          "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
+        }
       }
     },
     {
