@@ -2,7 +2,7 @@
   "version": "HEALTH_V6_COMPLETENESS_READ_AUDIT_V1",
   "qualification": "READ_ONLY_SOURCE_COMPLETENESS_NOT_PART_B_NOT_NATIVE_ACCEPTANCE",
   "initial_i2_commit": "77c629dba2efe39fa0e676e551e12bf5cf442664",
-  "latest_i2_observed": "e246b40ef3c301faccaf18d719fd2dad78f75a5a",
+  "latest_i2_observed": "5383434d29d39d994476da36a7c514a7b28690f2",
   "office_commit": "db25784674882a4b1c3b0ca3530cee1db2399260",
   "mytms_commit": "a7a1526e697cec792db4123a5b0aa1b1deee9303",
   "reviewed_pack_content": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
@@ -35,10 +35,10 @@
   ],
   "integration_updates": {
     "invoice": "e246 source-mounted while audit ran; no native/release qualification",
-    "candidate": "f566 root mount in progress; final joined source not new missing authoring",
+    "candidate": "f566 full55 plus genuine nullable native-pending migration mounted5383434d; native NOT_RUN",
     "source_pending": "e8cc reviewed source plus Report1808 full duty successor awaiting root",
     "contact": "e466 full continuation published WIP awaiting full root/native review; existing strict controllers not parent-mounted",
-    "source_native": "d863 full SQL/application/adoption depends actual Bank closure; Worker modules already integrated"
+    "source_native": "d863 full52 inputs/78 declarations unmounted;77 complete Health functions selected after excluding embedded Bank receipt-hook body; existing25 Worker files/351 source tests do not replace SQL"
   },
   "banking_boundary": {
     "read_source_or_checklist": false,
@@ -124,7 +124,7 @@
       "sha256": "d54278e9d763fa6a9a5d9c7d34a4eccaa553db92bccf6353894a104107e0023b"
     }
   ],
-  "audit_sha256": "c9d935b7c8764efbd239f606f50e640fe7a49fef2cdcce5ed4628721d1d184a6",
+  "audit_sha256": "5968e847126b00ad2dc33a3706a44b3ddcc43f90965bb57dea4b9fb4ae647b89",
   "effects": {
     "database_connections": 0,
     "application_source_edits": 0,
@@ -133,5 +133,15 @@
     "deployments": 0,
     "secrets_printed": false,
     "files_authored": "This own-worktree audit Markdown/JSON only"
+  },
+  "assembly_supplement": {
+    "markdown": "SOURCE_ASSEMBLY_REVIEW.md",
+    "json": "SOURCE_ASSEMBLY_REVIEW.json",
+    "json_sha256": "7a82f40abf75b94079247c98060989c5c0e5cd117fce8449f92e80d6382cdcc9",
+    "markdown_sha256": "b4de381b0fdb67ac1ec1c28fbcc4535bf79b4a5dedcbe2a42d28841f3dd62e7e",
+    "frozen_inputs_verified": 115,
+    "contact_recipe_stale_hashes": 1,
+    "banking_body_excluded": "private.bpay_next_source_receipt_publish_v1() and owner/ACL/trigger suffix of d863 forward19",
+    "scope": "Read-only audit evidence; no product or source-receipt correction authored"
   }
 }
