@@ -1,0 +1,106 @@
+-- Immutable native command/render lineage only. Current eligibility remains
+-- Root0214/native START. Replies, pause and publication changes after START
+-- must not erase genuine provider results for the original saved members.
+create or replace function private.weekly_contact_source_logical_members_v1(p_command_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare c public.weekly_message_dispatch_commands%rowtype;i public.weekly_message_intents%rowtype;
+ r public.weekly_message_renders%rowtype;g public.weekly_candidate_outreach_generations%rowtype;
+ request public.weekly_timesheet_submission_requests%rowtype;b public.weekly_manager_review_batches%rowtype;
+ member record;members jsonb:='[]';identity jsonb;logical bytea;budget bytea;audience text;purpose text;ordinal integer;expected_count integer;
+begin
+ select * into strict c from public.weekly_message_dispatch_commands where id=p_command_id;
+ select * into strict i from public.weekly_message_intents where id=c.message_intent_id;
+ select * into strict r from public.weekly_message_renders where id=c.message_render_id;
+ if r.message_intent_id<>i.id or i.environment<>c.environment or i.agency_id<>c.agency_id
+  or i.source_cycle_id<>c.source_cycle_id or i.tranche_kind<>c.tranche_kind or i.tranche_sequence<>c.tranche_sequence
+  or r.rendered_content_hash<>c.rendered_content_hash or r.membership_hash<>c.membership_hash
+  or r.render_sequence<1 then raise exception 'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID' using errcode='23514';end if;
+ if i.audience_kind='CANDIDATE' then
+  audience:='WORKER';
+  select * into strict g from public.weekly_candidate_outreach_generations where id=c.candidate_generation_id;
+  if i.candidate_generation_id<>g.id or i.candidate_cohort_id<>g.candidate_cohort_id or g.source_cycle_id<>c.source_cycle_id
+   or g.membership_hash<>c.membership_hash then raise exception 'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID' using errcode='23514';end if;
+  purpose:=g.request_kind;
+  if purpose='CHECK_HOURS' then
+   select count(*) into expected_count from public.weekly_candidate_outreach_memberships where candidate_generation_id=g.id;
+   ordinal:=case when c.tranche_kind='CANDIDATE_INITIAL' and c.tranche_sequence=1 then 1
+    when c.tranche_kind='CANDIDATE_REMINDER_6H' and c.tranche_sequence=1 then 2
+    when c.tranche_kind='CANDIDATE_MANUAL_REMINDER' and c.tranche_sequence<=2147483645 then c.tranche_sequence+2 end;
+   for member in select m.id native_member_id,incident.id incident_id,incident.episode_number incident_episode,
+    incident.work_event_id,g.candidate_id candidate_id,incident.client_id,
+    jsonb_build_object('kind','CANDIDATE_CHECK_HOURS_MEMBER_V1','membership_id',m.id,'candidate_generation_id',g.id,
+     'comparison_revision_id',comparison.id,'comparison_fingerprint',encode(comparison.material_comparison_fingerprint,'hex')) native_basis
+    from public.weekly_candidate_outreach_memberships m join public.weekly_discrepancy_incidents incident on incident.id=m.incident_id
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=m.comparison_revision_id and comparison.incident_id=incident.id
+    join public.weekly_work_events work on work.id=incident.work_event_id and work.candidate_id=incident.candidate_id and work.client_id=incident.client_id
+    where m.candidate_generation_id=g.id and incident.candidate_id=g.candidate_id and incident.client_id=g.client_id
+     and incident.source_cycle_id=g.source_cycle_id order by m.id loop
+    identity:=jsonb_build_object('work_event_id',member.work_event_id,'incident_id',member.incident_id,'incident_episode',member.incident_episode);
+    logical:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_LOGICAL_V1',jsonb_build_object('environment',c.environment,
+     'agency_id',c.agency_id,'candidate_id',member.candidate_id,'client_id',member.client_id,'purpose',purpose,'audience',audience,'identity',identity));
+    budget:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_BUDGET_V1',jsonb_build_object('logical_contact_key',encode(logical,'hex')));
+    members:=members||jsonb_build_array(to_jsonb(member)||jsonb_build_object('logical_contact_key',encode(logical,'hex'),
+     'budget_owner_key',encode(budget,'hex'),'purpose',purpose,'audience',audience,'send_ordinal',ordinal));
+   end loop;
+  elsif purpose='SUBMIT_TIMESHEET' then
+   ordinal:=case when c.tranche_kind='TIMESHEET_SUBMISSION_INITIAL' and c.tranche_sequence=1 then 1
+    when c.tranche_kind='TIMESHEET_SUBMISSION_REMINDER_6H' and c.tranche_sequence<=2147483646 then c.tranche_sequence+1 end;
+   -- The real native request writer binds request_generation to this genuine
+   -- outreach generation. No latest/max request or synthetic expected week.
+   select * into strict request from public.weekly_timesheet_submission_requests x
+    where x.candidate_cohort_id=g.candidate_cohort_id and x.candidate_id=g.candidate_id and x.source_cycle_id=g.source_cycle_id
+     and x.request_generation=g.generation_number and x.membership_hash=g.membership_hash and x.environment=c.environment and x.agency_id=c.agency_id;
+   select count(*) into expected_count from public.weekly_timesheet_submission_request_memberships where submission_request_id=request.id;
+   for member in select m.id native_member_id,null::uuid incident_id,null::integer incident_episode,null::uuid work_event_id,
+    request.candidate_id,m.client_id,
+    jsonb_build_object('kind','NATIVE_EXPECTED_WEEK_MEMBER_V1','submission_request_id',request.id,'membership_id',m.id,
+     'candidate_generation_id',g.id,'contract_id',m.contract_id,'week_ending',m.week_ending,
+     'expected_source_fingerprint',encode(m.expected_source_fingerprint,'hex')) native_basis
+    from public.weekly_timesheet_submission_request_memberships m join public.contracts contract on contract.id=m.contract_id
+     and contract.candidate_id=request.candidate_id and contract.client_id=m.client_id
+    where m.submission_request_id=request.id order by m.id loop
+    identity:=jsonb_build_object('contract_id',member.native_basis->'contract_id','week_ending',member.native_basis->'week_ending');
+    -- The saved fingerprint stays in actual native evidence, but reimport's
+    -- publication/generation/fingerprint does not renew this week's allowance.
+    logical:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_LOGICAL_V1',jsonb_build_object('environment',c.environment,
+     'agency_id',c.agency_id,'candidate_id',member.candidate_id,'client_id',member.client_id,'purpose',purpose,'audience',audience,'identity',identity));
+    budget:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_BUDGET_V1',jsonb_build_object('logical_contact_key',encode(logical,'hex')));
+    members:=members||jsonb_build_array(to_jsonb(member)||jsonb_build_object('logical_contact_key',encode(logical,'hex'),
+     'budget_owner_key',encode(budget,'hex'),'purpose',purpose,'audience',audience,'send_ordinal',ordinal));
+   end loop;
+  else raise exception 'CONTACT_SOURCE_NATIVE_PURPOSE_UNPROVIDED' using errcode='55000';end if;
+ elsif i.audience_kind='MANAGER' then
+  audience:='MANAGER';purpose:='CHECK_HOURS';
+  -- All actual initial writers use sequence1. MANAGER_MANUAL_SELECTED claims
+  -- unsent rows only. No current native MANAGER_MANUAL_RESEND producer exists;
+  -- neither max accepted nor a new generation can invent its ordinal.
+  if c.tranche_kind in('MANAGER_EARLY_ALL','MANAGER_T6_RESPONDED','MANAGER_T12_REMAINDER','MANAGER_MANUAL_SELECTED') and c.tranche_sequence=1 then ordinal:=1;end if;
+  select * into strict b from public.weekly_manager_review_batches where message_render_id=r.id;
+  select count(*) into expected_count from public.weekly_manager_review_items where review_batch_id=b.id;
+  if b.recipient_generation_id<>i.recipient_generation_id or b.original_membership_hash<>c.membership_hash or b.sent_content_hash<>r.rendered_content_hash
+   or c.recipient_route_id<>i.recipient_route_id then raise exception 'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID' using errcode='23514';end if;
+  for member in select m.id native_member_id,incident.id incident_id,m.incident_episode,incident.work_event_id,incident.candidate_id,incident.client_id,
+   jsonb_build_object('kind','MANAGER_REVIEW_ITEM_V1','review_batch_id',b.id,'review_item_id',m.id,
+    'comparison_revision_id',comparison.id,'comparison_fingerprint',encode(m.sent_comparison_fingerprint,'hex')) native_basis
+   from public.weekly_manager_review_items m join public.weekly_discrepancy_incidents incident on incident.id=m.incident_id
+   join public.weekly_issue_comparison_revisions comparison on comparison.id=m.sent_comparison_revision_id and comparison.incident_id=incident.id
+    and comparison.material_comparison_fingerprint=m.sent_comparison_fingerprint
+   join public.weekly_work_events work on work.id=incident.work_event_id and work.candidate_id=incident.candidate_id and work.client_id=incident.client_id
+   where m.review_batch_id=b.id and incident.source_cycle_id=c.source_cycle_id order by m.id loop
+   identity:=jsonb_build_object('work_event_id',member.work_event_id,'incident_id',member.incident_id,'incident_episode',member.incident_episode);
+   logical:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_LOGICAL_V1',jsonb_build_object('environment',c.environment,
+    'agency_id',c.agency_id,'candidate_id',member.candidate_id,'client_id',member.client_id,'purpose',purpose,'audience',audience,'identity',identity));
+   budget:=private.weekly_source_sha256_jsonb_v1('WEEKLY_CONTACT_SOURCE_BUDGET_V1',jsonb_build_object('logical_contact_key',encode(logical,'hex')));
+   members:=members||jsonb_build_array(to_jsonb(member)||jsonb_build_object('logical_contact_key',encode(logical,'hex'),
+    'budget_owner_key',encode(budget,'hex'),'purpose',purpose,'audience',audience,'send_ordinal',ordinal));
+  end loop;
+ else raise exception 'CONTACT_SOURCE_NATIVE_PURPOSE_UNPROVIDED' using errcode='55000';end if;
+ if ordinal is null then raise exception 'CONTACT_SOURCE_NATIVE_ORDINAL_UNPROVIDED' using errcode='55000';end if;
+ if jsonb_array_length(members) not between 1 and 500 or jsonb_array_length(members) is distinct from expected_count
+  or exists(select 1 from jsonb_array_elements(members)m group by m->>'logical_contact_key' having count(*)<>1) then
+  raise exception 'CONTACT_SOURCE_NATIVE_LINEAGE_INVALID' using errcode='23514';end if;
+ return jsonb_build_object('version','SOURCE_LOGICAL_MEMBERS_V1','dispatch_command_id',c.id,'payload_revision',r.render_sequence::text,
+  'content_hash',encode(c.rendered_content_hash,'hex'),'members',members);
+end;
+$function$;

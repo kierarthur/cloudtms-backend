@@ -222,6 +222,9 @@ begin
   return jsonb_build_object('ok',false,'version','CONTACT_START_RESULT_V1','owner_kind','WEEKLY_SOURCE_TARGET',
    'channel',v_target.channel,'reason','NOT_STARTED_PAUSED','dispatch_target_id',v_target.id,
    'next_eligible_at_utc',to_char(v_until at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));end if;
+ if not (private.weekly_contact_source_budget_v1(v_command.id)->>'allowed')::boolean then
+  return jsonb_build_object('ok',false,'version','CONTACT_START_RESULT_V1','owner_kind','WEEKLY_SOURCE_TARGET',
+   'channel',v_target.channel,'reason','OBSOLETE','dispatch_target_id',v_target.id,'next_eligible_at_utc',null);end if;
  v_admission:=jsonb_build_object('scope_revisions',v_scopes,'content_hash',v_after->>'content_hash',
   'admitted_at_utc',to_char(v_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'));
  if v_target.channel='PUSH' then
@@ -368,6 +371,7 @@ begin
   v_attempt.lease_owner,v_attempt.lease_token::text,v_target.lease_expires_at_utc,'STARTED',v_admitted,v_before,
   case when v_target.channel='EMAIL' then v_admitted end,v_attempt.provider_idempotency_key)
  returning id into v_permit;
+ perform private.weekly_contact_source_memberships_v1(v_permit,true);
  if v_target.channel='PUSH' then
   return jsonb_build_object('ok',true,'replay',false,'provider_attempt_id',v_attempt.id,
    'provider_idempotency_key',v_attempt.provider_idempotency_key,'permit_id',v_permit,

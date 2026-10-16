@@ -3699,6 +3699,13 @@
           "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
           "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
         }
+      },
+      "source_logical_membership_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CONTACT_MEMBERSHIP_IMPLEMENTATION.json",
+        "status": "AUTHORED_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "same_original_device_siblings": "INDEPENDENT_TRANSPORT",
+        "accepted_logical_membership": "ONCE_AT_ACTUAL_PERMIT_ACCEPTANCE"
       }
     },
     {
@@ -3817,6 +3824,13 @@
           "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
           "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
         }
+      },
+      "source_logical_membership_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CONTACT_MEMBERSHIP_IMPLEMENTATION.json",
+        "status": "AUTHORED_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "same_original_device_siblings": "INDEPENDENT_TRANSPORT",
+        "accepted_logical_membership": "ONCE_AT_ACTUAL_PERMIT_ACCEPTANCE"
       }
     },
     {
@@ -3903,6 +3917,13 @@
           "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
           "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
         }
+      },
+      "source_logical_membership_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CONTACT_MEMBERSHIP_IMPLEMENTATION.json",
+        "status": "AUTHORED_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "same_original_device_siblings": "INDEPENDENT_TRANSPORT",
+        "accepted_logical_membership": "ONCE_AT_ACTUAL_PERMIT_ACCEPTANCE"
       }
     },
     {
@@ -3981,6 +4002,13 @@
           "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
           "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
         }
+      },
+      "source_logical_membership_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CONTACT_MEMBERSHIP_IMPLEMENTATION.json",
+        "status": "AUTHORED_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "same_original_device_siblings": "INDEPENDENT_TRANSPORT",
+        "accepted_logical_membership": "ONCE_AT_ACTUAL_PERMIT_ACCEPTANCE"
       }
     },
     {
@@ -4106,6 +4134,13 @@
           "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
           "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
         }
+      },
+      "source_logical_membership_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CONTACT_MEMBERSHIP_IMPLEMENTATION.json",
+        "status": "AUTHORED_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "same_original_device_siblings": "INDEPENDENT_TRANSPORT",
+        "accepted_logical_membership": "ONCE_AT_ACTUAL_PERMIT_ACCEPTANCE"
       }
     },
     {
@@ -5294,6 +5329,13 @@
           "source_commit": "af62c698d75a93cba963b639167e4d7fc5a21248",
           "scope": "schema/repeatability/scoped read only; query business/concurrency not qualified"
         }
+      },
+      "source_logical_membership_qualification_20261016": {
+        "record": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CONTACT_MEMBERSHIP_IMPLEMENTATION.json",
+        "status": "AUTHORED_SOURCE_CHECKED",
+        "native": "REQUIRED_NOT_RUN",
+        "same_original_device_siblings": "INDEPENDENT_TRANSPORT",
+        "accepted_logical_membership": "ONCE_AT_ACTUAL_PERMIT_ACCEPTANCE"
       }
     },
     {

@@ -1,0 +1,91 @@
+{
+  "scope": "SOURCE_LOGICAL_MEMBERSHIP_NATIVE_OWNER_SOURCE",
+  "proposal_commit": "3b6adeb3f4db02cf35d62a887fed88af54a51212",
+  "proposal_manifest_sha256": "db9e1caee97ee7a7b92fbffc3d32266153ad1d7c9aea62dca095cfb1d1fd8ff7",
+  "schema_changes": false,
+  "worker_changes": false,
+  "bank_owned_changes": false,
+  "database_execution": false,
+  "native": "REQUIRED_NOT_RUN",
+  "provider": "NOT_RUN",
+  "full_acceptance": "REQUIRED_NOT_RUN",
+  "repeatable": {
+    "path": "supabase/repeatable/16102026_0403_weekly_contact_source_memberships_v1.sql",
+    "sha256": "a2c5221c2531d7f0bb8245573fd945cfc3ba9c610be9b1b7acb5e5f37e8a9010",
+    "functions": [
+      {
+        "signature": "private.weekly_contact_source_logical_members_v1(uuid)",
+        "payload": "forward/010_native_logical_members.sqlinc"
+      },
+      {
+        "signature": "private.weekly_contact_source_budget_v1(uuid)",
+        "payload": "forward/020_native_budget.sqlinc"
+      },
+      {
+        "signature": "private.weekly_contact_source_memberships_v1(uuid,boolean)",
+        "payload": "forward/030_native_enrol_assert.sqlinc"
+      },
+      {
+        "signature": "private.weekly_contact_source_membership_accept_v1(uuid)",
+        "payload": "forward/040_native_accept.sqlinc"
+      }
+    ],
+    "complete_includes": [
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_source_memberships/010_native_logical_members.sqlinc",
+        "sha256": "25fb04d1466e9f25c9e341d543cbe852c74614683f6e9c49dbc5dac21dc7e3a8"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_source_memberships/020_native_budget.sqlinc",
+        "sha256": "92f349dd431dc1808e4d6a851794a3cd51dbb898e804d3495592e2f51d382a7e"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_source_memberships/030_native_enrol_assert.sqlinc",
+        "sha256": "eed10421aa5248b6fe923456211b95189f0924c39de2eb158ebeb9d8e9d515ec"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_source_memberships/040_native_accept.sqlinc",
+        "sha256": "cab29973854389e28cbd22b3ac9a85c9dd5dcc6063156d499667c9c57367b914"
+      },
+      {
+        "path": "supabase/repeatable/includes/weekly_contact_source_memberships/090_acl.sqlinc",
+        "sha256": "3675ad3c2327fa0b41ad836ff9995e708868d2decda3660cac22e2b1e142bb39"
+      }
+    ]
+  },
+  "finite_composition": {
+    "anchors": 4,
+    "targets": [
+      "supabase/repeatable/16102026_0214_weekly_contact_source_admission_v1.sql",
+      "supabase/repeatable/16102026_0130_weekly_contact_submission_consume_v1.sql"
+    ]
+  },
+  "preserved": {
+    "native_target_result_and_aggregate_file": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+    "sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7",
+    "native_start_sha256": "4ba27457a080ae6d438ee853380b2ced36b8dcc3006cb1d6237f0c1dd135d152"
+  },
+  "source_checks": {
+    "offline_grammar_files": 7,
+    "procedures": 16,
+    "inner_expressions": 372,
+    "catalogue_dependent_rowtypes_aliased_in_parser_only": true,
+    "source_integrity": {
+      "migrations": 407,
+      "repeatables": 1074
+    }
+  },
+  "qualifications": [
+    "MANAGER_MANUAL_RESEND has no genuine native producer/explicit ordinal witness; refuses instead of inventing max-accepted followup.",
+    "Pre-install genuine native attempts retain actual owner/budget; no fabricated captured pause revisions or accepted memberships. New-command refill is refused.",
+    "A frozen Source body containing another command's already-owned logical slot is OBSOLETE; this owner cannot send an eligible subset with that old body. Genuine generation/render recomposition remains with its native producer.",
+    "New Source initial/reminder/manually staged slots use exact current native tranche/sequence writers; no generation/publication allowance renewal.",
+    "All catalogue/ACL/RLS, native result replay, dual-device concurrency/currentness, historical-owner and full runtime tests REQUIRED_NOT_RUN."
+  ],
+  "native_fixture": {
+    "path": "tests/weekly-source/source-contact-membership-native-assertions.sqlinc",
+    "cases": 7,
+    "status": "REQUIRED_NOT_RUN"
+  },
+  "install2": "NOT_INSTALLED"
+}

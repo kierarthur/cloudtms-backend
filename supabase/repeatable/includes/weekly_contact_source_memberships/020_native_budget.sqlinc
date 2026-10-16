@@ -1,0 +1,48 @@
+-- Called while common START already owns every actual sorted checking scope,
+-- before native attempt allocation. A device of the SAME original command is
+-- independent transport, never a duplicate new logical command.
+create or replace function private.weekly_contact_source_budget_v1(p_command_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare current_members jsonb:=private.weekly_contact_source_logical_members_v1(p_command_id);
+ c public.weekly_message_dispatch_commands%rowtype;other_command record;other_members jsonb;member jsonb;checked integer:=0;
+begin
+ select * into strict c from public.weekly_message_dispatch_commands where id=p_command_id;
+ for member in select value from jsonb_array_elements(current_members->'members') loop
+  if exists(select 1 from public.weekly_contact_delivery_memberships m where m.logical_contact_key=decode(member->>'logical_contact_key','hex')
+   and m.send_ordinal=(member->>'send_ordinal')::integer and m.delivery_id<>c.id) then
+   return jsonb_build_object('allowed',false,'reason','ORIGINAL_LOGICAL_OWNER','logical_contact_key',member->'logical_contact_key');end if;
+ end loop;
+ -- Preserve genuine pre-install native ownership without inventing a pause
+ -- revision, START permit or accepted timestamp for historical submissions.
+ -- Only exact incident or expected Contract/week candidates are inspected;
+ -- an unstarted old publication/render alone spends no send allowance.
+ for other_command in
+  select old.id from public.weekly_message_dispatch_commands old join public.weekly_message_intents intent on intent.id=old.message_intent_id
+  where old.id<>c.id and old.agency_id=c.agency_id and old.environment=c.environment
+   and (exists(select 1 from public.weekly_message_dispatch_targets t join public.weekly_message_target_attempts a on a.dispatch_target_id=t.id where t.dispatch_command_id=old.id)
+    or exists(select 1 from public.weekly_message_provider_attempts a where a.dispatch_command_id=old.id))
+   and exists(select 1 from jsonb_array_elements(current_members->'members')m where
+    ((m->>'audience'='WORKER' and intent.audience_kind='CANDIDATE') or(m->>'audience'='MANAGER' and intent.audience_kind='MANAGER')) and(
+    (m->>'incident_id' is not null and(
+     exists(select 1 from public.weekly_candidate_outreach_memberships membership where membership.candidate_generation_id=old.candidate_generation_id and membership.incident_id=(m->>'incident_id')::uuid)
+     or exists(select 1 from public.weekly_manager_review_batches batch join public.weekly_manager_review_items item on item.review_batch_id=batch.id
+      where batch.message_render_id=old.message_render_id and item.incident_id=(m->>'incident_id')::uuid and item.incident_episode=(m->>'incident_episode')::integer)))
+    or(m->>'purpose'='SUBMIT_TIMESHEET' and exists(
+     select 1 from public.weekly_candidate_outreach_generations generation join public.weekly_timesheet_submission_requests request
+      on request.candidate_cohort_id=generation.candidate_cohort_id and request.request_generation=generation.generation_number
+       and request.candidate_id=generation.candidate_id and request.source_cycle_id=generation.source_cycle_id and request.membership_hash=generation.membership_hash
+     join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id
+     where generation.id=old.candidate_generation_id and generation.request_kind='SUBMIT_TIMESHEET' and request.candidate_id=(m->>'candidate_id')::uuid
+      and membership.client_id=(m->>'client_id')::uuid and membership.contract_id=(m->'native_basis'->>'contract_id')::uuid
+      and membership.week_ending=(m->'native_basis'->>'week_ending')::date))))
+  order by old.id limit 1001 loop
+  checked:=checked+1;if checked>1000 then raise exception 'CONTACT_SOURCE_NATIVE_HISTORY_BOUND_EXCEEDED' using errcode='54000';end if;
+  other_members:=private.weekly_contact_source_logical_members_v1(other_command.id);
+  if exists(select 1 from jsonb_array_elements(current_members->'members')a cross join jsonb_array_elements(other_members->'members')b
+   where a->>'logical_contact_key'=b->>'logical_contact_key' and a->'send_ordinal'=b->'send_ordinal') then
+   return jsonb_build_object('allowed',false,'reason','ORIGINAL_NATIVE_ATTEMPT_OWNER','dispatch_command_id',other_command.id);end if;
+ end loop;
+ return jsonb_build_object('allowed',true,'reason','CURRENT_ORIGINAL_COMMAND');
+end;
+$function$;

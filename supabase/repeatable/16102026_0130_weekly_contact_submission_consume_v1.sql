@@ -133,7 +133,9 @@ begin
  perform private.weekly_source_query_require_service_v1();
  select * into strict v_attempt from public.weekly_message_target_attempts where id=p_attempt_id;
  select * into strict v_target from public.weekly_message_dispatch_targets where id=v_attempt.dispatch_target_id;
+ perform 1 from public.weekly_message_dispatch_commands where id=v_target.dispatch_command_id for update;
  select * into v_permit from public.weekly_contact_submission_permits where provider_attempt_id=p_attempt_id for update;
+ v_at:=clock_timestamp();
  v_no_network:=p_receipt->'proved_no_network'='true'::jsonb
   and p_error->>'error_code'='CONTACT_PERMIT_EXPIRED_NO_SUBMISSION';
  if not found then
@@ -176,6 +178,7 @@ begin
   status=case p_outcome when 'ACCEPTED' then 'ACCEPTED' when 'AMBIGUOUS' then 'AMBIGUOUS' else 'FAILED' end,
   accepted_at_utc=case when p_outcome='ACCEPTED' then v_at end,
   accepted_result_json=case when p_outcome='ACCEPTED' then v_result end where id=v_permit.id;
+ if p_outcome='ACCEPTED' then perform private.weekly_contact_source_membership_accept_v1(p_attempt_id);end if;
 end;
 $function$;
 

@@ -1,0 +1,8 @@
+alter function private.weekly_contact_source_logical_members_v1(uuid) owner to postgres;
+revoke all on function private.weekly_contact_source_logical_members_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_budget_v1(uuid) owner to postgres;
+revoke all on function private.weekly_contact_source_budget_v1(uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_memberships_v1(uuid,boolean) owner to postgres;
+revoke all on function private.weekly_contact_source_memberships_v1(uuid,boolean) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_membership_accept_v1(uuid) owner to postgres;
+revoke all on function private.weekly_contact_source_membership_accept_v1(uuid) from public,anon,authenticated,service_role;
