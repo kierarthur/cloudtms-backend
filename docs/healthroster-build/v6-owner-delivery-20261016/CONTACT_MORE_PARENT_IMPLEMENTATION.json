@@ -1,0 +1,74 @@
+{
+  "scope": "CONTACT_MORE_PARENT_SOURCE_CHECKPOINT",
+  "native_projection": "NOT_RUN",
+  "installed_acceptance": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "database_execution": false,
+  "source_owner": {
+    "baseline": "b192e0433cd24c4e7027ec1ca91470a715e57584",
+    "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+    "function_sha256": "5d8b766785991b508a582b7ca80f82ac41a959f2866341e1ffcebd0891474b85"
+  },
+  "proof": {
+    "office_focused_tests": 69,
+    "passed": 69,
+    "failed": 0,
+    "local_component_viewports": [
+      "1366x900",
+      "390x844"
+    ],
+    "local_component_external_requests": 0,
+    "offline_grammar": {
+      "procedures": 2,
+      "expressions": 143,
+      "rowtype_alias_parser_only": true
+    },
+    "source_integrity": {
+      "migrations": 406,
+      "repeatables": 1072
+    }
+  },
+  "pending": [
+    "genuine native combined read binding/projection",
+    "actual parent browser/API acceptance",
+    "complete contact history and native sender/result qualification",
+    "full protected Install2 and acceptance"
+  ],
+  "files": [
+    {
+      "repository": "backend",
+      "path": "scripts/compose-healthroster-contact-office-projection.mjs",
+      "sha256": "b2bf5bbc3ea08a524724c4e214227fd22b9427518a2828ea25d0f0444a67f40c"
+    },
+    {
+      "repository": "backend",
+      "path": "supabase/repeatable/includes/weekly_contact_office_rows_v1.sqlinc",
+      "sha256": "c96636a2fb262915af44830721e10a7bd4118646cf84b85353fe595faf104e0b"
+    },
+    {
+      "repository": "backend",
+      "path": "supabase/repeatable/16102026_0319_weekly_contact_office_projection_v1.sql",
+      "sha256": "d94522d3ae20fa2c4e2a0ee0d0918dbdd9ccc33e345995ae921cf8e19a07e597"
+    },
+    {
+      "repository": "Office",
+      "path": "js/weekly-source/combined-review.js",
+      "sha256": "9e7c63dcd93aebab4504c89fd55957f655e35b70992e435b55067817a62c4e4b"
+    },
+    {
+      "repository": "Office",
+      "path": "js/weekly-source/import-workspace.js",
+      "sha256": "caaa46c217add6b58c9eaa07eb89cc56dae253f19eb531b7a558d07a198f42a5"
+    },
+    {
+      "repository": "Office",
+      "path": "js/weekly-source/workspace-actions.js",
+      "sha256": "d1184992204ec0b86d63b612dd04016de4c862a0620f7e861e5216e22595b339"
+    },
+    {
+      "repository": "Office",
+      "path": "tests/unit/contact-controls-parent.test.cjs",
+      "sha256": "b4b8bfe84ee289df0cceef964dc734a534c418d490c8f489ebe238140b0b6017"
+    }
+  ]
+}
