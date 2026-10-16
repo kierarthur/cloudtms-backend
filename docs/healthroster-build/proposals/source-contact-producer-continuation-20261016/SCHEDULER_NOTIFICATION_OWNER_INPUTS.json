@@ -33,7 +33,11 @@
     },
     {
       "path": "forward/32_native_scheduler_followups.sqlinc",
-      "sha256": "2c9ad1a623650720ca0d826ff684752e2436347505bcfea51890f187526ba968"
+      "sha256": "305377cd512fd41c0b8dbd262f2a17501c157b3e9d30f4095e696b2b7562fccf"
+    },
+    {
+      "path": "forward/47_native_scheduler_selection.sqlinc",
+      "sha256": "2a7175036fcce40edcbd3695adae909c5328f0b420c1cb1c8e613b44c5fab4e0"
     }
   ],
   "qualification": "Authored source; actual PostgreSQL/scheduler/provider-free qualification NOT_RUN"

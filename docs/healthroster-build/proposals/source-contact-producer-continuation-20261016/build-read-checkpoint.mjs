@@ -35,7 +35,7 @@ const outputs=[...readdirSync(path.join(base,'one-time')).filter(x=>x.endsWith('
  'SUBMISSION_CONSUMER_INVENTORY.json','SUBMISSION_PAUSE_OWNER_INPUTS.json','SUBMISSION_READER_OWNER_INPUTS.json',
  'SUBMISSION_CALLER_OWNER_INPUTS.json','SUBMISSION_COHORT_DELTA_PROPOSAL.md',
  'CANDIDATE_CONTACT_ENTRY_INPUTS.json',
- 'EXACT_NATIVE_LOCK_OWNER_INPUTS.json','OFFLINE_GRAMMAR_INPUTS.json','OFFLINE_GRAMMAR_RESULT.json',
+ 'EXACT_NATIVE_LOCK_OWNER_INPUTS.json','SOURCE_COMPLETION_RECIPE.json','OFFLINE_GRAMMAR_INPUTS.json','OFFLINE_GRAMMAR_RESULT.json',
  ...readdirSync(base).filter(file=>file.startsWith('build-')&&file.endsWith('.mjs')).sort(),
  ...readdirSync(path.join(base,'runtime')).filter(file=>file!=='contact-manual-enquiry.mjs'&&file!=='contact-manual-enquiry.d.ts').sort().map(file=>'runtime/'+file),
  ...readdirSync(path.join(base,'tests')).sort().map(file=>'tests/'+file)].map(file=>({path:file,sha256:sha(readFileSync(path.join(base,file)))}));
@@ -48,7 +48,7 @@ writeFileSync(path.join(base,'READ_SOURCE_CHECKPOINT.json'),JSON.stringify({vers
  readonly_row_owner:'private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)',
  native:'NOT_RUN; managed scanner treats PL/pgSQL bodies as opaque; separate exact-input OFFLINE_GRAMMAR_RESULT is grammar/declared-fields only',
  unfinished:['Actual PostgreSQL/current-contract/native qualification of authored first-activation/cohort/partition/retained-reader successors',
-  'Native qualification of authored complete nested manager/manual/recheck transaction footprints; complete bounded scheduler lock-prefix selection',
+  'Native qualification of authored complete nested manager/manual/recheck transaction footprints and bounded scheduler lock-prefix selection',
   'Native review of manual mixed initial/followup group ineligibility and actual route grouping/throttle',
   'Complete retained capture/alias/rebase/notification native integrity review and first-use fixture assertions',
   'Root finite current runtime/combined-read/routes/Office/central ACL mount only after complete source review',

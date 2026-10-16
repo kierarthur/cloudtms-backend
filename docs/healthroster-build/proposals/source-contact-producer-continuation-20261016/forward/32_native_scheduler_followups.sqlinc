@@ -20,10 +20,15 @@ declare
   v_due_kind text;
   v_manager_tranche text;
   v_actionable integer;
+  v_selected jsonb;
+  v_collapse record;
   v_followup record;
   v_followup_result jsonb;
   v_followup_results jsonb:='[]';
   v_followup_held integer:=0;
+  v_followup_member jsonb;
+  v_followup_groups jsonb:='[]';
+  v_followup_group record;
 begin
   perform private.weekly_source_query_require_service_v1();
   if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
@@ -42,10 +47,16 @@ begin
     raise exception 'WEEKLY_SOURCE_SCHEDULER_LIMIT_INVALID' using errcode='22023';
   end if;
 
+  -- Freeze actual native batch IDs, then deployment and complete connected
+  -- scopes in sorted order, before the original first FOR UPDATE or overdue UPDATE.
+  v_selected:=private.weekly_contact_source_scheduler_selection_v1(v_now,v_limit);
+  perform private.weekly_contact_source_scheduler_selection_lock_v1(v_selected);
+
   for v_generation in
     select generation.*
     from public.weekly_candidate_outreach_generations generation
-    where generation.state='ACTIVE' and generation.reminder_due_at_utc<=v_now
+    where generation.id in(select(value->>'id')::uuid from jsonb_array_elements(v_selected->'candidate_generations'))
+      and generation.state='ACTIVE' and generation.reminder_due_at_utc<=v_now
       and exists(
         select 1 from public.weekly_message_intents intent
         where intent.candidate_generation_id=generation.id
@@ -106,7 +117,8 @@ begin
 
   update public.weekly_timesheet_submission_requests submission
   set state='OVERDUE',updated_at_utc=v_now
-  where submission.state in ('ACTIVE','PARTLY_SUBMITTED') and submission.deadline_at_utc<=v_now;
+  where submission.id in(select(value->>'id')::uuid from jsonb_array_elements(v_selected->'overdue_requests'))
+    and submission.state in ('ACTIVE','PARTLY_SUBMITTED') and submission.deadline_at_utc<=v_now;
   get diagnostics v_overdue_count=row_count;
 
   for v_route in
@@ -118,6 +130,9 @@ begin
     join public.weekly_manager_cohort_due_events event
       on event.recipient_generation_id=generation.id
      and event.state='PENDING' and event.due_at_utc<=v_now
+    where exists(select 1 from jsonb_array_elements(v_selected->'manager_routes')selected
+      where(selected->>'route_id')::uuid=route.id and(selected->>'generation_id')::uuid=generation.id
+        and selected->>'event_kind'=event.event_kind)
     group by route.id,generation.id,event.event_kind
     order by pg_catalog.min(event.due_at_utc),route.id,event.event_kind
     limit v_limit
@@ -190,7 +205,14 @@ begin
     update public.weekly_manager_cohort_due_events set state='CONSUMED'
     where id=any(v_event_ids);
   end loop;
-  perform private.weekly_contact_source_candidate_due_collapse_v1(v_now,v_limit);
+  for v_collapse in select earlier.id from public.weekly_message_intents earlier
+    where earlier.id in(select(value->>'id')::uuid from jsonb_array_elements(v_selected->'collapse_intents'))
+      and earlier.audience_kind='CANDIDATE'and earlier.state in('DUE','RENDERED')
+      and earlier.tranche_kind in('CANDIDATE_INITIAL','TIMESHEET_SUBMISSION_INITIAL')and earlier.due_at_utc<=v_now
+      and exists(select 1 from public.weekly_message_intents later where later.candidate_generation_id=earlier.candidate_generation_id
+        and later.tranche_kind in('CANDIDATE_REMINDER_6H','TIMESHEET_SUBMISSION_REMINDER_6H')and later.due_at_utc<=v_now
+        and later.state in('DUE','RENDERED','DISPATCHED'))order by earlier.id
+  loop perform private.weekly_contact_source_retire_unsubmitted_v1(v_collapse.id);end loop;
   -- Actual accepted native history, not consumed initial due-events, supplies
   -- later follow-up candidates. The bounded current batch retains genuine due
   -- ordering. Pending original owners are excluded without a lifetime cap.
@@ -198,7 +220,8 @@ begin
     with current_candidates as materialized(
       select incident.id,private.weekly_contact_source_followup_candidate_v1(incident.id,v_now) state
       from public.weekly_discrepancy_incidents incident
-      where incident.state='OPEN' and incident.manager_potential_state='AVAILABLE'
+      where incident.id in(select(value->>'id')::uuid from jsonb_array_elements(v_selected->'followups'))
+        and incident.state='OPEN' and incident.manager_potential_state='AVAILABLE'
         and incident.manager_action_state not in('RESPONDED','NOT_REQUIRED')
         and(exists(select 1 from public.weekly_contact_delivery_memberships member
           where member.incident_id=incident.id and member.incident_episode=incident.episode_number
@@ -226,13 +249,48 @@ begin
       if v_followup.state->>'reason'='HELD_DEPENDENCY' then
         v_followup_held:=v_followup_held+1;v_followup_result:=v_followup.state;
       else
-        v_followup_result:=private.weekly_contact_source_manager_followup_enqueue_v1(v_followup.id,clock_timestamp());
+        v_followup_member:=private.weekly_contact_manual_member_facts_v1(v_followup.id,'MANAGER',clock_timestamp());
+        if v_followup_member->>'manager_address'is null then
+          v_followup_result:=jsonb_build_object('version','CONTACT_SOURCE_FOLLOWUP_ENQUEUE_V1','incident_id',v_followup.id,
+            'message_intent_id',null,'disposition',coalesce(v_followup_member->>'exclusion_reason','MANAGER_CONTACT_DISABLED'));
+        else
+          v_followup_groups:=v_followup_groups||jsonb_build_array(jsonb_build_object('incident_id',v_followup.id,
+            'source_cycle_id',v_followup_member->'source_cycle_id','manager_address',v_followup_member->'manager_address',
+            'candidate_id',v_followup_member->'candidate_id','client_id',v_followup_member->'client_id',
+            'due_at_utc',v_followup.state->'due_at_utc'));
+          continue;
+        end if;
       end if;
     exception when others then
       v_followup_held:=v_followup_held+1;
       v_followup_result:=jsonb_build_object('incident_id',v_followup.id,'disposition','HELD_DEPENDENCY','code','CONTACT_SOURCE_FOLLOWUP_ITEM_HELD');
     end;
     v_followup_results:=v_followup_results||jsonb_build_array(v_followup_result);
+  end loop;
+  -- Partition the actual bounded selected due set by its genuine current
+  -- cycle/recipient. Native bodies retain500rows/100candidates/100clients;
+  -- no member is truncated and every member has its own accepted-step witness.
+  for v_followup_group in
+    with ordered as(
+      select member.value,(row_number()over(partition by member.value->>'source_cycle_id',member.value->>'manager_address'
+        order by(member.value->>'due_at_utc')::timestamptz,(member.value->>'incident_id')::uuid)-1)/500 partition_number,
+        (dense_rank()over(partition by member.value->>'source_cycle_id',member.value->>'manager_address'
+          order by(member.value->>'candidate_id')::uuid)-1)/100 candidate_partition,
+        (dense_rank()over(partition by member.value->>'source_cycle_id',member.value->>'manager_address'
+          order by(member.value->>'client_id')::uuid)-1)/100 client_partition
+      from jsonb_array_elements(v_followup_groups)member(value)
+    )select array_agg((value->>'incident_id')::uuid order by(value->>'incident_id')::uuid)incident_ids
+      from ordered group by value->>'source_cycle_id',value->>'manager_address',partition_number,candidate_partition,client_partition
+      order by value->>'source_cycle_id',value->>'manager_address',partition_number,candidate_partition,client_partition
+  loop
+    begin
+      v_followup_result:=private.weekly_contact_source_manager_followup_group_enqueue_v1(v_followup_group.incident_ids,clock_timestamp());
+      v_followup_results:=v_followup_results||(v_followup_result->'results');
+    exception when others then
+      v_followup_held:=v_followup_held+cardinality(v_followup_group.incident_ids);
+      select v_followup_results||jsonb_agg(jsonb_build_object('incident_id',id,'disposition','HELD_DEPENDENCY',
+        'code','CONTACT_SOURCE_FOLLOWUP_ITEM_HELD')order by id)into v_followup_results from unnest(v_followup_group.incident_ids)id;
+    end;
   end loop;
   return pg_catalog.jsonb_build_object(
     'ok',true,'now_utc',v_now,'candidate_reminder_intents',v_candidate_count,

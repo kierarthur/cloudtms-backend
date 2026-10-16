@@ -169,7 +169,7 @@
     {
       "source": "forward/07_capture_native_reads.sqlinc",
       "file": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\forward\\07_capture_native_reads.sqlinc",
-      "sha256": "20c8a3864902ece9ac72fb36e2e5b211594c7969b9664bc16f3cb9a721c89a4e",
+      "sha256": "5881c1b7eb989ef975b1762d462ff72942001d49419e56737c1f74e7bd44f541",
       "kind": "PROPOSAL_NATIVE_SOURCE"
     },
     {
@@ -193,7 +193,7 @@
     {
       "source": "forward/11_followup_state_and_enqueue.sqlinc",
       "file": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\forward\\11_followup_state_and_enqueue.sqlinc",
-      "sha256": "95a1a571c4d6993e25e01b4907b0fa226ccf30e6c9b6fb4b103b53d512954b91",
+      "sha256": "8e0e917683a626d159fda05d446cfdeabc8976cc4f03cec91c4b7bc4209f7354",
       "kind": "PROPOSAL_NATIVE_SOURCE"
     },
     {
@@ -319,7 +319,7 @@
     {
       "source": "forward/32_native_scheduler_followups.sqlinc",
       "file": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\forward\\32_native_scheduler_followups.sqlinc",
-      "sha256": "2c9ad1a623650720ca0d826ff684752e2436347505bcfea51890f187526ba968",
+      "sha256": "305377cd512fd41c0b8dbd262f2a17501c157b3e9d30f4095e696b2b7562fccf",
       "kind": "PROPOSAL_NATIVE_SOURCE"
     },
     {
@@ -407,15 +407,39 @@
       "kind": "PROPOSAL_NATIVE_SOURCE"
     },
     {
+      "source": "forward/47_native_scheduler_selection.sqlinc",
+      "file": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\forward\\47_native_scheduler_selection.sqlinc",
+      "sha256": "2a7175036fcce40edcbd3695adae909c5328f0b420c1cb1c8e613b44c5fab4e0",
+      "kind": "PROPOSAL_NATIVE_SOURCE"
+    },
+    {
+      "source": "forward/48_native_scheduler_selection_locks.sqlinc",
+      "file": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\forward\\48_native_scheduler_selection_locks.sqlinc",
+      "sha256": "01935b7603a223600f526b29b1114fc86a2ce85a8b89454be9ac35f4da9c85e1",
+      "kind": "PROPOSAL_NATIVE_SOURCE"
+    },
+    {
+      "source": "forward/49_grouped_automatic_followup.sqlinc",
+      "file": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\forward\\49_grouped_automatic_followup.sqlinc",
+      "sha256": "0944cf658fe62b4ba61edeb4cad7e867432faac690a71a1492a3deb77de7b513",
+      "kind": "PROPOSAL_NATIVE_SOURCE"
+    },
+    {
       "source": "forward/99_acl.sqlinc",
       "file": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\forward\\99_acl.sqlinc",
-      "sha256": "ed447b5a307bd43e225161eaf7cd312d1be98781abef6380c05e134a3e54f205",
+      "sha256": "87e01a782adb992b8f63d0cfabbcc4ecd0f32d6da6c3cd665b38d4596675da98",
       "kind": "PROPOSAL_NATIVE_SOURCE"
     },
     {
       "source": "tests/contact-producer-native-assertions.sqlinc",
       "file": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\tests\\contact-producer-native-assertions.sqlinc",
       "sha256": "8f0f91b8dc50b13003942250a0174e4e027e6ad4af595ab74d0f2e3fa5c4dd80",
+      "kind": "FIXTURE_NOT_MOUNTED"
+    },
+    {
+      "source": "tests/grouped-followup-native-assertions.sqlinc",
+      "file": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-contact-producer-continuation-20261016\\tests\\grouped-followup-native-assertions.sqlinc",
+      "sha256": "294fd9f16fe73c5ab34f474af928b784c9e089d4e5343262ea6c32adef1764fe",
       "kind": "FIXTURE_NOT_MOUNTED"
     }
   ],

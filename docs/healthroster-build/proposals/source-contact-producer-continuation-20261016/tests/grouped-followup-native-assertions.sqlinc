@@ -1,0 +1,40 @@
+-- NOT_RUN. Root may invoke only with genuine existing native accepted history,
+-- a current configured AUTOMATIC due step and actual current Source issues.
+-- This helper never manufactures provider acceptance or enables a policy.
+create or replace function pg_temp.contact_assert_grouped_followup_v1(p_incidents uuid[])
+returns void language plpgsql as $function$
+declare issue uuid;state jsonb;fact jsonb;first_result jsonb;retry_result jsonb;intent uuid;members integer;
+ before_intents integer;first_intents integer;after_intents integer;before_attempts integer;after_attempts integer;accepted_hash bytea;after_accepted_hash bytea;
+begin
+ if p_incidents is null or cardinality(p_incidents)not between 2 and 500 then raise exception 'GENUINE_GROUP_FIXTURE_REQUIRED';end if;
+ for issue in select id from unnest(p_incidents)id order by id loop
+  state:=private.weekly_contact_source_manager_followup_state_v1(issue,clock_timestamp());
+  fact:=private.weekly_contact_manual_member_facts_v1(issue,'MANAGER',clock_timestamp());
+  if state->>'reason'<>'SCHEDULED'or state->>'mode'<>'AUTOMATIC'or(state->>'due_at_utc')::timestamptz>clock_timestamp()
+   or state->>'last_accepted_at_utc'is null or(fact->'eligible'is distinct from 'true'::jsonb
+    and fact->>'exclusion_reason'<>'MANUAL_ENQUIRY_COOLDOWN')then raise exception 'GENUINE_DUE_ACCEPTED_AUTOMATIC_FIXTURE_REQUIRED';end if;
+ end loop;
+ select count(*)into before_intents from public.weekly_message_intents;
+ select count(*)into before_attempts from public.weekly_message_provider_attempts;
+ select private.weekly_source_sha256_jsonb_v1('FIXTURE_ACTUAL_ACCEPTED_MEMBERSHIPS',coalesce(jsonb_agg(to_jsonb(member)order by member.id),'[]'))into accepted_hash
+  from public.weekly_contact_delivery_memberships member where member.incident_id=any(p_incidents)and member.accepted_at_utc is not null;
+ first_result:=private.weekly_contact_source_manager_followup_group_enqueue_v1(p_incidents,clock_timestamp());
+ intent:=(first_result->>'message_intent_id')::uuid;
+ if intent is null or jsonb_array_length(first_result->'results')<>cardinality(p_incidents)then raise exception 'GROUP_SELECTED_MEMBER_COVERAGE';end if;
+ select count(*)into members from public.weekly_contact_source_intent_capture_members where message_intent_id=intent;
+ if members<>cardinality(p_incidents)or not private.weekly_contact_source_capture_current_v1(intent,clock_timestamp(),true)
+  or exists(select 1 from public.weekly_contact_source_intent_capture_members where message_intent_id=intent
+   and(routine_step is null or routine_step<1))then raise exception 'GROUP_NATIVE_CAPTURE_NOT_CURRENT';end if;
+ select count(*)into first_intents from public.weekly_message_intents;
+ retry_result:=private.weekly_contact_source_manager_followup_group_enqueue_v1(p_incidents,clock_timestamp());
+ select count(*)into after_intents from public.weekly_message_intents;
+ select count(*)into after_attempts from public.weekly_message_provider_attempts;
+ if first_intents<=before_intents or after_intents<>first_intents or after_attempts<>before_attempts then raise exception 'GROUP_RETRY_CREATED_OWNER_OR_PROVIDER_ATTEMPT';end if;
+ if exists(select 1 from jsonb_array_elements(retry_result->'results')result
+  where result->>'disposition'not in('ORIGINAL_ENQUIRY_QUEUED','ORIGINAL_ATTEMPT_OWNER_PENDING','ORIGINAL_SUBMISSION_UNCERTAIN','ORIGINAL_QUEUED_STEP'))then
+  raise exception 'GROUP_RETRY_DID_NOT_RETAIN_ORIGINAL_OWNER';end if;
+ select private.weekly_source_sha256_jsonb_v1('FIXTURE_ACTUAL_ACCEPTED_MEMBERSHIPS',coalesce(jsonb_agg(to_jsonb(member)order by member.id),'[]'))into after_accepted_hash
+  from public.weekly_contact_delivery_memberships member where member.incident_id=any(p_incidents)and member.accepted_at_utc is not null;
+ if after_accepted_hash is distinct from accepted_hash then raise exception 'GROUP_ENQUEUE_REWROTE_ACCEPTED_HISTORY';end if;
+end;
+$function$;

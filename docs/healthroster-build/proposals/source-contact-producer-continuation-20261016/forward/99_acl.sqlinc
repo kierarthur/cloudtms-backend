@@ -214,4 +214,12 @@ alter function private.weekly_contact_source_activation_scope_facts_v1(uuid,uuid
 revoke all on function private.weekly_contact_source_activation_scope_facts_v1(uuid,uuid) from public,anon,authenticated,service_role;
 alter function private.weekly_contact_recheck_selection_scope_facts_v1(uuid,timestamptz) owner to postgres;
 revoke all on function private.weekly_contact_recheck_selection_scope_facts_v1(uuid,timestamptz) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_scheduler_selection_v1(timestamptz,integer) owner to postgres;
+revoke all on function private.weekly_contact_source_scheduler_selection_v1(timestamptz,integer) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_scheduler_work_facts_v1(text,uuid) owner to postgres;
+revoke all on function private.weekly_contact_source_scheduler_work_facts_v1(text,uuid) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_scheduler_selection_lock_v1(jsonb) owner to postgres;
+revoke all on function private.weekly_contact_source_scheduler_selection_lock_v1(jsonb) from public,anon,authenticated,service_role;
+alter function private.weekly_contact_source_manager_followup_group_enqueue_v1(uuid[],timestamptz) owner to postgres;
+revoke all on function private.weekly_contact_source_manager_followup_group_enqueue_v1(uuid[],timestamptz) from public,anon,authenticated,service_role;
 notify pgrst, 'reload schema';

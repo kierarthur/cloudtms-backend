@@ -90,7 +90,7 @@
     },
     {
       "path": "forward/07_capture_native_reads.sqlinc",
-      "sha256": "20c8a3864902ece9ac72fb36e2e5b211594c7969b9664bc16f3cb9a721c89a4e"
+      "sha256": "5881c1b7eb989ef975b1762d462ff72942001d49419e56737c1f74e7bd44f541"
     },
     {
       "path": "forward/08_manual_native_enqueue.sqlinc",
@@ -106,7 +106,7 @@
     },
     {
       "path": "forward/11_followup_state_and_enqueue.sqlinc",
-      "sha256": "95a1a571c4d6993e25e01b4907b0fa226ccf30e6c9b6fb4b103b53d512954b91"
+      "sha256": "8e0e917683a626d159fda05d446cfdeabc8976cc4f03cec91c4b7bc4209f7354"
     },
     {
       "path": "forward/12_current_native_subset.sqlinc",
@@ -190,7 +190,7 @@
     },
     {
       "path": "forward/32_native_scheduler_followups.sqlinc",
-      "sha256": "2c9ad1a623650720ca0d826ff684752e2436347505bcfea51890f187526ba968"
+      "sha256": "305377cd512fd41c0b8dbd262f2a17501c157b3e9d30f4095e696b2b7562fccf"
     },
     {
       "path": "forward/33_native_submission_pause.sqlinc",
@@ -249,8 +249,20 @@
       "sha256": "290dd8ed5ba712c0b0c9f1e585d3c7f8a1b893660890050003d5a2fd0b482985"
     },
     {
+      "path": "forward/47_native_scheduler_selection.sqlinc",
+      "sha256": "2a7175036fcce40edcbd3695adae909c5328f0b420c1cb1c8e613b44c5fab4e0"
+    },
+    {
+      "path": "forward/48_native_scheduler_selection_locks.sqlinc",
+      "sha256": "01935b7603a223600f526b29b1114fc86a2ce85a8b89454be9ac35f4da9c85e1"
+    },
+    {
+      "path": "forward/49_grouped_automatic_followup.sqlinc",
+      "sha256": "0944cf658fe62b4ba61edeb4cad7e867432faac690a71a1492a3deb77de7b513"
+    },
+    {
       "path": "forward/99_acl.sqlinc",
-      "sha256": "ed447b5a307bd43e225161eaf7cd312d1be98781abef6380c05e134a3e54f205"
+      "sha256": "87e01a782adb992b8f63d0cfabbcc4ecd0f32d6da6c3cd665b38d4596675da98"
     },
     {
       "path": "runtime/contact-manual-enquiry.mjs",
@@ -266,7 +278,7 @@
     },
     {
       "path": "NATIVE_CONTINUATION_WIP.md",
-      "sha256": "8bd0398936382325837245682c844abbf1a4788e91ae25d4ecd69535be5c201d"
+      "sha256": "eb0db011a5d0a416c98f62cfa264013a73afb49ca010bfa8070e0bf8ef385d2b"
     },
     {
       "path": "NATIVE_OWNER_INPUTS.json",
@@ -274,7 +286,7 @@
     },
     {
       "path": "REGISTER_DELTA_WIP.json",
-      "sha256": "ead70d8b2f3229d9e81f2070d16b9c1c28f2d787f63a6fd12bf3cdfec228a1ac"
+      "sha256": "aaa502c3dc99a927878d6d95a53b682fd7cefa7827b0ad858f62f2c9aa5d39bb"
     },
     {
       "path": "MANAGER_ACTION_OWNER_INPUTS.json",
@@ -282,7 +294,7 @@
     },
     {
       "path": "SCHEDULER_NOTIFICATION_OWNER_INPUTS.json",
-      "sha256": "d3a4aef47c1298535cf2c437a0bb5a784ea2554ebd4ca59cbe16d7023718acfb"
+      "sha256": "e92066537faf392972bd9fb31a89a13e7759946c18883db687232c84e1517be5"
     },
     {
       "path": "RUNTIME_CONTRIBUTION.json",
@@ -317,12 +329,16 @@
       "sha256": "87e591be975a9c48a7ee317d411621e8ee25b1b00489ddd182c5c89a12ec38fc"
     },
     {
+      "path": "SOURCE_COMPLETION_RECIPE.json",
+      "sha256": "93ad88a1045bd98186af559900d1d2c7711d2ba311bcec6aeccc8f54a8bee9a6"
+    },
+    {
       "path": "OFFLINE_GRAMMAR_INPUTS.json",
-      "sha256": "66c7f324434998d6a9573fecbff0b46938a2aea3b4b778d41a98717bed99d706"
+      "sha256": "87f1cd9eaec2a37bd975fa66aaaf4e4d6d17e6441ec6fa0e8d4459b7cb310301"
     },
     {
       "path": "OFFLINE_GRAMMAR_RESULT.json",
-      "sha256": "6c1a1057df1af2b8afcfd6994590a35918e523cbfbb07ed7b4bb2ad4d434c140"
+      "sha256": "9bd282d2305fac4575d9a3b657316c7b448d7afb1bac842addb24be2e5073633"
     },
     {
       "path": "build-candidate-contact-entry-owners.mjs",
@@ -346,7 +362,7 @@
     },
     {
       "path": "build-read-checkpoint.mjs",
-      "sha256": "6e5deb56cce857e140d501707b97da1652c12e4241357c3a8e4d8b04cd52d4bf"
+      "sha256": "3e87d14e4c4f306b4574c71a35ee629cc12cd9f85ba5677fbf33c0f7bc172e1f"
     },
     {
       "path": "build-register-delta.mjs",
@@ -358,7 +374,15 @@
     },
     {
       "path": "build-scheduler-notification-owners.mjs",
-      "sha256": "0a252708b075380189805175758e8ce710bc42921a21e1a0a5fd92318db166d6"
+      "sha256": "a0d82f688725ffb41565dd987582c0c2a76dae0bd64ca005c55278eedfd2caa7"
+    },
+    {
+      "path": "build-scheduler-prefix.mjs",
+      "sha256": "8e875a536a0b714bee2846ffd2355f910006ea07152d2a74bf4938a393fc497b"
+    },
+    {
+      "path": "build-source-completion-recipe.mjs",
+      "sha256": "03476e906737de18d1f221c6fb7f141496a16383a84cf47928a384a9d2714a7d"
     },
     {
       "path": "build-submission-callers.mjs",
@@ -378,7 +402,7 @@
     },
     {
       "path": "build-wip-receipt.mjs",
-      "sha256": "4ddb275da0cb61d8a148b4bae7ba2b0ca858e7e5a7d12e82251595da211e4fc7"
+      "sha256": "a4b811ab7fefbbd36743f2949b6f07cbccb6d94346c56f1046c168552485c492"
     },
     {
       "path": "runtime/contact-recheck-runtime.mjs",
@@ -393,6 +417,10 @@
       "sha256": "2bb1261112f497bef5e8413a6eac63761b5beebc7f2de605038fbcf2ba21a32e"
     },
     {
+      "path": "tests/grouped-followup-native-assertions.sqlinc",
+      "sha256": "294fd9f16fe73c5ab34f474af928b784c9e089d4e5343262ea6c32adef1764fe"
+    },
+    {
       "path": "tests/manual-request.test.mjs",
       "sha256": "abd04e11e7abe2286748b5da0346a18084a5122fd9a8e1e4fafbd6911e51f2c4"
     },
@@ -403,16 +431,20 @@
     {
       "path": "tests/runtime-contribution.test.mjs",
       "sha256": "2c07397a89c45c55776e8b7215199680dd2266dd57037b8a36377c91c787eda9"
+    },
+    {
+      "path": "tests/scheduler-prefix-source.test.mjs",
+      "sha256": "080e003e865e150ef36bed2f9f891c9da8a1101ca72f18fcb24b3ceea02dea21"
     }
   ],
-  "sql_statement_count": 366,
-  "private_owner_declarations": 100,
+  "sql_statement_count": 378,
+  "private_owner_declarations": 104,
   "status": "NOT_FOR_MOUNT_NOT_REVIEWED_NATIVE_REQUIRED_NOT_RUN",
   "readonly_row_owner": "private.weekly_contact_manual_enquiry_read_v1(uuid,text,uuid,uuid)",
   "native": "NOT_RUN; managed scanner treats PL/pgSQL bodies as opaque; separate exact-input OFFLINE_GRAMMAR_RESULT is grammar/declared-fields only",
   "unfinished": [
     "Actual PostgreSQL/current-contract/native qualification of authored first-activation/cohort/partition/retained-reader successors",
-    "Native qualification of authored complete nested manager/manual/recheck transaction footprints; complete bounded scheduler lock-prefix selection",
+    "Native qualification of authored complete nested manager/manual/recheck transaction footprints and bounded scheduler lock-prefix selection",
     "Native review of manual mixed initial/followup group ineligibility and actual route grouping/throttle",
     "Complete retained capture/alias/rebase/notification native integrity review and first-use fixture assertions",
     "Root finite current runtime/combined-read/routes/Office/central ACL mount only after complete source review",

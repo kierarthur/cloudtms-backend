@@ -3,6 +3,7 @@ import {readFileSync,writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {schedulerPrefix,groupedSchedulerFollowups} from './build-scheduler-prefix.mjs';
 const base=path.dirname(fileURLToPath(import.meta.url)),root=path.resolve(base,'../../../..');
 const commit='90ffcf3f40644280fcdb5b791a62a86613896d6e',checkpoint='18f844f1c01c7d1cf293bc4e92a2ab7e0fb762eb';
 const sha=s=>createHash('sha256').update(s).digest('hex'),inputs=[];
@@ -89,13 +90,15 @@ scheduler=once(scheduler,'  perform private.weekly_contact_source_candidate_due_
   end loop;`);
 scheduler=once(scheduler,`    'timesheet_requests_marked_overdue',v_overdue_count,`,`    'timesheet_requests_marked_overdue',v_overdue_count,
     'routine_followup_results',v_followup_results,'routine_followup_held',v_followup_held,`);
-write('32_native_scheduler_followups.sqlinc',scheduler);
+const prefixed=schedulerPrefix(scheduler);
+write('32_native_scheduler_followups.sqlinc',groupedSchedulerFollowups(prefixed.output));
+write('47_native_scheduler_selection.sqlinc',prefixed.snapshot);
 const queryPath='supabase/repeatable/includes/weekly_contact_query/040_native_recomposition.sqlinc';
 source(queryPath,'1859790b0596761f405a10c258394a1d47ca304e');
 source('supabase/repeatable/10102026_1623_candidate_notification_management_v1.sql');
 writeFileSync(path.join(base,'SCHEDULER_NOTIFICATION_OWNER_INPUTS.json'),JSON.stringify({version:'CONTACT_SCHEDULER_NOTIFICATION_OWNER_INPUTS_V1',inputs,
  existing_query_owner:{signature:'private.weekly_contact_query_recompose_v1(uuid,uuid,text,uuid,text)',
  dependency_status:'PUBLISHED_SOURCE_PRESENT_NOT_REDECLARED_BY_THIS_LANE'},
- outputs:['30_native_notification_retirement.sqlinc','32_native_scheduler_followups.sqlinc'].map(file=>({path:'forward/'+file,
+ outputs:['30_native_notification_retirement.sqlinc','32_native_scheduler_followups.sqlinc','47_native_scheduler_selection.sqlinc'].map(file=>({path:'forward/'+file,
  sha256:sha(readFileSync(path.join(base,'forward',file)))})),qualification:'Authored source; actual PostgreSQL/scheduler/provider-free qualification NOT_RUN'},null,2)+'\n');
 console.log(JSON.stringify({complete_native_owners:2,status:'SOURCE_ONLY_NATIVE_NOT_RUN'}));

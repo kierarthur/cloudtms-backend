@@ -19,7 +19,10 @@ begin
   or cap.manifest_json->>'version' is distinct from 'CONTACT_SOURCE_INTENT_CAPTURE_V1'
   or cap.manifest_json->>'membership_hash' is distinct from encode(cap.membership_hash,'hex')
   or cap.manifest_json->>'original_generation_membership_hash' is distinct from encode(cap.original_generation_membership_hash,'hex')
-  or jsonb_typeof(cap.manifest_json->'members') is distinct from 'array' then
+  or jsonb_typeof(cap.manifest_json->'members') is distinct from 'array'
+  or jsonb_typeof(cap.manifest_json->'current_facts') is distinct from 'array'
+  or(cap.capture_kind in('EXPLICIT_MANUAL','MANUAL_RECOMPOSITION'))<>(cap.manual_request_id is not null)
+  or(cap.manual_request_id is not null and cap.accepted_actor_user_id is null) then
   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
  if i.audience_kind='CANDIDATE' then
   if not exists(select 1 from public.weekly_candidate_outreach_generations g where g.id=i.candidate_generation_id
@@ -36,6 +39,14 @@ begin
  else raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
  for m in select * from public.weekly_contact_source_intent_capture_members where message_intent_id=cap.message_intent_id order by logical_contact_key loop
   n:=n+1;if n>500 then raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+  if array_position(m.selected_issue_ids,null)is not null
+   or cardinality(m.selected_issue_ids)<>(select count(distinct id)from unnest(m.selected_issue_ids)id)
+   or(m.purpose='CHECK_HOURS'and m.selected_issue_ids is distinct from array[m.incident_id])
+   or(m.native_member_kind='SUBMISSION_MEMBER')<>(m.purpose='SUBMIT_TIMESHEET')
+   or(cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION')and(
+    m.audience<>'MANAGER'or m.purpose<>'CHECK_HOURS'or m.routine_step is null or m.routine_step<1))
+   or(cap.capture_kind in('EXPLICIT_MANUAL','MANUAL_RECOMPOSITION')and m.routine_step is not null)then
+   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID'using errcode='23514';end if;
   if m.purpose='CHECK_HOURS' then
    identity:=jsonb_build_object('work_event_id',m.work_event_id,'incident_id',m.incident_id,'incident_episode',m.incident_episode);
    if not exists(select 1 from public.weekly_discrepancy_incidents incident
@@ -67,6 +78,17 @@ begin
      and m.native_basis_json->>'week_ending'=native.week_ending::text
      and m.native_basis_json->>'expected_source_fingerprint'=encode(native.expected_source_fingerprint,'hex')) then
     raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+   -- Original selected issue aliases are immutable evidence for the genuine
+   -- expected Contract/week member. Result recording never depends on a later
+   -- current comparison: an actual retained comparison supplies that lineage.
+   if exists(select 1 from unnest(m.selected_issue_ids)alias(id)where not exists(
+    select 1 from public.weekly_discrepancy_incidents incident join public.weekly_work_events work on work.id=incident.work_event_id
+     where incident.id=alias.id and incident.candidate_id=m.candidate_id and incident.client_id=m.client_id
+      and incident.source_cycle_id=cap.source_cycle_id
+      and work.work_date+(7-extract(isodow from work.work_date)::integer)=(m.native_basis_json->>'week_ending')::date
+      and exists(select 1 from public.weekly_issue_comparison_revisions comparison where comparison.incident_id=incident.id
+       and comparison.contract_id=(m.native_basis_json->>'contract_id')::uuid)))then
+    raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID'using errcode='23514';end if;
   elsif m.native_member_kind='MANAGER_MEMBER' then
    if not exists(select 1 from public.weekly_manager_recipient_memberships native where native.id=m.native_member_id
     and native.recipient_generation_id=i.recipient_generation_id and native.incident_id=m.incident_id
@@ -85,6 +107,9 @@ begin
  end loop;
  if n not between 1 and 500 or n<>jsonb_array_length(cap.manifest_json->'members') then
   raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID' using errcode='23514';end if;
+ if exists(select alias.id from public.weekly_contact_source_intent_capture_members member
+  cross join lateral unnest(member.selected_issue_ids)alias(id)where member.message_intent_id=cap.message_intent_id
+  group by alias.id having count(*)>1)then raise exception 'CONTACT_SOURCE_CAPTURE_LINEAGE_INVALID'using errcode='23514';end if;
 end;
 $function$;
 
@@ -172,7 +197,8 @@ begin
    is distinct from(select version::text from public.weekly_source_global_settings where singleton) then return false;end if;
   if cap.capture_kind in('ROUTINE_FOLLOWUP','ROUTINE_MANUAL_FOLLOWUP','FOLLOWUP_RECOMPOSITION') then
    followup:=private.weekly_contact_source_manager_followup_state_v1(m.incident_id,p_at);
-   if followup->>'reason' is distinct from 'SCHEDULED'
+   if history->'last_accepted_send' is distinct from sealed_fact->'last_accepted_send'
+    or followup->>'reason' is distinct from 'SCHEDULED'
     or followup->>'mode' is distinct from (case when i.tranche_kind='MANAGER_AUTOMATIC_FOLLOWUP' then 'AUTOMATIC' else 'MANUAL' end)
     or(followup->>'due_at_utc')::timestamptz>p_at
     or(followup->>'routine_sequence')::integer is distinct from m.routine_step
