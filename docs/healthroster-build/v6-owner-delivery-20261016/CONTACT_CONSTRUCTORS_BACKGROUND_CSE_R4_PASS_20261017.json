@@ -1,0 +1,363 @@
+{
+  "version": "CONTACT_CONSTRUCTORS_BACKGROUND_CSE_R4_ACTUAL_CANONICAL_PASS_V1",
+  "executionCommit": "574c0feefcfc3ff71ed8b5f9c70fb99ff639c007",
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/contact-qt-positive-native-20261017-constructors-background-cse-r4",
+  "processExitCode": 0,
+  "actualNativeStatements": 34,
+  "nativeResultSha256": "177a9ae80465012bbb8fc00cd4351c86110c1c4c32a82c764b33cd573eaed214",
+  "actualInputSqlSha256": "2b2995537637d0386772ff1dc903803cd7b90d2ce4bcca3c0e0294e644a8b317",
+  "summary": {
+    "status": "PASS_EXACT_CONTACT_QT_CASE_AND_ORIGINAL_CANONICAL_RESTORATION",
+    "caseId": "CONTACT_CONSTRUCTORS_V1",
+    "scope": "CONTACT_QT_POSITIVE_TWELVE_COMPLETE_RELATIONS_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "programmeSha256": "2ee9712aa357c9db4c8fbde1cd9e541de38b0721e19aec7d6fc9a31c692b9c91",
+    "programmeBytes": 13974,
+    "sqlSha256": "2b2995537637d0386772ff1dc903803cd7b90d2ce4bcca3c0e0294e644a8b317",
+    "rolledBack": true,
+    "connectedFresh": true,
+    "markerAbsent": true,
+    "realMarkerCreatedInB": true,
+    "actualProgrammeAssertions": {
+      "programme": "CONTACT_CONSTRUCTORS_V1",
+      "completeConstructorUnits": 2,
+      "businessFixtureRows": 0,
+      "originalAssertions": "EXECUTED_WITHOUT_SUBSTITUTION",
+      "outerIsolation": "read committed"
+    },
+    "readerPids": {
+      "holder": 283729,
+      "before": 283733,
+      "nativeB": 283371,
+      "mcpVerification": 283371,
+      "after": 283781
+    },
+    "localTransport": {
+      "before": {
+        "stdoutBytes": 28539391,
+        "snapshotUtf8Bytes": 28539213,
+        "snapshotSha256": "f21e76961abb47165412f97af53a8072ff19ff8160c9e94c1eacbaa28aa7fe41",
+        "frameCount": 2,
+        "nativeFrameCount": 3,
+        "batchTransport": "CONTACT_SAME_RR_NATIVE_BATCH_V1",
+        "referenceCanonicalSqlSha256": "90fd13aee2735b2dac3aeb832d25c2d2b6b04ce312bc1988c3f51445ccdd39fe",
+        "executedBatchInputSha256": "156486df4f0e0cb6edfcb059be65361ff4e7f0ad43c1f3ecc263202fe6cba5b3",
+        "canonicalStatementExecuted": false
+      },
+      "after": {
+        "stdoutBytes": 28540148,
+        "snapshotUtf8Bytes": 28539596,
+        "snapshotSha256": "ec7274c12025d2ae6bf49c81448423008bb8e6d3619cfa53e777900c0ecacccd",
+        "frameCount": 3,
+        "nativeFrameCount": 4,
+        "batchTransport": "CONTACT_SAME_RR_NATIVE_BATCH_V1",
+        "fixtureProofUtf8Bytes": 372,
+        "fixtureProofSha256": "3aa18c531e2c51db6ef171507aa9dd29d5aa1eb2700cc44dd8ed9a2c833745e5",
+        "referenceCanonicalSqlSha256": "90fd13aee2735b2dac3aeb832d25c2d2b6b04ce312bc1988c3f51445ccdd39fe",
+        "executedBatchInputSha256": "15919cbef8a3b7a8851c878cb4a3ecbe918bde22c64dff70d3c1dcc9252bc579",
+        "canonicalStatementExecuted": false,
+        "fixtureNativeFrameOrdinal": 4,
+        "fixtureLogicalFrameOrdinal": 3
+      }
+    },
+    "before": {
+      "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+      "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+      "relationCensus": "d213a5d24a20317095d431c95689c9656a96aace1dd4f084489bd4e0bd4116b2",
+      "businessCountsFingerprint": "b9906d465eec87e164656f8558cdd2bc810a46bc236bc7c020d1b9cf33e92f78",
+      "businessRowsFingerprint": "81c3c6ad3b5b9a6718f70befb6bb18338aec90d43e75c5f0994268b6a1407a0c",
+      "businessRelations": [
+        {
+          "hash": "1a152caf7f5d587ba332cc435a9afaa0624d543b199d26c709f72bbb08a1d7b7",
+          "count": 74715,
+          "relation": "private.candidate_daily_batch_receipts"
+        },
+        {
+          "hash": "005eb858461d3ba50d74bc3bf634ed1671e008d0311f16a62eff9f70746f9003",
+          "count": 1139776,
+          "relation": "public.audit_events"
+        },
+        {
+          "hash": "cc96606b8bcb111f5c93ce492087459f40343f6b5aeb8204d18f6bc7457731b3",
+          "count": 1,
+          "relation": "public.settings_defaults"
+        },
+        {
+          "hash": "3431c844aca63b8092371166aef7977ddd5f19566c56cb5f87982852f3e5ada9",
+          "count": 6,
+          "relation": "public.tms_users"
+        },
+        {
+          "hash": "53609f8910b8ef40d23661203a01c2f1205a18521c4175617d8161e2ec4fbceb",
+          "count": 20,
+          "relation": "public.ts_financials_outbox"
+        },
+        {
+          "hash": "cf5b970eac9000dd9b037a59a7e555b00d80c0b122e1f0e183224b539a38b3a1",
+          "count": 1,
+          "relation": "public.weekly_candidate_cohorts"
+        },
+        {
+          "hash": "5bdd16b03cad5e93f1cbe00120c983b2fbceb263523ba94a381bc08ba65cf272",
+          "count": 3,
+          "relation": "public.weekly_candidate_outreach_generations"
+        },
+        {
+          "hash": "738e19e72d607031f25a2dffcd694c3cc1b6d4218d3da3e2b5a191bc28f5898a",
+          "count": 4,
+          "relation": "public.weekly_manager_recipient_generations"
+        },
+        {
+          "hash": "caf15144624be820c2009800597f3b458b4248b0d7ad50eea7f5f95f08db8769",
+          "count": 10,
+          "relation": "public.weekly_message_dispatch_commands"
+        },
+        {
+          "hash": "be084cffea1b7c66f8df24758475e1cbe91b9220b6e2ccca8f5ea1175b3c9337",
+          "count": 1,
+          "relation": "public.weekly_source_global_settings"
+        },
+        {
+          "hash": "20c3eb6e80e1bdbdc7c2753eb44edc7f9588e30bbd0c5b825b7a3946f2fa7188",
+          "count": 2,
+          "relation": "public.weekly_timesheet_submission_request_memberships"
+        },
+        {
+          "hash": "22a0390f73d1a15133dd655047dbaa37fe10c7139fbb58b1549c795cb077ccb2",
+          "count": 2,
+          "relation": "public.weekly_timesheet_submission_requests"
+        }
+      ],
+      "otherActivityCount": 0
+    },
+    "after": {
+      "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+      "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+      "relationCensus": "d213a5d24a20317095d431c95689c9656a96aace1dd4f084489bd4e0bd4116b2",
+      "businessCountsFingerprint": "70f947e044c6bb287eafa66f2b67b760c586dcd52aa605b1a452aa56405c8c0f",
+      "businessRowsFingerprint": "67b6703f0ce65c7b71804aa89ae2190c6c21e0b0906623ee8d05cb4f5701daa2",
+      "businessRelations": [
+        {
+          "hash": "3eda1b7faab59b470964c6f86b391d7638800e6a78ad3d9786e58f2bdcc2ffed",
+          "count": 74716,
+          "relation": "private.candidate_daily_batch_receipts"
+        },
+        {
+          "hash": "005eb858461d3ba50d74bc3bf634ed1671e008d0311f16a62eff9f70746f9003",
+          "count": 1139776,
+          "relation": "public.audit_events"
+        },
+        {
+          "hash": "cc96606b8bcb111f5c93ce492087459f40343f6b5aeb8204d18f6bc7457731b3",
+          "count": 1,
+          "relation": "public.settings_defaults"
+        },
+        {
+          "hash": "3431c844aca63b8092371166aef7977ddd5f19566c56cb5f87982852f3e5ada9",
+          "count": 6,
+          "relation": "public.tms_users"
+        },
+        {
+          "hash": "53609f8910b8ef40d23661203a01c2f1205a18521c4175617d8161e2ec4fbceb",
+          "count": 20,
+          "relation": "public.ts_financials_outbox"
+        },
+        {
+          "hash": "cf5b970eac9000dd9b037a59a7e555b00d80c0b122e1f0e183224b539a38b3a1",
+          "count": 1,
+          "relation": "public.weekly_candidate_cohorts"
+        },
+        {
+          "hash": "5bdd16b03cad5e93f1cbe00120c983b2fbceb263523ba94a381bc08ba65cf272",
+          "count": 3,
+          "relation": "public.weekly_candidate_outreach_generations"
+        },
+        {
+          "hash": "738e19e72d607031f25a2dffcd694c3cc1b6d4218d3da3e2b5a191bc28f5898a",
+          "count": 4,
+          "relation": "public.weekly_manager_recipient_generations"
+        },
+        {
+          "hash": "caf15144624be820c2009800597f3b458b4248b0d7ad50eea7f5f95f08db8769",
+          "count": 10,
+          "relation": "public.weekly_message_dispatch_commands"
+        },
+        {
+          "hash": "be084cffea1b7c66f8df24758475e1cbe91b9220b6e2ccca8f5ea1175b3c9337",
+          "count": 1,
+          "relation": "public.weekly_source_global_settings"
+        },
+        {
+          "hash": "20c3eb6e80e1bdbdc7c2753eb44edc7f9588e30bbd0c5b825b7a3946f2fa7188",
+          "count": 2,
+          "relation": "public.weekly_timesheet_submission_request_memberships"
+        },
+        {
+          "hash": "22a0390f73d1a15133dd655047dbaa37fe10c7139fbb58b1549c795cb077ccb2",
+          "count": 2,
+          "relation": "public.weekly_timesheet_submission_requests"
+        }
+      ],
+      "otherActivityCount": 0
+    },
+    "restoration": {
+      "connectedFresh": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "module": "LEGACY:1",
+      "markerAbsent": true,
+      "compared": [
+        "ledgerFingerprint",
+        "catalogueFingerprint",
+        "businessCountsFingerprint",
+        "businessRowsFingerprint"
+      ],
+      "liveRestoration": {
+        "status": "LIVE_TEST_RESTORATION_QUALIFIED",
+        "ownerRuling": "14 October 2026: background changes require attribution, never job pause",
+        "relationCount": 12,
+        "unchangedBusinessRelations": 11,
+        "qualifiedBusinessChanges": [
+          {
+            "relation": "private.candidate_daily_batch_receipts",
+            "beforeCount": 74715,
+            "afterCount": 74716,
+            "beforeHash": "1a152caf7f5d587ba332cc435a9afaa0624d543b199d26c709f72bbb08a1d7b7",
+            "afterHash": "3eda1b7faab59b470964c6f86b391d7638800e6a78ad3d9786e58f2bdcc2ffed",
+            "created": 1,
+            "updated": 0,
+            "attribution": "NATIVE_SIGNED_SYSTEM_PROJECTION_CLAIM_RECEIPT",
+            "fixtureMatches": 0
+          }
+        ],
+        "parentRollback": {
+          "database": "cloudtms_test_clone",
+          "backendPid": 283371,
+          "xid": "414571088",
+          "status": "aborted",
+          "connectedFresh": true
+        },
+        "fixtureAbsence": {
+          "allUnchangedRelationsBound": true,
+          "exceptionCaptureUnits": 1,
+          "observedExceptionFixtureKeys": 0,
+          "remaining": 0
+        },
+        "writerProof": {
+          "matched": true,
+          "routines": [
+            {
+              "schema": "private",
+              "identity": "_candidate_daily_json_sha256_v1(p_value jsonb)",
+              "definitionSha256": "91bb08b79571e0e9937e8d82f4388959eea6dadf9981e259e537e7cb7fc199fd"
+            },
+            {
+              "schema": "public",
+              "identity": "candidate_daily_projection_claim_v1(p_internal_context jsonb, p_claim_request_id uuid, p_idempotency_key text, p_target text, p_claimant text, p_max_items integer, p_lease_seconds integer, p_correlation_id text)",
+              "definitionSha256": "f9323cdcb4f2163f97c8b0c31bf1f0f92c3e2766041f0e0571c3dc22698eae3d"
+            },
+            {
+              "schema": "public",
+              "identity": "tsfin_dequeue_batch_ids(p_limit integer)",
+              "definitionSha256": "3daeab18828c11b4b18a42cd07842f1c5fcc672e4940aa5824830a201a26e82d"
+            },
+            {
+              "schema": "public",
+              "identity": "tsfin_work_fail(p_id uuid, p_error text)",
+              "definitionSha256": "02f9b0d49608eeb7525a848c25eed3196f02dc24cf7493d2ec45060fa8701ace"
+            }
+          ],
+          "authority": "Original sealed four writers equal genuine complete C-before and independent C-after catalogue records"
+        },
+        "backgroundPaused": false,
+        "proofSha256": "63c76ca78851d6045120a404759d835bf7f807f213b73ef528f48216f6e7c157"
+      },
+      "otherActivityCountObserved": 0,
+      "activityIsRestorationEvidence": false
+    },
+    "nativeClockFrames": [
+      {
+        "phase": "B_GUARD_BEFORE",
+        "readOnly": false,
+        "holderPid": 283729,
+        "backendPid": 283371,
+        "observedAt": "2026-10-17T13:08:20.728053+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T13:08:20.727419+00:00",
+        "transactionStartedAt": "2026-10-17T13:08:20.523917+00:00"
+      },
+      {
+        "phase": "B_GUARD_AFTER",
+        "readOnly": false,
+        "holderPid": 283729,
+        "backendPid": 283371,
+        "observedAt": "2026-10-17T13:08:20.771418+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T13:08:20.770803+00:00",
+        "transactionStartedAt": "2026-10-17T13:08:20.523917+00:00"
+      }
+    ],
+    "nativeCompletionObservedAt": "2026-10-17T13:08:21.358481+00:00",
+    "mcpVerificationObservedAt": "2026-10-17T13:08:21.508096+00:00",
+    "providerEffects": "NONE_IN_SCOPE",
+    "directRoleApi": "NOT_RUN",
+    "crossAgencyProof": "NOT_RUN",
+    "postWaitRace": "NOT_RUN",
+    "fullInstallRehearsal": "NOT_RUN",
+    "rootCallTiming": {
+      "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+      "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+      "sqlSha256": "2b2995537637d0386772ff1dc903803cd7b90d2ce4bcca3c0e0294e644a8b317",
+      "callStartedAt": "2026-10-17T13:08:18.905Z",
+      "callReturnedAt": "2026-10-17T13:08:20.376Z",
+      "rootObservedCallMilliseconds": 1471,
+      "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+    },
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T13:07:27.415Z",
+      "workDeadlineAt": "2026-10-17T13:09:27.415Z",
+      "readyAt": "2026-10-17T13:08:15.576Z",
+      "resultReadAt": "2026-10-17T13:08:21.602Z"
+    },
+    "elapsedMilliseconds": 110371,
+    "wholeSequenceBudgetMilliseconds": 180000,
+    "workBudgetMilliseconds": 120000,
+    "canonicalSharedTurnUnlockedAndClosed": true,
+    "completeMapsPersisted": false
+  },
+  "sharedTurn": [
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_POSITIVE_CONTACT_CONSTRUCTORS_V1",
+      "status": "TAKEN",
+      "takenAt": "2026-10-17T13:07:26.652Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_POSITIVE_CONTACT_CONSTRUCTORS_V1",
+      "status": "RELEASED",
+      "takenAt": "2026-10-17T13:07:26.652Z",
+      "releasedAt": "2026-10-17T13:09:17.781Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    }
+  ],
+  "fullMapsPersisted": false,
+  "rootLoaderCorrectionActual": true,
+  "previousR3TransportHoldPreserved": true,
+  "qt": "NEXT_NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}
