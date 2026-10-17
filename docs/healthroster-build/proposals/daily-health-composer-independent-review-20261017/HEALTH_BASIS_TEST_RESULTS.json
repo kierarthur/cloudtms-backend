@@ -1,0 +1,12 @@
+{
+  "args": [
+    "--test",
+    "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-composition-20261017\\source-boundary.test.mjs",
+    "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-composition-20261017\\reason-roundtrip.test.mjs"
+  ],
+  "cwd": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+  "exitCode": 0,
+  "stdout": "✔ native Worker vectors preserve all1969 Unicode characters beyond stored1969 length (2.0446ms)\n✔ empty, Unicode-trimmed and prefix-containing legitimate Details round-trip exactly (0.1366ms)\n✔ malformed stored canonical strings and overlong notes refuse without adding a prefix (0.1678ms)\nPASS: current pinned native sources/final owners;6 internal Health bodies/full reverse; existing0955 Daily ABI/deferred guard; reason roundtrip/current-role read/native-lock boundaries\n✔ complete Health support implements actual bounded metadata with no public success or business writes (1.0872ms)\n✔ source guard rejects removing the post-wait actor recheck (0.7651ms)\n✔ source guard rejects treating a mutex as refreshing an old snapshot (0.2662ms)\n✔ source guard rejects acquiring shared metadata before native Invoice locks (0.2634ms)\n✔ source guard rejects a fake public finish or early financial write (0.292ms)\n✔ source guard rejects a partial sealed-review substitute (0.2234ms)\n✔ source guard rejects feeding the canonical stored reason back as raw Details (0.1935ms)\n✔ source guard rejects adding mutation Admin admission to current active GET reader (0.2137ms)\n✔ source guard rejects leaking raw native financial receipt or identifiers before Bank join (0.3051ms)\nℹ tests 12\nℹ suites 0\nℹ pass 12\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 149.9309\n",
+  "stderr": "",
+  "native": "NOT_RUN"
+}

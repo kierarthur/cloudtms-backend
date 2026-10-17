@@ -1,0 +1,11 @@
+{
+  "args": [
+    "--test",
+    "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-composer-independent-review-20261017\\reviewed-blocks.test.mjs"
+  ],
+  "cwd": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+  "exitCode": 0,
+  "stdout": "✔ exact current complete owners and full independent Health blocks verify with assembly held (182.1215ms)\n✔ unprovided real Bank interfaces cannot emit runtime composer symbols or files (399.1378ms)\n✔ changing an availability flag alone never supplies a published native join (0.4901ms)\n✔ review cannot normalize stored reason as raw Details, default Bank Ready or replace Health manifest (4.1757ms)\n✔ concurrent identical replay precedes comparing the old preview after native waits (1.553ms)\n✔ Bank acceptance gate and frozen actual Invoice/metadata admission precede native DML (2.6324ms)\n✔ same-ID native stage keeps exact backend/xid/120second context and real owner publication/proof (3.5327ms)\n✔ no exception handler, ordinary writer shortcut or Contract financial API can mask a native failure (2.1456ms)\n✔ result uses current reader, exact native0955 billing and deny-by-shape financial projection (3.5825ms)\n✔ real shared V3 decoder accepts complete registered same-physical role-safe result without APPLIED/PDF gate (3.2652ms)\n✔ real shared V3 preview decoder requires a real matching review before one Confirm (0.4847ms)\n✔ actual shared action decoder rejects duplicate native targets across actions and links (0.2933ms)\nℹ tests 12\nℹ suites 0\nℹ pass 12\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 867.0827\n",
+  "stderr": "",
+  "native": "NOT_RUN"
+}

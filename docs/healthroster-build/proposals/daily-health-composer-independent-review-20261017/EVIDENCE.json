@@ -1,0 +1,141 @@
+{
+  "version": "DAILY_HEALTH_COMPOSER_INDEPENDENT_SOURCE_REVIEW_V1",
+  "commit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+  "pins": [
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/ASSEMBLY_STATE.json",
+      "sha256": "e674666e99e8d1b1a0dc8cd0c33deb09606e52d92ea6e23f82df8e800731831f",
+      "bytes": 761
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/BLOCK_TEST_RESULTS.json",
+      "sha256": "8e05bfeea2f4aa5489d0b858331fcde89d5b7925b6627e233f027768679d4f76",
+      "bytes": 1873
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/CURRENT_HEALTH_BASIS_TEST_RESULTS.json",
+      "sha256": "b7eabec93051baa2a88f4389d3e2246ad19a6d6747b781013683b9446c31c7ca",
+      "bytes": 2816
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/CURRENT_TRANSPORT_TEST_RESULTS.json",
+      "sha256": "0e77de031f2672a0a5c72e7d9a14ae4367cf59e34ae7dcc60ed810d093fab310",
+      "bytes": 2893
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/GRAMMAR_RESULTS.json",
+      "sha256": "535b8adf0a50a4e16dd165e549800f5959b9e800bf76d4a14140e92b3d2dd8fb",
+      "bytes": 1900
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/MANIFEST.json",
+      "sha256": "6bf8e6cec03e0a87c34c3b135f734677f1c43aa0c803fcc113ed456208b8d89f",
+      "bytes": 3830
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/NATIVE_REQUIRED.md",
+      "sha256": "0ec5636fad4b857826b49623b155c77b157863d7e5eae169f1487d3632d5370f",
+      "bytes": 5597
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/OWNER_BLOCKS.json",
+      "sha256": "6dcc99a25a5080ca3d35260aa4c589274cd03c5c9164a5535fb90dd4493cf718",
+      "bytes": 4431
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/README.md",
+      "sha256": "bda733b940fe437b00c8bd277bf64a68bb9b62e44960ece1943f1dd07485fcff",
+      "bytes": 9722
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/SOURCE_PINS.json",
+      "sha256": "632438613b99b6586152d469edcbe58973d245d2f9d3ae59105611c62df6a6a6",
+      "bytes": 11715
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/assemble.mjs",
+      "sha256": "a8004ba3745783938b8181e3630669f57ba2ebac131b3311fa221c4c3554b58d",
+      "bytes": 9910
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/blocks.test.mjs",
+      "sha256": "48a12ae2063c7f835ca22260f5e1886ef87eb33cf13aaa504fbd77c61dc292fb",
+      "bytes": 8984
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/health/00_presentation.sqlinc",
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0",
+      "bytes": 4550
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/health/10_revision_apply.sqlinc",
+      "sha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf",
+      "bytes": 8104
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/offline-checks.py",
+      "sha256": "d7ec0ae511a6aaf66c782e602256eab580f2d5db2ef740f06205378c57ccc100",
+      "bytes": 3567
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/reverse/complete_additive_reverse.sqlinc",
+      "sha256": "e2531ebe7599c511ee687b6d665d527129ea958a5628bd139dcd36c7087302b7",
+      "bytes": 595
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/templates/01_review.sql.tmpl",
+      "sha256": "797a0f324d716b0002883f1272976e1196d06acdf36f6f71d687f551aa95e1a6",
+      "bytes": 8792
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/templates/02_accept.sql.tmpl",
+      "sha256": "7bae24fa58c854f4e8df0b16e17cef8a04aff52fa88792f316f2daa7f42f21d3",
+      "bytes": 7621
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/templates/03_result.sql.tmpl",
+      "sha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b",
+      "bytes": 3741
+    }
+  ],
+  "assemblyOriginalRegistryVfs": {
+    "fullSourceFiles": 20,
+    "finalOwnerSignatures": 14,
+    "currentOwnerEdits": 0,
+    "privateHelpers": 4,
+    "heldComposerBodies": 3,
+    "unboundOwnerBlocks": 3,
+    "businessWritersImplemented": 0,
+    "assembly": "HELD_UNPROVIDED_GENUINE_BANK_INTERFACES",
+    "native": "NOT_RUN",
+    "runtimeSqlEmitted": false
+  },
+  "currentSourcePinGuard": {
+    "changedPins": [
+      "docs/bpay-next/final-definer-closures.json"
+    ],
+    "unchangedOtherFullPins": 19,
+    "unchangedFinalOwners": 14,
+    "status": "REFUSES_CURRENT_ROOT_REQUIRES_REVIEWED_REGISTRY_PIN_SUCCESSOR"
+  },
+  "emitCurrentRoot": {
+    "exitCode": 2,
+    "stderr": "saved raw source: docs/bpay-next/final-definer-closures.json\n+ actual - expected\n\n+ 'b5be24d089aa3db2d79a1866a8aacee6b21f7696b1b262b2d1fe5b938d1b8dd8'\n- 'e6ee24f8f541b4e31d28ba625623b7bb7674a54a6dcabd808a5aa8e17b6e3aaa'",
+    "outputExists": false
+  },
+  "emitFrozenRegistryVfs": {
+    "exitCode": 2,
+    "stderr": "DAILY_V3_OWNER_BLOCKS_UNPROVIDED: assembly emits no runtime SQL",
+    "outputExists": false
+  },
+  "tests": {
+    "reviewedAuthorOriginalRegistryVfs": 12,
+    "actualTransport": 24,
+    "originalHealthBasis": 12
+  },
+  "rootWrites": 0,
+  "reportWrites": 0,
+  "bankBodyInspected": false,
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}

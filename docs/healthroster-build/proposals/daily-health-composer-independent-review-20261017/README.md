@@ -1,0 +1,39 @@
+# Independent Daily Health composer source review
+
+Reviewed Report `b776cedf6d2483aff44d6e1bada5e0f7b389112d`, all19 frozen package files and all seven authored private definers. **The bounded Health choreography is accepted as source-only, with runtime assembly held.** No Banking body/interface, native body compilation, permission/transaction execution or feature completion is qualified.
+
+Review uses the exact original0858 Daily authority/admission/request owners, public1342 wrappers, native0955 Invoice owner, shared0713 guards/context cleanup, unchanged e938 six helpers, actual HTTP/shared V3 decoder and explicit Daily/MOVE§8 contracts. All nineteen non-registry full source/policy pins and all fourteen consumed final-owner identities remain unchanged on the current root. No new actor/creator/Admin GET gate or replacement business writer is introduced.
+
+| New body | Source finding |
+| --- | --- |
+| Financial projection assertion | Actual closed public assertion first; denied command/cut IDs must be JSON NULL, denied non-NULL summary exact REDACTED. Visibility must come from the genuine independent reader. |
+| Invoice effect | Describes actual0955 selected native dispositions; no valuation arithmetic or readiness authority. |
+| Action assertion | Actual closed action assertion and the same eight-field semantic target identity as the unchanged Worker, across combined actions/links. |
+| Review | Actual native locks, post-wait immutable preview replay before old digest comparison, unchanged Health basis, genuine Bank slot, actual locked Invoice inspection/preflight, request mutex last, native scope/cut/invoice hashes and one sealed request/review. Confirm requires real Bank readiness, Invoice readiness and no known blocker. |
+| Revision apply | Exact frozen Accept basis, QUALIFIED genuine cut/review/member, same physical Timesheet/version/booking, real backend/XID/120-second context, actual0858 full OLD/NEW row admission, one declared Bank publisher call, guarded cleanup, actual0955 preparation and original native final assertion. |
+| Accept | Exact request hash and current-reader committed replay before fresh mutation admission, replay again after native context waits, original rawDetails inverse/hash, current Admin/WP-PP recheck, Bank gate before Invoice/metadata locks, request mutex last, one native revision/publication/Invoice registration and immutable ACCEPT/COMPLETE enrollment in the same transaction. |
+| Result | Unchanged active Office current-reader Health basis, genuine unprovided Bank projection, actual0955 current-role Billing, same physical identity, saved native receipt scalar, combined action dedupe and final Health/operation/actor-row comparison. No saved creator projection or raw private receipt escapes. |
+
+The original reason correction remains intact: Accept reconstructs only the exact raw Details note from validated canonical stored reason and proves original native PREVIEW hash equality. It does not feed prefixed canonical reason into the1969-character raw-note normalizer. The original current-role GET policy remains intact: active Office/noncreator/former Admin is independently admitted; actual native projection owns redaction. Fresh mutation's READ COMMITTED guard remains scoped to locked work, with REPEATABLE READ/SERIALIZABLE and genuine selector/actor concurrency still required in the protected native programme.
+
+## Private placement scalar decision
+
+Peer approval is given for the **source-only additive private** `placement_revision` scalar, subject to root's explicit full-assembly approval. MOVE§8.1 already requires public Placement's lossless uint63 revision string, and Daily shares that Result while retaining the same physical Timesheet. The new scalar records this acceptance's genuine operation-allocated `billing_revision` after its increment, exactly the allocation used by the native execution context, capability consumption and Invoice obligation. The original operation guard makes accepted receipt/allocation immutable. Result requires canonical positive text equal to that stored native BIGINT allocation and then the actual public scalar assertion. It neither interprets physical Timesheet version nor invents a current financial revision counter.
+
+This peer approval does not approve a new Bank ABI or a history rewrite. Existing genuine receipts lacking the newly recorded scalar fail closed in this proposal. Before actual assembly installation, root must establish the real historical receipt population and its permitted read behavior; it cannot backfill a guessed allocation. Root approval and native qualification are not recorded here.
+
+## Assembly remains held
+
+All three genuine Bank call blocks remain UNPROVIDED with NULL contract/call-block pins. The actual frozen assembler checks twenty full original source/policy pins and fourteen final owners, then `--emit` exits2 without an output. No signature/return DTO is guessed for the missing preview, cut/freeze preflight or current-reader semantic joins. The one producer signature is precisely the already-declared Daily contract producer; symbol existence and publisher JSON alone do not prove publication. Original0858 additionally requires the actual Work/revision/SEALED command/publication/guard receipts and exclusive Invoice obligation. A nominal NOT_REQUIRED branch is not supplied.
+
+The current Later/Keep mount changed the full final-definer registry, so the original assembler now refuses its stale registry pin before the owner-binding check. That is a real current integration hold. The nineteen other full pins and fourteen consumed final owner locations still match. A separately reviewed source-pin/assembly successor must bind the current registry and real owner blocks before any runtime emission or mounting.
+
+The test harness transparently reproduces the frozen assembler in a read-only VFS with **only** its original24c57 registry restored from exact Git bytes. This is labelled original-registry evidence, not a successful current-root assembly. Current actual `--check`/`--emit` refusal is recorded separately. No root or Report file is written. Author tests change only four import/CLI/output paths; no assertion or success body is replaced.
+
+## Verification and remaining dependencies
+
+Twelve frozen composer source/negative/closed DTO tests pass under the explicit original-registry VFS; current actual HTTP/shared DTO24 tests and original e938 reason/boundary12 tests pass. Current and frozen `--emit` both exit2 with no runtime output, for the exact separately recorded guards. PG17 grammar parses seven bodies and the exact seven-function additive reverse, with each unprovided Bank token replaced in memory only by unconditional refusal. This is not native compilation or body completion; all native cases remain NOT_RUN.
+
+The complete7-function additive reverse preserves every original e938/0858/0955/0713 body. Final full assembly still requires genuine published owner call blocks and proof contracts, reviewed lock/current-role composition, explicit root approval of the private scalar and exact shared contract, managed final-owner/ACL/admission registration, real catalogue compilation and the entire protected `NATIVE_REQUIRED.md` programme. That programme includes same-request multi-connection replay, RC selector stale/actor revocation, RR/serializable refusal, full1969 Unicode reason vectors, once-only publisher/native effects, every actual Invoice branch, role/history readback and injected-failure restoration.
+
+Only this owned review directory was written. No runtime SQL, root/Report/Money/Office source, Banking body, database, Docker, lock, deployment or original schema/history change occurred. D: physical paths were verified. Existing unrelated untracked folders are preserved. Commit/push uses `gc.auto=0` and `maintenance.auto=false`; no shared metadata maintenance is run.

@@ -1,0 +1,62 @@
+{
+  "parserVersion": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "programs": [
+    {
+      "file": "health/00_presentation.sqlinc",
+      "statements": 6,
+      "plpgsqlBodies": 3,
+      "refusalSubstitutions": 0,
+      "grammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "refusalSubstitutions": 0,
+      "grammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "templates/01_review.sql.tmpl",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "refusalSubstitutions": 1,
+      "grammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "templates/02_accept.sql.tmpl",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "refusalSubstitutions": 1,
+      "grammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "refusalSubstitutions": 1,
+      "grammar": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "reverse/complete_additive_reverse.sqlinc",
+      "statements": 7,
+      "plpgsqlBodies": 0,
+      "refusalSubstitutions": 0,
+      "grammar": "PASS",
+      "native": "NOT_RUN"
+    }
+  ],
+  "completeAdditiveReverseNamesMatch": true,
+  "newPrivateDefiners": 7,
+  "realBankBlocksExpanded": 0,
+  "nativeBodyCompilation": "NOT_PROVED",
+  "native": "NOT_RUN"
+}

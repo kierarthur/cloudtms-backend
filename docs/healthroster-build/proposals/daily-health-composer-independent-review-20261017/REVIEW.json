@@ -1,0 +1,25 @@
+{
+  "version": "DAILY_HEALTH_COMPOSER_PEER_REVIEW_V1",
+  "reviewedCommit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+  "healthSourceDecision": "ACCEPT_BOUNDED_SOURCE_ONLY_ASSEMBLY_HELD",
+  "newPrivateDefiners": 7,
+  "genuineBankBlocks": {"review": "UNPROVIDED", "accept": "UNPROVIDED", "result": "UNPROVIDED"},
+  "privatePlacementRevision": {
+    "peerDecision": "APPROVE_SOURCE_ADDITIVE_PRIVATE_METADATA",
+    "rootApproval": "REQUIRED_NOT_RECORDED",
+    "basis": "MOVE8.1 existing public uint63 Placement scalar; actual operation billing allocation bound to native context/consumption/Invoice obligation",
+    "historyRewritten": false,
+    "historicalReceiptPopulationAndPermittedReadBehavior": "REQUIRES_ROOT_NATIVE_EVIDENCE"
+  },
+  "currentRegistryPin": "STALE_REFUSED_REQUIRES_REVIEWED_SUCCESSOR",
+  "unchangedOtherFullSourcePins": 19,
+  "unchangedConsumedFinalOwners": 14,
+  "originalE938ReasonAndGetPolicy": "UNCHANGED",
+  "actualPublicWrappersAndTransport": "UNCHANGED",
+  "nativeBodyCompilation": "NOT_PROVED",
+  "native": "NOT_RUN",
+  "runtimeSqlEmitted": false,
+  "bankBodySemanticInspection": false,
+  "dbConnections": 0,
+  "rootWrites": 0
+}
