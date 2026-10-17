@@ -1,0 +1,106 @@
+{
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "parent": "42802228977b941325f0feb44c11918b0f42190f",
+  "currentRootHead": "cdb4540daae048a2646793b401058392fef51ef6",
+  "files": [
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "capture": "reference/scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48190,
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "capture": "reference/scripts/healthroster-live-test-restoration.mjs",
+      "bytes": 14597,
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "capture": "reference/scripts/healthroster-turn-control.mjs",
+      "bytes": 9580,
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "capture": "reference/supabase/release/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "capture": "reference/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "bytes": 13203,
+      "sha256": "b4e8359ab9d4c3b6e400beb66237fe568639610540915717dfea40755993b9e7",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/metadata-diagnostic.mjs",
+      "capture": "reference/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/metadata-diagnostic.mjs",
+      "bytes": 3613,
+      "sha256": "a16b0a67e5c333e39c23fed4c5287d1929aa0baf9ac2107b9b93112de55f6794",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/control.mjs",
+      "capture": "reference/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/control.mjs",
+      "bytes": 3227,
+      "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/timing.mjs",
+      "capture": "reference/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/timing.mjs",
+      "bytes": 1313,
+      "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/input-builder.mjs",
+      "capture": "reference/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/input-builder.mjs",
+      "bytes": 7217,
+      "sha256": "c715cc0cb96a9c6b83819ddcf210385b4797eb52112b8785d69c54ac5ee6f90d",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/source.mjs",
+      "capture": "reference/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/source.mjs",
+      "bytes": 5751,
+      "sha256": "1dc02b678f9db5899fb424170b99f1788ec297eb839477d711a3fc5b822551b9",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "capture": "reference/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "bytes": 26267,
+      "sha256": "f70de4401dd1f7ba6fd4479d08c5e8d303733819ba9031bcdb5539f502d62d9a",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/native-boundary.mjs",
+      "capture": "reference/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/native-boundary.mjs",
+      "bytes": 2620,
+      "sha256": "84abd1f06ec85ffa002cd79fa4f5cf010d7f939bf86b4546ca35c56de54000eb",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/result-validator.mjs",
+      "capture": "reference/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/result-validator.mjs",
+      "bytes": 11793,
+      "sha256": "ebb88d1b7d6b2cfeb89f5fe5f0762d00d0633251a9b96c7f7de9ea65f84cc713",
+      "savedIndexHeadParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/hold-case.mjs",
+      "capture": "reference/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/hold-case.mjs",
+      "bytes": 8170,
+      "sha256": "b19cf397047e895ddfa2c92bd6f91d433557e50907e48ea1df1f95cfac902b73",
+      "savedIndexHeadParentEqual": true
+    }
+  ],
+  "native": "NOT_RUN"
+}

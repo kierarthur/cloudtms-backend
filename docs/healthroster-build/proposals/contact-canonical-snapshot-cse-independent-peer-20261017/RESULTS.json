@@ -1,0 +1,382 @@
+{
+  "version": "CONTACT_CSE_INDEPENDENT_PEER_V1",
+  "candidateCommit": "4cc8d993d71e1dab011fa91c6493f00f7e18c9ff",
+  "candidateManifestSha256": "906032ff35f31fd2d4e251ba0c3bf6ddb93f2e056dd194c03d4b2347d6678b9d",
+  "disposition": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "files": 91,
+  "selectedTargets": 48,
+  "changedTargets": 8,
+  "unchangedAdapterTargets": 40,
+  "inverseProof": [
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "beforeSha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+      "afterSha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc",
+      "hunks": 6,
+      "fullRawParentEqual": true
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "beforeSha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "afterSha256": "8b4ab4113e42cea647dbbd1a22be2eef68806b62f3c8c2f06c58d4c904982cfc",
+      "hunks": 3,
+      "fullRawParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/OFFLINE_INPUTS.json",
+      "beforeSha256": "449d920d0c267303c37264eac775c00fe0cf6715dc84cfa9312741585f589eab",
+      "afterSha256": "dd53d4cc43ff0c9eed56cf7536b39429b147ce5bb59efd1f70d66663661f25a1",
+      "hunks": 1,
+      "fullRawParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/README.md",
+      "beforeSha256": "665075d47612a3abc16cca6b8da0ec2386a58dc70232c085296c76e300da3d93",
+      "afterSha256": "6f8c4ab941a971e710828de4ab22308579350c7565dc4de80664b367ad87fa7f",
+      "hunks": 1,
+      "fullRawParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/ROOT_SOURCE_BINDING.json",
+      "beforeSha256": "9c0a872f1df38ebd9c087ae671032a47c845a2c367e101f75a60b8c7dc11b117",
+      "afterSha256": "74965cda56af3384d22960345e26b798e10844a741b8163656808c250a74482b",
+      "hunks": 1,
+      "fullRawParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "beforeSha256": "f70de4401dd1f7ba6fd4479d08c5e8d303733819ba9031bcdb5539f502d62d9a",
+      "afterSha256": "2b54e76a6416f20231e513072748f4eaa136d3fa1c7210a897acf5ed731a6c78",
+      "hunks": 1,
+      "fullRawParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/source.mjs",
+      "beforeSha256": "1dc02b678f9db5899fb424170b99f1788ec297eb839477d711a3fc5b822551b9",
+      "afterSha256": "6512932d124af8fb109e1840822af512820c52d10b8c7bdb225637050a00c886",
+      "hunks": 1,
+      "fullRawParentEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "beforeSha256": "663e7fdbcbe4d8169c008c706a0bc2d16b28394f6aec7191a158e68fd961f42f",
+      "afterSha256": "d583e2cfa00cffbe263c88a0d6ef0530bb1bbcc28b2ae4c68952e8f341507896",
+      "hunks": 1,
+      "fullRawParentEqual": true
+    }
+  ],
+  "wholeHunks": 15,
+  "otherRootSourcePinsUnchanged": 61,
+  "finiteForwardRootPins": 2,
+  "actualConsumerCases": [
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: exact reviewed real predecessor and expected postimage bytes",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: changed saved",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: changed index",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: changed current",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: changed parent",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: unchanged parent cannot stand in for committed postimage",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: forged zero predecessor hash",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: forward for another file",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: absent finite forward",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: wrong expected postimage hash",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-live-test-restoration.mjs: text is not raw source image",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: exact reviewed real predecessor and expected postimage bytes",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: changed saved",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: changed index",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: changed current",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: changed parent",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: unchanged parent cannot stand in for committed postimage",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: forged zero predecessor hash",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: forward for another file",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: absent finite forward",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: wrong expected postimage hash",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "scripts/healthroster-install1-full-rehearsal.mjs: text is not raw source image",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "ordinary row retains exact predecessor equality",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "ordinary row cannot inherit arbitrary changed predecessor",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "unmounted proposal is refused by actual adapter location predicate",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    }
+  ],
+  "actualConsumerTests": 25,
+  "renderedCases": [
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "relations": [
+        "private.candidate_daily_batch_receipts",
+        "public.audit_events",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.ts_financials_outbox",
+        "public.weekly_candidate_cohorts",
+        "public.weekly_candidate_outreach_generations",
+        "public.weekly_manager_recipient_generations",
+        "public.weekly_message_dispatch_commands",
+        "public.weekly_source_global_settings",
+        "public.weekly_timesheet_submission_request_memberships",
+        "public.weekly_timesheet_submission_requests"
+      ],
+      "parentSha256": "050d6e416c988ad58251f1c50b300c448dddc74471b8251e0b5437e958387fe1",
+      "afterSha256": "42a76b6e6e25ab8df6d09a47111f2cf0661c2da8fdda882e5079fd7eac2b396f",
+      "wholeBeforeOnlyCanonicalReplacement": true,
+      "legacyOutputRawEqual": true
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "relations": [
+        "private.candidate_daily_batch_receipts",
+        "public.audit_events",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.ts_financials_outbox",
+        "public.weekly_candidate_cohorts",
+        "public.weekly_candidate_outreach_generations",
+        "public.weekly_manager_recipient_generations",
+        "public.weekly_message_dispatch_commands",
+        "public.weekly_source_global_settings",
+        "public.weekly_timesheet_submission_request_memberships",
+        "public.weekly_timesheet_submission_requests"
+      ],
+      "parentSha256": "050d6e416c988ad58251f1c50b300c448dddc74471b8251e0b5437e958387fe1",
+      "afterSha256": "42a76b6e6e25ab8df6d09a47111f2cf0661c2da8fdda882e5079fd7eac2b396f",
+      "wholeBeforeOnlyCanonicalReplacement": true,
+      "legacyOutputRawEqual": true
+    }
+  ],
+  "astProof": {
+    "version": "CONTACT_CSE_INDEPENDENT_WHOLE_AST_PROOF_V1",
+    "authorWholeProofRawJsonReplayed": true,
+    "authorNegatives": 9,
+    "exactScalarSubstitutions": 5,
+    "completeCteNodeChecked": true,
+    "snapshotCalls": {
+      "before": 5,
+      "after": 1
+    },
+    "allOtherCallsIdentical": {
+      "clock_timestamp": 1,
+      "count": 14,
+      "current_database": 2,
+      "encode": 33,
+      "extensions.digest": 2,
+      "jsonb_agg": 29,
+      "jsonb_array_elements": 1,
+      "jsonb_build_array": 1,
+      "jsonb_build_object": 27,
+      "pg_backend_pid": 1,
+      "pg_catalog.acldefault": 4,
+      "pg_catalog.aclexplode": 4,
+      "pg_catalog.cardinality": 1,
+      "pg_catalog.convert_to": 35,
+      "pg_catalog.encode": 2,
+      "pg_catalog.extract": 4,
+      "pg_catalog.format_type": 1,
+      "pg_catalog.pg_get_constraintdef": 1,
+      "pg_catalog.pg_get_expr": 1,
+      "pg_catalog.pg_get_function_identity_arguments": 2,
+      "pg_catalog.pg_get_functiondef": 1,
+      "pg_catalog.pg_get_indexdef": 1,
+      "pg_catalog.pg_get_triggerdef": 1,
+      "pg_catalog.pg_get_viewdef": 1,
+      "pg_catalog.regexp_replace": 1,
+      "pg_catalog.replace": 1,
+      "pg_catalog.sha256": 33,
+      "pg_catalog.unnest": 2,
+      "pg_input_is_valid": 1,
+      "pg_snapshot_xip": 1,
+      "pg_snapshot_xmax": 4,
+      "pg_xact_status": 2,
+      "private._candidate_daily_json_sha256_v1": 2,
+      "string_agg": 12,
+      "to_jsonb": 21,
+      "to_regclass": 1,
+      "transaction_timestamp": 1,
+      "trunc": 1
+    },
+    "cases": [
+      {
+        "case": "CTE output column override cannot hide in discarded producer",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "CTE cycle/search metadata cannot hide in discarded producer",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "extra CTE target changes the closed scalar producer",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "CTE WHERE false cannot remove actual observation",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "CTE is explicitly materialized",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "CTE expression cannot cache a volatile transaction-status call",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "bound scalar cannot read a qualified different relation",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "background full row hash cannot be replaced by stable-only data",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "volatile status observations cannot be replaced",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "clock observation cannot become transaction start",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "complete relation census cannot lose a background scope",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "epoch refusal boundary cannot change",
+        "status": "PASS",
+        "native": "NOT_RUN"
+      }
+    ],
+    "independentAstNegatives": 12,
+    "native": "NOT_RUN",
+    "performance": "NOT_MEASURED"
+  },
+  "originalRegression": {
+    "tests": 43,
+    "failures": 0,
+    "exactCurrentTestSourcePins": [
+      {
+        "file": "tests/healthroster-live-test-restoration.test.mjs",
+        "bytes": 13344,
+        "sha256": "701dd1d9b0bba0b18c451446089268a48eb722f3455c0718bc26b12912a356bc"
+      },
+      {
+        "file": "tests/healthroster-install1-full-rehearsal.test.mjs",
+        "bytes": 24216,
+        "sha256": "96ef1cb24b109db7e1d3b2f517ac70a0ff3ee02e820a51ae470eb8b73efad371"
+      }
+    ],
+    "externalExecutionPolicy": "REFUSED_IN_TEST_WORKERS_EXCEPT_EXACT_READONLY_GIT_LS_FILES_INVENTORY"
+  },
+  "actualCommittedPostimageAdmission": "ROOT_REQUIRED_AFTER_MOUNT_NOT_CLAIMED_BY_PURE_TESTS",
+  "native": "NOT_RUN",
+  "performance": "NOT_MEASURED",
+  "cancelledOrdinal": "UNKNOWN",
+  "rootWrites": 0,
+  "bankBodiesRead": 0
+}

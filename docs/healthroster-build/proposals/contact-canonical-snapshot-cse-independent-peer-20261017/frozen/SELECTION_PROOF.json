@@ -1,0 +1,99 @@
+{
+  "version": "CONTACT_CSE_FINITE_FULL_SELECTION_PROOF_V1",
+  "parent": "42802228977b941325f0feb44c11918b0f42190f",
+  "currentObservedHead": "cdb4540daae048a2646793b401058392fef51ef6",
+  "all48CurrentSavedIndexHeadBytesEqualParent": true,
+  "selected": 48,
+  "changedShared": 2,
+  "changedAdapter": 6,
+  "unchangedAdapter": 40,
+  "completeRawParentReversals": 8,
+  "wholeHunks": 15,
+  "unchangedRootPins": 61,
+  "amendedRootPins": 2,
+  "closedActualConsumerVectors": [
+    {
+      "name": "scripts/healthroster-live-test-restoration.mjs: exact actual parent and postimage",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-live-test-restoration.mjs: dirty saved",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-live-test-restoration.mjs: dirty index",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-live-test-restoration.mjs: dirty current",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-live-test-restoration.mjs: dirty parent",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-live-test-restoration.mjs: wrong expected postimage",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-live-test-restoration.mjs: wrong committed predecessor hash",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-live-test-restoration.mjs: forward for other filename",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-live-test-restoration.mjs: absent finite predecessor amendment",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-install1-full-rehearsal.mjs: exact actual parent and postimage",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-install1-full-rehearsal.mjs: dirty saved",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-install1-full-rehearsal.mjs: dirty index",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-install1-full-rehearsal.mjs: dirty current",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-install1-full-rehearsal.mjs: dirty parent",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-install1-full-rehearsal.mjs: wrong expected postimage",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-install1-full-rehearsal.mjs: wrong committed predecessor hash",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-install1-full-rehearsal.mjs: forward for other filename",
+      "result": "PASS"
+    },
+    {
+      "name": "scripts/healthroster-install1-full-rehearsal.mjs: absent finite predecessor amendment",
+      "result": "PASS"
+    },
+    {
+      "name": "unchanged ordinary source parent/index/current/saved",
+      "result": "PASS"
+    },
+    {
+      "name": "ordinary source cannot use wrong parent",
+      "result": "PASS"
+    }
+  ],
+  "actualSourceAdmission": "NOT_RUN_CANDIDATE_NOT_INSTALLED",
+  "native": "NOT_RUN",
+  "performance": "NOT_MEASURED"
+}

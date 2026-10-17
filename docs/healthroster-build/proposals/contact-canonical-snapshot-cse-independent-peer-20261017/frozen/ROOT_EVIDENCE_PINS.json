@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "commit": "da365b7367e2d78d810ad04b7af436e90d36c8f6",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_NATIVE_SNAPSHOT_BUILTIN_METADATA_20261017.json",
+      "capture": "evidence/CONTACT_NATIVE_SNAPSHOT_BUILTIN_METADATA_20261017.json",
+      "bytes": 4051,
+      "sha256": "39e82890f93409ad75052399ef2086bddb31a6968e7f0680a5bb931891118f51",
+      "nativeObserver": "ROOT_NOT_THIS_LANE"
+    },
+    {
+      "commit": "da365b7367e2d78d810ad04b7af436e90d36c8f6",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_CONSTRUCTORS_NATIVE_R2_CANCELLED_PREQUERY_20261017.json",
+      "capture": "evidence/CONTACT_CONSTRUCTORS_NATIVE_R2_CANCELLED_PREQUERY_20261017.json",
+      "bytes": 2314,
+      "sha256": "3dcac082d979f38231a68bca69f9e42bdf0f4dbad2bfe1e29c9a2225a088a77f",
+      "nativeObserver": "ROOT_NOT_THIS_LANE"
+    }
+  ],
+  "queriesExecutedByThisLane": 0
+}
