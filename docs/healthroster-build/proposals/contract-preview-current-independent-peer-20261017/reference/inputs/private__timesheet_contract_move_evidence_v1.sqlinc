@@ -1,0 +1,25 @@
+create or replace function private.timesheet_contract_move_evidence_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare source_member jsonb; snapshot jsonb; a private.timesheet_contract_family_aliases%rowtype;
+begin
+ select v.* into a from private.timesheet_contract_family_aliases v where v.timesheet_id=p_timesheet_id;
+ if not found then return private.timesheet_contract_move_evidence_live_v1(p_timesheet_id);end if;
+ -- The original alias is immutable and points directly at its first accepted
+ -- operation. No latest-version/chain walk or current workflow state is the seal.
+ select value into source_member from private.timesheet_contract_family_aliases original_alias
+  join private.timesheet_contract_move_operations o on o.id=original_alias.accepted_operation_id
+  join private.timesheet_contract_move_reviews r on r.id=o.accepted_review_id and r.operation_id=o.id
+  join private.timesheet_contract_move_members m on m.operation_id=o.id and m.member_key=original_alias.member_key
+  cross join lateral jsonb_array_elements(r.manifest_json#>'{physical,members}') value
+  where original_alias.timesheet_id=a.original_timesheet_id and original_alias.original_timesheet_id=a.original_timesheet_id
+   and (o.state in('COMPLETE','SUPERSEDED') or private.timesheet_contract_move_accepting_v1(o.id)) and value->>'member_key'=a.member_key
+   and value->>'original_timesheet_id'=a.original_timesheet_id::text
+   and m.member_hash=private.timesheet_contract_move_row_hash_v1(value)
+   and m.immutable_evidence_hash=private.timesheet_contract_move_row_hash_v1(value->'original_evidence');
+ snapshot:=source_member->'original_evidence';
+ if snapshot is null then raise exception 'CONTRACT_MOVE_ORIGINAL_EVIDENCE_UNBOUND' using errcode='23514';end if;
+ perform private.candidate_contract_move_evidence_snapshot_assert_v1(a.original_timesheet_id,snapshot);
+ return snapshot;
+end;
+$function$;

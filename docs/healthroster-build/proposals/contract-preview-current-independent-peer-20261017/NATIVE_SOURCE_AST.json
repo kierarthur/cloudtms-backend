@@ -1,0 +1,182 @@
+{
+  "parserVersion": "v7.20",
+  "PostgreSQLGrammar": [
+    17,
+    7
+  ],
+  "schemaRawSha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+  "operationCandidateForeignKeyAST": {
+    "referencedRelation": "public.candidates",
+    "columns": [
+      "id"
+    ],
+    "deferrable": false,
+    "initiallyDeferred": false
+  },
+  "completeSelectedPrograms": [
+    {
+      "file": "native-owners/private__daily_rate_correction_public_assert_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.daily_rate_correction_public_assert_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__invoice_contract_move_billing_read_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.invoice_contract_move_billing_read_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__invoice_contract_move_inspect_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.invoice_contract_move_inspect_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__invoice_contract_move_inspect_v1__3arg.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.invoice_contract_move_inspect_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__invoice_contract_move_preflight_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.invoice_contract_move_preflight_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_current_placement_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_current_placement_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_commit_guard_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_move_commit_guard_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_evidence_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_move_evidence_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_family_lock_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_move_family_lock_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_operation_guard_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_move_operation_guard_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_reason_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_move_reason_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_request_assert_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_move_request_assert_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_request_guard_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_move_request_guard_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_request_hash_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_move_request_hash_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_review_members_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_move_review_members_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_scope_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_move_scope_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_move_stage_v1.sqlinc",
+      "statements": 1,
+      "programs": null,
+      "grammar": "NOT_PROVED",
+      "actualParserError": "\"target.timesheet_id\" is not a known variable",
+      "name": "private.timesheet_contract_move_stage_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_contract_native_pending_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_contract_native_pending_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/private__timesheet_correction_entry_subject_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "private.timesheet_correction_entry_subject_v1",
+      "nativeExecuted": false
+    },
+    {
+      "file": "native-owners/public__timesheet_contract_move_accept_v1.sqlinc",
+      "statements": 1,
+      "programs": 1,
+      "grammar": "PASS",
+      "name": "public.timesheet_contract_move_accept_v1",
+      "nativeExecuted": false
+    }
+  ],
+  "native": "NOT_RUN",
+  "catalogueTyping": "NOT_PROVED",
+  "deadlockNativeReproduction": "NOT_RUN"
+}

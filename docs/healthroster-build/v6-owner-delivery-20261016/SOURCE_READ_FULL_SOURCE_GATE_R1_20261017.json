@@ -1,0 +1,8 @@
+{
+  "version": "SOURCE_READ_FULL_ROOT_SOURCE_GATE_V1",
+  "status": "HOLD",
+  "error": "HEALTHROSTER_SOURCE_CLASSIFIER_DELEGATION_ACTUAL_ACL_CHANGED",
+  "elapsedMilliseconds": 17909,
+  "native": "NOT_RUN",
+  "release": "NOT_RUN"
+}

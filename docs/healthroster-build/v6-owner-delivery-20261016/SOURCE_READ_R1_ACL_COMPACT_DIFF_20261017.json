@@ -1,0 +1,26 @@
+{
+  "version": "SOURCE_CLASSIFIER_CURRENT_ACL_COMPACT_DIFF_V1",
+  "historicalClassification": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/CLASSIFICATION.json",
+  "definitionsExactlyUnchanged": true,
+  "historicalAclEvents": 75,
+  "currentAclEvents": 77,
+  "additions": [
+    {
+      "root": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "physical": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+      "sha256": "53c09a59d4e92be3be7dbf95350be7663bbd984bb6b31d8fe39b659dda388891",
+      "statement": "alter function private._candidate_expense_source_family_v1(uuid) owner to postgres;"
+    },
+    {
+      "root": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "physical": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+      "sha256": "bbb2a760f5f17175d7c24e05f656c031f48b46f4314c0cc0b11b5f015e840270",
+      "statement": "revoke all on function private._candidate_expense_source_family_v1(uuid) from public,anon,authenticated,service_role;"
+    }
+  ],
+  "removed": [],
+  "mechanicalSourceCatalogueOnly": true,
+  "native": "NOT_RUN",
+  "historicalOwners": 13,
+  "historicalDefinitionEvents": 17
+}

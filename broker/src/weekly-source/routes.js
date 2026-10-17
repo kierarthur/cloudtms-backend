@@ -1336,7 +1336,7 @@ export async function dispatchWeeklySourceRequest(req, env, ctx, dependencies = 
       req, url, user, route: payDecisionRoute,
       preview: dependencies.previewSourcePayDecision,
       confirm: dependencies.confirmSourcePayDecision,
-      readSource: dependencies.readSourcePayDecisionSource,
+      readResult: dependencies.readCurrentSourcePayDecision,
     });
     if (user.payView && !(
       (req.method === 'GET' && [ `${officePrefix}/workspace`, `${officePrefix}/notifications`, `${officePrefix}/checklist` ].includes(path))

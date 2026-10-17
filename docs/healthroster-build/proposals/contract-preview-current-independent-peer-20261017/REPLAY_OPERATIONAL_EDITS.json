@@ -1,0 +1,105 @@
+{
+  "scope": "PEER_HARNESS_PATHS_AND_RESULT_DESTINATION_ONLY",
+  "edits": [
+    {
+      "file": "assemble.py",
+      "inputSha256": "7e48aace7f1d924bdb514721eccc84d049b5ba27577b1e34ced000cc6b641eee",
+      "operationalOutputSha256": "b86f27f52b85441c47c73be131db289ee0b7d0ce8fb894d3bf6d19d8a8add7a3",
+      "edits": [
+        {
+          "before": "HERE = Path(__file__).resolve().parent",
+          "after": "HERE = Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/contract-preview-current-independent-peer-20261017/reference\")",
+          "count": 1
+        },
+        {
+          "before": "OWN = HERE.parents[3]",
+          "after": "OWN = Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026\")",
+          "count": 1
+        },
+        {
+          "before": "ROOT = OWN.parent / 'healthroster-install2-14102026'",
+          "after": "ROOT = Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026\")",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "offline-checks.py",
+      "inputSha256": "f66844ce95af0c894ab4b18a782f8e06027b99330e7f30be4f6d3ccf1c3aec08",
+      "operationalOutputSha256": "3c857cd44c13b6736f0c2ee26857e6bcb76379489e5479db12b870a6d10960cd",
+      "edits": [
+        {
+          "before": "HERE = Path(__file__).resolve().parent",
+          "after": "HERE = Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/contract-preview-current-independent-peer-20261017/reference\")",
+          "count": 1
+        },
+        {
+          "before": "OWN = HERE.parents[3]",
+          "after": "OWN = Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026\")",
+          "count": 1
+        },
+        {
+          "before": "ROOT = OWN.parent / 'healthroster-install2-14102026'",
+          "after": "ROOT = Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026\")",
+          "count": 1
+        },
+        {
+          "before": "(HERE / name).write_bytes(",
+          "after": "(Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/contract-preview-current-independent-peer-20261017/replay\") / name).write_bytes(",
+          "count": 1
+        },
+        {
+          "before": "spec_from_file_location('health_contract_assembly', HERE / 'assemble.py')",
+          "after": "spec_from_file_location('health_contract_assembly', Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/contract-preview-current-independent-peer-20261017/replay\") / 'assemble.py')",
+          "count": 1
+        },
+        {
+          "before": "str(HERE / 'assemble.py')",
+          "after": "str(Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/contract-preview-current-independent-peer-20261017/replay\") / 'assemble.py')",
+          "count": 1
+        },
+        {
+          "before": "str(HERE / 'protocol-vectors.mjs')",
+          "after": "str(Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/contract-preview-current-independent-peer-20261017/replay\") / 'protocol-vectors.mjs')",
+          "count": 1
+        },
+        {
+          "before": "'tests/contract-correction-v3.test.mjs'], cwd=ROOT",
+          "after": "'tests/contract-correction-v3.test.mjs'], cwd=Path(\"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/contract-preview-current-independent-peer-20261017/replay/current\")",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "protocol-vectors.mjs",
+      "inputSha256": "bd228023bc94be7ac9994d3a7ecf931b4f54a0afed35064f0991e7f8768d7ce6",
+      "operationalOutputSha256": "9d4351b71876cc2c59e6460bad4131fbf723c0daedc0a3373258a9bb5c117b2e",
+      "edits": [
+        {
+          "before": "const here=path.dirname(fileURLToPath(import.meta.url));",
+          "after": "const here=\"D:\\\\Development\\\\GitHub\\\\.codex-worktrees\\\\healthroster-v2-money-build-13102026\\\\docs\\\\healthroster-build\\\\proposals\\\\contract-preview-current-independent-peer-20261017\\\\replay\";",
+          "count": 1
+        },
+        {
+          "before": "const root=path.resolve(here,'../../../../../healthroster-install2-14102026');",
+          "after": "const root=\"D:\\\\Development\\\\GitHub\\\\.codex-worktrees\\\\healthroster-v2-money-build-13102026\\\\docs\\\\healthroster-build\\\\proposals\\\\contract-preview-current-independent-peer-20261017\\\\replay\\\\current\";",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "currentProductInputs": [
+    {
+      "path": "tests/contract-correction-v3.test.mjs",
+      "sha256": "198f5743e3c7fbf587fe3b11cfcabd016202cc7e5e693313162302053f0eb1ef",
+      "bytes": 9934
+    },
+    {
+      "path": "broker/src/contract-correction-v3.mjs",
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087",
+      "bytes": 12418
+    }
+  ],
+  "productEdits": 0,
+  "referenceWrites": 0
+}

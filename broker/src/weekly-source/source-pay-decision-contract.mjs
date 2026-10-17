@@ -141,6 +141,22 @@ export function decodeSourcePayDecisionSourceRead(v,{validateAction=sharedValida
    ||v.version!=='SOURCE_PAY_DECISION_INTERNAL_SOURCE_READ_V1'||!uuid(v.decision_id)||!uuid(v.request_id)||!revision(v.state_revision))invalid();
  decodeSourcePayDecisionReceipt(v.accepted_receipt,{validateAction,decision_id:v.decision_id});
  decodeSourcePayDecisionReceipt(v.request_receipt,{validateAction,decision_id:v.decision_id,request_id:v.request_id});
+ // Internal Source evidence remains separate from the public accepted receipt.
+ if(v.accepted_receipt.decision!==v.request_receipt.decision
+  ||v.accepted_receipt.reason!==v.request_receipt.reason
+  ||BigInt(v.accepted_receipt.state_revision)>BigInt(v.request_receipt.state_revision))invalid();
+ // A read of the original request projects the same immutable saved receipt twice.
+ const canonicalReadReceipt=x=>Array.isArray(x)?'['+x.map(canonicalReadReceipt).join(',')+']':x!==null&&typeof x==='object'
+  ?'{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonicalReadReceipt(x[k])).join(',')+'}':JSON.stringify(x);
+ if(v.request_id===v.accepted_receipt.request_id&&canonicalReadReceipt(v.request_receipt)!==canonicalReadReceipt(v.accepted_receipt))invalid();
+ const acceptedMembers=new Map(v.accepted_receipt.members.map(m=>[m.member_key,m]));
+ if(acceptedMembers.size!==v.request_receipt.members.length)invalid();
+ // Original Source-only NULL family/event evidence stays in accepted_receipt.
+ // A later genuine native binding belongs to its separate request receipt;
+ // current SQL proves that association. Do not equate absence with current IDs.
+ for(const m of v.request_receipt.members){const original=acceptedMembers.get(m.member_key);
+  if(!original||!['scope_kind','scope_mode','source_row_id'].every(k=>same(m[k],original[k]))
+   ||m.scope_kind==='TIMESHEET_FAMILY'&&!same(m.family_root_id,original.family_root_id))invalid();}
  const cut=v.current_cut;
  if(!closed(cut,['cut_id','cut_no','review_id','qualification_state','pay_cut_sha256','source_invoice_sha256','issue_set_sha256'])
    ||!uuid(cut.cut_id)||!uuid(cut.review_id)||!revision(cut.cut_no)||!['NOT_APPROVED','QUALIFIED','REVIEW_REQUIRED'].includes(cut.qualification_state)
@@ -151,14 +167,27 @@ export function decodeSourcePayDecisionSourceRead(v,{validateAction=sharedValida
  if(!v.applications.some(a=>a.cut_id===cut.cut_id&&a.review_id===cut.review_id)
   ||!v.applications.some(a=>a.request_id===v.request_id&&a.review_id===v.request_receipt.review_id)
   ||BigInt(v.state_revision)<BigInt(v.request_receipt.state_revision))invalid();
+ const requestApplication=v.applications.filter(a=>a.request_id===v.request_id),
+  acceptedApplication=v.applications.filter(a=>a.request_id===v.accepted_receipt.request_id),
+  currentApplication=v.applications.filter(a=>a.cut_id===cut.cut_id&&a.review_id===cut.review_id);
+ if(new Set(v.applications.map(a=>a.request_id)).size!==v.applications.length
+  ||new Set(v.applications.map(a=>a.cut_id)).size!==v.applications.length
+  ||new Set(v.applications.map(a=>a.review_id)).size!==v.applications.length
+  ||requestApplication.length!==1||acceptedApplication.length!==1||currentApplication.length!==1
+  ||requestApplication[0].review_id!==v.request_receipt.review_id
+  ||requestApplication[0].cut_id!==v.request_receipt.financial_publications.cut_id
+  ||acceptedApplication[0].review_id!==v.accepted_receipt.review_id
+  ||acceptedApplication[0].cut_id!==v.accepted_receipt.financial_publications.cut_id)invalid();
  list(v.native_members,n=>{
   if(!closed(n,['application_id','request_id','member_key','preparation_id','route','origin','orchestration_run_id','native_result_sha256','original_native_result','failure_code','current_local_release_proof'])
    ||!['application_id','request_id','preparation_id'].every(k=>uuid(n[k]))||!text(n.member_key)||!['NEXT','SOURCE_LOCAL'].includes(n.route)
    ||!v.applications.some(a=>a.application_id===n.application_id&&a.request_id===n.request_id))return false;
+  if(!acceptedMembers.has(n.member_key))return false;
+  const application=v.applications.find(a=>a.application_id===n.application_id);
   if(n.origin==='NOT_APPLIED_DEPENDENCY')return n.orchestration_run_id===null&&n.native_result_sha256===null&&n.original_native_result===null
     &&['DEPENDENCY_UNAVAILABLE','RESULT_UNKNOWN'].includes(n.failure_code)&&n.current_local_release_proof===null;
   if(!['APPLIED_IN_THIS_TRANSACTION','ADOPTED_EXISTING'].includes(n.origin)||!uuid(n.orchestration_run_id)||!hash(n.native_result_sha256)||n.failure_code!==null)return false;
-  decodeSourceNativeComposedResult(n.original_native_result,{application_id:n.application_id,decision_id:v.decision_id,request_id:n.request_id,member_key:n.member_key,
+  decodeSourceNativeComposedResult(n.original_native_result,{application_id:n.application_id,decision_id:v.decision_id,request_id:n.request_id,review_id:application.review_id,member_key:n.member_key,
    preparation_id:n.preparation_id,route:n.route});
   if(n.original_native_result.origin!==n.origin||n.original_native_result.native_receipt.orchestration_run_id!==n.orchestration_run_id)return false;
   if(n.current_local_release_proof!==null){

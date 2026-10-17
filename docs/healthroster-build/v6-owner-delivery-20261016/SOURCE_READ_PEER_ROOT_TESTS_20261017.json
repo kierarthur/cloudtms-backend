@@ -1,0 +1,27 @@
+{
+  "version": "SOURCE_READ_PEER_ROOT_INDEPENDENT_TESTS_V1",
+  "peerCommit": "25388c26b6d0d849d3e022fd76aa2a0f4c95f70b",
+  "status": "PASS",
+  "results": [
+    {
+      "name": "f23.test.mjs",
+      "exit": 0,
+      "stdout": "{\"passed\":57,\"stages\":[{\"name\":\"READ\",\"files\":11,\"rawOccurrences\":19,\"uniqueKeys\":19},{\"name\":\"CLASSIFICATION\",\"files\":5,\"rawOccurrences\":19,\"uniqueKeys\":19},{\"name\":\"ADMISSION\",\"files\":1,\"rawOccurrences\":0,\"uniqueKeys\":0}],\"native\":\"NOT_RUN\"}\n{\"suppressedFrozenEqualWrites\":1}",
+      "stderr": ""
+    },
+    {
+      "name": "gate-pipeline.test.mjs",
+      "exit": 0,
+      "stdout": "{\"actualPatchedPipeline\":17,\"extraDynamicStatementRefused\":true,\"native\":\"NOT_RUN\"}\n{\"suppressedFrozenEqualWrites\":1}",
+      "stderr": ""
+    },
+    {
+      "name": "source.test.mjs",
+      "exit": 0,
+      "stdout": "{\"passed\":229,\"roles\":81,\"finalInventory\":[426,1095],\"native\":\"NOT_RUN\"}\n{\"suppressedFrozenEqualWrites\":1}",
+      "stderr": ""
+    }
+  ],
+  "native": "NOT_RUN",
+  "runtimeMounted": false
+}

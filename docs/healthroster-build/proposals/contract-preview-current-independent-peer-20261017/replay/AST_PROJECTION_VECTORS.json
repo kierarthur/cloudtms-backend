@@ -1,0 +1,383 @@
+{
+  "scope": "ACTUAL_AUTHORED_PURE_ASSIGNMENT_AST_ONLY_INDEPENDENT_FIXTURES",
+  "invoice": [
+    {
+      "dispositions": [
+        "PRESERVE_SOURCE"
+      ],
+      "effect": {
+        "visibility": "FULL",
+        "text": "Source invoice history remains unchanged."
+      }
+    },
+    {
+      "dispositions": [
+        "NO_INVOICE"
+      ],
+      "effect": {
+        "visibility": "FULL",
+        "text": "Uninvoiced work retains its native collection gates."
+      }
+    },
+    {
+      "dispositions": [
+        "EDIT_DRAFT"
+      ],
+      "effect": {
+        "visibility": "FULL",
+        "text": "Selected invoice Draft lines will be updated."
+      }
+    },
+    {
+      "dispositions": [
+        "RELOCATE_DRAFT"
+      ],
+      "effect": {
+        "visibility": "FULL",
+        "text": "Selected invoice Draft lines require native relocation."
+      }
+    },
+    {
+      "dispositions": [
+        "REPLACE_ISSUED"
+      ],
+      "effect": {
+        "visibility": "FULL",
+        "text": "Original invoice lines require native credits and replacement Drafts."
+      }
+    },
+    {
+      "dispositions": [
+        "PRESERVE_SOURCE",
+        "NO_INVOICE",
+        "EDIT_DRAFT",
+        "RELOCATE_DRAFT",
+        "REPLACE_ISSUED"
+      ],
+      "effect": {
+        "visibility": "FULL",
+        "text": "Source invoice history remains unchanged. Uninvoiced work retains its native collection gates. Selected invoice Draft lines will be updated. Selected invoice Draft lines require native relocation. Original invoice lines require native credits and replacement Drafts."
+      }
+    },
+    {
+      "dispositions": [
+        "PRESERVE_SOURCE",
+        "REPLACE_ISSUED"
+      ],
+      "effect": {
+        "visibility": "FULL",
+        "text": "Source invoice history remains unchanged. Original invoice lines require native credits and replacement Drafts."
+      }
+    },
+    {
+      "dispositions": [
+        "NO_INVOICE",
+        "EDIT_DRAFT",
+        "RELOCATE_DRAFT"
+      ],
+      "effect": {
+        "visibility": "FULL",
+        "text": "Uninvoiced work retains its native collection gates. Selected invoice Draft lines will be updated. Selected invoice Draft lines require native relocation."
+      }
+    }
+  ],
+  "results": [
+    {
+      "visible": false,
+      "retainedNativePending": false,
+      "result": {
+        "version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+        "purpose": "CONTRACT_CORRECTION",
+        "operation_id": "10000000-0000-0000-0000-000000000010",
+        "state": "REVIEWED",
+        "state_revision": "9007199254740995",
+        "placement": {
+          "status": "NOT_COMMITTED",
+          "original_timesheet_id": "10000000-0000-0000-0000-000000000001",
+          "current_timesheet_id": "10000000-0000-0000-0000-000000000001",
+          "placement_revision": "9007199254740993",
+          "receipt_id": null
+        },
+        "financial": {
+          "status": "REGISTERED",
+          "command_id": null,
+          "cut_id": null,
+          "summary": {
+            "visibility": "REDACTED"
+          }
+        },
+        "billing": {
+          "status": "PREPARING_DRAFTS",
+          "revision": "9223372036854775807",
+          "group_id": null,
+          "visible_summary": {
+            "visibility": "REDACTED"
+          }
+        },
+        "next_actions": [],
+        "links": []
+      }
+    },
+    {
+      "visible": true,
+      "retainedNativePending": false,
+      "result": {
+        "version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+        "purpose": "CONTRACT_CORRECTION",
+        "operation_id": "10000000-0000-0000-0000-000000000010",
+        "state": "REVIEWED",
+        "state_revision": "9007199254740995",
+        "placement": {
+          "status": "NOT_COMMITTED",
+          "original_timesheet_id": "10000000-0000-0000-0000-000000000001",
+          "current_timesheet_id": "10000000-0000-0000-0000-000000000001",
+          "placement_revision": "9007199254740993",
+          "receipt_id": null
+        },
+        "financial": {
+          "status": "REGISTERED",
+          "command_id": "10000000-0000-0000-0000-000000000040",
+          "cut_id": "10000000-0000-0000-0000-000000000041",
+          "summary": {
+            "visibility": "FULL",
+            "text": "Native registration remains separate from payment."
+          }
+        },
+        "billing": {
+          "status": "PREPARING_DRAFTS",
+          "revision": "9223372036854775807",
+          "group_id": "10000000-0000-0000-0000-000000000050",
+          "visible_summary": {
+            "visibility": "FULL",
+            "text": "The native invoice job is preparing the correction Drafts."
+          }
+        },
+        "next_actions": [],
+        "links": []
+      }
+    },
+    {
+      "visible": false,
+      "retainedNativePending": false,
+      "result": {
+        "version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+        "purpose": "CONTRACT_CORRECTION",
+        "operation_id": "10000000-0000-0000-0000-000000000010",
+        "state": "COMPLETE",
+        "state_revision": "9007199254740995",
+        "placement": {
+          "status": "COMMITTED",
+          "original_timesheet_id": "10000000-0000-0000-0000-000000000001",
+          "current_timesheet_id": "10000000-0000-0000-0000-000000000002",
+          "placement_revision": "9007199254740993",
+          "receipt_id": "10000000-0000-0000-0000-000000000020"
+        },
+        "financial": {
+          "status": "REGISTERED",
+          "command_id": null,
+          "cut_id": null,
+          "summary": {
+            "visibility": "REDACTED"
+          }
+        },
+        "billing": {
+          "status": "PREPARING_DRAFTS",
+          "revision": "9223372036854775807",
+          "group_id": null,
+          "visible_summary": {
+            "visibility": "REDACTED"
+          }
+        },
+        "next_actions": [],
+        "links": []
+      }
+    },
+    {
+      "visible": true,
+      "retainedNativePending": false,
+      "result": {
+        "version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+        "purpose": "CONTRACT_CORRECTION",
+        "operation_id": "10000000-0000-0000-0000-000000000010",
+        "state": "COMPLETE",
+        "state_revision": "9007199254740995",
+        "placement": {
+          "status": "COMMITTED",
+          "original_timesheet_id": "10000000-0000-0000-0000-000000000001",
+          "current_timesheet_id": "10000000-0000-0000-0000-000000000002",
+          "placement_revision": "9007199254740993",
+          "receipt_id": "10000000-0000-0000-0000-000000000020"
+        },
+        "financial": {
+          "status": "REGISTERED",
+          "command_id": "10000000-0000-0000-0000-000000000040",
+          "cut_id": "10000000-0000-0000-0000-000000000041",
+          "summary": {
+            "visibility": "FULL",
+            "text": "Native registration remains separate from payment."
+          }
+        },
+        "billing": {
+          "status": "PREPARING_DRAFTS",
+          "revision": "9223372036854775807",
+          "group_id": "10000000-0000-0000-0000-000000000050",
+          "visible_summary": {
+            "visibility": "FULL",
+            "text": "The native invoice job is preparing the correction Drafts."
+          }
+        },
+        "next_actions": [],
+        "links": []
+      }
+    },
+    {
+      "visible": false,
+      "retainedNativePending": false,
+      "result": {
+        "version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+        "purpose": "CONTRACT_CORRECTION",
+        "operation_id": "10000000-0000-0000-0000-000000000010",
+        "state": "SUPERSEDED",
+        "state_revision": "9007199254740995",
+        "placement": {
+          "status": "COMMITTED",
+          "original_timesheet_id": "10000000-0000-0000-0000-000000000001",
+          "current_timesheet_id": "10000000-0000-0000-0000-000000000003",
+          "placement_revision": "9007199254740993",
+          "receipt_id": "10000000-0000-0000-0000-000000000030"
+        },
+        "financial": {
+          "status": "REGISTERED",
+          "command_id": null,
+          "cut_id": null,
+          "summary": {
+            "visibility": "REDACTED"
+          }
+        },
+        "billing": {
+          "status": "PREPARING_DRAFTS",
+          "revision": "9223372036854775807",
+          "group_id": null,
+          "visible_summary": {
+            "visibility": "REDACTED"
+          }
+        },
+        "next_actions": [],
+        "links": []
+      }
+    },
+    {
+      "visible": true,
+      "retainedNativePending": false,
+      "result": {
+        "version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+        "purpose": "CONTRACT_CORRECTION",
+        "operation_id": "10000000-0000-0000-0000-000000000010",
+        "state": "SUPERSEDED",
+        "state_revision": "9007199254740995",
+        "placement": {
+          "status": "COMMITTED",
+          "original_timesheet_id": "10000000-0000-0000-0000-000000000001",
+          "current_timesheet_id": "10000000-0000-0000-0000-000000000003",
+          "placement_revision": "9007199254740993",
+          "receipt_id": "10000000-0000-0000-0000-000000000030"
+        },
+        "financial": {
+          "status": "REGISTERED",
+          "command_id": "10000000-0000-0000-0000-000000000040",
+          "cut_id": "10000000-0000-0000-0000-000000000041",
+          "summary": {
+            "visibility": "FULL",
+            "text": "Native registration remains separate from payment."
+          }
+        },
+        "billing": {
+          "status": "PREPARING_DRAFTS",
+          "revision": "9223372036854775807",
+          "group_id": "10000000-0000-0000-0000-000000000050",
+          "visible_summary": {
+            "visibility": "FULL",
+            "text": "The native invoice job is preparing the correction Drafts."
+          }
+        },
+        "next_actions": [],
+        "links": []
+      }
+    },
+    {
+      "visible": false,
+      "retainedNativePending": true,
+      "result": {
+        "version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+        "purpose": "CONTRACT_CORRECTION",
+        "operation_id": "10000000-0000-0000-0000-000000000010",
+        "state": "PENDING_PLACEMENT",
+        "state_revision": "9007199254740995",
+        "placement": {
+          "status": "NATIVE_PENDING",
+          "original_timesheet_id": "10000000-0000-0000-0000-000000000001",
+          "current_timesheet_id": null,
+          "placement_revision": "9007199254740993",
+          "receipt_id": null
+        },
+        "financial": {
+          "status": "REGISTERED",
+          "command_id": null,
+          "cut_id": null,
+          "summary": {
+            "visibility": "REDACTED"
+          }
+        },
+        "billing": {
+          "status": "PREPARING_DRAFTS",
+          "revision": "9223372036854775807",
+          "group_id": null,
+          "visible_summary": {
+            "visibility": "REDACTED"
+          }
+        },
+        "next_actions": [],
+        "links": []
+      }
+    },
+    {
+      "visible": true,
+      "retainedNativePending": true,
+      "result": {
+        "version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+        "purpose": "CONTRACT_CORRECTION",
+        "operation_id": "10000000-0000-0000-0000-000000000010",
+        "state": "PENDING_PLACEMENT",
+        "state_revision": "9007199254740995",
+        "placement": {
+          "status": "NATIVE_PENDING",
+          "original_timesheet_id": "10000000-0000-0000-0000-000000000001",
+          "current_timesheet_id": null,
+          "placement_revision": "9007199254740993",
+          "receipt_id": null
+        },
+        "financial": {
+          "status": "REGISTERED",
+          "command_id": "10000000-0000-0000-0000-000000000040",
+          "cut_id": "10000000-0000-0000-0000-000000000041",
+          "summary": {
+            "visibility": "FULL",
+            "text": "Native registration remains separate from payment."
+          }
+        },
+        "billing": {
+          "status": "PREPARING_DRAFTS",
+          "revision": "9223372036854775807",
+          "group_id": "10000000-0000-0000-0000-000000000050",
+          "visible_summary": {
+            "visibility": "FULL",
+            "text": "The native invoice job is preparing the correction Drafts."
+          }
+        },
+        "next_actions": [],
+        "links": []
+      }
+    }
+  ],
+  "nativeAuthorityProved": false
+}

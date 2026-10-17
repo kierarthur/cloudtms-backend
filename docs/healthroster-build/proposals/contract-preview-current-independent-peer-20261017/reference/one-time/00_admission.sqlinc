@@ -1,0 +1,10 @@
+-- One-time managed-root admission BODY; no timestamp/migration allocation.
+-- Refuse any pre-existing overload of these seven newly authored names.
+do $admission$
+begin
+ if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  join(values ('public','timesheet_contract_move_preview_v1'),('private','timesheet_contract_move_read_v1'),('private','timesheet_contract_move_preview_replay_v1'),('private','timesheet_contract_move_preview_read_v1'),('private','timesheet_contract_move_invoice_effect_v1'),('private','timesheet_contract_move_actions_assert_v1'),('private','timesheet_contract_move_public_assert_v1')) expected(schema_name,function_name)
+   on expected.schema_name=n.nspname and expected.function_name=p.proname) then
+  raise exception 'CONTRACT_PREVIEW_READ_NAME_COLLISION' using errcode='55000';end if;
+end;
+$admission$;

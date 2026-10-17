@@ -1695,6 +1695,10 @@
       "sha256": "6dcb719b0e62eec72cd547e59e9726dec7b7ccc513edba463ada003046b8842d"
     },
     {
+      "path": "supabase/migrations/17102026_0749_source_current_read_private_admission.sql",
+      "sha256": "7cbb76d9b28d83349b0713186a5bdaca9613865bceca0294230d37bb4c7cb2a2"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

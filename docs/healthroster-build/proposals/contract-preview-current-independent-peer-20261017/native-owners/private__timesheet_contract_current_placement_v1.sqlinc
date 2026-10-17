@@ -1,0 +1,84 @@
+create or replace function private.timesheet_contract_current_placement_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare a private.timesheet_contract_family_aliases%rowtype; p private.timesheet_contract_current_placements%rowtype;
+ o private.timesheet_contract_move_operations%rowtype; t public.timesheets%rowtype; root_id uuid; native_chain jsonb;
+begin
+ if p_timesheet_id is null then raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='22023'; end if;
+ select v.* into a from private.timesheet_contract_family_aliases v where v.timesheet_id=p_timesheet_id;
+ if found then
+  select v.* into p from private.timesheet_contract_current_placements v
+   where v.family_root_id=a.family_root_id and v.member_key=a.member_key;
+  select v.* into o from private.timesheet_contract_move_operations v where v.id=p.operation_id;
+  if p.current_timesheet_id is null then
+    if private.timesheet_contract_native_pending_v1(to_jsonb(p),false) is null
+      or a.member_role is distinct from p.role
+      or not exists(select 1 from private.timesheet_contract_move_members member
+        join private.timesheet_contract_move_operations accepted on accepted.id=member.operation_id
+         and accepted.state in('COMPLETE','SUPERSEDED') and accepted.receipt_json is not null
+        where member.operation_id=a.accepted_operation_id and member.member_key=a.member_key
+         and member.family_root_id=a.family_root_id and member.role=a.member_role
+         and (a.timesheet_id in(member.from_timesheet_id,member.to_timesheet_id)
+           or private.timesheet_contract_native_rotation_alias_v1(to_jsonb(a))
+           or private.timesheet_contract_native_allocation_alias_v1(to_jsonb(a)))) then
+      raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';end if;
+    return jsonb_build_object('version','CURRENT_CONTRACT_PLACEMENT_V1','requested_timesheet_id',p_timesheet_id,
+      'family_root_id',p.family_root_id,'current_timesheet_id',null,'current_contract_id',p.current_contract_id,
+      'placement_revision',p.placement_revision::text,'placement_receipt_id',p.placement_receipt_id,'legacy_origin',false);
+  end if;
+  select v.* into t from public.timesheets v where v.timesheet_id=p.current_timesheet_id;
+  if p.current_timesheet_id is null or t.timesheet_id is null or not t.is_current or t.archived_at_utc is not null
+   or t.contract_id is distinct from p.current_contract_id or a.member_role<>p.role
+   or o.id is null or not ((o.state='COMPLETE' and o.receipt_json is not null) or private.timesheet_contract_move_accepting_v1(o.id))
+   or o.placement_receipt_json->>'receipt_id' is distinct from p.placement_receipt_id::text
+   or o.placement_receipt_json->>'operation_id' is distinct from o.id::text
+   or o.accepted_review_id is null
+   or (not exists(select 1 from private.timesheet_contract_move_members m where m.operation_id=o.id
+     and m.member_key=p.member_key and m.to_timesheet_id=t.timesheet_id and m.to_version=t.version
+     and m.family_root_id=p.family_root_id and m.role=p.role) and not private.timesheet_contract_native_rotation_binding_v1(to_jsonb(p),false)
+     and not private.timesheet_contract_native_allocation_binding_v1(to_jsonb(p),false)
+     and not private.timesheet_contract_native_allocation_binding_v1(to_jsonb(p),true))
+   or not exists(select 1 from private.timesheet_contract_move_members m
+     join private.timesheet_contract_move_operations accepted on accepted.id=m.operation_id
+     where m.operation_id=a.accepted_operation_id
+      and (accepted.state in('COMPLETE','SUPERSEDED') or (accepted.id=o.id and private.timesheet_contract_move_accepting_v1(accepted.id)))
+      and m.member_key=a.member_key and m.family_root_id=a.family_root_id and m.role=a.member_role
+      and (a.timesheet_id in(m.from_timesheet_id,m.to_timesheet_id)
+        or private.timesheet_contract_native_rotation_alias_v1(to_jsonb(a))
+        or private.timesheet_contract_native_allocation_alias_v1(to_jsonb(a)))) then
+   raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+  end if;
+  return jsonb_build_object('version','CURRENT_CONTRACT_PLACEMENT_V1','requested_timesheet_id',p_timesheet_id,
+   'family_root_id',p.family_root_id,'current_timesheet_id',t.timesheet_id,'current_contract_id',t.contract_id,
+   'placement_revision',p.placement_revision::text,'placement_receipt_id',p.placement_receipt_id,'legacy_origin',false);
+ end if;
+ select v.* into t from public.timesheets v where v.timesheet_id=p_timesheet_id;
+ if not found or t.archived_at_utc is not null then raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000'; end if;
+ -- Native booking rotations retain their exact booking family; never choose max(version).
+ if (select count(*) from public.timesheets v where v.booking_id=t.booking_id and v.is_current and v.archived_at_utc is null)<>1 then
+  raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+ end if;
+ select v.* into t from public.timesheets v where v.booking_id=t.booking_id and v.is_current and v.archived_at_utc is null;
+ if exists(select 1 from private.timesheet_contract_family_aliases v where v.timesheet_id=t.timesheet_id) then
+  -- A previously unknown alias cannot fall through to original Contract qualification.
+  raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+ end if;
+ root_id:=t.timesheet_id;
+ if t.parent_timesheet_id is not null or exists(select 1 from public.timesheets child where child.parent_timesheet_id=t.timesheet_id) then
+  -- Existing signed correction family is explicit native identity, never a move chain.
+  native_chain:=public.timesheet_correction_chain_scope_v1(t.timesheet_id,false,32,100);
+  root_id:=(native_chain->>'root_timesheet_id')::uuid;
+  if native_chain->>'valid' is distinct from 'true' or root_id is null then
+   raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+  end if;
+  select v.* into t from public.timesheets v where v.timesheet_id=(native_chain->>'latest_positive_timesheet_id')::uuid
+   and v.is_current and v.archived_at_utc is null;
+  if not found or exists(select 1 from private.timesheet_contract_family_aliases a where a.timesheet_id=t.timesheet_id) then
+   raise exception 'CURRENT_PLACEMENT_UNBOUND' using errcode='55000';
+  end if;
+ end if;
+ return jsonb_build_object('version','CURRENT_CONTRACT_PLACEMENT_V1','requested_timesheet_id',p_timesheet_id,
+  'family_root_id',root_id,'current_timesheet_id',t.timesheet_id,'current_contract_id',t.contract_id,
+  'placement_revision','0','placement_receipt_id',null,'legacy_origin',true);
+end;
+$function$;

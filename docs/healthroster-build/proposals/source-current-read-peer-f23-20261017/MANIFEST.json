@@ -1,0 +1,188 @@
+{
+  "version": "HEALTH_SOURCE_CURRENT_READ_INDEPENDENT_PEER_F23_V1",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "functionalParent": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "runtimeFiles": 2,
+  "runtimeSqlChanges": 0,
+  "gateHunks": 3,
+  "files": [
+    {
+      "path": "ACTUAL_GATE_PIPELINE_RESULTS.json",
+      "bytes": 4091,
+      "sha256": "80e6bd65202973337942ba952a6f409573e08afdb100d9a28d222e8fbc1a979f"
+    },
+    {
+      "path": "checks/f23.test.mjs",
+      "bytes": 7092,
+      "sha256": "427936fe367792a183ed528e75bbed71331792112cf858f48229d047cf642f9e"
+    },
+    {
+      "path": "checks/gate-hook.mjs",
+      "bytes": 1668,
+      "sha256": "20e0bbc42131bee2f5dd75b39242e1c225f41597048754e94078ca037829b97a"
+    },
+    {
+      "path": "checks/gate-pipeline.test.mjs",
+      "bytes": 2227,
+      "sha256": "80310b41fdd09fbacd4896aa0c72fbe25a844a68e6dfd691f48f9e77b067cedb"
+    },
+    {
+      "path": "checks/grammar.py",
+      "bytes": 2007,
+      "sha256": "6f5fc7dae8e1d390aca554043649e5e6a9f5aa9dae3fccaa963731d65ac5f1f5"
+    },
+    {
+      "path": "checks/managed-closure.test.mjs",
+      "bytes": 3766,
+      "sha256": "be5801a1020bf0559ad9a3aa102954207502cb793bd36525d53acce3ed078f0e"
+    },
+    {
+      "path": "checks/prior-review.mjs",
+      "bytes": 3977,
+      "sha256": "16c5df6f3b8ec01d571bf56ec710b9adcfd37f33496e78310881126ab382ea76"
+    },
+    {
+      "path": "checks/read-only-bootstrap.mjs",
+      "bytes": 1441,
+      "sha256": "cc2d9e88244d2e30a06851fa207582bb04def38cee540c656fe19a08e17b6e4c"
+    },
+    {
+      "path": "checks/replay.mjs",
+      "bytes": 1616,
+      "sha256": "36a67c8870af80aa19ad357ef1a68e304a3642538cd4f27e6f2f27cde7ce9e1d"
+    },
+    {
+      "path": "checks/source.test.mjs",
+      "bytes": 10433,
+      "sha256": "08944d626cb475d4126990caf3ec472780f3571154d2e2739ab488f1e0ea3cd5"
+    },
+    {
+      "path": "checks/verify-freeze.py",
+      "bytes": 993,
+      "sha256": "bf1459ef7156c5a681118a7ecea899f6fb226ea5aa25a4c79b59fcc1a9d34a6d"
+    },
+    {
+      "path": "CLASSIFICATION.json",
+      "bytes": 96582,
+      "sha256": "7aa875bf450b81be3d945182c67398c4134f3cb325ab88ff2aa089ac99f2a399"
+    },
+    {
+      "path": "F23_TEST_RESULTS.json",
+      "bytes": 10789,
+      "sha256": "fee3d5a172a917951ce5aa1a31431b7ba3d593cc5bfd4bd1dc7554c8f53003a2"
+    },
+    {
+      "path": "GATE_PARENT_EDITS.json",
+      "bytes": 5124,
+      "sha256": "f5040a6e800a32d7c7679510085b0c1edf07964ce562cc4d98685266afb67ff8"
+    },
+    {
+      "path": "GRAMMAR_RESULTS.json",
+      "bytes": 8055,
+      "sha256": "36be2336079feb902696ca4a8e73c2a1c81ea4ee974e98bd8ccb9981eb8f99c5"
+    },
+    {
+      "path": "INDEPENDENT_SOURCE_RESULTS.json",
+      "bytes": 34407,
+      "sha256": "20bf0afdfbdde75ac883e3ede1c1ac6ee66c45b6df1fc3610b9fee0b8077cb36"
+    },
+    {
+      "path": "INTEGRATION.md",
+      "bytes": 4752,
+      "sha256": "a11a5fff91505ebfa20f1145d8b7f06cdadbb787a72d23ab3f338f07799678ab"
+    },
+    {
+      "path": "INTEGRATION_SELECTION.json",
+      "bytes": 11637,
+      "sha256": "4aa6a6539f626f7dc935bcb08b481ac5a9ed83bfce9ca6732d794371aaf954de"
+    },
+    {
+      "path": "MANAGED_HEALTH_CLOSURE_RESULTS.json",
+      "bytes": 4739,
+      "sha256": "d095f7b7d228f484f8b18957574c543843ca88a0e7c39595da82f32e1df6627c"
+    },
+    {
+      "path": "payload/scripts/bpay-next-source-gates.mjs",
+      "bytes": 283554,
+      "sha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8"
+    },
+    {
+      "path": "payload/scripts/healthroster-source-read-type-review.mjs",
+      "bytes": 5814,
+      "sha256": "03504c269e29432de19dc82a93c62b221489b42ac6e62c2c95f6e6bedd149d2f"
+    },
+    {
+      "path": "PAYLOAD_MANIFEST.json",
+      "bytes": 1452,
+      "sha256": "44ac1ab7d0b3c609cce007d171722c3bd92da8c067f45abffd2433f973e02a55"
+    },
+    {
+      "path": "PRIOR_REGRESSION_RESULTS.json",
+      "bytes": 1065,
+      "sha256": "11e063ac6ae0e33ded420174c639db3871e3a1cdb937173718de3dd88cf20f7f"
+    },
+    {
+      "path": "reference/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 97619,
+      "sha256": "472d6fd233cc73a0d692d2ef83151f9a3f697573d0379f06bc56a8e1f1892607"
+    },
+    {
+      "path": "reference/bpay-next-source-gates.mjs",
+      "bytes": 282449,
+      "sha256": "0ae982224fda89dc77d6f6bd606acdaa6a37ccf126db01b87d5134f4612f2dda"
+    },
+    {
+      "path": "reference/healthroster-same-separate-type-review.mjs",
+      "bytes": 14107,
+      "sha256": "897df1661b265921f960c107f5189470475866ad8311aec358b15f8841391259"
+    },
+    {
+      "path": "REPLAY_RESULTS.json",
+      "bytes": 1412,
+      "sha256": "ef128ae17ffc221890989c7ea16852b8953990771d0c82ebe15071a844f7ad84"
+    },
+    {
+      "path": "replayed/source-complete-classification-current-successor-20261017/TEST_RESULTS.json",
+      "bytes": 973,
+      "sha256": "b98fdb7b4ef332b2bc13aa98b93abcea527f405c1960b5ea6e0004d64d642be2"
+    },
+    {
+      "path": "replayed/source-current-read-health-successor-20261017/SOURCE_TEST_RESULTS.json",
+      "bytes": 1534,
+      "sha256": "82bb90255f2d2cbef6e2c45305e30f756d512c15fdda506809f18ab8a9875a4b"
+    },
+    {
+      "path": "replayed/source-read-identity-portability-forward-20261017/PORTABILITY_RESULTS.json",
+      "bytes": 808,
+      "sha256": "7ed4c652c4627482eeecc8553019333583aa3f9fa55075a74d9eb73835516034"
+    },
+    {
+      "path": "replayed/source-read-identity-portability-forward-20261017/REGRESSION_RESULTS.json",
+      "bytes": 1657,
+      "sha256": "517f6c2783d582bb6bf39850db85afe49136c92f553dc3aab9329a30306e5804"
+    },
+    {
+      "path": "replayed/source-read-identity-portability-forward-20261017/SOURCE_TEST_RESULTS.json",
+      "bytes": 581,
+      "sha256": "6dd507166537625c369702b1ef10695c8c0157a98a86634105a7c115b761b9ab"
+    },
+    {
+      "path": "replayed/source-read-identity-portability-forward-20261017/TEST_RESULTS.json",
+      "bytes": 7045,
+      "sha256": "e095fd9fa200dd462e4b3b3b04198ecc87fc13f2049c59910026e4b2f9620185"
+    },
+    {
+      "path": "REVIEW.md",
+      "bytes": 8349,
+      "sha256": "a9c0134d48139c3f7c6333dc57d64e0fd5bf37eae869b0c84ac7338614abc239"
+    },
+    {
+      "path": "SOURCE_PINS.json",
+      "bytes": 54390,
+      "sha256": "7cdbed38731f606e3aa7407846971e73985853aa357ca6257dcd70b8aa04396d"
+    }
+  ],
+  "native": "NOT_RUN",
+  "BankBodiesRead": false,
+  "fullGlobalGate": "ROOT_REQUIRED"
+}

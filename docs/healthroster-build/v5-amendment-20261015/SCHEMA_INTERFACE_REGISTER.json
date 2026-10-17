@@ -7263,5 +7263,26 @@
     "wholeElapsedMilliseconds": 60038,
     "sharedTurnExplicitlyUnlockedAndClosed": true,
     "install2": "NOT_INSTALLED"
+  },
+  "source_current_read_source_continuation_20261017": {
+    "rootMountReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CURRENT_READ_ROOT_MOUNT_20261017.json",
+    "authorCommits": [
+      "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f",
+      "3f01b8f1782175c3f2be3b167b296a478e3a042a",
+      "39dc0664b56a110a08d75351e379e04c6ae155e2"
+    ],
+    "independentPeerCommit": "25388c26b6d0d849d3e022fd76aa2a0f4c95f70b",
+    "runtimeTargetsMounted": 26,
+    "sourceIntegrity": "PASS_426_1095",
+    "newPrivateDefinitions": 2,
+    "newPublicSignatures": 0,
+    "rootF23Tests": 57,
+    "rootActualPipelineVariants": 17,
+    "rootSourceAclChecks": 229,
+    "completeClassificationRoleLiterals": 81,
+    "sourceGate": "HOLD_FINITE_PRIOR_ACL_EVENT_PROOF",
+    "publicB051Success": "NOT_PROVIDED",
+    "native": "NOT_RUN",
+    "install2": "NOT_INSTALLED"
   }
 }

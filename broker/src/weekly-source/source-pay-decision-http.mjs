@@ -45,7 +45,11 @@ const localCodes=Object.freeze({SOURCE_PAY_DECISION_REQUEST_INVALID:400,SOURCE_P
 const nativeCodes=Object.freeze({
  SOURCE_PAY_DECISION_ACTOR_REQUIRED:['42501',403],SOURCE_PAY_DECISION_REQUEST_INVALID:['22023',400],
  SOURCE_PAY_DECISION_REQUEST_CONFLICT:['23505',409],SOURCE_PAY_DECISION_REVIEW_CHANGED:[['P0001','40001'],409],
- SOURCE_PAY_DECISION_READ_PROJECTION_DEPENDENCY_REQUIRED:['55000',503]
+ SOURCE_PAY_DECISION_READ_PROJECTION_DEPENDENCY_REQUIRED:['55000',503],
+ SOURCE_PAY_DECISION_SCOPE_DENIED:['42501',403],SOURCE_PAY_DECISION_SAVED_RESULT_NOT_FOUND:['22023',404],
+ SOURCE_PAY_DECISION_SAVED_RECEIPT_INVALID:['23514',502],SOURCE_PAY_DECISION_SAVED_APPLICATION_INVALID:['23514',502],
+ SOURCE_PAY_DECISION_SAVED_NATIVE_RESULT_INVALID:['23514',502],SOURCE_NATIVE_STATUS_INVALID:['55000',502],
+ SOURCE_NATIVE_OWNERSHIP_CONTRADICTION:['55000',502]
 });
 const calls=new Set(['weekly_source_pay_decision_preview_begin_v1','weekly_source_pay_decision_preview_quote_context_v1',
  'weekly_source_pay_decision_preview_quote_v1','weekly_source_pay_decision_preview_ready_v1','weekly_source_pay_decision_preview_v1',
@@ -53,7 +57,7 @@ const calls=new Set(['weekly_source_pay_decision_preview_begin_v1','weekly_sourc
  'weekly_source_pay_decision_unprotect_run_prepare_v1','weekly_source_pay_decision_unprotect_quote_context_v1',
  'weekly_exceptional_pay_action_context_v1','weekly_source_pay_decision_unprotect_prepare_v1',
  'weekly_source_pay_decision_accept_v1','weekly_source_pay_decision_read_source_v1']);
-export async function handleSourcePayDecisionHttp({req,url,user,route,preview,confirm,readSource}){
+export async function handleSourcePayDecisionHttp({req,url,user,route,preview,confirm,readResult}){
  let request;
  try{
   if(!uuid(user?.id)||!isActivePaymentActor(user))fail('PAYMENT_PERMISSION_REQUIRED',403);
@@ -62,11 +66,12 @@ export async function handleSourcePayDecisionHttp({req,url,user,route,preview,co
   if(route.action==='READ_RESULT'){
    if(req.body!==null||[...url.searchParams].length!==1||url.searchParams.getAll('request_id').length!==1)fail('SOURCE_PAY_DECISION_REQUEST_INVALID',400);
    request=decodeSourcePayDecisionBrowserRequest({version:'SOURCE_PAY_DECISION_V1',action:'READ_RESULT',decision_id:route.decisionId,request_id:url.searchParams.get('request_id')},'READ_RESULT');
-   if(typeof readSource!=='function')fail('SOURCE_PAY_DECISION_DEPENDENCY_REQUIRED',503);
-   // Authenticate/reprove exact saved request/current SQL scope through its
-   // already declared real owner. Its private nine-key result is never sent.
-   await readSource({request,actorUserId:user.id});
-   fail('SOURCE_PAY_DECISION_READ_PROJECTION_DEPENDENCY_REQUIRED',503);
+   if(typeof readResult!=='function')fail('SOURCE_PAY_DECISION_DEPENDENCY_REQUIRED',503);
+   // The genuine public SQL READ_RESULT arm owns saved request/current scope
+   // and native-child validation. It returns the exact dependency refusal until
+   // the separately missing public envelope/financial child is supplied.
+   await readResult({request,actorUserId:user.id});
+   fail('SOURCE_PAY_DECISION_RESULT_INVALID',502);
   }
   if(url.search)fail('SOURCE_PAY_DECISION_REQUEST_INVALID',400);
   request=decodeSourcePayDecisionBrowserRequest(await body(req),route.action);

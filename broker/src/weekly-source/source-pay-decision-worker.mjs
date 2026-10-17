@@ -71,3 +71,13 @@ export async function readSourcePayDecisionSource({request,actorUserId,...provid
   version:'SOURCE_PAY_DECISION_INTERNAL_SOURCE_READ_V1',actor_user_id:actorUserId,decision_id:body.decision_id,request_id:body.request_id,
  }}),{decision_id:body.decision_id,request_id:body.request_id});
 }
+
+// Actual public READ_RESULT service path. The approved public current-result
+// envelope/B051 financial child is not supplied. Do not promote internal9, an
+// accepted15 receipt, or opaque native JSON when a producer unexpectedly returns.
+export async function readCurrentSourcePayDecision({request,actorUserId,...provided}){
+ const body=decodeSourcePayDecisionBrowserRequest(request,'READ_RESULT'),owner=dependencies(actorUserId,provided);
+ await owner.dataRpc('weekly_source_pay_decision_accept_v1',{p_request:{...body,actor_user_id:actorUserId,
+  preview_assembly_ref:null,unprotect_preparations:[]}});
+ const error=new Error('The Source pay decision result is invalid.');error.code='SOURCE_PAY_DECISION_RESULT_INVALID';error.status=502;throw error;
+}

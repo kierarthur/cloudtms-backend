@@ -215,7 +215,9 @@
     "supabase/verification/15102026_0344_healthroster_source_selectors_verification.sql",
     "supabase/verification/17102026_0144_kept_pay_and_correction_entry_security.sql",
     "supabase/verification/17102026_0217_missing_later_keep_security.sql",
-    "supabase/verification/17102026_0248_daily_health_support_security.sql"
+    "supabase/verification/17102026_0248_daily_health_support_security.sql",
+    "supabase/verification/17102026_0722_source_current_read_security.sql",
+    "supabase/verification/17102026_0741_source_complete_security.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
@@ -397,6 +399,8 @@
     "supabase/verification/15102026_0344_healthroster_source_selectors_verification.sql",
     "supabase/verification/17102026_0144_kept_pay_and_correction_entry_security.sql",
     "supabase/verification/17102026_0217_missing_later_keep_security.sql",
-    "supabase/verification/17102026_0248_daily_health_support_security.sql"
+    "supabase/verification/17102026_0248_daily_health_support_security.sql",
+    "supabase/verification/17102026_0722_source_current_read_security.sql",
+    "supabase/verification/17102026_0741_source_complete_security.sql"
   ]
 }

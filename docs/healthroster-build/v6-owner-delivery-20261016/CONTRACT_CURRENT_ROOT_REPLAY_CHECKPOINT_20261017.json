@@ -19,10 +19,21 @@
     "nativeAuthorityProved": false
   },
   "existingContractTestExit": 0,
-  "independentPeer": "IN_PROGRESS_LOCK_ORDER_FINDING_UNRESOLVED",
+  "independentPeer": "HOLD_SOURCE_LOCK_ORDER",
   "runtimeMounted": false,
   "native": "NOT_RUN",
   "API": "NOT_RUN",
   "install2": "NOT_INSTALLED",
-  "sourceLimit": "Exact immediate business FKs on pre-Bank operation/member enrollment require a reviewed choreography successor; no concurrency-safe claim for this template. Missing genuine Bank joins remain unprovided; emission refuses."
+  "sourceLimit": "Exact immediate business FKs on pre-Bank operation/member enrollment require a reviewed choreography successor; no concurrency-safe claim for this template. Missing genuine Bank joins remain unprovided; emission refuses.",
+  "independentPeerCommit": "769451ba8e0f2606843962bb9618f37ab5834b10",
+  "independentPeerManifestSha256": "bdcf83afe91360534501015492a49ac121c70049600ba7487add086a81aef532",
+  "independentPeerChecks": 101,
+  "scopedFindings": 1,
+  "appliedFixes": 0,
+  "rejectedFindings": 0,
+  "rootConfirmedFinding": "F1 immediate Candidate FK KEY SHARE before final family Candidate FOR UPDATE permits a distinct-Preview lock-upgrade cycle; source inference, native concurrency NOT_RUN",
+  "primaryReferences": [
+    "https://www.postgresql.org/docs/17/explicit-locking.html",
+    "https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/utils/adt/ri_triggers.c"
+  ]
 }

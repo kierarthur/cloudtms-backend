@@ -68,7 +68,7 @@ import { classifyBpayNextContinuation, createBpayNextLegacyRetirement } from './
 import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-rpc.mjs';
 import { parseWeeklySourceFile } from './weekly-source/index.js';
 import { dispatchWeeklySourceRequest, weeklySourceDeploymentContext } from './weekly-source/routes.js';
-import { previewSourcePayDecision,confirmSourcePayDecision,readSourcePayDecisionSource } from './weekly-source/source-pay-decision-worker.mjs';
+import { previewSourcePayDecision,confirmSourcePayDecision,readCurrentSourcePayDecision } from './weekly-source/source-pay-decision-worker.mjs';
 import {dispatchDailyRateCorrectionRequest,createDailyRateCorrectionRpc} from './daily-rate-correction.js';
 import {matchCorrectionEntry,handleCorrectionEntry} from './correction-entry.mjs';
 
@@ -199269,7 +199269,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
           request, actorUserId, dataRpc: weeklySourceOffRecordingRpc,
           calculateWeeklySnapshot: (input) => calculateWeeklyProtectedSnapshot(env, input)
         }),
-        readSourcePayDecisionSource: ({ request, actorUserId }) => readSourcePayDecisionSource({
+        readCurrentSourcePayDecision: ({ request, actorUserId }) => readCurrentSourcePayDecision({
           request, actorUserId, dataRpc: weeklySourceOffRecordingRpc
         }),
         previewUpload: weeklySourceUploadOwner.previewUpload,

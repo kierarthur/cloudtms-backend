@@ -1,0 +1,30 @@
+create or replace function private.timesheet_contract_move_review_members_v1(p_operation_id uuid,p_physical jsonb)
+returns integer language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype; actual_scope jsonb; member jsonb; n integer:=0;
+begin
+ select v.* into strict o from private.timesheet_contract_move_operations v where v.id=p_operation_id for update;
+ if o.state<>'REVIEWED' or o.accepted_review_id is not null or exists(
+  select 1 from private.timesheet_contract_move_reviews r where r.operation_id=o.id) then
+  raise exception 'CONTRACT_MOVE_REVIEW_MEMBERS_ALREADY_SEALED' using errcode='55000';end if;
+ if o.purpose='DAILY_RATE_CORRECTION' then
+  actual_scope:=private.daily_rate_correction_scope_v1(o.id,false);
+ else
+  actual_scope:=private.timesheet_contract_move_scope_v1(o.id,false);
+ end if;
+ if p_physical is distinct from actual_scope then raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ for member in select value from jsonb_array_elements(actual_scope->'members') order by value->>'member_key' loop
+  insert into private.timesheet_contract_move_members(operation_id,family_root_id,member_key,role,from_timesheet_id,from_version,
+   from_financial_id,from_contract_id,to_contract_id,original_booking_id,expense_component_ids,workflow_ids,source_lineage_ids,
+   immutable_evidence_hash,approval_evidence_hash,member_hash)
+  values(o.id,o.family_root_id,member->>'member_key',member->>'role',(member->>'from_timesheet_id')::uuid,
+   (member->>'from_version')::integer,(member->>'from_financial_id')::uuid,(member->>'from_contract_id')::uuid,o.to_contract_id,
+   member->>'original_booking_id',array(select x::uuid from jsonb_array_elements_text(member->'expense_component_ids') x),
+   array(select x::uuid from jsonb_array_elements_text(member->'workflow_ids') x),
+   array(select x::uuid from jsonb_array_elements_text(member->'source_lineage_ids') x),
+   decode(member->>'immutable_evidence_hash','hex'),decode(member->>'approval_evidence_hash','hex'),private.timesheet_contract_move_row_hash_v1(member));
+  n:=n+1;
+ end loop;
+ return n;
+end;
+$function$;

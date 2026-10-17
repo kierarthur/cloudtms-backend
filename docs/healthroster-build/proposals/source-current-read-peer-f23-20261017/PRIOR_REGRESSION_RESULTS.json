@@ -1,0 +1,25 @@
+{
+  "command": "node --test tests/healthroster-prebody-dynamic-review.test.mjs tests/healthroster-prebody-same-separate-dependency.test.mjs tests/healthroster-kept-entry-verifier.test.mjs",
+  "passed": 24,
+  "failed": 0,
+  "cwd": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "sourcePins": [
+    {
+      "path": "tests/healthroster-prebody-dynamic-review.test.mjs",
+      "sha256": "9c23e63cfe88e14028b5c896190ae152c35c83d087beb4e8fa150069c26eb95d"
+    },
+    {
+      "path": "tests/healthroster-prebody-same-separate-dependency.test.mjs",
+      "sha256": "07bbf5874967ebcd4480bd1cf50997a94f8e5eb31c484782b9b01d60eb7dd6a3"
+    },
+    {
+      "path": "tests/healthroster-kept-entry-verifier.test.mjs",
+      "sha256": "785601b4cb3daa4f962adcdf324a2fa860fefb0bfb3d00993b9380d0b4ba535e"
+    }
+  ],
+  "temporaryParent": "D:/Development/Legacy-Work/C-tmp/source-read-peer-f23-20261017",
+  "taskTemporaryParentRemovedAfterFixtureCleanup": true,
+  "original95DependenciesAndFourPackets": "PASS",
+  "rootWrites": 0,
+  "native": "NOT_RUN"
+}

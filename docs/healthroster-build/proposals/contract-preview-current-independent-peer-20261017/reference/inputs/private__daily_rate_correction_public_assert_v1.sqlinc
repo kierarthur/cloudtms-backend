@@ -1,0 +1,117 @@
+create or replace function private.daily_rate_correction_public_assert_v1(p_value jsonb,p_shape text)
+returns jsonb language plpgsql stable security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare keys text[]; ids text[]:=array[]::text[]; nullable_ids text[]:=array[]::text[];
+ revisions text[]:=array[]::text[]; key text; child jsonb; expected text[]; value_text text;
+begin
+ if jsonb_typeof(p_value) is distinct from 'object' or octet_length(p_value::text)>131072 then raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ case p_shape
+ when 'PREVIEW' then
+  keys:=array['version','operation_id','review_id','review_digest','state_revision','ready_to_confirm','current_timesheet_id','summary','known_blockers','confirm','links'];
+  ids:=array['operation_id','review_id','current_timesheet_id'];revisions:=array['state_revision'];
+  if p_value->>'version' is distinct from 'DAILY_RATE_CORRECTION_V1' or jsonb_typeof(p_value->'ready_to_confirm') is distinct from 'boolean'
+   or jsonb_typeof(p_value->'review_digest') is distinct from 'string' or p_value->>'review_digest' !~ '^[a-f0-9]{64}$'
+   or jsonb_typeof(p_value->'known_blockers') is distinct from 'array' or jsonb_typeof(p_value->'links') is distinct from 'array' then
+   raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  perform private.daily_rate_correction_public_assert_v1(p_value->'summary','SUMMARY');
+  for child in select value from jsonb_array_elements(p_value->'known_blockers') loop perform private.daily_rate_correction_public_assert_v1(child,'BLOCKER');end loop;
+  for child in select value from jsonb_array_elements(p_value->'links') loop perform private.daily_rate_correction_public_assert_v1(child,'ACTION');end loop;
+  if p_value->'ready_to_confirm'='true'::jsonb then
+   perform private.daily_rate_correction_public_assert_v1(p_value->'confirm','CONFIRM');
+   if p_value#>'{summary,worked_facts_preserved}' is distinct from 'true'::jsonb or jsonb_array_length(p_value->'known_blockers')<>0
+    or p_value#>'{confirm,review_id}' is distinct from p_value->'review_id' or p_value#>'{confirm,review_digest}' is distinct from p_value->'review_digest'
+    or p_value#>'{confirm,expected_state_revision}' is distinct from p_value->'state_revision' then raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  elsif p_value->'confirm' is distinct from 'null'::jsonb then raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ when 'RESULT' then
+  keys:=array['version','purpose','operation_id','state','state_revision','placement','financial','billing','next_actions','links'];ids:=array['operation_id'];revisions:=array['state_revision'];
+  if p_value->>'version' is distinct from 'DAILY_RATE_CORRECTION_V1' or p_value->>'purpose' is distinct from 'DAILY_RATE_CORRECTION'
+   or p_value->>'state' is null or p_value->>'state' not in('REVIEWED','COMPLETE','SUPERSEDED')
+   or jsonb_typeof(p_value->'next_actions') is distinct from 'array' or jsonb_typeof(p_value->'links') is distinct from 'array' then
+   raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  perform private.daily_rate_correction_public_assert_v1(p_value->'placement','PLACEMENT');
+  perform private.daily_rate_correction_public_assert_v1(p_value->'financial','FINANCIAL');
+  perform private.daily_rate_correction_public_assert_v1(p_value->'billing','BILLING');
+  if p_value->>'state'='COMPLETE' and p_value#>>'{placement,status}'<>'COMMITTED' then raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  for child in select value from jsonb_array_elements((p_value->'next_actions')||(p_value->'links')) loop
+   perform private.daily_rate_correction_public_assert_v1(child,'ACTION');
+   if p_value->>'state'='COMPLETE' and child->>'kind' in('REVIEW_RATES','REVIEW_EARLIER_PAYMENT','RESUME_FINANCIAL') then
+    raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  end loop;
+ when 'SUMMARY' then
+  keys:=array['worked_facts_preserved','pay_effect','invoice_effect'];
+  if jsonb_typeof(p_value->'worked_facts_preserved') is distinct from 'boolean' then raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  perform private.daily_rate_correction_public_assert_v1(p_value->'pay_effect','EFFECT');perform private.daily_rate_correction_public_assert_v1(p_value->'invoice_effect','EFFECT');
+ when 'EFFECT' then
+  if p_value->>'visibility'='REDACTED' then keys:=array['visibility'];
+  elsif p_value->>'visibility'='FULL' then keys:=array['visibility','text'];
+   if jsonb_typeof(p_value->'text') is distinct from 'string' or nullif(btrim(p_value->>'text'),'') is null or char_length(p_value->>'text')>500 then
+    raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  else raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ when 'BLOCKER' then
+  keys:=array['code','native_owner','field_key','permitted_action'];
+  if jsonb_typeof(p_value->'code') is distinct from 'string' or nullif(btrim(p_value->>'code'),'') is null
+   or p_value->>'native_owner' is null or p_value->>'native_owner' not in('HEALTH','BANKING')
+   or jsonb_typeof(p_value->'field_key') not in('string','null') then raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  if p_value->'permitted_action' is distinct from 'null'::jsonb then perform private.daily_rate_correction_public_assert_v1(p_value->'permitted_action','ACTION');end if;
+ when 'CONFIRM' then
+  keys:=array['request_version','review_id','review_digest','expected_state_revision'];ids:=array['review_id'];revisions:=array['expected_state_revision'];
+  if p_value->>'request_version' is distinct from 'DAILY_RATE_CORRECTION_V1' or jsonb_typeof(p_value->'review_digest') is distinct from 'string'
+   or p_value->>'review_digest' !~ '^[a-f0-9]{64}$' then raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ when 'PLACEMENT' then
+  keys:=array['status','original_timesheet_id','current_timesheet_id','placement_revision','receipt_id'];ids:=array['original_timesheet_id','current_timesheet_id'];
+  nullable_ids:=array['receipt_id'];revisions:=array['placement_revision'];
+  if p_value->>'status' is null or p_value->>'status' not in('NOT_COMMITTED','COMMITTED')
+   or p_value->'original_timesheet_id' is distinct from p_value->'current_timesheet_id'
+   or (p_value->>'status'='COMMITTED') is distinct from (p_value->'receipt_id' is distinct from 'null'::jsonb)
+   or p_value->>'status'='COMMITTED' and p_value->>'placement_revision'='0' then raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ when 'FINANCIAL' then
+  keys:=array['status','command_id','cut_id','summary'];nullable_ids:=array['command_id','cut_id'];
+  if p_value->>'status' is null or p_value->>'status' not in('NOT_REQUIRED','REGISTERED','PROCESSING','APPLIED','ACTION_REQUIRED')
+   or p_value->>'status'='NOT_REQUIRED' and (p_value->'command_id' is distinct from 'null'::jsonb or p_value->'cut_id' is distinct from 'null'::jsonb) then
+   raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  if p_value->'summary' is distinct from 'null'::jsonb then perform private.daily_rate_correction_public_assert_v1(p_value->'summary','EFFECT');end if;
+ when 'BILLING' then
+  keys:=array['status','revision','group_id','visible_summary'];nullable_ids:=array['group_id'];revisions:=array['revision'];
+  if p_value->>'status' is null or p_value->>'status' not in('NOT_REQUIRED','PREPARING_DRAFTS','DRAFTS_READY','PARTIALLY_ISSUED','ISSUED','RETRY_WAIT','ACTION_REQUIRED')
+   or p_value->>'status'='NOT_REQUIRED' and (p_value->'group_id' is distinct from 'null'::jsonb or p_value->'visible_summary' is distinct from 'null'::jsonb) then
+   raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  if p_value->'visible_summary' is distinct from 'null'::jsonb then perform private.daily_rate_correction_public_assert_v1(p_value->'visible_summary','EFFECT');end if;
+ when 'ACTION' then
+  -- The exact variant tuples below are generated from pinned ACTION_VARIANTS.
+  select array['kind','target_type','target_id','url','caption','enabled','disabled_reason']||array(select jsonb_array_elements_text(v->3)) into expected
+   from jsonb_array_elements('[["READ_RESULT","CONTRACT_MOVE_OPERATION","Check saved result",[]],["READ_RESULT","SOURCE_PAY_DECISION","Check saved result",[]],["READ_RESULT","NATIVE_UNPROTECT_RUN","Check saved Unprotect result",["decision_id","member_key"]],["OPEN_TIMESHEET","TIMESHEET","Open Timesheet",[]],["OPEN_INVOICE","INVOICE","Open invoice",[]],["OPEN_INVOICE","INVOICE","Open credit note",[]],["OPEN_DRAFT","BANKING_RUN","Open Draft",[]],["CHECK_PAYMENT_RESULT","NATIVE_TRANSFER","Open payment",[]],["REVIEW_EARLIER_PAYMENT","CONTRACT_MOVE_HISTORY","Review earlier payment",[]],["REVIEW_EARLIER_PAYMENT","SOURCE_PAY_DECISION_HISTORY","Review earlier payment",[]],["REVIEW_RECOVERY","FINANCE_CASE","Review recovery",[]],["REVIEW_RATES","TIMESHEET","Review rates",[]],["RESUME_FINANCIAL","CONTRACT_MOVE_OPERATION","Update pay result",[]],["RESUME_FINANCIAL","SOURCE_PAY_DECISION","Update pay result",[]],["WAIT_FOR_FINAL_REPORT","SOURCE_REPORT_PERIOD","Open Imports",["client_id","period_start","period_end"]],["RESUME_UNPROTECT","NATIVE_UNPROTECT_RUN","Retry Unprotect",["decision_id","member_key"]],["OPEN_SOURCE_REVIEW","SOURCE_ROW","Review shift",[]]]'::jsonb) v where v->>0=p_value->>'kind' and v->>1=p_value->>'target_type' and v->>2=p_value->>'caption';
+  if expected is null then raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;keys:=expected;
+  if jsonb_typeof(p_value->'enabled') is distinct from 'boolean' or jsonb_typeof(p_value->'url') is distinct from 'string'
+   or left(p_value->>'url',1)<>'/' or left(p_value->>'url',2)='//' or p_value->>'url' ~ '[\\\x01-\x20]' or char_length(p_value->>'url')>2048
+   or p_value->'enabled'='true'::jsonb and p_value->'disabled_reason' is distinct from 'null'::jsonb
+   or p_value->'enabled'='false'::jsonb and (jsonb_typeof(p_value->'disabled_reason') is distinct from 'string' or nullif(btrim(p_value->>'disabled_reason'),'') is null) then
+   raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  if p_value->>'kind'='WAIT_FOR_FINAL_REPORT' then
+   if p_value->'target_id' is distinct from 'null'::jsonb or jsonb_typeof(p_value->'period_start') is distinct from 'string'
+    or jsonb_typeof(p_value->'period_end') is distinct from 'string' or not pg_input_is_valid(p_value->>'period_start','date')
+    or not pg_input_is_valid(p_value->>'period_end','date') or p_value->>'period_start' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+    or p_value->>'period_end' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' or p_value->>'period_end'<p_value->>'period_start' then
+    raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;ids:=array['client_id'];
+  else ids:=array['target_id'];end if;
+  if 'decision_id'=any(keys) then ids:=ids||array['decision_id'];
+   if jsonb_typeof(p_value->'member_key') is distinct from 'string' or nullif(btrim(p_value->>'member_key'),'') is null or char_length(p_value->>'member_key')>200 then
+    raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  end if;
+ else raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';
+ end case;
+ if not(p_value ?& keys) or p_value-keys<>'{}'::jsonb then raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ foreach key in array ids||nullable_ids loop
+  if key=any(nullable_ids) and p_value->key='null'::jsonb then continue;end if;
+  if jsonb_typeof(p_value->key) is distinct from 'string' or p_value->>key !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+   raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ end loop;
+ foreach key in array revisions loop
+  value_text:=p_value->>key;
+  if jsonb_typeof(p_value->key) is distinct from 'string' or value_text !~ '^(0|[1-9][0-9]*)$' or length(value_text)>19 then
+   raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+  if value_text::numeric>9223372036854775807 or key in('state_revision','expected_state_revision') and value_text='0' then
+   raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ end loop;
+ return p_value;
+end;
+$function$;

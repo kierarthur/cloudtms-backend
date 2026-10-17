@@ -1,0 +1,116 @@
+-- Complete Health public Preview source, held until genuine owner joins bind.
+-- No grant/route/availability symbol is emitted by this source proposal.
+create or replace function public.timesheet_contract_move_preview_v1(p_args jsonb)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare actor uuid; request uuid; request_hash bytea; reason text; subject jsonb; physical jsonb; before_scope jsonb;
+ o private.timesheet_contract_move_operations%rowtype; source public.timesheets%rowtype; original_contract public.contracts%rowtype;
+ destination public.contracts%rowtype; operation uuid; inserted uuid; review uuid; manifest jsonb; digest bytea;
+ invoice jsonb; scope_hash bytea; invoice_hash bytea; policy text; authority text; result jsonb; replay jsonb; actor_hash bytea;
+ -- Unprovided producer-local outputs, never a guessed Banking service ABI.
+ bank_pay_cut_hash bytea; bank_manifest_extension jsonb;
+begin
+ perform private.timesheet_contract_move_request_assert_v1(p_args,'PREVIEW');
+ actor:=(p_args->>'actor_user_id')::uuid;request:=(p_args->>'request_id')::uuid;
+ request_hash:=private.timesheet_contract_move_request_hash_v1(p_args,'PREVIEW');
+ reason:=private.timesheet_contract_move_reason_v1(p_args->>'reason','CONTRACT_CORRECTION');
+ replay:=private.timesheet_contract_move_preview_replay_v1(p_args);if replay is not null then return replay;end if;
+ if current_setting('transaction_isolation') is distinct from 'read committed' then
+  raise exception 'CORRECTION_LOCKED_CONTEXT_ISOLATION_REQUIRED' using errcode='55000';end if;
+ if private.weekly_source_pay_actor_allowed_v1(actor) is distinct from true then raise exception 'CORRECTION_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
+ select private.timesheet_contract_move_row_hash_v1(to_jsonb(u)) into actor_hash from public.tms_users u where u.id=actor and u.is_active;
+ if actor_hash is null then raise exception 'CORRECTION_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
+ select x.* into source from public.timesheets x where x.timesheet_id=(p_args->>'timesheet_id')::uuid;
+ if source.sheet_scope::text='DAILY' then raise exception 'DAILY_HAS_NO_CONTRACT' using errcode='22023';end if;
+ -- Genuine final1003 subject/evidence resolution; advisory can_open_review is
+ -- neither read nor treated as financial/native Preview capability.
+ subject:=private.timesheet_correction_entry_subject_v1((p_args->>'timesheet_id')::uuid,actor);
+ if subject->'pending' is distinct from 'false'::jsonb or subject->'current_timesheet_id'='null'::jsonb then
+  raise exception 'CURRENT_ALLOCATION_PENDING' using errcode='55000';end if;
+ if subject->>'current_timesheet_id' is distinct from p_args->>'timesheet_id' then
+  raise exception 'CORRECTION_CURRENT_PARENT_REQUIRED' using errcode='40001';end if;
+ if source.timesheet_id is null or source.sheet_scope::text is distinct from 'WEEKLY' or source.contract_id is null
+  or not source.is_current or source.archived_at_utc is not null or source.revoked_at is not null then
+  raise exception 'CORRECTION_CURRENT_PARENT_REQUIRED' using errcode='40001';end if;
+ select x.* into original_contract from public.contracts x where x.id=source.contract_id;
+ select x.* into destination from public.contracts x where x.id=(p_args->>'to_contract_id')::uuid;
+ if original_contract.id is null or destination.id is null or destination.id=original_contract.id
+  or destination.candidate_id is distinct from original_contract.candidate_id or destination.client_id is distinct from original_contract.client_id then
+  raise exception 'CONTRACT_MOVE_DESTINATION_NOT_APPLICABLE' using errcode='22023';end if;
+ -- This deterministic metadata ID serializes identical Preview requests only.
+ -- It is never a Timesheet/booking/Work/financial/publication identity.
+ operation:=substr(encode(private.timesheet_contract_move_row_hash_v1(jsonb_build_array(
+  'CONTRACT_CORRECTION_PREVIEW_OPERATION_V1',request,actor,source.timesheet_id,destination.id)),'hex'),1,32)::uuid;
+ insert into private.timesheet_contract_move_operations(id,purpose,state,state_revision,family_root_id,from_timesheet_id,
+  from_contract_id,to_contract_id,candidate_id,actual_client_id,invoice_authority,invoice_move_policy,financial_state,
+  reason,created_by_user_id,created_at_utc)
+ values(operation,'CONTRACT_CORRECTION','REVIEWED',1,(private.timesheet_contract_current_placement_v1(source.timesheet_id)->>'family_root_id')::uuid,
+  source.timesheet_id,source.contract_id,destination.id,original_contract.candidate_id,original_contract.client_id,
+  'UNRESOLVED','REVIEW_REQUIRED','REVIEW_REQUIRED',reason,actor,clock_timestamp())
+ on conflict(id) do nothing returning id into inserted;
+ if inserted is null then
+  -- Any uniqueness wait occurred before native cut/family locks or new local
+  -- metadata. Recheck current auth and exact request after that wait. No orphan
+  -- operation can survive a duplicate-preview return.
+  replay:=private.timesheet_contract_move_preview_replay_v1(p_args);
+  if replay is null then raise exception 'CORRECTION_REQUEST_CONFLICT' using errcode='22023';end if;
+  return replay;
+ end if;
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=operation;
+ before_scope:=private.timesheet_contract_move_scope_v1(o.id,false);
+ perform private.timesheet_contract_move_review_members_v1(o.id,before_scope);
+ @@BANK_PREVIEW@@
+ -- The actual Bank fragment must use its native lock order BEFORE Health's
+ -- final family/Contract/member locks, as in retained Accept. It must not stage,
+ -- publish, reserve payment, create physical B or create invoice obligations.
+ physical:=private.timesheet_contract_move_scope_v1(o.id,true);
+ if physical is distinct from before_scope then raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=operation;
+ if o.state is distinct from 'REVIEWED' or o.accept_request_id is not null or o.to_timesheet_id is not null
+  or o.placement_receipt_json is not null or o.created_by_user_id is distinct from actor or o.reason is distinct from reason
+  or o.financial_state not in('NOT_APPROVED','QUALIFIED','REVIEW_REQUIRED')
+  or o.financial_state='QUALIFIED' and o.current_financial_cut_id is null
+  or bank_pay_cut_hash is null or octet_length(bank_pay_cut_hash)<>32
+  or jsonb_typeof(bank_manifest_extension) is distinct from 'object'
+  or bank_manifest_extension ?| array['physical','invoice','reason'] then
+  raise exception 'CORRECTION_NATIVE_PREVIEW_UNBOUND' using errcode='55000';end if;
+ invoice:=private.invoice_contract_move_inspect_v1(physical,actor,true);
+ scope_hash:=decode(physical->>'scope_sha256','hex');invoice_hash:=decode(invoice->>'certificate_digest','hex');
+ if scope_hash is null or octet_length(scope_hash)<>32 or invoice_hash is null or octet_length(invoice_hash)<>32
+  or jsonb_typeof(invoice->'slices') is distinct from 'array' or jsonb_array_length(invoice->'slices')=0
+  or exists(select 1 from jsonb_array_elements(invoice->'slices') s where coalesce(s->>'authority','') not in('SOURCE_FINANCIAL','CONTRACT_PRICED')) then
+  raise exception 'CORRECTION_NATIVE_INVOICE_UNBOUND' using errcode='23514';end if;
+ if not exists(select 1 from jsonb_array_elements(invoice->'slices') s where s->>'authority'<>'SOURCE_FINANCIAL') then
+  authority:='SOURCE_FINANCIAL';policy:='PRESERVE_SOURCE';
+ elsif not exists(select 1 from jsonb_array_elements(invoice->'slices') s where s->>'authority'<>'CONTRACT_PRICED') then
+  authority:='CONTRACT_PRICED';policy:='ORDINARY_CORRECTION';
+ else authority:='MIXED';policy:='MIXED';end if;
+ -- Existing shared request mutex remains LAST after native lock domains.
+ -- A different operation/body winning this UUID is a conflict and the entire
+ -- fresh statement (including every newly enrolled metadata row) rolls back.
+ perform pg_advisory_xact_lock(hashtextextended('timesheet-contract-move-request:'||request::text,0));
+ if exists(select 1 from private.timesheet_contract_move_requests q where q.request_id=request) then
+  raise exception 'CORRECTION_REQUEST_CONFLICT' using errcode='22023';end if;
+ if actor_hash is distinct from(select private.timesheet_contract_move_row_hash_v1(to_jsonb(u)) from public.tms_users u where u.id=actor and u.is_active)
+  or private.weekly_source_pay_actor_allowed_v1(actor) is distinct from true
+  or private.timesheet_contract_move_scope_v1(o.id,false) is distinct from physical then raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ manifest:=jsonb_build_object('physical',physical,'invoice',invoice,'reason',reason)||bank_manifest_extension;
+ review:=gen_random_uuid();digest:=private.timesheet_contract_move_row_hash_v1(jsonb_build_object(
+  'version','CONTRACT_CORRECTION_REVIEW_V3','operation_id',o.id,'review_id',review,'preview_request_id',request,
+  'preview_request_hash',encode(request_hash,'hex'),'scope_hash',encode(scope_hash,'hex'),
+  'pay_cut_hash',encode(bank_pay_cut_hash,'hex'),'invoice_hash',encode(invoice_hash,'hex'),'manifest',manifest));
+ update private.timesheet_contract_move_operations set expected_scope_hash=scope_hash,before_pay_cut_hash=bank_pay_cut_hash,
+  before_invoice_hash=invoice_hash,invoice_authority=authority,invoice_move_policy=policy,state_revision=state_revision+1 where id=operation;
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=operation;
+ insert into private.timesheet_contract_move_requests(request_id,operation_id,request_kind,request_hash,review_id,state_revision,created_at_utc)
+ values(request,o.id,'PREVIEW',request_hash,review,o.state_revision,clock_timestamp());
+ insert into private.timesheet_contract_move_reviews(id,operation_id,review_no,preview_request_id,preview_request_hash,
+  review_digest,scope_hash,pay_cut_hash,invoice_hash,manifest_json,created_at_utc)
+ values(review,o.id,1,request,request_hash,digest,scope_hash,bank_pay_cut_hash,invoice_hash,manifest,clock_timestamp());
+ result:=private.timesheet_contract_move_preview_read_v1(request,actor);
+ update private.timesheet_contract_move_requests q set receipt_json=result where q.request_id=request and q.operation_id=o.id;
+ return result;
+ -- No exception handler preserves partial fresh enrollment or claims success.
+end;
+$function$;
+revoke all on function public.timesheet_contract_move_preview_v1(jsonb) from public,anon,authenticated,service_role;
