@@ -1,0 +1,9 @@
+{
+  "status": "ACTUAL_OPERATIONAL_COST_SOURCE_ADMITTED",
+  "source": {
+    "rootSourceCommit": "8aa1fa74666a743317cf31c0ef9e2a1aab5985cd",
+    "rootExecutionCommit": "8aa1fa74666a743317cf31c0ef9e2a1aab5985cd",
+    "reportSourceCommit": "b7694b8b727084fb749c8b015285ae3c74e76f09"
+  },
+  "native": "NOT_RUN"
+}

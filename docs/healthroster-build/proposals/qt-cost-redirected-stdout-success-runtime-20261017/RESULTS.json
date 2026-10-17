@@ -1,0 +1,18 @@
+{
+  "version": "QT_COST_REDIRECTED_STDOUT_BRIDGE_SOURCE_RESULTS_V1",
+  "sourceOnly": true,
+  "tests": {"total": 21, "pass": 20, "fail": 0, "skipped": 1},
+  "skip": "Windows EPERM creating a file symlink; production rejection remains and actual directory-junction/hard-link refusal tests pass",
+  "realPublicFilesystem": ["append and no-append UTF8 roundtrip", "full-prefix SHA and byte offset", "truncation", "same-length rewrite", "same-prefix file replacement", "hard link", "directory junction", "16KiB boundary", "invalid/incomplete UTF8", "BOM preserved", "fixed path/cursor substitutions"],
+  "actualUnchanged317WithMemoryTools": ["normal redirected output with raw PTY echo/OSC retained", "real exit/session/chunk metadata retained", "unknown/HOLD/duplicate/partial before RELEASE refused", "exact single READY prefix", "nonzero actual exit refused", "foreign session refused"],
+  "costSource": "reference manifest/controller raw-equal to actual736dc saved/index/HEAD/historical source",
+  "existingCodeEdits": 0,
+  "actualCompanionSourceAdmission": "NOT_RUN_REQUIRES_GENUINE_NEW_MOUNT_COMMIT",
+  "actualPtyProbe": "NOT_RUN_ROOT_OWNED",
+  "native": "NOT_RUN",
+  "privateStateAccess": false,
+  "rootReportOfficeEdits": false,
+  "trackedWrites": false,
+  "gitMutations": false,
+  "performanceRestorationOrQtAcceptanceClaim": false
+}

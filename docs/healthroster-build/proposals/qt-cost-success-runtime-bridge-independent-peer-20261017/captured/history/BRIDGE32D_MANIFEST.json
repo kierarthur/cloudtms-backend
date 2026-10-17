@@ -1,0 +1,61 @@
+{
+  "version": "QT_COST_REDIRECTED_STDOUT_BRIDGE_SOURCE_MANIFEST_V1",
+  "sourceOnly": true,
+  "files": [
+    {
+      "file": "bridge.mjs",
+      "bytes": 4095,
+      "sha256": "7df6f2e58c0681e7b61c2f5b20e0d2a5e3f1550d1850a06bfbce85a8096d0178"
+    },
+    {
+      "file": "FORWARD.json",
+      "bytes": 1462,
+      "sha256": "bfde9793c3b2f9d5937a54f7e41d7c51276e9a8b18b791a9e5806c9ef6adb2f0"
+    },
+    {
+      "file": "progress-file.mjs",
+      "bytes": 3188,
+      "sha256": "1af0617ef07faa98668d7c04d9cccbd16d822ce0ce197af0463599e57475b97e"
+    },
+    {
+      "file": "reader.mjs",
+      "bytes": 4297,
+      "sha256": "81fb56242c4d80d73a4aa1a12540aed7dcc4df6a625fd18b229f5707f41c2c6e"
+    },
+    {
+      "file": "README.md",
+      "bytes": 5932,
+      "sha256": "5ea5bb616ab2f7b776489ba3d131a9d481cac0664c063e9416d56ea7fcf25e69"
+    },
+    {
+      "file": "reference/COST317_MANIFEST.json",
+      "bytes": 7141,
+      "sha256": "3177911190336340676bb1fbd6756bc2b193850f8722ece225a9d9865c8e8344"
+    },
+    {
+      "file": "reference/COST317_root-tools.mjs",
+      "bytes": 11752,
+      "sha256": "33ba6d0dab85ca8eeb6d3413e543ab55800a9bc87b136ee6fe776ac6033cc4e4"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1338,
+      "sha256": "1fdc8aa3838bd89ffc4fdc9145b9a683e5c12bfff5e096520007612efc0b1f38"
+    },
+    {
+      "file": "SOURCE_BINDING.json",
+      "bytes": 763,
+      "sha256": "c4eabcfa36d0aadf275bfafab2f49a66597e87ab97cc4c0e4d265fb8cf38dba9"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 9872,
+      "sha256": "cb2355341098284aa473f9da66d234bfa8f325dc8df897ae26c6a9efa90fb764"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 2332,
+      "sha256": "da6941182d28626bc996391087e0ebdedd1570840e6d51ef5c6d6f16c58d0429"
+    }
+  ]
+}

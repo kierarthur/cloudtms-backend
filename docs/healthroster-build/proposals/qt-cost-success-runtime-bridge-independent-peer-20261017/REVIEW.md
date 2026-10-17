@@ -1,0 +1,7 @@
+Accepted as bounded source only, no scoped finding.
+
+Complete bridge/reader/progress bodies, six whole source reversals and documentation successor read. Progress reader is raw-identical to32d. Reader source binds the genuine new Cost8aa/MFb0ad/controllerd9c and original18b0/843c receipt; accepted Cost ancestry alone cannot admit a future companion. All25 author cases replayed:24PASS,1Windows file-symlink fixture skipped; real junction/hardlink refusals PASS. Twelve actual old bridge images,71Cost images and genuine committed receipt match saved/index/current/historical bytes. Eight additional in-memory tests of the complete actual reader source pass, including companion/current/index/history/Cost/receipt/HEAD/ancestry refusals. Only the import.meta locator is replaced in that test harness, not a source predicate.
+
+The bridge preserves original PTY response objects and replaces only controller-facing output with exact checked stdout deltas. Original closed READY/stream/SUMMARY, native header/freshness/clock/held-A/consumption, source and120/60/180 guards stay unchanged. Actual companion source admission, real redirected-PTY transport and native execution remain root-owned prerequisites. Prior SCAN controller HOLD remains unchanged; no positive capture or performance/QT conclusion is inferred.
+
+No actual source admission/progress operation/holder/auth/native/private lookup, runtime/tracked change, commit or push occurred.

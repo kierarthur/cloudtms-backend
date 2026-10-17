@@ -1,0 +1,31 @@
+{
+  "version": "COST_SUCCESS_RUNTIME_BRIDGE_INDEPENDENT_SOURCE_REVIEW_V1",
+  "disposition": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "findings": [],
+  "authorManifest": "838cd6a5120243012b1ae12208a0aa9d9cd12d58a38cce3ab33bf3dfc5645d37",
+  "capturedSourceFiles": 29,
+  "authorTests": {
+    "total": 25,
+    "passCount": 24,
+    "skipped": 1,
+    "skipReason": "Windows file-symlink creation EPERM; real directory junction and hardlink refusals PASS"
+  },
+  "independentActualReaderSourceTests": 8,
+  "fullRawInverses": 6,
+  "actualOldBridgeSourceImages": 12,
+  "actualCostSourceImages": 71,
+  "costCommit": "8aa1fa74666a743317cf31c0ef9e2a1aab5985cd",
+  "costManifest": "b0ad2394b22e7536ee7a0469b0472a2e968d14beff530d9c1c6bb31dcedae339",
+  "costController": "d9c952190c7282da21b7d1570b2e1d353b3a338e31ad2b6e8732b2d94d83e24f",
+  "receiptCommit": "18b0fc1679314576840030217512483e402a0a62",
+  "receiptSha256": "843c6f38d289bc86617a29efa9bbc5d3442a8b34845d0b1bf217612fcdeac054",
+  "receiptOriginalDisposition": "ACTUAL_COST_HOLD_UNCHANGED",
+  "progressAlgorithm": "RAW32D_EQUAL",
+  "sourceAfterReplay": "ALL29_RAW_UNCHANGED",
+  "actualCompanionAdmission": "NOT_RUN_REQUIRES_GENUINE_NEW_MOUNT_COMMIT",
+  "actualPtyQualification": "NOT_RUN_ROOT_OWNED",
+  "native": "NOT_RUN",
+  "privateStateAccess": false,
+  "trackedChanges": false,
+  "gitMutations": false
+}

@@ -1,0 +1,22 @@
+{
+  "version": "R11_ENTRY_COMPLETE_PARENT_ROOT_P2_V1",
+  "status": "HOLD_BEFORE_ADOPTION_OR_AUTH",
+  "sourceManifestSha256": "2dfd4d6ffc8859456cd16aa102c125cd7e45035322724d743453f8871fc634e1",
+  "peerManifestSha256": "2c98d89ca8acf644bbeffae6df42f74b4a4f5e8fb3706748d8ea5c563ed954fe",
+  "actualRootHead": "1c60802423f854ea7664051ba4b82d2d0e3e9ca8",
+  "target": "docs/healthroster-build/proposals/daily-b2-r11-s0-publish-stageplans-20261017.mjs",
+  "parent": "docs/healthroster-build/proposals/daily-b2-s0-publish-stageplans-20261017.mjs",
+  "claimedParent": {
+    "bytes": 158,
+    "sha256": "95925a07e52c25c31ffc5204b2188a62e9726b12560617c70d794c719af8cf63",
+    "text": "for(const r of records)must(!fs.existsSync(root+'/'+r.file),'HISTORY_COLLISION');for(const r of records)fs.writeFileSync(root+'/'+r.file,r.bytes,{flag:'wx'});"
+  },
+  "actualSavedIndexHeadParent": {
+    "bytes": 22021,
+    "sha256": "2e791467e258bf2b81938ce8e3a8cab9dd3ce9cefe37455e5a9492a25a037cef",
+    "allEqual": true
+  },
+  "cause": "Author confirmed prepare-entry.py shadowed complete parent variable old with alias-replacement snippet before emit. Runtime postimages unchanged; inverse evidence was incorrect.",
+  "scope": "Root mount stopped at third new entry; original109 source and first two exact new targets remain owned untracked work. No auth/source admission/native or commit of those files.",
+  "disposition": "Old bounded acceptance superseded/HOLD. Require packaging-only successor with full actual parent crosschecks and new independent peer. Preserve all original bytes/history."
+}

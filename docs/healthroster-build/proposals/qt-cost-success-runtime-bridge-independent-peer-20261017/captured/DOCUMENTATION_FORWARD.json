@@ -1,0 +1,28 @@
+{
+  "version": "QT_COST_BRIDGE_DOCUMENTATION_ONLY_FORWARD_V1",
+  "parentManifestSha256": "0f9ec4f8387b4973da02ee2237c4265cf177badb171d83981b6fa96260fbf06d",
+  "runtimeChanges": [],
+  "readmeBeforeSha256": "2650a01ac15bfa67015ab41828a3e3fe69d95e357959901e1427b2dd0a80a136",
+  "readmeAfterSha256": "644f00876d396f3277af5bfe8d748e498b1beb52b0f8fb7977f7c7ab585f84db",
+  "edits": [
+    {
+      "before": "sourceCommit;736dc is the accepted Cost predecessor",
+      "after": "sourceCommit;8aa1fa74666a743317cf31c0ef9e2a1aab5985cd is the accepted operational Cost predecessor",
+      "count": 1
+    },
+    {
+      "before": "load accepted Cost317 `root-tools.mjs` separately",
+      "after": "load the exact reviewed operational success-runtime `root-tools.mjs` (d9c95219\u2026) separately",
+      "count": 1
+    },
+    {
+      "before": "pass unchanged to Cost317,",
+      "after": "pass unchanged to the reviewed operational Cost controller,",
+      "count": 1
+    }
+  ],
+  "cumulativeProofBeforeSha256": "692abe3f50a9842b211e2abce91b86fbad441d0c9070d8f35b9d8148cfb37ac4",
+  "cumulativeProofAfterSha256": "870bc08d40ddd3cbadf662127c9ab03395b3e460674892311e5b272baf2e9ec3",
+  "proofDelta": "README complete after-image/hash/bytes and append these three literal doc edits only",
+  "native": "NOT_RUN"
+}

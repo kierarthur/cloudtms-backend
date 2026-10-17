@@ -1,0 +1,59 @@
+// Self-contained root functions-tools template. No imports, Node runtime, connector or executor.
+// Root loads this exact reviewed text and evaluates it after removing the three export tokens.
+// Only the fixed direct Kier rollback tool is called, exactly once for one genuine READY.
+const ROOT='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026',HERE=ROOT+'/docs/healthroster-build/proposals/qt-audit-readonly-cost1000-success-runtime-20261017',NODE='C:/Program Files/nodejs/node.exe';
+const MODES=['SCAN_PROJECT','JSON_TEXT','JSON_MD5','RECORD_BINARY','RECORD_SHA256'],check=(v,c)=>{if(!v)throw Error(c);},equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b),exact=(v,k)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join('|')===[...k].sort().join('|'),q=s=>"'"+s.replaceAll("'","''")+"'",parse=s=>{try{return JSON.parse(s.trim());}catch{throw Error('COST_CLOSED_JSON_REQUIRED');}};
+const WARNINGS=['All transactional database and catalog changes were rolled back.','PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.','Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback.'];
+export function readyCheck(r,mode){check(exact(r,['status','ownedDirectory','inputFile','nativeResultFile','remainingWorkMs','holderStartedAt','compatibility','businessScope','mode'])&&r.status==='COST_INPUT_READY'&&MODES.includes(mode)&&r.mode===mode&&r.inputFile==='INPUT.json'&&r.nativeResultFile==='NATIVE_RESULT.json'&&r.compatibility==='ROOT_REVIEW_REQUIRED'&&r.businessScope==='NOT_RUN'&&Number.isSafeInteger(r.remainingWorkMs)&&r.remainingWorkMs>0&&r.remainingWorkMs<=120000&&typeof r.holderStartedAt==='string'&&Number.isFinite(Date.parse(r.holderStartedAt))&&new Date(Date.parse(r.holderStartedAt)).toISOString()===r.holderStartedAt&&Date.parse(r.holderStartedAt)<=Date.now()&&typeof r.ownedDirectory==='string'&&new RegExp('^'+ROOT.replaceAll('.','\\.')+'/.codex-tmp/qt-audit-cost1000-20261017-[a-f0-9]{32}$').test(r.ownedDirectory),'COST_ACTUAL_CLOSED_READY_REQUIRED');}
+export function unwrapNative(v){check(v?.isError!==true,'COST_NATIVE_TOOL_ERROR');const structured=v?.structuredContent,text=v?.content?.filter(x=>x.type==='text');if(structured){check(!v.content||v.content.length===(text?.length??0),'COST_NATIVE_WRAPPER_UNKNOWN_CONTENT');if(text?.length){check(text.length===1&&equal(parse(text[0].text),structured),'COST_NATIVE_WRAPPER_CONFLICT');}return structured;}check(Array.isArray(v?.content)&&v.content.length===1&&text?.length===1,'COST_EXACT_NATIVE_WRAPPER_REQUIRED');return parse(text[0].text);}
+function inputCheck(b,mode){check(exact(b,['input','receipt'])&&exact(b.input,['database','label','sql','verification_sql','continue_on_error','max_rows_per_statement','statement_timeout_ms','lock_timeout_ms'])&&b.input.database==='agency_test'&&b.input.label===b.receipt.label&&b.receipt.mode===mode&&b.receipt.sampleLimit===1000&&b.receipt.statementCount===4&&b.receipt.verificationStatementCount===1&&b.input.continue_on_error===false&&b.input.max_rows_per_statement===1&&b.input.statement_timeout_ms===30000&&b.input.lock_timeout_ms===2000&&typeof b.input.sql==='string'&&typeof b.input.verification_sql==='string','COST_ROOT_EXACT_GENERATED_INPUT_REQUIRED');}
+// This pre-copy filter accepts only closed scalar clock/count frames. Full exact factory,
+// SQL hashes, genuine identity, freshness and consumption are revalidated by root-io before wx.
+function closedNative(r,b){
+ check(exact(r,['accepted','databaseTarget','database','label','sqlSha256','statementCount','statements','rolledBack','rollbackVerification','warnings'])&&r.accepted===true&&r.rolledBack===true&&r.databaseTarget==='agency_test'&&r.database==='cloudtms_test_clone'&&r.label===b.receipt.label&&r.sqlSha256===b.receipt.sqlSha256&&r.statementCount===4&&equal(r.warnings,WARNINGS)&&Array.isArray(r.statements)&&r.statements.length===4&&exact(r.rollbackVerification,['connectedFresh','database','statements'])&&r.rollbackVerification.connectedFresh===true&&r.rollbackVerification.database==='cloudtms_test_clone'&&Array.isArray(r.rollbackVerification.statements)&&r.rollbackVerification.statements.length===1,'COST_NATIVE_CLOSED_SCALARS_REQUIRED');
+ const one=(s,n,field)=>{check(exact(s,['statement','command','rowCount','fields','rows','rowsTruncated'])&&s.statement===n&&s.rowsTruncated===false&&s.command==='SELECT'&&s.rowCount===1&&equal(s.fields,[field])&&s.rows.length===1&&exact(s.rows[0],[field]),'COST_NATIVE_CLOSED_FRAME_REQUIRED');return s.rows[0][field];};
+ const set=r.statements[0];check(exact(set,['statement','command','rowCount','fields','rows','rowsTruncated'])&&set.statement===1&&set.command==='SET'&&set.rowCount===null&&equal(set.fields,[])&&equal(set.rows,[])&&set.rowsTruncated===false,'COST_NATIVE_CLOSED_FRAME_REQUIRED');
+ for(const[x,phase]of[[one(r.statements[1],2,'cost_clock'),'START'],[one(r.statements[3],4,'cost_clock'),'END'],[one(r.rollbackVerification.statements[0],1,'cost_clock'),'FRESH']]){
+  check(exact(x,['version','mode','phase','sampleLimit','database','databaseOid','backendPid','holderPid','holderGranted','readOnly','noRoleSwitch','observedAt','closureAdmitted'])&&x.version==='QT_AUDIT_COST_CLOCK_V1'&&x.mode===b.receipt.mode&&x.phase===phase&&x.sampleLimit===1000&&x.database==='cloudtms_test_clone'&&['databaseOid','backendPid','holderPid'].every(k=>Number.isSafeInteger(x[k])&&x[k]>0)&&['holderGranted','readOnly','noRoleSwitch','closureAdmitted'].every(k=>x[k]===true)&&typeof x.observedAt==='string'&&/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+(?:Z|\+00:00)$/.test(x.observedAt),'COST_NATIVE_CLOSED_CLOCK_REQUIRED');
+ }
+ const c=one(r.statements[2],3,'cost_counters');check(exact(c,['version','mode','sampleLimit','sampleCount','evaluatedCount','bytesTotal','database','backendPid','holderPid','holderGranted','readOnly','noRoleSwitch'])&&c.version==='QT_AUDIT_COST_CONSUMED_V1'&&c.mode===b.receipt.mode&&c.sampleLimit===1000&&c.database==='cloudtms_test_clone'&&['backendPid','holderPid'].every(k=>Number.isSafeInteger(c[k])&&c[k]>0)&&['holderGranted','readOnly','noRoleSwitch'].every(k=>c[k]===true)&&['sampleCount','evaluatedCount','bytesTotal'].every(k=>typeof c[k]==='string'&&/^(0|[1-9][0-9]{0,12})$/.test(c[k])),'COST_NATIVE_CLOSED_COUNTERS_REQUIRED');
+}
+function base64ASCII(s){check(s.length<=65536&&[...s].every(c=>c.charCodeAt(0)<128),'COST_CLOSED_ASCII_RESULT_BOUND_REQUIRED');const a='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';let out='';for(let i=0;i<s.length;i+=3){const n=(s.charCodeAt(i)<<16)|((s.charCodeAt(i+1)||0)<<8)|(s.charCodeAt(i+2)||0);out+=a[(n>>>18)&63]+a[(n>>>12)&63]+(i+1<s.length?a[(n>>>6)&63]:'=')+(i+2<s.length?a[n&63]:'=');}return out;}
+export async function runReadyCost(tools,{ready,mode,sourceCommit,sessionId}){
+ readyCheck(ready,mode);check(/^[a-f0-9]{40}$/.test(sourceCommit??'')&&Number.isSafeInteger(sessionId)&&sessionId>0,'COST_REAL_SOURCE_AND_OWN_SESSION_REQUIRED');
+ const started=Date.parse(ready.holderStartedAt),deadline=Math.min(started+120000,Date.now()+ready.remainingWorkMs),whole=started+180000;let normal=false,buffer='',nativeCalls=0,closed=false,pendingSeen=false,summarySeen=false;
+ const active=()=>check(Date.now()<deadline,'COST_ROOT_WORK_BUDGET_HELD');
+ const io=async(op,value)=>{if(op==='summary')check(Date.now()<whole,'COST_ROOT_CLEANUP_BUDGET_HELD');else active();const args=[op,ready.ownedDirectory,mode,sourceCommit,...value?[value]:[]],cmd='& '+q(NODE)+' '+q(HERE+'/root-io.mjs')+' '+args.map(q).join(' ');check(cmd.length<=30000,'COST_ROOT_COMMAND_BOUND_REQUIRED');const r=await tools.exec_command({cmd,workdir:ROOT,max_output_tokens:20000});if(op==='summary')check(Date.now()<whole,'COST_ROOT_CLEANUP_BUDGET_HELD');else active();check(r.exit_code===0&&!r.session_id,'COST_ROOT_PUBLIC_IO_HELD');return parse(r.output);};
+ const collect=r=>{check(typeof r.output==='string','COST_OWN_OUTPUT_REQUIRED');buffer+=r.output;check([...buffer].reduce((n,c)=>n+(c.codePointAt(0)<128?1:c.codePointAt(0)<2048?2:c.codePointAt(0)<65536?3:4),0)<=16384,'COST_OWN_OUTPUT_BOUND_REQUIRED');};
+ const drain=phase=>{
+  const lines=buffer.split(/\r?\n/);buffer=lines.pop();
+  for(const raw of lines){
+   const line=raw.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'');if(!line)continue;const r=parse(line);
+   if(phase==='pending'){
+    check(!pendingSeen&&r?.status==='COST_CAPTURED_PENDING_RELEASE','COST_ACTUAL_HOLDER_HOLD_UNKNOWN_OR_DUPLICATE_OUTPUT');
+    readyCheck({...r,status:'COST_INPUT_READY'},mode);check(r.ownedDirectory===ready.ownedDirectory,'COST_OWN_OUTPUT_PATH_CHANGED');pendingSeen=true;
+   }else{
+    check(!summarySeen&&exact(r,['status','ownedDirectory','businessScope','compatibility'])&&r.status==='COST_CAPTURED_OWN_TURN_RELEASED'&&r.ownedDirectory===ready.ownedDirectory&&r.businessScope==='NOT_RUN'&&r.compatibility==='ROOT_REVIEW_REQUIRED_NOT_QUALIFIED','COST_EXACT_FINAL_HOLDER_SUMMARY_REQUIRED');summarySeen=true;
+   }
+  }
+ };
+ const wait=async()=>{while(true){
+  active();drain('pending');
+  if(pendingSeen){check(buffer.length===0,'COST_PARTIAL_TRAILER_BEFORE_RELEASE');return;}
+  const r=await tools.write_stdin({session_id:sessionId,chars:'',yield_time_ms:1000,max_output_tokens:1500});collect(r);check(r.exit_code===undefined,'COST_HOLDER_EXITED_BEFORE_READY');
+ }};
+ try{
+  const built=await io('input');inputCheck(built,mode);active();
+  nativeCalls++;const wrapper=await tools.mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback(built.input);active();const native=unwrapNative(wrapper);closedNative(native,built);
+  const saved=await io('result',base64ASCII(JSON.stringify(native)));check(saved.status==='COST_VALIDATED_RESULT_SAVED'&&saved.capture?.mode===mode,'COST_ROOT_RESULT_SAVE_REQUIRED');const capture=saved.capture;
+  collect(await tools.write_stdin({session_id:sessionId,chars:'RESULT_READY\n',yield_time_ms:0,max_output_tokens:1500}));await wait();active();
+  const end=await tools.write_stdin({session_id:sessionId,chars:'RELEASE\n',yield_time_ms:0,max_output_tokens:1500});collect(end);if(end.exit_code!==undefined){check(end.exit_code===0,'COST_OWN_RELEASE_NOT_CONFIRMED');closed=true;}drain('summary');
+  while(!closed){check(Date.now()<whole,'COST_ROOT_CLEANUP_BUDGET_HELD');const r=await tools.write_stdin({session_id:sessionId,chars:'',yield_time_ms:1000,max_output_tokens:1500});collect(r);if(r.exit_code!==undefined){check(r.exit_code===0,'COST_OWN_RELEASE_NOT_CONFIRMED');closed=true;}drain('summary');}
+  check(summarySeen&&buffer.length===0,'COST_FINAL_SUMMARY_OR_COMPLETE_OUTPUT_REQUIRED');
+  // Only after all stdout records and normal exit0, then original explicit unlock/close SUMMARY.
+  const summary=await io('summary');normal=exact(summary,['status','originalSharedTurnCompleted'])&&summary.status==='COST_CAPTURED_OWN_TURN_RELEASED'&&summary.originalSharedTurnCompleted===true;check(normal&&nativeCalls===1,'COST_OWN_RELEASE_NOT_CONFIRMED');return{status:'BOUNDED_COST_CAPTURE_OWN_TURN_RELEASED',mode,capture,nativeCalls,ownSessionClosed:true,scope:'DIAGNOSTIC_ONLY_NOT_QT_ACCEPTANCE'};
+ }catch(error){throw Error(/^COST_[A-Z0-9_]+$/.test(error?.message??'')?error.message:'COST_ROOT_TOOL_HELD');}finally{
+  if(!normal&&!closed){try{collect(await tools.write_stdin({session_id:sessionId,chars:'ABORT\n',yield_time_ms:0,max_output_tokens:1500}));}catch{}while(Date.now()<whole){try{const r=await tools.write_stdin({session_id:sessionId,chars:'',yield_time_ms:1000,max_output_tokens:1500});if(r.exit_code!==undefined){closed=true;break;}}catch{break;}}}
+  // No inferred success from ABORT, timeout, lost session or unconfirmed close. No forced kill.
+ }
+}

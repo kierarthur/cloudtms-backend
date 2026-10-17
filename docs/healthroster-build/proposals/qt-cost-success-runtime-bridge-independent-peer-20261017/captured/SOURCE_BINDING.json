@@ -1,0 +1,18 @@
+{
+  "version": "QT_COST_SUCCESS_RUNTIME_REDIRECTED_STDOUT_BRIDGE_SOURCE_BINDING_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "acceptedCostRootCommit": "8aa1fa74666a743317cf31c0ef9e2a1aab5985cd",
+  "acceptedCostManifestSha256": "b0ad2394b22e7536ee7a0469b0472a2e968d14beff530d9c1c6bb31dcedae339",
+  "acceptedCostControllerSha256": "d9c952190c7282da21b7d1570b2e1d353b3a338e31ad2b6e8732b2d94d83e24f",
+  "acceptedCostControllerChanged": false,
+  "newInstallRelativePath": "docs/healthroster-build/proposals/qt-cost-redirected-stdout-success-runtime-20261017",
+  "runtimeSourceCommit": "REQUIRES_GENUINE_FUTURE_ROOT_COMMIT_CONTAINING_THIS_NEW_COMPLETE_PACKET",
+  "native": "NOT_RUN",
+  "actualRedirectedLocalProbe": "ROOT_OWNED_NOT_RUN_BY_AUTHOR",
+  "acceptedCostRelativeDirectory": "docs/healthroster-build/proposals/qt-audit-readonly-cost1000-success-runtime-20261017",
+  "receiptCommit": "18b0fc1679314576840030217512483e402a0a62",
+  "receiptSha256": "843c6f38d289bc86617a29efa9bbc5d3442a8b34845d0b1bf217612fcdeac054",
+  "receiptBytes": 32625,
+  "originalBridge32dRetained": true,
+  "nextMode": "JSON_TEXT"
+}
