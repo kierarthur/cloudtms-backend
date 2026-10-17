@@ -1,0 +1,23 @@
+{
+  "version": "DAILY_GENUINE_S0_R1_ACTUAL_HOLD_V1",
+  "status": "HOLD",
+  "code": "FIXTURE_CURRENT_ACTOR_ADMISSION_HELD",
+  "sourceCommit": "e9cc374c066ff13494ff17fb8436dd8d0e54017c",
+  "executionCommit": "1b38c8db8ab7e851a315aa4f51a9452e61e9083a",
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-1109c7e725c62cd2d5c52b380c553905",
+  "processExitCode": 1,
+  "browserClosed": true,
+  "privateBindingPresent": false,
+  "nativeInputPresent": false,
+  "beforeReady": false,
+  "mcpCalls": 0,
+  "businessAttempt": false,
+  "takenAt": "2026-10-17T11:00:34.186Z",
+  "releasedAt": "2026-10-17T11:00:54.505Z",
+  "explicitUnlockConfirmed": true,
+  "connectionClosed": true,
+  "proved": false,
+  "interpretation": "Actual initial bind refused genuine actor admission; which admission condition failed is not recorded. Do not infer expiry, bad credentials or business defect from the generic code. Actual closed child has only status/code/phase/stage/browserClosed. No private binding/native input/attempt/fixture exists. Original owned A explicitly unlocked and closed; no waiting root connection. Existing genuine auth workflow runs outside native intervals; old R4 state is preserved unread by parent.",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

@@ -1,0 +1,15 @@
+{
+  "version": "TEST_AUTH_REFRESH_R5_ACTUAL_READY_HOLD_V1",
+  "executionRootCommit": "1b38c8db8ab7e851a315aa4f51a9452e61e9083a",
+  "executableReportCommit": "e9cc374c066ff13494ff17fb8436dd8d0e54017c",
+  "authorSource": "462c196c503c39731fe331f4b6899f3e72b35b9c",
+  "actualClosedResult": {"version":"TEST_AUTH_REFRESH_PRIVATE_RESULT_V3","status":"HOLD","code":"AUTH_READY_HELD","browserClosed":true,"loginRequests":0,"refreshRequests":0,"blockedReadRequests":0,"forbiddenWriteRequests":0,"refusedRequests":0,"suppressedStartupRequests":0,"diagnostic":{"phase":"BEFORE_EXPLICIT_ADMISSION","admission":null,"blockedWriteLabel":"NONE","blockedWriteMethod":"NONE"}},
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/test-auth-refresh-20261017-d668ef0f06a1fe5e426ed391d930b807",
+  "freshStatePresent": false,
+  "processExitCode": 1,
+  "nativeIntervalActive": false,
+  "interpretation": "The pre-login readiness response was not200. Exact status/body were not recorded by this closed source. No login or refresh was attempted. One independent bounded follow-up returned readyz200/all core readiness true at11:01:48.107Z; no service/pool/job/configuration changes. Do not infer expiry or credentials from either HOLD.",
+  "retention": "Protected owned scratch retained, no cleanup attempted; old R4 state unread and preserved",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}
