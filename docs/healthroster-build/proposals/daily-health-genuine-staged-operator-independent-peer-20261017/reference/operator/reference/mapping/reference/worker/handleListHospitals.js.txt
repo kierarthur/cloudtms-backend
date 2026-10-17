@@ -1,0 +1,14 @@
+async function handleListHospitals(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_hospitals?client_id=eq.${encodeURIComponent(clientId)}&select=*`
+    );
+    return withCORS(env, req, ok({ items: rows }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to list client hospitals"));
+  }
+}

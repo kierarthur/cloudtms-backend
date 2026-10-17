@@ -1,0 +1,19 @@
+{
+  "version":"DAILY_GENUINE_AUDIT_RUNTIME_ROOT_REVIEW_V1",
+  "authorCommit":"e1c13ecb123224aea0fa95beff3727cd4c58bbb2",
+  "finalManifestSha256":"0b2e8a621f3673948396c10dc1da9d799638381f7436ad7a1261b5b7ab62ead7",
+  "files":47,
+  "rootReplay":{"actualJsTests":11,"clientOuterGrammar":"PASS","actualReturnPolicyCalls":2,"fullPlBody":"NOT_PROVED_CATALOGUE_DEPENDENT","frozenOutputsUnchanged":true},
+  "boundedVerdict":"ACCEPT_SOURCE_AUDIT_AND_EXPLICIT_UNPROVED_ADMISSION_OBLIGATIONS",
+  "sourceErratum":"Original freeze remains exact; five distinct Client dependencies/six calls including both real RETURN policy readers; no body substitution",
+  "runtimeEvidence":"DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+  "currentRuntime":"Fresh active deployment matches exact Install1 publication f743b81fe537830d81b1de93ec4f9cb0331532a7; all22 selected complete functions raw-equal",
+  "moduleBoundary":"Schedule module raw-equal. Current whole canonical calculator differs from published source; operator must bind actual published ordinary module and unchanged call. Current I2 HEAD is not deployed",
+  "mutationFailures":"S3 may truncate a prior window before POST failure; S4 INSERT/recalculation/failed compensating DELETE can precede HTTP500. Actual complete scoped reconciliation required before retry",
+  "stagedOperator":"IN_PROGRESS_SEPARATE_REVIEW_REQUIRED",
+  "actualFixtureMutation":false,
+  "nativeEffectClosure":"NOT_QUALIFIED_BY_SOURCE_AUDIT",
+  "immutableEvidenceWhitespaceException":{"file":"docs/healthroster-build/proposals/daily-health-current-genuine-producer-audit-20261017/reference/worker/client-create-fields.js.txt","line":24,"kind":"new blank line at EOF","reason":"Exact committed author capture preserved; no runtime file or SQL changed"},
+  "install2":"NOT_INSTALLED",
+  "finalCritics":"NOT_RUN"
+}

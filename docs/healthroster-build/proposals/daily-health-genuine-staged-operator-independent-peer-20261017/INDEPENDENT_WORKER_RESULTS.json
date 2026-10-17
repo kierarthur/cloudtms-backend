@@ -1,0 +1,21 @@
+{
+  "version": "DAILY_GENUINE_PEER_EXTRA_ACTUAL_WORKER_V1",
+  "results": [
+    {
+      "name": "actual worker ABORT during late browser close cannot retain PASS",
+      "result": "PASS"
+    },
+    {
+      "name": "actual worker ABORT at final pre-forward held check sends no POST",
+      "result": "PASS"
+    },
+    {
+      "name": "actual worker final wall deadline is checked even without a timer callback",
+      "result": "PASS"
+    }
+  ],
+  "privateActualStateReads": 0,
+  "actualOperatorSourcePreflight": "NOT_EXECUTED",
+  "browser": "SYNTHETIC_ONLY",
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,37 @@
+{
+  "version": "DAILY_GENUINE_STAGED_OPERATOR_INDEPENDENT_REPLAY_V1",
+  "reviewedCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+  "reviewedManifestSha256": "0a908ee36e34c41457b797a7609676c46373c89d924f66846100c87a2dc47f0d",
+  "capture": {"files": 132, "savedIndexCurrentHeadEqual": true},
+  "checks": {
+    "originalOfflineNodeTests": 38,
+    "exactGeneratedReadInputs": 18,
+    "pg17Statements": 54,
+    "businessDmlStatements": 0,
+    "schemaNameTuples": 55,
+    "actualCatalogueJoinPresenceAstChecks": 2034,
+    "mappingAstChecks": 9,
+    "completePublishedAndCurrentHealthFunctions": 29,
+    "originalAuditAndMappingFiles": 75,
+    "completeRawParentForwardsAndReversals": 5,
+    "finiteEdits": 24,
+    "additionalActualWorkerVectors": 3,
+    "copiedFreezeImagesStillEqualAfterReplay": 132
+  },
+  "commands": [
+    "Original Report verify-freeze.mjs --committed, invoked from Money cwd (read-only public source/Git only)",
+    "Captured reference/operator/offline.mjs --verify (all frozen evidence writes suppressed; TAP counts compared, duration variance retained as unscored)",
+    "Captured reference/operator/verify-source.mjs --verify (no evidence write)",
+    "Captured reference/operator/verify-forward.py without --freeze (no write)",
+    "independent-worker.mjs under --experimental-vm-modules (exact captured perform body; synthetic browser/filesystem/turn)",
+    "Captured reference/operator/verify-freeze.mjs (copied raw image verification)"
+  ],
+  "observedRootSourceCheckpoint": "78b2ae42c1b47a222d32a46121066825dc20115c",
+  "all": "PASS",
+  "diffCheck": {"newAuthoredWhitespaceFindings":0,"immutableCapturedEofBlankLineNotices":["reference/operator/reference/audit/reference/worker/client-create-fields.js.txt:24","reference/operator/reference/mapping/reference/worker/hospital-route.js.txt:13"],"disposition":"Preserve exact original committed bytes; no normalization"},
+  "localEffects": "Only this Money peer packet and bounded transient synthetic D filesystem/Git/process fixtures; original frozen packet and other worktrees unchanged",
+  "operatorSourcePreflight": "NOT_EXECUTED",
+  "privateActualStateInspectedHashedCopied": false,
+  "actualBrowserApiNativeOrConnector": "NOT_RUN",
+  "bankSemanticBodiesRead": 0
+}

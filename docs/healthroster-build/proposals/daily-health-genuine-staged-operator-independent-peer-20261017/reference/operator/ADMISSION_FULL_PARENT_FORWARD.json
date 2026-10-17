@@ -1,0 +1,219 @@
+{
+  "version": "DAILY_GENUINE_ADMISSION_FULL_PARENT_FORWARD_V1",
+  "records": [
+    {
+      "file": "source.mjs",
+      "before": {
+        "file": "reference/pre-freeze-admission-draft/source.mjs",
+        "bytes": 5335,
+        "sha256": "28ca253df8d96f93fa6bff59c55d2d58e4aa5f3d048ef02d724aaacc57fd4401"
+      },
+      "after": {
+        "bytes": 6821,
+        "sha256": "79d1f181cf21d270352382cdc16f20e36569d68857a7bbbb35b2053b76aa79f8"
+      },
+      "edits": [
+        {
+          "beforeOffset": 742,
+          "afterOffset": 742,
+          "before": "",
+          "after": "export function assertReviewedImage(root,reviewedCommit,files){\n check(/^[0-9a-f]{40}$/.test(reviewedCommit)&&Array.isArray(files)&&files.length>0&&new Set(files).size===files.length,'FIXTURE_REVIEWED_SOURCE_IMAGE_REQUIRED');\n const head=git(root,'rev-parse','HEAD').toString().trim();\n try{git(root,'merge-base','--is-ancestor',reviewedCommit,head);}catch{throw Error('FIXTURE_REVIEWED_SOURCE_ANCESTRY_REQUIRED');}\n for(const file of files){\n  check(typeof file==='string'&&/^[A-Za-z0-9_./-]+$/.test(file)&&!file.split('/').includes('..')&&!file.startsWith('/'),'FIXTURE_REVIEWED_SOURCE_PATH_REQUIRED');\n  check(same(root,file,head).equals(git(root,'show',reviewedCommit+':'+file)),'FIXTURE_REVIEWED_SOURCE_IMAGE_CHANGED');\n }\n return {reviewedCommit,executionCommit:head,selectedImagesUnchanged:true};\n}\nexport function assertReviewedExecutionSource(reviewedCommit){\n // A required root setup/evidence commit may advance HEAD. Its source image may not change.\n sourcePreflight();const top=git(here,'rev-parse','--show-toplevel').toString().trim();\n const relative=path.relative(top,here).replaceAll('\\\\','/'),manifest=JSON.parse(same(top,relative+'/MANIFEST.json',reviewedCommit));\n return assertReviewedImage(top,reviewedCommit,[relative+'/MANIFEST.json',...manifest.files.map(r=>relative+'/'+r.file)]);\n}\n"
+        },
+        {
+          "beforeOffset": 3629,
+          "afterOffset": 4938,
+          "before": " const observed=pins.authObservation;check(sha(same(ROOT,observed.file,rootHead))===observed.sha256,'FIXTURE_ACTUAL_AUTH_OBSERVATION_CHANGED');\n for(const r of [...pins.rootRuntimeObservations,pins.turnControl])check(sha(same(ROOT,r.file,rootHead))===r.sha256,'FIXTURE_ACTUAL_RUNTIME_OR_TURN_SOURCE_CHANGED');\n",
+          "after": " const observed=pins.authObservation;check(sha(same(ROOT,observed.file,rootHead))===observed.sha256\n  &&sha(git(ROOT,'show',observed.commit+':'+observed.file))===observed.sha256,'FIXTURE_ACTUAL_AUTH_OBSERVATION_CHANGED');\n for(const r of [...pins.rootRuntimeObservations,pins.turnControl])check(sha(same(ROOT,r.file,rootHead))===r.sha256\n  &&sha(git(ROOT,'show',r.commit+':'+r.file))===r.sha256,'FIXTURE_ACTUAL_RUNTIME_OR_TURN_SOURCE_CHANGED');\n"
+        },
+        {
+          "beforeOffset": 4071,
+          "afterOffset": 5515,
+          "before": "  &&sha(git(r.root,'show',r.commit+':'+r.file))===r.sha256,'FIXTURE_ORIGINAL_AUTH_COMPONENT_CHANGED');\n",
+          "after": "  &&sha(git(r.root,'show',r.commit+':'+r.file))===r.sha256\n  &&sha(same(top,r.file,head))===r.sha256,'FIXTURE_ORIGINAL_AUTH_COMPONENT_CHANGED');\n"
+        }
+      ]
+    },
+    {
+      "file": "worker.mjs",
+      "before": {
+        "file": "reference/pre-freeze-admission-draft/worker.mjs",
+        "bytes": 12509,
+        "sha256": "3863c872760e08dd12109f84cfcbb4790a9cf2162546db52ff141949e4976749"
+      },
+      "after": {
+        "bytes": 12684,
+        "sha256": "ef082cac41ef6f653d044a33b3801d83eb0b1bc1275a6bb9684d06a46b4d9f60"
+      },
+      "edits": [
+        {
+          "beforeOffset": 393,
+          "afterOffset": 393,
+          "before": "import {here,sourcePreflight,ownedDirectory,physical,committedRootFile,git} from './source.mjs';\n",
+          "after": "import {here,sourcePreflight,assertReviewedExecutionSource,ownedDirectory,physical,committedRootFile,git} from './source.mjs';\n"
+        },
+        {
+          "beforeOffset": 1882,
+          "afterOffset": 1912,
+          "before": " const abort=new AbortController();let timer;const onAbort=()=>{abort.abort();void browser?.close().catch(()=>{});};\n",
+          "after": " const abort=new AbortController(),deadline=Date.now()+110000;let timer;\n const assertActive=()=>check(!abort.signal.aborted&&Date.now()<deadline,'FIXTURE_BUDGET_HELD');\n const onAbort=()=>{abort.abort();void browser?.close().catch(()=>{});};\n"
+        },
+        {
+          "beforeOffset": 3123,
+          "afterOffset": 3279,
+          "before": "  check(!abort.signal.aborted,'FIXTURE_BUDGET_HELD');closed=false;\n",
+          "after": "  assertActive();closed=false;\n"
+        },
+        {
+          "beforeOffset": 4036,
+          "afterOffset": 4156,
+          "before": "    try{await turn.assertHeld('daily-genuine-'+stage+'-before-post-forward');}catch{network.refuseTransport();return r.abort();}\n",
+          "after": "    try{assertActive();await turn.assertHeld('daily-genuine-'+stage+'-before-post-forward');assertActive();}catch{network.refuseTransport();return r.abort();}\n"
+        },
+        {
+          "beforeOffset": 6856,
+          "afterOffset": 7006,
+          "before": "   check(entry.sourceCommit===git(here,'rev-parse','HEAD').toString().trim(),'FIXTURE_EXACT_OPERATOR_COMMIT_REQUIRED');\n",
+          "after": "   assertReviewedExecutionSource(entry.sourceCommit);\n"
+        },
+        {
+          "beforeOffset": 6997,
+          "afterOffset": 7081,
+          "before": "",
+          "after": "    assertActive();\n"
+        },
+        {
+          "beforeOffset": 7568,
+          "afterOffset": 7672,
+          "before": "    load('BEFORE');await turn.assertHeld('daily-genuine-'+stage+'-before-attempt');check(!abort.signal.aborted,'FIXTURE_BUDGET_HELD');\n",
+          "after": "    load('BEFORE');await turn.assertHeld('daily-genuine-'+stage+'-before-attempt');assertActive();\n"
+        },
+        {
+          "beforeOffset": 10654,
+          "afterOffset": 10722,
+          "before": "   saveQualification(out,stage,before.frame,after.frame,response.projection,beforeState);status='PASS';code='FIXTURE_STAGE_NATIVE_QUALIFIED';\n",
+          "after": "   assertActive();saveQualification(out,stage,before.frame,after.frame,response.projection,beforeState);status='PASS';code='FIXTURE_STAGE_NATIVE_QUALIFIED';\n"
+        },
+        {
+          "beforeOffset": 11949,
+          "afterOffset": 12032,
+          "before": "",
+          "after": "  if(abort.signal.aborted||Date.now()>=deadline){status='HOLD';code='FIXTURE_BUDGET_HELD';}\n"
+        }
+      ]
+    },
+    {
+      "file": "native-read.mjs",
+      "before": {
+        "file": "reference/pre-freeze-admission-draft/native-read.mjs",
+        "bytes": 16878,
+        "sha256": "d572ca1528d7b020e68c81479887871211965da310f0166c075bbfedf302ef7d"
+      },
+      "after": {
+        "bytes": 18744,
+        "sha256": "b8449f6bc901f41c2d058c6618b11bab70337579133fd99360c6988eb820cf07"
+      },
+      "edits": [
+        {
+          "beforeOffset": 195,
+          "afterOffset": 195,
+          "before": "import {check,sha,uuid,CLIENT,CANDIDATE,MAPPING,BOOKING,STAGES,request} from './contract.mjs';\n",
+          "after": "import {check,exact,sha,uuid,CLIENT,CANDIDATE,MAPPING,BOOKING,STAGES,request} from './contract.mjs';\n"
+        },
+        {
+          "beforeOffset": 1634,
+          "afterOffset": 1640,
+          "before": "const routineNames=[...new Set([...metadata.callbackRoutines,...metadata.producerRoutineMetadata].map(r=>r.identity.split('(')[0])\n .concat(JSON.parse(fs.readFileSync(new URL('./reference/audit/FINAL_SOURCE_REVIEW.json',import.meta.url))).distinctCustomDirectRoutines.map(r=>r.name.split('.').at(-1))))].sort();\n",
+          "after": "export function routineTuple(row){\n const name=row.identity.split('(')[0],parts=name.split('.');\n check(['public','private'].includes(row.schema)&&parts.length<=2&&(parts.length===1||parts[0]===row.schema)\n  &&/^[a-z_][a-z0-9_]*$/.test(parts.at(-1)),'FIXTURE_EXACT_ROUTINE_SCHEMA_NAME_REQUIRED');\n return {schema:row.schema,name:parts.at(-1)};\n}\nconst direct=JSON.parse(fs.readFileSync(new URL('./reference/audit/FINAL_SOURCE_REVIEW.json',import.meta.url))).distinctCustomDirectRoutines;\nexport const routineSelection=[...new Map([...metadata.callbackRoutines,...metadata.producerRoutineMetadata,...direct.map(r=>r.baselineMetadata)]\n .map(r=>{const tuple=routineTuple(r);return [tuple.schema+'.'+tuple.name,tuple];})).values()].sort((a,b)=>(a.schema+'.'+a.name).localeCompare(b.schema+'.'+b.name));\n"
+        },
+        {
+          "beforeOffset": 5671,
+          "afterOffset": 6165,
+          "before": " const ctes=`target_timesheets as (${where.timesheets}),target_financials as (${where.financials})`;\n",
+          "after": " const ctes=`target_timesheets as (${where.timesheets}),target_financials as (${where.financials}),\n expected_routines as (select v.schema_name,v.routine_name from (values ${routineSelection.map(r=>'('+lit(r.schema)+','+lit(r.name)+')').join(',')}) v(schema_name,routine_name)),\n selected_routines as (select p.*,n.nspname from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace join expected_routines e on e.schema_name=n.nspname and e.routine_name=p.proname)`;\n"
+        },
+        {
+          "beforeOffset": 7647,
+          "afterOffset": 8528,
+          "before": "  'routines',(select jsonb_agg(jsonb_build_object('identity',p.oid::regprocedure::text,'owner',pg_get_userbyid(p.proowner),'acl',p.proacl,'config',p.proconfig,'definer',p.prosecdef,'volatility',p.provolatile,'kind',p.prokind,'definitionSha256',encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_functiondef(p.oid),'UTF8')),'hex')) order by n.nspname,p.oid::regprocedure::text) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private') and p.proname in (${routineNames.map(lit).join(',')}))) as metadata`;\n",
+          "after": "  'routines',(select jsonb_agg(jsonb_build_object('identity',p.oid::regprocedure::text,'owner',pg_get_userbyid(p.proowner),'acl',p.proacl,'config',p.proconfig,'definer',p.prosecdef,'volatility',p.provolatile,'kind',p.prokind,'definitionSha256',encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_functiondef(p.oid),'UTF8')),'hex')) order by p.nspname,p.oid::regprocedure::text) from selected_routines p)) as metadata`;\n"
+        },
+        {
+          "beforeOffset": 11904,
+          "afterOffset": 12635,
+          "before": "",
+          "after": " 'catalogueComplete',not exists(select 1 from expected_routines e where not exists(select 1 from selected_routines p where p.nspname=e.schema_name and p.proname=e.routine_name))\n  and (select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname in (${relationNames.map(lit).join(',')}))=${relationNames.length},\n"
+        },
+        {
+          "beforeOffset": 15250,
+          "afterOffset": 16370,
+          "before": "",
+          "after": "  check(exact(v,['version','stage','phase','database','databaseOid','backendPid','holderPid','holderGranted','readOnly','noRoleSwitch','observedAt','testIdentity','legacyOne','applyingCount','catalogueComplete','actorAllowed','scope','facts','ids','catalogueSha256']),'FIXTURE_NATIVE_CLOSED_FRAME_REQUIRED');\n"
+        },
+        {
+          "beforeOffset": 15551,
+          "afterOffset": 16980,
+          "before": "   &&Number.isSafeInteger(v.backendPid)&&v.backendPid>0&&v.backendPid!==v.holderPid&&v.testIdentity===true&&v.legacyOne===true&&v.applyingCount===0&&v.actorAllowed===true,'FIXTURE_NATIVE_IDENTITY_REQUIRED');\n",
+          "after": "   &&Number.isSafeInteger(v.backendPid)&&v.backendPid>0&&v.backendPid!==v.holderPid&&v.testIdentity===true&&v.legacyOne===true&&v.applyingCount===0&&v.actorAllowed===true&&v.catalogueComplete===true,'FIXTURE_NATIVE_IDENTITY_REQUIRED');\n"
+        },
+        {
+          "beforeOffset": 16013,
+          "afterOffset": 17470,
+          "before": "  for(const r of Object.values(v.scope))check(Number.isSafeInteger(r.count)&&r.count>=0&&/^[0-9a-f]{64}$/.test(r.sha256),'FIXTURE_NATIVE_SCOPE_REQUIRED');\n",
+          "after": "  for(const r of Object.values(v.scope))check(exact(r,['count','sha256'])&&Number.isSafeInteger(r.count)&&r.count>=0&&/^[0-9a-f]{64}$/.test(r.sha256),'FIXTURE_NATIVE_SCOPE_REQUIRED');\n  check(exact(v.facts,['audit','clientMapping','settings','candidate','rate','timesheet','financial'])&&Object.values(v.facts).every(x=>typeof x==='boolean'),'FIXTURE_NATIVE_CLOSED_FACTS_REQUIRED');\n  check(exact(v.ids,['settings','rates','timesheets','financials'])&&Object.values(v.ids).every(x=>x===null||Array.isArray(x)&&x.every(uuid)),'FIXTURE_NATIVE_CLOSED_IDS_REQUIRED');\n"
+        }
+      ]
+    },
+    {
+      "file": "README.md",
+      "before": {
+        "file": "reference/pre-freeze-admission-draft/README.md",
+        "bytes": 14448,
+        "sha256": "1b32018e967cecfbaaa51ac3b63e6d4b8c9674f11689895e7c197cfe01577bb9"
+      },
+      "after": {
+        "bytes": 17847,
+        "sha256": "6e2191a88713142df6748c2f63faf36771ae1b6ceae0f37179f4062454815800"
+      },
+      "edits": [
+        {
+          "beforeOffset": 930,
+          "afterOffset": 930,
+          "before": "",
+          "after": "\nThe pre-freeze source review closed three admission defects. The original draft is retained under `reference/pre-freeze-admission-draft`, with complete finite inverses in `ADMISSION_FULL_PARENT_FORWARD.json`. A required setup/evidence commit may now advance execution HEAD while preserving the exact historical reviewed operator commit: every selected operator file and manifest must remain equal in saved/index/HEAD/historical images, and HEAD must be its descendant. Current selected runtime/source images are independently checked against their original pins. This accepts genuine documentation commits without accepting unchecked source ancestry. The catalogue now retains exact schema/name distinctions for all55 expected routine names, includes every overload in that schema and refuses any missing expected name. The early suggestion that the old query had omitted current callbacks was corrected: the frozen identity strings are bare with separate schema, so omission was not observed; loss of schema distinction was the concrete issue. Local ABORT/deadline now independently forces HOLD and prevents dispatch/prefix qualification even while original A remains held.\n"
+        },
+        {
+          "beforeOffset": 7776,
+          "afterOffset": 8952,
+          "before": "",
+          "after": "\nThe actual actor UUID remains in child memory/private binding only. Generated SQL binds it by its SHA256 digest and returns only the actual active-Admin boolean, never the actor UUID or any private state hash. Aggregate frames, fact keys and fixture-ID arrays are closed. Parent source checks use only private-path/type/ignore/ACL metadata. The fixed read queries preserve exact native `pg_get_functiondef` byte hashes: the reported mapping callback raw CRLF body1705/whole1834 pins are distinct from its LF source body1657; root’s explicit newline-only comparison never becomes a raw-equality claim.\n"
+        },
+        {
+          "beforeOffset": 13474,
+          "afterOffset": 15252,
+          "before": "Offline verification: `node offline.mjs` replays13 new protocol tests, original11 actual-JS producer cases and original8 mapping cases; the immutable mapping test runs in its actual registered author worktree because its retained recipe locator is repository-relative. All selected original bytes remain unchanged. It parses18 exact generated synthetic read inputs,54 PG17 statements, with zero DML/INTO/row-locking and only pg_catalog function calls. `verify-source.mjs` independently checks the75 frozen peer files, current saved/index/HEAD source and29 whole published functions. The two-process lost-reply test persists exactly one attempt and refuses the competing/reopened write. These are controlled offline facts only. Actual auth in this operator, in-app/full-host/API/native/race/financial/fixture success and every missing Bank/public composer join remain **NOT_RUN/NOT_PROVIDED** until genuinely observed by root.\n",
+          "after": "Offline verification: `node offline.mjs` replays14 protocol tests, one real isolated-Git entry/commit/source-image test, four complete-worker controlled tests, original11 actual-JS producer cases and original8 mapping cases:38 Node tests PASS. The immutable mapping test runs in its actual registered author worktree because its retained recipe locator is repository-relative. All selected original bytes remain unchanged. It parses18 exact generated synthetic read inputs,54 PG17 statements, with zero DML/INTO/row-locking and only pg_catalog function calls. Actual join/presence AST evaluation makes2,034 checks over55 schema/name tuples: every missing/wrong-schema expected name refuses; correct-schema overloads remain selected. The unchanged mapping AST contributes nine further vectors. `verify-source.mjs` independently checks the75 frozen peer files, current saved/index/HEAD source and29 whole published functions. The two-process lost-reply test persists exactly one attempt and refuses the competing/reopened write. The actual worker tests cover lost reply, partial500, wrong current actor, original-turn loss, late unrelated writes, late-close ABORT and qualification ABORT without prefix advancement. These are controlled offline facts only. Actual auth in this operator, in-app/full-host/API/native/race/financial/fixture success and every missing Bank/public composer join remain **NOT_RUN/NOT_PROVIDED** until genuinely observed by root.\n\nBefore eventual execution root must recompose/review its actual current original coordinator and protected-run admission. This packet does not pin or alter the full-rehearsal/background helper/Contact46 CSE successor and does not automatically approve a stale coordinator image. `SOURCE_PINS.json` binds the unchanged turn-control component and the finite producer/runtime inputs only. No Contact case ID, marker, full snapshot, verdict or native authority is reused.\n\nRead-only peer replay after freeze uses `node verify-freeze.mjs --committed`, `node verify-source.mjs --verify`, `node offline.mjs --verify` and the approved installed Python on `verify-forward.py` without `--freeze`. The offline verifier suppresses all frozen-result writes, compares deterministic generated bytes exactly and compares actual TAP totals while allowing new elapsed timings. Do not rerun author capture/sealing scripts or `offline.mjs` without `--verify` in a frozen packet. The controlled Git/two-process tests create and remove only their own nonsecret ignored D: directories; they make no remote calls.\n"
+        }
+      ]
+    },
+    {
+      "file": "secure-owned.ps1",
+      "before": {
+        "file": "reference/secure-owned-auth-parent.ps1",
+        "bytes": 1349,
+        "sha256": "b9bbeabb5ea8cee109a08a866d8590cac8c22b2d2dc52d83562e257789daf211"
+      },
+      "after": {
+        "bytes": 1352,
+        "sha256": "3086757bb8f932d0cc32e31b603a8a960cd8ea5dc87a2e6603e7f05fbe43b4aa"
+      },
+      "edits": [
+        {
+          "beforeOffset": 259,
+          "afterOffset": 259,
+          "before": "if([IO.Path]::GetDirectoryName($resolved) -cne $expectedParent -or [IO.Path]::GetFileName($resolved) -cnotmatch '^test-auth-refresh-20261017-[a-f0-9]{32}$'){throw 'AUTH_OWNED_PATH_REQUIRED'}\n",
+          "after": "if([IO.Path]::GetDirectoryName($resolved) -cne $expectedParent -or [IO.Path]::GetFileName($resolved) -cnotmatch '^daily-genuine-stages-20261017-[a-f0-9]{32}$'){throw 'AUTH_OWNED_PATH_REQUIRED'}\n"
+        }
+      ]
+    }
+  ]
+}

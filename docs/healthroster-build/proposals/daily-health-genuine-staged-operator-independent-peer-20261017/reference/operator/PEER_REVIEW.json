@@ -1,0 +1,34 @@
+{
+  "version": "DAILY_GENUINE_PRODUCER_AND_MAPPING_INDEPENDENT_PEER_V1",
+  "reviewer": "Report GPT-6.1-sol xhigh",
+  "producerCommit": "e1c13ecb123224aea0fa95beff3727cd4c58bbb2",
+  "producerFinalManifestSha256": "0b2e8a621f3673948396c10dc1da9d799638381f7436ad7a1261b5b7ab62ead7",
+  "mappingCommit": "bb2acf3eb32f80b5b73f462fbf39e41272acadc4",
+  "mappingManifestSha256": "1d6bd4efe842421893fede8b8234e68c8cc74c6862315c1caa09edf2a7c348e5",
+  "disposition": "ACCEPT_BOUNDED_SOURCE_FACTS_WITH_REQUIRED_GENUINE_S1A_SETUP",
+  "findings": [
+    {
+      "id": "SETUP_PREREQUISITE_1",
+      "classification": "BLOCKING_SETUP_PREREQUISITE_NOT_OBSERVED_NATIVE_FAILURE",
+      "fact": "Fresh contractless/no-finance S4 needs genuine Client-hospital mapping; no Client.name fallback exists in the actual Health context.",
+      "resolution": "Root-authorised immutable bb2acf S1a via existing genuine Admin Hospital API, separately manifested/vacancy-qualified/read back before S4. No direct seed or original recipe rewrite."
+    }
+  ],
+  "additionalScopedSourceDefects": 0,
+  "originalAuditFilesRawEqual": 47,
+  "mappingFilesRawEqual": 28,
+  "distinctCompleteFunctionsCurrentAndPublishedRawOnce": 29,
+  "s1Baseline1900": "SOURCE_AND_RETAINED_ROOT_DEFINITION_BOUND_NOT_INVOKED_HERE",
+  "s2EmptyDrain": "ACTUAL_FUNCTION_SETTINGS_READ_THEN_NO_ENQUEUE_DEQUEUE_OR_WORKER_IF_GENUINELY_EMPTY",
+  "s3UnsafePath": "INCUMBENT_PATCH_CAN_PRECEDE_FAILED_POST_REQUIRE_FRESH_COMPLETE_RATE_AND_CLIENT_TSFIN_VACANCY",
+  "s4UnsafePath": "INSERT_RECALC_AND_IGNORED_FAILED_DELETE_CAN_PRECEDE_500_NO_BLIND_RETRY",
+  "mappingUnsafePath": "GLOBAL_ALIAS_TIMESHEET_NAMESPACE_NOT_CLIENT_LIST_ONLY_NO_NATIVE_UNIQUENESS_OR_CAS",
+  "runtimeCalculator": "EXACT_PUBLISHED_F743_WHOLE_MODULE_CURRENT_WHOLE_MODULE_NOT_DEPLOYED",
+  "native": "NOT_RUN",
+  "api": "NOT_RUN",
+  "browser": "NOT_RUN",
+  "businessRowsReadOrCreated": 0,
+  "privateStateContentsReadHashedCopied": false,
+  "bankBodiesRead": 0,
+  "missingPublicBankJoins": "NOT_PROVIDED_NO_SUCCESS_CLAIM"
+}

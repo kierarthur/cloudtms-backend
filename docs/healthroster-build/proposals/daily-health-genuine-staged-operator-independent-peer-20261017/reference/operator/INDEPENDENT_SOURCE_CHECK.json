@@ -1,0 +1,15 @@
+{
+  "version": "DAILY_GENUINE_OPERATOR_INDEPENDENT_SOURCE_CHECK_V1",
+  "distinctCompleteFunctions": 29,
+  "selectedRawCurrentPublishedOnce": true,
+  "originalAuditFiles": 47,
+  "mappingFiles": 28,
+  "originalRecipeUnchanged": true,
+  "wholeCurrentCalculatorDeployed": false,
+  "publishedCalculatorAuthority": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "currentRoot": "cdb4540daae048a2646793b401058392fef51ef6",
+  "bankBodiesRead": 0,
+  "privateFilesRead": 0,
+  "businessRowsRead": 0,
+  "native": "NOT_RUN"
+}
