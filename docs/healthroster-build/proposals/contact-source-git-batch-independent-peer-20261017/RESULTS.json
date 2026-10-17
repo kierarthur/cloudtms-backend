@@ -1,0 +1,22 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "sourceFindings": [],
+  "actualNonWritingReplay": {
+    "command": "node <author-folder>/verify.mjs from registered Money cwd",
+    "targets": 54,
+    "payloads": 3,
+    "wholeInverses": 3,
+    "literalHunks": 8,
+    "unchangedReferences": 51,
+    "tests": 47,
+    "pass": 47,
+    "fail": 0,
+    "sourceImagesPerCall": 189,
+    "adapterImagesPerCall": 104,
+    "gitProcessMaxBuffer": 24000000
+  },
+  "runtimeOrSourceAdmissionThisLane": "NOT_RUN_UNMOUNTED",
+  "nativeRestoration": "NOT_RUN_THIS_LANE_ORIGINAL_R1_HOLD_RETAINED",
+  "rootWrites": 0,
+  "privateStateAccess": false
+}
