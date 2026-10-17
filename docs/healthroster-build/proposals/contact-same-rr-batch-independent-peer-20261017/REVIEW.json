@@ -1,0 +1,21 @@
+{
+  "version":"CONTACT_SAME_RR_BATCH_INDEPENDENT_PEER_V1",
+  "reviewer":"GPT-6.1-sol / xhigh",
+  "disposition":"ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "actionableFindings":[],
+  "authorCommit":"20709382805ce8e873abcb0f1d7f3e439c6c1c51",
+  "authorManifestSha256":"7b550e1eedee0be81e73ae8988021bdf073c7dc11f28e7ab9165d55aa1089b15",
+  "selectionSha256":"3344b7fcdf1aed84d78b2e5084da0d68d22bc1bd3d55e31a00bb0a3dfff3394c",
+  "authorProofSha256":"5efefb05b8fcc41499d2a50c3bec6fb63d43dfcf5c6d21869605a7fdad07357b",
+  "parent":"62a0630df15a93816ce8be583089541dc9a1830d",
+  "selection":{"targets":54,"payloads":6,"changedExisting":5,"new":1,"unchanged":48,"wholeRawInverses":5,"literalHunks":20,"actualCurrentParentImages":53,"actualNewVacancies":1},
+  "structure":{"transaction":"original one read-only RR child/complete guard/peer/path/rollback","bagPopulations":[1,11],"bagRecords":12,"bagSqlControlBytes":16384,"worstCaseEachBagBelowBytes":4096,"bagInterpolation":"two fixed gset SQL-literal quoted variables only","catalogue":"complete original TEXT exporter/wrapper hash retained","partition":[15,6],"totalDisjointKeys":21,"background":"complete original maps/status/snapshot/clocks in one query","jsValueReserialization":false,"fixtureNativeLogicalOrdinals":[4,3]},
+  "identity":{"referenceCanonicalSqlSha256":"5044b4d3821709aecc48d4d955aa6d8109bdf67d447067030e0dad444715e811","executedBatchInputSha256":"bc5c863a4591218a1b009c08d520f7f6571cf3d50c098ce075b10763e5da476d","canonicalStatementExecuted":false,"hypotheticalSameMemberByteEquality":true,"independentlyTimedOldClockStatusEqualityClaimed":false},
+  "replay":{"capturedAuthorFiles":25,"savedIndexHeadEqual":true,"testsPassed":37,"wholeStagePg17Cases":2,"guardBodiesParsed":2,"negativeAstMutations":17,"reviewerProductionTestSqlGitChanges":0,"authorRendererLocationChanges":1},
+  "preserved":["all12 complete business scopes","shared2/all63 sourcepins/resultvalidator/WeakMap","original independent Cafter/abortedXID/distinctPID","source/setup/role/physical/turn guards","45/70/120/180 caps and all byte/lock/connect/termination bounds","original diagnostic programs"],
+  "execution":{"native":"NOT_RUN","queriesExecuted":0,"psqlOrExplainExecuted":false,"ipcUsed":false,"apiOrConnectorCalls":0,"privateStateOrMapsAccess":false,"rootOrOfficeWrites":0,"bankSemanticBodiesRead":0},
+  "performance":"NOT_MEASURED",
+  "restorationQualified":false,
+  "cancellationCause":"UNKNOWN",
+  "remaining":"root exact six-target mount/commit/real source admission and separately authorised genuine bounded trial; no native qualification implied"
+}

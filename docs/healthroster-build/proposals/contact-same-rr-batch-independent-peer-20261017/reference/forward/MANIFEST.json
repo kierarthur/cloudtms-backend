@@ -1,0 +1,134 @@
+{
+  "version": "CONTACT_SAME_RR_NATIVE_BATCH_FREEZE_V1",
+  "requiredModel": "gpt-6.1-sol/xhigh",
+  "parent": "62a0630df15a93816ce8be583089541dc9a1830d",
+  "selectedTargets": 54,
+  "actualPayloadFiles": 6,
+  "wholeParentInverses": 5,
+  "unchangedParentReferences": 48,
+  "tests": 37,
+  "native": "NOT_RUN",
+  "restorationQualified": false,
+  "files": [
+    {
+      "file": "ast-proof.py",
+      "bytes": 10267,
+      "sha256": "f8d456aae09c9408c59225fafc4f59dc62c5ecb77ed8e93ee8a6656740eba6de"
+    },
+    {
+      "file": "batch-overlay.mjs",
+      "bytes": 839,
+      "sha256": "82ae0b5fa29fad38b0ba7921212248de1f57e84c748a3965bfe1b860bced8174"
+    },
+    {
+      "file": "batch-source.mjs",
+      "bytes": 7811,
+      "sha256": "5c1b0b7d2050daa4009903a361d2e98a4e7d0073b5161b960a70f825f142ae7c"
+    },
+    {
+      "file": "batch.test.mjs",
+      "bytes": 12729,
+      "sha256": "52002a386780508d28244eed0ed09d7b7fac866070460f193e4909466a0cbdcf"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/batch-source.mjs",
+      "bytes": 7811,
+      "sha256": "5c1b0b7d2050daa4009903a361d2e98a4e7d0073b5161b960a70f825f142ae7c"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "bytes": 20601,
+      "sha256": "2a8c0085016a18243e94c8a940e95d21ffca946e09d4cfcc18543b9a217f1564"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/hold-case.mjs",
+      "bytes": 8180,
+      "sha256": "01522035ba4a2fc3bc505ddd6a58c9418ce684ab296b0ff6eeab780af2c37501"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "bytes": 8528,
+      "sha256": "3fa45061fcb1525a87f794ff2869f967fbe702545ad1264dbdb33689733a1077"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/READER_PARENT_REVERSE.json",
+      "bytes": 50757,
+      "sha256": "198025464b1df4db8bf5c4b63c37458a65be94b5959a63f0a592b195f409fb44"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/README.md",
+      "bytes": 9652,
+      "sha256": "c0c1df6afda90e2574dbc698753243262e7f038cb32291aadb20939099fe693d"
+    },
+    {
+      "file": "compose.mjs",
+      "bytes": 8562,
+      "sha256": "e25f64c8d6140ba606ed1668b21b00648dfa5510a31f95732a8f2a98e4599fe3"
+    },
+    {
+      "file": "coordinator.test.mjs",
+      "bytes": 8215,
+      "sha256": "d5d2cae4f2a2fff094cd656fba7f383c654c1ecedb6b3833a944158ab43ed2bd"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 1121,
+      "sha256": "4bc88cbde9ec2ce7f6bf9db48447ab2b89af60a4521f538947a49d75b166f5a6"
+    },
+    {
+      "file": "FULL_PARENT_INVERSES.json",
+      "bytes": 334793,
+      "sha256": "83b7b3c108b5a5666eb17d70e40a76456f7942638a8fbf9f9dbfe8eaf7b9ac40"
+    },
+    {
+      "file": "PARENT_PINS.json",
+      "bytes": 12676,
+      "sha256": "1d091c89c8019a6fc7a8115dd7b07bbb969d83c059f7850caff36d2ec0dbb921"
+    },
+    {
+      "file": "PAYLOAD_SELECTION.json",
+      "bytes": 22409,
+      "sha256": "3344b7fcdf1aed84d78b2e5084da0d68d22bc1bd3d55e31a00bb0a3dfff3394c"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 2081,
+      "sha256": "69efc3c80c64d9adb1547cb912527d3e4d5a0c79e1ac5796f24f149e2fc932e3"
+    },
+    {
+      "file": "README.md",
+      "bytes": 5783,
+      "sha256": "e1a6465b3b6e4f542532463b7b18731aa4e289912b0d4f2baf399878a86cc70c"
+    },
+    {
+      "file": "render.mjs",
+      "bytes": 1182,
+      "sha256": "99d12b4b1ede40556356216d828f2ea616a423ec8208690afc7e9bd5e0ea886b"
+    },
+    {
+      "file": "rendered/CONTACT_CONSTRUCTORS_V1.json",
+      "bytes": 175926,
+      "sha256": "bcb737095e2e7b498d317d0130ff3e61f56db3108a6a412fd5cb1c8ec09bff3d"
+    },
+    {
+      "file": "rendered/QT_ADMIN_CONTROLS_V1.json",
+      "bytes": 175926,
+      "sha256": "bcb737095e2e7b498d317d0130ff3e61f56db3108a6a412fd5cb1c8ec09bff3d"
+    },
+    {
+      "file": "TEST_RESULTS.tap",
+      "bytes": 8845,
+      "sha256": "4b3a179ff3bf43968c7311ee0510312a490b22464df2a76b42dcd5c5a0366eeb"
+    },
+    {
+      "file": "VERIFY_PROOF.json",
+      "bytes": 7465,
+      "sha256": "5efefb05b8fcc41499d2a50c3bec6fb63d43dfcf5c6d21869605a7fdad07357b"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 7877,
+      "sha256": "8339ee1e30bc76167c5b3858ea56058804bcf5d072178710b10cb1c7109d5eb2"
+    }
+  ]
+}
