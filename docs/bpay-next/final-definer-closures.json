@@ -19089,8 +19089,8 @@
     },
     {
       "signature": "private._weekly_source_acl_private_helper_contract_v1()",
-      "finalRoot": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
-      "finalPhysical": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "finalRoot": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1900_health_d10_query_reader/98_private_helper_classification.sqlinc",
       "allowedPhysical": [
         "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
         "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
@@ -19103,7 +19103,8 @@
         "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc",
         "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/98_complete_current_classification.sqlinc",
         "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
-        "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc"
+        "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+        "supabase/repeatable/17102026_1900_health_d10_query_reader/98_private_helper_classification.sqlinc"
       ],
       "predecessors": [
         "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
@@ -19115,7 +19116,8 @@
         "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
         "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read_v1.sql",
         "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql",
-        "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql"
+        "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+        "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql"
       ],
       "finalClosures": [
         "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
@@ -19125,7 +19127,8 @@
         "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read_v1.sql",
         "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql",
         "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
-        "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql"
+        "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+        "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql"
       ],
       "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
       "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
@@ -19136,7 +19139,8 @@
       "healthKeepCurrentReadReview": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/INTEGRATION.md",
       "healthSameSeparateReview": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/INTEGRATION.md",
       "healthSourceReadReview": "docs/healthroster-build/proposals/source-current-read-health-successor-20261017/INTEGRATION.md",
-      "healthSourceCompleteClassificationReview": "docs/healthroster-build/proposals/source-complete-classification-current-successor-20261017/INTEGRATION.md"
+      "healthSourceCompleteClassificationReview": "docs/healthroster-build/proposals/source-complete-classification-current-successor-20261017/INTEGRATION.md",
+      "healthD10SourceProvenance": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/MODULE_RECIPE.json"
     },
     {
       "signature": "private._weekly_source_acl_service_rpc_contract_v1()",
@@ -28713,6 +28717,113 @@
       ],
       "owner": "Health closed private helper; immutable accepted source body",
       "healthClosedHelperReview": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/README.md"
+    },
+    {
+      "signature": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "finalRoot": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1900_health_d10_query_reader/01_weekly_source_actual_timesheet_submission_v1.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+        "supabase/repeatable/17102026_1900_health_d10_query_reader/01_weekly_source_actual_timesheet_submission_v1.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql"
+      ],
+      "owner": "Health D10 preserved seven-reader closure; source-only peer required",
+      "healthD10SourceProvenance": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/MODULE_RECIPE.json"
+    },
+    {
+      "signature": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1900_health_d10_query_reader/02_weekly_source_signed_submission_read_context_v1.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+        "supabase/repeatable/17102026_1900_health_d10_query_reader/02_weekly_source_signed_submission_read_context_v1.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql"
+      ],
+      "owner": "Health D10 preserved seven-reader closure; source-only peer required",
+      "healthD10SourceProvenance": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/MODULE_RECIPE.json"
+    },
+    {
+      "signature": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1900_health_d10_query_reader/03_weekly_source_check_only_query_rows_v1.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+        "supabase/repeatable/17102026_1900_health_d10_query_reader/03_weekly_source_check_only_query_rows_v1.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql"
+      ],
+      "owner": "Health D10 preserved seven-reader closure; source-only peer required",
+      "healthD10SourceProvenance": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/MODULE_RECIPE.json"
+    },
+    {
+      "signature": "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1900_health_d10_query_reader/04_weekly_source_check_only_issue_filter_keys_v1.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader/04_weekly_source_check_only_issue_filter_keys_v1.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql"
+      ],
+      "owner": "Health D10 preserved seven-reader closure; source-only peer required",
+      "healthD10SourceProvenance": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/MODULE_RECIPE.json"
+    },
+    {
+      "signature": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1900_health_d10_query_reader/07_weekly_source_check_only_query_groups_v1.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader/07_weekly_source_check_only_query_groups_v1.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql"
+      ],
+      "owner": "Health D10 preserved seven-reader closure; source-only peer required",
+      "healthD10SourceProvenance": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/MODULE_RECIPE.json"
+    },
+    {
+      "signature": "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)",
+      "finalRoot": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1900_health_d10_query_reader/05_weekly_source_check_only_candidate_reminder_subject_v1.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader/05_weekly_source_check_only_candidate_reminder_subject_v1.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql"
+      ],
+      "owner": "Health D10 preserved seven-reader closure; source-only peer required",
+      "healthD10SourceProvenance": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/MODULE_RECIPE.json"
+    },
+    {
+      "signature": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "finalRoot": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1900_health_d10_query_reader/06_weekly_source_check_only_candidate_reminder_context_v1.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader/06_weekly_source_check_only_candidate_reminder_context_v1.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql"
+      ],
+      "owner": "Health D10 preserved seven-reader closure; source-only peer required",
+      "healthD10SourceProvenance": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015/MODULE_RECIPE.json"
     }
   ],
   "editorChains": [

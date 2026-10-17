@@ -1,0 +1,31 @@
+{
+  "root": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "HEAD": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+  "source": "ACTUAL_STAGED_D10_POSTIMAGES_EQUAL_FROZEN86",
+  "rows": [
+    {
+      "target": "scripts/healthroster-d10-reader-type-review.mjs",
+      "capture": "parents/scripts/healthroster-d10-reader-type-review.mjs",
+      "savedAndIndexSha256": "bfb2144801125a43da3eb34d7ff02ba64ec0090ffe68d54a8c9225ecbb440946",
+      "bytes": 5980,
+      "HEAD": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+      "headStatus": "ABSENT_NEW_D10_MODULE",
+      "historicalSha256": null
+    },
+    {
+      "target": "scripts/bpay-next-source-gates.mjs",
+      "capture": "parents/scripts/bpay-next-source-gates.mjs",
+      "savedAndIndexSha256": "01bb14f1a0c60adfad928978cb6aaf1686266fbe9b2b5b7f5894f417c610f922",
+      "bytes": 283838,
+      "HEAD": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+      "headStatus": "PRE_D10_HISTORICAL_PARENT",
+      "historicalSha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8"
+    }
+  ],
+  "unchangedSourceRead": {
+    "target": "scripts/healthroster-source-read-type-review.mjs",
+    "source": "reference/scripts/healthroster-source-read-type-review.mjs",
+    "sha256": "8571c834d9500af8943092d422a738f197c730a327fc0b41e0e79df86044cfc7",
+    "bytes": 18793
+  }
+}

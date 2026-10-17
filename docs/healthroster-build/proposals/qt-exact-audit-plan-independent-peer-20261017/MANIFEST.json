@@ -1,0 +1,30 @@
+{
+  "version": "INDEPENDENT_EXACT_AUDIT_PLAN_SOURCE_PEER_V1",
+  "files": [
+    {
+      "file": "AUTHOR_PINS.json",
+      "bytes": 6881,
+      "sha256": "59ed2a3c707888bce8da0469a14255540f263155791ad6c920d4dd9a83d7ee53"
+    },
+    {
+      "file": "independent.test.mjs",
+      "bytes": 3144,
+      "sha256": "9b643873959de5e96bf6558dc4da3c9811b206177e4d76c8e858ecf77da6b76e"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 841,
+      "sha256": "bf1e48a8eac6b20dc316683e2e808a2aac6395cc79cd894219c5c81098c40716"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 2192,
+      "sha256": "59b1b3b775650ccc9ff693d737752d07553f87b887e22629cec67f7be3ac2a9e"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 1208,
+      "sha256": "f0455a4d2363645943bf37347dd0f8e7fbfb77e588480e1a98ec05637769c458"
+    }
+  ]
+}

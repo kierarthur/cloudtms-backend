@@ -1,0 +1,25 @@
+{
+  "descriptor": {
+    "version": "CONTACT_EXACT_EXECUTED_AUDIT_BAG_ESTIMATED_PLAN_V1",
+    "executedBatchInputSha256": "38567b25bfa9df017332b39272d35239542390a2c1180f0b6d6426c9f37ba4a8",
+    "executedAuditBagSha256": "f5729765fdf3acfaf96ce915b59e342cbd3e5201bd5a06e3b2f5bfdf2dc9663f",
+    "explainStatementSha256": "2a8a5e29d51562e1f6dc0ef87e151e9ff9eb52fb9e14ab690a57161f3fa46f57",
+    "diagnosticInputSha256": "c6a6b5caddcd27fe2229ebf38f52485da46c24e0f436463a9c10d73391d000a1",
+    "canonicalReferenceExecuted": false,
+    "auditQueryExecuted": false,
+    "analyze": false,
+    "statements": 6,
+    "fullCanonicalSnapshotRead": false,
+    "completeMapsPersisted": false,
+    "restorationQualified": false
+  },
+  "render": "SOURCE_ONLY_FICTIONAL_TURN_NOT_NATIVE",
+  "wholeQueryInverse": {
+    "before": "with retained_business as (select 'public.audit_events' relation,count(*) row_count,\n   encode(pg_catalog.sha256(pg_catalog.convert_to(coalesce(string_agg(row_hash,'|' order by row_hash),''),'UTF8')),'hex') row_fingerprint\n   from (select encode(pg_catalog.sha256(pg_catalog.convert_to(to_jsonb(t)::text,'UTF8')),'hex') row_hash from \"public\".\"audit_events\" t offset 0) hashed_rows), fixed_bag as (select jsonb_agg(jsonb_build_object('relation',relation,'row_count',row_count,'row_fingerprint',row_fingerprint) order by relation)::text value from retained_business)\nselect value as hr_contact_audit_bag from fixed_bag where octet_length(value)<=16384",
+    "after": "EXPLAIN (ANALYZE FALSE, VERBOSE FALSE, COSTS TRUE, SETTINGS FALSE, SUMMARY FALSE, FORMAT JSON) with retained_business as (select 'public.audit_events' relation,count(*) row_count,\n   encode(pg_catalog.sha256(pg_catalog.convert_to(coalesce(string_agg(row_hash,'|' order by row_hash),''),'UTF8')),'hex') row_fingerprint\n   from (select encode(pg_catalog.sha256(pg_catalog.convert_to(to_jsonb(t)::text,'UTF8')),'hex') row_hash from \"public\".\"audit_events\" t offset 0) hashed_rows), fixed_bag as (select jsonb_agg(jsonb_build_object('relation',relation,'row_count',row_count,'row_fingerprint',row_fingerprint) order by relation)::text value from retained_business)\nselect value as hr_contact_audit_bag from fixed_bag where octet_length(value)<=16384;",
+    "prefix": "EXPLAIN (ANALYZE FALSE, VERBOSE FALSE, COSTS TRUE, SETTINGS FALSE, SUMMARY FALSE, FORMAT JSON) ",
+    "suffix": ";"
+  },
+  "auditBytes": 650,
+  "auditSha256": "f5729765fdf3acfaf96ce915b59e342cbd3e5201bd5a06e3b2f5bfdf2dc9663f"
+}

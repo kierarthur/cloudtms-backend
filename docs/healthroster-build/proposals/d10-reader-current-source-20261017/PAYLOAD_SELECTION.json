@@ -1,0 +1,145 @@
+{
+  "version": "HEALTH_D10_CURRENT_SELECTION_V1",
+  "parent": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5",
+  "module": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+  "admission": "supabase/migrations/17102026_1900_health_d10_query_reader_admission.sql",
+  "verifier": "supabase/verification/17102026_1900_health_d10_query_reader_security.sql",
+  "targets": [
+    {
+      "target": "supabase/repeatable/17102026_1900_health_d10_query_reader/01_weekly_source_actual_timesheet_submission_v1.sqlinc",
+      "source": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/01_weekly_source_actual_timesheet_submission_v1.sqlinc",
+      "sha256": "f7241f54b3d8d4e67410cd736e8b9e0d3f8a270cdf4c1caa9970c1a7778dfbb3",
+      "bytes": 14295,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "supabase/repeatable/17102026_1900_health_d10_query_reader/02_weekly_source_signed_submission_read_context_v1.sqlinc",
+      "source": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/02_weekly_source_signed_submission_read_context_v1.sqlinc",
+      "sha256": "c30413ef5607b5b34393a7619dc2be04e413d2a25057261f60a70b36f7d70ff0",
+      "bytes": 4471,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "supabase/repeatable/17102026_1900_health_d10_query_reader/03_weekly_source_check_only_query_rows_v1.sqlinc",
+      "source": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/03_weekly_source_check_only_query_rows_v1.sqlinc",
+      "sha256": "686f01040be67787d4ee38ecb7ca993018aefe4dc044fd679b361910047588fd",
+      "bytes": 22185,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "supabase/repeatable/17102026_1900_health_d10_query_reader/04_weekly_source_check_only_issue_filter_keys_v1.sqlinc",
+      "source": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/04_weekly_source_check_only_issue_filter_keys_v1.sqlinc",
+      "sha256": "1d44e61ba42d7db2eae5f7976f4e6293310ee78f154e824edbdbbae7d86a7460",
+      "bytes": 2278,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "supabase/repeatable/17102026_1900_health_d10_query_reader/05_weekly_source_check_only_candidate_reminder_subject_v1.sqlinc",
+      "source": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/05_weekly_source_check_only_candidate_reminder_subject_v1.sqlinc",
+      "sha256": "bb23b8c0fed028fe3f264887453e559f02936022515df25d471a04d211362c5f",
+      "bytes": 5474,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "supabase/repeatable/17102026_1900_health_d10_query_reader/06_weekly_source_check_only_candidate_reminder_context_v1.sqlinc",
+      "source": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/06_weekly_source_check_only_candidate_reminder_context_v1.sqlinc",
+      "sha256": "6cbf2d426045ece02f484cb92be1f33800d18017215fba23751e376a2570e61a",
+      "bytes": 9467,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "supabase/repeatable/17102026_1900_health_d10_query_reader/07_weekly_source_check_only_query_groups_v1.sqlinc",
+      "source": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/07_weekly_source_check_only_query_groups_v1.sqlinc",
+      "sha256": "522a3b84b66b6af5d7741dd77e98e12f4e4c947ed80372d605c6f58cbacbe946",
+      "bytes": 15542,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "supabase/repeatable/17102026_1900_health_d10_query_reader/98_private_helper_classification.sqlinc",
+      "source": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/98_private_helper_classification.sqlinc",
+      "sha256": "674454b315bb2862c09502b89d6a63d731739ec8614ae9165fb284d2784f22d2",
+      "bytes": 49684,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "source": "payload/supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sha256": "cbea5f801b5ab89685bf39d83ca3cf51fccf4a751e8222e9936ee415711b044e",
+      "bytes": 102837,
+      "beforeSha256": "78d97ce6a540356b07039e2dc6a0748ff322ce0eb571dce2db0b441b5f3ae152",
+      "beforeBytes": 102517
+    },
+    {
+      "target": "supabase/migrations/17102026_1900_health_d10_query_reader_admission.sql",
+      "source": "payload/supabase/migrations/17102026_1900_health_d10_query_reader_admission.sql",
+      "sha256": "fb3ab56de20436b6c6b16545b39cdd5be7e42cc6155650f7817e98e9f2c34c83",
+      "bytes": 774,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "source": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "sha256": "05428c26d4c841e0e190112707eeecf94994f9b33483400f81743c6d13dd53ab",
+      "bytes": 896,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "supabase/verification/17102026_1900_health_d10_query_reader_security.sql",
+      "source": "payload/supabase/verification/17102026_1900_health_d10_query_reader_security.sql",
+      "sha256": "f9a4162eb4e94681fde4e079d283272338b9c85c2e8d3c043100c6258c748c0f",
+      "bytes": 2217,
+      "beforeSha256": null,
+      "beforeBytes": null
+    },
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "source": "payload/docs/bpay-next/final-definer-closures.json",
+      "sha256": "5c92730c7c586fc63a909809d59e73b60e72a95f6dae9dc662e43fa018a62956",
+      "bytes": 1760783,
+      "beforeSha256": "4e3cf52c02d0d9bc48f679056ab83ee9108c10cc722f97228fbdf1bf129ae155",
+      "beforeBytes": 1753835
+    },
+    {
+      "target": "supabase/release/current-release.json",
+      "source": "payload/supabase/release/current-release.json",
+      "sha256": "fc070d23cd03548b6156738ca7e08fda58381895cf61438d34ec84dd7ff31506",
+      "bytes": 36968,
+      "beforeSha256": "b9b045c6038c46238a8a47945bb201e336ffb8dc0afdee86f9524ece9d29cbe2",
+      "beforeBytes": 36808
+    },
+    {
+      "target": "supabase/release/migration-lock.json",
+      "source": "payload/supabase/release/migration-lock.json",
+      "sha256": "d32dd319f202bf2e4f174da8e54e25f24f344ac44aaf19555b08688f3d3ecc26",
+      "bytes": 79859,
+      "beforeSha256": "cc73db6af457e09cce092b70bc3cfcf21c1cb2c0bbf8868ede26f8d454d73c2e",
+      "beforeBytes": 79674
+    },
+    {
+      "target": "scripts/bpay-next-source-gates.mjs",
+      "source": "payload/scripts/bpay-next-source-gates.mjs",
+      "sha256": "01bb14f1a0c60adfad928978cb6aaf1686266fbe9b2b5b7f5894f417c610f922",
+      "bytes": 283838,
+      "beforeSha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+      "beforeBytes": 283554
+    },
+    {
+      "target": "scripts/healthroster-d10-reader-type-review.mjs",
+      "source": "payload/scripts/healthroster-d10-reader-type-review.mjs",
+      "sha256": "bfb2144801125a43da3eb34d7ff02ba64ec0090ffe68d54a8c9225ecbb440946",
+      "bytes": 5980,
+      "beforeSha256": null,
+      "beforeBytes": null
+    }
+  ]
+}

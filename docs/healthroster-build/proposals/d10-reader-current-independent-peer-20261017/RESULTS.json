@@ -1,0 +1,47 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "findings": [],
+  "authorManifestSha256": "1d4f2204cd4402d665792aef3813e7a25eba2b3cf0082a85d6b439a6265ceb7c",
+  "authorFilesIncludingManifest": 86,
+  "selectedTargets": 17,
+  "sevenHistoricalBodiesRawIdentical": true,
+  "currentWorkspaceConsumers": [
+    "037",
+    "064"
+  ],
+  "actualCurrentHistoricalParents": 37,
+  "wholeExistingFileInverses": 5,
+  "oldReaderFileInverses": 3,
+  "classifierFullDefinitionInverse": true,
+  "sourceTests": 19,
+  "f23Tests": 6,
+  "independentTests": 7,
+  "sqlInputs": 12,
+  "fullSqlExpressions": 279,
+  "typedRecordFields": 100,
+  "f23RawKeys": 13,
+  "candidateInventory": {
+    "migrations": 428,
+    "repeatables": 1099,
+    "signatures": 3050,
+    "registeredChains": 1666
+  },
+  "candidateLoaderNegativeCases": 2,
+  "originalCataloguePLBodiesNotProved": [
+    "weekly_source_actual_timesheet_submission_v1",
+    "weekly_source_check_only_candidate_reminder_context_v1"
+  ],
+  "watchedOverlap": {
+    "QT63": [],
+    "R11_231": [
+      "docs/bpay-next/final-definer-closures.json",
+      "supabase/release/current-release.json"
+    ],
+    "futureCurrentContract": "WATCHED_BY_BOTH_UNSELECTED"
+  },
+  "all86FrozenBytesUnchanged": true,
+  "currentGlobalSourceGate": "NOT_RUN",
+  "nativeApiDispatch": "NOT_RUN",
+  "privateStateSourcePreflight": "NOT_RUN",
+  "trackedHeadChanges": false
+}

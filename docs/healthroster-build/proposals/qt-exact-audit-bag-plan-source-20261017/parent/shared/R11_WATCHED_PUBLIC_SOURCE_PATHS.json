@@ -1,0 +1,1706 @@
+[
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "broker/src/daily-canonical-authority.js",
+    "sources": [
+      "FULL_PREFLIGHT_AUDIT_CENSUS"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "broker/src/daily-schedule-authority.js",
+    "sources": [
+      "FULL_PREFLIGHT_AUDIT_CENSUS"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "broker/src/index.js",
+    "sources": [
+      "FULL_PREFLIGHT_AUDIT_CENSUS",
+      "FULL_PREFLIGHT_MAPPING"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/bpay-next/final-definer-closures.json",
+    "sources": [
+      "FULL_PREFLIGHT_AUDIT_CENSUS"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-b2-current-effect-20261017/SOURCE_SELECTION.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-b2-current-effect-20261017/current-effect.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-b2-real-commit-reseal-source-20261017/CAPTURE.json",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-b2-real-commit-reseal-source-20261017/COMPOSER_FORWARD.json",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-b2-real-commit-reseal-source-20261017/REVIEWED_POSTIMAGES.json",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-b2-real-commit-reseal-source-20261017/admit-public.mjs",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-b2-real-commit-reseal-source-20261017/git_values.py",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-b2-real-commit-reseal-source-20261017/reseal.py",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-b2-s0-publish-stageplans-20261017.mjs",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/MANIFEST.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/test.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-genuine-root-s0-b2-bookkeeper-20261017.mjs",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-helper-source-20261017/s1-observation.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-genuine-s0-b2-tools-orchestration-20261017.js.txt",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-genuine-stage-tools-orchestration-20261017.js.txt",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r10-source-recipe-20261017/materialize.mjs",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r10-source-recipe-20261017/recipe.mjs",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-health-observer-seven-field-turn-forward-20261017/runtime/observer-s1.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-health-observer-seven-field-turn-forward-20261017/runtime/observer-s23.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-health-observer-seven-field-turn-forward-20261017/runtime/original-stage-receipt.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/MANIFEST.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/MANIFEST.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/validate.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/MANIFEST.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/MANIFEST.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/clock-forward.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/proposals/daily-s23-observation-20261017/s23-observation.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_AUTH_R10_SOURCE_RECIPE_ROOT_REVIEW_20261017.json",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_B2_S0_ROOT_CONFIG_20261017.json",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_B2_S0_SOURCE_ADMISSION_20261017.json",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+    "sources": [
+      "FULL_PREFLIGHT_MAPPING"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_DEFINITION_READONLY_20261017.json",
+    "sources": [
+      "FULL_PREFLIGHT_AUDIT_CENSUS"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json",
+    "sources": [
+      "FULL_PREFLIGHT_AUDIT_CENSUS"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/TEST_AUTH_REFRESH_R10_SUCCESS_20261017.json",
+    "sources": [
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "scripts/bpay-next-final-definers.mjs",
+    "sources": [
+      "FULL_PREFLIGHT_MAPPING"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "scripts/cloudtms-db-release-lib.mjs",
+    "sources": [
+      "FULL_PREFLIGHT_MAPPING"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "scripts/cloudtms-managed-release-sql.mjs",
+    "sources": [
+      "FULL_PREFLIGHT_MAPPING"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "scripts/healthroster-rehearsal-turn.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "scripts/healthroster-turn-control.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "supabase/release/current-contract.json",
+    "sources": [
+      "FULL_PREFLIGHT_AUDIT_CENSUS",
+      "FULL_PREFLIGHT_MAPPING"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "supabase/release/current-release.json",
+    "sources": [
+      "FULL_PREFLIGHT_MAPPING"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "supabase/repeatable/05012026_fix_trg_tsfin_client_hospitals_wakeup.sql",
+    "sources": [
+      "FULL_PREFLIGHT_MAPPING"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "supabase/repeatable/05012026_tsfin_work_success_bulk.sql",
+    "sources": [
+      "FULL_PREFLIGHT_MAPPING"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+    "sources": [
+      "FULL_PREFLIGHT_AUDIT_CENSUS"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "supabase/repeatable/19012026_extras.sql",
+    "sources": [
+      "FULL_PREFLIGHT_MAPPING"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+    "sources": [
+      "FULL_PREFLIGHT_AUDIT_CENSUS"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/MANIFEST.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/PARENTS.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/MANIFEST.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/SOURCE_PINS.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/coordinate.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/progress.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/sequence.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/source.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/stage.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/ADMISSION_FULL_PARENT_FORWARD.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/ADMISSION_REVIEW.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/AUDIT_CAPTURE.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/INDEPENDENT_SOURCE_CHECK.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MAPPING_AST_REPLAY_RESULTS.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MAPPING_CAPTURE.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/OFFLINE_NATIVE_INPUTS.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/OFFLINE_TEST_RESULTS.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/PEER_REVIEW.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/PUBLISHED_ORDINARY_CALL_BINDING.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/README.md",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/RESULT.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/ROUTINE_SELECTION_AST_RESULTS.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/SOURCE_PINS.json",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/SQL_GRAMMAR_RESULTS.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/WORKER_OFFLINE_TEST_RESULTS.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/capture-mapping.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/capture-root-bindings.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/capture-runtime.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/capture.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/contract.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "HOLDER_EXTERNAL",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/current-ipc.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/current-read.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/freeze.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/git-image-batch.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/native-read.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/network.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/offline.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/DAILY_GENUINE_AUDIT_RUNTIME_ROOT_REVIEW_20261017.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/NORMAL_TEST_WORKER_ACTIVE_VERSION_METADATA_20261017.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/NORMAL_TEST_WORKER_DEPLOYMENTS_READONLY_20261017.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/TEST_AUTH_REFRESH_R4_SUCCESS_20261017.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/CLIENT_RETURN_AST.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/CURRENT_ROOT_BINDING.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/CURRENT_SOURCE_CENSUS.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/DERIVED_FIXTURE.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/DIRECT_DEPENDENCY_ERRATUM.md",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/FINAL_MANIFEST.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/FINAL_SOURCE_REVIEW.json",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/MANIFEST.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/README.md",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/SOURCE_SCHEMA_EFFECT_BOUNDARIES.json",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/TEST_RESULTS.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/capture.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/client-return-ast.py",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/finalize.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/freeze.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/current/01_complete_context.sqlinc",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/current/22092026_1226_client_initial_settings_baseline_v1.sql",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/current/daily-canonical-authority.js",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/current/daily-schedule-authority.js",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/root-native/GENUINE_CLIENT_NATIVE_DEFINITION_READONLY_20261017.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/root-native/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/client-create-fields.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/createClientWithSettingsAtomic.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/enqueueTsfinRecomputeForClient.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/handleCreateCandidate.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/handleCreateClient.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/handleTimesheetCreateManualDaily.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/handleUpsertClientRate.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/loadSettingsDefaults.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/londonDate.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/makeBookingId.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/norm.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/requireUser.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/rpcTsfinDequeueSpecific.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/rpcTsfinLoadContextBatch.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/rpcTsfinResolveRatesBatch.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/rpcTsfinWriteSnapshotsAndComplete.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/runTsfinWorkerOnce.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/saveAndRecalculateCanonicalDaily.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/sha256Hex.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/timezone.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/tsfinTargetedDrainNow.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/ukLocalToUtcISO.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/weekEndingSunday.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/reference/worker/writeAudit.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/source.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/test.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/daily-health-genuine-fixture-recipe-20261017/RECIPE.json",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "HOLDER_EXTERNAL",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/healthroster-turn-control.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/ACTUAL_OWNER_ORDER.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/GRAMMAR_RUN.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/MANIFEST.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/README.md",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/SETUP_ENTRY.md",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/SOURCE_METADATA.json",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/SOURCE_PINS.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/SOURCE_REVIEW.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/TEST_RESULTS.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/TRIGGER_AST_PROOF.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/capture.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/freeze.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/owner-order.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/native/05012026_fix_trg_tsfin_client_hospitals_wakeup.sql",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/native/05012026_tsfin_work_success_bulk.sql",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/root/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/worker/handleCreateHospital.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/worker/handleGetHospital.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/worker/handleListHospitals.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/worker/hospital-route.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/worker/ok.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/worker/parseJSONBody.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/worker/requireUser.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/worker/sbFetch.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/reference/worker/sbGetUserById.js.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/stage.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "HOLDER_EXTERNAL",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/test.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/trigger-ast.py",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/policy.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/pre-freeze-admission-draft/README.md",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/pre-freeze-admission-draft/native-read.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/pre-freeze-admission-draft/source.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/pre-freeze-admission-draft/worker.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/published/daily-canonical-authority.js",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/run-auth-refresh.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/secure-owned-auth-parent.ps1",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/replay-mapping-ast.py",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/routine-selection-ast.py",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/run-staged.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/secure-owned.ps1",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/source-image.test.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/source.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/test.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/verify-forward.py",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/verify-freeze.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/verify-owned.ps1",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/verify-source.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/verify-sql.py",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker-offline-turn.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker-offline.test.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-preflight-batch-forward-20261017/git-image-batch.mjs",
+    "sources": [
+      "HOLDER_EXTERNAL"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-preflight-batch-forward-20261017/s0-scope.mjs",
+    "sources": [
+      "HOLDER_EXTERNAL"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/EXTERNAL_SOURCE_PINS.json",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/FULL_PARENT_COMPOSITION.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/MANIFEST.json",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/OFFLINE_TEST_OUTPUT.tap",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/OFFLINE_TEST_RESULT.json",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/PROTECTED_RELEASE_DERIVED.mjs.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/PROTECTED_RELEASE_PARENT.mjs.txt",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/README.md",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/ROOT_SOURCE_PINS.json",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/hold.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/holder.test.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/protocol.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/reference/healthroster-rehearsal-turn.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/reference/healthroster-turn-control.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/reference/secure-owned-parent.ps1",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/secure-owned.ps1",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/source.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "COORDINATOR153",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/verify.mjs",
+    "sources": [
+      "COORDINATOR153"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/SOURCE_PINS.json",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/coordinate.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/owned-worker.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/sequence.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/source.mjs",
+    "sources": [
+      "B2_BASELINE62",
+      "R11_PARENTS77"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/test-auth-refresh-suppressed-startup-forward-20261017/policy.mjs",
+    "sources": [
+      "HOLDER_EXTERNAL"
+    ]
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/test-auth-refresh-suppressed-startup-forward-20261017/run-auth-refresh.mjs",
+    "sources": [
+      "HOLDER_EXTERNAL"
+    ]
+  }
+]

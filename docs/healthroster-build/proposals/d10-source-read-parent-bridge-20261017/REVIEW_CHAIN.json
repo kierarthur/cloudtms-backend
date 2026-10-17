@@ -1,0 +1,11 @@
+{
+  "version": "HEALTH_D10_SOURCE_READ_PARENT_BRIDGE_V1",
+  "currentRootHEAD": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+  "selectedParentState": "Original frozen D10 staged images, not yet HEAD",
+  "oldSourceRead": "Unchanged complete original factory/proofs; exactly one mandatory-verifier input is reversed before that factory",
+  "newD10": "Still validates actual complete new verifier and actual unchanged census; no reconstructed file fed to outer D10",
+  "gateDelta": "One import extends existing D10 export list; one factory initializer uses the narrow wrapper while retaining exact original prior callback/options",
+  "statementTransfer": "Exactly four new private-helper literal lines, whole inverse must equal pinned complete original parent, all current/parent/supplied census keys/counts/hazards identical",
+  "scope": "No SQL/provider/native/auth/contract/runtime body/permission changes",
+  "truth": "Source-only repair of ordering; original source-only peer is preserved, original full joined gate HOLD is preserved; new full joined source gate must be rerun by root"
+}

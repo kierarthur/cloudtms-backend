@@ -1,0 +1,393 @@
+{
+  "version": "HEALTH_D10_PRESERVED_SEVEN_V1",
+  "authoredModuleCommit": "0d002966b022734f7b86c9a6f98d7a2332080721",
+  "originalBodyCommit": "6346f699029201de90288514e4c0751d43e10553",
+  "originalModule": "docs/healthroster-build/proposals/checklist-current-native-module-recipe-20261015",
+  "originalRecipeSha256": "c1edc609597b67ae424ae87c4350b8ef555b3b6cbb347f6e31f4d45b9674433c",
+  "staleWhole60TargetSelectionExcluded": true,
+  "owners": [
+    {
+      "id": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "name": "private.weekly_source_actual_timesheet_submission_v1",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "source_file_sha256": "789fd5c9b9cfcf58d6d326b51c3c338ba153cc447a59ec84ff50ce2b7ddc49d3",
+      "definition_sha256": "dbdd1503f218292cd081cbd61aeb75b489a5472f48a3cb56c8f891973c0ac500",
+      "output": "forward/sql/healthroster_checklist_current/01_private_weekly_source_actual_timesheet_submission_v1.sqlinc",
+      "output_sha256": "f7241f54b3d8d4e67410cd736e8b9e0d3f8a270cdf4c1caa9970c1a7778dfbb3",
+      "ACL": [
+        "alter function private.weekly_source_actual_timesheet_submission_v1(uuid) owner to postgres;",
+        "revoke all on function private.weekly_source_actual_timesheet_submission_v1(uuid) from public,anon,authenticated,service_role;"
+      ]
+    },
+    {
+      "id": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "name": "private.weekly_source_signed_submission_read_context_v1",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+      "source_file_sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987",
+      "definition_sha256": "6b1b21e7cae703b2e2c6ef8e31689f1328a81c56ab5ae1a75dc39e6a9a105797",
+      "output": "forward/sql/healthroster_checklist_current/02_private_weekly_source_signed_submission_read_context_v1.sqlinc",
+      "output_sha256": "c30413ef5607b5b34393a7619dc2be04e413d2a25057261f60a70b36f7d70ff0",
+      "ACL": [
+        "alter function private.weekly_source_signed_submission_read_context_v1(uuid,uuid) owner to postgres;",
+        "revoke all on function private.weekly_source_signed_submission_read_context_v1(uuid,uuid) from public,anon,authenticated,service_role;"
+      ]
+    },
+    {
+      "id": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "name": "private.weekly_source_check_only_query_rows_v1",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "source_file_sha256": "cec16e3824fdca570e6d6c6efdfaadf02292f58492f1380f5a972c7e4e99dcbd",
+      "definition_sha256": "f115abf9c5a260f339623e40121a937dac41d8a716379a35f4b936ffc84041ab",
+      "output": "forward/sql/healthroster_checklist_current/04_private_weekly_source_check_only_query_rows_v1.sqlinc",
+      "output_sha256": "686f01040be67787d4ee38ecb7ca993018aefe4dc044fd679b361910047588fd",
+      "ACL": [
+        "alter function private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb) owner to postgres;",
+        "revoke all on function private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;"
+      ]
+    },
+    {
+      "id": "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)",
+      "name": "private.weekly_source_check_only_issue_filter_keys_v1",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_groups.sqlinc",
+      "source_file_sha256": "9329a0b8f443755dd7f29a303f5cbcc4673ea82ac336e6cf34dc2cf86f2893de",
+      "definition_sha256": "d762b216e1a0aefbc1fc3d6ab86ec4f28622d73eecb42bc06f960ee50575defc",
+      "output": "forward/sql/healthroster_checklist_current/05_private_weekly_source_check_only_issue_filter_keys_v1.sqlinc",
+      "output_sha256": "1d44e61ba42d7db2eae5f7976f4e6293310ee78f154e824edbdbbae7d86a7460",
+      "ACL": [
+        "alter function private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) owner to postgres;",
+        "revoke all on function private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) from public,anon,authenticated,service_role;"
+      ]
+    },
+    {
+      "id": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "name": "private.weekly_source_check_only_query_groups_v1",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_groups.sqlinc",
+      "source_file_sha256": "9329a0b8f443755dd7f29a303f5cbcc4673ea82ac336e6cf34dc2cf86f2893de",
+      "definition_sha256": "9d0358f439dec88abdb7264ad7cd4709ea88739a4bdc442ee764f1ab0c410fd0",
+      "output": "forward/sql/healthroster_checklist_current/06_private_weekly_source_check_only_query_groups_v1.sqlinc",
+      "output_sha256": "522a3b84b66b6af5d7741dd77e98e12f4e4c947ed80372d605c6f58cbacbe946",
+      "ACL": [
+        "alter function private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb) owner to postgres;",
+        "revoke all on function private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;"
+      ]
+    },
+    {
+      "id": "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)",
+      "name": "private.weekly_source_check_only_candidate_reminder_subject_v1",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_candidate_reminder_subject.sqlinc",
+      "source_file_sha256": "c5bce88819ef7c78b694c9b703bf61e38a48f103b1b6ed4c1f7120f7346043fa",
+      "definition_sha256": "ed1dc759462ffab59e1c5d231a37b3f936028712f1dc4f94432ea62f3ae21d2c",
+      "output": "forward/sql/healthroster_checklist_current/28_private_weekly_source_check_only_candidate_reminder_subject_v1.sqlinc",
+      "output_sha256": "bb23b8c0fed028fe3f264887453e559f02936022515df25d471a04d211362c5f",
+      "ACL": [
+        "alter function private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid) owner to postgres;",
+        "revoke all on function private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid) from public,anon,authenticated,service_role;"
+      ]
+    },
+    {
+      "id": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "name": "private.weekly_source_check_only_candidate_reminder_context_v1",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_candidate_reminder_context.sqlinc",
+      "source_file_sha256": "78b238d508a0591a4af33eb86f4e6afe8fc801f98ac51a07bc7bab73ec0d37bf",
+      "definition_sha256": "29844609a04bf348655277a3c78065645e7fa6c2dfd1bbb32a6709e215a40692",
+      "output": "forward/sql/healthroster_checklist_current/29_private_weekly_source_check_only_candidate_reminder_context_v1.sqlinc",
+      "output_sha256": "6cbf2d426045ece02f484cb92be1f33800d18017215fba23751e376a2570e61a",
+      "ACL": [
+        "alter function private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text) owner to postgres;",
+        "revoke all on function private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text) from public,anon,authenticated,service_role;"
+      ]
+    }
+  ],
+  "directDependencies": [
+    {
+      "caller": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "callee": "private._candidate_daily_canonical_save_input_v1(uuid,integer)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "definition_sha256": "9d78925a456eebfbb8cc552e486c74c88b2e8dbeb110158fa700e626660cf664"
+    },
+    {
+      "caller": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "callee": "private._candidate_sha256_jsonb_v1(jsonb)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+      "definition_sha256": "01f451e2cc1dde92a04d293b0eb0886effcb444ebbee42ea29a615c7217cc103"
+    },
+    {
+      "caller": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "callee": "public._import_review_query_evidence_core_v1(uuid)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "definition_sha256": "0ba277aac49ff4dd63c26c1eeb19b39711a1815896e95002e0ae9418196d2ee3"
+    },
+    {
+      "caller": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "callee": "private._weekly_source_effective_policy_v1(uuid,uuid,date)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "definition_sha256": "66daec8a58f94287e673703fd076165e910215dce842781613cd8f9c270e63e5"
+    },
+    {
+      "caller": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "callee": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "owner": "NEW_CURRENT_MODULE",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "definition_sha256": "dbdd1503f218292cd081cbd61aeb75b489a5472f48a3cb56c8f891973c0ac500"
+    },
+    {
+      "caller": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "callee": "private.weekly_source_signed_check_only_v1(uuid)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "definition_sha256": "bc565bef991c2ee69f8f557a3a93d1b2ada589f49ca67dc824e75e35df8c449c"
+    },
+    {
+      "caller": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "callee": "public._import_review_effective_authority_core_v1(text,uuid,uuid,date)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "definition_sha256": "ad27622d56bcaa8392d048f10fdb6d7c73af5d8fbd066bc0fb912ad98c06778a"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "callee": "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "definition_sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "owner": "NEW_CURRENT_MODULE",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "definition_sha256": "dbdd1503f218292cd081cbd61aeb75b489a5472f48a3cb56c8f891973c0ac500"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "definition_sha256": "4482fb9ec88991595adb3644459fc3c14517d7f5831bb827eafaf05cfb94cc9c"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "definition_sha256": "df9834db5f8f7e3e94a4decd24e678610569e6848c05d13855ca4e2c77ceca82"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_issued_signed_query_evidence_v1(uuid,uuid)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "definition_sha256": "97cc92e3a74d23f76194d2d532d735b0caeb3209422dcbf90d1217eedb675dfd"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "definition_sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_query_ascii_fold_v1(text)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "definition_sha256": "c9d2b59389c5b360613afbcee64fb66df9e4baec945c7c035ac4e4a1a1e0fcdc"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "definition_sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "owner": "NEW_CURRENT_MODULE",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+      "definition_sha256": "6b1b21e7cae703b2e2c6ef8e31689f1328a81c56ab5ae1a75dc39e6a9a105797"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "callee": "public._import_review_query_evidence_core_v1(uuid)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "definition_sha256": "0ba277aac49ff4dd63c26c1eeb19b39711a1815896e95002e0ae9418196d2ee3"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "callee": "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "definition_sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "owner": "NEW_CURRENT_MODULE",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_candidate_reminder_context.sqlinc",
+      "definition_sha256": "29844609a04bf348655277a3c78065645e7fa6c2dfd1bbb32a6709e215a40692"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)",
+      "owner": "NEW_CURRENT_MODULE",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_groups.sqlinc",
+      "definition_sha256": "d762b216e1a0aefbc1fc3d6ab86ec4f28622d73eecb42bc06f960ee50575defc"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "owner": "NEW_CURRENT_MODULE",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "definition_sha256": "f115abf9c5a260f339623e40121a937dac41d8a716379a35f4b936ffc84041ab"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "definition_sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_query_ascii_fold_v1(text)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "definition_sha256": "c9d2b59389c5b360613afbcee64fb66df9e4baec945c7c035ac4e4a1a1e0fcdc"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_query_require_service_v1()",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "definition_sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0"
+    },
+    {
+      "caller": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "callee": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "definition_sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "caller": "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)",
+      "callee": "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "definition_sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4"
+    },
+    {
+      "caller": "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)",
+      "callee": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "owner": "NEW_CURRENT_MODULE",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "definition_sha256": "dbdd1503f218292cd081cbd61aeb75b489a5472f48a3cb56c8f891973c0ac500"
+    },
+    {
+      "caller": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "callee": "private._candidate_assert_environment(text)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "definition_sha256": "22852420985b785d012095c944622352a3e8e9a7f1542691c6f0960e9e8ee941"
+    },
+    {
+      "caller": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "callee": "private._candidate_feature_enabled_v1(text,text)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "definition_sha256": "14f9ea95a3d68d7ddd2af0dc9b5747f39d286b8cacd72dec002c22d12fe7b015"
+    },
+    {
+      "caller": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "callee": "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "definition_sha256": "5d8978caf2dab2fbdd7086e89db3960d75bbcec22a902a6e7b067eafe6efa8f4"
+    },
+    {
+      "caller": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "callee": "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)",
+      "owner": "NEW_CURRENT_MODULE",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_candidate_reminder_subject.sqlinc",
+      "definition_sha256": "ed1dc759462ffab59e1c5d231a37b3f936028712f1dc4f94432ea62f3ae21d2c"
+    },
+    {
+      "caller": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "callee": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "owner": "NEW_CURRENT_MODULE",
+      "source_commit": "6346f699029201de90288514e4c0751d43e10553",
+      "source_file": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "definition_sha256": "f115abf9c5a260f339623e40121a937dac41d8a716379a35f4b936ffc84041ab"
+    },
+    {
+      "caller": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "callee": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "definition_sha256": "d9d9970304d07871a390324499a4e80aed3ccdbf435c6fba9b6cadbbb8f6fb8d"
+    },
+    {
+      "caller": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "callee": "private.weekly_source_query_require_service_v1()",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "definition_sha256": "89622bbf6db00b1bac31bf1a7294084de6a6ac8516106dbc71376641c6e2ddd0"
+    },
+    {
+      "caller": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "callee": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+      "owner": "EXISTING_CURRENT_ROOT",
+      "source_commit": "62b4a2e1ce4fff6957a9b2d8183aada46a9a20a9",
+      "source_file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "definition_sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    }
+  ],
+  "readOnlySourceContribution": true,
+  "BankSemanticBodiesRead": false,
+  "native": "NOT_RUN"
+}

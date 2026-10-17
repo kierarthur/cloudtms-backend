@@ -1,0 +1,115 @@
+-- Native R254 Candidate channel proof. Private read only, never a send owner.
+-- Reuse the one raw D10 fact census; no Source publication/cohort/generation.
+create or replace function private.weekly_source_check_only_candidate_reminder_context_v1(
+  p_actor_user_id uuid,p_scope jsonb,p_action_id text
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare actor public.tms_users%rowtype; cycle public.weekly_source_cycles%rowtype; source_group public.weekly_source_groups%rowtype;
+  decision public.import_review_decisions%rowtype; account public.candidate_app_accounts%rowtype;
+  link public.candidate_app_global_membership_links%rowtype; settings public.weekly_source_global_settings%rowtype;
+  page jsonb; cursor text; revision text; raw jsonb; found_row jsonb; subject jsonb; matches integer:=0;
+  links integer; target jsonb; contract_week_id uuid; context jsonb; last_reminder timestamptz; now_at timestamptz:=statement_timestamp();
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_scope,
+    array['source_group_id','source_cycle_id','client_id','week_ending'],'WEEKLY_SOURCE_CHECK_ONLY_REMINDER_SCOPE_INVALID');
+  if jsonb_typeof(p_scope->'source_group_id') is distinct from 'string'
+    or jsonb_typeof(p_scope->'source_cycle_id') is distinct from 'string'
+    or jsonb_typeof(p_scope->'client_id') is distinct from 'string'
+    or jsonb_typeof(p_scope->'week_ending') is distinct from 'string'
+    or not pg_input_is_valid(p_scope->>'source_group_id','uuid')
+    or not pg_input_is_valid(p_scope->>'source_cycle_id','uuid')
+    or not pg_input_is_valid(p_scope->>'client_id','uuid')
+    or not pg_input_is_valid(p_scope->>'week_ending','date') then
+    raise exception 'WEEKLY_SOURCE_CHECK_ONLY_REMINDER_SCOPE_INVALID' using errcode='22023';
+  end if;
+  select u.* into actor from public.tms_users u where u.id=p_actor_user_id and u.is_active;
+  if actor.id is null or actor.role::text is distinct from 'admin' then
+    raise exception 'WEEKLY_SOURCE_CHECK_ONLY_REMINDER_ACTOR_FORBIDDEN' using errcode='42501';
+  end if;
+  select c.* into cycle from public.weekly_source_cycles c where c.id=(p_scope->>'source_cycle_id')::uuid;
+  select g.* into source_group from public.weekly_source_groups g where g.id=cycle.source_group_id and g.active and g.source_family='ROSTER';
+  if source_group.id is null or source_group.id::text is distinct from p_scope->>'source_group_id'
+    or nullif(p_action_id,'') is null then raise exception 'WEEKLY_SOURCE_CHECK_ONLY_REMINDER_SCOPE_INVALID' using errcode='22023'; end if;
+  perform private.weekly_source_office_authority_v1(actor.id,'VIEW_SOURCE_PROGRESS',source_group.id,
+    (p_scope->>'client_id')::uuid,(p_scope->>'week_ending')::date);
+  cursor:=null;
+  loop
+    page:=private.weekly_source_check_only_query_rows_v1(cycle.id,(p_scope->>'client_id')::uuid,
+      jsonb_strip_nulls(jsonb_build_object('actor_user_id',actor.id,'source_group_id',source_group.id,
+        'week_ending',p_scope->>'week_ending','limit',100,'cursor',cursor)));
+    if page->'ok' is distinct from 'true'::jsonb or (revision is not null and revision is distinct from page->>'read_revision') then
+      raise exception 'WEEKLY_SOURCE_CHECK_ONLY_REMINDER_STALE' using errcode='40001';
+    end if;
+    revision:=page->>'read_revision';
+    for raw in select value from jsonb_array_elements(page->'rows') loop
+      if raw->>'item_kind'='SOURCE_INFORMATION' and raw->>'action_id'=p_action_id then found_row:=raw; matches:=matches+1; end if;
+    end loop;
+    exit when page->'has_more'='false'::jsonb;
+    if cursor is not distinct from page->>'next_cursor' then raise exception 'WEEKLY_SOURCE_CHECK_ONLY_REMINDER_STALE' using errcode='40001'; end if;
+    cursor:=page->>'next_cursor';
+  end loop;
+  if matches<>1 or found_row->'counts_for_row_admission' is distinct from 'false'::jsonb
+    or found_row->'open_read_item' is distinct from 'false'::jsonb then
+    raise exception 'WEEKLY_SOURCE_CHECK_ONLY_REMINDER_SUBJECT_UNAVAILABLE' using errcode='55000';
+  end if;
+  select d.* into decision from public.import_review_decisions d where d.action_id=p_action_id and d.is_current
+    and d.import_id=(found_row->>'query_import_id')::uuid and d.hr_row_id=(found_row->>'hr_row_id')::uuid
+    and d.client_id=(p_scope->>'client_id')::uuid and d.candidate_id=(found_row->>'candidate_id')::uuid
+    and d.timesheet_id is null and d.action_kind='ADVISORY'
+    and d.summary_json->>'authority_mode'='VALIDATION_ONLY'
+    and d.summary_json->>'reason_code' in('DAILY_TIMESHEET_NOT_SUBMITTED','WEEKLY_TIMESHEET_NOT_SUBMITTED')
+    and d.evidence_fingerprint=found_row->>'evidence_fingerprint';
+  if decision.action_id is null or not exists(select 1 from public.candidates c where c.id=decision.candidate_id and c.active) then
+    raise exception 'WEEKLY_SOURCE_CHECK_ONLY_REMINDER_SUBJECT_UNAVAILABLE' using errcode='55000';
+  end if;
+  subject:=private.weekly_source_check_only_candidate_reminder_subject_v1(p_scope,p_action_id,decision.candidate_id);
+  if subject->'current_native_action' is distinct from 'true'::jsonb then
+    return jsonb_build_object('available',false,'reason','NATIVE_ACTION_NO_LONGER_CURRENT');
+  end if;
+  if subject->'actual_submission_present' is distinct from 'false'::jsonb then
+    return jsonb_build_object('available',false,'reason','ACTUAL_SUBMISSION_ALREADY_PRESENT');
+  end if;
+  perform private._candidate_assert_environment(source_group.environment);
+  if private._candidate_feature_enabled_v1(source_group.environment,'candidate_notifications') is not true then
+    return jsonb_build_object('available',false,'reason','CANDIDATE_NOTIFICATIONS_DISABLED');
+  end if;
+  select count(*),(array_agg(l.membership_id order by l.membership_id))[1] into links,link.membership_id
+    from public.candidate_app_global_membership_links l join public.candidate_app_accounts a on a.id=l.account_id
+    where l.candidate_id=decision.candidate_id and l.state='ACTIVE' and a.status='ACTIVE' and a.environment=source_group.environment;
+  if links<>1 then return jsonb_build_object('available',false,'reason','CANDIDATE_APP_UNAVAILABLE'); end if;
+  select l.* into link from public.candidate_app_global_membership_links l where l.membership_id=link.membership_id;
+  select a.* into account from public.candidate_app_accounts a where a.id=link.account_id;
+  select s.* into strict settings from public.weekly_source_global_settings s where s.singleton;
+  -- Existing target contract only: Daily hub, real unique Contract week, or
+  -- native Home. Never fabricate a Timesheet/workflow/Source request identity.
+  target:=case when decision.summary_json->>'reason_code'='DAILY_TIMESHEET_NOT_SUBMITTED'
+    then jsonb_build_object('type','daily') else '{}'::jsonb end;
+  if decision.summary_json->>'reason_code'='WEEKLY_TIMESHEET_NOT_SUBMITTED' and decision.contract_id is not null then
+    select case when count(*)=1 then (array_agg(cw.id))[1] end into contract_week_id
+      from public.contract_weeks cw join public.contracts c on c.id=cw.contract_id
+      where cw.contract_id=decision.contract_id and c.client_id=decision.client_id and c.candidate_id=decision.candidate_id
+        and cw.week_ending_date=(p_scope->>'week_ending')::date and cw.additional_seq=0 and not cw.is_adjustment;
+    if contract_week_id is not null then target:=jsonb_build_object('contract_week_id',contract_week_id); end if;
+  end if;
+  select max(n.created_at_utc) into last_reminder from public.candidate_notifications n
+    where n.candidate_id=decision.candidate_id and n.event_type='CHECK_ONLY_TIMESHEET_REMINDER'
+      and n.template_params->>'client_id'=decision.client_id::text
+      and n.template_params->>'week_ending'=p_scope->>'week_ending';
+  context:=jsonb_build_object('actor_user_id',actor.id,'scope',p_scope,'item_id',found_row->'item_id',
+    'action_id',decision.action_id,'import_id',decision.import_id,'preview_generation',decision.preview_generation,
+    'state_version',found_row#>'{query_preview,state_version}','preview_fingerprint',found_row#>'{query_preview,preview_fingerprint}',
+    'evidence_fingerprint',decision.evidence_fingerprint,'native_reason_code',decision.summary_json->>'reason_code',
+    'native_action',subject->'native_action','candidate_id',decision.candidate_id,'account_id',account.id,'membership_id',link.membership_id,
+    'membership_generation',link.membership_generation,'target',target,
+    'candidate_manual_reminder_cooldown_seconds',extract(epoch from settings.candidate_manual_reminder_cooldown),
+    'next_available_at_utc',last_reminder+settings.candidate_manual_reminder_cooldown);
+  return jsonb_build_object('available',last_reminder is null or now_at>=last_reminder+settings.candidate_manual_reminder_cooldown,
+    'reason',case when last_reminder is not null and now_at<last_reminder+settings.candidate_manual_reminder_cooldown then 'CANDIDATE_REMINDER_COOLDOWN' end,
+    'context',context,'context_hash',encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECK_ONLY_CANDIDATE_REMINDER_CONTEXT_V1',
+      jsonb_build_object('native_row',found_row,'source_revision',revision,'subject',subject,'actor',to_jsonb(actor),'account',to_jsonb(account),'link',to_jsonb(link),'context',context)),'hex'));
+end;
+$function$;
+alter function private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text) owner to postgres;
+revoke all on function private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text) from public,anon,authenticated,service_role;

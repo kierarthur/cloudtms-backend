@@ -1,0 +1,25 @@
+{
+  "version": "D10_READER_CURRENT_INDEPENDENT_SOURCE_PEER_V1",
+  "files": [
+    {
+      "file": "CAPTURE.json",
+      "bytes": 17842,
+      "sha256": "dd8e778f0cc093e01dd3621be0eda666d0235ba47ff8dbf37c84ef036f88af67"
+    },
+    {
+      "file": "independent.py",
+      "bytes": 5710,
+      "sha256": "dba82e9db06dd3b83995e9a5ee867bb427f43e8080818058c30b84a2c0122611"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1416,
+      "sha256": "f1a8c29882f5bef558c6475bd40c332f3b8f8c591288b1f8894860a9f87cbb71"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 2080,
+      "sha256": "6007c57efea19801145c73718b5a38c0891b78ea78237e1e8ed97ba24743fb92"
+    }
+  ]
+}

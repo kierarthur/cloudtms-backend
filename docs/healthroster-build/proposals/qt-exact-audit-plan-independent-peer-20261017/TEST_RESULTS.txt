@@ -1,0 +1,24 @@
+(node:44380) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ all raw expression/alias/index/function fields omitted; estimated parent graph retained (1.5535ms)
+✔ actual runtime metric refused Actual Loops (0.1794ms)
+✔ actual runtime metric refused WAL Records (0.0778ms)
+✔ actual runtime metric refused Temp Read Blocks (0.0557ms)
+✔ actual runtime metric refused I/O Read Time (0.0569ms)
+✔ actual runtime metric refused Workers (0.0578ms)
+✔ node identity and every key arity are finite; empty arity remains0 (0.3803ms)
+✔ every split point consumes full plan and yields identical safe projection (38.7773ms)
+✔ post-rollback trailer refused "H" (0.3215ms)
+✔ post-rollback trailer refused "\u0000" (0.21ms)
+✔ post-rollback trailer refused "[" (0.1517ms)
+✔ post-rollback trailer refused "\r" (0.11ms)
+✔ post-rollback trailer refused "{\"status\":\"HOLD\"}\n" (0.2222ms)
+✔ stderr after otherwise complete plan and rollback cannot become success (0.4513ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 147.4567

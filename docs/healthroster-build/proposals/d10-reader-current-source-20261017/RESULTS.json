@@ -1,0 +1,68 @@
+{
+  "version": "HEALTH_D10_SEVEN_CURRENT_SOURCE_RESULTS_V1",
+  "verdict": "READY_FOR_INDEPENDENT_SOURCE_PEER_NOT_INSTALL_AUTHORITY",
+  "sourceParent": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5",
+  "selectedTargets": 17,
+  "completeParents": 37,
+  "wholeExistingFileInverses": 5,
+  "existingReaderFileInverses": 3,
+  "completeClassifierDefinitionInverse": 1,
+  "exactPreservedHelperBodies": 7,
+  "newPrivateNames": 4,
+  "pythonSourcePredicateTests": 19,
+  "nodeFiniteTypeTests": 6,
+  "actualLoaderNegativeCases": 2,
+  "candidateInventory": {
+    "migrations": 428,
+    "repeatables": 1099,
+    "signatures": 3050,
+    "registeredChains": 1666
+  },
+  "grammar": {
+    "SQLInputs": 12,
+    "exactPrivateHeaders": 7,
+    "SQLExpressions": 279,
+    "typedDeclaredRecordFieldUses": 100,
+    "directSourcePLHelperBodies": 5,
+    "originalCatalogueDependentHelperBodies": "TWO_NOT_PROVED",
+    "scratchTargetUse": "ONLY_SOURCE_EXPRESSION_EXTRACTION_NOT_ORIGINAL_BODY_COMPILATION"
+  },
+  "F23": {
+    "rawKeys": 13,
+    "tuple": 8,
+    "aggregate": 2,
+    "jsonbConcat": 2,
+    "unchangedMandatoryStatement": 1,
+    "gateHunks": 3,
+    "allPriorGateBytesPreservedOutsideExactHunks": true,
+    "fullGlobalGate": "ROOT_AFTER_REVIEW_NOT_RUN"
+  },
+  "existingDependencyMetadata": {
+    "HealthGeneralRecords": 58,
+    "metadataOnlyBoundaryNames": [
+      "extensions.digest",
+      "public._pay_batch_status_is_active_reservation"
+    ],
+    "nativeEffects": "NOT_PROVED_NO_NEW_GLOBAL_GATE"
+  },
+  "watcherOverlaps": {
+    "QT63": [],
+    "R11_231": [
+      "docs/bpay-next/final-definer-closures.json",
+      "supabase/release/current-release.json"
+    ],
+    "laterRealContract": "WATCHED_BY_BOTH_UNSELECTED_HERE"
+  },
+  "held": [
+    "independent source peer",
+    "actual joined global source gate",
+    "genuine mechanical PG17 contract regeneration",
+    "native original-body/catalogue and read/API/role/concurrency fixtures",
+    "ordinary completion and all unprovided compositions remain separate"
+  ],
+  "native": "NOT_RUN",
+  "BankSemanticBodyReview": false,
+  "trackedRuntimeWrites": 0,
+  "rootWrites": 0,
+  "authAPIbrowserDBlockDockerInvocations": 0
+}

@@ -1,0 +1,441 @@
+{
+  "version": "CONTACT_CANONICAL_PLAN_SOURCE_SCOPE_ORDINALS_V1",
+  "queryRender": "SYNTHETIC_SOURCE_ONLY_NOT_NATIVE",
+  "wholeQueryRenderSha256": "1d779b4be79aa7715096fe6be9d47a8e0b2fcf0f459805743a8339c3fac97e88",
+  "parser": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "directRelationNames": 33,
+  "cteNames": 16,
+  "upstreamViewSource": "https://raw.githubusercontent.com/postgres/postgres/REL_17_11/src/backend/catalog/system_views.sql",
+  "upstreamViewScope": {
+    "pg_roles": [
+      "pg_authid",
+      "pg_db_role_setting"
+    ],
+    "pg_policies": [
+      "pg_authid",
+      "pg_policy",
+      "pg_class",
+      "pg_namespace"
+    ],
+    "pg_stat_activity": [
+      "pg_database",
+      "pg_authid"
+    ]
+  },
+  "nativeViewIdentityClaimed": false,
+  "relations": [
+    {
+      "ordinal": 1,
+      "name": "audit_events",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 2,
+      "name": "bpay_next_module_control",
+      "schemas": [
+        "private"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 3,
+      "name": "candidate_daily_batch_receipts",
+      "schemas": [
+        "private"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 4,
+      "name": "cloudtms_database_identity",
+      "schemas": [
+        "private"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 5,
+      "name": "cloudtms_database_releases",
+      "schemas": [
+        "private"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 6,
+      "name": "cloudtms_migration_ledger",
+      "schemas": [
+        "private"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 7,
+      "name": "cloudtms_repeatable_ledger",
+      "schemas": [
+        "private"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 8,
+      "name": "pg_attrdef",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 9,
+      "name": "pg_attribute",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 10,
+      "name": "pg_authid",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "PG17_11_SYSTEM_VIEW_SOURCE_EXPANSION",
+      "viaViews": [
+        "pg_roles",
+        "pg_policies",
+        "pg_stat_activity"
+      ]
+    },
+    {
+      "ordinal": 11,
+      "name": "pg_class",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 12,
+      "name": "pg_constraint",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 13,
+      "name": "pg_database",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "PG17_11_SYSTEM_VIEW_SOURCE_EXPANSION",
+      "viaViews": [
+        "pg_stat_activity"
+      ]
+    },
+    {
+      "ordinal": 14,
+      "name": "pg_db_role_setting",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "PG17_11_SYSTEM_VIEW_SOURCE_EXPANSION",
+      "viaViews": [
+        "pg_roles"
+      ]
+    },
+    {
+      "ordinal": 15,
+      "name": "pg_default_acl",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 16,
+      "name": "pg_depend",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 17,
+      "name": "pg_enum",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 18,
+      "name": "pg_extension",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 19,
+      "name": "pg_index",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 20,
+      "name": "pg_namespace",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 21,
+      "name": "pg_policies",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 22,
+      "name": "pg_policy",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "PG17_11_SYSTEM_VIEW_SOURCE_EXPANSION",
+      "viaViews": [
+        "pg_policies"
+      ]
+    },
+    {
+      "ordinal": 23,
+      "name": "pg_proc",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 24,
+      "name": "pg_roles",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 25,
+      "name": "pg_stat_activity",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 26,
+      "name": "pg_trigger",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 27,
+      "name": "pg_type",
+      "schemas": [
+        "pg_catalog"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 28,
+      "name": "settings_defaults",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 29,
+      "name": "tms_users",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 30,
+      "name": "ts_financials_outbox",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 31,
+      "name": "weekly_candidate_cohorts",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 32,
+      "name": "weekly_candidate_outreach_generations",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 33,
+      "name": "weekly_manager_recipient_generations",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 34,
+      "name": "weekly_message_dispatch_commands",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 35,
+      "name": "weekly_source_global_settings",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 36,
+      "name": "weekly_timesheet_submission_request_memberships",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    },
+    {
+      "ordinal": 37,
+      "name": "weekly_timesheet_submission_requests",
+      "schemas": [
+        "public"
+      ],
+      "kind": "ACTUAL_QUERY_RANGEVAR_AST",
+      "viaViews": []
+    }
+  ],
+  "ctes": [
+    {
+      "ordinal": 1,
+      "name": "app_namespaces"
+    },
+    {
+      "ordinal": 2,
+      "name": "background_statement_snapshot"
+    },
+    {
+      "ordinal": 3,
+      "name": "business"
+    },
+    {
+      "ordinal": 4,
+      "name": "catalogue"
+    },
+    {
+      "ordinal": 5,
+      "name": "contract_role_names"
+    },
+    {
+      "ordinal": 6,
+      "name": "default_acl_contract"
+    },
+    {
+      "ordinal": 7,
+      "name": "default_acl_rows"
+    },
+    {
+      "ordinal": 8,
+      "name": "enum_contract"
+    },
+    {
+      "ordinal": 9,
+      "name": "extensions_contract"
+    },
+    {
+      "ordinal": 10,
+      "name": "identity_proof"
+    },
+    {
+      "ordinal": 11,
+      "name": "ledger"
+    },
+    {
+      "ordinal": 12,
+      "name": "policy_contract"
+    },
+    {
+      "ordinal": 13,
+      "name": "relation_contract"
+    },
+    {
+      "ordinal": 14,
+      "name": "routine_contract"
+    },
+    {
+      "ordinal": 15,
+      "name": "schema_contract"
+    },
+    {
+      "ordinal": 16,
+      "name": "trigger_contract"
+    }
+  ]
+}

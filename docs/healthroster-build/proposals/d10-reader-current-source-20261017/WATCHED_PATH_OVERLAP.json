@@ -1,0 +1,55 @@
+{
+  "version": "HEALTH_D10_ACTUAL_WATCHED_PATH_INTERSECTION_V1",
+  "qt": {
+    "source": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+    "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751",
+    "rows": 63,
+    "overlap": []
+  },
+  "r11": {
+    "source": "docs/healthroster-build/proposals/qt-audit-record-sha256-independent-peer-20261017/R11_WATCHED_PUBLIC_SOURCE_PATHS.json",
+    "sha256": "6268864e17263678e421683fdc6bd50c18169393154cbab3abe1a4e14ca8aa4b",
+    "rows": 231,
+    "i2Rows": 56,
+    "overlap": [
+      {
+        "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+        "file": "docs/bpay-next/final-definer-closures.json",
+        "sources": [
+          "FULL_PREFLIGHT_AUDIT_CENSUS"
+        ],
+        "proposedSha256": "5c92730c7c586fc63a909809d59e73b60e72a95f6dae9dc662e43fa018a62956",
+        "actualSavedSha256": "4e3cf52c02d0d9bc48f679056ab83ee9108c10cc722f97228fbdf1bf129ae155",
+        "actualBytes": 1753835
+      },
+      {
+        "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+        "file": "supabase/release/current-release.json",
+        "sources": [
+          "FULL_PREFLIGHT_MAPPING"
+        ],
+        "proposedSha256": "fc070d23cd03548b6156738ca7e08fda58381895cf61438d34ec84dd7ff31506",
+        "actualSavedSha256": "b9b045c6038c46238a8a47945bb201e336ffb8dc0afdee86f9524ece9d29cbe2",
+        "actualBytes": 36808
+      }
+    ]
+  },
+  "currentContract": {
+    "path": "supabase/release/current-contract.json",
+    "selected": false,
+    "reason": "Current contract is unchanged in this source proposal. Its future mechanical regeneration is a separate real-image change; watched intersections shown explicitly, no pin translation supplied.",
+    "qtWatched": true,
+    "r11Watched": true
+  },
+  "policy": "No watcher/pin is modified or translated. Root must sequence current QT/R11 qualification or reviewed finite current-image successors after the actual D10 integration. This intersection is a path census, not source admission or authorization.",
+  "selectedTargets": 17,
+  "sourceGateExtension": {
+    "targets": [
+      "scripts/bpay-next-source-gates.mjs",
+      "scripts/healthroster-d10-reader-type-review.mjs"
+    ],
+    "qtWatched": false,
+    "r11Watched": false,
+    "existingClassificationsPreservedByWholeGateInverse": true
+  }
+}

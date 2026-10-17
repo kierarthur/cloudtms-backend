@@ -1,0 +1,25 @@
+{
+  "version": "D10_SOURCE_READ_PARENT_BRIDGE_INDEPENDENT_PEER_V1",
+  "files": [
+    {
+      "file": "REVIEW.json",
+      "bytes": 1171,
+      "sha256": "b689eafe6cf75abf838615f2dc7805cc2d67fef54167732d04e9acbafd1defb7"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 654,
+      "sha256": "471f117031ab5ead57759cd5dd799b6f2ec343f1a28083f87e6bfe847a77c1f0"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 4305,
+      "sha256": "8b938acaefd88f8a0d033e167628d5a9566a44f6452150139b6101ba7a877d5d"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 880,
+      "sha256": "5e05c18d81b8f4962718923c284699218d5e672a18c8ecf672d5f7a6b654733f"
+    }
+  ]
+}

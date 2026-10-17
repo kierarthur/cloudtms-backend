@@ -1,0 +1,29 @@
+{
+  "verdict": "ACCEPT_BOUNDED_EXACT_AUDIT_ESTIMATED_PLAN_SOURCE",
+  "findings": [],
+  "sourceFiles": 42,
+  "targets": 4,
+  "newTargets": 2,
+  "fullCurrentHistoricalParents": 21,
+  "readerFullInverse": true,
+  "manifestFullInverse": true,
+  "holderWholeDerivation": true,
+  "unchangedManifestRows": 52,
+  "normalCaptureBytesUnchanged": true,
+  "originalSourceGuardsAndBudgetsUnchanged": true,
+  "r11SelectedOverlap": 0,
+  "authorTests": 56,
+  "independentTests": 14,
+  "actualCompleteQueryExplainAstEqual": true,
+  "pgGrammar": [
+    17,
+    7
+  ],
+  "actualMutatedAstRefusals": 8,
+  "auditQueryBytes": 650,
+  "auditQuerySha256": "f5729765fdf3acfaf96ce915b59e342cbd3e5201bd5a06e3b2f5bfdf2dc9663f",
+  "underlyingAuditQueryExecuted": false,
+  "estimatedOnly": true,
+  "actualAdmission": "NOT_RUN",
+  "nativeAuthPrivateTrackedWrites": "NONE"
+}

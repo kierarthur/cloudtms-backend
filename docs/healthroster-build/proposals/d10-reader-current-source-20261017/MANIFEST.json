@@ -1,0 +1,431 @@
+{
+  "version": "HEALTH_D10_SEVEN_CURRENT_FROZEN_SOURCE_V1",
+  "qualification": "SOURCE_ONLY_NOT_NATIVE_OR_RELEASE",
+  "files": [
+    {
+      "path": "ASSEMBLY.json",
+      "bytes": 3712,
+      "sha256": "623a83378e66771207bf934137b84645aca2b1a6a12f052b5c19e5908dcffcf3"
+    },
+    {
+      "path": "build.py",
+      "bytes": 14860,
+      "sha256": "0056e3b4bb0177f63a63b4419b53a92fc264b3694a2e28b60d438b05b66387e2"
+    },
+    {
+      "path": "CURRENT_DEFINERS.json",
+      "bytes": 19272,
+      "sha256": "da309dc26cac9098cf1893565bd2081674f23c78dd8f06a8cfcb64d149b1b330"
+    },
+    {
+      "path": "CURRENT_OWNER_PATCH.diff",
+      "bytes": 49285,
+      "sha256": "7bbf6e897475d1a2ee0dee4d5fa372c9e39aabbd8bd548ed8873f2755c51610d"
+    },
+    {
+      "path": "EXISTING_DEPENDENCY_CLOSURE.json",
+      "bytes": 467051,
+      "sha256": "4c6e8aeb26eedd7080befb6234f19045dc55895350e98d7260088e61707a0f6f"
+    },
+    {
+      "path": "EXPECTED_SECURITY_DELTA.json",
+      "bytes": 1412,
+      "sha256": "d34bd519cdf698890952e320c99a0dcb122a46cbc17570e63c2a1db38d069a36"
+    },
+    {
+      "path": "F23_BRIDGE_FORWARD.json",
+      "bytes": 4430,
+      "sha256": "20f6bec5687baca77561ba7fe48566ed0f1f97d51a73e424da852c124f75602f"
+    },
+    {
+      "path": "FULL_PARENT_FORWARD.json",
+      "bytes": 4738609,
+      "sha256": "953a86c10fe108dc7431b858f060215fc40b2501aea3cb82b09b09c73f93421a"
+    },
+    {
+      "path": "grammar.py",
+      "bytes": 11613,
+      "sha256": "bdfdfa38575292b600da58eca29d08a05f884581738f8249fd88f9405b1af807"
+    },
+    {
+      "path": "GRAMMAR_TYPE_RESULTS.json",
+      "bytes": 95637,
+      "sha256": "faad64059371bfc5be35a255a24064f98b86198174a807ca44b1107ebd72957d"
+    },
+    {
+      "path": "parents/AGENTS.md",
+      "bytes": 57328,
+      "sha256": "ae1357fb0372932d1ae05cc15c7b02662c71d5e96f00cecb185fccc3f2be29e9"
+    },
+    {
+      "path": "parents/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1753835,
+      "sha256": "4e3cf52c02d0d9bc48f679056ab83ee9108c10cc722f97228fbdf1bf129ae155"
+    },
+    {
+      "path": "parents/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "bytes": 27619,
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751"
+    },
+    {
+      "path": "parents/docs/healthroster-build/proposals/qt-audit-record-sha256-independent-peer-20261017/R11_WATCHED_PUBLIC_SOURCE_PATHS.json",
+      "bytes": 63949,
+      "sha256": "6268864e17263678e421683fdc6bd50c18169393154cbab3abe1a4e14ca8aa4b"
+    },
+    {
+      "path": "parents/scripts/bpay-next-final-definers.mjs",
+      "bytes": 13639,
+      "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
+    },
+    {
+      "path": "parents/scripts/bpay-next-source-gates.mjs",
+      "bytes": 283554,
+      "sha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8"
+    },
+    {
+      "path": "parents/scripts/cloudtms-db-release-lib.mjs",
+      "bytes": 32174,
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "path": "parents/scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "path": "parents/scripts/healthroster-rowtype-type-review.mjs",
+      "bytes": 4212,
+      "sha256": "fe380ca1c44803f8dad5b04aa0779e025cbdd8ff4c7104356835e5be739496e3"
+    },
+    {
+      "path": "parents/supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "bytes": 4481,
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4"
+    },
+    {
+      "path": "parents/supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "bytes": 14951,
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf"
+    },
+    {
+      "path": "parents/supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "path": "parents/supabase/release/current-release.json",
+      "bytes": 36808,
+      "sha256": "b9b045c6038c46238a8a47945bb201e336ffb8dc0afdee86f9524ece9d29cbe2"
+    },
+    {
+      "path": "parents/supabase/release/migration-lock.json",
+      "bytes": 79674,
+      "sha256": "cc73db6af457e09cce092b70bc3cfcf21c1cb2c0bbf8868ede26f8d454d73c2e"
+    },
+    {
+      "path": "parents/supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "bytes": 70450,
+      "sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+    },
+    {
+      "path": "parents/supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "bytes": 86352,
+      "sha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d"
+    },
+    {
+      "path": "parents/supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+      "bytes": 27036,
+      "sha256": "42a3b830a53ea3ffad232dbe414d06d38771e4d6c4736a16518053a14df811ed"
+    },
+    {
+      "path": "parents/supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "bytes": 583,
+      "sha256": "a9b639df6471cb2873a7239f6da6d78152d387144cd2a5364c675cce52aa47a4"
+    },
+    {
+      "path": "parents/supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "bytes": 101270,
+      "sha256": "4d5bd92b34ce4bdb659d3178144b3f1e7822f053dc91cf9c4d40c356dbbcbbba"
+    },
+    {
+      "path": "parents/supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "bytes": 128188,
+      "sha256": "5e7e51c44f2c0ef713df0fd35fe284b9e264f437efaff72da33811b6eaf26a4c"
+    },
+    {
+      "path": "parents/supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+      "bytes": 492,
+      "sha256": "7d5988cf8e1792cd23eb479604d8735d5c9ebb2dda05d2eb8b28006da3cc2093"
+    },
+    {
+      "path": "parents/supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "bytes": 311541,
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "path": "parents/supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "bytes": 1820,
+      "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0"
+    },
+    {
+      "path": "parents/supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "bytes": 14562,
+      "sha256": "bd93165a3c30a35aea8775bef8fb4234d1901b362fc69c3cda26ef9b8de8ae9d"
+    },
+    {
+      "path": "parents/supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "bytes": 9589,
+      "sha256": "116b4cab99eddf64663a84865f40bbad18fa486101a93e02d14d23a84cd62bf0"
+    },
+    {
+      "path": "parents/supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "bytes": 268078,
+      "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+    },
+    {
+      "path": "parents/supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "bytes": 73391,
+      "sha256": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c"
+    },
+    {
+      "path": "parents/supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "bytes": 13643,
+      "sha256": "c00abac4e44edaf0a752fca2176ea5f6e1c75f1f676c96bf9655797cfbc264ed"
+    },
+    {
+      "path": "parents/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "bytes": 131964,
+      "sha256": "93dc90bca45e476cde4a74073ab11bf8864ccdca294269a39d13cb56eba16a21"
+    },
+    {
+      "path": "parents/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/064_public_weekly_source_workspace_scopes_v1.sqlinc",
+      "bytes": 18702,
+      "sha256": "4daf7a2983e5fc1e806f65ef5a292e9a7d0264db6e7bee6f5c216ed4e2602684"
+    },
+    {
+      "path": "parents/supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "bytes": 94520,
+      "sha256": "d6ea8fd40e152bb9038a300274be39c63be1a451e300e9f4ad3eb1bb12f208e7"
+    },
+    {
+      "path": "parents/supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "bytes": 211,
+      "sha256": "4e220b43f3759f2f3644d85673a42c556debffd6a600b9d35483bbb96da9ac75"
+    },
+    {
+      "path": "parents/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "bytes": 275109,
+      "sha256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9"
+    },
+    {
+      "path": "parents/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "bytes": 19902,
+      "sha256": "5757ef54f996c82cfb72353702ca9982ac9862222f20ca13420370fcde9ff7a5"
+    },
+    {
+      "path": "parents/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+      "bytes": 4711,
+      "sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987"
+    },
+    {
+      "path": "parents/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "bytes": 11146,
+      "sha256": "3a4e886ad6d6280acd300884ce87625fff12ae66ebecb206e2cd98865fc915e8"
+    },
+    {
+      "path": "parents/supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 102517,
+      "sha256": "78d97ce6a540356b07039e2dc6a0748ff322ce0eb571dce2db0b441b5f3ae152"
+    },
+    {
+      "path": "PARENTS.json",
+      "bytes": 14136,
+      "sha256": "45e003fa58a17851f3792d54858190622508a34d59b7dfcb7bc1d395ab46275c"
+    },
+    {
+      "path": "payload/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1760783,
+      "sha256": "5c92730c7c586fc63a909809d59e73b60e72a95f6dae9dc662e43fa018a62956"
+    },
+    {
+      "path": "payload/scripts/bpay-next-source-gates.mjs",
+      "bytes": 283838,
+      "sha256": "01bb14f1a0c60adfad928978cb6aaf1686266fbe9b2b5b7f5894f417c610f922"
+    },
+    {
+      "path": "payload/scripts/healthroster-d10-reader-type-review.mjs",
+      "bytes": 5980,
+      "sha256": "bfb2144801125a43da3eb34d7ff02ba64ec0090ffe68d54a8c9225ecbb440946"
+    },
+    {
+      "path": "payload/supabase/migrations/17102026_1900_health_d10_query_reader_admission.sql",
+      "bytes": 774,
+      "sha256": "fb3ab56de20436b6c6b16545b39cdd5be7e42cc6155650f7817e98e9f2c34c83"
+    },
+    {
+      "path": "payload/supabase/release/current-release.json",
+      "bytes": 36968,
+      "sha256": "fc070d23cd03548b6156738ca7e08fda58381895cf61438d34ec84dd7ff31506"
+    },
+    {
+      "path": "payload/supabase/release/migration-lock.json",
+      "bytes": 79859,
+      "sha256": "d32dd319f202bf2e4f174da8e54e25f24f344ac44aaf19555b08688f3d3ecc26"
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/01_weekly_source_actual_timesheet_submission_v1.sqlinc",
+      "bytes": 14295,
+      "sha256": "f7241f54b3d8d4e67410cd736e8b9e0d3f8a270cdf4c1caa9970c1a7778dfbb3"
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/02_weekly_source_signed_submission_read_context_v1.sqlinc",
+      "bytes": 4471,
+      "sha256": "c30413ef5607b5b34393a7619dc2be04e413d2a25057261f60a70b36f7d70ff0"
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/03_weekly_source_check_only_query_rows_v1.sqlinc",
+      "bytes": 22185,
+      "sha256": "686f01040be67787d4ee38ecb7ca993018aefe4dc044fd679b361910047588fd"
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/04_weekly_source_check_only_issue_filter_keys_v1.sqlinc",
+      "bytes": 2278,
+      "sha256": "1d44e61ba42d7db2eae5f7976f4e6293310ee78f154e824edbdbbae7d86a7460"
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/05_weekly_source_check_only_candidate_reminder_subject_v1.sqlinc",
+      "bytes": 5474,
+      "sha256": "bb23b8c0fed028fe3f264887453e559f02936022515df25d471a04d211362c5f"
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/06_weekly_source_check_only_candidate_reminder_context_v1.sqlinc",
+      "bytes": 9467,
+      "sha256": "6cbf2d426045ece02f484cb92be1f33800d18017215fba23751e376a2570e61a"
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/07_weekly_source_check_only_query_groups_v1.sqlinc",
+      "bytes": 15542,
+      "sha256": "522a3b84b66b6af5d7741dd77e98e12f4e4c947ed80372d605c6f58cbacbe946"
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader/98_private_helper_classification.sqlinc",
+      "bytes": 49684,
+      "sha256": "674454b315bb2862c09502b89d6a63d731739ec8614ae9165fb284d2784f22d2"
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "bytes": 896,
+      "sha256": "05428c26d4c841e0e190112707eeecf94994f9b33483400f81743c6d13dd53ab"
+    },
+    {
+      "path": "payload/supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 102837,
+      "sha256": "cbea5f801b5ab89685bf39d83ca3cf51fccf4a751e8222e9936ee415711b044e"
+    },
+    {
+      "path": "payload/supabase/verification/17102026_1900_health_d10_query_reader_security.sql",
+      "bytes": 2217,
+      "sha256": "f9a4162eb4e94681fde4e079d283272338b9c85c2e8d3c043100c6258c748c0f"
+    },
+    {
+      "path": "PAYLOAD_SELECTION.json",
+      "bytes": 7335,
+      "sha256": "eb820d9ff54f5f27823e243fee402956e7e771be1f52f1e496c14d662142abbb"
+    },
+    {
+      "path": "provenance/MODULE_RECIPE.json",
+      "bytes": 240664,
+      "sha256": "c1edc609597b67ae424ae87c4350b8ef555b3b6cbb347f6e31f4d45b9674433c"
+    },
+    {
+      "path": "provenance/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_candidate_reminder_context.sqlinc",
+      "bytes": 9625,
+      "sha256": "78b238d508a0591a4af33eb86f4e6afe8fc801f98ac51a07bc7bab73ec0d37bf"
+    },
+    {
+      "path": "provenance/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_candidate_reminder_subject.sqlinc",
+      "bytes": 5783,
+      "sha256": "c5bce88819ef7c78b694c9b703bf61e38a48f103b1b6ed4c1f7120f7346043fa"
+    },
+    {
+      "path": "provenance/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_groups.sqlinc",
+      "bytes": 18284,
+      "sha256": "9329a0b8f443755dd7f29a303f5cbcc4673ea82ac336e6cf34dc2cf86f2893de"
+    },
+    {
+      "path": "provenance/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "bytes": 22344,
+      "sha256": "cec16e3824fdca570e6d6c6efdfaadf02292f58492f1380f5a972c7e4e99dcbd"
+    },
+    {
+      "path": "provenance/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+      "bytes": 4711,
+      "sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987"
+    },
+    {
+      "path": "provenance/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "bytes": 14466,
+      "sha256": "789fd5c9b9cfcf58d6d326b51c3c338ba153cc447a59ec84ff50ce2b7ddc49d3"
+    },
+    {
+      "path": "RAW_F23_CENSUS.json",
+      "bytes": 24889,
+      "sha256": "f12047227a06db9a48cdee4ea785222a50723da6f5db109c4641634f8e31fae3"
+    },
+    {
+      "path": "README.md",
+      "bytes": 8714,
+      "sha256": "1e89468d642ca875c2fac828671e34592a94ae6f667157b7d1e0d4b5080e43f9"
+    },
+    {
+      "path": "RESULTS.json",
+      "bytes": 2221,
+      "sha256": "f38a5a5614a69964e2784765f682f0065d178c46ab4fc3684ac921d11b666b05"
+    },
+    {
+      "path": "reviewed-hazards-template.mjs",
+      "bytes": 5386,
+      "sha256": "a16ebb24dd9e623f4681610b77791e83c015a3d26232f86fb69cd08cf95e9eec"
+    },
+    {
+      "path": "source-check.mjs",
+      "bytes": 7502,
+      "sha256": "6cd6c56740c8ab1fe34df48542d5aa36d757200a28d6872fa8103d95780340b0"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULTS.json",
+      "bytes": 27024,
+      "sha256": "e5d922440cedf139ee3211e332d72e13c1ea06bc3fee39c5bcacff3229139a7b"
+    },
+    {
+      "path": "SOURCE_OWNER_REVERSES.json",
+      "bytes": 180642,
+      "sha256": "94016cf755db58eabebb258a72d68e70627e67f2feca72fbf0ffc0289fc13fc6"
+    },
+    {
+      "path": "SOURCE_PROVENANCE.json",
+      "bytes": 24824,
+      "sha256": "198e08c49480015e655c68cf4a8ac389834fc27eb06037384d9d66eb94efb7fd"
+    },
+    {
+      "path": "test-f23.mjs",
+      "bytes": 3740,
+      "sha256": "787bbb8c502c5300d18c2595be7c2fea94c3a60d6ed0cd96a54b838f131240df"
+    },
+    {
+      "path": "test_source.py",
+      "bytes": 12920,
+      "sha256": "91f140e29c5edac96a277fa9a98055f97f507c3a5187ca34c22d26acc8000b60"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 6222,
+      "sha256": "983b1654f34fe7f5f76d9ba74b8f9e741c9446eeade565cb7bd22852e58933e5"
+    },
+    {
+      "path": "WATCHED_PATH_OVERLAP.json",
+      "bytes": 2480,
+      "sha256": "5adcac5ee94cd03f887f87bdce90f2cd26ebd5a21df87f3ca2fa3f083a40ccdb"
+    }
+  ]
+}

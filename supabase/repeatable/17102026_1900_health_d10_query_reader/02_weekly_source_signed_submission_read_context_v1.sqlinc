@@ -1,0 +1,57 @@
+create or replace function private.weekly_source_signed_submission_read_context_v1(
+  p_timesheet_id uuid,p_source_group_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare t public.timesheets%rowtype; v_witness jsonb; v_client uuid; v_work_date date;
+  v_policy jsonb; v_route record; v_native boolean;
+begin
+  v_witness:=private.weekly_source_actual_timesheet_submission_v1(p_timesheet_id);
+  if (v_witness->>'actual_submitted')::boolean is distinct from true then
+    return jsonb_build_object('eligible',false,'submission_witness',v_witness,'read_only',true);
+  end if;
+  select * into t from public.timesheets where timesheet_id=p_timesheet_id;
+  v_client:=(v_witness->>'client_id')::uuid; v_work_date:=(v_witness->>'work_date')::date;
+  if not exists(select 1 from public.weekly_source_groups g
+    join public.weekly_source_group_clients member on member.source_group_id=g.id and member.client_id=v_client
+    join public.weekly_source_client_policies policy on policy.source_group_id=g.id and policy.client_id=v_client
+    join public.weekly_source_group_rule_assignments assignment on assignment.source_group_id=g.id
+      and assignment.feature_enabled and assignment.feature_purpose='SIGNED_CHECK_ONLY' and assignment.rule_set_version_id is null
+    where g.id=p_source_group_id and g.active and g.source_family='ROSTER'
+      and v_work_date between member.valid_from and coalesce(member.valid_to,'infinity'::date)
+      and t.week_ending_date between member.valid_from and coalesce(member.valid_to,'infinity'::date)
+      and v_work_date between policy.effective_from and coalesce(policy.effective_to,'infinity'::date)
+      and t.week_ending_date between assignment.effective_from_week_ending and coalesce(assignment.effective_to_week_ending,'infinity'::date)
+      and policy.authority_mode='TIMESHEET_AUTHORITY' and policy.document_mode='INVOICE_EVIDENCE_REQUIRED' and not policy.self_bill_enabled) then
+    return jsonb_build_object('eligible',false,'submission_witness',v_witness,'read_only',true);
+  end if;
+  v_native:=private.weekly_source_signed_check_only_v1(p_timesheet_id);
+  if v_native then
+    return jsonb_build_object('eligible',true,'read_only',true,'submission_witness',v_witness,
+      'route_state','NATIVE_ROUTE_AVAILABLE','query_route_available',true,'pending_materialisation',false);
+  end if;
+  -- This exception admits an actual submitted record to a read, never query,
+  -- manager/correction/Send/Authorise or financial mutation. Client/Contract,
+  -- Candidate, work date, workflow/generation and signature are already proved
+  -- by the unchanged canonical submitted-hours projection in the witness.
+  if t.sheet_scope::text<>'DAILY' or t.worked_start_iso is not null
+    or v_witness->>'authority' is distinct from 'CANDIDATE_IMMUTABLE_HOURS' then
+    return jsonb_build_object('eligible',false,'submission_witness',v_witness,'read_only',true);
+  end if;
+  v_policy:=private._weekly_source_effective_policy_v1(v_client,t.contract_id,v_work_date);
+  select * into v_route from public._import_review_effective_authority_core_v1('HR_DAILY',t.contract_id,v_client,v_work_date);
+  if v_policy->>'source_family' is distinct from 'ROSTER' or v_policy->>'authority_mode' is distinct from 'TIMESHEET_AUTHORITY'
+    or v_policy->>'document_mode' is distinct from 'INVOICE_EVIDENCE_REQUIRED'
+    or coalesce((v_policy->>'self_bill_enabled')::boolean,true)
+    or not coalesce(v_route.route_eligible,false) or not coalesce(v_route.validation_eligible,false)
+    or coalesce(v_route.import_authoritative,true) or v_route.authority_mode is distinct from 'VALIDATION_ONLY'
+    or coalesce(v_route.effective_is_nhsp,true) or coalesce(v_route.effective_no_timesheet_required,true) then
+    return jsonb_build_object('eligible',false,'submission_witness',v_witness,'read_only',true);
+  end if;
+  return jsonb_build_object('eligible',true,'read_only',true,'submission_witness',v_witness,
+    'route_state','SUBMITTED_PENDING_NATIVE_MATERIALISATION','query_route_available',false,
+    'pending_materialisation',true,'actions_held',true,'action_hold_reason','NATIVE_DAILY_MATERIALISATION_PENDING');
+end;
+$function$;
+alter function private.weekly_source_signed_submission_read_context_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_signed_submission_read_context_v1(uuid,uuid) from public,anon,authenticated,service_role;

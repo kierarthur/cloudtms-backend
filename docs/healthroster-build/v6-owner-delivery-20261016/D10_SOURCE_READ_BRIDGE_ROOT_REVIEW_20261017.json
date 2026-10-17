@@ -1,0 +1,36 @@
+{
+  "version": "D10_SOURCE_READ_BRIDGE_ROOT_REVIEW_V1",
+  "actualParent": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+  "sourceParentDomain": "Actual staged D10 bytes from preserved frozen86; not a fabricated interim Git commit.",
+  "authorManifestSha256": "25a5053d497209028a0c68c45e69d0687596c948d1bc1b6b5221bf8b58153b6f",
+  "peerManifestSha256": "813760590145bc2735b973428b69639a1683f9f00a3669966931430f4633be5e",
+  "peerVerdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "rootAuthorReplayTests": 22,
+  "peerTests": 6,
+  "targets": [
+    {
+      "target": "scripts/healthroster-d10-reader-type-review.mjs",
+      "source": "payload/scripts/healthroster-d10-reader-type-review.mjs",
+      "sha256": "89314be9037f80a0b31c46d26dd9ba65f758fa7f53d642d5bc1e276f177c3d5b",
+      "bytes": 9284,
+      "beforeSha256": "bfb2144801125a43da3eb34d7ff02ba64ec0090ffe68d54a8c9225ecbb440946",
+      "beforeBytes": 5980
+    },
+    {
+      "target": "scripts/bpay-next-source-gates.mjs",
+      "source": "payload/scripts/bpay-next-source-gates.mjs",
+      "sha256": "0eec2d8234ecdcd954032e18a612a788549e9086df6d6f3ec67cca086fb53ddb",
+      "bytes": 283935,
+      "beforeSha256": "01bb14f1a0c60adfad928978cb6aaf1686266fbe9b2b5b7f5894f417c610f922",
+      "beforeBytes": 283838
+    }
+  ],
+  "fullExistingInverses": 2,
+  "literalHunks": 3,
+  "oldSourceReadModuleChanged": false,
+  "SQLChanged": false,
+  "original86AndActualR1HoldPreserved": true,
+  "joinedFullGate": "PASS_WITH_EXACT_TWO_JS_SUCCESSOR",
+  "native": "NOT_RUN",
+  "actualJoinedGateReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/D10_ACTUAL_JOINED_SOURCE_GATE_R2_PASS_20261017.json"
+}

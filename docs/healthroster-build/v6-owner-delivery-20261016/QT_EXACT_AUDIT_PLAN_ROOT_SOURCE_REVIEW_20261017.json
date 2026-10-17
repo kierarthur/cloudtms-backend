@@ -1,0 +1,46 @@
+{
+  "version": "QT_EXACT_AUDIT_ESTIMATED_PLAN_ROOT_SOURCE_REVIEW_V1",
+  "actualParent": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "payload": "payload/fixed-metadata-reader.mjs",
+      "bytes": 27369,
+      "sha256": "649970e791827bae200a58190e6ace711979864346743337956d628c1d87d7db",
+      "parent": "parent/fixed-metadata-reader.mjs",
+      "beforeBytes": 24981,
+      "beforeSha256": "45d6079e1b6b38dbbd9e376c7c18eeeddc13007f50cc7b359c0f8929a5d88053"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/audit-bag-plan.mjs",
+      "payload": "payload/audit-bag-plan.mjs",
+      "bytes": 11057,
+      "sha256": "8bec378d43bb0ffc50421f259c8bcdc6da1a7783e57477b6faac5f3f092d0aa2"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/hold-audit-bag-plan.mjs",
+      "payload": "payload/hold-audit-bag-plan.mjs",
+      "bytes": 5064,
+      "sha256": "3199113424163d9053899d542dbf5e3880bc78ac945f08bc7bad67475ef973ba"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "payload": "payload/MANIFEST.json",
+      "bytes": 9160,
+      "sha256": "4a30f0bf9f48d2a27e618dcb20867ecde27d4d3ac296256e63fe2270f18cbc7c",
+      "parent": "parent/MANIFEST.json",
+      "beforeBytes": 8848,
+      "beforeSha256": "f875ddec0ac4fb365ad7b04435284bfbdd734b4d8a763b627d6153d608013d99"
+    }
+  ],
+  "rootAuthorReplayTests": 56,
+  "independentTests": 14,
+  "wholeParentChecks": 21,
+  "wholeQueryAstEquality": true,
+  "analyze": false,
+  "peer": "ACCEPT_BOUNDED_EXACT_AUDIT_ESTIMATED_PLAN_SOURCE",
+  "native": "NOT_RUN",
+  "performance": "NOT_PROVED",
+  "restoration": "NOT_CLAIMED",
+  "allOriginalCapsAndNormalReaderRetained": true
+}

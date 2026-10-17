@@ -1,0 +1,32 @@
+create or replace function private.weekly_source_check_only_issue_filter_keys_v1(p_action_kind text,p_summary jsonb)
+returns jsonb language plpgsql immutable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare keys jsonb:='[]'::jsonb; comparisons jsonb; evidence jsonb;
+begin
+  if p_action_kind is null or p_action_kind not in('EMAIL_ISSUE','EMAIL_REMINDER','ADVISORY') or jsonb_typeof(p_summary) is distinct from 'object' then
+    raise exception 'WEEKLY_SOURCE_CHECK_ONLY_NATIVE_FILTER_FACT_INVALID' using errcode='55000';
+  end if;
+  comparisons:=case when jsonb_typeof(p_summary->'comparisons')='array' then p_summary->'comparisons' else '[]'::jsonb end;
+  evidence:=case when jsonb_typeof(p_summary->'evidence_rows')='array' then p_summary->'evidence_rows' else '[]'::jsonb end;
+  if p_action_kind='ADVISORY' and p_summary->>'authority_mode'='VALIDATION_ONLY'
+    and p_summary->>'reason_code' in('DAILY_TIMESHEET_NOT_SUBMITTED','WEEKLY_TIMESHEET_NOT_SUBMITTED') then
+    keys:=keys||jsonb_build_array('TIMESHEET_MISSING');
+  end if;
+  if p_action_kind in('EMAIL_ISSUE','EMAIL_REMINDER') and (
+    p_summary->>'reason_code' in('ACTUAL_HOURS_MISMATCH','START_END_MISMATCH','BREAK_MINUTES_MISMATCH')
+    or exists(select 1 from jsonb_array_elements(comparisons) cx where cx->>'match_status'='MISMATCH')
+    or exists(select 1 from jsonb_array_elements(evidence) e cross join lateral jsonb_array_elements_text(
+      case when jsonb_typeof(e->'difference_codes')='array' then e->'difference_codes' else '[]'::jsonb end) code
+      where code in('WORKED_HOURS','START_TIME','END_TIME','BREAK_MINUTES'))) then
+    keys:=keys||jsonb_build_array('HOURS_DIFFER');
+  end if;
+  if p_action_kind in('EMAIL_ISSUE','EMAIL_REMINDER') and (p_summary->>'reason_code'='MISSING_FROM_IMPORT'
+    or exists(select 1 from jsonb_array_elements(comparisons) cx where cx->>'match_status' in('UNMATCHED','HR_ONLY'))) then
+    keys:=keys||jsonb_build_array('MISSING_SHIFT');
+  end if;
+  return keys;
+end;
+$function$;
+alter function private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) owner to postgres;
+revoke all on function private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) from public,anon,authenticated,service_role;

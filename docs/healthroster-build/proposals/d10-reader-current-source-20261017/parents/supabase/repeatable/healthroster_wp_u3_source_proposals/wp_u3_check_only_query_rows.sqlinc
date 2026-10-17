@@ -1,0 +1,221 @@
+-- One private Source projection reused by Queries and Checklist. No query
+-- store, discrepancy calculator, email send, validation mutation or public reader.
+create or replace function private.weekly_source_check_only_query_rows_v1(
+  p_source_cycle_id uuid,p_client_id uuid,p_filters jsonb
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare c public.weekly_source_cycles%rowtype; v_actor uuid; v_week date; v_limit integer:=50;
+  v_cursor jsonb; v_binding text; v_revision text; v_rows jsonb; v_more boolean; v_last jsonb; v_admin boolean;
+begin
+  perform private._weekly_source_settings_assert_request_v1(p_filters,
+    array['actor_user_id','source_group_id','week_ending','cursor','limit'], 'WEEKLY_SOURCE_CHECK_ONLY_FILTER_INVALID');
+  v_actor:=nullif(p_filters->>'actor_user_id','')::uuid;
+  if nullif(p_filters->>'week_ending','') is null or not pg_input_is_valid(p_filters->>'week_ending','date') then
+    raise exception 'WEEKLY_SOURCE_CHECK_ONLY_FILTER_INVALID' using errcode='22023';
+  end if;
+  v_week:=(p_filters->>'week_ending')::date;
+  select * into c from public.weekly_source_cycles where id=p_source_cycle_id;
+  if c.id is null or p_client_id is null or (c.scope_client_id is not null and c.scope_client_id<>p_client_id)
+    or v_week not between c.finalisation_week_ending-6 and c.finalisation_week_ending
+    or (nullif(p_filters->>'source_group_id','') is not null and (p_filters->>'source_group_id')::uuid<>c.source_group_id) then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_NATIVE_SCOPE_UNAVAILABLE' using errcode='22023';
+  end if;
+  select lower(btrim(coalesce(role,'')))='admin' into v_admin from public.tms_users where id=v_actor and is_active;
+  perform private.weekly_source_office_authority_v1(v_actor,case when v_admin then 'VIEW_SOURCE_PROGRESS' else 'VIEW_PAY_WORK' end,
+    c.source_group_id,p_client_id,c.finalisation_week_ending);
+  v_limit:=coalesce((p_filters->>'limit')::integer,50);
+  if v_limit not between 1 and 100 then raise exception 'WEEKLY_SOURCE_CHECK_ONLY_FILTER_INVALID' using errcode='22023'; end if;
+  v_binding:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECK_ONLY_BINDING_V1',
+    jsonb_build_object('actor',v_actor,'view',case when v_admin then 'ADMIN' else 'PAY_READONLY' end,
+      'cycle',c.id,'client',p_client_id,'filters',p_filters-'cursor'-'limit')),'hex');
+  if nullif(p_filters->>'cursor','') is not null then
+    begin
+      if length(p_filters->>'cursor')>4096 then raise exception 'cursor'; end if;
+      v_cursor:=convert_from(decode(p_filters->>'cursor','base64'),'UTF8')::jsonb;
+      if v_cursor->>'contract' is distinct from 'WEEKLY_SOURCE_CHECK_ONLY_CURSOR_V1' or v_cursor->>'binding' is distinct from v_binding
+        or jsonb_typeof(v_cursor->'after') is distinct from 'array' or jsonb_array_length(v_cursor->'after')<>3
+        or coalesce(v_cursor->>'read_revision','')!~'^[0-9a-f]{64}$'
+        or jsonb_typeof(v_cursor#>'{after,0}') is distinct from 'string'
+        or jsonb_typeof(v_cursor#>'{after,1}') is distinct from 'string'
+        or jsonb_typeof(v_cursor#>'{after,2}') is distinct from 'string'
+        or not pg_input_is_valid(coalesce(v_cursor#>>'{after,1}',''),'date')
+        or length(coalesce(v_cursor#>>'{after,2}','')) not between 1 and 512 then raise exception 'cursor'; end if;
+      perform private._weekly_source_settings_assert_request_v1(v_cursor,array['contract','binding','read_revision','after'],'CURSOR');
+    exception when others then raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001'; end;
+  end if;
+  with actual as materialized (
+    select t.*,s.witness,rctx.route_read,cl.name client_name,coalesce(nullif(btrim(ca.first_name||' '||ca.last_name),''),ca.id::text) worker_name,
+      private.weekly_source_query_ascii_fold_v1(coalesce(nullif(btrim(ca.first_name||' '||ca.last_name),''),ca.id::text)) collate "C" worker_sort,
+      (s.witness->>'work_date')::date actual_work_date
+    from public.timesheets t
+    cross join lateral(select private.weekly_source_signed_submission_read_context_v1(t.timesheet_id,c.source_group_id) route_read) rctx
+    cross join lateral(select rctx.route_read->'submission_witness' witness) s
+    join public.clients cl on cl.id=p_client_id join public.candidates ca on ca.id=(s.witness->>'candidate_id')::uuid
+    where (s.witness->>'actual_submitted')::boolean is true and s.witness->>'client_id'=p_client_id::text
+      and t.week_ending_date between c.finalisation_week_ending-6 and c.finalisation_week_ending
+      and t.week_ending_date=v_week
+      and (rctx.route_read->>'eligible')::boolean is true
+      and exists(select 1 from public.weekly_source_groups g
+        join public.weekly_source_group_clients gc on gc.source_group_id=g.id and gc.client_id=p_client_id
+        join public.weekly_source_client_policies cp on cp.source_group_id=g.id and cp.client_id=gc.client_id
+        join public.weekly_source_group_rule_assignments ga on ga.source_group_id=g.id and ga.feature_enabled
+          and ga.feature_purpose='SIGNED_CHECK_ONLY' and ga.rule_set_version_id is null
+        where g.id=c.source_group_id and g.active and g.source_family='ROSTER'
+          and (s.witness->>'work_date')::date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+          and t.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date)
+          and (s.witness->>'work_date')::date between cp.effective_from and coalesce(cp.effective_to,'infinity'::date)
+          and t.week_ending_date between ga.effective_from_week_ending and coalesce(ga.effective_to_week_ending,'infinity'::date)
+          and cp.authority_mode='TIMESHEET_AUTHORITY' and cp.document_mode='INVOICE_EVIDENCE_REQUIRED' and not cp.self_bill_enabled)
+  ), context as materialized (
+    select a.*,tv.id validation_id,tv.status::text validation_status,tv.reason_code validation_reason,
+      tv.last_source validation_import_id,tv.validated_at_utc,tf.id financial_id,tf.processing_status::text processing_status,
+      r.id request_id,r.state request_state,r.state_revision request_state_revision,r.replacement_timesheet_id,
+      pw.id replacement_workflow_id,pw.generation replacement_workflow_generation,pw.state replacement_workflow_state,
+      pw.worker_submitted_at_utc replacement_submitted_at,pw.manager_approved_at_utc replacement_manager_approved_at,
+      qi.id query_import_id,qi.uploaded_at_utc query_import_uploaded_at,qs.preview_generation,qs.state_version,
+      qs.preview_fingerprint,qi.import_scope,qi.source_file_sha256,
+      case when (a.route_read->>'query_route_available')::boolean is not true then null
+        when qi.id is not null then private.weekly_source_issued_signed_query_evidence_v1(a.timesheet_id,qi.id)
+        else public._import_review_query_evidence_core_v1(a.timesheet_id) end query_evidence
+    from actual a
+    left join lateral(select * from public.timesheet_validations v where v.timesheet_id=a.timesheet_id
+      order by v.updated_at desc,v.created_at desc,v.id desc limit 1) tv on true
+    left join public.timesheets_financials tf on tf.timesheet_id=a.timesheet_id and tf.is_current and tf.timesheet_version=a.version
+    left join lateral(select * from private.timesheet_correction_requests request where request.state='WAITING'
+      and request.reversed_timesheet_id=a.timesheet_id order by request.id limit 1) r on true
+    left join public.timesheets pt on pt.timesheet_id=r.replacement_timesheet_id
+    left join public.candidate_submission_workflows pw on pw.id=pt.candidate_workflow_id and pw.generation=pt.candidate_workflow_generation
+    left join lateral(select hi.* from public.hr_imports hi
+      where hi.pruned_at is null and hi.source_system::text in('HEALTHROSTER','HEALTHROSTER_DAILY')
+        and (hi.client_id is null or hi.client_id=p_client_id)
+        and (hi.id=tv.last_source or exists(select 1 from public.import_review_decisions d join public.import_review_states st on st.import_id=d.import_id
+          and st.preview_generation=d.preview_generation and st.superseded_at_utc is null and st.abandoned_at_utc is null
+          where d.import_id=hi.id and d.timesheet_id=a.timesheet_id and d.client_id=p_client_id and d.is_current))
+      order by hi.uploaded_at_utc desc,hi.id desc limit 1) qi on true
+    left join public.import_review_states qs on qs.import_id=qi.id
+  ), rows as materialized (
+    select x.worker_sort,x.actual_work_date,('timesheet:'||x.timesheet_id) collate "C" item_sort,
+      jsonb_build_object('item_id','timesheet:'||x.timesheet_id,'timesheet_id',x.timesheet_id,'item_kind','ACTUAL_TIMESHEET',
+      'source_group_id',c.source_group_id,'source_cycle_id',c.id,'client_id',p_client_id,'client',x.client_name,
+      'candidate_id',x.witness->'candidate_id','worker',x.worker_name,'week_ending',x.week_ending_date,
+      'work_date',x.actual_work_date,'sheet_scope',x.sheet_scope,'submission_witness',x.witness,
+      'submission_read_context',x.route_read,
+      'validation',jsonb_build_object('id',x.validation_id,'status',x.validation_status,'reason_code',x.validation_reason,
+        'last_source',x.validation_import_id,'validated_at_utc',x.validated_at_utc),
+      'ordinary_authorised',x.authorised_at_server is not null,'financial_id',x.financial_id,'processing_status',x.processing_status,
+      'correction_owns_read_item',x.request_id is not null,'ordinary_query_reminder_suppressed',x.request_id is not null,
+      'correction',case when x.request_id is not null then jsonb_build_object('request_id',x.request_id,'state',x.request_state,
+        'state_revision',x.request_state_revision,'replacement_timesheet_id',x.replacement_timesheet_id,
+        'workflow_id',x.replacement_workflow_id,'workflow_generation',x.replacement_workflow_generation,
+        'workflow_state',x.replacement_workflow_state,'worker_submitted_at_utc',x.replacement_submitted_at,
+        'manager_approved_at_utc',x.replacement_manager_approved_at) end,
+      -- Pay work remains available for native subject admission, but invoice
+      -- query evidence, recipients and delivery history are admin-only.
+      'query_import_id',case when v_admin then x.query_import_id end,
+      'query_evidence',case when v_admin then x.query_evidence end,
+      'native_issues',case when v_admin and (x.route_read->>'query_route_available')::boolean is true
+        then coalesce(issues.value,'[]'::jsonb) else '[]'::jsonb end,
+      'unfinished_daily_review',case when x.sheet_scope::text='DAILY' and x.query_import_id is not null
+        and upper(coalesce(x.import_scope,''))='HR_DAILY' then exists(select 1 from public.import_review_states ds
+          where ds.import_id=x.query_import_id and ds.applied_at_utc is null and ds.superseded_at_utc is null and ds.abandoned_at_utc is null) else false end,
+      'engineering_gate',case when x.validation_reason is not null and x.validation_status<>'VALIDATION_OK'
+        and x.query_import_id is null then 'CURRENT_IMPORT_REVIEW_ISSUE_SNAPSHOT_UNAVAILABLE' end) value
+    from context x
+    left join lateral(select jsonb_agg(jsonb_build_object('action_id',d.action_id,'action_kind',d.action_kind,
+      'evidence_fingerprint',d.evidence_fingerprint,'reason_code',d.summary_json->'reason_code','summary',d.summary_json,
+      'issue_id',e.id,'issue_fingerprint',e.issue_fingerprint,'recipient_scope',e.recipient_scope,
+      'sent_verified',e.delivery_history_status='SENT_VERIFIED' and delivery.status='SENT'
+        and delivery.accepted_at_utc is not null and delivery.marked_at_utc is not null
+        and item.marked_sent_at_utc is not null and (upper(mail.status::text)='SENT' or mail.sent_at is not null),
+      'last_sent_at',e.last_sent_at,'sent_count',e.sent_count,'delivery_id',delivery.id,
+      'recipient_email',delivery.recipient_email,'reminder_sequence',delivery.reminder_sequence,
+      'mail_outbox_id',mail.id,'mail_status',mail.status,'accepted_at_utc',delivery.accepted_at_utc) order by d.action_id) value
+      from public.import_review_decisions d
+      left join public.hr_issue_emails e on e.issue_fingerprint=coalesce(nullif(d.summary_json->>'issue_fingerprint',''),d.source_identity)
+        and e.timesheet_id=x.timesheet_id and e.client_id=p_client_id
+      left join public.hr_issue_email_deliveries delivery on delivery.id=e.last_successful_delivery_id
+      left join public.hr_issue_email_delivery_items item on item.delivery_id=delivery.id and item.issue_id=e.id
+        and item.issue_fingerprint=e.issue_fingerprint and item.action_id=d.action_id
+      left join public.mail_outbox mail on mail.id=delivery.mail_outbox_id and mail.deterministic_outbox_key=delivery.deterministic_outbox_key
+      where d.import_id=x.query_import_id and d.preview_generation=x.preview_generation and d.is_current
+        and d.timesheet_id=x.timesheet_id and d.client_id=p_client_id
+        and d.action_kind in('EMAIL_WEEKLY_ISSUES','EMAIL_DAILY_ISSUES','EMAIL_MISSING_FROM_IMPORT')) issues on true
+  ), source_information as materialized (
+    -- R-254 is informational inside an admitted actual-submission row. Native
+    -- missing-source advisories never create a Checklist row or Timesheet count.
+    -- They carry native action identity/reason, with no fabricated TS target.
+    select private.weekly_source_query_ascii_fold_v1(coalesce(nullif(btrim(ca.first_name||' '||ca.last_name),''),
+        d.summary_json->>'candidate_name',hr.staff_raw,hr.staff_norm)) collate "C" worker_sort,
+      hr.date_local actual_work_date,('native-action:'||d.action_id) collate "C" item_sort,
+      jsonb_build_object('item_id','native-action:'||d.action_id,'item_kind','SOURCE_INFORMATION',
+        'timesheet_id',null,'counted_timesheet_id',null,'counts_for_row_admission',false,
+        'source_group_id',c.source_group_id,'source_cycle_id',c.id,'client_id',p_client_id,
+        'client',cl.name,'candidate_id',d.candidate_id,
+        'worker',coalesce(nullif(btrim(ca.first_name||' '||ca.last_name),''),d.summary_json->>'candidate_name',hr.staff_raw,hr.staff_norm),
+        'work_date',hr.date_local,'week_ending',own_week.week_ending_date,
+        'sheet_scope',case when upper(coalesce(d.summary_json->>'source_route','')) like '%DAILY%' then 'DAILY' else 'WEEKLY' end,
+        'query_import_id',d.import_id,'hr_row_id',d.hr_row_id,'action_id',d.action_id,
+        'action_kind',d.action_kind,'evidence_fingerprint',d.evidence_fingerprint,'summary',d.summary_json,
+        'native_reason_code',d.summary_json->>'reason_code','writable_action',null) value
+    from public.import_review_decisions d
+    join public.import_review_states st on st.import_id=d.import_id and st.preview_generation=d.preview_generation
+      and st.superseded_at_utc is null and st.abandoned_at_utc is null
+    join public.hr_imports hi on hi.id=d.import_id and hi.pruned_at is null
+      and hi.source_system::text in('HEALTHROSTER','HEALTHROSTER_DAILY') and (hi.client_id is null or hi.client_id=p_client_id)
+    join public.hr_rows hr on hr.id=d.hr_row_id and hr.import_id=d.import_id
+    join lateral(select min(admitted.week_ending_date) week_ending_date from actual admitted
+      where hr.date_local between admitted.week_ending_date-6 and admitted.week_ending_date
+      having count(distinct admitted.week_ending_date)=1) own_week on true
+    join public.clients cl on cl.id=p_client_id left join public.candidates ca on ca.id=d.candidate_id
+    where v_admin and d.client_id=p_client_id and d.timesheet_id is null and d.is_current
+      and d.action_kind='ADVISORY' and d.summary_json->>'authority_mode'='VALIDATION_ONLY'
+      and d.summary_json->>'reason_code' in('DAILY_TIMESHEET_NOT_SUBMITTED','WEEKLY_TIMESHEET_NOT_SUBMITTED',
+        'WEEKLY_TIMESHEET_AWAITING_MANAGER_APPROVAL','WEEKLY_TIMESHEET_COMPLETING')
+      and own_week.week_ending_date between c.finalisation_week_ending-6 and c.finalisation_week_ending
+      and own_week.week_ending_date=v_week
+      and exists(select 1 from actual admitted where admitted.week_ending_date=own_week.week_ending_date)
+      and exists(select 1 from public.weekly_source_group_clients member
+        join public.weekly_source_client_policies policy on policy.source_group_id=member.source_group_id and policy.client_id=member.client_id
+        where member.source_group_id=c.source_group_id and member.client_id=p_client_id
+          and hr.date_local between member.valid_from and coalesce(member.valid_to,'infinity'::date)
+          and hr.date_local between policy.effective_from and coalesce(policy.effective_to,'infinity'::date)
+          and policy.authority_mode='TIMESHEET_AUTHORITY' and policy.document_mode='INVOICE_EVIDENCE_REQUIRED' and not policy.self_bill_enabled)
+      and hi.id=(select latest.id from public.hr_imports latest
+        join public.import_review_states latest_state on latest_state.import_id=latest.id
+          and latest_state.superseded_at_utc is null and latest_state.abandoned_at_utc is null
+        where latest.pruned_at is null and latest.source_system=hi.source_system
+          and (latest.client_id is null or latest.client_id=p_client_id)
+          and exists(select 1 from public.import_review_decisions latest_decision
+            left join public.hr_rows latest_row on latest_row.id=latest_decision.hr_row_id and latest_row.import_id=latest.id
+            where latest_decision.import_id=latest.id and latest_decision.preview_generation=latest_state.preview_generation
+              and latest_decision.is_current and latest_decision.client_id=p_client_id
+              and (latest_row.date_local between own_week.week_ending_date-6 and own_week.week_ending_date
+                or exists(select 1 from actual latest_actual where latest_actual.timesheet_id=latest_decision.timesheet_id
+                  and latest_actual.week_ending_date=own_week.week_ending_date)))
+        order by latest.uploaded_at_utc desc,latest.id desc limit 1)
+  ), all_rows as materialized (
+    select * from rows union all select * from source_information
+  ), version as (
+    select encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_CHECK_ONLY_READ_REVISION_V1',
+      coalesce(jsonb_agg(value order by worker_sort,actual_work_date,item_sort),'[]'::jsonb)),'hex') hash from all_rows
+  ), page as (
+    select * from all_rows where v_cursor is null or (worker_sort,actual_work_date,item_sort)>
+      (v_cursor#>>'{after,0}',(v_cursor#>>'{after,1}')::date,v_cursor#>>'{after,2}')
+    order by worker_sort,actual_work_date,item_sort limit v_limit+1
+  ) select (select hash from version),coalesce(jsonb_agg(value order by worker_sort,actual_work_date,item_sort),'[]'::jsonb),count(*)>v_limit
+    into v_revision,v_rows,v_more from page;
+  if v_cursor is not null and v_cursor->>'read_revision' is distinct from v_revision then
+    raise exception 'WEEKLY_SOURCE_CHECKLIST_ANCHORED_REFRESH_REQUIRED' using errcode='40001';
+  end if;
+  if v_more then v_rows:=v_rows-(jsonb_array_length(v_rows)-1); end if;
+  v_last:=v_rows->(jsonb_array_length(v_rows)-1);
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_CHECK_ONLY_QUERY_ROWS_V1','rows',v_rows,
+    'read_only',true,'invoice_subjects_hidden',not coalesce(v_admin,false),
+    'read_revision',v_revision,'binding',v_binding,'has_more',v_more,'next_cursor',case when v_more then
+      encode(convert_to(jsonb_build_object('contract','WEEKLY_SOURCE_CHECK_ONLY_CURSOR_V1','binding',v_binding,'read_revision',v_revision,
+        'after',jsonb_build_array(private.weekly_source_query_ascii_fold_v1(v_last->>'worker'),v_last->'work_date',v_last->'item_id'))::text,'UTF8'),'base64') end);
+end;
+$function$;
+alter function private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;

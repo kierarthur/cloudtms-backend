@@ -1,0 +1,35 @@
+{
+  "status": "FROZEN_SOURCE_ONLY_NOT_ADMITTED_OR_EXECUTED",
+  "targets": 4,
+  "newRuntimeFiles": 2,
+  "completeCurrentHistoricalParents": 21,
+  "actualRootParent": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+  "readerLiteralEdits": 5,
+  "readerWholeRawInverse": true,
+  "manifestWholeRawInverse": true,
+  "holderWholeParentDerivation": true,
+  "unchangedAdapterRows": 52,
+  "normalCanonicalCaptureByteUnchanged": true,
+  "sharedCanonicalRuntimeChanges": 0,
+  "r11WatchedSelectedOverlap": 0,
+  "controlledTestsPassed": 56,
+  "grammar": {
+    "postgresql": [
+      17,
+      7
+    ],
+    "completeExplainQueryAstEqual": true,
+    "sqlStatements": 2,
+    "negativeMutations": 8
+  },
+  "executedAuditBagBytes": 650,
+  "executedAuditBagSha256": "f5729765fdf3acfaf96ce915b59e342cbd3e5201bd5a06e3b2f5bfdf2dc9663f",
+  "plansIncludeAllNodes": true,
+  "actualTimingsOrSpillClaimed": false,
+  "fullMapsPersisted": false,
+  "BOrFixtures": false,
+  "actualSourceAdmission": "NOT_RUN",
+  "native": "NOT_RUN",
+  "privateStateAccess": "NOT_RUN",
+  "trackedOrHeadChanges": false
+}

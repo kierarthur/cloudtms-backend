@@ -1,0 +1,9 @@
+{
+  "authorFolder": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\.codex-tmp\\d10-source-read-parent-bridge-20261017",
+  "authorManifestSha256": "25a5053d497209028a0c68c45e69d0687596c948d1bc1b6b5221bf8b58153b6f",
+  "selectionSha256": "894c59b7c30ec9d807b60972e6a6393784e34299a732eb436014be2637c1a55c",
+  "fullForwardSha256": "34b1f848bec47b848d16eddff586b23c3b9a302fa513ad0afcd63ae8f8c86df3",
+  "rootHEAD": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+  "actualParents": "TWO_STAGED_IMAGES_EXACT; HEAD_IS_DECLARED_PRE_D10_HISTORY; NEW_MODULE_HEAD_ABSENT",
+  "ReportHEAD": "aa6a57b964b7916ca0a689ead1555ef0774a39e2"
+}

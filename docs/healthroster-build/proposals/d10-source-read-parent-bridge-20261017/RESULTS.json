@@ -1,0 +1,12 @@
+{
+  "status": "PASS_BOUNDED_SOURCE_ONLY",
+  "nodeTests": 22,
+  "proofs": "Both real factories, complete real gate prior callback, original relevant FROZEN_BASE census, unmodified Source READ whole artifacts",
+  "retainedWholeProofFiles": 21,
+  "runtimeSQLChanges": 0,
+  "fullJoinedGate": "ROOT_RERUN_REQUIRED",
+  "native": "NOT_RUN",
+  "original86": "PRESERVED_UNCHANGED_HISTORICAL_JOINED_GATE_HOLD",
+  "originalGateFailure": "HEALTH_SOURCE_READ_TYPE_CURRENT_SOURCE_CHANGED",
+  "note": "Initial isolated integration fixture omitted the original frozen-baseline allowance and correctly refused PRIOR_STATEMENT_UNPROVED; final test calculates actual baseline from the real historical Git source rather than supplying a synthetic allowance."
+}

@@ -219,7 +219,8 @@
     "supabase/verification/17102026_0722_source_current_read_security.sql",
     "supabase/verification/17102026_0741_source_complete_security.sql",
     "supabase/verification/17102026_0910_daily_role_identity_security.sql",
-    "supabase/verification/17102026_1251_health_closed_private_helpers_security.sql"
+    "supabase/verification/17102026_1251_health_closed_private_helpers_security.sql",
+    "supabase/verification/17102026_1900_health_d10_query_reader_security.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
@@ -405,6 +406,7 @@
     "supabase/verification/17102026_0722_source_current_read_security.sql",
     "supabase/verification/17102026_0741_source_complete_security.sql",
     "supabase/verification/17102026_0910_daily_role_identity_security.sql",
-    "supabase/verification/17102026_1251_health_closed_private_helpers_security.sql"
+    "supabase/verification/17102026_1251_health_closed_private_helpers_security.sql",
+    "supabase/verification/17102026_1900_health_d10_query_reader_security.sql"
   ]
 }

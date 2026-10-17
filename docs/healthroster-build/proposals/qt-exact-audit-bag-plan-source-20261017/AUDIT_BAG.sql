@@ -1,0 +1,4 @@
+with retained_business as (select 'public.audit_events' relation,count(*) row_count,
+   encode(pg_catalog.sha256(pg_catalog.convert_to(coalesce(string_agg(row_hash,'|' order by row_hash),''),'UTF8')),'hex') row_fingerprint
+   from (select encode(pg_catalog.sha256(pg_catalog.convert_to(to_jsonb(t)::text,'UTF8')),'hex') row_hash from "public"."audit_events" t offset 0) hashed_rows), fixed_bag as (select jsonb_agg(jsonb_build_object('relation',relation,'row_count',row_count,'row_fingerprint',row_fingerprint) order by relation)::text value from retained_business)
+select value as hr_contact_audit_bag from fixed_bag where octet_length(value)<=16384

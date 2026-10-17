@@ -1709,6 +1709,10 @@
     {
       "path": "supabase/migrations/17102026_1251_health_closed_private_helpers_admission.sql",
       "sha256": "2d4a29c5351427be5e20d2a3357d212419825b7ad2fdffb9956f1745df657f67"
+    },
+    {
+      "path": "supabase/migrations/17102026_1900_health_d10_query_reader_admission.sql",
+      "sha256": "fb3ab56de20436b6c6b16545b39cdd5be7e42cc6155650f7817e98e9f2c34c83"
     }
   ]
 }

@@ -1,5 +1,21 @@
 # HealthRoster v2 TEST build progress
 
+> Current implementation checkpoint — 17 October 2026, 19:34 UTC. Earlier dated entries below are retained history.
+
+Install 1 is COMPLETE with features OFF. The sole Install 2 is NOT_INSTALLED; both final Part B critics are NOT_RUN. No owner answer is pending.
+
+The seven preserved D10 Health read helpers and their dependency, classifier, security and one-time admission closure are integrated. Database source integrity passes with 428 migrations and 1,099 repeatables. The complete corrected source gate passes: 2,272 SQL sources, 80 RPC roots, 183 routine-work and 41 typed-transport signatures, with all frozen checks intact. The original 86-file packet and genuine R1 gate failure are preserved. A separately reviewed two-file JavaScript bridge corrects the eager prior-image handoff; its 22 author/root tests and 6 independent checks pass. SQL and the original Source READ classifier remain unchanged by that bridge.
+
+The exact audit-bag estimated-plan diagnostic is integrated and independently accepted: 56 author/root tests, 14 independent checks and complete-query PostgreSQL 17 AST proof pass. Actual read-only execution remains NOT_RUN. QT R7 retains all 69 native statements, rollback and fresh absence checks passing, but its overall canonical-after deadline remains HOLD. There is no unchanged full QT retry or cap increase. The separate opt-in native-claim projection remains source work, with no native, performance or restoration qualification.
+
+The current 184-verifier review preserves the original 16 exclusions and mandatory F5 after VERIFIED and before publication. It found a stale F1 activation request that omits current protected qualification. Correct that Health verifier against the real guard, preserve its genuine positive assertions in their eligible path, and do not invent evidence or weaken feature authority. PostgreSQL 17 contract generation and final candidate binding remain pending.
+
+Next: clean pushed source; one exact read-only audit-plan turn under the shared lock; fresh mechanical PostgreSQL 17 schema/contract generation after eligible corrections; complete verifier review and precise watched-source forwards; stable-source stage-auth admission, with fresh outside-lock authentication last; remaining genuine qualification; exact-candidate full rollback and protected Install 2 under one retained lock, then F5 and ordered Workers/Office publication, activation and genuine eligible past upload-empty client/week acceptance. Only NEXT-dependent acceptance waits compatible F17. Recheck current MyTMS main before TestFlight and phone tests. Both final critics remain required.
+
+Fresh Banking checkpoint R10 observes the same two records and six item metadata rows as R9. No new publication, switch-on or installation evidence appeared in those records. Local 47b3351c differs from remote 40193adc. This is no universal interface-absence finding and creates no Banking implementation authority. No Banking message was sent.
+
+The finish time remains conditional on genuine native and producer evidence. Allow 1–3 hours per qualified rehearsal/release cycle, plus actual fixes, review, acceptance and Apple/device time; this is not a completion promise. Own mechanical resources remain absent. Existing Banking and unrelated Docker resources are preserved.
+
 ## Current continuation — 17 October 2026
 
 Install1 remains COMPLETE/features OFF. Install2 remains NOT_INSTALLED; genuine staged fixture qualification, remaining native/API/financial/security checks, clean PostgreSQL17 contract seal, exact full rehearsal/protected release, activation/acceptance, TestFlight/phone and final critics remain outstanding. No owner answer is pending.

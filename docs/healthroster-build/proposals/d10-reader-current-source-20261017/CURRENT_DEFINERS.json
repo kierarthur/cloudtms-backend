@@ -1,0 +1,360 @@
+{
+  "rows": [
+    {
+      "signature": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_actual_timesheet_submission_v1(uuid)",
+          "physical": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+          "root": "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+          "closureSha256": "4671156183622ed97fecb9ad7d85673295254e2e623e569bde109c247824be33"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_signed_submission_read_context_v1(uuid,uuid)",
+          "physical": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+          "root": "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+          "closureSha256": "4671156183622ed97fecb9ad7d85673295254e2e623e569bde109c247824be33"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_check_only_query_rows_v1(uuid,uuid,jsonb)",
+          "physical": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+          "root": "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+          "closureSha256": "4671156183622ed97fecb9ad7d85673295254e2e623e569bde109c247824be33"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)",
+      "definitions": []
+    },
+    {
+      "signature": "private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)",
+      "definitions": []
+    },
+    {
+      "signature": "private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)",
+      "definitions": []
+    },
+    {
+      "signature": "private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)",
+      "definitions": []
+    },
+    {
+      "signature": "private._candidate_daily_canonical_save_input_v1(uuid,integer)",
+      "definitions": [
+        {
+          "signature": "private._candidate_daily_canonical_save_input_v1(uuid,integer)",
+          "physical": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+          "root": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+          "closureSha256": "e863b8e2029e182a12bae8b03590f48d4b5cfff6f8d8e16b40eccaeefe63237f"
+        }
+      ]
+    },
+    {
+      "signature": "private._candidate_sha256_jsonb_v1(jsonb)",
+      "definitions": [
+        {
+          "signature": "private._candidate_sha256_jsonb_v1(jsonb)",
+          "physical": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+          "root": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+          "closureSha256": "1ea65617300f6c04ba443b2541527fb6443b25f82ca1495a4b6a79a375aed95c"
+        }
+      ]
+    },
+    {
+      "signature": "public._import_review_query_evidence_core_v1(uuid)",
+      "definitions": [
+        {
+          "signature": "public._import_review_query_evidence_core_v1(uuid)",
+          "physical": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+          "root": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+          "closureSha256": "289719378b1353284983fe2b5a55c9636dca0240516aea45c09ed20ab2a335f8"
+        }
+      ]
+    },
+    {
+      "signature": "private._weekly_source_effective_policy_v1(uuid,uuid,date)",
+      "definitions": [
+        {
+          "signature": "private._weekly_source_effective_policy_v1(uuid,uuid,date)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+          "closureSha256": "efc1bd398a3f23892e0b8e8f40fc12fa8bdcdb172b220f86b3bdff1bb0f75504"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_signed_check_only_v1(uuid)",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_signed_check_only_v1(uuid)",
+          "physical": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+          "root": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+          "closureSha256": "91259a6df33ca4e69c5ebd63b3a479fe3ceebd90d5fb62442a73088f3cfc9f99"
+        }
+      ]
+    },
+    {
+      "signature": "public._import_review_effective_authority_core_v1(text,uuid,uuid,date)",
+      "definitions": [
+        {
+          "signature": "public._import_review_effective_authority_core_v1(text,uuid,uuid,date)",
+          "physical": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+          "root": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+          "closureSha256": "289719378b1353284983fe2b5a55c9636dca0240516aea45c09ed20ab2a335f8"
+        },
+        {
+          "signature": "public._import_review_effective_authority_core_v1(text,uuid,uuid,date)",
+          "physical": "supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql",
+          "root": "supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql",
+          "closureSha256": "7a947363dace8f9c205bb1745c8da280e1687205eea584aa285e76a0a1c10ad4"
+        },
+        {
+          "signature": "public._import_review_effective_authority_core_v1(text,uuid,uuid,date)",
+          "physical": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "root": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "closureSha256": "bd5ef8add0b2066e5b63a48f739dd8a6cd40e2643e6ddbdc12aaaaea0746a55d"
+        },
+        {
+          "signature": "public._import_review_effective_authority_core_v1(text,uuid,uuid,date)",
+          "physical": "supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql",
+          "root": "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql",
+          "closureSha256": "cb6800b20a846be3d29bc9c4a5818fd645c8aa4dd73c7fb74dee27bc4115e1a3"
+        },
+        {
+          "signature": "public._import_review_effective_authority_core_v1(text,uuid,uuid,date)",
+          "physical": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "root": "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql",
+          "closureSha256": "cb6800b20a846be3d29bc9c4a5818fd645c8aa4dd73c7fb74dee27bc4115e1a3"
+        },
+        {
+          "signature": "public._import_review_effective_authority_core_v1(text,uuid,uuid,date)",
+          "physical": "supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql",
+          "root": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+          "closureSha256": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf"
+        },
+        {
+          "signature": "public._import_review_effective_authority_core_v1(text,uuid,uuid,date)",
+          "physical": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "root": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+          "closureSha256": "693c068fac56d4755e8a63664250097a994d3085e9cc32fd8a1f23fb24bfdcbf"
+        }
+      ]
+    },
+    {
+      "signature": "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+      "definitions": [
+        {
+          "signature": "private._weekly_source_settings_assert_request_v1(jsonb,text[],text)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+          "closureSha256": "c048381f26c2972967025533c17b7644806e7c5a9c23688800e71ee67f3c5c6e"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_agency_invoice_check_only_v1(uuid)",
+          "physical": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+          "root": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+          "closureSha256": "91259a6df33ca4e69c5ebd63b3a479fe3ceebd90d5fb62442a73088f3cfc9f99"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+          "physical": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+          "root": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+          "closureSha256": "91259a6df33ca4e69c5ebd63b3a479fe3ceebd90d5fb62442a73088f3cfc9f99"
+        },
+        {
+          "signature": "private.weekly_source_effective_rule_set_v1(uuid,uuid)",
+          "physical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+          "root": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+          "closureSha256": "969900cb13d615a144d9ff57258d39864a7babbdce65a5456df7bd96e6547960"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_issued_signed_query_evidence_v1(uuid,uuid)",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_issued_signed_query_evidence_v1(uuid,uuid)",
+          "physical": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+          "root": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+          "closureSha256": "9b14ea9fd3120f49a12d269b8dbefb405882241d497ff81b2d9dfb25d4514b34"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+          "physical": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+          "root": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+          "closureSha256": "d58b576d1b1d5b8f10b6cd9c5b5694b9ab585ef00cee9cbd206f7ba6a89aa35a"
+        },
+        {
+          "signature": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+          "physical": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+          "root": "supabase/repeatable/13102026_1113_weekly_source_protected_pay_authority_v1.sql",
+          "closureSha256": "8fa4122d574e4938e839d2d858b3f8f34320b3ace876fcea4d7eeebfd2e3cf28"
+        },
+        {
+          "signature": "private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)",
+          "physical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+          "root": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+          "closureSha256": "327a0e4169fd5c9cc66f1bad209ee796ddf07dcc6c07d995cd3a1590e3667c44"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_query_ascii_fold_v1(text)",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_query_ascii_fold_v1(text)",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "closureSha256": "66e1c05364cc3cacf56d3512aa1f8e86280bd5b74c7e91798a966250a2a00412"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_sha256_jsonb_v1(text,jsonb)",
+          "physical": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+          "root": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+          "closureSha256": "d58b576d1b1d5b8f10b6cd9c5b5694b9ab585ef00cee9cbd206f7ba6a89aa35a"
+        }
+      ]
+    },
+    {
+      "signature": "private.weekly_source_query_require_service_v1()",
+      "definitions": [
+        {
+          "signature": "private.weekly_source_query_require_service_v1()",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+          "closureSha256": "66e1c05364cc3cacf56d3512aa1f8e86280bd5b74c7e91798a966250a2a00412"
+        }
+      ]
+    },
+    {
+      "signature": "private._candidate_assert_environment(text)",
+      "definitions": [
+        {
+          "signature": "private._candidate_assert_environment(text)",
+          "physical": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+          "root": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+          "closureSha256": "e863b8e2029e182a12bae8b03590f48d4b5cfff6f8d8e16b40eccaeefe63237f"
+        }
+      ]
+    },
+    {
+      "signature": "private._candidate_feature_enabled_v1(text,text)",
+      "definitions": [
+        {
+          "signature": "private._candidate_feature_enabled_v1(text,text)",
+          "physical": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+          "root": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+          "closureSha256": "e863b8e2029e182a12bae8b03590f48d4b5cfff6f8d8e16b40eccaeefe63237f"
+        }
+      ]
+    },
+    {
+      "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+      "definitions": [
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+          "root": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+          "closureSha256": "b65c827ae713a7162e10d8ae00394cef5d8d055626e31cc25e163d334aaf7569"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+          "root": "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+          "closureSha256": "6a44b757f1b04432b5c02c4711ddfc1b5aa887d490fbb257ee89132b74fd2ff7"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+          "root": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+          "closureSha256": "e369749a1ceb474ce03ca0d52203b00016345ccab25afc2c1d0704a4852d488b"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+          "root": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+          "closureSha256": "e369749a1ceb474ce03ca0d52203b00016345ccab25afc2c1d0704a4852d488b"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+          "root": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+          "closureSha256": "890c04721cca58f3ca325303242b55ec0f6090cbed80ddb3a93d4c48014fb2c1"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+          "root": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+          "closureSha256": "834444970b54d6eb1efed6ec50a6c63d0aa3af515d9c5087b29faeef009cb428"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+          "root": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+          "closureSha256": "07ce75c897ab3df4a52ce579a340e34857fa42d55d414a08950cc55d7bf006f1"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc",
+          "root": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
+          "closureSha256": "d82e48a723f51b36da45425282ebfbcac4234a76445e376e2461a1fee6c6e3a5"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc",
+          "root": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read_v1.sql",
+          "closureSha256": "5d2c2da47cb2a211625baa06ac1a6630e9a7cc5aa86a1a857ed3080377be16c7"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/98_complete_current_classification.sqlinc",
+          "root": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql",
+          "closureSha256": "ade9672eb429e2eeb1d9f25040e61028763e7ccc29a0017f50e4795f3c4099f4"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+          "root": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+          "closureSha256": "29047daf66dc9b4bc916ad2439fbde200a675e6311552d43a64aaba96f75d465"
+        },
+        {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "physical": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+          "root": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+          "closureSha256": "ee6e1980d831755668511c8868ebb9b5f7fc53f8bd38db7410687a27fe09fe70"
+        }
+      ]
+    }
+  ]
+}

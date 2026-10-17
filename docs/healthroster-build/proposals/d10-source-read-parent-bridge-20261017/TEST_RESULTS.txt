@@ -1,0 +1,30 @@
+✔ original eager actual factory fails real D10 whole-file image; complete real chain successor passes (203.6912ms)
+✔ original complete parent still passes the actual retained Source READ factory (144.0617ms)
+✔ all real original D10 points still pass the outer current factory and complete tuple proof (424.1775ms)
+✔ missing literal refuses BOTH-factory composition: private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text) (18.8147ms)
+✔ duplicate literal refuses BOTH-factory composition: private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text) (16.0984ms)
+✔ altered literal refuses BOTH-factory composition: private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text) (16.5326ms)
+✔ missing literal refuses BOTH-factory composition: private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid) (18.1336ms)
+✔ duplicate literal refuses BOTH-factory composition: private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid) (22.1534ms)
+✔ altered literal refuses BOTH-factory composition: private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid) (15.9516ms)
+✔ missing literal refuses BOTH-factory composition: private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) (16.3262ms)
+✔ duplicate literal refuses BOTH-factory composition: private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) (16.3564ms)
+✔ altered literal refuses BOTH-factory composition: private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb) (16.1945ms)
+✔ missing literal refuses BOTH-factory composition: private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb) (21.8562ms)
+✔ duplicate literal refuses BOTH-factory composition: private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb) (16.5585ms)
+✔ altered literal refuses BOTH-factory composition: private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb) (16.4251ms)
+✔ same hazard census never permits arbitrary whole-body or comment drift (53.4349ms)
+✔ missing, duplicated, foreign caller census refuses before old allowance can transfer (63.9579ms)
+✔ every actual complete bridge proof refuses raw-byte substitution (42.5029ms)
+✔ wrong-path dispatch preserves original factory and cannot acquire this one-path transfer (6.9795ms)
+✔ baseline is not mutated and unrelated prior allowances survive both real factories (115.8536ms)
+✔ retained READ review and its real prior artifact remain required by actual factory (21.8983ms)
+✔ bridge requires actual factories; tuple proof is still necessary for unrelated D10 native tuples (31.1891ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1582.3656

@@ -1,0 +1,81 @@
+-- Current read capability: exact retained request/review and original native
+-- run ownership, followed by the existing fresh Source financial/client gate.
+-- No expiry/revaluation, allocation, metadata lock, actor substitution or write.
+create or replace function private.weekly_source_pay_decision_read_access_v1(p_decision uuid,p_request uuid,p_actor uuid)
+returns void language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+declare d private.weekly_source_pay_decisions%rowtype;j private.weekly_source_pay_decision_requests%rowtype;
+ r private.weekly_source_pay_decision_reviews%rowtype;a private.weekly_source_pay_decision_preview_assemblies%rowtype;
+ p private.weekly_source_pay_decision_unprotect_preparations%rowtype;run public.weekly_exceptional_orchestration_runs%rowtype;
+ m jsonb;q jsonb;body jsonb;members text[]:='{}';status_child jsonb;
+begin
+ if p_actor is null or not private.weekly_source_pay_actor_allowed_v1(p_actor) then
+  raise exception 'SOURCE_PAY_DECISION_ACTOR_REQUIRED' using errcode='42501';end if;
+ select x.* into strict d from private.weekly_source_pay_decisions x where x.id=p_decision;
+ select x.* into strict j from private.weekly_source_pay_decision_requests x
+  where x.request_id=p_request and x.decision_id=d.id and x.request_kind in('ACCEPT','RESUME_FINANCIAL');
+ select x.* into strict r from private.weekly_source_pay_decision_reviews x where x.id=j.review_id and x.decision_id=d.id;
+ select x.* into strict a from private.weekly_source_pay_decision_preview_assemblies x
+  where x.id=r.preview_assembly_id and x.decision_id=d.id and x.review_id=r.id and x.state='SEALED';
+ body:=private.weekly_source_pay_decision_request_v1(j.request_json,j.request_kind);
+ if j.metadata_state not in('CONFIRMED','COMMITTED') or a.actor_user_id is distinct from j.actor_user_id
+  or body->>'decision_id' is distinct from d.id::text or body->>'request_id' is distinct from j.request_id::text
+  or body->>'review_id' is distinct from r.id::text
+  or j.request_hash is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_CONFIRMATION_V1',body)
+  or body->>'review_digest' is distinct from encode(r.review_digest,'hex')
+  or body->>'expected_pay_cut_hash' is distinct from encode(r.pay_cut_hash,'hex')
+  or body->'expected_prior_dispositions' is distinct from r.private_manifest_json->'prior_dispositions'
+  or body->>'expected_prior_dispositions_sha256' is distinct from r.private_manifest_json->>'prior_dispositions_sha256'
+  or jsonb_typeof(r.private_manifest_json->'selection') is distinct from 'array'
+  or jsonb_array_length(r.private_manifest_json->'selection') not between 1 and 250 then
+  raise exception 'SOURCE_PAY_DECISION_SAVED_RECEIPT_INVALID' using errcode='23514';end if;
+ if (j.request_kind='ACCEPT' and (body->>'decision' is distinct from a.decision_kind
+   or body->>'expected_source_invoice_hash' is distinct from encode(r.source_invoice_hash,'hex')
+   or body->>'expected_issue_set_hash' is distinct from encode(r.issue_set_hash,'hex')
+   or body->'supersedes_decision_id' is distinct from r.private_manifest_json->'supersedes_decision_id'))
+  or (j.request_kind='RESUME_FINANCIAL' and (d.accept_request_id is null or a.decision_kind is distinct from d.decision_kind)) then
+  raise exception 'SOURCE_PAY_DECISION_SAVED_RECEIPT_INVALID' using errcode='23514';end if;
+ for m in select value from jsonb_array_elements(r.private_manifest_json->'selection') loop
+  if jsonb_typeof(m->'member_key') is distinct from 'string' or char_length(coalesce(m->>'member_key','')) not between 1 and 512
+   or m->>'member_key'=any(members) or m->>'actual_client_id' is distinct from d.actual_client_id::text then
+   raise exception 'SOURCE_PAY_DECISION_SAVED_RECEIPT_INVALID' using errcode='23514';end if;
+  members:=array_append(members,m->>'member_key');
+  perform private.weekly_source_pay_decision_scope_access_v1(p_actor,(m->>'source_group_id')::uuid,
+   (m->>'actual_client_id')::uuid,(m->>'scope_date')::date);
+ end loop;
+ -- A confirmed journal with no completed receipt is recoverable metadata, not
+ -- proof of acceptance. It remains bound to its original actor/native request.
+ if j.metadata_state='CONFIRMED' and (j.actor_user_id is distinct from p_actor or j.receipt_json is not null) then
+  raise exception 'SOURCE_PAY_DECISION_SCOPE_DENIED' using errcode='42501';end if;
+ if j.metadata_state='COMMITTED' and (j.receipt_json is null or d.accept_request_id is null or d.receipt_json is null
+  or j.receipt_json->>'decision_id' is distinct from d.id::text
+  or j.receipt_json->>'request_id' is distinct from j.request_id::text
+  or j.receipt_json->>'review_id' is distinct from r.id::text
+  or j.receipt_json->>'actor_user_id' is distinct from j.actor_user_id::text
+  or j.receipt_json->>'version' is distinct from 'SOURCE_PAY_DECISION_RECEIPT_V1') then
+  raise exception 'SOURCE_PAY_DECISION_SAVED_RECEIPT_INVALID' using errcode='23514';end if;
+ for p in select x.* from private.weekly_source_pay_decision_unprotect_preparations x
+  where x.decision_id=d.id and x.accept_or_resume_request_id=j.request_id order by x.member_key loop
+  select value into strict q from jsonb_array_elements(r.private_manifest_json->'required_quote_members') x
+   where x.value->>'member_key'=p.member_key;
+  select x.* into strict run from public.weekly_exceptional_orchestration_runs x where x.id=p.orchestration_run_id;
+  if not(p.member_key=any(members)) or p.review_id is distinct from r.id or p.actor_user_id is distinct from j.actor_user_id
+   or p.confirmation_request_sha256 is distinct from j.request_hash or q->>'family_id' is distinct from p.family_id::text
+   or run.family_id is distinct from p.family_id or run.requested_by_user_id is distinct from p.actor_user_id
+   or run.request_kind is distinct from 'WITHDRAW' or run.idempotency_key is distinct from p.child_idempotency_key
+   or run.request_fingerprint is distinct from p.native_prepare_request_sha256
+   or p.native_prepare_request_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_PREPARE_ACTION_REQUEST_V1',p.native_prepare_request_json)
+   or p.native_prepared_sha256 is distinct from private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_PREPARED_ACTION_V1',p.native_prepared_json)
+   or p.native_prepared_json->>'family_id' is distinct from p.family_id::text
+   or p.native_prepared_json->>'orchestration_run_id' is distinct from run.id::text
+   or p.native_prepared_json->>'work_event_id' is distinct from q->>'work_event_id' then
+   raise exception 'SOURCE_NATIVE_OWNERSHIP_CONTRADICTION' using errcode='55000';end if;
+  -- The genuine Banking owner receives the current reader, never the stored
+  -- original actor. It alone qualifies current native financial publication.
+  status_child:=private.weekly_source_pay_decision_native_status_child_v1(
+   private.bpay_next_source_decision_native_status_v1(p.family_id,run.id,p_actor),p.family_id,run.id,d.id,j.request_id);
+ end loop;
+exception when no_data_found or too_many_rows then
+ raise exception 'SOURCE_PAY_DECISION_SAVED_RESULT_NOT_FOUND' using errcode='22023';
+end;
+$function$;
+revoke all on function private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;

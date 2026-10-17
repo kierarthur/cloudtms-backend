@@ -1,0 +1,16 @@
+{
+  "disposition": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "findings": [],
+  "scope": "Exact two JavaScript source targets; no SQL/body/native/auth/admission changes",
+  "authorTests": 22,
+  "independentTests": 6,
+  "currentVerifier": "PASS; 2 raw inverses / 3 literal hunks / 21 retained genuine complete proof inputs",
+  "review": "One-path wrapper first pins actual D10 full source, reverses exactly four private-name lines to the pinned complete old mandatory verifier and proves current/old/supplied census equality. Unchanged real Source-read factory and full prior proof callback still execute. Outer D10 factory receives actual new complete source; all13 points remain proved. Original module and all prior artifacts are required. No blanket allowance or baseline refresh.",
+  "preservation": "Frozen86 historical joined HOLD retained; frozen48 unchanged after replay. New module append only and gate two-hunk inverse retain all original callbacks/options.",
+  "limits": [
+    "Actual complete joined source gate must be rerun by root",
+    "Native/catalogue/API/install NOT_RUN",
+    "No Bank semantic body inspection",
+    "No tracked/Report HEAD/root mutations"
+  ]
+}

@@ -201,6 +201,10 @@ declare
   -- a signature listed in the service array but not actually granted makes the
   -- routine sweep fail, which is how the two lists stay honest.
   v_expected_private_helpers text[]:=array[
+    'private.weekly_source_check_only_candidate_reminder_context_v1(uuid,jsonb,text)',
+    'private.weekly_source_check_only_candidate_reminder_subject_v1(jsonb,text,uuid)',
+    'private.weekly_source_check_only_issue_filter_keys_v1(text,jsonb)',
+    'private.weekly_source_check_only_query_groups_v1(uuid,uuid,jsonb)',
     'private._candidate_expense_source_family_v1(uuid)',
     'private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)',
     'private.weekly_exceptional_pay_publish_next_impl_v1(jsonb,uuid)',

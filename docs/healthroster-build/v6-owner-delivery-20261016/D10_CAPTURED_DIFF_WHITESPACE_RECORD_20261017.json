@@ -1,0 +1,15 @@
+{
+  "version": "D10_CAPTURED_DIFF_ONLY_WHITESPACE_RECORD_V1",
+  "path": "docs/healthroster-build/proposals/d10-reader-current-source-20261017/CURRENT_OWNER_PATCH.diff",
+  "bytes": 49285,
+  "sha256": "7bbf6e897475d1a2ee0dee4d5fa372c9e39aabbd8bd548ed8873f2755c51610d",
+  "defaultWhitespaceNotices": [
+    "docs/healthroster-build/proposals/d10-reader-current-source-20261017/CURRENT_OWNER_PATCH.diff:321: trailing whitespace.",
+    "docs/healthroster-build/proposals/d10-reader-current-source-20261017/CURRENT_OWNER_PATCH.diff:323: trailing whitespace.",
+    "docs/healthroster-build/proposals/d10-reader-current-source-20261017/CURRENT_OWNER_PATCH.diff:335: trailing whitespace.",
+    "docs/healthroster-build/proposals/d10-reader-current-source-20261017/CURRENT_OWNER_PATCH.diff:336: trailing whitespace.",
+    "docs/healthroster-build/proposals/d10-reader-current-source-20261017/CURRENT_OWNER_PATCH.diff:337: trailing whitespace."
+  ],
+  "disposition": "Preserve exact captured patch evidence and manifest bytes. All17 actual selected runtime/metadata targets pass default git diff --check. No whitespace configuration changed.",
+  "actualSelectedTargetsDefaultCheck": "PASS"
+}

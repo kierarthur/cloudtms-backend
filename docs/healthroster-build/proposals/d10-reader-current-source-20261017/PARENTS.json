@@ -1,0 +1,266 @@
+{
+  "version": "HEALTH_D10_CURRENT_COMPLETE_PARENTS_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "parent": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5",
+  "rows": [
+    {
+      "target": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "capture": "parents/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_submission_context.sqlinc",
+      "sha256": "3a4e886ad6d6280acd300884ce87625fff12ae66ebecb206e2cd98865fc915e8",
+      "bytes": 11146,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+      "capture": "parents/supabase/repeatable/13102026_1730_healthroster_checklist_private_read_v1.sql",
+      "sha256": "7d5988cf8e1792cd23eb479604d8735d5c9ebb2dda05d2eb8b28006da3cc2093",
+      "bytes": 492,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+      "capture": "parents/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_signed_submission_read_context.sqlinc",
+      "sha256": "e65ed379877ab471dc16e7af4c4c2419d10bf6cd340ddcded6310ebffe3e2987",
+      "bytes": 4711,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "capture": "parents/supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_check_only_query_rows.sqlinc",
+      "sha256": "5757ef54f996c82cfb72353702ca9982ac9862222f20ca13420370fcde9ff7a5",
+      "bytes": 19902,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "capture": "parents/supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "sha256": "d6ea8fd40e152bb9038a300274be39c63be1a451e300e9f4ad3eb1bb12f208e7",
+      "bytes": 94520,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "capture": "parents/supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sha256": "78d97ce6a540356b07039e2dc6a0748ff322ce0eb571dce2db0b441b5f3ae152",
+      "bytes": 102517,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "capture": "parents/docs/bpay-next/final-definer-closures.json",
+      "sha256": "4e3cf52c02d0d9bc48f679056ab83ee9108c10cc722f97228fbdf1bf129ae155",
+      "bytes": 1753835,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/release/current-release.json",
+      "capture": "parents/supabase/release/current-release.json",
+      "sha256": "b9b045c6038c46238a8a47945bb201e336ffb8dc0afdee86f9524ece9d29cbe2",
+      "bytes": 36808,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/release/migration-lock.json",
+      "capture": "parents/supabase/release/migration-lock.json",
+      "sha256": "cc73db6af457e09cce092b70bc3cfcf21c1cb2c0bbf8868ede26f8d454d73c2e",
+      "bytes": 79674,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "AGENTS.md",
+      "capture": "parents/AGENTS.md",
+      "sha256": "ae1357fb0372932d1ae05cc15c7b02662c71d5e96f00cecb185fccc3f2be29e9",
+      "bytes": 57328,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "scripts/cloudtms-db-release-lib.mjs",
+      "capture": "parents/scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "bytes": 32174,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "scripts/cloudtms-managed-release-sql.mjs",
+      "capture": "parents/scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "bytes": 7853,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "scripts/bpay-next-final-definers.mjs",
+      "capture": "parents/scripts/bpay-next-final-definers.mjs",
+      "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa",
+      "bytes": 13639,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "scripts/bpay-next-source-gates.mjs",
+      "capture": "parents/scripts/bpay-next-source-gates.mjs",
+      "sha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+      "bytes": 283554,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/release/current-contract.json",
+      "capture": "parents/supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "bytes": 7865503,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "capture": "parents/supabase/migrations/13102026_1127_healthroster_timesheet_correction_requests_v1.sql",
+      "sha256": "49e7110033679e40e9290ad1d6f043fdeb507aa4c0129a6acf20a9f7fce180a4",
+      "bytes": 4481,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "capture": "parents/supabase/migrations/13102026_1133_weekly_source_rule_sets_schema.sql",
+      "sha256": "8fc11ed0be84c7c53f4bf41a9d92775e2b4f071c49c3cb69c07458cded30e7bf",
+      "bytes": 14951,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "capture": "parents/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "sha256": "93dc90bca45e476cde4a74073ab11bf8864ccdca294269a39d13cb56eba16a21",
+      "bytes": 131964,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/064_public_weekly_source_workspace_scopes_v1.sqlinc",
+      "capture": "parents/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/064_public_weekly_source_workspace_scopes_v1.sqlinc",
+      "sha256": "4daf7a2983e5fc1e806f65ef5a292e9a7d0264db6e7bee6f5c216ed4e2602684",
+      "bytes": 18702,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "capture": "parents/supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "sha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d",
+      "bytes": 86352,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+      "capture": "parents/supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql",
+      "sha256": "42a3b830a53ea3ffad232dbe414d06d38771e4d6c4736a16518053a14df811ed",
+      "bytes": 27036,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "capture": "parents/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql",
+      "sha256": "b5ebcfd3f9b404f3533d07bb5cb798302381b6706f7c6ea6eab0d017ca0098f9",
+      "bytes": 275109,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "capture": "parents/supabase/repeatable/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "sha256": "c00abac4e44edaf0a752fca2176ea5f6e1c75f1f676c96bf9655797cfbc264ed",
+      "bytes": 13643,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "capture": "parents/supabase/repeatable/13102026_1134_weekly_source_rule_sets_v1.sql",
+      "sha256": "4d5bd92b34ce4bdb659d3178144b3f1e7822f053dc91cf9c4d40c356dbbcbbba",
+      "bytes": 101270,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "capture": "parents/supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18",
+      "bytes": 70450,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "capture": "parents/supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+      "sha256": "a9b639df6471cb2873a7239f6da6d78152d387144cd2a5364c675cce52aa47a4",
+      "bytes": 583,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "capture": "parents/supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "sha256": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c",
+      "bytes": 73391,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "capture": "parents/supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/10_02_effective_rule_owner.sqlinc",
+      "sha256": "d7a855b54ccb0b9b01d27d7ba2ad4fe3d4895baac41c88b9d1d6bcb5580c44f0",
+      "bytes": 1820,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "capture": "parents/supabase/repeatable/14102026_0430_healthroster_money_native_interfaces_v1.sql",
+      "sha256": "bd93165a3c30a35aea8775bef8fb4234d1901b362fc69c3cda26ef9b8de8ae9d",
+      "bytes": 14562,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "capture": "parents/supabase/repeatable/13102026_1205_healthroster_issued_signed_query_v1.sql",
+      "sha256": "5e7e51c44f2c0ef713df0fd35fe284b9e264f437efaff72da33811b6eaf26a4c",
+      "bytes": 128188,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "capture": "parents/supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "bytes": 311541,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "capture": "parents/supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+      "bytes": 268078,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "capture": "parents/supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "sha256": "116b4cab99eddf64663a84865f40bbad18fa486101a93e02d14d23a84cd62bf0",
+      "bytes": 9589,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "capture": "parents/supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "sha256": "4e220b43f3759f2f3644d85673a42c556debffd6a600b9d35483bbb96da9ac75",
+      "bytes": 211,
+      "commit": "dc33d2760ea5c3ebe8b850db4c031528fe3ab4e5"
+    },
+    {
+      "target": "scripts/healthroster-rowtype-type-review.mjs",
+      "capture": "parents/scripts/healthroster-rowtype-type-review.mjs",
+      "sha256": "fe380ca1c44803f8dad5b04aa0779e025cbdd8ff4c7104356835e5be739496e3",
+      "bytes": 4212,
+      "commit": "bb9786de3c4efa4327cbf01cc8da58f285657604"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "capture": "parents/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751",
+      "bytes": 27619,
+      "commit": "bb9786de3c4efa4327cbf01cc8da58f285657604"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/qt-audit-record-sha256-independent-peer-20261017/R11_WATCHED_PUBLIC_SOURCE_PATHS.json",
+      "capture": "parents/docs/healthroster-build/proposals/qt-audit-record-sha256-independent-peer-20261017/R11_WATCHED_PUBLIC_SOURCE_PATHS.json",
+      "sha256": "6268864e17263678e421683fdc6bd50c18169393154cbab3abe1a4e14ca8aa4b",
+      "bytes": 63949,
+      "commit": "bb9786de3c4efa4327cbf01cc8da58f285657604"
+    }
+  ]
+}

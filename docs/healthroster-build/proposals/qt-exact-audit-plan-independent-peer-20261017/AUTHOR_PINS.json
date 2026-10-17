@@ -1,0 +1,210 @@
+{
+  "version": "CONTACT_EXACT_EXECUTED_AUDIT_BAG_PLAN_SOURCE_PACKET_V1",
+  "files": [
+    {
+      "file": "AUDIT_BAG.sql",
+      "bytes": 650,
+      "sha256": "f5729765fdf3acfaf96ce915b59e342cbd3e5201bd5a06e3b2f5bfdf2dc9663f"
+    },
+    {
+      "file": "EXPLAIN_AUDIT_BAG.sql",
+      "bytes": 746,
+      "sha256": "2a8a5e29d51562e1f6dc0ef87e151e9ff9eb52fb9e14ab690a57161f3fa46f57"
+    },
+    {
+      "file": "factory.test.mjs",
+      "bytes": 5535,
+      "sha256": "bda82c91e51a6961af8e04f9cc4dd29832d7c546d2d607d54ee35cafdceabd6c"
+    },
+    {
+      "file": "factory.txt",
+      "bytes": 2050,
+      "sha256": "d4247b1fa75bb71336a7ffa821af164ea701a905c60878a219cb8ce6bfb2aeb0"
+    },
+    {
+      "file": "FORWARD.json",
+      "bytes": 95128,
+      "sha256": "1fe93fdf9ed240bd92373b1d8abe989359721763f44c9940b25e78ceff229ebc"
+    },
+    {
+      "file": "holder.test.mjs",
+      "bytes": 5705,
+      "sha256": "d7a47031ba3a28cfe49c15a7b0dfea5e96a214f63452810be44e485bac975287"
+    },
+    {
+      "file": "parent/batch-source.mjs",
+      "bytes": 9947,
+      "sha256": "d8ae4bd26c310f610a1549edbe4baf00dd9b0bcb0fb63fdb6db5f907e80bee4d"
+    },
+    {
+      "file": "parent/batch-timing-diagnostic.mjs",
+      "bytes": 6689,
+      "sha256": "0df911bb6d99cbb9b94c5798040562d3a1f73ff6afde571bd1b7cd672c00dbe7"
+    },
+    {
+      "file": "parent/control.mjs",
+      "bytes": 3227,
+      "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8"
+    },
+    {
+      "file": "parent/fixed-metadata-reader.mjs",
+      "bytes": 24981,
+      "sha256": "45d6079e1b6b38dbbd9e376c7c18eeeddc13007f50cc7b359c0f8929a5d88053"
+    },
+    {
+      "file": "parent/hold-batch-timing.mjs",
+      "bytes": 5043,
+      "sha256": "b24241fb383360bffe2e19268f1aa97c3e3379c6a103cd9bf4c4b4efee5e5a51"
+    },
+    {
+      "file": "parent/hold-case.mjs",
+      "bytes": 8180,
+      "sha256": "01522035ba4a2fc3bc505ddd6a58c9418ce684ab296b0ff6eeab780af2c37501"
+    },
+    {
+      "file": "parent/input-builder.mjs",
+      "bytes": 8048,
+      "sha256": "5809dcbd703fb95450ef9dd782cf7d36192d454b07805f2b46030ad7bd606426"
+    },
+    {
+      "file": "parent/MANIFEST.json",
+      "bytes": 8848,
+      "sha256": "f875ddec0ac4fb365ad7b04435284bfbdd734b4d8a763b627d6153d608013d99"
+    },
+    {
+      "file": "parent/metadata-diagnostic.mjs",
+      "bytes": 3613,
+      "sha256": "a16b0a67e5c333e39c23fed4c5287d1929aa0baf9ac2107b9b93112de55f6794"
+    },
+    {
+      "file": "parent/metadata-progress-diagnostic.mjs",
+      "bytes": 9824,
+      "sha256": "d6aaf6580e733a90dc5e71397cb1e62e0edcae61d8d7b9979cb7d65be879cb35"
+    },
+    {
+      "file": "parent/PLAN_SOURCE_SCOPES.json",
+      "bytes": 8763,
+      "sha256": "f897562d54a994dbd0b610b3c5fe10dc32ee4cf7b477d63f0fd5cba1e52f6aca"
+    },
+    {
+      "file": "parent/reference/source-store-metadata.json",
+      "bytes": 198687,
+      "sha256": "b971445cb9197e414686ffd677e1a9759a332eb101788d2c38b940ead1b3f850"
+    },
+    {
+      "file": "parent/shared/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "parent/shared/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    },
+    {
+      "file": "parent/shared/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48330,
+      "sha256": "31acd390acf2ef6dbbd062fbb157feea66f9b5d328440414e67b2bfd4a3f78ab"
+    },
+    {
+      "file": "parent/shared/healthroster-live-test-restoration.mjs",
+      "bytes": 15050,
+      "sha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc"
+    },
+    {
+      "file": "parent/shared/healthroster-rehearsal-turn.mjs",
+      "bytes": 12827,
+      "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa"
+    },
+    {
+      "file": "parent/shared/healthroster-turn-control.mjs",
+      "bytes": 9580,
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "parent/shared/R11_WATCHED_PUBLIC_SOURCE_PATHS.json",
+      "bytes": 63949,
+      "sha256": "6268864e17263678e421683fdc6bd50c18169393154cbab3abe1a4e14ca8aa4b"
+    },
+    {
+      "file": "parent/source.mjs",
+      "bytes": 14702,
+      "sha256": "24449c3b195c6b552547536c0ce93c3ce88e3059b105724d014d33d2a0468313"
+    },
+    {
+      "file": "parent/SOURCE_PINS.json",
+      "bytes": 27619,
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751"
+    },
+    {
+      "file": "payload/audit-bag-plan.mjs",
+      "bytes": 11057,
+      "sha256": "8bec378d43bb0ffc50421f259c8bcdc6da1a7783e57477b6faac5f3f092d0aa2"
+    },
+    {
+      "file": "payload/fixed-metadata-reader.mjs",
+      "bytes": 27369,
+      "sha256": "649970e791827bae200a58190e6ace711979864346743337956d628c1d87d7db"
+    },
+    {
+      "file": "payload/hold-audit-bag-plan.mjs",
+      "bytes": 5064,
+      "sha256": "3199113424163d9053899d542dbf5e3880bc78ac945f08bc7bad67475ef973ba"
+    },
+    {
+      "file": "payload/MANIFEST.json",
+      "bytes": 9160,
+      "sha256": "4a30f0bf9f48d2a27e618dcb20867ecde27d4d3ac296256e63fe2270f18cbc7c"
+    },
+    {
+      "file": "pg17-proof.py",
+      "bytes": 2594,
+      "sha256": "a1c5c36eb864366a883fbfc24629a0365fd3beb66e639490daf6afabb731bcd0"
+    },
+    {
+      "file": "prepare.py",
+      "bytes": 6072,
+      "sha256": "d5d947799fd9d3ad8e653b756826b868267897236be2fcfd6e7bdf35675094a0"
+    },
+    {
+      "file": "R11_OVERLAP.json",
+      "bytes": 813,
+      "sha256": "09268d8e26fc74affe4d280cd847f358f71542c832af4c4dfe8a082b82d4a767"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4874,
+      "sha256": "f75b9e866150fdff2132c91225ab9691c970aa51c89fcb4a7faee04d353dc901"
+    },
+    {
+      "file": "render-source.mjs",
+      "bytes": 1586,
+      "sha256": "0b8d97058d417900ae7db42c91395b0f4a1eee4684c2b9ee3c5a7ec48fd18bee"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1100,
+      "sha256": "84234e33807eeb0bac496cf7fcac7494cdfd05bc53c7209c9fbdb29b3656b78b"
+    },
+    {
+      "file": "SOURCE_DERIVATION.json",
+      "bytes": 2480,
+      "sha256": "b105093787358c45f5be9667bddfea5a9c3fd5276b11a037cf22ec1f454b0b06"
+    },
+    {
+      "file": "test-loader.mjs",
+      "bytes": 1109,
+      "sha256": "c38a1631e467e1d968eb23319454de8b044178749c72d15c2fa1f4ef519d7e42"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 8272,
+      "sha256": "e0ca206e8c92fad392d027e8b705c5e51255236b49503dced4473b416025fc0b"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 4569,
+      "sha256": "2be361893231a8fc287e8df5939a2312d0d08c4f7d49bd223b058a67fb1b698d"
+    }
+  ]
+}

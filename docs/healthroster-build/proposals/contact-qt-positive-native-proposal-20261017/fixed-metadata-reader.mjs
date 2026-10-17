@@ -13,6 +13,8 @@ import {COMPONENTS,compileComponentInputs} from './component-source.mjs';
 import {compileNativeBatch,joinNativeSnapshotFrames} from './batch-source.mjs';
 import {BatchTimingCapture,compileBatchTimingInput,batchTimingProgressFor} from './batch-timing-diagnostic.mjs';
 export {batchTimingProgressFor};
+import {AuditBagPlanCapture,compileAuditBagPlan,auditBagPlanProgressFor} from './audit-bag-plan.mjs';
+export {auditBagPlanProgressFor};
 
 export const LIMITS=Object.freeze({stdoutBytes:64*1024*1024,stderrBytes:16*1024,
  connectSeconds:10,statementMilliseconds:45000,lockMilliseconds:2000,
@@ -61,7 +63,8 @@ export class BoundedMemoryCapture {
 function assertPins(root){
  for(const row of protectedFiles)check(sha(fs.readFileSync(path.join(root,row.file)))===row.sha256,'LOCAL_METADATA_REVIEWED_SOURCE_CHANGED');
 }
-async function runFixedChild({input,env,turn,phase,diagnosticMode=null,batch=false,batchTiming=false}){
+async function runFixedChild({input,env,turn,phase,diagnosticMode=null,batch=false,batchTiming=false,auditBagPlan=false}){
+ check(!auditBagPlan||(phase==='BEFORE'&&!batch&&!batchTiming&&diagnosticMode===null),'LOCAL_METADATA_AUDIT_PLAN_MODE_REFUSED');
  check(!batchTiming||(phase==='BEFORE'&&batch&&diagnosticMode===null),'LOCAL_METADATA_BATCH_TIMING_MODE_REFUSED');
  const diagnostic=diagnosticContext(phase);
  try{await turn.assertHeld('before-fixed-read-only-metadata');}catch{throw diagnosticError('LOCAL_METADATA_TURN_LOST',diagnostic);}
@@ -69,9 +72,9 @@ async function runFixedChild({input,env,turn,phase,diagnosticMode=null,batch=fal
  let child;try{child=spawn(psql,['-X','-q','-A','-t','-v','ON_ERROR_STOP=on','-v','VERBOSITY=sqlstate'],
   {windowsHide:true,env,stdio:['pipe','pipe','pipe']});diagnostic.spawnReturnedAt=new Date().toISOString();}catch{throw diagnosticError('LOCAL_METADATA_START_FAILED',diagnostic);}
  return new Promise((resolve,reject)=>{
-  const capture=batchTiming?new BatchTimingCapture(new BoundedMemoryCapture(phase,true)):diagnosticMode===null?new BoundedMemoryCapture(phase,batch):new DiagnosticMemoryCapture(diagnosticMode);let failure=null,closed=false,settled=false,termTimer,closeTimer;
+  const capture=auditBagPlan?new AuditBagPlanCapture():batchTiming?new BatchTimingCapture(new BoundedMemoryCapture(phase,true)):diagnosticMode===null?new BoundedMemoryCapture(phase,batch):new DiagnosticMemoryCapture(diagnosticMode);let failure=null,closed=false,settled=false,termTimer,closeTimer;
   const clean=()=>{clearTimeout(deadline);clearTimeout(termTimer);clearTimeout(closeTimer);turn.signal.removeEventListener('abort',lost);};
-  const finishError=code=>{if(settled)return;settled=true;clean();const error=diagnosticError(code,diagnostic,capture.diagnosticSqlstate(closed));if(diagnosticMode!==null||batchTiming)capture.attachFailure(error,closed);reject(error);};
+  const finishError=code=>{if(settled)return;settled=true;clean();const error=diagnosticError(code,diagnostic,capture.diagnosticSqlstate(closed));if(diagnosticMode!==null||batchTiming||auditBagPlan)capture.attachFailure(error,closed);reject(error);};
   const stop=code=>{
    failure??=code;if(closed)return;
    child.kill('SIGTERM');
@@ -236,6 +239,22 @@ export async function createFixedBatchTimingDiagnostic({root,turn,caseId}){
    }catch(error){state='FAILED';error.batchTimingPhases=phases.map(x=>({...x}));throw error;}finally{result=null;bInput=null;}
   }
  });
+}
+
+// Separate one-shot estimated plan for the exact EXECUTED audit bag only.
+export async function createFixedAuditBagPlanDiagnostic({root,turn,caseId}){
+ const reader=await createFixedBatchMetadataReader({root,turn,caseId}),original=reader.inspectSource();
+ const managed=await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')).href),built=compileAuditBagPlan(original.batch,managed);
+ let state='READY';return Object.freeze({sourceDescriptor:Object.freeze({...built.descriptor,scope:SCOPE,limits:LIMITS}),async run(){
+  check(state==='READY','LOCAL_METADATA_AUDIT_PLAN_ONESHOT_REQUIRED');state='RUNNING';
+  try{assertPins(root);check(!turn.signal.aborted,'LOCAL_METADATA_TURN_LOST');await source(root,caseId);
+   const helpers=await import(pathToFileURL(path.join(root,'scripts/healthroster-rehearsal-turn.mjs')).href),env=helpers.agencyChildEnvironment('healthroster_contact_qt_fixed_metadata');env.PGCLIENTENCODING='UTF8';env.PGCONNECT_TIMEOUT=String(LIMITS.connectSeconds);env.PGOPTIONS+=' -c default_transaction_read_only=on -c statement_timeout='+LIMITS.statementMilliseconds+' -c lock_timeout='+LIMITS.lockMilliseconds;
+   const result=await runFixedChild({input:built.input,env,turn,phase:'BEFORE',auditBagPlan:true}),p=result.peer;
+   check(p.database==='cloudtms_test_clone'&&p.databaseOid===turn.identity.databaseOid&&Number.isSafeInteger(p.readerPid)&&p.readerPid>0&&p.readerPid!==turn.identity.backendPid&&p.holderPid===turn.identity.backendPid&&p.readOnly===true&&p.isolation==='repeatable read'&&p.noRoleSwitch===true,'LOCAL_METADATA_NATIVE_PEER_REFUSED');
+   check(!turn.signal.aborted,'LOCAL_METADATA_TURN_LOST');assertPins(root);state='DONE';
+   return{status:'EXACT_EXECUTED_AUDIT_BAG_ESTIMATED_PLAN_CAPTURED_NOT_RESTORATION',peer:p,plan:result.plan,progress:result.progress,source:built.descriptor,childClosed:result.childClosed,transport:result.transport,noBDispatched:true,noFixture:true,completeMapsPersisted:false,restorationQualified:false};
+  }catch(error){state='FAILED';throw error;}
+ }});
 }
 
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))throw Error('SOURCE_ONLY_ROOT_METADATA_CALLBACK_REQUIRED');

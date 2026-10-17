@@ -1,0 +1,22 @@
+{
+  "version": "D10_ACTUAL_JOINED_SOURCE_GATE_R1_HOLD_V1",
+  "sourceParent": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+  "selectedSourceManifestSha256": "1d4f2204cd4402d665792aef3813e7a25eba2b3cf0082a85d6b439a6265ceb7c",
+  "actualCommand": [
+    "node",
+    "--input-type=module",
+    "-e",
+    "import {verifyBpayNextSourceGates} from './scripts/bpay-next-source-gates.mjs'; console.log(JSON.stringify(verifyBpayNextSourceGates()))"
+  ],
+  "processExitCode": 1,
+  "error": "HEALTH_SOURCE_READ_TYPE_CURRENT_SOURCE_CHANGED",
+  "location": "scripts/bpay-next-source-gates.mjs verifyBpayNextSourceGates / scripts/healthroster-source-read-type-review.mjs retained whole-owner variant guard",
+  "diagnosis": "The nested retained classifier is evaluated before the outer D10 transfer. Its mandatory ACL verifier full-image guard correctly refuses the four-name successor. A finite prior-image transfer must run before that retained classifier; the actual new whole-image/census checks remain required.",
+  "disposition": "No commit/install/native proof from this attempt; exact correction and integrated regression required.",
+  "databaseSourceIntegrity": {
+    "status": "PASS",
+    "migrations": 428,
+    "repeatables": 1099
+  },
+  "databaseOrAuthOrBrowserOrNativeCalls": 0
+}

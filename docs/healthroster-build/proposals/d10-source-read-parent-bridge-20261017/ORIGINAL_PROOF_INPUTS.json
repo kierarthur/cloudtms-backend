@@ -1,0 +1,35 @@
+{
+  "originalManifestSha256": "1d4f2204cd4402d665792aef3813e7a25eba2b3cf0082a85d6b439a6265ceb7c",
+  "rows": [
+    {
+      "file": "GRAMMAR_TYPE_RESULTS.json",
+      "sha256": "faad64059371bfc5be35a255a24064f98b86198174a807ca44b1107ebd72957d",
+      "bytes": 95637
+    },
+    {
+      "file": "RAW_F23_CENSUS.json",
+      "sha256": "f12047227a06db9a48cdee4ea785222a50723da6f5db109c4641634f8e31fae3",
+      "bytes": 24889
+    },
+    {
+      "file": "SOURCE_PROVENANCE.json",
+      "sha256": "198e08c49480015e655c68cf4a8ac389834fc27eb06037384d9d66eb94efb7fd",
+      "bytes": 24824
+    },
+    {
+      "file": "SOURCE_OWNER_REVERSES.json",
+      "sha256": "94016cf755db58eabebb258a72d68e70627e67f2feca72fbf0ffc0289fc13fc6",
+      "bytes": 180642
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "sha256": "953a86c10fe108dc7431b858f060215fc40b2501aea3cb82b09b09c73f93421a",
+      "bytes": 4738609
+    },
+    {
+      "file": "parents/supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "bytes": 7865503
+    }
+  ]
+}

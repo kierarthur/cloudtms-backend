@@ -1,0 +1,15 @@
+{
+  "version": "EXACT_AUDIT_BAG_PLAN_R11_WATCHED_INTERSECTION_V1",
+  "source": "parent/shared/R11_WATCHED_PUBLIC_SOURCE_PATHS.json",
+  "sourceSha256": "6268864e17263678e421683fdc6bd50c18169393154cbab3abe1a4e14ca8aa4b",
+  "watchedRows": 231,
+  "targets": [
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/audit-bag-plan.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/hold-audit-bag-plan.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json"
+  ],
+  "selectedOverlap": [],
+  "canonicalSharedFilesChanged": 0,
+  "futureSourceAdmission": "ROOT_OWNED_NOT_RUN"
+}

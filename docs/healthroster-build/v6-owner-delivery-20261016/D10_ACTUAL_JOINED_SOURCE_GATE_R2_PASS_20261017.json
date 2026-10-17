@@ -1,0 +1,113 @@
+{
+  "version": "D10_ACTUAL_JOINED_SOURCE_GATE_R2_PASS_V1",
+  "actualSourceParent": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+  "execution": "Actual complete verifyBpayNextSourceGates() on integrated saved/index source, not a substitute or synthetic gate.",
+  "processExitCode": 0,
+  "result": {
+    "frozenFiles": 7,
+    "frozenTriggers": 18,
+    "frozenTables": 45,
+    "protectedSignatures": 24,
+    "sqlSources": 2272,
+    "rpcRoots": 80,
+    "routineWorkSignatures": 183,
+    "typedTransportSignatures": 41
+  },
+  "finalSelectedRuntimeImages": [
+    {
+      "file": "supabase/repeatable/17102026_1900_health_d10_query_reader/01_weekly_source_actual_timesheet_submission_v1.sqlinc",
+      "bytes": 14295,
+      "sha256": "f7241f54b3d8d4e67410cd736e8b9e0d3f8a270cdf4c1caa9970c1a7778dfbb3"
+    },
+    {
+      "file": "supabase/repeatable/17102026_1900_health_d10_query_reader/02_weekly_source_signed_submission_read_context_v1.sqlinc",
+      "bytes": 4471,
+      "sha256": "c30413ef5607b5b34393a7619dc2be04e413d2a25057261f60a70b36f7d70ff0"
+    },
+    {
+      "file": "supabase/repeatable/17102026_1900_health_d10_query_reader/03_weekly_source_check_only_query_rows_v1.sqlinc",
+      "bytes": 22185,
+      "sha256": "686f01040be67787d4ee38ecb7ca993018aefe4dc044fd679b361910047588fd"
+    },
+    {
+      "file": "supabase/repeatable/17102026_1900_health_d10_query_reader/04_weekly_source_check_only_issue_filter_keys_v1.sqlinc",
+      "bytes": 2278,
+      "sha256": "1d44e61ba42d7db2eae5f7976f4e6293310ee78f154e824edbdbbae7d86a7460"
+    },
+    {
+      "file": "supabase/repeatable/17102026_1900_health_d10_query_reader/05_weekly_source_check_only_candidate_reminder_subject_v1.sqlinc",
+      "bytes": 5474,
+      "sha256": "bb23b8c0fed028fe3f264887453e559f02936022515df25d471a04d211362c5f"
+    },
+    {
+      "file": "supabase/repeatable/17102026_1900_health_d10_query_reader/06_weekly_source_check_only_candidate_reminder_context_v1.sqlinc",
+      "bytes": 9467,
+      "sha256": "6cbf2d426045ece02f484cb92be1f33800d18017215fba23751e376a2570e61a"
+    },
+    {
+      "file": "supabase/repeatable/17102026_1900_health_d10_query_reader/07_weekly_source_check_only_query_groups_v1.sqlinc",
+      "bytes": 15542,
+      "sha256": "522a3b84b66b6af5d7741dd77e98e12f4e4c947ed80372d605c6f58cbacbe946"
+    },
+    {
+      "file": "supabase/repeatable/17102026_1900_health_d10_query_reader/98_private_helper_classification.sqlinc",
+      "bytes": 49684,
+      "sha256": "674454b315bb2862c09502b89d6a63d731739ec8614ae9165fb284d2784f22d2"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 102837,
+      "sha256": "cbea5f801b5ab89685bf39d83ca3cf51fccf4a751e8222e9936ee415711b044e"
+    },
+    {
+      "file": "supabase/migrations/17102026_1900_health_d10_query_reader_admission.sql",
+      "bytes": 774,
+      "sha256": "fb3ab56de20436b6c6b16545b39cdd5be7e42cc6155650f7817e98e9f2c34c83"
+    },
+    {
+      "file": "supabase/repeatable/17102026_1900_health_d10_query_reader_v1.sql",
+      "bytes": 896,
+      "sha256": "05428c26d4c841e0e190112707eeecf94994f9b33483400f81743c6d13dd53ab"
+    },
+    {
+      "file": "supabase/verification/17102026_1900_health_d10_query_reader_security.sql",
+      "bytes": 2217,
+      "sha256": "f9a4162eb4e94681fde4e079d283272338b9c85c2e8d3c043100c6258c748c0f"
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "bytes": 1760783,
+      "sha256": "5c92730c7c586fc63a909809d59e73b60e72a95f6dae9dc662e43fa018a62956"
+    },
+    {
+      "file": "supabase/release/current-release.json",
+      "bytes": 36968,
+      "sha256": "fc070d23cd03548b6156738ca7e08fda58381895cf61438d34ec84dd7ff31506"
+    },
+    {
+      "file": "supabase/release/migration-lock.json",
+      "bytes": 79859,
+      "sha256": "d32dd319f202bf2e4f174da8e54e25f24f344ac44aaf19555b08688f3d3ecc26"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "bytes": 283935,
+      "sha256": "0eec2d8234ecdcd954032e18a612a788549e9086df6d6f3ec67cca086fb53ddb"
+    },
+    {
+      "file": "scripts/healthroster-d10-reader-type-review.mjs",
+      "bytes": 9284,
+      "sha256": "89314be9037f80a0b31c46d26dd9ba65f758fa7f53d642d5bc1e276f177c3d5b"
+    }
+  ],
+  "databaseSourceIntegrity": {
+    "status": "PASS",
+    "migrations": 428,
+    "repeatables": 1099
+  },
+  "retainedR1Hold": "docs/healthroster-build/v6-owner-delivery-20261016/D10_ACTUAL_JOINED_SOURCE_GATE_R1_HOLD_20261017.json",
+  "appliedCorrections": 1,
+  "rejectedCorrections": 0,
+  "native": "NOT_RUN",
+  "install2": "NOT_INSTALLED"
+}

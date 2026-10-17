@@ -1,0 +1,15 @@
+fatal: path 'scripts/healthroster-d10-reader-type-review.mjs' exists on disk, but not in 'bb9786de3c4efa4327cbf01cc8da58f285657604'
+✔ every complete before image is cross-bound to capture, selection, actual saved/index and declared historical HEAD (137.7283ms)
+✔ complete exact inverses reject a snippet parent and reconstruct every raw byte (0.7021ms)
+✔ new module is a pure append to the whole original module; old factory/proofs raw unchanged (62.6596ms)
+✔ gate initializer changes retain every original callback/options byte after the one factory argument (0.2398ms)
+✔ all 21 retained proof files equal their real historical and current saved/index images (1458.6667ms)
+✔ frozen inventory remains exact after author and independent replay (19.4486ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1777.862

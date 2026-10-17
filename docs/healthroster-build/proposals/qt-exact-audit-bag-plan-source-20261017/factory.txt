@@ -1,0 +1,15 @@
+// Separate one-shot estimated plan for the exact EXECUTED audit bag only.
+export async function createFixedAuditBagPlanDiagnostic({root,turn,caseId}){
+ const reader=await createFixedBatchMetadataReader({root,turn,caseId}),original=reader.inspectSource();
+ const managed=await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')).href),built=compileAuditBagPlan(original.batch,managed);
+ let state='READY';return Object.freeze({sourceDescriptor:Object.freeze({...built.descriptor,scope:SCOPE,limits:LIMITS}),async run(){
+  check(state==='READY','LOCAL_METADATA_AUDIT_PLAN_ONESHOT_REQUIRED');state='RUNNING';
+  try{assertPins(root);check(!turn.signal.aborted,'LOCAL_METADATA_TURN_LOST');await source(root,caseId);
+   const helpers=await import(pathToFileURL(path.join(root,'scripts/healthroster-rehearsal-turn.mjs')).href),env=helpers.agencyChildEnvironment('healthroster_contact_qt_fixed_metadata');env.PGCLIENTENCODING='UTF8';env.PGCONNECT_TIMEOUT=String(LIMITS.connectSeconds);env.PGOPTIONS+=' -c default_transaction_read_only=on -c statement_timeout='+LIMITS.statementMilliseconds+' -c lock_timeout='+LIMITS.lockMilliseconds;
+   const result=await runFixedChild({input:built.input,env,turn,phase:'BEFORE',auditBagPlan:true}),p=result.peer;
+   check(p.database==='cloudtms_test_clone'&&p.databaseOid===turn.identity.databaseOid&&Number.isSafeInteger(p.readerPid)&&p.readerPid>0&&p.readerPid!==turn.identity.backendPid&&p.holderPid===turn.identity.backendPid&&p.readOnly===true&&p.isolation==='repeatable read'&&p.noRoleSwitch===true,'LOCAL_METADATA_NATIVE_PEER_REFUSED');
+   check(!turn.signal.aborted,'LOCAL_METADATA_TURN_LOST');assertPins(root);state='DONE';
+   return{status:'EXACT_EXECUTED_AUDIT_BAG_ESTIMATED_PLAN_CAPTURED_NOT_RESTORATION',peer:p,plan:result.plan,progress:result.progress,source:built.descriptor,childClosed:result.childClosed,transport:result.transport,noBDispatched:true,noFixture:true,completeMapsPersisted:false,restorationQualified:false};
+  }catch(error){state='FAILED';throw error;}
+ }});
+}
