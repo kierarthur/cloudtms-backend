@@ -13,8 +13,8 @@
     },
     {
       "file": "coordinate.mjs",
-      "bytes": 4938,
-      "sha256": "13127c4af70d3fdb32057d8c0a0cceaa58e430bbd22e2ec6accfaab169dcd614"
+      "bytes": 5280,
+      "sha256": "8e092dcd7947156684a7284c8fd774b2ba8e2320b93f7f1beba15fd44b53d60a"
     },
     {
       "file": "FULL_PARENT_DERIVATIONS.json",
@@ -28,8 +28,8 @@
     },
     {
       "file": "progress.mjs",
-      "bytes": 4560,
-      "sha256": "fda0b2de5a53f29c1fbd77bee5ed172ee22d80bb0d081794bf63e2a3ee2e076c"
+      "bytes": 4917,
+      "sha256": "dd918d8222a028dd6ccac06d8f5a997f0190fc45b9e9b54c37c115abab14c3c2"
     },
     {
       "file": "progress.test.mjs",
@@ -89,7 +89,7 @@
     {
       "file": "SOURCE_PINS.json",
       "bytes": 4429,
-      "sha256": "8720d67675d157b02ef602bcdfac960f244180142ac745ad72d9f3a028f64fff"
+      "sha256": "da542b6a2f9ba1c8bdb393a27ca32ebf0e81bae7f5fd1872d125021682be6936"
     },
     {
       "file": "source-binding.test.mjs",
@@ -103,8 +103,8 @@
     },
     {
       "file": "stage.mjs",
-      "bytes": 2089,
-      "sha256": "b33cd9943a80b87a04af6d0290e22a76549c741aed6666e338cf306ea784b39b"
+      "bytes": 2117,
+      "sha256": "82fff5d95e548fe510ceb351b587586e833133e8f88edaf8d0d7b47d5e71e0d0"
     },
     {
       "file": "stage.test.mjs",
