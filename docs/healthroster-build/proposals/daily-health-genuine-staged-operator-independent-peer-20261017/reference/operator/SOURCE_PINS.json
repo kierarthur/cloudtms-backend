@@ -1,0 +1,92 @@
+{
+  "version": "DAILY_GENUINE_OPERATOR_PUBLIC_SOURCE_PINS_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "auditCommit": "e1c13ecb123224aea0fa95beff3727cd4c58bbb2",
+  "publishedCalculator": {
+    "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "file": "broker/src/daily-canonical-authority.js",
+    "bytes": 11475,
+    "sha256": "64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b",
+    "captured": "reference/published/daily-canonical-authority.js"
+  },
+  "authObservation": {
+    "commit": "c6f0e9f124db7d2b9846d97526a1ddf158b11e4a",
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/TEST_AUTH_REFRESH_R4_SUCCESS_20261017.json",
+    "sha256": "f31df2271a058efff80934a62fae580d00f5145e3716682fa0304797c0adc632"
+  },
+  "frontend": {
+    "root": "D:/Development/GitHub/TEST-Frontend",
+    "commit": "7a75111ec2923693e75feef4a7ccbcb6ecba942e",
+    "file": "js/main.js",
+    "bytes": 17616949,
+    "sha256": "02b44699ffef0dabab73b2ce8743d62195f003e86a3879881909a04f11cdc684"
+  },
+  "localRuntime": [
+    {
+      "file": "D:/Development/GitHub/TEST-Frontend/node_modules/@playwright/test/package.json",
+      "bytes": 754,
+      "sha256": "cf92117ef1d8cbf1e4b2dffb63a0da552c0173bd6052f0f45711c0f00b79dc99"
+    },
+    {
+      "file": "D:/Development/GitHub/TEST-Frontend/node_modules/playwright/lib/index.js",
+      "bytes": 34490,
+      "sha256": "36faa53b7c6fa8f76788f2bcfa21d72edc22e5f528c45328b71d07e215d79a32"
+    }
+  ],
+  "native": "NOT_RUN",
+  "deployedRuntime": "ROOT_ACTIVE_RUNTIME_BINDING_REQUIRED",
+  "privateStateHandling": "PATH_METADATA_ONLY_PARENT_NO_STATE_READ_HASH_COPY",
+  "rootRuntimeObservations": [
+    {
+      "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/NORMAL_TEST_WORKER_DEPLOYMENTS_READONLY_20261017.json",
+      "bytes": 4681,
+      "sha256": "172207c808ccfa82818af9e2961ca577253757486ea28e997e9b82bfb21481ec",
+      "captured": "reference/NORMAL_TEST_WORKER_DEPLOYMENTS_READONLY_20261017.json"
+    },
+    {
+      "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/NORMAL_TEST_WORKER_ACTIVE_VERSION_METADATA_20261017.json",
+      "bytes": 742,
+      "sha256": "858886bbad7a2fefcb4de7f538b3b9af8fc980d84c3a713814b475288256ecdd",
+      "captured": "reference/NORMAL_TEST_WORKER_ACTIVE_VERSION_METADATA_20261017.json"
+    },
+    {
+      "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+      "bytes": 5618,
+      "sha256": "b9ba019fc9f2ec59e5ae9ddd7d2257f214c5bc76246e2e3089bb76e38a588275",
+      "captured": "reference/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json"
+    },
+    {
+      "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_AUDIT_RUNTIME_ROOT_REVIEW_20261017.json",
+      "bytes": 1837,
+      "sha256": "2a4ebac664ff8d9041bbe7d8f629c7f93950eb6698a7dc7e2ed83532d9074186",
+      "captured": "reference/DAILY_GENUINE_AUDIT_RUNTIME_ROOT_REVIEW_20261017.json"
+    }
+  ],
+  "turnControl": {
+    "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+    "file": "scripts/healthroster-turn-control.mjs",
+    "bytes": 9580,
+    "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8",
+    "captured": "reference/healthroster-turn-control.mjs"
+  },
+  "authReusableParents": [
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "commit": "462c196c503c39731fe331f4b6899f3e72b35b9c",
+      "file": "docs/healthroster-build/proposals/test-auth-refresh-suppressed-startup-forward-20261017/run-auth-refresh.mjs",
+      "bytes": 9514,
+      "sha256": "abe211b76df1b3700972de37dc194ed9561815d9e2fb4163f5601274447990fd"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "commit": "462c196c503c39731fe331f4b6899f3e72b35b9c",
+      "file": "docs/healthroster-build/proposals/test-auth-refresh-suppressed-startup-forward-20261017/policy.mjs",
+      "bytes": 7669,
+      "sha256": "62f4daa452ece71dc6189155a85bb13af716120a8d6cbbf28551a6f23fc379cd"
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+function ukLocalToUtcISO(ymd, hhmm = "00:00", opts = null) {
+  const ymdStr = String(ymd || '').trim();
+  const hhmmStr = String(hhmm || '00:00').trim();
+
+  const mDate = ymdStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const mTime = hhmmStr.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+  if (!mDate || !mTime) return null;
+
+  const Y  = Number(mDate[1]);
+  const Mo = Number(mDate[2]);
+  const D  = Number(mDate[3]);
+  const H  = Number(mTime[1]);
+  const Mi = Number(mTime[2]);
+
+  if (!Y || Mo < 1 || Mo > 12 || D < 1 || D > 31 || H < 0 || H > 23 || Mi < 0 || Mi > 59) {
+    return null;
+  }
+
+  const options = (opts && typeof opts === 'object') ? opts : {};
+
+  const formatter = ukLocalToUtcISO._formatterLondon || (ukLocalToUtcISO._formatterLondon = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    hourCycle: 'h23'
+  }));
+
+  const targetYmd = `${String(Y).padStart(4, '0')}-${String(Mo).padStart(2, '0')}-${String(D).padStart(2, '0')}`;
+  const targetHm  = `${String(H).padStart(2, '0')}:${String(Mi).padStart(2, '0')}`;
+
+  const formatLocal = (dt) => {
+    const parts = formatter.formatToParts(dt);
+    const year  = parts.find((p) => p.type === 'year')?.value || '';
+    const month = parts.find((p) => p.type === 'month')?.value || '';
+    const day   = parts.find((p) => p.type === 'day')?.value || '';
+    let hour    = parts.find((p) => p.type === 'hour')?.value || '';
+    const min   = parts.find((p) => p.type === 'minute')?.value || '';
+
+    if (hour === '24') hour = '00';
+
+    return {
+      ymd:  (year && month && day) ? `${year}-${month}-${day}` : '',
+      hhmm: (hour && min) ? `${hour}:${min}` : ''
+    };
+  };
+
+  const candidates = [];
+  const seen = new Set();
+
+  for (const offsetHours of [0, 1]) {
+    const ms = Date.UTC(Y, Mo - 1, D, H - offsetHours, Mi, 0, 0);
+    const dt = new Date(ms);
+    if (!Number.isFinite(dt.getTime())) continue;
+
+    const local = formatLocal(dt);
+    if (local.ymd !== targetYmd || local.hhmm !== targetHm) continue;
+
+    const iso = dt.toISOString();
+    if (seen.has(iso)) continue;
+    seen.add(iso);
+
+    candidates.push({ iso, ms });
+  }
+
+  candidates.sort((a, b) => a.ms - b.ms);
+
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0].iso;
+
+  const relationRefMs = (() => {
+    const ref = options.referenceIso || options.afterIso || options.beforeIso || null;
+    const ms = ref ? new Date(ref).getTime() : NaN;
+    return Number.isFinite(ms) ? ms : null;
+  })();
+
+  if (relationRefMs != null) {
+    if (options.afterIso || options.relation === 'after' || options.direction === 'after') {
+      const hit = candidates.find((c) => c.ms > relationRefMs);
+      if (hit) return hit.iso;
+    }
+    if (options.beforeIso || options.relation === 'before' || options.direction === 'before') {
+      const hit = [...candidates].reverse().find((c) => c.ms < relationRefMs);
+      if (hit) return hit.iso;
+    }
+  }
+
+  const prefer = String(options.prefer || '').trim().toLowerCase();
+  if (prefer === 'later' || prefer === 'latest' || prefer === 'second') {
+    return candidates[candidates.length - 1].iso;
+  }
+  if (prefer === 'earlier' || prefer === 'earliest' || prefer === 'first') {
+    return candidates[0].iso;
+  }
+
+  if (options.rejectAmbiguous === true || options.strict === true) {
+    return null;
+  }
+
+  return candidates[0].iso;
+}

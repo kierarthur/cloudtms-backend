@@ -1,0 +1,460 @@
+{
+  "version": "DAILY_GENUINE_CURRENT_PRODUCER_CENSUS_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "commit": "5b4f4e4c196871fa85722435deeee3ad418908f2",
+  "inputs": [
+    {
+      "file": "broker/src/index.js",
+      "bytes": 8936784,
+      "sha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db"
+    },
+    {
+      "file": "broker/src/daily-canonical-authority.js",
+      "bytes": 18725,
+      "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942"
+    },
+    {
+      "file": "broker/src/daily-schedule-authority.js",
+      "bytes": 14306,
+      "sha256": "1623f5294d7da3860731ac6eee91f8fe6aed1f3fc27f01ab42eb1ea4c7fbeb2e"
+    },
+    {
+      "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "bytes": 29493,
+      "sha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "bytes": 8650,
+      "sha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6"
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "bytes": 1746259,
+      "sha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c"
+    }
+  ],
+  "functions": [
+    {
+      "name": "createClientWithSettingsAtomic",
+      "file": "reference/worker/createClientWithSettingsAtomic.js.txt",
+      "startLine": 512,
+      "endLine": 539,
+      "bytes": 1388,
+      "sha256": "8bacd300e3a39b2b0aa0e1d0807fc9075f30bd64b1a88d0e63d031bc91e9fb8d",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "handleCreateClient",
+      "file": "reference/worker/handleCreateClient.js.txt",
+      "startLine": 141212,
+      "endLine": 141234,
+      "bytes": 1020,
+      "sha256": "a0cda4932d3e08ef288fd74249d3b20cf10e2f0fe45d361dfc6e9fc44f75a09e",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "handleCreateCandidate",
+      "file": "reference/worker/handleCreateCandidate.js.txt",
+      "startLine": 149557,
+      "endLine": 149802,
+      "bytes": 8415,
+      "sha256": "42642fcfbe70961b2b8276e875e75c69a673a15a3442a04fe3c2d4e6046b4231",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "handleUpsertClientRate",
+      "file": "reference/worker/handleUpsertClientRate.js.txt",
+      "startLine": 158899,
+      "endLine": 159083,
+      "bytes": 7868,
+      "sha256": "5e6c7f3b1a5dc5302971c91d5cf80a5ea464e76b6119312e6ee9b981bc43d518",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "handleTimesheetCreateManualDaily",
+      "file": "reference/worker/handleTimesheetCreateManualDaily.js.txt",
+      "startLine": 28622,
+      "endLine": 28916,
+      "bytes": 8574,
+      "sha256": "23cd9c38a20d43398756965210b4d47391eee94583ea61347d548c8d39344a77",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "saveAndRecalculateCanonicalDaily",
+      "file": "reference/worker/saveAndRecalculateCanonicalDaily.js.txt",
+      "startLine": 28054,
+      "endLine": 28103,
+      "bytes": 1915,
+      "sha256": "860f54d4fc2a807ddd77c17151e5c47f93541d6c20c4e28824c6ba936445409b",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "runTsfinWorkerOnce",
+      "file": "reference/worker/runTsfinWorkerOnce.js.txt",
+      "startLine": 167170,
+      "endLine": 168338,
+      "bytes": 45081,
+      "sha256": "024d4352267936829914046f1b0ec3bb33cc9b053d9c39d35711606948ee50a9",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "requireUser",
+      "file": "reference/worker/requireUser.js.txt",
+      "startLine": 139791,
+      "endLine": 139829,
+      "bytes": 1385,
+      "sha256": "72cb3dc069bbec6c973eff2e7258f1649b721978c47cd56d75dd8ad81089ca2a",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "tsfinTargetedDrainNow",
+      "file": "reference/worker/tsfinTargetedDrainNow.js.txt",
+      "startLine": 172953,
+      "endLine": 173222,
+      "bytes": 8426,
+      "sha256": "af80a52b263df6e769d797eaa2a3739512ef594800da9d79a76e26d8fef8c74f",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "enqueueTsfinRecomputeForClient",
+      "file": "reference/worker/enqueueTsfinRecomputeForClient.js.txt",
+      "startLine": 160658,
+      "endLine": 160687,
+      "bytes": 986,
+      "sha256": "787e0be9d2018fb0754462c736fef321a176ad4ba15cd2971b8b77e8dd678827",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "rpcTsfinDequeueSpecific",
+      "file": "reference/worker/rpcTsfinDequeueSpecific.js.txt",
+      "startLine": 165644,
+      "endLine": 165661,
+      "bytes": 805,
+      "sha256": "db527150e9e48a6ff35e6e3bfbd88b8d0ab5c0bfffb200aec0c64f01236735e1",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "rpcTsfinLoadContextBatch",
+      "file": "reference/worker/rpcTsfinLoadContextBatch.js.txt",
+      "startLine": 165679,
+      "endLine": 165698,
+      "bytes": 788,
+      "sha256": "4cb6a97b9581449cda587a6d45a004d6707977cffad363635f8700157cde287e",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "rpcTsfinResolveRatesBatch",
+      "file": "reference/worker/rpcTsfinResolveRatesBatch.js.txt",
+      "startLine": 165700,
+      "endLine": 165716,
+      "bytes": 748,
+      "sha256": "839218845ebccb87037ee44b6e605a2b2eb4969a8b627e41b0e4b39bf30ad899",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "rpcTsfinWriteSnapshotsAndComplete",
+      "file": "reference/worker/rpcTsfinWriteSnapshotsAndComplete.js.txt",
+      "startLine": 165718,
+      "endLine": 165949,
+      "bytes": 8979,
+      "sha256": "74db970602f274f27504035ad9a625926bf41e3c37be3a8d09a0bd6123f285da",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "loadSettingsDefaults",
+      "file": "reference/worker/loadSettingsDefaults.js.txt",
+      "startLine": 1344,
+      "endLine": 2464,
+      "bytes": 61656,
+      "sha256": "973fc5a6f63ddfdc13b28bf69ad100b9ac0b1cc19a4491842ee5cb8f42d0f3fe",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "writeAudit",
+      "file": "reference/worker/writeAudit.js.txt",
+      "startLine": 152013,
+      "endLine": 152101,
+      "bytes": 2832,
+      "sha256": "73e81314601a0e57ad866545e7726f9c084a85bf5fdb874f8bc48ef74e8e2870",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "makeBookingId",
+      "file": "reference/worker/makeBookingId.js.txt",
+      "startLine": 136810,
+      "endLine": 136814,
+      "bytes": 309,
+      "sha256": "27519889ad2885c69d7ab1fd401fd9880642e702a34016f4671e19a4e5f7bd7a",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "norm",
+      "file": "reference/worker/norm.js.txt",
+      "startLine": 136803,
+      "endLine": 136809,
+      "bytes": 141,
+      "sha256": "5b766f6462eae3d2535fc017aaba906acf5308ad2074a4be6e27199b73bd6978",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "sha256Hex",
+      "file": "reference/worker/sha256Hex.js.txt",
+      "startLine": 136697,
+      "endLine": 136701,
+      "bytes": 223,
+      "sha256": "faccc75d3ac3697bbbf133df2a9d387e04da0d69e8b9dcacbf1b17a406e52ed9",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "ukLocalToUtcISO",
+      "file": "reference/worker/ukLocalToUtcISO.js.txt",
+      "startLine": 152149,
+      "endLine": 152252,
+      "bytes": 3476,
+      "sha256": "f0030af99c0d3e0713495cb46cf2e81556f8151a33fd0c8914c36edf9c872c60",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "weekEndingSunday",
+      "file": "reference/worker/weekEndingSunday.js.txt",
+      "startLine": 136791,
+      "endLine": 136800,
+      "bytes": 517,
+      "sha256": "14fa1e01d3652db803462235e4e2b6a756d8473d38b2d41be602701cfbee91c7",
+      "completeFunctionParseOnly": true
+    },
+    {
+      "name": "londonDate",
+      "file": "reference/worker/londonDate.js.txt",
+      "startLine": 136785,
+      "endLine": 136790,
+      "bytes": 338,
+      "sha256": "0baff5db38fd97eae959a12706216221dbff4e25bab385bc6d9ec25d2dc6bd3e",
+      "completeFunctionParseOnly": true
+    }
+  ],
+  "rootDefinitionReceipts": [
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_DEFINITION_READONLY_20261017.json",
+      "bytes": 30249,
+      "sha256": "ceb2fe48a6d45d4950f954d48623d073369f990b271e8bbbb31c13294ac6977b",
+      "copy": "reference/root-native/GENUINE_CLIENT_NATIVE_DEFINITION_READONLY_20261017.json"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json",
+      "bytes": 703,
+      "sha256": "24083c4747f29c1f77d67a5035e5e38f2cedcfa1063d86ce1a0e33ff0e88bd2c",
+      "copy": "reference/root-native/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json"
+    }
+  ],
+  "historicalRecipe": "ad02698589fa28b1a73af26390fad7cf4c0466f9",
+  "historicalPinDelta": [
+    {
+      "file": "broker/src/index.js",
+      "historicalSha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a",
+      "currentSha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db",
+      "sameRaw": false
+    },
+    {
+      "file": "broker/src/daily-rate-correction.js",
+      "historicalSha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84",
+      "currentSha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84",
+      "sameRaw": true
+    },
+    {
+      "file": "broker/src/daily-canonical-authority.js",
+      "historicalSha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942",
+      "currentSha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942",
+      "sameRaw": true
+    },
+    {
+      "file": "broker/src/daily-schedule-authority.js",
+      "historicalSha256": "1623f5294d7da3860731ac6eee91f8fe6aed1f3fc27f01ab42eb1ea4c7fbeb2e",
+      "currentSha256": "1623f5294d7da3860731ac6eee91f8fe6aed1f3fc27f01ab42eb1ea4c7fbeb2e",
+      "sameRaw": true
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "historicalSha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "currentSha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "sameRaw": true
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "historicalSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "currentSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "sameRaw": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "historicalSha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "currentSha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "sameRaw": true
+    },
+    {
+      "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "historicalSha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff",
+      "currentSha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff",
+      "sameRaw": true
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "historicalSha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "currentSha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "sameRaw": true
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "historicalSha256": "9c89151b35ac193d94c69fbd4b63527d3df78e1d37c8b0734934a562f361bd92",
+      "currentSha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c",
+      "sameRaw": false
+    }
+  ],
+  "historicalFunctionDelta": [
+    {
+      "name": "createClientWithSettingsAtomic",
+      "historicalSha256": "8bacd300e3a39b2b0aa0e1d0807fc9075f30bd64b1a88d0e63d031bc91e9fb8d",
+      "currentSha256": "8bacd300e3a39b2b0aa0e1d0807fc9075f30bd64b1a88d0e63d031bc91e9fb8d",
+      "sameRaw": true
+    },
+    {
+      "name": "handleCreateClient",
+      "historicalSha256": "a0cda4932d3e08ef288fd74249d3b20cf10e2f0fe45d361dfc6e9fc44f75a09e",
+      "currentSha256": "a0cda4932d3e08ef288fd74249d3b20cf10e2f0fe45d361dfc6e9fc44f75a09e",
+      "sameRaw": true
+    },
+    {
+      "name": "handleCreateCandidate",
+      "historicalSha256": "42642fcfbe70961b2b8276e875e75c69a673a15a3442a04fe3c2d4e6046b4231",
+      "currentSha256": "42642fcfbe70961b2b8276e875e75c69a673a15a3442a04fe3c2d4e6046b4231",
+      "sameRaw": true
+    },
+    {
+      "name": "handleUpsertClientRate",
+      "historicalSha256": "5e6c7f3b1a5dc5302971c91d5cf80a5ea464e76b6119312e6ee9b981bc43d518",
+      "currentSha256": "5e6c7f3b1a5dc5302971c91d5cf80a5ea464e76b6119312e6ee9b981bc43d518",
+      "sameRaw": true
+    },
+    {
+      "name": "handleTimesheetCreateManualDaily",
+      "historicalSha256": "23cd9c38a20d43398756965210b4d47391eee94583ea61347d548c8d39344a77",
+      "currentSha256": "23cd9c38a20d43398756965210b4d47391eee94583ea61347d548c8d39344a77",
+      "sameRaw": true
+    },
+    {
+      "name": "saveAndRecalculateCanonicalDaily",
+      "historicalSha256": "860f54d4fc2a807ddd77c17151e5c47f93541d6c20c4e28824c6ba936445409b",
+      "currentSha256": "860f54d4fc2a807ddd77c17151e5c47f93541d6c20c4e28824c6ba936445409b",
+      "sameRaw": true
+    },
+    {
+      "name": "runTsfinWorkerOnce",
+      "historicalSha256": "024d4352267936829914046f1b0ec3bb33cc9b053d9c39d35711606948ee50a9",
+      "currentSha256": "024d4352267936829914046f1b0ec3bb33cc9b053d9c39d35711606948ee50a9",
+      "sameRaw": true
+    },
+    {
+      "name": "requireUser",
+      "historicalSha256": "72cb3dc069bbec6c973eff2e7258f1649b721978c47cd56d75dd8ad81089ca2a",
+      "currentSha256": "72cb3dc069bbec6c973eff2e7258f1649b721978c47cd56d75dd8ad81089ca2a",
+      "sameRaw": true
+    },
+    {
+      "name": "tsfinTargetedDrainNow",
+      "historicalSha256": "af80a52b263df6e769d797eaa2a3739512ef594800da9d79a76e26d8fef8c74f",
+      "currentSha256": "af80a52b263df6e769d797eaa2a3739512ef594800da9d79a76e26d8fef8c74f",
+      "sameRaw": true
+    },
+    {
+      "name": "enqueueTsfinRecomputeForClient",
+      "historicalSha256": "787e0be9d2018fb0754462c736fef321a176ad4ba15cd2971b8b77e8dd678827",
+      "currentSha256": "787e0be9d2018fb0754462c736fef321a176ad4ba15cd2971b8b77e8dd678827",
+      "sameRaw": true
+    },
+    {
+      "name": "rpcTsfinDequeueSpecific",
+      "historicalSha256": "db527150e9e48a6ff35e6e3bfbd88b8d0ab5c0bfffb200aec0c64f01236735e1",
+      "currentSha256": "db527150e9e48a6ff35e6e3bfbd88b8d0ab5c0bfffb200aec0c64f01236735e1",
+      "sameRaw": true
+    },
+    {
+      "name": "rpcTsfinLoadContextBatch",
+      "historicalSha256": "4cb6a97b9581449cda587a6d45a004d6707977cffad363635f8700157cde287e",
+      "currentSha256": "4cb6a97b9581449cda587a6d45a004d6707977cffad363635f8700157cde287e",
+      "sameRaw": true
+    },
+    {
+      "name": "rpcTsfinResolveRatesBatch",
+      "historicalSha256": "839218845ebccb87037ee44b6e605a2b2eb4969a8b627e41b0e4b39bf30ad899",
+      "currentSha256": "839218845ebccb87037ee44b6e605a2b2eb4969a8b627e41b0e4b39bf30ad899",
+      "sameRaw": true
+    },
+    {
+      "name": "rpcTsfinWriteSnapshotsAndComplete",
+      "historicalSha256": "74db970602f274f27504035ad9a625926bf41e3c37be3a8d09a0bd6123f285da",
+      "currentSha256": "74db970602f274f27504035ad9a625926bf41e3c37be3a8d09a0bd6123f285da",
+      "sameRaw": true
+    },
+    {
+      "name": "loadSettingsDefaults",
+      "historicalSha256": "973fc5a6f63ddfdc13b28bf69ad100b9ac0b1cc19a4491842ee5cb8f42d0f3fe",
+      "currentSha256": "973fc5a6f63ddfdc13b28bf69ad100b9ac0b1cc19a4491842ee5cb8f42d0f3fe",
+      "sameRaw": true
+    },
+    {
+      "name": "writeAudit",
+      "historicalSha256": "73e81314601a0e57ad866545e7726f9c084a85bf5fdb874f8bc48ef74e8e2870",
+      "currentSha256": "73e81314601a0e57ad866545e7726f9c084a85bf5fdb874f8bc48ef74e8e2870",
+      "sameRaw": true
+    },
+    {
+      "name": "makeBookingId",
+      "historicalSha256": "27519889ad2885c69d7ab1fd401fd9880642e702a34016f4671e19a4e5f7bd7a",
+      "currentSha256": "27519889ad2885c69d7ab1fd401fd9880642e702a34016f4671e19a4e5f7bd7a",
+      "sameRaw": true
+    },
+    {
+      "name": "norm",
+      "historicalSha256": "5b766f6462eae3d2535fc017aaba906acf5308ad2074a4be6e27199b73bd6978",
+      "currentSha256": "5b766f6462eae3d2535fc017aaba906acf5308ad2074a4be6e27199b73bd6978",
+      "sameRaw": true
+    },
+    {
+      "name": "sha256Hex",
+      "historicalSha256": "faccc75d3ac3697bbbf133df2a9d387e04da0d69e8b9dcacbf1b17a406e52ed9",
+      "currentSha256": "faccc75d3ac3697bbbf133df2a9d387e04da0d69e8b9dcacbf1b17a406e52ed9",
+      "sameRaw": true
+    },
+    {
+      "name": "ukLocalToUtcISO",
+      "historicalSha256": "f0030af99c0d3e0713495cb46cf2e81556f8151a33fd0c8914c36edf9c872c60",
+      "currentSha256": "f0030af99c0d3e0713495cb46cf2e81556f8151a33fd0c8914c36edf9c872c60",
+      "sameRaw": true
+    },
+    {
+      "name": "weekEndingSunday",
+      "historicalSha256": "14fa1e01d3652db803462235e4e2b6a756d8473d38b2d41be602701cfbee91c7",
+      "currentSha256": "14fa1e01d3652db803462235e4e2b6a756d8473d38b2d41be602701cfbee91c7",
+      "sameRaw": true
+    },
+    {
+      "name": "londonDate",
+      "historicalSha256": "0baff5db38fd97eae959a12706216221dbff4e25bab385bc6d9ec25d2dc6bd3e",
+      "currentSha256": "0baff5db38fd97eae959a12706216221dbff4e25bab385bc6d9ec25d2dc6bd3e",
+      "sameRaw": true
+    }
+  ],
+  "rootSourceCaptureOnly": true,
+  "workerDeployedSource": "NOT_PROVED",
+  "actor": "UNBOUND",
+  "vacancy": "UNBOUND",
+  "businessRowsCreated": 0,
+  "native": "NOT_RUN",
+  "bankBodiesSelected": 0
+}

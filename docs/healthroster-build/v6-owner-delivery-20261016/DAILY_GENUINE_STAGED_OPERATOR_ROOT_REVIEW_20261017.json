@@ -1,0 +1,48 @@
+{
+  "version": "DAILY_GENUINE_STAGED_OPERATOR_ROOT_REVIEW_V1",
+  "sourceCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+  "sourceFilesGitExact": 132,
+  "manifestSha256": "0a908ee36e34c41457b797a7609676c46373c89d924f66846100c87a2dc47f0d",
+  "peerCommit": "0459e5b18caf29a870c42eb63e586b9660054c04",
+  "peerFilesGitExact": 141,
+  "peerManifestSha256": "44ccc882945ed8c90d6505f004a17930a872c5b2e7cc498175ad9823af872e7b",
+  "rootReplays": {
+    "offlineTests": 38,
+    "additionalActualWorkerVectors": 3,
+    "nativeReadInputVectors": 18,
+    "pg17Statements": 54,
+    "schemaNameAstCases": 2034,
+    "mappingAstCases": 9,
+    "wholePublishedFunctions": 29,
+    "fullParents": 5,
+    "finiteEdits": 24,
+    "frozenWrites": 0
+  },
+  "sourceVerdict": "ACCEPT_BOUNDED_SOURCE_PROTOCOL_F1_F2_F3_CLOSED",
+  "executionVerdict": "HOLD_F4_MEASURED_FRESHNESS_BUDGET",
+  "fixes": {
+    "applied": 3,
+    "rejected": 0,
+    "F1": "Required setup commit no longer invalidates exact historical reviewed source image",
+    "F2": "Preserve exact schema and name plus full expected-name admission",
+    "F3": "Local abort/deadline forces HOLD before dispatch/prefix qualification"
+  },
+  "rootF2Correction": "Initial root omission inference assumed qualified identity strings; actual frozen identities were bare with separate schema. Current callback omission was not established. Actual accepted fix is schema-specific identity preservation.",
+  "F4": {
+    "observedParentPreflightMilliseconds": 18499,
+    "observedChildPreflightMilliseconds": 18764,
+    "observedEntryBeforeReadMilliseconds": 37263,
+    "freshnessLimitMilliseconds": 30000,
+    "source": "Report measured unchanged committed preflights only; no native/browser/IPC",
+    "correction": "Equivalent real batched Git blob reads under source preparation; do not raise freshness limit"
+  },
+  "nativeS0": "NOT_RUN",
+  "genuineSetupMutations": 0,
+  "original92SchemaHistoryPreserved": true,
+  "immutableWhitespaceExceptions": [
+    "reference/audit/reference/worker/client-create-fields.js.txt:24",
+    "reference/mapping/reference/worker/hospital-route.js.txt:13"
+  ],
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

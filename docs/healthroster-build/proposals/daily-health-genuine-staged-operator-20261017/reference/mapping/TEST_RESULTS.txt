@@ -1,0 +1,58 @@
+TAP version 13
+# Subtest: all eight complete functions and route bind exact full published commit/current source
+ok 1 - all eight complete functions and route bind exact full published commit/current source
+  ---
+  duration_ms: 15.6538
+  type: 'test'
+  ...
+# Subtest: finite stage preserves original Client/Candidate/booking, rejects extra body/path authority
+ok 2 - finite stage preserves original Client/Candidate/booking, rejects extra body/path authority
+  ---
+  duration_ms: 0.983
+  type: 'test'
+  ...
+# Subtest: actual Admin POST forwards allowed explicit map UUID and normalized aliases through genuine REST INSERT
+ok 3 - actual Admin POST forwards allowed explicit map UUID and normalized aliases through genuine REST INSERT
+  ---
+  duration_ms: 2.144
+  type: 'test'
+  ...
+# Subtest: actual role denial reaches neither JSON parse nor INSERT
+ok 4 - actual role denial reaches neither JSON parse nor INSERT
+  ---
+  duration_ms: 1.3846
+  type: 'test'
+  ...
+# Subtest: actual producer transport failure has no compensation/retry and malformed success needs reconciliation
+ok 5 - actual producer transport failure has no compensation/retry and malformed success needs reconciliation
+  ---
+  duration_ms: 1.6286
+  type: 'test'
+  ...
+# Subtest: actual list/get are read calls scoped to native row/client; client list cannot prove global namespace
+ok 6 - actual list/get are read calls scoped to native row/client; client list cannot prove global namespace
+  ---
+  duration_ms: 1.5271
+  type: 'test'
+  ...
+# Subtest: baseline native field/ACL/trigger evidence is explicit and does not invent an alias uniqueness guarantee
+ok 7 - baseline native field/ACL/trigger evidence is explicit and does not invent an alias uniqueness guarantee
+  ---
+  duration_ms: 0.6173
+  type: 'test'
+  ...
+# Subtest: original recipe and all current source inputs remain saved/committed byte-exact
+ok 8 - original recipe and all current source inputs remain saved/committed byte-exact
+  ---
+  duration_ms: 372.9673
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 490.9379

@@ -1,0 +1,148 @@
+{
+  "commit": "bb2acf3eb32f80b5b73f462fbf39e41272acadc4",
+  "packet": "docs/healthroster-build/proposals/daily-health-genuine-hospital-mapping-stage-20261017",
+  "manifestSha256": "1d6bd4efe842421893fede8b8234e68c8cc74c6862315c1caa09edf2a7c348e5",
+  "files": [
+    {
+      "file": "ACTUAL_OWNER_ORDER.json",
+      "bytes": 1720,
+      "sha256": "113de4dd35bc037ce355e94bf79fc730ef88eab7bdc26d669b01f7f2ce92d4bf"
+    },
+    {
+      "file": "capture.mjs",
+      "bytes": 5961,
+      "sha256": "187a32809d097eafe2cf1d560033c4016b5d9a481f51af2a2542e5c2cc82bfa0"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 3710,
+      "sha256": "e2cbb7dd4c5814d825984655468910e83c9aa64e00f734718f5a30bd8d2fc7d9"
+    },
+    {
+      "file": "GRAMMAR_RUN.txt",
+      "bytes": 91,
+      "sha256": "8bddcfe64c0d770c849c0dc7059d6f17201f3fcb7982cbce001eff9a873b3803"
+    },
+    {
+      "file": "owner-order.mjs",
+      "bytes": 2969,
+      "sha256": "7a729df8a832e77018b08f2ed0fd115b2dba7f70ab5cd94771bbabceb75aeae5"
+    },
+    {
+      "file": "README.md",
+      "bytes": 6888,
+      "sha256": "e15d06bc6a3b47c05b6f1e899073b8ff7f6089f5fdbd8de4505ae9cdcf2eb604"
+    },
+    {
+      "file": "reference/native/05012026_fix_trg_tsfin_client_hospitals_wakeup.sql",
+      "bytes": 1785,
+      "sha256": "9023ceb4e0bef1d91299732948fe2b9cc6bafafd59ac8e154cb9db9b468be7f3"
+    },
+    {
+      "file": "reference/native/05012026_tsfin_work_success_bulk.sql",
+      "bytes": 509,
+      "sha256": "509ade551e9ed4113e278de6684f253312605505a752c098f49d14e2d7696704"
+    },
+    {
+      "file": "reference/root/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+      "bytes": 5618,
+      "sha256": "b9ba019fc9f2ec59e5ae9ddd7d2257f214c5bc76246e2e3089bb76e38a588275"
+    },
+    {
+      "file": "reference/worker/handleCreateHospital.js.txt",
+      "bytes": 1718,
+      "sha256": "f96f048f91d44f2a5cfeeb73a2e4a153d156c462c040acffa50e68b7edf50cc9"
+    },
+    {
+      "file": "reference/worker/handleGetHospital.js.txt",
+      "bytes": 603,
+      "sha256": "68582fb213d7ee8b67a9a77d11720a4d4dd9e0dff8cf640a44540d0381dd16d7"
+    },
+    {
+      "file": "reference/worker/handleListHospitals.js.txt",
+      "bytes": 466,
+      "sha256": "494fc81a030d553a6eb701d1ab13b76622fa1e59c88c5ef1c745369dbaa98848"
+    },
+    {
+      "file": "reference/worker/hospital-route.js.txt",
+      "bytes": 845,
+      "sha256": "637bacbb79016c357724ba1e88f8d854d2dcc55201d0bd77a0a14bedd293d968"
+    },
+    {
+      "file": "reference/worker/ok.js.txt",
+      "bytes": 139,
+      "sha256": "9237487d38182bfba46940bbdbba4cab23a4fcbcb61ea236a3dcfac47204ed36"
+    },
+    {
+      "file": "reference/worker/parseJSONBody.js.txt",
+      "bytes": 70,
+      "sha256": "2dd32f3e09267a26bd89d297269131836abbaa5cf7155ed683774b400ce50d93"
+    },
+    {
+      "file": "reference/worker/requireUser.js.txt",
+      "bytes": 1385,
+      "sha256": "72cb3dc069bbec6c973eff2e7258f1649b721978c47cd56d75dd8ad81089ca2a"
+    },
+    {
+      "file": "reference/worker/sbFetch.js.txt",
+      "bytes": 2259,
+      "sha256": "30f8cc1b32eb74e777986bf4266229d1cca96f79a5ce27bce6380acbba803b8b"
+    },
+    {
+      "file": "reference/worker/sbGetUserById.js.txt",
+      "bytes": 407,
+      "sha256": "26ee14fcf93557a495aaf8b14841703c34c2bf7381d4c5a716155d35e4a5af20"
+    },
+    {
+      "file": "SETUP_ENTRY.md",
+      "bytes": 3988,
+      "sha256": "81ab5385f981d382002ceff5ad14fc59dd447869afdb96978d3550ca1e453880"
+    },
+    {
+      "file": "SOURCE_METADATA.json",
+      "bytes": 86934,
+      "sha256": "f9f14235719dab1887214992dd928790cf2b8c3962fa3845ac8b55a1c342cf01"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 6541,
+      "sha256": "233c9bf7140bdd0b1bb14a8b60da98335042d7be87afa20792dc90b98e9a555c"
+    },
+    {
+      "file": "SOURCE_REVIEW.json",
+      "bytes": 1268,
+      "sha256": "7120060f75a46ef346fd0fd55a80447a17985ef5edd3b49648aa25793499a930"
+    },
+    {
+      "file": "stage.mjs",
+      "bytes": 1201,
+      "sha256": "f64b0dcac218e582b848d24660b11b7f8bf9c22161d97b2a23397c960354ab0f"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 2114,
+      "sha256": "3a62501faf08aeb37998fcec5b8fa8d0789d955e61b168168e14c86a2c48f9b4"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 6275,
+      "sha256": "a94d7b3b9a37e52809871eb5f221a18732a0dcfc7dd0ee5f33e83a3eeab29870"
+    },
+    {
+      "file": "TRIGGER_AST_PROOF.json",
+      "bytes": 42577,
+      "sha256": "3d7f30b7dd85ed6fa239663f3b0f292fde1db85ab98c6a7724f1af228c5b970f"
+    },
+    {
+      "file": "trigger-ast.py",
+      "bytes": 4781,
+      "sha256": "23c9e5d46278f467b5be1f8e3ddaae67746742bb18c936a7524c9cf217e7d487"
+    },
+    {
+      "file": "MANIFEST.json",
+      "bytes": 4655,
+      "sha256": "1d6bd4efe842421893fede8b8234e68c8cc74c6862315c1caa09edf2a7c348e5"
+    }
+  ],
+  "native": "NOT_RUN"
+}

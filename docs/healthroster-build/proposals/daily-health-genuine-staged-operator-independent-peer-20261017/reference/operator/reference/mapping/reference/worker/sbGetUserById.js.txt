@@ -1,0 +1,6 @@
+async function sbGetUserById(env, id) {
+  const url = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(id)}&select=id,email,role,is_active,password_hash,session_version,payment_authoriser,payment_golden_key`;
+  const res = await fetch(url, { headers: sbAuthHeaders(env) });
+  const json = await res.json().catch(()=>[]);
+  return Array.isArray(json) && json[0] ? json[0] : null;
+}

@@ -1,0 +1,30 @@
+async function enqueueTsfinRecomputeForClient(env, client_id) {
+  try {
+    const urlList =
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?select=timesheet_id` +
+      `&client_id=eq.${encodeURIComponent(client_id)}` +
+      `&is_current=eq.true` +
+      `&locked_by_invoice_id=is.null`;
+    const { rows: tsfins } = await sbFetch(env, urlList);
+    if (tsfins && tsfins.length) {
+      const now = nowIso();
+      const items = tsfins.map(r => ({
+        timesheet_id: r.timesheet_id,
+        reason: 'RATE_CHANGED',
+        attempt_count: 0,
+        next_attempt_at: now,
+        last_error: null,
+        created_at: now,
+      }));
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
+        {
+          method: "POST",
+          headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
+          body: JSON.stringify(items)
+        }
+      );
+    }
+  } catch (_) { /* non-fatal */ }
+}

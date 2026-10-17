@@ -1,0 +1,240 @@
+{
+  "version": "DAILY_GENUINE_CURRENT_PRODUCER_AUDIT_FINAL_SOURCE_FREEZE_V1",
+  "firstLocalManifestSha256": "39a2de2fab40738c2ceb589491e4e06bc8212f5b4e3e42d1dd9667ee9bdfb500",
+  "sourceParent": "5b4f4e4c196871fa85722435deeee3ad418908f2",
+  "currentCheckpoint": "d3bf033e1ccb171d2b382f3c59b9fc2a85448933",
+  "native": "NOT_RUN",
+  "runtimeTargets": [],
+  "files": [
+    {
+      "file": "capture.mjs",
+      "bytes": 7943,
+      "sha256": "4b3f0f8b7865e735826c2294a6866d9af3afd7ebef06e1da50115fa6b625c02d"
+    },
+    {
+      "file": "CLIENT_RETURN_AST.json",
+      "bytes": 21174,
+      "sha256": "c227047eda4e9c73b0766d03403b46301d382a70a0068e34490cd51b89decab6"
+    },
+    {
+      "file": "client-return-ast.py",
+      "bytes": 2175,
+      "sha256": "0b7287f3fe1f16363f6a95e4d73a70892f958386c697bdf22512b669dbe08941"
+    },
+    {
+      "file": "CURRENT_ROOT_BINDING.json",
+      "bytes": 231,
+      "sha256": "fbc9050deaa89869fee93bd450ae9123c5f0fc5ee853cd37c6badaece6aa4e6d"
+    },
+    {
+      "file": "CURRENT_SOURCE_CENSUS.json",
+      "bytes": 17945,
+      "sha256": "ea394b58e75dfdc19d704a685b07ea05ac6dba028c10f1a040ec55c1aa9f96b4"
+    },
+    {
+      "file": "DERIVED_FIXTURE.json",
+      "bytes": 993,
+      "sha256": "0773fc3c8b3732180ad739857794460d96caa8414fe84386bc6d0000c2199f8a"
+    },
+    {
+      "file": "DIRECT_DEPENDENCY_ERRATUM.md",
+      "bytes": 1671,
+      "sha256": "deb8251f790b6f27c4ecca947f051f2ad14e641d32523ea67a74be0d03f8b650"
+    },
+    {
+      "file": "FINAL_SOURCE_REVIEW.json",
+      "bytes": 6154,
+      "sha256": "d601bd9bc16d03453683bba4d298589f4f1450f06c7f09ba9d5adfe7b79151f2"
+    },
+    {
+      "file": "finalize.mjs",
+      "bytes": 4031,
+      "sha256": "811e2aab2e1a163abba037e4f61358c1261416a71cae4c0683c35d26de9e9f99"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 2486,
+      "sha256": "ca9d43785fc5f73286302a7cfac6036b65ef1c92b4de8046dc8feed712bfb10f"
+    },
+    {
+      "file": "MANIFEST.json",
+      "bytes": 7291,
+      "sha256": "39a2de2fab40738c2ceb589491e4e06bc8212f5b4e3e42d1dd9667ee9bdfb500"
+    },
+    {
+      "file": "README.md",
+      "bytes": 8426,
+      "sha256": "42b04618a2cd0a47029bde4b0eafdd39d7093e942a7cc6fe117e0ebde7dab29d"
+    },
+    {
+      "file": "reference/current/01_complete_context.sqlinc",
+      "bytes": 8650,
+      "sha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6"
+    },
+    {
+      "file": "reference/current/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "bytes": 29493,
+      "sha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff"
+    },
+    {
+      "file": "reference/current/daily-canonical-authority.js",
+      "bytes": 18725,
+      "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942"
+    },
+    {
+      "file": "reference/current/daily-schedule-authority.js",
+      "bytes": 14306,
+      "sha256": "1623f5294d7da3860731ac6eee91f8fe6aed1f3fc27f01ab42eb1ea4c7fbeb2e"
+    },
+    {
+      "file": "reference/root-native/GENUINE_CLIENT_NATIVE_DEFINITION_READONLY_20261017.json",
+      "bytes": 30249,
+      "sha256": "ceb2fe48a6d45d4950f954d48623d073369f990b271e8bbbb31c13294ac6977b"
+    },
+    {
+      "file": "reference/root-native/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json",
+      "bytes": 703,
+      "sha256": "24083c4747f29c1f77d67a5035e5e38f2cedcfa1063d86ce1a0e33ff0e88bd2c"
+    },
+    {
+      "file": "reference/worker/client-create-fields.js.txt",
+      "bytes": 1495,
+      "sha256": "e14c20ee8ede8c369ec2506b9cba20aa29b325fdbac90fc9fcf1a19789622c6f"
+    },
+    {
+      "file": "reference/worker/createClientWithSettingsAtomic.js.txt",
+      "bytes": 1388,
+      "sha256": "8bacd300e3a39b2b0aa0e1d0807fc9075f30bd64b1a88d0e63d031bc91e9fb8d"
+    },
+    {
+      "file": "reference/worker/enqueueTsfinRecomputeForClient.js.txt",
+      "bytes": 986,
+      "sha256": "787e0be9d2018fb0754462c736fef321a176ad4ba15cd2971b8b77e8dd678827"
+    },
+    {
+      "file": "reference/worker/handleCreateCandidate.js.txt",
+      "bytes": 8415,
+      "sha256": "42642fcfbe70961b2b8276e875e75c69a673a15a3442a04fe3c2d4e6046b4231"
+    },
+    {
+      "file": "reference/worker/handleCreateClient.js.txt",
+      "bytes": 1020,
+      "sha256": "a0cda4932d3e08ef288fd74249d3b20cf10e2f0fe45d361dfc6e9fc44f75a09e"
+    },
+    {
+      "file": "reference/worker/handleTimesheetCreateManualDaily.js.txt",
+      "bytes": 8574,
+      "sha256": "23cd9c38a20d43398756965210b4d47391eee94583ea61347d548c8d39344a77"
+    },
+    {
+      "file": "reference/worker/handleUpsertClientRate.js.txt",
+      "bytes": 7868,
+      "sha256": "5e6c7f3b1a5dc5302971c91d5cf80a5ea464e76b6119312e6ee9b981bc43d518"
+    },
+    {
+      "file": "reference/worker/loadSettingsDefaults.js.txt",
+      "bytes": 61656,
+      "sha256": "973fc5a6f63ddfdc13b28bf69ad100b9ac0b1cc19a4491842ee5cb8f42d0f3fe"
+    },
+    {
+      "file": "reference/worker/londonDate.js.txt",
+      "bytes": 338,
+      "sha256": "0baff5db38fd97eae959a12706216221dbff4e25bab385bc6d9ec25d2dc6bd3e"
+    },
+    {
+      "file": "reference/worker/makeBookingId.js.txt",
+      "bytes": 309,
+      "sha256": "27519889ad2885c69d7ab1fd401fd9880642e702a34016f4671e19a4e5f7bd7a"
+    },
+    {
+      "file": "reference/worker/norm.js.txt",
+      "bytes": 141,
+      "sha256": "5b766f6462eae3d2535fc017aaba906acf5308ad2074a4be6e27199b73bd6978"
+    },
+    {
+      "file": "reference/worker/requireUser.js.txt",
+      "bytes": 1385,
+      "sha256": "72cb3dc069bbec6c973eff2e7258f1649b721978c47cd56d75dd8ad81089ca2a"
+    },
+    {
+      "file": "reference/worker/rpcTsfinDequeueSpecific.js.txt",
+      "bytes": 805,
+      "sha256": "db527150e9e48a6ff35e6e3bfbd88b8d0ab5c0bfffb200aec0c64f01236735e1"
+    },
+    {
+      "file": "reference/worker/rpcTsfinLoadContextBatch.js.txt",
+      "bytes": 788,
+      "sha256": "4cb6a97b9581449cda587a6d45a004d6707977cffad363635f8700157cde287e"
+    },
+    {
+      "file": "reference/worker/rpcTsfinResolveRatesBatch.js.txt",
+      "bytes": 748,
+      "sha256": "839218845ebccb87037ee44b6e605a2b2eb4969a8b627e41b0e4b39bf30ad899"
+    },
+    {
+      "file": "reference/worker/rpcTsfinWriteSnapshotsAndComplete.js.txt",
+      "bytes": 8979,
+      "sha256": "74db970602f274f27504035ad9a625926bf41e3c37be3a8d09a0bd6123f285da"
+    },
+    {
+      "file": "reference/worker/runTsfinWorkerOnce.js.txt",
+      "bytes": 45081,
+      "sha256": "024d4352267936829914046f1b0ec3bb33cc9b053d9c39d35711606948ee50a9"
+    },
+    {
+      "file": "reference/worker/saveAndRecalculateCanonicalDaily.js.txt",
+      "bytes": 1915,
+      "sha256": "860f54d4fc2a807ddd77c17151e5c47f93541d6c20c4e28824c6ba936445409b"
+    },
+    {
+      "file": "reference/worker/sha256Hex.js.txt",
+      "bytes": 223,
+      "sha256": "faccc75d3ac3697bbbf133df2a9d387e04da0d69e8b9dcacbf1b17a406e52ed9"
+    },
+    {
+      "file": "reference/worker/timezone.js.txt",
+      "bytes": 34,
+      "sha256": "8a1fb8076292f3475b7a4015646bb53043769af8f5248dd688b30c510b606b3e"
+    },
+    {
+      "file": "reference/worker/tsfinTargetedDrainNow.js.txt",
+      "bytes": 8426,
+      "sha256": "af80a52b263df6e769d797eaa2a3739512ef594800da9d79a76e26d8fef8c74f"
+    },
+    {
+      "file": "reference/worker/ukLocalToUtcISO.js.txt",
+      "bytes": 3476,
+      "sha256": "f0030af99c0d3e0713495cb46cf2e81556f8151a33fd0c8914c36edf9c872c60"
+    },
+    {
+      "file": "reference/worker/weekEndingSunday.js.txt",
+      "bytes": 517,
+      "sha256": "14fa1e01d3652db803462235e4e2b6a756d8473d38b2d41be602701cfbee91c7"
+    },
+    {
+      "file": "reference/worker/writeAudit.js.txt",
+      "bytes": 2832,
+      "sha256": "73e81314601a0e57ad866545e7726f9c084a85bf5fdb874f8bc48ef74e8e2870"
+    },
+    {
+      "file": "SOURCE_SCHEMA_EFFECT_BOUNDARIES.json",
+      "bytes": 236921,
+      "sha256": "b702b374a964e6368e5b7dca3caab714397d1f91d8bdd0591a63cd07bb971bbd"
+    },
+    {
+      "file": "source.mjs",
+      "bytes": 3991,
+      "sha256": "05d31db2f5da78dfc2f9acf66738bd000b3de0e8c7706c0ad6b3deb58d9bcb58"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 2726,
+      "sha256": "e00ec3870681cdc021bc4e743448ac4a2a10a48775555da18a9a2d6288d7ea82"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 9138,
+      "sha256": "65dbc5907b74468712463a19843173e173e9452a65cad6ec04d898f99079f588"
+    }
+  ]
+}

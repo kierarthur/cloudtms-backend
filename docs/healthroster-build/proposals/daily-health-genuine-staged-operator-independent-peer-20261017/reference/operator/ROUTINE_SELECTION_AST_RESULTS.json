@@ -1,0 +1,1 @@
+{"version": "DAILY_GENUINE_ROUTINE_SELECTION_AST_V1", "generatedInputs": 18, "expectedSchemaNameTuples": 55, "actualJoinAndPresenceChecks": 2034, "wrongSchemaAndMissingEachRefused": true, "sameSchemaOverloadsRetained": true, "native": "NOT_RUN"}

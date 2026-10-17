@@ -1,0 +1,23 @@
+async function handleCreateClient(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const data = await parseJSONBody(req);
+  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  // Client and initial settings share one idempotent database transaction.
+  try {
+    const payload = await createClientWithSettingsAtomic(env, user, data);
+    return withCORS(env, req, ok(payload));
+  } catch (error) {
+    const code = String(error?.json?.message || error?.message || 'CLIENT_CREATE_FAILED').match(/CLIENT_[A-Z0-9_]+/)?.[0] || 'CLIENT_CREATE_FAILED';
+    const status = /CONFLICT|LOCK_BUSY/.test(code) ? 409 : 400;
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false,
+      error_code: code,
+      message: code === 'CLIENT_CREATE_FAILED'
+        ? 'Client creation failed safely.'
+        : 'The client or initial settings did not pass server validation.'
+    }), { status, headers: JSON_HEADERS }));
+  }
+}

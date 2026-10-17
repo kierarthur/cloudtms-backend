@@ -1,0 +1,571 @@
+{
+  "version": "ACTUAL_CLIENT_RETURN_SOURCE_AST_V1",
+  "parser": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "actualCompleteFunctionSha256": "83d8b610606abd6299bcd5be3b3cf2987d245ee34c83fbbd33e63060ff78de1c",
+  "completeOuterGrammar": "PASS",
+  "completePlBody": {
+    "status": "NOT_PROVED_CATALOGUE_DEPENDENT",
+    "reason": "\"v_settings_input.candidate_manager_approval_policy_json\" is not a known variable"
+  },
+  "actualReturnExpression": "jsonb_build_object(\n    'ok', true,\n    'replay', v_replay,\n    'client', to_jsonb(v_client),\n    'client_settings', to_jsonb(v_settings),\n    'policy', jsonb_build_object(\n      'healthroster', public.import_auto_authorise_policy_resolve_v1(\n        'HEALTHROSTER'::public.hr_source_enum,\n        v_client.id,\n        NULL::uuid,\n        false\n      ),\n      'nhsp', public.import_auto_authorise_policy_resolve_v1(\n        'NHSP'::public.hr_source_enum,\n        v_client.id,\n        NULL::uuid,\n        false\n      )\n    )\n  )",
+  "actualReturnAst": {
+    "version": 170007,
+    "stmts": [
+      {
+        "stmt": {
+          "SelectStmt": {
+            "targetList": [
+              {
+                "ResTarget": {
+                  "val": {
+                    "FuncCall": {
+                      "funcname": [
+                        {
+                          "String": {
+                            "sval": "jsonb_build_object"
+                          }
+                        }
+                      ],
+                      "args": [
+                        {
+                          "A_Const": {
+                            "sval": {
+                              "sval": "ok"
+                            },
+                            "location": 31
+                          }
+                        },
+                        {
+                          "A_Const": {
+                            "boolval": {
+                              "boolval": true
+                            },
+                            "location": 37
+                          }
+                        },
+                        {
+                          "A_Const": {
+                            "sval": {
+                              "sval": "replay"
+                            },
+                            "location": 47
+                          }
+                        },
+                        {
+                          "ColumnRef": {
+                            "fields": [
+                              {
+                                "String": {
+                                  "sval": "v_replay"
+                                }
+                              }
+                            ],
+                            "location": 57
+                          }
+                        },
+                        {
+                          "A_Const": {
+                            "sval": {
+                              "sval": "client"
+                            },
+                            "location": 71
+                          }
+                        },
+                        {
+                          "FuncCall": {
+                            "funcname": [
+                              {
+                                "String": {
+                                  "sval": "to_jsonb"
+                                }
+                              }
+                            ],
+                            "args": [
+                              {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "v_client"
+                                      }
+                                    }
+                                  ],
+                                  "location": 90
+                                }
+                              }
+                            ],
+                            "funcformat": "COERCE_EXPLICIT_CALL",
+                            "location": 81
+                          }
+                        },
+                        {
+                          "A_Const": {
+                            "sval": {
+                              "sval": "client_settings"
+                            },
+                            "location": 105
+                          }
+                        },
+                        {
+                          "FuncCall": {
+                            "funcname": [
+                              {
+                                "String": {
+                                  "sval": "to_jsonb"
+                                }
+                              }
+                            ],
+                            "args": [
+                              {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "v_settings"
+                                      }
+                                    }
+                                  ],
+                                  "location": 133
+                                }
+                              }
+                            ],
+                            "funcformat": "COERCE_EXPLICIT_CALL",
+                            "location": 124
+                          }
+                        },
+                        {
+                          "A_Const": {
+                            "sval": {
+                              "sval": "policy"
+                            },
+                            "location": 150
+                          }
+                        },
+                        {
+                          "FuncCall": {
+                            "funcname": [
+                              {
+                                "String": {
+                                  "sval": "jsonb_build_object"
+                                }
+                              }
+                            ],
+                            "args": [
+                              {
+                                "A_Const": {
+                                  "sval": {
+                                    "sval": "healthroster"
+                                  },
+                                  "location": 186
+                                }
+                              },
+                              {
+                                "FuncCall": {
+                                  "funcname": [
+                                    {
+                                      "String": {
+                                        "sval": "public"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "import_auto_authorise_policy_resolve_v1"
+                                      }
+                                    }
+                                  ],
+                                  "args": [
+                                    {
+                                      "TypeCast": {
+                                        "arg": {
+                                          "A_Const": {
+                                            "sval": {
+                                              "sval": "HEALTHROSTER"
+                                            },
+                                            "location": 258
+                                          }
+                                        },
+                                        "typeName": {
+                                          "names": [
+                                            {
+                                              "String": {
+                                                "sval": "public"
+                                              }
+                                            },
+                                            {
+                                              "String": {
+                                                "sval": "hr_source_enum"
+                                              }
+                                            }
+                                          ],
+                                          "typemod": -1,
+                                          "location": 274
+                                        },
+                                        "location": 272
+                                      }
+                                    },
+                                    {
+                                      "ColumnRef": {
+                                        "fields": [
+                                          {
+                                            "String": {
+                                              "sval": "v_client"
+                                            }
+                                          },
+                                          {
+                                            "String": {
+                                              "sval": "id"
+                                            }
+                                          }
+                                        ],
+                                        "location": 305
+                                      }
+                                    },
+                                    {
+                                      "TypeCast": {
+                                        "arg": {
+                                          "A_Const": {
+                                            "isnull": true,
+                                            "location": 326
+                                          }
+                                        },
+                                        "typeName": {
+                                          "names": [
+                                            {
+                                              "String": {
+                                                "sval": "uuid"
+                                              }
+                                            }
+                                          ],
+                                          "typemod": -1,
+                                          "location": 332
+                                        },
+                                        "location": 330
+                                      }
+                                    },
+                                    {
+                                      "A_Const": {
+                                        "boolval": {},
+                                        "location": 346
+                                      }
+                                    }
+                                  ],
+                                  "funcformat": "COERCE_EXPLICIT_CALL",
+                                  "location": 202
+                                }
+                              },
+                              {
+                                "A_Const": {
+                                  "sval": {
+                                    "sval": "nhsp"
+                                  },
+                                  "location": 367
+                                }
+                              },
+                              {
+                                "FuncCall": {
+                                  "funcname": [
+                                    {
+                                      "String": {
+                                        "sval": "public"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "import_auto_authorise_policy_resolve_v1"
+                                      }
+                                    }
+                                  ],
+                                  "args": [
+                                    {
+                                      "TypeCast": {
+                                        "arg": {
+                                          "A_Const": {
+                                            "sval": {
+                                              "sval": "NHSP"
+                                            },
+                                            "location": 431
+                                          }
+                                        },
+                                        "typeName": {
+                                          "names": [
+                                            {
+                                              "String": {
+                                                "sval": "public"
+                                              }
+                                            },
+                                            {
+                                              "String": {
+                                                "sval": "hr_source_enum"
+                                              }
+                                            }
+                                          ],
+                                          "typemod": -1,
+                                          "location": 439
+                                        },
+                                        "location": 437
+                                      }
+                                    },
+                                    {
+                                      "ColumnRef": {
+                                        "fields": [
+                                          {
+                                            "String": {
+                                              "sval": "v_client"
+                                            }
+                                          },
+                                          {
+                                            "String": {
+                                              "sval": "id"
+                                            }
+                                          }
+                                        ],
+                                        "location": 470
+                                      }
+                                    },
+                                    {
+                                      "TypeCast": {
+                                        "arg": {
+                                          "A_Const": {
+                                            "isnull": true,
+                                            "location": 491
+                                          }
+                                        },
+                                        "typeName": {
+                                          "names": [
+                                            {
+                                              "String": {
+                                                "sval": "uuid"
+                                              }
+                                            }
+                                          ],
+                                          "typemod": -1,
+                                          "location": 497
+                                        },
+                                        "location": 495
+                                      }
+                                    },
+                                    {
+                                      "A_Const": {
+                                        "boolval": {},
+                                        "location": 511
+                                      }
+                                    }
+                                  ],
+                                  "funcformat": "COERCE_EXPLICIT_CALL",
+                                  "location": 375
+                                }
+                              }
+                            ],
+                            "funcformat": "COERCE_EXPLICIT_CALL",
+                            "location": 160
+                          }
+                        }
+                      ],
+                      "funcformat": "COERCE_EXPLICIT_CALL",
+                      "location": 7
+                    }
+                  },
+                  "location": 7
+                }
+              }
+            ],
+            "limitOption": "LIMIT_OPTION_DEFAULT",
+            "op": "SETOP_NONE"
+          }
+        }
+      }
+    ]
+  },
+  "genuinePolicyCalls": [
+    {
+      "funcname": [
+        {
+          "String": {
+            "sval": "public"
+          }
+        },
+        {
+          "String": {
+            "sval": "import_auto_authorise_policy_resolve_v1"
+          }
+        }
+      ],
+      "args": [
+        {
+          "TypeCast": {
+            "arg": {
+              "A_Const": {
+                "sval": {
+                  "sval": "HEALTHROSTER"
+                },
+                "location": 258
+              }
+            },
+            "typeName": {
+              "names": [
+                {
+                  "String": {
+                    "sval": "public"
+                  }
+                },
+                {
+                  "String": {
+                    "sval": "hr_source_enum"
+                  }
+                }
+              ],
+              "typemod": -1,
+              "location": 274
+            },
+            "location": 272
+          }
+        },
+        {
+          "ColumnRef": {
+            "fields": [
+              {
+                "String": {
+                  "sval": "v_client"
+                }
+              },
+              {
+                "String": {
+                  "sval": "id"
+                }
+              }
+            ],
+            "location": 305
+          }
+        },
+        {
+          "TypeCast": {
+            "arg": {
+              "A_Const": {
+                "isnull": true,
+                "location": 326
+              }
+            },
+            "typeName": {
+              "names": [
+                {
+                  "String": {
+                    "sval": "uuid"
+                  }
+                }
+              ],
+              "typemod": -1,
+              "location": 332
+            },
+            "location": 330
+          }
+        },
+        {
+          "A_Const": {
+            "boolval": {},
+            "location": 346
+          }
+        }
+      ],
+      "funcformat": "COERCE_EXPLICIT_CALL",
+      "location": 202
+    },
+    {
+      "funcname": [
+        {
+          "String": {
+            "sval": "public"
+          }
+        },
+        {
+          "String": {
+            "sval": "import_auto_authorise_policy_resolve_v1"
+          }
+        }
+      ],
+      "args": [
+        {
+          "TypeCast": {
+            "arg": {
+              "A_Const": {
+                "sval": {
+                  "sval": "NHSP"
+                },
+                "location": 431
+              }
+            },
+            "typeName": {
+              "names": [
+                {
+                  "String": {
+                    "sval": "public"
+                  }
+                },
+                {
+                  "String": {
+                    "sval": "hr_source_enum"
+                  }
+                }
+              ],
+              "typemod": -1,
+              "location": 439
+            },
+            "location": 437
+          }
+        },
+        {
+          "ColumnRef": {
+            "fields": [
+              {
+                "String": {
+                  "sval": "v_client"
+                }
+              },
+              {
+                "String": {
+                  "sval": "id"
+                }
+              }
+            ],
+            "location": 470
+          }
+        },
+        {
+          "TypeCast": {
+            "arg": {
+              "A_Const": {
+                "isnull": true,
+                "location": 491
+              }
+            },
+            "typeName": {
+              "names": [
+                {
+                  "String": {
+                    "sval": "uuid"
+                  }
+                }
+              ],
+              "typemod": -1,
+              "location": 497
+            },
+            "location": 495
+          }
+        },
+        {
+          "A_Const": {
+            "boolval": {},
+            "location": 511
+          }
+        }
+      ],
+      "funcformat": "COERCE_EXPLICIT_CALL",
+      "location": 375
+    }
+  ],
+  "nativeInvocation": "NOT_RUN",
+  "substitutions": 0
+}
