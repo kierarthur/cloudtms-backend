@@ -1,0 +1,366 @@
+{
+  "checks": 88,
+  "results": [
+    {
+      "name": "exact frozen saved/Git recipe/README.md",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git recipe/RECIPE.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git recipe/SCHEMA_METADATA.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git recipe/TEST_RESULTS.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git recipe/freeze.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git recipe/prepare.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git recipe/test.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git recipe/MANIFEST.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/F23_CENSUS.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/GRAMMAR_RESULTS.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/LOADER_RESULTS.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/PAYLOAD_MANIFEST.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/README.md",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/SOURCE_PROOF.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/TEST_RESULTS.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/build.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/freeze.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/grammar.py",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/loader-check.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/payload/docs/bpay-next/final-definer-closures.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/payload/supabase/release/current-release.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/payload/supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/reference/complete-original-context.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/reference/current-context-parent.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/reference/docs/bpay-next/final-definer-closures.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/reference/supabase/release/current-release.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/reference/whole-context-parent-forward.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/test.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/verifier.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git context/MANIFEST.json",
+      "result": "PASS"
+    },
+    {
+      "name": "actual source pin broker/src/index.js",
+      "result": "PASS"
+    },
+    {
+      "name": "actual source pin broker/src/daily-rate-correction.js",
+      "result": "PASS"
+    },
+    {
+      "name": "actual source pin broker/src/daily-canonical-authority.js",
+      "result": "PASS"
+    },
+    {
+      "name": "actual source pin broker/src/daily-schedule-authority.js",
+      "result": "PASS"
+    },
+    {
+      "name": "actual source pin supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "actual source pin supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "actual source pin supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "actual source pin supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "actual source pin supabase/release/current-contract.json",
+      "result": "PASS"
+    },
+    {
+      "name": "actual source pin docs/bpay-next/final-definer-closures.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact context payload supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "exact context payload supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "exact context payload supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "exact context payload supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "exact context payload docs/bpay-next/final-definer-closures.json",
+      "result": "PASS"
+    },
+    {
+      "name": "exact context payload supabase/release/current-release.json",
+      "result": "PASS"
+    },
+    {
+      "name": "one actual predicate complete raw context and whole-parent inverse",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"RN\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \" rn \"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"rMn\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"rGn\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"HCA\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"ODP\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"Health Care Assistant\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"health\\tcare  assistant\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"Registered Nurse\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"registered_nurse\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"Support Worker\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \" Senior Nurse \"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"RN-MH\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual manual/canonical role representation \"\"",
+      "result": "PASS"
+    },
+    {
+      "name": "actual normalizer has no role alias lookup",
+      "result": "PASS"
+    },
+    {
+      "name": "SQL retains exact null/empty/different-role and band refusals",
+      "result": "PASS"
+    },
+    {
+      "name": "actual Client HTTP whitelists retain every recipe field",
+      "result": "PASS"
+    },
+    {
+      "name": "real Client native authority allocates settings and owns baseline date",
+      "result": "PASS"
+    },
+    {
+      "name": "actual Candidate producer receives fixed ID but retains genuine native identity",
+      "result": "PASS"
+    },
+    {
+      "name": "native Client rate result and zero-incumbent window qualification remain staged",
+      "result": "PASS"
+    },
+    {
+      "name": "actual Daily producer returns native Timesheet ID and uses actual canonical queue",
+      "result": "PASS"
+    },
+    {
+      "name": "ordinary authorise body remains unbound until exact native currentness readback",
+      "result": "PASS"
+    },
+    {
+      "name": "independent explicit ACL expectations preserve existing seven signatures",
+      "result": "PASS"
+    },
+    {
+      "name": "whole current3cbc producer preserved createClientWithSettingsAtomic",
+      "result": "PASS"
+    },
+    {
+      "name": "whole current3cbc producer preserved handleCreateCandidate",
+      "result": "PASS"
+    },
+    {
+      "name": "whole current3cbc producer preserved handleUpsertClientRate",
+      "result": "PASS"
+    },
+    {
+      "name": "whole current3cbc producer preserved handleTimesheetCreateManualDaily",
+      "result": "PASS"
+    },
+    {
+      "name": "whole current3cbc producer preserved saveAndRecalculateCanonicalDaily",
+      "result": "PASS"
+    },
+    {
+      "name": "whole current3cbc producer preserved runTsfinWorkerOnce",
+      "result": "PASS"
+    },
+    {
+      "name": "whole current3cbc producer preserved handleTimesheetAuthoriseGeneric",
+      "result": "PASS"
+    },
+    {
+      "name": "current product/migration guard excluded from role edits supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "current product/migration guard excluded from role edits broker/src/daily-canonical-authority.js",
+      "result": "PASS"
+    },
+    {
+      "name": "current product/migration guard excluded from role edits broker/src/daily-rate-correction.js",
+      "result": "PASS"
+    },
+    {
+      "name": "current product/migration guard excluded from role edits broker/src/daily-schedule-authority.js",
+      "result": "PASS"
+    },
+    {
+      "name": "current product/migration guard excluded from role edits supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "current product/migration guard excluded from role edits supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "current product/migration guard excluded from role edits supabase/verification/17102026_0248_daily_health_support_security.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "current product/migration guard excluded from role edits supabase/release/migration-lock.json",
+      "result": "PASS"
+    }
+  ],
+  "findings": 0,
+  "sourceOnly": true,
+  "recipe": "MANIFEST_ONLY_NOT_CREATED",
+  "roleForward": "ACCEPT_BOUNDED_SOURCE_ONLY_CURRENT_METADATA_REBASE_REQUIRED",
+  "native": "NOT_RUN",
+  "dbConnections": 0,
+  "BankBodySemanticReads": 0,
+  "rootWrites": 0,
+  "OfficeWrites": 0
+}

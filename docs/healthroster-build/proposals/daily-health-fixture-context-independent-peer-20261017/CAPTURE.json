@@ -1,0 +1,188 @@
+{
+  "selections": [
+    {
+      "name": "recipe",
+      "commit": "ad02698589fa28b1a73af26390fad7cf4c0466f9",
+      "folder": "daily-health-genuine-fixture-recipe-20261017",
+      "manifestSha256": "249da3f1fd60b51d9d9e633a91a5ec7bc220601a8672c3f9acf7747624e1f9c1",
+      "files": [
+        {
+          "file": "README.md",
+          "sha256": "1c1fadde8bf4f36383055394846a41c84ffa2ca72590f2d371637364fbea5167",
+          "bytes": 5405
+        },
+        {
+          "file": "RECIPE.json",
+          "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c",
+          "bytes": 11525
+        },
+        {
+          "file": "SCHEMA_METADATA.json",
+          "sha256": "574bb838f62042c47c9f93df1bc5eb2013d2345778bf1f1fc44cabf2f5083587",
+          "bytes": 164377
+        },
+        {
+          "file": "TEST_RESULTS.json",
+          "sha256": "61eee32e7d736ce860a51710e4d85f1babd4009c1f7a4e0d8031dd720315e34b",
+          "bytes": 659
+        },
+        {
+          "file": "freeze.mjs",
+          "sha256": "22190cf3c944f2b38871185074d2ec69dba7fe028c1df219548a539accbe596e",
+          "bytes": 1386
+        },
+        {
+          "file": "prepare.mjs",
+          "sha256": "ca0cff25b5959c3509680c549e286f34147d32708ab3647adf9859ab4c94ee95",
+          "bytes": 10178
+        },
+        {
+          "file": "test.mjs",
+          "sha256": "e8b04e86b70501010ed9463284249837f9c8cdadc76b72cc3ba179407c6e8b6a",
+          "bytes": 4203
+        },
+        {
+          "file": "MANIFEST.json",
+          "sha256": "249da3f1fd60b51d9d9e633a91a5ec7bc220601a8672c3f9acf7747624e1f9c1",
+          "bytes": 1244
+        }
+      ]
+    },
+    {
+      "name": "context",
+      "commit": "1d00a57a1cf292f2a0c6cf8c17898d1e13204d31",
+      "folder": "daily-health-role-identity-forward-20261017",
+      "manifestSha256": "df574a80c57e977df9743adc12e55e2e66b523301d8c0aad25dbd72d5f899dd6",
+      "files": [
+        {
+          "file": "F23_CENSUS.json",
+          "sha256": "c65fffaea2ba6f2012b7a283a4d7500d303ebf08750f7a320cfa3dfb10b16584",
+          "bytes": 1183
+        },
+        {
+          "file": "GRAMMAR_RESULTS.json",
+          "sha256": "be98ce3815165b8f9496eda6ffe9ebe3ec212ad7e56626c15136d297a1a816f1",
+          "bytes": 1349
+        },
+        {
+          "file": "LOADER_RESULTS.json",
+          "sha256": "40588ad73ccb89ba3d01e4d4021ee5208942f113e6cb37c7471c269b5dc753d5",
+          "bytes": 2441
+        },
+        {
+          "file": "PAYLOAD_MANIFEST.json",
+          "sha256": "8f117bb8d148d3cbaf44db9517bef1affac24f626ca6652df04e18ddd57787ab",
+          "bytes": 1970
+        },
+        {
+          "file": "README.md",
+          "sha256": "6927384cb756eb19541dfae1bf83f9a38763abbc96eb2ffe3cdd32306f51bfd6",
+          "bytes": 4599
+        },
+        {
+          "file": "SOURCE_PROOF.json",
+          "sha256": "7f88895455cf3b85febe39fd6e53a24f15d25b0f0544fe9fbdaa70bd0d835415",
+          "bytes": 80482
+        },
+        {
+          "file": "TEST_RESULTS.json",
+          "sha256": "f4a1ddfc83550681e608cf126e770dcd214de0921481566fbdb2baeff050bd8e",
+          "bytes": 1001
+        },
+        {
+          "file": "build.mjs",
+          "sha256": "5142a6d51e054517cfab2c5fc48473d3c48c8b1c31fdf4fd95bf9b4baee8bba6",
+          "bytes": 7539
+        },
+        {
+          "file": "freeze.mjs",
+          "sha256": "b102ce793be986059d2304cdb8225b95e1057a1fcadbb8e2b92f1bc74414fa3d",
+          "bytes": 2168
+        },
+        {
+          "file": "grammar.py",
+          "sha256": "c07440c5fdcdbca39894f9fff978785b2c6c4d2c969cd5bbdbd5465c4e5eaa92",
+          "bytes": 1729
+        },
+        {
+          "file": "loader-check.mjs",
+          "sha256": "8b6a9fe5e443737b5c7a009f66c1b382dda37fc8f31478c4b563bf875a033f9d",
+          "bytes": 8065
+        },
+        {
+          "file": "payload/docs/bpay-next/final-definer-closures.json",
+          "sha256": "a69fda2fcd96e0000087c895835f7a95fe9b9ca2ed4a3b81157874817db2379d",
+          "bytes": 1737560
+        },
+        {
+          "file": "payload/supabase/release/current-release.json",
+          "sha256": "2df4d8cc4eee218f73130ca65504915591a14cecbae24b2db170ffacde9d9b2e",
+          "bytes": 36340
+        },
+        {
+          "file": "payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+          "sha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6",
+          "bytes": 8650
+        },
+        {
+          "file": "payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+          "sha256": "f0477a93e05e9fa6960d64df4628c17421ce1e80d661067febec3c5fa0e6f3c4",
+          "bytes": 288
+        },
+        {
+          "file": "payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+          "sha256": "869be3d8ff7f6635c9ca81c6805558e1de8d1f1de60c0d21342b0dfbfac39ea0",
+          "bytes": 244
+        },
+        {
+          "file": "payload/supabase/verification/17102026_0910_daily_role_identity_security.sql",
+          "sha256": "888fcbcb73c5222f3756e1428130a67fe7a06f56b544d3a17c92cc46795b9852",
+          "bytes": 2886
+        },
+        {
+          "file": "reference/complete-original-context.sqlinc",
+          "sha256": "3812ba6727faa4bae2646ea0fa4a9bb8623fa7f44bfc0349883134756ee59f1c",
+          "bytes": 8642
+        },
+        {
+          "file": "reference/current-context-parent.sqlinc",
+          "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+          "bytes": 15693
+        },
+        {
+          "file": "reference/docs/bpay-next/final-definer-closures.json",
+          "sha256": "9c89151b35ac193d94c69fbd4b63527d3df78e1d37c8b0734934a562f361bd92",
+          "bytes": 1737277
+        },
+        {
+          "file": "reference/supabase/release/current-release.json",
+          "sha256": "cf68ab7b56dd2bfe5a865892cd8364845851ac6fb6fb56fd884e4f16ef2359f8",
+          "bytes": 36188
+        },
+        {
+          "file": "reference/whole-context-parent-forward.sqlinc",
+          "sha256": "28c04e4ca8c525d7e6f4c1c35b26b7e0c081e7faa2cb0061566cfa32d267c79d",
+          "bytes": 15700
+        },
+        {
+          "file": "test.mjs",
+          "sha256": "588a77f0bca47f0651148c670b9b17c22d0736ecfc136fba982464c0d0a4920e",
+          "bytes": 7593
+        },
+        {
+          "file": "verifier.sql",
+          "sha256": "888fcbcb73c5222f3756e1428130a67fe7a06f56b544d3a17c92cc46795b9852",
+          "bytes": 2886
+        },
+        {
+          "file": "MANIFEST.json",
+          "sha256": "df574a80c57e977df9743adc12e55e2e66b523301d8c0aad25dbd72d5f899dd6",
+          "bytes": 4334
+        }
+      ]
+    }
+  ],
+  "sourceOnly": true,
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}

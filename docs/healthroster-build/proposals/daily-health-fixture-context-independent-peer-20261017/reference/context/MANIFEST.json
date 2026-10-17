@@ -1,0 +1,131 @@
+{
+  "version": "DAILY_HEALTH_ROLE_IDENTITY_FORWARD_FREEZE_V1",
+  "rootCommit": "dd338cecd355a077192a236770db26e15559180a",
+  "payloads": 6,
+  "changedSignatures": 1,
+  "newMigrations": 0,
+  "native": "NOT_RUN",
+  "sourceOnly": true,
+  "files": [
+    {
+      "file": "F23_CENSUS.json",
+      "bytes": 1183,
+      "sha256": "c65fffaea2ba6f2012b7a283a4d7500d303ebf08750f7a320cfa3dfb10b16584"
+    },
+    {
+      "file": "GRAMMAR_RESULTS.json",
+      "bytes": 1349,
+      "sha256": "be98ce3815165b8f9496eda6ffe9ebe3ec212ad7e56626c15136d297a1a816f1"
+    },
+    {
+      "file": "LOADER_RESULTS.json",
+      "bytes": 2441,
+      "sha256": "40588ad73ccb89ba3d01e4d4021ee5208942f113e6cb37c7471c269b5dc753d5"
+    },
+    {
+      "file": "PAYLOAD_MANIFEST.json",
+      "bytes": 1970,
+      "sha256": "8f117bb8d148d3cbaf44db9517bef1affac24f626ca6652df04e18ddd57787ab"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4599,
+      "sha256": "6927384cb756eb19541dfae1bf83f9a38763abbc96eb2ffe3cdd32306f51bfd6"
+    },
+    {
+      "file": "SOURCE_PROOF.json",
+      "bytes": 80482,
+      "sha256": "7f88895455cf3b85febe39fd6e53a24f15d25b0f0544fe9fbdaa70bd0d835415"
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "bytes": 1001,
+      "sha256": "f4a1ddfc83550681e608cf126e770dcd214de0921481566fbdb2baeff050bd8e"
+    },
+    {
+      "file": "build.mjs",
+      "bytes": 7539,
+      "sha256": "5142a6d51e054517cfab2c5fc48473d3c48c8b1c31fdf4fd95bf9b4baee8bba6"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 2168,
+      "sha256": "b102ce793be986059d2304cdb8225b95e1057a1fcadbb8e2b92f1bc74414fa3d"
+    },
+    {
+      "file": "grammar.py",
+      "bytes": 1729,
+      "sha256": "c07440c5fdcdbca39894f9fff978785b2c6c4d2c969cd5bbdbd5465c4e5eaa92"
+    },
+    {
+      "file": "loader-check.mjs",
+      "bytes": 8065,
+      "sha256": "8b6a9fe5e443737b5c7a009f66c1b382dda37fc8f31478c4b563bf875a033f9d"
+    },
+    {
+      "file": "payload/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1737560,
+      "sha256": "a69fda2fcd96e0000087c895835f7a95fe9b9ca2ed4a3b81157874817db2379d"
+    },
+    {
+      "file": "payload/supabase/release/current-release.json",
+      "bytes": 36340,
+      "sha256": "2df4d8cc4eee218f73130ca65504915591a14cecbae24b2db170ffacde9d9b2e"
+    },
+    {
+      "file": "payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "bytes": 8650,
+      "sha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6"
+    },
+    {
+      "file": "payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "bytes": 288,
+      "sha256": "f0477a93e05e9fa6960d64df4628c17421ce1e80d661067febec3c5fa0e6f3c4"
+    },
+    {
+      "file": "payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "bytes": 244,
+      "sha256": "869be3d8ff7f6635c9ca81c6805558e1de8d1f1de60c0d21342b0dfbfac39ea0"
+    },
+    {
+      "file": "payload/supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "bytes": 2886,
+      "sha256": "888fcbcb73c5222f3756e1428130a67fe7a06f56b544d3a17c92cc46795b9852"
+    },
+    {
+      "file": "reference/complete-original-context.sqlinc",
+      "bytes": 8642,
+      "sha256": "3812ba6727faa4bae2646ea0fa4a9bb8623fa7f44bfc0349883134756ee59f1c"
+    },
+    {
+      "file": "reference/current-context-parent.sqlinc",
+      "bytes": 15693,
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f"
+    },
+    {
+      "file": "reference/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1737277,
+      "sha256": "9c89151b35ac193d94c69fbd4b63527d3df78e1d37c8b0734934a562f361bd92"
+    },
+    {
+      "file": "reference/supabase/release/current-release.json",
+      "bytes": 36188,
+      "sha256": "cf68ab7b56dd2bfe5a865892cd8364845851ac6fb6fb56fd884e4f16ef2359f8"
+    },
+    {
+      "file": "reference/whole-context-parent-forward.sqlinc",
+      "bytes": 15700,
+      "sha256": "28c04e4ca8c525d7e6f4c1c35b26b7e0c081e7faa2cb0061566cfa32d267c79d"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 7593,
+      "sha256": "588a77f0bca47f0651148c670b9b17c22d0736ecfc136fba982464c0d0a4920e"
+    },
+    {
+      "file": "verifier.sql",
+      "bytes": 2886,
+      "sha256": "888fcbcb73c5222f3756e1428130a67fe7a06f56b544d3a17c92cc46795b9852"
+    }
+  ]
+}

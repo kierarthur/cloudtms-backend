@@ -1,0 +1,46 @@
+TAP version 13
+# Subtest: recipe preserves unknown native bindings and cannot claim fixture or financial success
+ok 1 - recipe preserves unknown native bindings and cannot claim fixture or financial success
+  ---
+  duration_ms: 0.5868
+  type: 'test'
+  ...
+# Subtest: proposed bodies use actual committed columns and exact separate native identities
+ok 2 - proposed bodies use actual committed columns and exact separate native identities
+  ---
+  duration_ms: 0.6085
+  type: 'test'
+  ...
+# Subtest: no recipient, account provisioning, auto-authorisation or provider action is proposed
+ok 3 - no recipient, account provisioning, auto-authorisation or provider action is proposed
+  ---
+  duration_ms: 0.1007
+  type: 'test'
+  ...
+# Subtest: all real Worker/native producer pins remain exact and the known role join is retained
+ok 4 - all real Worker/native producer pins remain exact and the known role join is retained
+  ---
+  duration_ms: 367.6418
+  type: 'test'
+  ...
+# Subtest: real standalone Worker still rederives native selection and forwards actual snapshot/provenance
+ok 5 - real standalone Worker still rederives native selection and forwards actual snapshot/provenance
+  ---
+  duration_ms: 0.246
+  type: 'test'
+  ...
+# Subtest: native-generated IDs and committed visibility remain explicit staged gates
+ok 6 - native-generated IDs and committed visibility remain explicit staged gates
+  ---
+  duration_ms: 0.2065
+  type: 'test'
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2350.2719

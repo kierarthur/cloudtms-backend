@@ -1,0 +1,59 @@
+{
+  "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+  "wholeProducersUnchanged": 7,
+  "protectedCurrentParents": [
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "currentParent": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "bytes": 15693
+    },
+    {
+      "file": "broker/src/daily-canonical-authority.js",
+      "currentParent": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+      "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942",
+      "bytes": 18725
+    },
+    {
+      "file": "broker/src/daily-rate-correction.js",
+      "currentParent": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+      "sha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84",
+      "bytes": 14101
+    },
+    {
+      "file": "broker/src/daily-schedule-authority.js",
+      "currentParent": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+      "sha256": "1623f5294d7da3860731ac6eee91f8fe6aed1f3fc27f01ab42eb1ea4c7fbeb2e",
+      "bytes": 14306
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "currentParent": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "bytes": 15886
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "currentParent": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+      "sha256": "ec1dae1cab0e44a1713ace86ceaf4d6ae916e5550ba4f204e407450ce73e117a",
+      "bytes": 1358
+    },
+    {
+      "file": "supabase/verification/17102026_0248_daily_health_support_security.sql",
+      "currentParent": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+      "sha256": "d2a1bc26c9c5b5650f78235e46e505037e4e59fbd74f095859fd3fc62817a847",
+      "bytes": 2400
+    },
+    {
+      "file": "supabase/release/migration-lock.json",
+      "currentParent": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+      "sha256": "6b0b4a3d518a3d80a2dff6ab9a17dfe347efb6c073574c4cf5014581ada2f250",
+      "bytes": 79483
+    }
+  ],
+  "roleNewSignatures": 0,
+  "roleNewMigrations": 0,
+  "SourceAccepted15Internal9": "UNTOUCHED",
+  "BankAuthorisationSQLBody": "NOT_INSPECTED",
+  "native": "NOT_RUN"
+}

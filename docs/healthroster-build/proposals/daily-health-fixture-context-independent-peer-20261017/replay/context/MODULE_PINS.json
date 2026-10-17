@@ -1,0 +1,19 @@
+{
+  "mode": "context",
+  "commit": "dd338cecd355a077192a236770db26e15559180a",
+  "modules": [
+    {
+      "path": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "commit": "dd338cecd355a077192a236770db26e15559180a"
+    },
+    {
+      "path": "scripts/cloudtms-managed-psql.mjs",
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d",
+      "commit": "dd338cecd355a077192a236770db26e15559180a"
+    }
+  ],
+  "native": "NOT_RUN",
+  "rootWrites": 0,
+  "referenceWrites": 0
+}

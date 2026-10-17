@@ -1,0 +1,35 @@
+{
+  "tests": [
+    {
+      "mode": "recipe",
+      "tests": 6,
+      "pass": 6,
+      "fail": 0
+    },
+    {
+      "mode": "context",
+      "tests": 9,
+      "pass": 9,
+      "fail": 0
+    }
+  ],
+  "actualLoader": true,
+  "grammar": true,
+  "harness": {
+    "GitPinnedReadInputs": true,
+    "moduleHooksFiniteBrokerAndScripts": true,
+    "referenceWrites": 0,
+    "rootWrites": 0,
+    "grammarOperationalEdits": [
+      {
+        "before": "HERE=Path(__file__).resolve().parent",
+        "after": "HERE=Path(\"//?/D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/daily-health-fixture-context-independent-peer-20261017/reference/context\")"
+      },
+      {
+        "before": "(HERE/'GRAMMAR_RESULTS.json').write_text",
+        "after": "(Path(\"//?/D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/docs/healthroster-build/proposals/daily-health-fixture-context-independent-peer-20261017/replay/context/GRAMMAR_RESULTS.json\")).write_text"
+      }
+    ]
+  },
+  "native": "NOT_RUN"
+}

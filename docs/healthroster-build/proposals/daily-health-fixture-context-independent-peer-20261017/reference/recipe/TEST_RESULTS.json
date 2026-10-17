@@ -1,0 +1,15 @@
+{
+  "tests": 6,
+  "pass": 6,
+  "fail": 0,
+  "names": [
+    "recipe preserves unknown native bindings and cannot claim fixture or financial success",
+    "proposed bodies use actual committed columns and exact separate native identities",
+    "no recipient, account provisioning, auto-authorisation or provider action is proposed",
+    "all real Worker/native producer pins remain exact and the known role join is retained",
+    "real standalone Worker still rederives native selection and forwards actual snapshot/provenance",
+    "native-generated IDs and committed visibility remain explicit staged gates"
+  ],
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

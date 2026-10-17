@@ -1,0 +1,52 @@
+{
+  "parser": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "files": [
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "statements": 5,
+      "sqlGrammar": "PASS",
+      "plpgsql": {
+        "grammar": "PASS",
+        "parsedBodies": 1,
+        "nativeBodyCompilation": "NOT_PROVED"
+      }
+    },
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "statements": 1,
+      "sqlGrammar": "PASS",
+      "plpgsql": {
+        "grammar": "PASS",
+        "parsedBodies": 1,
+        "nativeBodyCompilation": "NOT_PROVED"
+      }
+    },
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "statements": 2,
+      "sqlGrammar": "PASS",
+      "plpgsql": {
+        "grammar": "PASS",
+        "parsedBodies": 0,
+        "nativeBodyCompilation": "NOT_PROVED"
+      }
+    },
+    {
+      "file": "supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "statements": 3,
+      "sqlGrammar": "PASS",
+      "plpgsql": {
+        "grammar": "PASS",
+        "parsedBodies": 1,
+        "nativeBodyCompilation": "NOT_PROVED"
+      }
+    }
+  ],
+  "catalogueSubstitutions": [],
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

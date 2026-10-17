@@ -1,0 +1,43 @@
+{
+  "version": "DAILY_GENUINE_FIXTURE_MANIFEST_RECIPE_FREEZE_V1",
+  "sourceCommit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+  "status": "MANIFEST_ONLY_NOT_CREATED",
+  "native": "NOT_RUN",
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 5405,
+      "sha256": "1c1fadde8bf4f36383055394846a41c84ffa2ca72590f2d371637364fbea5167"
+    },
+    {
+      "file": "RECIPE.json",
+      "bytes": 11525,
+      "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c"
+    },
+    {
+      "file": "SCHEMA_METADATA.json",
+      "bytes": 164377,
+      "sha256": "574bb838f62042c47c9f93df1bc5eb2013d2345778bf1f1fc44cabf2f5083587"
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "bytes": 659,
+      "sha256": "61eee32e7d736ce860a51710e4d85f1babd4009c1f7a4e0d8031dd720315e34b"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 1386,
+      "sha256": "22190cf3c944f2b38871185074d2ec69dba7fe028c1df219548a539accbe596e"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 10178,
+      "sha256": "ca0cff25b5959c3509680c549e286f34147d32708ab3647adf9859ab4c94ee95"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 4203,
+      "sha256": "e8b04e86b70501010ed9463284249837f9c8cdadc76b72cc3ba179407c6e8b6a"
+    }
+  ]
+}

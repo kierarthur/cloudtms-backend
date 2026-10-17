@@ -1,0 +1,26 @@
+{
+  "sourceCommit": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+  "files": [
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "hazards": 0
+    },
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "hazards": 0
+    },
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "hazards": 0
+    },
+    {
+      "file": "supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "hazards": 0
+    }
+  ],
+  "totalHazards": 0,
+  "classifierChanges": 0,
+  "allowancesAdded": 0,
+  "fullGlobalGate": "NOT_RUN",
+  "native": "NOT_RUN"
+}

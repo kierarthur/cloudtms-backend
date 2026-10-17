@@ -1,0 +1,43 @@
+{
+  "sourceSha256": "8b6a9fe5e443737b5c7a009f66c1b382dda37fc8f31478c4b563bf875a033f9d",
+  "adaptedSha256": "01a1ed480668d51c54ac2458dc513e410f0b42b9e99bde5fa965012d92e99404",
+  "edits": [
+    {
+      "before": "const here=path.dirname(fileURLToPath(import.meta.url))",
+      "after": "const here=\"D:\\\\Development\\\\GitHub\\\\.codex-worktrees\\\\healthroster-v2-money-build-13102026\\\\docs\\\\healthroster-build\\\\proposals\\\\daily-health-fixture-context-independent-peer-20261017\\\\reference\\\\context\"",
+      "count": 1
+    },
+    {
+      "before": "checkpoint='dd338cecd355a077192a236770db26e15559180a'",
+      "after": "checkpoint='3cbc4585be761479de4854ae1caa621a0186ad8e'",
+      "count": 1
+    },
+    {
+      "before": "assert.equal(baseInventory.migrations.length,425)",
+      "after": "assert.equal(baseInventory.migrations.length,426)",
+      "count": 1
+    },
+    {
+      "before": "assert.equal(baseInventory.repeatables.length,1093)",
+      "after": "assert.equal(baseInventory.repeatables.length,1095)",
+      "count": 1
+    },
+    {
+      "before": "{migrations:425,repeatables:1094}",
+      "after": "{migrations:426,repeatables:1096}",
+      "count": 1
+    },
+    {
+      "before": "beforeInventory:{migrations:425,repeatables:1093}",
+      "after": "beforeInventory:{migrations:426,repeatables:1095}",
+      "count": 1
+    },
+    {
+      "before": "before:[425,1093],candidate:[425,1094]",
+      "after": "before:[426,1095],candidate:[426,1096]",
+      "count": 1
+    }
+  ],
+  "currentMetadataReviewOnly": true,
+  "sqlBodyEdits": 0
+}
