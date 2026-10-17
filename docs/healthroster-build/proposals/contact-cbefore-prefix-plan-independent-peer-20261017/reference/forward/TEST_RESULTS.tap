@@ -1,0 +1,208 @@
+TAP version 13
+# Subtest: synthetic complete PREFIX/PLAN streams validate across every byte boundary without raw plan leakage
+ok 1 - synthetic complete PREFIX/PLAN streams validate across every byte boundary without raw plan leakage
+  ---
+  duration_ms: 58.9659
+  type: 'test'
+  ...
+# Subtest: unsupported stdout, NOTICE, invalid UTF8 and partial final frames refuse without canaries
+ok 2 - unsupported stdout, NOTICE, invalid UTF8 and partial final frames refuse without canaries
+  ---
+  duration_ms: 0.6914
+  type: 'test'
+  ...
+# Subtest: stderr always refuses; exact split SQLSTATE and genuine prior completion metadata only
+ok 3 - stderr always refuses; exact split SQLSTATE and genuine prior completion metadata only
+  ---
+  duration_ms: 2.0754
+  type: 'test'
+  ...
+# Subtest: NOTICE/unclosed/over-cap stderr cannot yield an invented SQLSTATE
+ok 4 - NOTICE/unclosed/over-cap stderr cannot yield an invented SQLSTATE
+  ---
+  duration_ms: 0.2776
+  type: 'test'
+  ...
+# Subtest: duplicate/out-of-order markers and unknown peer fields cannot produce completion
+ok 5 - duplicate/out-of-order markers and unknown peer fields cannot produce completion
+  ---
+  duration_ms: 0.3198
+  type: 'test'
+  ...
+# Subtest: plan projection refuses ANALYZE results, unknown nodes/envelopes/nonfinite estimates
+ok 6 - plan projection refuses ANALYZE results, unknown nodes/envelopes/nonfinite estimates
+  ---
+  duration_ms: 0.3006
+  type: 'test'
+  ...
+# Subtest: estimated cost projection is finite top32; no raw expressions/relations or observations
+ok 7 - estimated cost projection is finite top32; no raw expressions/relations or observations
+  ---
+  duration_ms: 0.3131
+  type: 'test'
+  ...
+# Subtest: original metadata/child/connection budgets remain exact; diagnostic frame line is bounded
+ok 8 - original metadata/child/connection budgets remain exact; diagnostic frame line is bounded
+  ---
+  duration_ms: 0.698
+  type: 'test'
+  ...
+# Subtest: actual fixed source renders exact diagnostic modes; plan cannot bypass private prefix state
+ok 9 - actual fixed source renders exact diagnostic modes; plan cannot bypass private prefix state
+  ---
+  duration_ms: 9711.1192
+  type: 'test'
+  ...
+# Subtest: two exact complete programmes render within unchanged caps
+ok 10 - two exact complete programmes render within unchanged caps
+  ---
+  duration_ms: 32.2189
+  type: 'test'
+  ...
+# Subtest: unprovided case, fake Contact lock alias, wrong physical root refuse before connection
+ok 11 - unprovided case, fake Contact lock alias, wrong physical root refuse before connection
+  ---
+  duration_ms: 0.8535
+  type: 'test'
+  ...
+# Subtest: full constructor bodies and complete old assertions are retained
+ok 12 - full constructor bodies and complete old assertions are retained
+  ---
+  duration_ms: 270.2264
+  type: 'test'
+  ...
+# Subtest: QT actual return tag and command/domain audit checks bind current owner
+ok 13 - QT actual return tag and command/domain audit checks bind current owner
+  ---
+  duration_ms: 0.5809
+  type: 'test'
+  ...
+# Subtest: unchanged native actor preflight precedes INSERT; no role switching
+ok 14 - unchanged native actor preflight precedes INSERT; no role switching
+  ---
+  duration_ms: 0.382
+  type: 'test'
+  ...
+# Subtest: fixed C uses original canonical query and all twelve complete relations without connecting
+ok 15 - fixed C uses original canonical query and all twelve complete relations without connecting
+  ---
+  duration_ms: 618.941
+  type: 'test'
+  ...
+# Subtest: reader parent full raw inverse and original control/timing exact bytes
+ok 16 - reader parent full raw inverse and original control/timing exact bytes
+  ---
+  duration_ms: 2.1568
+  type: 'test'
+  ...
+# Subtest: all four original SQL parents fully reverse including exact owner and framing spans
+ok 17 - all four original SQL parents fully reverse including exact owner and framing spans
+  ---
+  duration_ms: 2.6822
+  type: 'test'
+  ...
+# Subtest: native metadata guard refuses unreviewed policy/owner/rule/inheritance/DDL hooks before business reads
+ok 18 - native metadata guard refuses unreviewed policy/owner/rule/inheritance/DDL hooks before business reads
+  ---
+  duration_ms: 0.8538
+  type: 'test'
+  ...
+# Subtest: synthetic response boundaries accept exact two shapes, not native qualification
+ok 19 - synthetic response boundaries accept exact two shapes, not native qualification
+  ---
+  duration_ms: 2.6566
+  type: 'test'
+  ...
+# Subtest: synthetic SET/DDL null is per-index; SELECT null, wrong tag and extra fields refuse
+ok 20 - synthetic SET/DDL null is per-index; SELECT null, wrong tag and extra fields refuse
+  ---
+  duration_ms: 1.2987
+  type: 'test'
+  ...
+# Subtest: synthetic wrong programme counters/accepted/rollback/freshness refuse
+ok 21 - synthetic wrong programme counters/accepted/rollback/freshness refuse
+  ---
+  duration_ms: 1.6139
+  type: 'test'
+  ...
+# Subtest: pooled MCP PID equal B is permitted only with independent C-after and full scope
+ok 22 - pooled MCP PID equal B is permitted only with independent C-after and full scope
+  ---
+  duration_ms: 0.8206
+  type: 'test'
+  ...
+# Subtest: original WeakMap refuses invented proof or stale copied qualification
+ok 23 - original WeakMap refuses invented proof or stale copied qualification
+  ---
+  duration_ms: 255.3163
+  type: 'test'
+  ...
+# Subtest: bounded capture and persistence refuse oversized/native raw maps
+ok 24 - bounded capture and persistence refuse oversized/native raw maps
+  ---
+  duration_ms: 0.6564
+  type: 'test'
+  ...
+# Subtest: root timing is actual bounded metadata only; no fabricated latency or SQL result
+ok 25 - root timing is actual bounded metadata only; no fabricated latency or SQL result
+  ---
+  duration_ms: 1.3641
+  type: 'test'
+  ...
+# Subtest: actual private default coordinator still parses its two original frames
+ok 26 - actual private default coordinator still parses its two original frames
+  ---
+  duration_ms: 3.8609
+  type: 'test'
+  ...
+# Subtest: actual private PREFIX coordinator closes with only bounded progress/peer
+ok 27 - actual private PREFIX coordinator closes with only bounded progress/peer
+  ---
+  duration_ms: 0.8041
+  type: 'test'
+  ...
+# Subtest: actual private failure kills own child and keeps exact SQLSTATE/completion only
+ok 28 - actual private failure kills own child and keeps exact SQLSTATE/completion only
+  ---
+  duration_ms: 1.4262
+  type: 'test'
+  ...
+# Subtest: two equal Seq Scans retain distinct exact source ordinals; aggregate inherits both scopes
+ok 29 - two equal Seq Scans retain distinct exact source ordinals; aggregate inherits both scopes
+  ---
+  duration_ms: 1.5532
+  type: 'test'
+  ...
+# Subtest: CTE producer and CTE scan identify the same source scope
+ok 30 - CTE producer and CTE scan identify the same source scope
+  ---
+  duration_ms: 0.2685
+  type: 'test'
+  ...
+# Subtest: unknown relation, wrong schema, unknown CTE and malformed CTE producer refuse
+ok 31 - unknown relation, wrong schema, unknown CTE and malformed CTE producer refuse
+  ---
+  duration_ms: 0.5259
+  type: 'test'
+  ...
+# Subtest: only four documented PG17 view expansion names supplement the exact query AST
+ok 32 - only four documented PG17 view expansion names supplement the exact query AST
+  ---
+  duration_ms: 0.789
+  type: 'test'
+  ...
+# Subtest: filters, expressions and row canaries remain absent after scope mapping
+ok 33 - filters, expressions and row canaries remain absent after scope mapping
+  ---
+  duration_ms: 0.2164
+  type: 'test'
+  ...
+1..33
+# tests 33
+# suites 0
+# pass 33
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10312.0952

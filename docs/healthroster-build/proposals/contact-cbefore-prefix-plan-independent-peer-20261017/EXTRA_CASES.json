@@ -1,0 +1,31 @@
+{
+  "version": "CONTACT_PREFIX_PLAN_PEER_EXTRA_CASES_V1",
+  "results": [
+    {
+      "name": "unknown source leaf below top32 still refuses the complete plan",
+      "result": "PASS"
+    },
+    {
+      "name": "parent union retains low-cost source outside the top32 projection",
+      "result": "PASS"
+    },
+    {
+      "name": "all37 closed source relations and16 CTEs retain only their reviewed ordinal",
+      "result": "PASS"
+    },
+    {
+      "name": "ANALYZE data on a deep low-cost child refuses before any projection",
+      "result": "PASS"
+    },
+    {
+      "name": "partial PLAN preserves only completed prefix lower bound and no plan canary",
+      "result": "PASS"
+    },
+    {
+      "name": "duplicate rollback and premature explain marker never qualify completion",
+      "result": "PASS"
+    }
+  ],
+  "native": "NOT_RUN",
+  "psqlOrExplainExecuted": false
+}

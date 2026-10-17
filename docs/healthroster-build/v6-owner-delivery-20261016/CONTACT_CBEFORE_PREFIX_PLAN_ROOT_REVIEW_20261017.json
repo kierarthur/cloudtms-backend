@@ -1,6 +1,7 @@
 {
   "version": "CONTACT_CBEFORE_PREFIX_PLAN_ROOT_REVIEW_V1",
   "status": "ROOT_ACCEPTS_FINITE_DIAGNOSTIC_SOURCE",
+  "independentPeer": {"commit": "3bff5548e6dabfbed5e58df31166dd386d3b0d80", "folder": "docs/healthroster-build/proposals/contact-cbefore-prefix-plan-independent-peer-20261017", "files": 85, "manifestSha256": "9662c4ffdac87f9cd082d0519c81f835d196ae1c1bccb0b6aa5f8236f2ae5ea2", "reviewSha256": "ae97a76a0472a4eb8428a314cd7eb46946936c1a5ffd08afdabcd57afdaab642", "verdict": "ACCEPT_BOUNDED_SOURCE_FORWARD", "scopedBlockers": 0, "additionalNarrowCases": 6, "rawSavedIndexHeadCommitAndManifest": "PASS", "capturedWhitespaceException": "reference/forward/projection.inc:17 retains the same immutable EOF blank line"},
   "authorCommit": "8ded68468803127fcbbc3c543d5ecf9934c79cba",
   "authorFolder": "docs/healthroster-build/proposals/contact-cbefore-plan-scope-forward-20261017",
   "authorFileCount": 73,
@@ -26,6 +27,11 @@
     "allChecks": "PASS"
   },
   "mount": {"completeTargets": 49, "changedExisting": 4, "new": 3, "unchanged": 42, "predecessorsRawSavedIndexHeadParentAndNewVacancy": "PASS", "allSelectedPostimageHashes": "PASS"},
+  "committedAdmission": {"commit": "ffd31cb6a40b8f3cdd698265cfdd7d924feeda1e", "remoteFreshEqual": true, "actualCommittedAdapter": "PASS", "exactExistingManifestedEntry": "PASS", "bothCasesCurrentSource": "PASS", "native": "NOT_RUN"},
+  "capturedWhitespaceExceptions": [
+    {"file": "docs/healthroster-build/proposals/contact-cbefore-plan-scope-forward-20261017/projection.inc", "line": 17, "finding": "new blank line at EOF", "disposition": "Retain exact immutable author capture bytes; no executable target altered to hide this exception"},
+    {"file": "docs/healthroster-build/proposals/contact-cbefore-prefix-plan-diagnostic-20261017/factory.inc", "line": 30, "finding": "new blank line at EOF", "disposition": "Retain exact immutable author capture bytes; no executable target altered to hide this exception"}
+  ],
   "existingProof": "Original before/after snapshot path, complete12 relation maps, catalogue/ledger/background fingerprints, WeakMap, constructor/QT programmes, original setup and all caps retained. Diagnostic cannot return restoration qualification.",
   "nextRun": "Only fixed PREFIX followed by non-ANALYZE estimated PLAN, after this exact source and independent peer are backed and actual committed-source admission passes; original shared lock and protected-release checks remain.",
   "planLimits": "Closed source ordinals and estimated costs only. No raw plan, filters, expressions, aliases, row values or actual timings persisted. Unknown source names refuse before top32 projection. Completion markers are lower bounds, not proof of the cancelled R3 ordinal.",

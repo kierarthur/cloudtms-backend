@@ -1,0 +1,12 @@
+{
+  "version":"CONTACT_PREFIX_PLAN_PEER_REPLAY_V1",
+  "result":"PASS",
+  "authorVerifier":{"targets":49,"rootReverses":4,"rootHunks":9,"ownerForwards":2,"tests":33,"sourceRelations":37,"sourceCtes":16,"pg17Cases":2},
+  "peerExtraCases":6,
+  "productionModulesByteUnchanged":true,
+  "capturedPacketByteUnchangedAfterReplay":true,
+  "testReplayAmendments":["copied verify.mjs physical-here assertion permits exact Money capture; author own path retained for actual original saved/Git checks", "copied coordinator.test.mjs scratch owner becomes Money"],
+  "native":"NOT_RUN",
+  "psqlOrExplainExecuted":false,
+  "privateActualStateReads":0
+}

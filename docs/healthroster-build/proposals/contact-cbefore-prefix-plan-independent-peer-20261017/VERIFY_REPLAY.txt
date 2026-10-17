@@ -1,0 +1,1 @@
+{"targets":49,"rootReverses":4,"rootHunks":9,"ownerForwards":2,"tests":33,"sourceRelations":37,"sourceCtes":16,"native":"NOT_RUN","psqlOrExplainExecuted":false}

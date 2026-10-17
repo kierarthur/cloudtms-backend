@@ -1,0 +1,89 @@
+{
+  "version": "CONTACT_CBEFORE_PLAN_SCOPE_FORWARD_PROOF_V1",
+  "initialCommit": "9a00861188b4b35e427e97d6e43f351b049b91e0",
+  "initialManifestSha256": "04d9472111d6ddd028b60da6166ac18ca9c0092ddff037de58270d04bc5b763f",
+  "initial70FilesRawUnchanged": true,
+  "rootParent": "78b2ae42c1b47a222d32a46121066825dc20115c",
+  "targets": 49,
+  "unchangedRootTargets": 42,
+  "changedExistingRootTargets": 4,
+  "newRootTargets": [
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/diagnose-metadata.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/metadata-progress-diagnostic.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/PLAN_SOURCE_SCOPES.json"
+  ],
+  "rootRawReversals": [
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "beforeSha256": "b4e8359ab9d4c3b6e400beb66237fe568639610540915717dfea40755993b9e7",
+      "afterSha256": "bcc5ec14313e63e845765a3e3671e4420a49bc8437fda61c2e4be2917b520e04",
+      "hunks": 5,
+      "wholeParentReverse": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/READER_PARENT_REVERSE.json",
+      "beforeSha256": "8fcdb0c268c5a79b2b5d9446b68f7f634b45a54193e8e1ae268fc298840266dc",
+      "afterSha256": "4bc5ee66d1d064b938e93fead6e4669afc73da741584aac002d79b563e8d1bbf",
+      "hunks": 1,
+      "wholeParentReverse": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/README.md",
+      "beforeSha256": "6f8c4ab941a971e710828de4ab22308579350c7565dc4de80664b367ad87fa7f",
+      "afterSha256": "4c64027001f2a87d92a8e137344b4b1e2aafcd64fb7b7541f0afcc7eaef2b95c",
+      "hunks": 1,
+      "wholeParentReverse": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "beforeSha256": "d583e2cfa00cffbe263c88a0d6ef0530bb1bbcc28b2ae4c68952e8f341507896",
+      "afterSha256": "fc1ac68dd24d6ead6d7f710055feb509cc689378699e38d116eb68928440026d",
+      "hunks": 2,
+      "wholeParentReverse": true
+    }
+  ],
+  "ownerForwardRawReversals": 2,
+  "unchangedInitialPayloads": 46,
+  "sourceNameMap": {
+    "directRelationNames": 33,
+    "closedRelationNames": 37,
+    "ctes": 16,
+    "native": "NOT_RUN"
+  },
+  "sourceMapSha256": "0426985ea599c726934b2a10eca00f1642d6fe99537a2a3441a723c00c395caf",
+  "tests": 33,
+  "grammar": {
+    "parser": "v7.20",
+    "postgresql": [
+      17,
+      7
+    ],
+    "cases": [
+      {
+        "case": "CONTACT_CONSTRUCTORS_V1",
+        "originalStatements": 6,
+        "prefixStatements": 5,
+        "planStatements": 6,
+        "exactOriginalPrefixAndRollbackAst": true,
+        "wholeCanonicalExplainQueryAstEqual": true,
+        "analyze": false,
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "QT_ADMIN_CONTROLS_V1",
+        "originalStatements": 6,
+        "prefixStatements": 5,
+        "planStatements": 6,
+        "exactOriginalPrefixAndRollbackAst": true,
+        "wholeCanonicalExplainQueryAstEqual": true,
+        "analyze": false,
+        "native": "NOT_RUN"
+      }
+    ],
+    "native": "NOT_RUN"
+  },
+  "native": "NOT_RUN",
+  "psqlOrExplainExecuted": false,
+  "rootWrites": 0,
+  "bankBodiesRead": 0
+}
