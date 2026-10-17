@@ -1,5 +1,5 @@
 {
-  "version": "CONTACT_QT_STATEMENT_SNAPSHOT_CSE_SOURCE_FORWARD_V1",
+  "version": "CONTACT_CBEFORE_PLAN_SOURCE_SCOPE_FORWARD_V1",
   "sourceParent": "feb36c0c13c87b57b7566172e4bfaa1254117794",
   "sourceTests": 16,
   "parsedNativeInputPlBodies": 21,
@@ -22,9 +22,14 @@
       "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8"
     },
     {
+      "file": "diagnose-metadata.mjs",
+      "bytes": 4633,
+      "sha256": "76b91f3d0ea812d02306e165eb4e419e908df84a639668ae71881d6f2c88875c"
+    },
+    {
       "file": "fixed-metadata-reader.mjs",
-      "bytes": 13203,
-      "sha256": "b4e8359ab9d4c3b6e400beb66237fe568639610540915717dfea40755993b9e7"
+      "bytes": 17150,
+      "sha256": "bcc5ec14313e63e845765a3e3671e4420a49bc8437fda61c2e4be2917b520e04"
     },
     {
       "file": "freeze.mjs",
@@ -57,6 +62,16 @@
       "sha256": "c715cc0cb96a9c6b83819ddcf210385b4797eb52112b8785d69c54ac5ee6f90d"
     },
     {
+      "file": "metadata-diagnostic.mjs",
+      "bytes": 3613,
+      "sha256": "a16b0a67e5c333e39c23fed4c5287d1929aa0baf9ac2107b9b93112de55f6794"
+    },
+    {
+      "file": "metadata-progress-diagnostic.mjs",
+      "bytes": 8184,
+      "sha256": "d6ad3ca5cc9d272da638bfb6b7b4d8df62a8e1898be53e25d0d77532f8bf425f"
+    },
+    {
       "file": "native-boundary.mjs",
       "bytes": 2620,
       "sha256": "84abd1f06ec85ffa002cd79fa4f5cf010d7f939bf86b4546ca35c56de54000eb"
@@ -65,6 +80,11 @@
       "file": "OFFLINE_INPUTS.json",
       "bytes": 113699,
       "sha256": "dd53d4cc43ff0c9eed56cf7536b39429b147ce5bb59efd1f70d66663661f25a1"
+    },
+    {
+      "file": "PLAN_SOURCE_SCOPES.json",
+      "bytes": 9204,
+      "sha256": "0426985ea599c726934b2a10eca00f1642d6fe99537a2a3441a723c00c395caf"
     },
     {
       "file": "prepare-adapter.mjs",
@@ -93,13 +113,13 @@
     },
     {
       "file": "READER_PARENT_REVERSE.json",
-      "bytes": 31099,
-      "sha256": "8fcdb0c268c5a79b2b5d9446b68f7f634b45a54193e8e1ae268fc298840266dc"
+      "bytes": 40226,
+      "sha256": "4bc5ee66d1d064b938e93fead6e4669afc73da741584aac002d79b563e8d1bbf"
     },
     {
       "file": "README.md",
-      "bytes": 6806,
-      "sha256": "6f8c4ab941a971e710828de4ab22308579350c7565dc4de80664b367ad87fa7f"
+      "bytes": 7464,
+      "sha256": "4c64027001f2a87d92a8e137344b4b1e2aafcd64fb7b7541f0afcc7eaef2b95c"
     },
     {
       "file": "reference/actor/build-program.mjs",
@@ -225,12 +245,8 @@
       "file": "timing.mjs",
       "bytes": 1313,
       "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9"
-    },
-    {
-      "file": "metadata-diagnostic.mjs",
-      "bytes": 3613,
-      "sha256": "a16b0a67e5c333e39c23fed4c5287d1929aa0baf9ac2107b9b93112de55f6794"
     }
   ],
-  "parentManifestSha256": "663e7fdbcbe4d8169c008c706a0bc2d16b28394f6aec7191a158e68fd961f42f"
+  "parentManifestSha256": "f46fb60686b41f5357ae9f43e079529e5ccb7645aae250ffe93c5a8bfca0de51",
+  "diagnosticParentRoot": "78b2ae42c1b47a222d32a46121066825dc20115c"
 }

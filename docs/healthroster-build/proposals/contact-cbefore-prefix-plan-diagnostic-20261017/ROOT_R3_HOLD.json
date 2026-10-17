@@ -1,0 +1,55 @@
+{
+  "version": "CONTACT_CONSTRUCTORS_NATIVE_R3_CSE_PREQUERY_HOLD_V1",
+  "executionCommit": "78b2ae42c1b47a222d32a46121066825dc20115c",
+  "actualHolderHold": {
+    "status": "HOLD",
+    "caseId": "CONTACT_CONSTRUCTORS_V1",
+    "code": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+    "observedErrorCode": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+    "deadlineObserved": false,
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T09:47:33.996Z",
+      "workDeadlineAt": "2026-10-17T09:49:33.996Z"
+    },
+    "metadataDiagnostic": {
+      "version": "CONTACT_QT_FIXED_METADATA_DIAGNOSTIC_V1",
+      "phase": "BEFORE",
+      "startedAt": "2026-10-17T09:47:34.254Z",
+      "spawnReturnedAt": "2026-10-17T09:47:38.427Z",
+      "firstStderrAt": "2026-10-17T09:48:24.073Z",
+      "finishedAt": "2026-10-17T09:48:24.078Z",
+      "elapsedMilliseconds": 49825,
+      "sqlstate": "57014"
+    },
+    "nativeClockFrames": [],
+    "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+    "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+    "elapsedMilliseconds": 50138,
+    "completeMapsPersisted": false
+  },
+  "mcpDispatched": false,
+  "rollbackSqlSubmitted": false,
+  "markerCreated": false,
+  "constructorsOrFixturesAttempted": false,
+  "ownTurn": {
+    "takenAt": "2026-10-17T09:47:30.160Z",
+    "releasedAt": "2026-10-17T09:48:24.129Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false
+  },
+  "restorationPassClaimed": false,
+  "cseClearedBeforeSnapshotHold": false,
+  "performanceCauseAndStatement": "UNKNOWN_NOT_INFERRED_FROM_TIMING_OR_SQLSTATE",
+  "afterService": {
+    "observedAt": "2026-10-17T09:48:32.325Z",
+    "physicalDatabase": "cloudtms_test_clone",
+    "state": "healthy",
+    "postmaster": "2026-10-14T09:07:33.240Z"
+  },
+  "next": "Finite prefix/progress and source-qualified planning diagnosis; no blind full-snapshot retry or raised limits",
+  "temporaryFolder": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-constructors-r3-cse",
+  "cleanupAttempted": false,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

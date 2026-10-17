@@ -1,0 +1,12 @@
+create or replace function private.weekly_source_sha256_jsonb_v1(
+  p_domain text,
+  p_value jsonb
+) returns bytea
+language sql immutable
+set search_path to 'pg_catalog','private','extensions','pg_temp'
+as $function$
+  select private.weekly_source_sha256_text_v1(
+    p_domain,
+    coalesce(p_value,'null'::jsonb)::text
+  );
+$function$;

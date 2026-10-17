@@ -1,0 +1,461 @@
+{
+  "version": "DAILY_GENUINE_MOUNTED_BATCH_PREFLIGHT_V1",
+  "operatorCommit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
+  "rootCommit": "5564a2e5e9e8f57196596b28c7bff526eaa7429d",
+  "sourcePreflightMs": 1235,
+  "historicalReviewedSourceAdmitted": true,
+  "privateContentsReadHashedCopied": false,
+  "native": "NOT_RUN",
+  "routeHealth": {
+    "normalHealthz": 200,
+    "normalReadyzFirst": 503,
+    "normalReadyzSingleDiagnosticFollowup": 200,
+    "followupReady": true,
+    "followupBackendReady": true,
+    "followupProcessorReady": true,
+    "followupDispatcherReady": true,
+    "firstReadyzCause": "UNKNOWN: first response body was not captured; later successful readiness is a separate observation",
+    "anonymousKierMcp": 401,
+    "exploratoryWrongRoutes": {"normalRoot": 404, "publicPostgrestReadyz": 404},
+    "wrongRouteQualification": "These exploratory URLs were not the source-defined normal Worker health routes; their404 responses are not service-health evidence.",
+    "poolRefreshOrRestartOrConfigurationChange": false
+  },
+  "routeChecks": [
+    {
+      "accepted": true,
+      "authenticated": true,
+      "read_only": false,
+      "rollback_only_transaction_tool": true,
+      "durable_database_writes_allowed": false,
+      "route": "Codex -> authenticated MCP -> Miget TEST read tools plus rollback-only transaction rehearsal",
+      "resource_count": 1,
+      "secrets_returned": false
+    },
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "agency_test",
+      "service": {
+        "uuid": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+        "name": "postgres-service-p0qoe",
+        "label": "cloudtms-codex-poc-pg17",
+        "service_type": "postgres",
+        "state": "healthy",
+        "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+        "created_at": "2026-08-23T16:00:33.774Z",
+        "updated_at": "2026-09-30T19:16:42.824Z"
+      }
+    },
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "mytms_test",
+      "service": {
+        "uuid": "01a03045-5d5a-7892-b555-704ba6edc733",
+        "name": "postgres-service-kpqwi",
+        "label": "mytms-control-plane-pg17",
+        "service_type": "postgres",
+        "state": "healthy",
+        "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+        "created_at": "2026-08-23T20:17:27.386Z",
+        "updated_at": "2026-08-24T20:44:30.793Z"
+      }
+    }
+  ],
+  "capacityChecks": [
+    {
+      "observation_contract": "CLOUDTMS_BANKING_PAY_CAPACITY_OBSERVATION_V1",
+      "authenticated": true,
+      "read_only": true,
+      "secrets_returned": false,
+      "caller_supplied_sql_accepted": false,
+      "caller_supplied_promql_accepted": false,
+      "business_rows_returned": 0,
+      "database": "agency_test",
+      "observed_at": "2026-10-17T10:12:36.238Z",
+      "target_metric_identities": [
+        "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+        "cloudtms-codex-poc-pg17",
+        "postgres-service-p0qoe"
+      ],
+      "service": {
+        "uuid": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+        "name": "postgres-service-p0qoe",
+        "label": "cloudtms-codex-poc-pg17",
+        "service_type": "postgres",
+        "state": "healthy",
+        "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+        "created_at": "2026-08-23T16:00:33.774Z",
+        "updated_at": "2026-09-30T19:16:42.824Z"
+      },
+      "resource": {
+        "uuid": "01a02ef7-1977-79bd-ad56-7e86927d5f81",
+        "name": "migetuq4",
+        "state": "active",
+        "total_disk_size": 171798691840,
+        "total_ram_size": 8589934592,
+        "total_cpu_size": 4,
+        "total_used_disk_size": 92341796864,
+        "total_used_ram_size": 8455716864,
+        "total_used_cpu_size": 0,
+        "available_cpu_size": 4,
+        "available_disk_size": 79456894976,
+        "available_ram_size": 134217728,
+        "created_at": "2026-08-23T14:12:20.983Z",
+        "updated_at": "2026-10-13T13:03:33.648Z",
+        "assigned": false
+      },
+      "database_observation": {
+        "database_name": "cloudtms_test_clone",
+        "connection_role": "dee50tht",
+        "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+        "server_version_num": 170011,
+        "in_recovery": false,
+        "postmaster_started_at": "2026-10-14T09:07:33.240Z",
+        "database_bytes": "4203452083",
+        "connected_replica_count": 0,
+        "active_replication_slot_count": 0,
+        "prepared_transaction_count": 0
+      },
+      "metrics": [
+        {
+          "metric": "miget_volume_used_bytes",
+          "status": "success",
+          "result_type": "vector",
+          "workspace_total_series": 3,
+          "workspace_result_truncated": false,
+          "observed_app_or_addon_identities": [
+            "postgres-service-kpqwi",
+            "postgres-service-rflek",
+            "shared-storage-service-rfqxp"
+          ],
+          "target_total_series": 0,
+          "target_series_found": false,
+          "series": []
+        },
+        {
+          "metric": "miget_volume_size_bytes",
+          "status": "success",
+          "result_type": "vector",
+          "workspace_total_series": 3,
+          "workspace_result_truncated": false,
+          "observed_app_or_addon_identities": [
+            "postgres-service-kpqwi",
+            "postgres-service-rflek",
+            "shared-storage-service-rfqxp"
+          ],
+          "target_total_series": 0,
+          "target_series_found": false,
+          "series": []
+        },
+        {
+          "metric": "miget_addon_pg_database_size_bytes",
+          "status": "success",
+          "result_type": "vector",
+          "workspace_total_series": 10,
+          "workspace_result_truncated": false,
+          "observed_app_or_addon_identities": [
+            "postgres-service-kpqwi",
+            "postgres-service-p0qoe",
+            "postgres-service-rflek"
+          ],
+          "target_total_series": 4,
+          "target_series_found": true,
+          "series": [
+            {
+              "labels": {
+                "addon": "postgres-service-p0qoe",
+                "addon_type": "postgres",
+                "app": "postgres-service-p0qoe",
+                "database": "cloudtms_test_clone",
+                "instance": "postgres-service-p0qoe-1",
+                "namespace": "migetuq4"
+              },
+              "value": {
+                "timestamp": 1792231956.237,
+                "value": "4203452083"
+              }
+            },
+            {
+              "labels": {
+                "addon": "postgres-service-p0qoe",
+                "addon_type": "postgres",
+                "app": "postgres-service-p0qoe",
+                "database": "postgres",
+                "instance": "postgres-service-p0qoe-1",
+                "namespace": "migetuq4"
+              },
+              "value": {
+                "timestamp": 1792231956.237,
+                "value": "8066739"
+              }
+            },
+            {
+              "labels": {
+                "addon": "postgres-service-p0qoe",
+                "addon_type": "postgres",
+                "app": "postgres-service-p0qoe",
+                "database": "template1",
+                "instance": "postgres-service-p0qoe-1",
+                "namespace": "migetuq4"
+              },
+              "value": {
+                "timestamp": 1792231956.237,
+                "value": "7886515"
+              }
+            },
+            {
+              "labels": {
+                "addon": "postgres-service-p0qoe",
+                "addon_type": "postgres",
+                "app": "postgres-service-p0qoe",
+                "database": "thnw5qst",
+                "instance": "postgres-service-p0qoe-1",
+                "namespace": "migetuq4"
+              },
+              "value": {
+                "timestamp": 1792231956.237,
+                "value": "9115315"
+              }
+            }
+          ]
+        },
+        {
+          "metric": "miget_addon_pg_up",
+          "status": "success",
+          "result_type": "vector",
+          "workspace_total_series": 3,
+          "workspace_result_truncated": false,
+          "observed_app_or_addon_identities": [
+            "postgres-service-kpqwi",
+            "postgres-service-p0qoe",
+            "postgres-service-rflek"
+          ],
+          "target_total_series": 1,
+          "target_series_found": true,
+          "series": [
+            {
+              "labels": {
+                "addon": "postgres-service-p0qoe",
+                "addon_type": "postgres",
+                "app": "postgres-service-p0qoe",
+                "instance": "postgres-service-p0qoe-1",
+                "namespace": "migetuq4"
+              },
+              "value": {
+                "timestamp": 1792231956.1,
+                "value": "1"
+              }
+            }
+          ]
+        }
+      ],
+      "metric_series_missing_is_zero": false,
+      "activation_evidence_complete": false
+    },
+    {
+      "observation_contract": "CLOUDTMS_BANKING_PAY_CAPACITY_OBSERVATION_V1",
+      "authenticated": true,
+      "read_only": true,
+      "secrets_returned": false,
+      "caller_supplied_sql_accepted": false,
+      "caller_supplied_promql_accepted": false,
+      "business_rows_returned": 0,
+      "database": "mytms_test",
+      "observed_at": "2026-10-17T10:12:36.543Z",
+      "target_metric_identities": [
+        "01a03045-5d5a-7892-b555-704ba6edc733",
+        "mytms-control-plane-pg17",
+        "postgres-service-kpqwi"
+      ],
+      "service": {
+        "uuid": "01a03045-5d5a-7892-b555-704ba6edc733",
+        "name": "postgres-service-kpqwi",
+        "label": "mytms-control-plane-pg17",
+        "service_type": "postgres",
+        "state": "healthy",
+        "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+        "created_at": "2026-08-23T20:17:27.386Z",
+        "updated_at": "2026-08-24T20:44:30.793Z"
+      },
+      "resource": {
+        "uuid": "01a02ef7-1977-79bd-ad56-7e86927d5f81",
+        "name": "migetuq4",
+        "state": "active",
+        "total_disk_size": 171798691840,
+        "total_ram_size": 8589934592,
+        "total_cpu_size": 4,
+        "total_used_disk_size": 92341796864,
+        "total_used_ram_size": 8455716864,
+        "total_used_cpu_size": 0,
+        "available_cpu_size": 4,
+        "available_disk_size": 79456894976,
+        "available_ram_size": 134217728,
+        "created_at": "2026-08-23T14:12:20.983Z",
+        "updated_at": "2026-10-13T13:03:33.648Z",
+        "assigned": false
+      },
+      "database_observation": {
+        "database_name": "uofvkfi5",
+        "connection_role": "3eoatknm",
+        "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+        "server_version_num": 170011,
+        "in_recovery": false,
+        "postmaster_started_at": "2026-09-17T23:40:44.934Z",
+        "database_bytes": "34830003",
+        "connected_replica_count": 0,
+        "active_replication_slot_count": 0,
+        "prepared_transaction_count": 0
+      },
+      "metrics": [
+        {
+          "metric": "miget_volume_used_bytes",
+          "status": "success",
+          "result_type": "vector",
+          "workspace_total_series": 3,
+          "workspace_result_truncated": false,
+          "observed_app_or_addon_identities": [
+            "postgres-service-kpqwi",
+            "postgres-service-rflek",
+            "shared-storage-service-rfqxp"
+          ],
+          "target_total_series": 1,
+          "target_series_found": true,
+          "series": [
+            {
+              "labels": {
+                "addon": "postgres-service-kpqwi",
+                "addon_type": "postgres",
+                "app": "postgres-service-kpqwi",
+                "namespace": "migetuq4",
+                "volume": "postgres-service-kpqwi-1"
+              },
+              "value": {
+                "timestamp": 1792231956.257,
+                "value": "647135232"
+              }
+            }
+          ]
+        },
+        {
+          "metric": "miget_volume_size_bytes",
+          "status": "success",
+          "result_type": "vector",
+          "workspace_total_series": 3,
+          "workspace_result_truncated": false,
+          "observed_app_or_addon_identities": [
+            "postgres-service-kpqwi",
+            "postgres-service-rflek",
+            "shared-storage-service-rfqxp"
+          ],
+          "target_total_series": 1,
+          "target_series_found": true,
+          "series": [
+            {
+              "labels": {
+                "addon": "postgres-service-kpqwi",
+                "addon_type": "postgres",
+                "app": "postgres-service-kpqwi",
+                "namespace": "migetuq4",
+                "volume": "postgres-service-kpqwi-1"
+              },
+              "value": {
+                "timestamp": 1792231956.165,
+                "value": "10464022528"
+              }
+            }
+          ]
+        },
+        {
+          "metric": "miget_addon_pg_database_size_bytes",
+          "status": "success",
+          "result_type": "vector",
+          "workspace_total_series": 10,
+          "workspace_result_truncated": false,
+          "observed_app_or_addon_identities": [
+            "postgres-service-kpqwi",
+            "postgres-service-p0qoe",
+            "postgres-service-rflek"
+          ],
+          "target_total_series": 3,
+          "target_series_found": true,
+          "series": [
+            {
+              "labels": {
+                "addon": "postgres-service-kpqwi",
+                "addon_type": "postgres",
+                "app": "postgres-service-kpqwi",
+                "database": "postgres",
+                "instance": "postgres-service-kpqwi-1",
+                "namespace": "migetuq4"
+              },
+              "value": {
+                "timestamp": 1792231956.158,
+                "value": "7829171"
+              }
+            },
+            {
+              "labels": {
+                "addon": "postgres-service-kpqwi",
+                "addon_type": "postgres",
+                "app": "postgres-service-kpqwi",
+                "database": "template1",
+                "instance": "postgres-service-kpqwi-1",
+                "namespace": "migetuq4"
+              },
+              "value": {
+                "timestamp": 1792231956.158,
+                "value": "7861939"
+              }
+            },
+            {
+              "labels": {
+                "addon": "postgres-service-kpqwi",
+                "addon_type": "postgres",
+                "app": "postgres-service-kpqwi",
+                "database": "uofvkfi5",
+                "instance": "postgres-service-kpqwi-1",
+                "namespace": "migetuq4"
+              },
+              "value": {
+                "timestamp": 1792231956.158,
+                "value": "34830003"
+              }
+            }
+          ]
+        },
+        {
+          "metric": "miget_addon_pg_up",
+          "status": "success",
+          "result_type": "vector",
+          "workspace_total_series": 3,
+          "workspace_result_truncated": false,
+          "observed_app_or_addon_identities": [
+            "postgres-service-kpqwi",
+            "postgres-service-p0qoe",
+            "postgres-service-rflek"
+          ],
+          "target_total_series": 1,
+          "target_series_found": true,
+          "series": [
+            {
+              "labels": {
+                "addon": "postgres-service-kpqwi",
+                "addon_type": "postgres",
+                "app": "postgres-service-kpqwi",
+                "instance": "postgres-service-kpqwi-1",
+                "namespace": "migetuq4"
+              },
+              "value": {
+                "timestamp": 1792231956.193,
+                "value": "1"
+              }
+            }
+          ]
+        }
+      ],
+      "metric_series_missing_is_zero": false,
+      "activation_evidence_complete": true
+    }
+  ]
+}
