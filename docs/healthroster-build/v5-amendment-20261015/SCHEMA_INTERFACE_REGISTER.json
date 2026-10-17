@@ -6977,5 +6977,14 @@
     "independentTests": 19,
     "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_HTTP_INDEPENDENT_PEER_ADOPTION_20261016.json",
     "finalPartB": "NOT_RUN"
+  },
+  "contact_six_lock_native_continuation_20261017": {
+    "status": "PASS_SIX_EXPECTED_EXACT_LOCK_REFUSALS_AND_FULL_CANONICAL_LIVE_RESTORATION",
+    "receipt": "../v6-owner-delivery-20261016/CONTACT_SIX_LOCK_NATIVE_20261017.json",
+    "cases": 6,
+    "originalObjectsUnchanged": true,
+    "positiveConstructors": "NOT_RUN",
+    "fullRehearsal": "NOT_RUN",
+    "install2": "NOT_INSTALLED"
   }
 }

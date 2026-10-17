@@ -1,0 +1,43 @@
+{
+  "version": "HEALTH_MYTMS_POST_MIGRATION_SOURCE_CHECKS_V1",
+  "date": "2026-10-17",
+  "worktree": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-mytms-13102026",
+  "sourceCommit": "45c50c9a541e05cd0f5915729da3d0332f0884db",
+  "remoteMain": "ed9270088f8ca555d6b2e7258aed86dff58b90b8",
+  "remoteMainAlreadyAncestor": true,
+  "mergeRequiredAtThisCheckpoint": false,
+  "featureRemoteEqual": true,
+  "checks": {
+    "contractSurface": "PASS_59_APP_MANAGER_13_SERVER_5_CONTROL",
+    "networkBoundary": "PASS",
+    "buildToolSecurity": "PASS",
+    "localProtection": "PASS",
+    "nativeDependencyBoundary": "PASS",
+    "candidateTypeScript": "PASS",
+    "candidateJest": {
+      "suites": 83,
+      "tests": 731,
+      "failures": 0,
+      "seconds": 108.068
+    },
+    "generatedContract": {
+      "status": "PASS",
+      "operations": 72,
+      "paths": 71,
+      "schemas": 317,
+      "successFixtures": 83,
+      "errorFixtures": 1191,
+      "negativeFixtures": 15
+    },
+    "focusedMoveFactualContractTests": {
+      "pass": 6,
+      "fail": 0
+    }
+  },
+  "initialTestSelection": "Two guessed test paths did not exist; exact tracked names were then located with rg and all six actual tests passed. No application behavior was changed.",
+  "nativeApi": "NOT_RUN",
+  "TestFlight": "NOT_BUILT_NOT_UPLOADED",
+  "phone": "NOT_RUN",
+  "appSourceChanged": false,
+  "releaseRequiredChecksRemain": true
+}

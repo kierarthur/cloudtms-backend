@@ -1,0 +1,23 @@
+{
+  "version": "HEALTH_IMPLICIT_GIT_MAINTENANCE_OBSERVATION_V1",
+  "date": "2026-10-17",
+  "event": "Unrequested Git automatic maintenance started during lane commits; visible prune attempts reported Permission denied",
+  "gitPruneExplicitlyInvoked": false,
+  "persistentConfigChanged": false,
+  "recoveryOrMetadataRecreationAttempted": false,
+  "commandsNowUse": [
+    "-c gc.auto=0",
+    "-c maintenance.auto=false"
+  ],
+  "readOnlyRecheck": {
+    "baseline": "D:/Migration/2026-10-16-replacement/activation/git-binding-verification.json",
+    "baselineRecords": 326,
+    "baselineAlreadyInvalidWithoutGitdir": 1,
+    "validatedGitdirRecords": 325,
+    "validatedDirectoriesStillPresent": 325,
+    "missingValidatedDirectories": 0,
+    "healthWorktreeRegistrationsVerified": 6
+  },
+  "limitation": "Truncated maintenance output does not prove that every unrecorded stale metadata entry remained. No original/source deletion is claimed or inferred.",
+  "buildContinuesInExistingRegisteredDWorktrees": true
+}

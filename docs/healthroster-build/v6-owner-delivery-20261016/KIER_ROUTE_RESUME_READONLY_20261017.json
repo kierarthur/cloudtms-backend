@@ -1,0 +1,38 @@
+{
+  "version": "HEALTH_KIER_ROUTE_RESUME_READONLY_V1",
+  "account": "kier@arthur-rai.co.uk",
+  "observedAt": "2026-10-17T00:14:33Z",
+  "route": "cloudtms-miget-operations-kier-codex",
+  "authenticated": true,
+  "rollbackOnlyTransactionTool": true,
+  "durableDatabaseWritesAllowed": false,
+  "secretsReturned": false,
+  "anonymousMcpStatus": 401,
+  "targets": [
+    {
+      "target": "agency_test",
+      "physicalDatabase": "cloudtms_test_clone",
+      "healthy": true,
+      "postgres": "17.11",
+      "postmasterStartedAt": "2026-10-14T09:07:33.240Z"
+    },
+    {
+      "target": "mytms_test",
+      "physicalDatabase": "uofvkfi5",
+      "healthy": true,
+      "postgres": "17.11",
+      "postmasterStartedAt": "2026-09-17T23:40:44.934Z"
+    }
+  ],
+  "remoteBackendTest": "912297ab79b48633b66d806d128ff00a9a9cd83d",
+  "latestProtectedRun": {
+    "id": 38583323424,
+    "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "conclusion": "success"
+  },
+  "activeProtectedRuns": 0,
+  "boundedTrial": "NOT_RUN_AT_THIS_RECORD",
+  "serviceOrConnectorChanged": false,
+  "backgroundJobsPaused": false,
+  "applicationAcceptance": "NOT_PROVED_BY_ROUTE_CHECK"
+}
