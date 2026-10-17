@@ -14,6 +14,7 @@ import { closeFinalDefinerSelection, routineDefinitions } from './bpay-next-fina
 import { CONTACT_CLAIM_MIGRATION,contactClaimMigrationCompanionFor,contactClaimMigrationSql } from './healthroster-contact-claim-boundary.mjs';
 import { MONEY_PREDECESSOR_MIGRATION,moneyPredecessorCompanionFor,moneyPredecessorMigrationSql } from './healthroster-money-predecessor-boundary.mjs';
 import { CAPABILITY_PREDECESSOR_MIGRATION,capabilityPredecessorCompanionFor,capabilityPredecessorMigrationSql } from './healthroster-capability-predecessor-boundary.mjs';
+import { HEALTH_SOURCE_COVERAGE,healthSourceCoverageFor,healthSourceCoverageSql } from './healthroster-source-schema-coverage.mjs';
 
 const json = value => `${literal(JSON.stringify(value))}::jsonb`;
 const readJson = (root, file) => JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
@@ -90,6 +91,8 @@ export function managedEvidence(context, extra = {}) {
     money_check_prebody_companion_sha256: MONEY_PREDECESSOR_MIGRATION.companionSha256,
     capability_check_prebody_companion_version: CAPABILITY_PREDECESSOR_MIGRATION.version,
     capability_check_prebody_companion_sha256: CAPABILITY_PREDECESSOR_MIGRATION.companionSha256,
+    health_source_constructor_coverage_version: HEALTH_SOURCE_COVERAGE.version,
+    health_source_constructor_coverage_sha256: HEALTH_SOURCE_COVERAGE.authoritySha256,
     expected_database: context.expectedDatabase, environment: context.environment, customer_key: context.customerKey,
     bootstrap_complete: context.mode === 'NEW' }, ...extra };
 }
@@ -168,6 +171,7 @@ export function compileManagedUnit(item, kind, { root, mapSource = value => valu
   const contactClaimCompanion = contactClaimMigrationCompanionFor(closure,kind,{root,mapSource});
   const moneyPredecessorCompanion = moneyPredecessorCompanionFor(closure,kind,{root,mapSource});
   const capabilityPredecessorCompanion = capabilityPredecessorCompanionFor(closure,kind,{root,mapSource});
+  const healthSourceCoverage = healthSourceCoverageFor(closure,kind,{root,mapSource});
   // Dollar bodies remain opaque to the packaging lexer. This conservative
   // refusal is additional guard integrity, not a claim that arbitrary DO
   // effects were proved safe by their statement head.
@@ -187,7 +191,7 @@ export function compileManagedUnit(item, kind, { root, mapSource = value => valu
     }
     return { item, kind, closure, exception, script: `\\ir ${quotePsqlPath(executable)}\n` };
   }
-  try { return { item, kind, closure, body: exactAtomicBody(closure.expanded), ownerRlsEnvelope, immutableGuardDependency,contactClaimCompanion,moneyPredecessorCompanion,capabilityPredecessorCompanion }; }
+  try { return { item, kind, closure, body: exactAtomicBody(closure.expanded), ownerRlsEnvelope, immutableGuardDependency,contactClaimCompanion,moneyPredecessorCompanion,capabilityPredecessorCompanion,healthSourceCoverage }; }
   catch (error) { throw Error(`MANAGED_EXECUTION_ENVELOPE_UNCLASSIFIED: ${item.path} (${error.message})`); }
 }
 
@@ -353,6 +357,10 @@ export function quotePsqlPath(file) {
 
 export function unitCheckpointSql(unit, context) {
   const ledger = unit.kind === 'migration' ? migrationLedgerSql(unit.item,context) : repeatableLedgerSql(unit.item,context);
+  if(unit.healthSourceCoverage||HEALTH_SOURCE_COVERAGE.consumers.includes(unit.item.path)){
+    const coverage=healthSourceCoverageSql(unit,context);
+    return `begin;\n${assertWriterSql}\n${coverage}\n${assertWriterSql}\n${ledger}\ncommit;`;
+  }
   if(unit.capabilityPredecessorCompanion||unit.item.path===CAPABILITY_PREDECESSOR_MIGRATION.path){
     const prebody=capabilityPredecessorMigrationSql(unit,mapExecutableSqlSource);
     return `begin;\n${assertWriterSql}\n${prebody}\n${unit.body}\n${assertWriterSql}\n${ledger}\ncommit;`;
@@ -442,6 +450,7 @@ export function managedReleaseContext({ root, current, release, context, baselin
       contactClaimAtomicCompanion: CONTACT_CLAIM_MIGRATION,
       moneyCheckPrebodyCompanion: MONEY_PREDECESSOR_MIGRATION,
       capabilityCheckPrebodyCompanion: CAPABILITY_PREDECESSOR_MIGRATION,
+      healthSourceConstructorCoverage: HEALTH_SOURCE_COVERAGE,
       logicalOwnerMapping: logicalPostgresExecutablePolicy() }}) };
   validateContext(result); return result;
 }

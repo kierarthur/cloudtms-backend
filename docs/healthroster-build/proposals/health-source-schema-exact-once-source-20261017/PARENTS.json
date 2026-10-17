@@ -1,0 +1,106 @@
+[
+  {
+    "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+    "bytes": 40625,
+    "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql"
+  },
+  {
+    "file": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+    "bytes": 11034,
+    "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql"
+  },
+  {
+    "file": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+    "bytes": 3839,
+    "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql"
+  },
+  {
+    "file": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+    "bytes": 7486,
+    "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql"
+  },
+  {
+    "file": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+    "bytes": 1823,
+    "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql"
+  },
+  {
+    "file": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+    "bytes": 2261,
+    "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql"
+  },
+  {
+    "file": "scripts/cloudtms-managed-release.mjs",
+    "bytes": 48153,
+    "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/scripts/cloudtms-managed-release.mjs"
+  },
+  {
+    "file": "scripts/cloudtms-managed-release-sql.mjs",
+    "bytes": 7853,
+    "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/scripts/cloudtms-managed-release-sql.mjs"
+  },
+  {
+    "file": "scripts/cloudtms-db-release-lib.mjs",
+    "bytes": 32174,
+    "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/scripts/cloudtms-db-release-lib.mjs"
+  },
+  {
+    "file": "scripts/healthroster-install2-local-schema.mjs",
+    "bytes": 11569,
+    "sha256": "372dd18d33cd976379c82350b4dd386e02b45844aab31f7cd2765c0720346dbe",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/scripts/healthroster-install2-local-schema.mjs"
+  },
+  {
+    "file": "scripts/compose-healthroster-v6-root01.mjs",
+    "bytes": 5350,
+    "sha256": "e7d2cad27fadf0b8fd57368a58a7d17f601f05a604040405a00523a926eaf08d",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/scripts/compose-healthroster-v6-root01.mjs"
+  },
+  {
+    "file": "supabase/release/migration-lock.json",
+    "bytes": 79859,
+    "sha256": "d32dd319f202bf2e4f174da8e54e25f24f344ac44aaf19555b08688f3d3ecc26",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/supabase/release/migration-lock.json"
+  },
+  {
+    "file": "docs/DATABASE_RELEASE_BIBLE.md",
+    "bytes": 18267,
+    "sha256": "968ab48d5b88181e6eb12f067309dd41162d3a2d816b47fb076e2bb4b87a7f5b",
+    "head": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+    "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "capture": "parents/docs/DATABASE_RELEASE_BIBLE.md"
+  }
+]

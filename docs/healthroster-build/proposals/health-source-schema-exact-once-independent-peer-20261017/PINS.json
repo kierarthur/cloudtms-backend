@@ -1,0 +1,121 @@
+{
+  "version": "HEALTH_SCHEMA_EXACT_ONCE_INDEPENDENT_PIN_PROOF_V1",
+  "rootHead": "ed82aafa01d86ea479693be2912e8a4e1a7c7a5c",
+  "authorFilesExact": 33,
+  "parents": [
+    {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "sha256": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "sha256": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "sha256": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "sha256": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "sha256": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "scripts/healthroster-install2-local-schema.mjs",
+      "sha256": "372dd18d33cd976379c82350b4dd386e02b45844aab31f7cd2765c0720346dbe",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "scripts/compose-healthroster-v6-root01.mjs",
+      "sha256": "e7d2cad27fadf0b8fd57368a58a7d17f601f05a604040405a00523a926eaf08d",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "supabase/release/migration-lock.json",
+      "sha256": "d32dd319f202bf2e4f174da8e54e25f24f344ac44aaf19555b08688f3d3ecc26",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    },
+    {
+      "file": "docs/DATABASE_RELEASE_BIBLE.md",
+      "sha256": "968ab48d5b88181e6eb12f067309dd41162d3a2d816b47fb076e2bb4b87a7f5b",
+      "historical": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+      "imagesExact": 5
+    }
+  ],
+  "selection": {
+    "version": "HEALTH_SOURCE_EXACT_ONCE_SELECTION_V1",
+    "targets": [
+      {
+        "target": "scripts/cloudtms-managed-release.mjs",
+        "source": "payload/scripts/cloudtms-managed-release.mjs",
+        "sha256": "a55464fdb2e4686fc8576722711c7872bf25f21b258f7c92c5d33fde5efead0b",
+        "bytes": 48871,
+        "parentSha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8"
+      },
+      {
+        "target": "scripts/healthroster-source-schema-coverage.mjs",
+        "source": "payload/scripts/healthroster-source-schema-coverage.mjs",
+        "sha256": "d8eb9616dc48dbd5f368b55ae998d25a3a3e6d4d95debaeed242383bedc19e51",
+        "bytes": 58924,
+        "parentSha256": null
+      }
+    ],
+    "immutableMigrationsChanged": false,
+    "migrationLockChanged": false,
+    "coverageOnly": [
+      "16102026_1100",
+      "16102026_1101",
+      "16102026_1104"
+    ],
+    "native": "NOT_RUN"
+  },
+  "R11Watched": 231,
+  "R11Overlap": [],
+  "QTCurrentPinnedParent": {
+    "file": "scripts/cloudtms-managed-release.mjs",
+    "bytes": 48153,
+    "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8"
+  },
+  "QTForwardRequiredAfterActualAdoption": true,
+  "native": "NOT_RUN"
+}

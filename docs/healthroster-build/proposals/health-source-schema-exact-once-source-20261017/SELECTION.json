@@ -1,0 +1,27 @@
+{
+  "version": "HEALTH_SOURCE_EXACT_ONCE_SELECTION_V1",
+  "targets": [
+    {
+      "target": "scripts/cloudtms-managed-release.mjs",
+      "source": "payload/scripts/cloudtms-managed-release.mjs",
+      "sha256": "a55464fdb2e4686fc8576722711c7872bf25f21b258f7c92c5d33fde5efead0b",
+      "bytes": 48871,
+      "parentSha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8"
+    },
+    {
+      "target": "scripts/healthroster-source-schema-coverage.mjs",
+      "source": "payload/scripts/healthroster-source-schema-coverage.mjs",
+      "sha256": "d8eb9616dc48dbd5f368b55ae998d25a3a3e6d4d95debaeed242383bedc19e51",
+      "bytes": 58924,
+      "parentSha256": null
+    }
+  ],
+  "immutableMigrationsChanged": false,
+  "migrationLockChanged": false,
+  "coverageOnly": [
+    "16102026_1100",
+    "16102026_1101",
+    "16102026_1104"
+  ],
+  "native": "NOT_RUN"
+}

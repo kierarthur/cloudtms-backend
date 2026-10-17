@@ -1,0 +1,60 @@
+{
+  "nativeDiagnostic": {
+    "sqlstate": "42P07",
+    "relationName": null,
+    "sourcePredictionOnly": "private.weekly_source_pay_decisions"
+  },
+  "checkpoint": {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/LOCAL_MECHANICAL_R4_DUPLICATE_RELATION_HOLD_20261017/SCHEMA.json",
+    "bytes": 991592,
+    "sha256": "6e97150125d5ba9e24137e06a4e397be52ae7fd4a716e9ebc3bfcee4b66a4241",
+    "status": "LOCAL_SCHEMA_LOADING",
+    "sourceCommit": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+    "mode": "NEW"
+  },
+  "order": [
+    {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "index": 402,
+      "pin": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82"
+    },
+    {
+      "file": "supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+      "index": 406,
+      "pin": "0f01583c1e7b0b4948c86270a9f6ea1ada46a996236cfef91715efa9c41ba7a6"
+    },
+    {
+      "file": "supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql",
+      "index": 407,
+      "pin": "50cb1a9f5aa9cb29b55be13c4f2970472f1b85b16eb5e298336289296f0833f0"
+    },
+    {
+      "file": "supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+      "index": 408,
+      "pin": "e89964ec2e3039e5325cefef5700d72e6e6f9f710fd1469c5fa69aa711195131"
+    },
+    {
+      "file": "supabase/migrations/16102026_1103_nhsp_v6_source_canonical_publication_bridge.sql",
+      "index": 409,
+      "pin": "14e21337f368edebaf81d84d60a5b482a16ff0d0c031aeca976287baf83e42f5"
+    },
+    {
+      "file": "supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql",
+      "index": 410,
+      "pin": "195b80edb9f161ca770e50a1cca146f1d931def449ba769fc8f8d4687b41c1c0"
+    }
+  ],
+  "selectedMigrationCount": 246,
+  "log": {
+    "relativePath": ".codex-tmp/i2-mechanical-r4-20261017-e92ef3d187da4de288f4f0e9b039bdea/SCHEMA.log",
+    "sha256": "ddb8ed46798fc3dc691b700af98bc0b75d5e1b8eeb9f121d8abddee6611d6ae9",
+    "bytes": 23350,
+    "loggedMigrationLoads": 225,
+    "lastLoad": "LOCAL LOAD migration supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+    "healthTail": [
+      "LOCAL LOAD migration supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "LOCAL LOAD migration supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql"
+    ]
+  },
+  "nativeObjectsOrBusinessRowsInspected": false
+}

@@ -1,0 +1,42 @@
+{
+  "version": "HEALTH_SOURCE_SCHEMA_EXACT_ONCE_ROOT_REVIEW_V1",
+  "status": "ACCEPT_BOUNDED_SOURCE_CANDIDATE",
+  "actualParentCommit": "ed82aafa01d86ea479693be2912e8a4e1a7c7a5c",
+  "targets": [
+    {
+      "target": "scripts/cloudtms-managed-release.mjs",
+      "source": "payload/scripts/cloudtms-managed-release.mjs",
+      "sha256": "a55464fdb2e4686fc8576722711c7872bf25f21b258f7c92c5d33fde5efead0b",
+      "bytes": 48871,
+      "parentSha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8"
+    },
+    {
+      "target": "scripts/healthroster-source-schema-coverage.mjs",
+      "source": "payload/scripts/healthroster-source-schema-coverage.mjs",
+      "sha256": "d8eb9616dc48dbd5f368b55ae998d25a3a3e6d4d95debaeed242383bedc19e51",
+      "bytes": 58924,
+      "parentSha256": null
+    }
+  ],
+  "authorManifestSha256": "020ebb5acf815cac4d9be6d3bd2e46acb9d38e4f75fa980464a01ec04f310641",
+  "peerManifestSha256": "902ff7395584356445bff40b07eefc979101505ec763f12dc3590501f2151e97",
+  "rootReplay": {
+    "authorActualCompilerSuites": 14,
+    "independentActualCompilerSuites": 8,
+    "pg17Suites": 6,
+    "parsedDoProgrammes": 21,
+    "independentlyDerivedForeignKeys": 31,
+    "deferredForeignKeys": 3,
+    "completeCurrentHistoricalParents": 13,
+    "compilerLiteralHunks": 6,
+    "wholeInverse": true
+  },
+  "immutableMigrationsAndLocks": "RAW_UNCHANGED",
+  "semantics": "0159 original constructor once; only pinned1100/1101 exact native source-relative shape/FKs/security coverage;1104 old8 security verified/new3 applied preserving1103 FKs; truthful coverage evidence+unchanged normal ledger transaction/writer guards",
+  "nativeCompatibility": "NOT_RUN",
+  "fullSourceGate": "ROOT_REQUIRED",
+  "qt63": "EXACT_SOURCE_FORWARD_AND_NEW_HELPER_PIN_REQUIRED_BEFORE_QT",
+  "r11WatchOverlap": 0,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

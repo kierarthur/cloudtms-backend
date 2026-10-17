@@ -1,0 +1,51 @@
+{
+  "version": "HEALTH_SCHEMA_EXACT_ONCE_PEER_RESULTS_V1",
+  "authorManifest": "020ebb5acf815cac4d9be6d3bd2e46acb9d38e4f75fa980464a01ec04f310641",
+  "replays": [
+    {
+      "name": "tests",
+      "chunk_id": "cc5338",
+      "wall_time_seconds": 0.6129321,
+      "exit_code": 0,
+      "original_token_count": 410,
+      "output": "(node:52556) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ whole compiler inverse and all other bytes retained (1.7694ms)\n✔ 0159 remains the original complete constructor, not coverage (13.2906ms)\n✔ exact consumer supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql (13.5618ms)\n✔ exact consumer supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql (9.8912ms)\n✔ exact consumer supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql (7.3369ms)\n✔ changed immutable source refuses supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql (6.6338ms)\n✔ changed immutable source refuses supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql (5.5771ms)\n✔ changed immutable source refuses supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql (6.4248ms)\n✔ changed immutable source refuses supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql (7.0624ms)\n✔ wrong kind/sha/body/closure/companion omission all refuse (25.9777ms)\n✔ source rechecked when checkpoint is generated (9.2619ms)\n✔ coverage has no arbitrary consumer/source/table input and no business reads (11.8484ms)\n✔ native guard fields cover mutations and prior partial commit without a stored baseline (10.957ms)\n✔ receipt FOUND is set and consumed inside same DO, not ambient (11.6695ms)\nℹ tests 14\nℹ suites 0\nℹ pass 14\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 268.6023\n"
+    },
+    {
+      "name": "grammar",
+      "chunk_id": "6f2a9b",
+      "wall_time_seconds": 0.5417006,
+      "exit_code": 0,
+      "original_token_count": 162,
+      "output": "test_complete_overlap (__main__.Proof.test_complete_overlap) ... ok\r\ntest_foreign_keys_complete (__main__.Proof.test_foreign_keys_complete) ... ok\r\ntest_generated_full_sql_and_all_do_programmes (__main__.Proof.test_generated_full_sql_and_all_do_programmes) ... ok\r\ntest_reference_ast_inverse (__main__.Proof.test_reference_ast_inverse) ... ok\r\ntest_reference_shape_counterexamples (__main__.Proof.test_reference_shape_counterexamples) ... ok\r\ntest_security_loop_only_eight_removed (__main__.Proof.test_security_loop_only_eight_removed) ... ok\r\n\r\n----------------------------------------------------------------------\r\nRan 6 tests in 0.129s\r\n\r\nOK\r\n"
+    },
+    {
+      "name": "verify",
+      "chunk_id": "3dabb2",
+      "wall_time_seconds": 2.4874976,
+      "exit_code": 0,
+      "original_token_count": 32,
+      "output": "{\"status\": \"PASS_SOURCE_ONLY\", \"parents\": 13, \"targets\": 2, \"hunks\": 6, \"inventory\": 32, \"current\": true, \"native\": \"NOT_RUN\"}\r\n"
+    },
+    {
+      "name": "own",
+      "chunk_id": "4dc187",
+      "wall_time_seconds": 0.7494742,
+      "exit_code": 0,
+      "original_token_count": 597,
+      "output": "(node:38940) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ whole compiler inverse and all other bytes retained (1.8611ms)\n✔ 0159 remains the original complete constructor, not coverage (13.9486ms)\n✔ exact consumer supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql (14.1131ms)\n✔ exact consumer supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql (10.7207ms)\n✔ exact consumer supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql (7.9299ms)\n✔ changed immutable source refuses supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql (6.8606ms)\n✔ changed immutable source refuses supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql (6.9349ms)\n✔ changed immutable source refuses supabase/migrations/16102026_1101_nhsp_v6_source_retained_native_preparations.sql (6.8273ms)\n✔ changed immutable source refuses supabase/migrations/16102026_1104_nhsp_v6_source_owner_only_rls.sql (7.0361ms)\n✔ wrong kind/sha/body/closure/companion omission all refuse (26.5686ms)\n✔ source rechecked when checkpoint is generated (9.7237ms)\n✔ coverage has no arbitrary consumer/source/table input and no business reads (12.2792ms)\n✔ native guard fields cover mutations and prior partial commit without a stored baseline (12.5286ms)\n✔ receipt FOUND is set and consumed inside same DO, not ambient (12.1473ms)\n✔ independent: frozen source authority cannot acquire arbitrary tables or consumers (4.0311ms)\n✔ independent: actual helper rejects multi-file and duplicate-ordered closures (12.3179ms)\n✔ independent: closure source, hash and expanded-byte substitutions all refuse (15.0983ms)\n✔ independent: deleting companion cannot resume duplicate original DDL (13.6742ms)\n✔ independent: same invocation source mapping drift refuses at checkpoint (11.0851ms)\n✔ independent: missing release context and forged body/authority refuse (14.9959ms)\n✔ independent: exact constructor ledger precedes locking, coverage, receipt and normal ledger (19.0704ms)\n✔ independent: original compiler whole-image inverse preserves all unselected code (1.3245ms)\nℹ tests 22\nℹ suites 0\nℹ pass 22\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 375.7097\n"
+    },
+    {
+      "name": "fk",
+      "chunk_id": "aec8ec",
+      "wall_time_seconds": 0.3583728,
+      "exit_code": 0,
+      "original_token_count": 33,
+      "output": "{\"sourceOnly\": true, \"actualForeignKeys\": 31, \"allExpectedFieldsIndependentlyDerived\": true, \"deferred\": 3, \"native\": \"NOT_RUN\"}\r\n"
+    }
+  ],
+  "initialOwnTestHarnessCorrections": [
+    "VM TypeError checked by name across context prototypes",
+    "IF NOT EXISTS guard is legitimate; refusal test narrowed to CREATE TABLE IF NOT EXISTS"
+  ],
+  "native": "NOT_RUN"
+}

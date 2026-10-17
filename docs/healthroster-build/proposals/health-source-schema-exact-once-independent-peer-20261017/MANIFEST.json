@@ -1,0 +1,31 @@
+{
+  "version": "HEALTH_SCHEMA_EXACT_ONCE_INDEPENDENT_PEER_FREEZE_V1",
+  "files": [
+    {
+      "path": "fk-proof.py",
+      "bytes": 2915,
+      "sha256": "cc7353160d574e86ada9fd7844e18331cd698bfe7d69f03cec169867047b59da"
+    },
+    {
+      "path": "PINS.json",
+      "bytes": 4769,
+      "sha256": "6ed5fe04ad4f7106f12b0594ecf66d7cfd0e83f60d9276803e43fa9fcfaf8d37"
+    },
+    {
+      "path": "RESULTS.json",
+      "bytes": 6319,
+      "sha256": "1803a84517c0eac45ff4722631d53594d790e5e2e2ffb649851d5d530e7facb3"
+    },
+    {
+      "path": "REVIEW.md",
+      "bytes": 3989,
+      "sha256": "3367361e8310cbd420168b22391f0f67cd666f479243935abc51c6565893cd70"
+    },
+    {
+      "path": "test.mjs",
+      "bytes": 4461,
+      "sha256": "3c10f22aba1342bda6d993f4aef70191ce442397fb37534a0536c08b7c01f2f9"
+    }
+  ],
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,27 @@
+# Exact-once Health metadata compiler transfer
+
+Source-only proposal. No database/SQL/schema/Docker/provider/auth/runtime/source-admission command was executed by the author. No tracked files, migration bytes, locks, ledgers, Report HEAD or I2 HEAD were changed by this packet.
+
+The actual R4 native failure was SQLSTATE 42P07 after the logged 1100 load. Its returned diagnostic did not name a relation. Canonical source predicts the first duplicate is `private.weekly_source_pay_decisions`: all ten complete 1100 statements (seven tables and three deferred foreign keys), plus the one 1101 table statement, each occur exactly once in the earlier 0159 constructor. 1104 would also repeat the same eight owner-only policies. This source prediction does not upgrade the native error into an observed object name.
+
+Only two targets are proposed: the new finite `scripts/healthroster-source-schema-coverage.mjs` and six literal hunks in the complete existing `cloudtms-managed-release.mjs`. All immutable SQL files, migration-lock bytes, constructor 0159, later 1102/1103 bodies and every unrelated compiler byte remain unchanged. Normal inventory order and original content-SHA ledger insertions remain. Managed execution policy/receipt provenance additionally identify this exact source coverage authority.
+
+The original 0159 constructor runs normally once. Only the three pinned consumers 1100/1101/1104 use coverage. Every compile and checkpoint rechecks all four complete original canonical sources and the exact whole closure/body. The consumer first requires the exact existing 0159 ledger entry and takes transaction-held ACCESS EXCLUSIVE locks on the fixed target tables. It does not mint a baseline from existing objects or require a session-local snapshot from a previous installation attempt.
+
+1100 and 1101 create eight fixed, empty TEMP reference tables from the exact source CREATE ASTs. Only schema/persistence and the FK nodes are changed; removing FKs is necessary because PostgreSQL prohibits temporary-to-permanent FK references. All source columns/types/nullability/defaults/identity/generation/collation/storage, CHECK/PK/UNIQUE constraints and supporting-index properties are compared with the native-parsed references. Every one of the 31 removed FKs is separately compared by exact source-derived name/ordered columns/referenced schema+table+columns/match/actions/defer/validation/inheritance and four enabled internal native RI functions. The temporary references are admitted absent and explicitly dropped only in `pg_temp`; no existing application table or row is dropped/read/changed. Errors roll the unit back; there is no duplicate-error catch or IF NOT EXISTS.
+
+The eight actual tables must also be ordinary permanent heaps, unpartitioned/uninherited, default replica identity, no rules/user triggers, no dropped/column-ACL attributes, exact owner/default-owner-only table ACL, FORCE+ENABLE RLS and sole owner-role/literal-true/all-command policy. Full shape verification therefore supports a retry where an original older engine already committed 0159, but refuses incompatible existing objects. Native compatibility remains unproved until the independent mechanical NEW run and appropriate retry tests.
+
+1104 retains all eleven original OWNER statements. Its otherwise unchanged security loop runs only for the three genuinely new tables, with exact old-eight security checked first and complete eleven-table security checked after. It does not compare the old-eight constraint set at that point: 1103 legitimately adds its three FKs. It therefore preserves those FKs. Covered consumers append explicit `health_source_constructor_coverage` release evidence in the same transaction, followed by their unchanged original normal ledger receipts. Evidence says verified coverage, not a second execution of the original CREATE statements. Missing release metadata refuses in the same DO as UPDATE/FOUND.
+
+The native expected references are generated from reviewed source, not the live target. FK automatic ASCII naming follows PostgreSQL 17's `makeObjectName`/constraint-name rules. Sources: [REL_17_11 indexcmds.c](https://raw.githubusercontent.com/postgres/postgres/REL_17_11/src/backend/commands/indexcmds.c), [REL_17_11 tablecmds.c](https://raw.githubusercontent.com/postgres/postgres/REL_17_11/src/backend/commands/tablecmds.c). That source also establishes `connoinherit=true` for nonpartitioned FK roots. A native namespace collision or provider incompatibility holds; no naming fallback or source waiver is present.
+
+Safe nonwriting replay from the registered D workspace:
+
+```
+node --experimental-vm-modules --test <packet>/test.mjs
+python -B <packet>/pg17-proof.py
+python -B <packet>/verify.py --current
+```
+
+Do not run `build.py`, `render.py`, `emit.mjs` or `seal.py` during peer review. They are author-only source derivations, never native executors. Fourteen controlled tests exercise the actual complete compiler/helper with only unrelated module/filesystem boundaries doubled; six PG17 suites compare full CREATE ASTs, security-loop transfer and all generated SQL/21 DO programmes. These do not claim actual SQL execution, native schema compatibility, complete NEW success, hosted upgrade/retry success or deployment. Root owns subsequent adoption, full source gates and one genuine mechanical confirmation. No caps, owner role, release authority or business semantics are broadened.
