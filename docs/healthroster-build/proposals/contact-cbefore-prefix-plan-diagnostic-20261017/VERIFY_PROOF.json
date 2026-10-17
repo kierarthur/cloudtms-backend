@@ -1,0 +1,126 @@
+{
+  "version": "CONTACT_CBEFORE_PREFIX_PLAN_DIAGNOSTIC_SOURCE_PROOF_V1",
+  "parent": "78b2ae42c1b47a222d32a46121066825dc20115c",
+  "selectedTargets": 48,
+  "unchangedTargets": 42,
+  "changedExistingTargets": 4,
+  "newTargets": [
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/diagnose-metadata.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/metadata-progress-diagnostic.mjs"
+  ],
+  "wholeRawReverses": [
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "beforeSha256": "b4e8359ab9d4c3b6e400beb66237fe568639610540915717dfea40755993b9e7",
+      "afterSha256": "bcc5ec14313e63e845765a3e3671e4420a49bc8437fda61c2e4be2917b520e04",
+      "literalHunks": 5,
+      "wholeParentReverse": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/READER_PARENT_REVERSE.json",
+      "beforeSha256": "8fcdb0c268c5a79b2b5d9446b68f7f634b45a54193e8e1ae268fc298840266dc",
+      "afterSha256": "4bc5ee66d1d064b938e93fead6e4669afc73da741584aac002d79b563e8d1bbf",
+      "literalHunks": 1,
+      "wholeParentReverse": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/README.md",
+      "beforeSha256": "6f8c4ab941a971e710828de4ab22308579350c7565dc4de80664b367ad87fa7f",
+      "afterSha256": "4c64027001f2a87d92a8e137344b4b1e2aafcd64fb7b7541f0afcc7eaef2b95c",
+      "literalHunks": 1,
+      "wholeParentReverse": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "beforeSha256": "d583e2cfa00cffbe263c88a0d6ef0530bb1bbcc28b2ae4c68952e8f341507896",
+      "afterSha256": "f46fb60686b41f5357ae9f43e079529e5ccb7645aae250ffe93c5a8bfca0de51",
+      "literalHunks": 1,
+      "wholeParentReverse": true
+    }
+  ],
+  "literalHunks": 8,
+  "originalBoundedCaptureRawEqual": true,
+  "originalBeforeAfterFactoryRawEqual": true,
+  "protectedAdapterFilesRawEqual": [
+    "source.mjs",
+    "SOURCE_PINS.json",
+    "input-builder.mjs",
+    "native-boundary.mjs",
+    "hold-case.mjs",
+    "metadata-diagnostic.mjs",
+    "result-validator.mjs",
+    "control.mjs",
+    "timing.mjs",
+    "SETUP_ENTRY.md",
+    "PROGRAMMES.json",
+    "OFFLINE_INPUTS.json"
+  ],
+  "sharedInputsRawEqual": [
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "bytes": 15050,
+      "sha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48321,
+      "sha256": "8b4ab4113e42cea647dbbd1a22be2eef68806b62f3c8c2f06c58d4c904982cfc"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "bytes": 12827,
+      "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "bytes": 9580,
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    }
+  ],
+  "tests": {
+    "passes": 28,
+    "failures": 0,
+    "syntheticOnly": true,
+    "actualPrivateCoordinatorMockedOsChild": true
+  },
+  "grammar": {
+    "parser": "v7.20",
+    "postgresql": [
+      17,
+      7
+    ],
+    "cases": [
+      {
+        "case": "CONTACT_CONSTRUCTORS_V1",
+        "originalStatements": 6,
+        "prefixStatements": 5,
+        "planStatements": 6,
+        "exactOriginalPrefixAndRollbackAst": true,
+        "wholeCanonicalExplainQueryAstEqual": true,
+        "analyze": false,
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "QT_ADMIN_CONTROLS_V1",
+        "originalStatements": 6,
+        "prefixStatements": 5,
+        "planStatements": 6,
+        "exactOriginalPrefixAndRollbackAst": true,
+        "wholeCanonicalExplainQueryAstEqual": true,
+        "analyze": false,
+        "native": "NOT_RUN"
+      }
+    ],
+    "native": "NOT_RUN"
+  },
+  "native": "NOT_RUN",
+  "psqlOrExplainExecuted": false,
+  "rootWrites": 0,
+  "bankBodiesRead": 0,
+  "actualCommittedDiagnosticAdmission": "ROOT_REQUIRED_AFTER_REVIEW_AND_MOUNT"
+}
