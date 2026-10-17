@@ -1,0 +1,34 @@
+{
+  "version": "SOURCE_PURE_R2_THREE_NAMESPACE_RANGE_ALIASES_ONLY_V1",
+  "originalCommit": "5931ae9e2f1ab11de810996f5aea6a02570b7ce9",
+  "recordVariable": "p",
+  "recordVariableChanged": false,
+  "edits": [
+    {
+      "file": "programme/preflight.sql",
+      "namespaceQueries": 2,
+      "beforeSha256": "9fe0984139bd6888ac694555ffc3e632038e64c06d5fdc375f775d04dbf779da",
+      "afterSha256": "67fb77f99d7ac2fa86600ecae56a46c985dbf3ae194c4e20591fb9beb67fc409",
+      "hunks": [
+        {
+          "before": "from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace\n  where s.nspname='private' and p.proname=",
+          "after": "from pg_catalog.pg_proc catalogue_routine join pg_catalog.pg_namespace s on s.oid=catalogue_routine.pronamespace\n  where s.nspname='private' and catalogue_routine.proname=",
+          "occurrences": 2
+        }
+      ]
+    },
+    {
+      "file": "programme/postflight.sql",
+      "namespaceQueries": 1,
+      "beforeSha256": "baac80aa7dfbe3cdfef1e23d352750c0737076ec733ff4b9150aea1db6b56606",
+      "afterSha256": "db6cb28b9300bdfe3cdef668e53c9e5225607acf1dfc3b7b76f335c54868305b",
+      "hunks": [
+        {
+          "before": "from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace\n  where s.nspname='private' and p.proname=",
+          "after": "from pg_catalog.pg_proc catalogue_routine join pg_catalog.pg_namespace s on s.oid=catalogue_routine.pronamespace\n  where s.nspname='private' and catalogue_routine.proname=",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

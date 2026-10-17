@@ -1,0 +1,527 @@
+{
+  "sourceCommit": "d56db402e8b415a1303b0ae5956ceab2ec6822ca",
+  "captureChecks": [
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "catalogue-vectors.py",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "control.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "fixed-metadata-reader.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "GENUINE_R2_COMMAND_EVIDENCE.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "hold-pure.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "input-builder.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "NAMESPACE_ALIAS_ONLY_EDITS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "OFFLINE_INPUTS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "OFFLINE_RESULTS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "PG_RESULT_PARSER_EVIDENCE.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "prepare-offline.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "programme/assertions.sql",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "programme/build-program.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "programme/key-source.sqlinc",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "programme/postflight.sql",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "programme/preflight.sql",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "programme/PROGRAMME.sql",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "programme/README.md",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "programme/source-child.sqlinc",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "programme/SOURCE_MANIFEST.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "programme/verify-programme.py",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "PROGRAMME_MILESTONE_MANIFEST.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "PROGRAMME_SOURCE_TRANSFER.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "PROGRESS.md",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "R1_ROOT_EVIDENCE.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "R2_FULL_PARENT_TRANSFERS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "R2_SOURCE_RESULTS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "README.md",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "reference/daily/control.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "reference/daily/fixed-metadata-reader.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "reference/daily/hold-pure.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "reference/daily/input-builder.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "reference/daily/prepare-offline.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "reference/daily/result-validator.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "reference/daily/source.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "reference/daily/test.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "reference/daily/timing.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "reference/daily-build-program.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "result-validator.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "SETUP_INTENT.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "source.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "SOURCE_MANIFEST.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "SOURCE_PINS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "SOURCE_TRANSFERS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "SOURCE_VERIFY_RESULTS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "test.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "timing.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "verify-adapter.py",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "verify-freeze.py",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "verify-r2.py",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-r2-alias-forward-20261017",
+      "file": "FREEZE_MANIFEST.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "catalogue-vectors.py",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "control.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "fixed-metadata-reader.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "GENUINE_R2_COMMAND_EVIDENCE.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "hold-pure.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "input-builder.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "OFFLINE_INPUTS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "OFFLINE_RESULTS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "PG_RESULT_PARSER_EVIDENCE.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "prepare-offline.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "programme/assertions.sql",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "programme/build-program.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "programme/key-source.sqlinc",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "programme/postflight.sql",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "programme/preflight.sql",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "programme/PROGRAMME.sql",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "programme/README.md",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "programme/source-child.sqlinc",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "programme/SOURCE_MANIFEST.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "programme/verify-programme.py",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "PROGRAMME_MILESTONE_MANIFEST.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "PROGRAMME_SOURCE_TRANSFER.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "PROGRESS.md",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "README.md",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "reference/daily/control.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "reference/daily/fixed-metadata-reader.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "reference/daily/hold-pure.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "reference/daily/input-builder.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "reference/daily/prepare-offline.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "reference/daily/result-validator.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "reference/daily/source.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "reference/daily/test.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "reference/daily/timing.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "reference/daily-build-program.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "result-validator.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "SETUP_INTENT.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "source.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "SOURCE_MANIFEST.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "SOURCE_PINS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "SOURCE_TRANSFERS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "SOURCE_VERIFY_RESULTS.json",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "test.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "timing.mjs",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "verify-adapter.py",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "verify-freeze.py",
+      "savedGitCaptureEqual": true
+    },
+    {
+      "selection": "source-status-child-pure-rollback-adapter-20261017",
+      "file": "FREEZE_MANIFEST.json",
+      "savedGitCaptureEqual": true
+    }
+  ],
+  "runs": [
+    {
+      "name": "node20",
+      "exitCode": 0,
+      "elapsedMs": 11892
+    },
+    {
+      "name": "prepare-offline",
+      "exitCode": 0,
+      "elapsedMs": 5296
+    },
+    {
+      "name": "python-source-grammar-r2",
+      "exitCode": 0,
+      "elapsedMs": 9097
+    }
+  ],
+  "assertCommittedAdapter": {
+    "committed": true,
+    "savedIndexEqual": true,
+    "sourceCommit": "d56db402e8b415a1303b0ae5956ceab2ec6822ca"
+  },
+  "rootHead": "f9d6d77d521c027bbab88f12af6f4e5c9f83f16e",
+  "rootPins": 42,
+  "programmeBytes": 20447,
+  "programmeSha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64",
+  "programmeSourceChecks": 41,
+  "catalogueAdmissionAstCases": 56,
+  "nodeTests": 20,
+  "sourceAndGrammarChecks": 177,
+  "R2ForwardChecks": 134,
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "rootWrites": 0,
+  "OfficeWrites": 0,
+  "BankingProducer": "NOT_PROVIDED",
+  "publicB051Result": "NOT_PROVIDED"
+}

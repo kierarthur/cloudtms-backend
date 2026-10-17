@@ -1,0 +1,28 @@
+✔ committed root source and exact original programme, no business relation closure (5.7362ms)
+✔ input is exact programme plus finite marker/control envelope, genuine original observation (0.3118ms)
+✔ reader retains whole canonical exporter and complete BOTH background scope, with fresh proof third frame (338.5299ms)
+✔ finite source transfer reverses entire exact Daily parents using literal callbacks (345.4291ms)
+✔ native-shaped success requires real B marker, original assertion and genuine observations (3.0893ms)
+✔ genuine R2 SET null responses pass exact command ABI, but actual guard failure never becomes success (1.2358ms)
+✔ unobserved Source DO CREATE REVOKE RESET ABI stays synthetic closed expectation; SELECT never accepts null counts (0.7004ms)
+✔ actual local pg8.23 Result parser derives exact no-row tags from synthetic messages without a connection (8.8754ms)
+✔ native guard clocks are actual frame observations and require same B identity and ordered timestamps (0.3868ms)
+✔ root timing is exact observed envelope, bound to input and local READY/result-read order (1.2646ms)
+✔ distinct C-after bound to original fixture proof; no aliases or omitted relation scope (0.7585ms)
+✔ fresh MCP pooled B or closed C-before PID qualifies only with independent C-after and original restoration (4384.7464ms)
+✔ original qualifier succeeds only on complete synthetic native-shaped proof and mints an uncopyable brand (288.5278ms)
+✔ original qualifier refuses committed parent, surviving fixture, incomplete rows, or native writer drift (1320.0821ms)
+✔ bounded transport rejects diagnostics, malformed UTF8, too many frames and oversize capture (1.2122ms)
+✔ control protocol refuses unsolicited, duplicate, oversized and EOF signals; cleanup budget remains bounded (1.0352ms)
+✔ work timer cause survives finite controls; genuine turn loss remains distinct with unchanged budgets (0.3293ms)
+✔ source/authority boundaries refuse another root and unauthorised execution before a connection (1.1524ms)
+✔ fresh verification requires exact name-wide new-child absence on its actual read-only physical peer (0.9599ms)
+✔ only the exact finite Source revoke receives a response expectation (0.2485ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11806.4807

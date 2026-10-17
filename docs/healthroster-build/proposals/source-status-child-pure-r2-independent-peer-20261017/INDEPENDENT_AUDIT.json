@@ -1,0 +1,420 @@
+{
+  "checks": 93,
+  "checkNames": [
+    "original-full-programme-pin",
+    "R2-full-programme-pin",
+    "original-real-record-alias-collisions-three",
+    "original-two-preflight-one-postflight",
+    "original-actual-p-record-and-namespace-fields",
+    "R2-zero-record-range-collisions",
+    "all-four-original-programmes-preserved",
+    "exact-three-new-query-occurrences",
+    "complete-programme-raw-inverse",
+    "independent-negative-alias-reintroduction-0",
+    "independent-negative-alias-reintroduction-1",
+    "independent-negative-alias-reintroduction-2",
+    "exact-21-complete-parent-forwards",
+    "forward-hash:hold-pure.mjs",
+    "single-whole-image:hold-pure.mjs",
+    "literal-whole-parent-inverse:hold-pure.mjs",
+    "forward-hash:input-builder.mjs",
+    "single-whole-image:input-builder.mjs",
+    "literal-whole-parent-inverse:input-builder.mjs",
+    "forward-hash:OFFLINE_INPUTS.json",
+    "single-whole-image:OFFLINE_INPUTS.json",
+    "literal-whole-parent-inverse:OFFLINE_INPUTS.json",
+    "forward-hash:OFFLINE_RESULTS.json",
+    "single-whole-image:OFFLINE_RESULTS.json",
+    "literal-whole-parent-inverse:OFFLINE_RESULTS.json",
+    "forward-hash:prepare-offline.mjs",
+    "single-whole-image:prepare-offline.mjs",
+    "literal-whole-parent-inverse:prepare-offline.mjs",
+    "forward-hash:programme/postflight.sql",
+    "single-whole-image:programme/postflight.sql",
+    "literal-whole-parent-inverse:programme/postflight.sql",
+    "forward-hash:programme/preflight.sql",
+    "single-whole-image:programme/preflight.sql",
+    "literal-whole-parent-inverse:programme/preflight.sql",
+    "forward-hash:programme/PROGRAMME.sql",
+    "single-whole-image:programme/PROGRAMME.sql",
+    "literal-whole-parent-inverse:programme/PROGRAMME.sql",
+    "forward-hash:programme/README.md",
+    "single-whole-image:programme/README.md",
+    "literal-whole-parent-inverse:programme/README.md",
+    "forward-hash:programme/SOURCE_MANIFEST.json",
+    "single-whole-image:programme/SOURCE_MANIFEST.json",
+    "literal-whole-parent-inverse:programme/SOURCE_MANIFEST.json",
+    "forward-hash:programme/verify-programme.py",
+    "single-whole-image:programme/verify-programme.py",
+    "literal-whole-parent-inverse:programme/verify-programme.py",
+    "forward-hash:PROGRAMME_MILESTONE_MANIFEST.json",
+    "single-whole-image:PROGRAMME_MILESTONE_MANIFEST.json",
+    "literal-whole-parent-inverse:PROGRAMME_MILESTONE_MANIFEST.json",
+    "forward-hash:PROGRESS.md",
+    "single-whole-image:PROGRESS.md",
+    "literal-whole-parent-inverse:PROGRESS.md",
+    "forward-hash:README.md",
+    "single-whole-image:README.md",
+    "literal-whole-parent-inverse:README.md",
+    "forward-hash:result-validator.mjs",
+    "single-whole-image:result-validator.mjs",
+    "literal-whole-parent-inverse:result-validator.mjs",
+    "forward-hash:source.mjs",
+    "single-whole-image:source.mjs",
+    "literal-whole-parent-inverse:source.mjs",
+    "forward-hash:SOURCE_MANIFEST.json",
+    "single-whole-image:SOURCE_MANIFEST.json",
+    "literal-whole-parent-inverse:SOURCE_MANIFEST.json",
+    "forward-hash:SOURCE_TRANSFERS.json",
+    "single-whole-image:SOURCE_TRANSFERS.json",
+    "literal-whole-parent-inverse:SOURCE_TRANSFERS.json",
+    "forward-hash:test.mjs",
+    "single-whole-image:test.mjs",
+    "literal-whole-parent-inverse:test.mjs",
+    "forward-hash:verify-adapter.py",
+    "single-whole-image:verify-adapter.py",
+    "literal-whole-parent-inverse:verify-adapter.py",
+    "forward-hash:verify-freeze.py",
+    "single-whole-image:verify-freeze.py",
+    "literal-whole-parent-inverse:verify-freeze.py",
+    "unchanged-authority-and-execution-guard:control.mjs",
+    "unchanged-authority-and-execution-guard:timing.mjs",
+    "unchanged-authority-and-execution-guard:fixed-metadata-reader.mjs",
+    "unchanged-authority-and-execution-guard:programme/source-child.sqlinc",
+    "unchanged-authority-and-execution-guard:programme/key-source.sqlinc",
+    "unchanged-authority-and-execution-guard:programme/assertions.sql",
+    "unchanged-authority-and-execution-guard:programme/build-program.mjs",
+    "unchanged-authority-and-execution-guard:SOURCE_PINS.json",
+    "unchanged-authority-and-execution-guard:PROGRAMME_SOURCE_TRANSFER.json",
+    "unchanged-authority-and-execution-guard:GENUINE_R2_COMMAND_EVIDENCE.json",
+    "single-required-programme-length-pin:result-validator.mjs",
+    "single-required-programme-length-pin:input-builder.mjs",
+    "single-required-programme-length-pin:hold-pure.mjs",
+    "source-loader-only-programme-pins-and-exact-new-folder",
+    "actual-root-R1-record:docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_STATUS_CHILD_NATIVE_R1_UNCHANGED_RESULT_20261017.json",
+    "actual-root-R1-record:docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_STATUS_CHILD_NATIVE_R1_HOLD_20261017.json",
+    "truthful-root-native-HOLD"
+  ],
+  "parser": {
+    "pglast": "v7.20",
+    "postgres": [
+      17,
+      7
+    ]
+  },
+  "before": {
+    "scopes": [
+      {
+        "programme": 0,
+        "recordVariables": {
+          "p": "pg_catalog.pg_proc%rowtype"
+        },
+        "completeSqlExpressions": 3
+      },
+      {
+        "programme": 1,
+        "recordVariables": {},
+        "completeSqlExpressions": 0
+      },
+      {
+        "programme": 2,
+        "recordVariables": {
+          "p": "pg_catalog.pg_proc%rowtype"
+        },
+        "completeSqlExpressions": 2
+      },
+      {
+        "programme": 3,
+        "recordVariables": {},
+        "completeSqlExpressions": 2
+      }
+    ],
+    "collisions": [
+      {
+        "programme": 0,
+        "record": "p",
+        "recordType": "pg_catalog.pg_proc%rowtype",
+        "qualifiedReferences": [
+          [
+            "p",
+            "proname"
+          ],
+          [
+            "p",
+            "pronamespace"
+          ]
+        ],
+        "query": "select count(*)        from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace\n  where s.nspname='private' and p.proname='weekly_source_pay_decision_native_status_child_v1'"
+      },
+      {
+        "programme": 0,
+        "record": "p",
+        "recordType": "pg_catalog.pg_proc%rowtype",
+        "qualifiedReferences": [
+          [
+            "p",
+            "proname"
+          ],
+          [
+            "p",
+            "pronamespace"
+          ]
+        ],
+        "query": "select count(*)        from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace\n  where s.nspname='private' and p.proname='weekly_exceptional_json_keys_exact_v1'"
+      },
+      {
+        "programme": 2,
+        "record": "p",
+        "recordType": "pg_catalog.pg_proc%rowtype",
+        "qualifiedReferences": [
+          [
+            "p",
+            "proname"
+          ],
+          [
+            "p",
+            "pronamespace"
+          ]
+        ],
+        "query": "select count(*)        from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace\n  where s.nspname='private' and p.proname='weekly_source_pay_decision_native_status_child_v1'"
+      }
+    ]
+  },
+  "after": {
+    "scopes": [
+      {
+        "programme": 0,
+        "recordVariables": {
+          "p": "pg_catalog.pg_proc%rowtype"
+        },
+        "completeSqlExpressions": 3
+      },
+      {
+        "programme": 1,
+        "recordVariables": {},
+        "completeSqlExpressions": 0
+      },
+      {
+        "programme": 2,
+        "recordVariables": {
+          "p": "pg_catalog.pg_proc%rowtype"
+        },
+        "completeSqlExpressions": 2
+      },
+      {
+        "programme": 3,
+        "recordVariables": {},
+        "completeSqlExpressions": 2
+      }
+    ],
+    "collisions": []
+  },
+  "threeNegativeAliasMutations": [
+    {
+      "site": 0,
+      "collisions": [
+        {
+          "programme": 0,
+          "record": "p",
+          "recordType": "pg_catalog.pg_proc%rowtype",
+          "qualifiedReferences": [
+            [
+              "p",
+              "proname"
+            ],
+            [
+              "p",
+              "pronamespace"
+            ]
+          ],
+          "query": "select count(*)        from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace\n  where s.nspname='private' and p.proname='weekly_source_pay_decision_native_status_child_v1'"
+        }
+      ]
+    },
+    {
+      "site": 1,
+      "collisions": [
+        {
+          "programme": 0,
+          "record": "p",
+          "recordType": "pg_catalog.pg_proc%rowtype",
+          "qualifiedReferences": [
+            [
+              "p",
+              "proname"
+            ],
+            [
+              "p",
+              "pronamespace"
+            ]
+          ],
+          "query": "select count(*)        from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace\n  where s.nspname='private' and p.proname='weekly_exceptional_json_keys_exact_v1'"
+        }
+      ]
+    },
+    {
+      "site": 2,
+      "collisions": [
+        {
+          "programme": 2,
+          "record": "p",
+          "recordType": "pg_catalog.pg_proc%rowtype",
+          "qualifiedReferences": [
+            [
+              "p",
+              "proname"
+            ],
+            [
+              "p",
+              "pronamespace"
+            ]
+          ],
+          "query": "select count(*)        from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace\n  where s.nspname='private' and p.proname='weekly_source_pay_decision_native_status_child_v1'"
+        }
+      ]
+    }
+  ],
+  "fullParentForwards": [
+    {
+      "file": "hold-pure.mjs",
+      "hunks": 1,
+      "before": "f2ffb92e7187ed7224e6e01880c28ddcf7f3d75122bd25a179ba6bf75d72385c",
+      "after": "e1b78512203ce2e0bd0c823fa1c0735c2d93c591a7b73d1709a1a6386c89c62c"
+    },
+    {
+      "file": "input-builder.mjs",
+      "hunks": 1,
+      "before": "f2d82970749a9a523d2f375f31d4011e8e33dbc01a06002234e120c45f8e7edc",
+      "after": "ffcabaa02f33d0eed925686077e0971279ba094e4a3be08ec7f719f3e8df3d54"
+    },
+    {
+      "file": "OFFLINE_INPUTS.json",
+      "hunks": 1,
+      "before": "927f56ca7388abb348a1be606a64307d806c21df179f7ec7f7659aa851551351",
+      "after": "8f9853a3ab0fa5c5d573006142a6a419e6bc9cdf6e0cb63a8202976d4acdf387"
+    },
+    {
+      "file": "OFFLINE_RESULTS.json",
+      "hunks": 1,
+      "before": "57a42cbceaffe702a5a8dfa661cea15a56cbc2d09554e0397cf603938b2953a2",
+      "after": "eeefb7d616cb5b839e5b81d75554f15f79f3bac325d13a2f89243ea3aa30f986"
+    },
+    {
+      "file": "prepare-offline.mjs",
+      "hunks": 1,
+      "before": "55fad7373179dbe9889a2956a4e29d3a909abcee3f7824d842ee07ad530a677d",
+      "after": "1824e000414b7b7d4d9817846ba7a9d56e7937293339721c928412672996815b"
+    },
+    {
+      "file": "programme/postflight.sql",
+      "hunks": 1,
+      "before": "baac80aa7dfbe3cdfef1e23d352750c0737076ec733ff4b9150aea1db6b56606",
+      "after": "db6cb28b9300bdfe3cdef668e53c9e5225607acf1dfc3b7b76f335c54868305b"
+    },
+    {
+      "file": "programme/preflight.sql",
+      "hunks": 1,
+      "before": "9fe0984139bd6888ac694555ffc3e632038e64c06d5fdc375f775d04dbf779da",
+      "after": "67fb77f99d7ac2fa86600ecae56a46c985dbf3ae194c4e20591fb9beb67fc409"
+    },
+    {
+      "file": "programme/PROGRAMME.sql",
+      "hunks": 1,
+      "before": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8",
+      "after": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64"
+    },
+    {
+      "file": "programme/README.md",
+      "hunks": 1,
+      "before": "a39f96c40a800c4e53b7a42848bece52b04d75c7be1783103964fd8fa45d2aac",
+      "after": "9e8b8745fbc8ea7abb4c80a5ef652918716ed6b39121e8d28e7f384f3f96b451"
+    },
+    {
+      "file": "programme/SOURCE_MANIFEST.json",
+      "hunks": 1,
+      "before": "d0c166a356a96d1950233b9b274e84851a1dcf4578eb7dc229d1cdab3cf3ec5d",
+      "after": "6c38ed2632f9347a6fb68d8771f5a7393e7665784574d42422f4241dc00a016c"
+    },
+    {
+      "file": "programme/verify-programme.py",
+      "hunks": 1,
+      "before": "7fc8efc2ef9139aef93c8e3136bebc8ca4d4ff6127b0cc651432ee4da2179026",
+      "after": "92341cba002052f2f0b7d4bfc960c32df9d8b198fb8dc7debc4a71287b3251d2"
+    },
+    {
+      "file": "PROGRAMME_MILESTONE_MANIFEST.json",
+      "hunks": 1,
+      "before": "b92324116ab90d896b002135c01f84eae79efdb0437ff34678a362f89b729198",
+      "after": "9a4348cdfdc94b198fa35f2b4be052b8a81048c689d4ea9fe5e287e2f1264c43"
+    },
+    {
+      "file": "PROGRESS.md",
+      "hunks": 1,
+      "before": "228fbd7e0f9547ea04b3860569b561332abc6615a0a1626e11d85420e5779d0a",
+      "after": "f2e55c13edd30c9eefd01e1eeb1e7f3f4ea55664327946e9f5f34e4a9f3f3f30"
+    },
+    {
+      "file": "README.md",
+      "hunks": 1,
+      "before": "42026da7dd204a73818619980733a97f825de103932fce6d3dc1d6ea529813b2",
+      "after": "3f26f526b345f151fc35e62000ec74069d37292d34d5f0e0530b0d961cc143dc"
+    },
+    {
+      "file": "result-validator.mjs",
+      "hunks": 1,
+      "before": "ddf58caf3300c203c9190bbf27ce98aee152dc68e801c7969514957be5271fc5",
+      "after": "7934c9bc36a05de74db8522c1bc5232ba6e0153a8fba7e912503b47b561c6091"
+    },
+    {
+      "file": "source.mjs",
+      "hunks": 1,
+      "before": "743ef3a0eadb7d7eb7c5e4a52b70bb5eb07393b88b269ddc290d9b16abfb8b15",
+      "after": "8474970cf2d0392c0a01182c53e9b3f620cf865ec0932d2a11b8f753a4f6b531"
+    },
+    {
+      "file": "SOURCE_MANIFEST.json",
+      "hunks": 1,
+      "before": "2518964f0142974ad1a75c024dec7eab9861d1f0d41923f276feb7b0f83c3964",
+      "after": "aa97ce33f4a4365d582811d3c554486f7ed95374f1dbbe5945f3f0e570ae62ca"
+    },
+    {
+      "file": "SOURCE_TRANSFERS.json",
+      "hunks": 1,
+      "before": "d20eabe01ea1c204cb7c85840f0de0656328430f87398457154bc371c3ef836a",
+      "after": "7306963ef1f7e3d195f5d3ddfaffe74f4a6d830b14bfa1aa445194a5c6950389"
+    },
+    {
+      "file": "test.mjs",
+      "hunks": 1,
+      "before": "9d3993a52499fc1c1c111ff7ff836352c7056051923c34d0a142895288016b0a",
+      "after": "173852ab4a20294636483cbe3c926044b8c03829c41dfc0490ad939b3f1d1e13"
+    },
+    {
+      "file": "verify-adapter.py",
+      "hunks": 1,
+      "before": "28608981f119df4d04f841253b1c892c786b547f117b02803593966399ee0f2e",
+      "after": "0eae602da781c6120622fe47c278a8ed1f62f8ed5ebaa37b68ed2def98c85743"
+    },
+    {
+      "file": "verify-freeze.py",
+      "hunks": 1,
+      "before": "8ddc637069860e21e83ebd82878e2e8d84f0e73bb7cda31d4f0ede287224a0f1",
+      "after": "41e78a99d60094784d45c92933ffafc287ee38654afb09a9536cb8620c5f47cb"
+    }
+  ],
+  "rootR1Records": [
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_STATUS_CHILD_NATIVE_R1_UNCHANGED_RESULT_20261017.json",
+      "bytes": 6649,
+      "sha256": "2884e8d4e3ac9d700a3da0fc6e1d77dbf2815978dfe8cc920bd10ebaec421530"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_STATUS_CHILD_NATIVE_R1_HOLD_20261017.json",
+      "bytes": 5167,
+      "sha256": "855fcf24f4d0fbe75e7a1156deb8038a363d739b7f6f973ff5721c63ee955825"
+    }
+  ],
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "bindingQualification": "CONSERVATIVE_SOURCE_AUDIT_NATIVE_R2_STILL_REQUIRED"
+}

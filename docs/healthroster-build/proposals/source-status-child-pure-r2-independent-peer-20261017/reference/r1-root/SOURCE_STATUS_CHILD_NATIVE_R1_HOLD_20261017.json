@@ -1,0 +1,127 @@
+{
+  "version": "ROOT_SOURCE_STATUS_CHILD_NATIVE_R1_HOLD_V1",
+  "reviewedSourceCommit": "7b0550ecd4337c75bd45dbfd52d295251fcd5e4f",
+  "authorCommit": "5931ae9e2f1ab11de810996f5aea6a02570b7ce9",
+  "independentPeerCommit": "9089c29ded175ab42220ff53bbac4e19dddda50b",
+  "status": "HOLD_PREFLIGHT_BINDING_DEFECT",
+  "actualSQLState": "42702",
+  "lastStatementReached": 10,
+  "diagnosis": "pg_proc SQL range alias p conflicts with PL/pgSQL pg_proc%rowtype variable p in preflight namespace count. Same collision exists in three pre/post namespace-count queries; fix finite aliases without conflict-mode override.",
+  "childCreateReached": false,
+  "childInvoked": false,
+  "markerCreatedThenRolledBack": true,
+  "businessFixtureRows": 0,
+  "nativeEnvelope": {
+    "accepted": false,
+    "rolledBack": true,
+    "connectedFresh": true,
+    "physicalDatabase": "cloudtms_test_clone",
+    "sqlSha256": "d3a381aba00d3bbe38ea671c75e5f5b7a7eda57d050549175ae8fd1c56a1a301"
+  },
+  "freshIdentity": {
+    "module": "LEGACY:1",
+    "identityTest": true,
+    "markerAbsent": true,
+    "applyingCount": 0,
+    "latestRelease": {
+      "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+      "status": "VERIFIED",
+      "releaseId": "20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537",
+      "completedAt": "2026-10-14T15:47:03.075975+00:00",
+      "installedContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+      "repositoryContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6"
+    },
+    "customerKeyNull": true,
+    "physicalDatabase": "cloudtms_test_clone"
+  },
+  "freshChildAbsence": {
+    "readOnly": true,
+    "backendPid": 266453,
+    "databaseOid": 324139,
+    "noRoleSwitch": true,
+    "physicalDatabase": "cloudtms_test_clone",
+    "statusChildNameCount": 0
+  },
+  "fullCanonicalCafter": "NOT_RUN",
+  "fullRestorationPassClaimed": false,
+  "actualTiming": {
+    "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "sqlSha256": "d3a381aba00d3bbe38ea671c75e5f5b7a7eda57d050549175ae8fd1c56a1a301",
+    "callStartedAt": "2026-10-17T08:00:45.560Z",
+    "callReturnedAt": "2026-10-17T08:00:46.591Z"
+  },
+  "originalHold": {
+    "status": "HOLD",
+    "code": "PURE_MCP_ROLLBACK_ENVELOPE_REFUSED",
+    "observedErrorCode": "PURE_MCP_ROLLBACK_ENVELOPE_REFUSED",
+    "deadlineObserved": false,
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T08:00:16.684Z",
+      "workDeadlineAt": "2026-10-17T08:02:16.684Z",
+      "readyAt": "2026-10-17T08:00:44.519Z",
+      "resultReadAt": "2026-10-17T08:00:49.654Z"
+    },
+    "rootCallTiming": {
+      "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+      "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+      "sqlSha256": "d3a381aba00d3bbe38ea671c75e5f5b7a7eda57d050549175ae8fd1c56a1a301",
+      "callStartedAt": "2026-10-17T08:00:45.560Z",
+      "callReturnedAt": "2026-10-17T08:00:46.591Z",
+      "rootObservedCallMilliseconds": 1031,
+      "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+    },
+    "nativeClockFrames": [
+      {
+        "phase": "B_GUARD_BEFORE",
+        "readOnly": false,
+        "holderPid": 266423,
+        "backendPid": 266453,
+        "observedAt": "2026-10-17T08:00:46.995015+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T08:00:46.985121+00:00",
+        "transactionStartedAt": "2026-10-17T08:00:46.781297+00:00"
+      },
+      {
+        "phase": "B_GUARD_AFTER",
+        "readOnly": false,
+        "holderPid": 266423,
+        "backendPid": 266453,
+        "observedAt": "2026-10-17T08:00:47.047118+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T08:00:47.046046+00:00",
+        "transactionStartedAt": "2026-10-17T08:00:46.781297+00:00"
+      }
+    ],
+    "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+    "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+    "elapsedMilliseconds": 33018,
+    "completeMapsPersisted": false
+  },
+  "originalOwnTurnClose": {
+    "chat": "HealthRoster",
+    "task": "SOURCE_STATUS_CHILD_EXACT_PURE_NATIVE_PROOF",
+    "status": "RELEASED",
+    "takenAt": "2026-10-17T08:00:14.126Z",
+    "releasedAt": "2026-10-17T08:00:49.697Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "unchangedResultSha256": "2884e8d4e3ac9d700a3da0fc6e1d77dbf2815978dfe8cc920bd10ebaec421530",
+  "retainedOwnedProtocolFolder": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\source-status-child-pure-native-20261017-r1",
+  "rawBusinessMapsPersisted": false,
+  "backgroundJobsPaused": false,
+  "otherSessionsCancelled": false,
+  "serviceOrPoolChanges": 0,
+  "deletionRefused": false,
+  "next": "FINITE_REVIEWED_ALIAS_ONLY_R2_THEN_EXACT_BOUNDED_RETRY"
+}

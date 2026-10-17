@@ -1,0 +1,599 @@
+{
+  "version": "SOURCE_STATUS_CHILD_PURE_R2_INDEPENDENT_PEER_MANIFEST_V1",
+  "authorCommit": "d56db402e8b415a1303b0ae5956ceab2ec6822ca",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_CORRECTION",
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "files": [
+    {
+      "file": "CAPTURE.json",
+      "bytes": 21572,
+      "sha256": "9ed0eb2de7e33cb94bfca7a914e4de3e40b22915984bb63538c5e89a64257a11"
+    },
+    {
+      "file": "capture.mjs",
+      "bytes": 2540,
+      "sha256": "de3e151694adb366140fea6cf7a0d844acd32dae64a6958d6014c4dc04146f43"
+    },
+    {
+      "file": "FINITE_PARENT_DIFF.txt",
+      "bytes": 36807,
+      "sha256": "2fea1770c2937accb4b1849ee277e08c7729a3b0eeda4ecbcce3cf25165ea729"
+    },
+    {
+      "file": "frozen-write-guard.mjs",
+      "bytes": 1248,
+      "sha256": "5eb3f28198ba0c3a1f8dbf220b835f7a12eca8223b33eacf835eb0d07def441d"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/catalogue-vectors.py",
+      "bytes": 7591,
+      "sha256": "a34802d55c0ebbd767f88aa8315cc1e59428bc9730dfc5461859cd4ad2cda952"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/control.mjs",
+      "bytes": 3225,
+      "sha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/fixed-metadata-reader.mjs",
+      "bytes": 12278,
+      "sha256": "9f53ec75880ef8371ca37aae7163dcb275c582492a2912fa42ca2c57e2d0b2cf"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/FREEZE_MANIFEST.json",
+      "bytes": 8111,
+      "sha256": "3807087a10214f5734e76b149c1ff954521eb37b53ad919526c84165b18d8275"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/GENUINE_R2_COMMAND_EVIDENCE.json",
+      "bytes": 2740,
+      "sha256": "4b8849e79e52cc474ba4a6025f415e2bd0be49452ef7be0b19b4b2295c35424a"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/hold-pure.mjs",
+      "bytes": 8352,
+      "sha256": "e1b78512203ce2e0bd0c823fa1c0735c2d93c591a7b73d1709a1a6386c89c62c"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/input-builder.mjs",
+      "bytes": 7665,
+      "sha256": "ffcabaa02f33d0eed925686077e0971279ba094e4a3be08ec7f719f3e8df3d54"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/NAMESPACE_ALIAS_ONLY_EDITS.json",
+      "bytes": 1567,
+      "sha256": "e45b7c855db41a7d1f150da169e700d53eb376fe358e3bd06e85d95dc3731f41"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/OFFLINE_INPUTS.json",
+      "bytes": 97390,
+      "sha256": "8f9853a3ab0fa5c5d573006142a6a419e6bc9cdf6e0cb63a8202976d4acdf387"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/OFFLINE_RESULTS.json",
+      "bytes": 1311,
+      "sha256": "eeefb7d616cb5b839e5b81d75554f15f79f3bac325d13a2f89243ea3aa30f986"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/PG_RESULT_PARSER_EVIDENCE.json",
+      "bytes": 2009,
+      "sha256": "40b7aab97bd707e1fc8d73960017fd33bb6294c26328ed2a23f5188d261422ba"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/prepare-offline.mjs",
+      "bytes": 1695,
+      "sha256": "1824e000414b7b7d4d9817846ba7a9d56e7937293339721c928412672996815b"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/PROGRAMME_MILESTONE_MANIFEST.json",
+      "bytes": 2275,
+      "sha256": "9a4348cdfdc94b198fa35f2b4be052b8a81048c689d4ea9fe5e287e2f1264c43"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/PROGRAMME_SOURCE_TRANSFER.json",
+      "bytes": 8584,
+      "sha256": "609d8852eaab05f46b86c64fb1587e10239730dd3f7a328380fe951824ca15a1"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/programme/assertions.sql",
+      "bytes": 2902,
+      "sha256": "c8785a0cfc06b44849244e32ab68d2b412254614a9b89fc321fa88780227cb5f"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/programme/build-program.mjs",
+      "bytes": 4453,
+      "sha256": "8a01debc06d70a190d2002f3c77b666a101373f14711c0b56613acc6bdeba543"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/programme/key-source.sqlinc",
+      "bytes": 430,
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/programme/postflight.sql",
+      "bytes": 2013,
+      "sha256": "db6cb28b9300bdfe3cdef668e53c9e5225607acf1dfc3b7b76f335c54868305b"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/programme/preflight.sql",
+      "bytes": 3069,
+      "sha256": "67fb77f99d7ac2fa86600ecae56a46c985dbf3ae194c4e20591fb9beb67fc409"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/programme/PROGRAMME.sql",
+      "bytes": 20447,
+      "sha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/programme/README.md",
+      "bytes": 867,
+      "sha256": "9e8b8745fbc8ea7abb4c80a5ef652918716ed6b39121e8d28e7f384f3f96b451"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/programme/SOURCE_MANIFEST.json",
+      "bytes": 2800,
+      "sha256": "6c38ed2632f9347a6fb68d8771f5a7393e7665784574d42422f4241dc00a016c"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/programme/source-child.sqlinc",
+      "bytes": 12317,
+      "sha256": "ffae1fc04874e0b3590c89609f592b4ca33c6b95654a4272e0dd1cc8b6ffb30b"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/programme/verify-programme.py",
+      "bytes": 3846,
+      "sha256": "92341cba002052f2f0b7d4bfc960c32df9d8b198fb8dc7debc4a71287b3251d2"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/PROGRESS.md",
+      "bytes": 491,
+      "sha256": "f2e55c13edd30c9eefd01e1eeb1e7f3f4ea55664327946e9f5f34e4a9f3f3f30"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/R1_ROOT_EVIDENCE.json",
+      "bytes": 1274,
+      "sha256": "4cca0709860da195b4059c2242502339dd4e00f0e7c401ae5cb6f5227270a9aa"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/R2_FULL_PARENT_TRANSFERS.json",
+      "bytes": 728714,
+      "sha256": "a299409645b5c806e5b1f4e6197b431a1e466ccab0e84865e65f209b49e5bb3f"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/R2_SOURCE_RESULTS.json",
+      "bytes": 2407,
+      "sha256": "09762f86829ce82216d0895b74ec43aca0e4493edad96ccf6aceeb4723666e30"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/README.md",
+      "bytes": 2866,
+      "sha256": "3f26f526b345f151fc35e62000ec74069d37292d34d5f0e0530b0d961cc143dc"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/reference/daily-build-program.mjs",
+      "bytes": 3514,
+      "sha256": "1ec1bf64e57ec38856a509be1df433a3318a439271eb53cfed2008d8b151d69d"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/reference/daily/control.mjs",
+      "bytes": 3225,
+      "sha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/reference/daily/fixed-metadata-reader.mjs",
+      "bytes": 12270,
+      "sha256": "ed641533595b6a04b82f027183b82d2fc9b9a03c674bb2db6c294f52ff4f4173"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/reference/daily/hold-pure.mjs",
+      "bytes": 8328,
+      "sha256": "3a1d5346f32669f76938386bb2260372109673dc1c654de15a78e6439b1dda5f"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/reference/daily/input-builder.mjs",
+      "bytes": 6914,
+      "sha256": "930ccc5a393a499b0f8a7ee9c752178b80ee35acd7c83df9bcc333b70475c47a"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/reference/daily/prepare-offline.mjs",
+      "bytes": 1694,
+      "sha256": "15157d3ca1760cdc788fcbd86413d77914e3bd5b83f640a350f13caa4b18336c"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/reference/daily/result-validator.mjs",
+      "bytes": 11297,
+      "sha256": "a95635e396281a0d2d51c160097c9a174eb5d98d25ae35dcd8df846f6d3d13a0"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/reference/daily/source.mjs",
+      "bytes": 6267,
+      "sha256": "26884004baae754df196c8efd34fd19f3234ec82909f184362a34c7a31d84e13"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/reference/daily/test.mjs",
+      "bytes": 21645,
+      "sha256": "7eb5914344ffa5deaae0c3dd40f10a761d715b6dcfb3577e2739a99fc94f8e01"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/reference/daily/timing.mjs",
+      "bytes": 1308,
+      "sha256": "db5a330bd11c4f1d1c5c23d68b1ec297f5503d21a86be0863f633f997f51531c"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/result-validator.mjs",
+      "bytes": 11984,
+      "sha256": "7934c9bc36a05de74db8522c1bc5232ba6e0153a8fba7e912503b47b561c6091"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/SETUP_INTENT.json",
+      "bytes": 1384,
+      "sha256": "cd955e98562341e07e8577fea2409897a5717e7532c9d70b4f9d4ea5acdcb9d0"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/SOURCE_MANIFEST.json",
+      "bytes": 2495,
+      "sha256": "aa97ce33f4a4365d582811d3c554486f7ed95374f1dbbe5945f3f0e570ae62ca"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/SOURCE_PINS.json",
+      "bytes": 9486,
+      "sha256": "d39584d9e176d31ed4295db6b7bb27300212ffc40b3c9ad2e96a6ecd04c16912"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/SOURCE_TRANSFERS.json",
+      "bytes": 147276,
+      "sha256": "7306963ef1f7e3d195f5d3ddfaffe74f4a6d830b14bfa1aa445194a5c6950389"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/SOURCE_VERIFY_RESULTS.json",
+      "bytes": 765,
+      "sha256": "c15dc629d0b7b2faa5cdc0230d09275eebb2d40fb531381174dbe680fa6ef496"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/source.mjs",
+      "bytes": 6713,
+      "sha256": "8474970cf2d0392c0a01182c53e9b3f620cf865ec0932d2a11b8f753a4f6b531"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/test.mjs",
+      "bytes": 24311,
+      "sha256": "173852ab4a20294636483cbe3c926044b8c03829c41dfc0490ad939b3f1d1e13"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/timing.mjs",
+      "bytes": 1308,
+      "sha256": "db5a330bd11c4f1d1c5c23d68b1ec297f5503d21a86be0863f633f997f51531c"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/verify-adapter.py",
+      "bytes": 4680,
+      "sha256": "0eae602da781c6120622fe47c278a8ed1f62f8ed5ebaa37b68ed2def98c85743"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/verify-freeze.py",
+      "bytes": 1112,
+      "sha256": "41e78a99d60094784d45c92933ffafc287ee38654afb09a9536cb8620c5f47cb"
+    },
+    {
+      "file": "frozen/source-status-child-pure-r2-alias-forward-20261017/verify-r2.py",
+      "bytes": 6517,
+      "sha256": "2a37d76bcfc217d95a6b765886af5a2e0596ef513ad4cc666f5195e7d1752d8d"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/catalogue-vectors.py",
+      "bytes": 7591,
+      "sha256": "a34802d55c0ebbd767f88aa8315cc1e59428bc9730dfc5461859cd4ad2cda952"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/control.mjs",
+      "bytes": 3225,
+      "sha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/fixed-metadata-reader.mjs",
+      "bytes": 12278,
+      "sha256": "9f53ec75880ef8371ca37aae7163dcb275c582492a2912fa42ca2c57e2d0b2cf"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/FREEZE_MANIFEST.json",
+      "bytes": 7248,
+      "sha256": "1c19cc71647619081a736d44cd794cdb3941b9d761e4bb9f88485e00bd3051a9"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/GENUINE_R2_COMMAND_EVIDENCE.json",
+      "bytes": 2740,
+      "sha256": "4b8849e79e52cc474ba4a6025f415e2bd0be49452ef7be0b19b4b2295c35424a"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/hold-pure.mjs",
+      "bytes": 8352,
+      "sha256": "f2ffb92e7187ed7224e6e01880c28ddcf7f3d75122bd25a179ba6bf75d72385c"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/input-builder.mjs",
+      "bytes": 7665,
+      "sha256": "f2d82970749a9a523d2f375f31d4011e8e33dbc01a06002234e120c45f8e7edc"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/OFFLINE_INPUTS.json",
+      "bytes": 97102,
+      "sha256": "927f56ca7388abb348a1be606a64307d806c21df179f7ec7f7659aa851551351"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/OFFLINE_RESULTS.json",
+      "bytes": 1126,
+      "sha256": "57a42cbceaffe702a5a8dfa661cea15a56cbc2d09554e0397cf603938b2953a2"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/PG_RESULT_PARSER_EVIDENCE.json",
+      "bytes": 2009,
+      "sha256": "40b7aab97bd707e1fc8d73960017fd33bb6294c26328ed2a23f5188d261422ba"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/prepare-offline.mjs",
+      "bytes": 1695,
+      "sha256": "55fad7373179dbe9889a2956a4e29d3a909abcee3f7824d842ee07ad530a677d"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/PROGRAMME_MILESTONE_MANIFEST.json",
+      "bytes": 2182,
+      "sha256": "b92324116ab90d896b002135c01f84eae79efdb0437ff34678a362f89b729198"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/PROGRAMME_SOURCE_TRANSFER.json",
+      "bytes": 8584,
+      "sha256": "609d8852eaab05f46b86c64fb1587e10239730dd3f7a328380fe951824ca15a1"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/programme/assertions.sql",
+      "bytes": 2902,
+      "sha256": "c8785a0cfc06b44849244e32ab68d2b412254614a9b89fc321fa88780227cb5f"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/programme/build-program.mjs",
+      "bytes": 4453,
+      "sha256": "8a01debc06d70a190d2002f3c77b666a101373f14711c0b56613acc6bdeba543"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/programme/key-source.sqlinc",
+      "bytes": 430,
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/programme/postflight.sql",
+      "bytes": 1965,
+      "sha256": "baac80aa7dfbe3cdfef1e23d352750c0737076ec733ff4b9150aea1db6b56606"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/programme/preflight.sql",
+      "bytes": 2973,
+      "sha256": "9fe0984139bd6888ac694555ffc3e632038e64c06d5fdc375f775d04dbf779da"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/programme/PROGRAMME.sql",
+      "bytes": 20303,
+      "sha256": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/programme/README.md",
+      "bytes": 2912,
+      "sha256": "a39f96c40a800c4e53b7a42848bece52b04d75c7be1783103964fd8fa45d2aac"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/programme/SOURCE_MANIFEST.json",
+      "bytes": 2800,
+      "sha256": "d0c166a356a96d1950233b9b274e84851a1dcf4578eb7dc229d1cdab3cf3ec5d"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/programme/source-child.sqlinc",
+      "bytes": 12317,
+      "sha256": "ffae1fc04874e0b3590c89609f592b4ca33c6b95654a4272e0dd1cc8b6ffb30b"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/programme/verify-programme.py",
+      "bytes": 3830,
+      "sha256": "7fc8efc2ef9139aef93c8e3136bebc8ca4d4ff6127b0cc651432ee4da2179026"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/PROGRESS.md",
+      "bytes": 767,
+      "sha256": "228fbd7e0f9547ea04b3860569b561332abc6615a0a1626e11d85420e5779d0a"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/README.md",
+      "bytes": 4050,
+      "sha256": "42026da7dd204a73818619980733a97f825de103932fce6d3dc1d6ea529813b2"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/reference/daily-build-program.mjs",
+      "bytes": 3514,
+      "sha256": "1ec1bf64e57ec38856a509be1df433a3318a439271eb53cfed2008d8b151d69d"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/reference/daily/control.mjs",
+      "bytes": 3225,
+      "sha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/reference/daily/fixed-metadata-reader.mjs",
+      "bytes": 12270,
+      "sha256": "ed641533595b6a04b82f027183b82d2fc9b9a03c674bb2db6c294f52ff4f4173"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/reference/daily/hold-pure.mjs",
+      "bytes": 8328,
+      "sha256": "3a1d5346f32669f76938386bb2260372109673dc1c654de15a78e6439b1dda5f"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/reference/daily/input-builder.mjs",
+      "bytes": 6914,
+      "sha256": "930ccc5a393a499b0f8a7ee9c752178b80ee35acd7c83df9bcc333b70475c47a"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/reference/daily/prepare-offline.mjs",
+      "bytes": 1694,
+      "sha256": "15157d3ca1760cdc788fcbd86413d77914e3bd5b83f640a350f13caa4b18336c"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/reference/daily/result-validator.mjs",
+      "bytes": 11297,
+      "sha256": "a95635e396281a0d2d51c160097c9a174eb5d98d25ae35dcd8df846f6d3d13a0"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/reference/daily/source.mjs",
+      "bytes": 6267,
+      "sha256": "26884004baae754df196c8efd34fd19f3234ec82909f184362a34c7a31d84e13"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/reference/daily/test.mjs",
+      "bytes": 21645,
+      "sha256": "7eb5914344ffa5deaae0c3dd40f10a761d715b6dcfb3577e2739a99fc94f8e01"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/reference/daily/timing.mjs",
+      "bytes": 1308,
+      "sha256": "db5a330bd11c4f1d1c5c23d68b1ec297f5503d21a86be0863f633f997f51531c"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/result-validator.mjs",
+      "bytes": 11984,
+      "sha256": "ddf58caf3300c203c9190bbf27ce98aee152dc68e801c7969514957be5271fc5"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/SETUP_INTENT.json",
+      "bytes": 1384,
+      "sha256": "cd955e98562341e07e8577fea2409897a5717e7532c9d70b4f9d4ea5acdcb9d0"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/SOURCE_MANIFEST.json",
+      "bytes": 2495,
+      "sha256": "2518964f0142974ad1a75c024dec7eab9861d1f0d41923f276feb7b0f83c3964"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/SOURCE_PINS.json",
+      "bytes": 9486,
+      "sha256": "d39584d9e176d31ed4295db6b7bb27300212ffc40b3c9ad2e96a6ecd04c16912"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/SOURCE_TRANSFERS.json",
+      "bytes": 147276,
+      "sha256": "d20eabe01ea1c204cb7c85840f0de0656328430f87398457154bc371c3ef836a"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/SOURCE_VERIFY_RESULTS.json",
+      "bytes": 765,
+      "sha256": "c15dc629d0b7b2faa5cdc0230d09275eebb2d40fb531381174dbe680fa6ef496"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/source.mjs",
+      "bytes": 6713,
+      "sha256": "743ef3a0eadb7d7eb7c5e4a52b70bb5eb07393b88b269ddc290d9b16abfb8b15"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/test.mjs",
+      "bytes": 24311,
+      "sha256": "9d3993a52499fc1c1c111ff7ff836352c7056051923c34d0a142895288016b0a"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/timing.mjs",
+      "bytes": 1308,
+      "sha256": "db5a330bd11c4f1d1c5c23d68b1ec297f5503d21a86be0863f633f997f51531c"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/verify-adapter.py",
+      "bytes": 4594,
+      "sha256": "28608981f119df4d04f841253b1c892c786b547f117b02803593966399ee0f2e"
+    },
+    {
+      "file": "frozen/source-status-child-pure-rollback-adapter-20261017/verify-freeze.py",
+      "bytes": 1112,
+      "sha256": "8ddc637069860e21e83ebd82878e2e8d84f0e73bb7cda31d4f0ede287224a0f1"
+    },
+    {
+      "file": "INDEPENDENT_AUDIT.json",
+      "bytes": 15078,
+      "sha256": "ddf8416d7ae1d353b61cc074d3c0c87d501785706c364c1403438344780f7bf3"
+    },
+    {
+      "file": "independent-audit.py",
+      "bytes": 8614,
+      "sha256": "a088a22af0e6c8a8e5a28d20faa8aa177e053e79103a1d187cba684b942a96a4"
+    },
+    {
+      "file": "PEER_REVIEW.md",
+      "bytes": 6316,
+      "sha256": "6b16026169a8f2625a482734cb30c580f04dda760a22d752d7091af620f3173c"
+    },
+    {
+      "file": "python-replay.py",
+      "bytes": 1750,
+      "sha256": "628265d40ae9fd30d480ebb323f8a44076f9743d74ee350b86f2771f1d686735"
+    },
+    {
+      "file": "reference/r1-root/SOURCE_STATUS_CHILD_NATIVE_R1_HOLD_20261017.json",
+      "bytes": 5167,
+      "sha256": "855fcf24f4d0fbe75e7a1156deb8038a363d739b7f6f973ff5721c63ee955825"
+    },
+    {
+      "file": "reference/r1-root/SOURCE_STATUS_CHILD_NATIVE_R1_UNCHANGED_RESULT_20261017.json",
+      "bytes": 6649,
+      "sha256": "2884e8d4e3ac9d700a3da0fc6e1d77dbf2815978dfe8cc920bd10ebaec421530"
+    },
+    {
+      "file": "REPLAY_RESULTS.json",
+      "bytes": 16741,
+      "sha256": "d3279049b63913fad8451422c171488d5972e55d2733c259fd0db5de5d03692b"
+    },
+    {
+      "file": "replay.mjs",
+      "bytes": 3215,
+      "sha256": "9d03508a60a0b38c6c4af1969b4c784c9cd086897aaafecd0e67365052319ed9"
+    },
+    {
+      "file": "replay/node20.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "replay/node20.stdout.txt",
+      "bytes": 2355,
+      "sha256": "3445e5456e315fc1b2aef0191d61c64af7d6c44cdd409685e16dda85922e040d"
+    },
+    {
+      "file": "replay/prepare-offline.stderr.txt",
+      "bytes": 55,
+      "sha256": "c16eb2905cea5289a703b0eee4c11de2c514358914b112f90a367ad616bf76aa"
+    },
+    {
+      "file": "replay/prepare-offline.stdout.txt",
+      "bytes": 836,
+      "sha256": "6ab74804d477872f9357763fd40231131c3eb80da2cec618f7efb973f968c4e1"
+    },
+    {
+      "file": "replay/PYTHON_REPLAY_ADAPTER.json",
+      "bytes": 6828,
+      "sha256": "dbabee1954e111c51619090a3dd30a66f16498aee23462eb43bb354d8d11dca6"
+    },
+    {
+      "file": "replay/python-source-grammar-r2.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "replay/python-source-grammar-r2.stdout.txt",
+      "bytes": 1974,
+      "sha256": "16ab7fdbbbdcfaaf4e709602b6c5c6dea4f87228d474135eb4703a2fb63f0728"
+    },
+    {
+      "file": "RESULT.json",
+      "bytes": 1362,
+      "sha256": "7e8d6e5b122af21c8605dd480cd0556061ea9276c73badcb97bceaab506aff05"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 1886,
+      "sha256": "bffa23acad14805b3b43a98eedcce05899f53d43c785eed9b12bded0e94882ae"
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "version": "SOURCE_STATUS_CHILD_PURE_PROGRAMME_V1",
+  "rootCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+  "rootInputs": [
+    {
+      "file": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/01_native_status_child.sqlinc",
+      "name": "private.weekly_source_pay_decision_native_status_child_v1",
+      "fileSha256": "5d916ede66cc997c8d65e267f12fa3cac0f23751af1790cd002437dab2f463cb",
+      "definitionSha256": "ffae1fc04874e0b3590c89609f592b4ca33c6b95654a4272e0dd1cc8b6ffb30b",
+      "definitionBytes": 12317
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+      "name": "private.weekly_exceptional_json_keys_exact_v1",
+      "fileSha256": "960b5ec7f2ed18898615fa0321d1b93434c1549576d75f8ad9e3f6e29152c933",
+      "definitionSha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4",
+      "definitionBytes": 430
+    }
+  ],
+  "localInputs": [
+    {
+      "file": "source-child.sqlinc",
+      "bytes": 12317,
+      "sha256": "ffae1fc04874e0b3590c89609f592b4ca33c6b95654a4272e0dd1cc8b6ffb30b"
+    },
+    {
+      "file": "key-source.sqlinc",
+      "bytes": 430,
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "file": "preflight.sql",
+      "bytes": 3069,
+      "sha256": "67fb77f99d7ac2fa86600ecae56a46c985dbf3ae194c4e20591fb9beb67fc409"
+    },
+    {
+      "file": "postflight.sql",
+      "bytes": 2013,
+      "sha256": "db6cb28b9300bdfe3cdef668e53c9e5225607acf1dfc3b7b76f335c54868305b"
+    },
+    {
+      "file": "assertions.sql",
+      "bytes": 2902,
+      "sha256": "c8785a0cfc06b44849244e32ab68d2b412254614a9b89fc321fa88780227cb5f"
+    }
+  ],
+  "privateDependencyClosure": [
+    "private.weekly_exceptional_json_keys_exact_v1",
+    "private.weekly_source_pay_decision_native_status_child_v1"
+  ],
+  "existingDependencyReplaced": false,
+  "newDefinitions": 1,
+  "positiveBoundaryVectors": 4,
+  "negativeBoundaryRefusals": 12,
+  "businessFixtureRows": 0,
+  "applicationRelationReads": 0,
+  "applicationWrites": 0,
+  "nativeFinancialCalls": 0,
+  "publicResultSuccess": "NOT_PROVIDED",
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "sqlBytes": 20447,
+  "sqlSha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64",
+  "metadataInputs": [
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PURE_DEPENDENCY_READONLY_20261017.json",
+      "bytes": 711,
+      "sha256": "af7d2edeb3debd42cbe9ca0e284cc12e4f1ec7b384c11addbd8a3640dbc2d12e"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PURE_ROUTINE_METADATA_READONLY_20261017.json",
+      "bytes": 4089,
+      "sha256": "33055f67a0dfae6775e12568d70f803c0d0babb014625bbf1b27f72e97d16786"
+    }
+  ]
+}

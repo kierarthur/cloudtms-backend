@@ -1,0 +1,66 @@
+{
+  "frozenEqualWritesSuppressed": [
+    {
+      "file": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\SOURCE_VERIFY_RESULTS.json",
+      "bytes": 765
+    },
+    {
+      "file": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\R2_SOURCE_RESULTS.json",
+      "bytes": 2407
+    }
+  ],
+  "nodeCheckPathAdapters": [
+    {
+      "kind": "Node --check operational path only",
+      "before": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\control.mjs",
+      "after": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\control.mjs"
+    },
+    {
+      "kind": "Node --check operational path only",
+      "before": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\fixed-metadata-reader.mjs",
+      "after": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\fixed-metadata-reader.mjs"
+    },
+    {
+      "kind": "Node --check operational path only",
+      "before": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\hold-pure.mjs",
+      "after": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\hold-pure.mjs"
+    },
+    {
+      "kind": "Node --check operational path only",
+      "before": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\input-builder.mjs",
+      "after": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\input-builder.mjs"
+    },
+    {
+      "kind": "Node --check operational path only",
+      "before": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\prepare-offline.mjs",
+      "after": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\prepare-offline.mjs"
+    },
+    {
+      "kind": "Node --check operational path only",
+      "before": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\result-validator.mjs",
+      "after": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\result-validator.mjs"
+    },
+    {
+      "kind": "Node --check operational path only",
+      "before": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\source.mjs",
+      "after": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\source.mjs"
+    },
+    {
+      "kind": "Node --check operational path only",
+      "before": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\test.mjs",
+      "after": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\test.mjs"
+    },
+    {
+      "kind": "Node --check operational path only",
+      "before": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\timing.mjs",
+      "after": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\timing.mjs"
+    },
+    {
+      "kind": "Node --check operational path only",
+      "before": "\\\\?\\D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\programme\\build-program.mjs",
+      "after": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\source-status-child-pure-r2-independent-peer-20261017\\frozen\\source-status-child-pure-r2-alias-forward-20261017\\programme\\build-program.mjs"
+    }
+  ],
+  "sqlChanges": 0,
+  "native": "NOT_RUN"
+}
