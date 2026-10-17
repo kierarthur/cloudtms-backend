@@ -1,0 +1,51 @@
+{
+  "version": "S0_R9_EXACT_R8_READONLY_BATCH_FORWARD_V1",
+  "parentFile": "docs/healthroster-build/proposals/daily-genuine-root-s0-r8-bookkeeper-20261017.mjs",
+  "parentCommit": "dfe46bfdccf2afd57c346baccb84becab423c709",
+  "parentBytes": 8231,
+  "parentSha256": "906108c459b7aa4ed50a9e3f82baec67b2c2b82284cdc5775f46316239b47b5f",
+  "afterBytes": 8716,
+  "afterSha256": "07496482e927774df1e1875c26e084be00f291505f488e066f0bb64071f6312c",
+  "changes": [
+    {
+      "before": "DAILY_GENUINE_S0_R8_",
+      "after": "DAILY_GENUINE_S0_R9_",
+      "occurrences": 3
+    },
+    {
+      "before": "ded3b26a98221e5b2941a226dab6caf6c1de0b16c10f365d2d5ec82ef225b34d",
+      "after": "63f33b767fbc75fefa623758178691443fbee11c5cc7c68028a075014a2eaf66",
+      "occurrences": 1
+    },
+    {
+      "before": "db015cac83e3fdcc4ebcb1888b841b345899dbdd",
+      "after": "bc9f27ed652a00c3bc85a51cd1df7aadf6c35c05",
+      "occurrences": 1
+    },
+    {
+      "before": "EXACT_R7_EFFECT_PARENT",
+      "after": "EXACT_R8_EFFECT_PARENT",
+      "occurrences": 1
+    },
+    {
+      "before": "const committedPublic=(file,historical)=>{const b=fs.readFileSync(i+'/'+file);if(![rootHead,'',historical].every(ref=>b.equals(g(i,'show',ref+':'+file))))throw Error('ACTUAL_COMMITTED_R10_PUBLIC_EVIDENCE_REQUIRED');return b;};\ng(i,'merge-base','--is-ancestor',reviewCommit,rootHead);committedPublic(reviewFile,reviewCommit);committedPublic(p+'DAILY_GENUINE_S0_R9_ROOT_EXECUTION_PLAN_20261017.json',rootHead);\nconst pinFile=s+'SOURCE_PINS.json',pinBytes=fs.readFileSync(r+'/'+pinFile);if(![source,''].every(ref=>pinBytes.equals(g(r,'show',ref+':'+pinFile))))throw Error('CURRENT_R10_SOURCE_PINS_REQUIRED');\nconst observed=JSON.parse(pinBytes).authObservation;if(observed?.file!==p+'TEST_AUTH_REFRESH_R10_SUCCESS_20261017.json'||!/^[a-f0-9]{40}$/.test(observed.commit??'')||!/^[a-f0-9]{64}$/.test(observed.sha256??''))throw Error('ACTUAL_R10_SOURCE_OBSERVATION_REQUIRED');\nif(sha(committedPublic(observed.file,observed.commit))!==observed.sha256)throw Error('ACTUAL_R10_PUBLIC_RECEIPT_HASH_REQUIRED');\n",
+      "after": "// Original reviewed real-blob transport; each batch exists only in this invocation before any write/index/HEAD mutation.\nconst {blobImages}=await imp('git-image-batch.mjs');\nconst pinFile=s+'SOURCE_PINS.json',pinBytes=fs.readFileSync(r+'/'+pinFile),pinImages=blobImages(r,[source,null].map(ref=>({ref,file:pinFile})));\nif(![source,null].every(ref=>pinBytes.equals(pinImages.get(ref,pinFile))))throw Error('CURRENT_R10_SOURCE_PINS_REQUIRED');\nconst observed=JSON.parse(pinBytes).authObservation;if(observed?.file!==p+'TEST_AUTH_REFRESH_R10_SUCCESS_20261017.json'||!/^[a-f0-9]{40}$/.test(observed.commit??'')||!/^[a-f0-9]{64}$/.test(observed.sha256??''))throw Error('ACTUAL_R10_SOURCE_OBSERVATION_REQUIRED');\ng(i,'merge-base','--is-ancestor',reviewCommit,rootHead);\nconst planFile=p+'DAILY_GENUINE_S0_R9_ROOT_EXECUTION_PLAN_20261017.json',publicRows=[[reviewFile,reviewCommit],[planFile,rootHead],[observed.file,observed.commit]],publicImages=blobImages(i,publicRows.flatMap(([file,historical])=>[rootHead,null,historical].map(ref=>({ref,file}))));\nconst committedPublic=(file,historical)=>{const b=fs.readFileSync(i+'/'+file);if(![rootHead,null,historical].every(ref=>b.equals(publicImages.get(ref,file))))throw Error('ACTUAL_COMMITTED_R10_PUBLIC_EVIDENCE_REQUIRED');return b;};\ncommittedPublic(reviewFile,reviewCommit);committedPublic(planFile,rootHead);\nif(sha(committedPublic(observed.file,observed.commit))!==observed.sha256)throw Error('ACTUAL_R10_PUBLIC_RECEIPT_HASH_REQUIRED');\n",
+      "occurrences": 1
+    }
+  ],
+  "protectedBefore": {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_EFFECT_ADMISSION_20261017.json",
+    "commit": "bc9f27ed652a00c3bc85a51cd1df7aadf6c35c05",
+    "bytes": 870,
+    "sha256": "63f33b767fbc75fefa623758178691443fbee11c5cc7c68028a075014a2eaf66"
+  },
+  "protectedAfter": {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_AFTER_EFFECT_QUALIFICATION_20261017.json",
+    "commit": "2d5496c6bea7ce559ca1575e357b2147fd474090",
+    "bytes": 812,
+    "sha256": "00323f57272f687183fc0a2c8b74bafabc7f569cdc2f39b3b17e421661ace9b4"
+  },
+  "original30SecondCurrentNativeRuleUnchanged": true,
+  "allPostWriteIndexAndCommitPushChecksUnchanged": true,
+  "noCacheUsedAfterAnyIndexOrHeadMutation": true
+}

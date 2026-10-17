@@ -1,0 +1,19 @@
+{
+  "tests": 22,
+  "pass": 22,
+  "fail": 0,
+  "wholeRawParentInverse": true,
+  "logicalPublicImages": 11,
+  "priorShowProcesses": 11,
+  "newBatchProcesses": 2,
+  "savedIndexHeadHistoricalPreserved": true,
+  "sourcePins": 4,
+  "syntax": 4,
+  "bookkeeperExecuted": false,
+  "nativeAuthPrivateOrOtherWorktreeWrites": false,
+  "measuredTransportSavingMs": [
+    429,
+    514
+  ],
+  "wholeStageTimingOr30sSuccessGuaranteed": false
+}

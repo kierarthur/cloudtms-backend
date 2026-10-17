@@ -1,0 +1,33 @@
+{
+  "kind": "READONLY_EXISTING_R8_PUBLIC_TUPLE_TRANSPORT_ONLY",
+  "rootHead": "9cc5c411d453a78cabfe1f3e233068be423b2587",
+  "reportHead": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+  "reviewCommit": "91c84401027da507e92c54414f1fb1f693bc08b5",
+  "receiptCommit": "23243623b6e95f311857c016560983df51a30810",
+  "existingPlan": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_R8_ROOT_EXECUTION_PLAN_20261017.json",
+  "logicalImages": 11,
+  "batches": 2,
+  "samples": [
+    {
+      "run": 1,
+      "priorShowProcesses": 11,
+      "newBatchProcesses": 2,
+      "priorMs": 540,
+      "batchMs": 111,
+      "savedMs": 429,
+      "all11LogicalImagesRawEqual": true
+    },
+    {
+      "run": 2,
+      "priorShowProcesses": 11,
+      "newBatchProcesses": 2,
+      "priorMs": 638,
+      "batchMs": 124,
+      "savedMs": 514,
+      "all11LogicalImagesRawEqual": true
+    }
+  ],
+  "r9PlanOrRuntime": "NOT_EXECUTED",
+  "nativePrivateAuthWrites": "NONE",
+  "wholeStageTimingGuarantee": false
+}

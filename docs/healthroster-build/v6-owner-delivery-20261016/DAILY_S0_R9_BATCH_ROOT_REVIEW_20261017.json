@@ -1,0 +1,26 @@
+{
+  "version": "DAILY_S0_R9_BATCH_SOURCE_ROOT_REVIEW_V1",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "source": "docs/healthroster-build/proposals/daily-s0-r9-bookkeeper-batch-source-20261017",
+  "manifestSha256": "2271615296339dfcf8e3eb5e0cd1b224b658680fdeda85013b1c1455b9606e80",
+  "files": 13,
+  "flatPostimageSha256": "07496482e927774df1e1875c26e084be00f291505f488e066f0bb64071f6312c",
+  "rootTests": 22,
+  "independentTests": 22,
+  "sourcePins": 4,
+  "syntaxInputs": 4,
+  "wholeRawR8Inverse": true,
+  "literalEdits": 5,
+  "independentReviewer": "Report GPT-6.1 Extra High; original blobImages framing and null=index/40hex refs, all11 equivalent image comparisons and no reuse after writes verified.",
+  "protectedBefore": "bc9f27ed652a00c3bc85a51cd1df7aadf6c35c05 /63f33b767fbc75fefa623758178691443fbee11c5cc7c68028a075014a2eaf66",
+  "protectedAfter": "2d5496c6bea7ce559ca1575e357b2147fd474090 /00323f57272f687183fc0a2c8b74bafabc7f569cdc2f39b3b17e421661ace9b4",
+  "measuredTransportSavingMs": [
+    429,
+    514
+  ],
+  "performanceQualification": "NOT_PROVED_WHOLE_STAGE; retain30s exactly.",
+  "controllerForward": "Two exact literals only: actualR9state key and R9helper; sourceK4 remains fixedactual6b5.",
+  "publicationForward": "Two R8 public proof/publication filename literals become R9; original PUBLISH and exact267f composeAll remain.",
+  "authSource": "Existing genuine R10K4 only; no fresh source or qualification relabelling.",
+  "native": "NOT_RUN"
+}

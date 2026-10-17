@@ -1,0 +1,65 @@
+{
+  "version": "S0_R9_FLAT_BOOKKEEPER_READONLY_BATCH_SOURCE_V1",
+  "files": [
+    {
+      "file": "bookkeeper.mjs",
+      "bytes": 8716,
+      "sha256": "07496482e927774df1e1875c26e084be00f291505f488e066f0bb64071f6312c"
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 4394,
+      "sha256": "49bf4e58bb2780b5e55f1a1df45bc07a360dac10fb2ecbcc5d7bdde94de2af18"
+    },
+    {
+      "file": "measure-readonly.mjs",
+      "bytes": 2944,
+      "sha256": "65bae7f6c5f2cca9830f948e032d8ba349c139a556bc10125c330a1f984d4f68"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2566,
+      "sha256": "4e9b417036bdab093313fdcd89b8cafcc6a67e3c1a99b3870f1540c40a9bb231"
+    },
+    {
+      "file": "READONLY_TIMING.json",
+      "bytes": 1033,
+      "sha256": "6c8ff3ed72e470662469c85141043301be487eccf99a960679a1490e8bbba70e"
+    },
+    {
+      "file": "reference/r7-effect-after.json",
+      "bytes": 812,
+      "sha256": "00323f57272f687183fc0a2c8b74bafabc7f569cdc2f39b3b17e421661ace9b4"
+    },
+    {
+      "file": "reference/r8-bookkeeper.mjs",
+      "bytes": 8231,
+      "sha256": "906108c459b7aa4ed50a9e3f82baec67b2c2b82284cdc5775f46316239b47b5f"
+    },
+    {
+      "file": "reference/r8-effect-before.json",
+      "bytes": 870,
+      "sha256": "63f33b767fbc75fefa623758178691443fbee11c5cc7c68028a075014a2eaf66"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 428,
+      "sha256": "36c5341e05db36232d71a3d15d459c71a09682cce44d9b4d746b080084d2f460"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 1540,
+      "sha256": "79f71e708f1332f7bc2e9caf0af35a62d2602a963bca8987b551ae7764303352"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 6984,
+      "sha256": "4a874d61975473b5b1d59bc3cc1b6a712909efb62ce79555434d31f830fde39e"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1469,
+      "sha256": "291154715b1af89b999817fc8cafc02cb17045a14c3e944efe58d20b24de37ed"
+    }
+  ]
+}

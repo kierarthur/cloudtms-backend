@@ -1,0 +1,32 @@
+{
+  "pins": [
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "dfe46bfdccf2afd57c346baccb84becab423c709",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-s0-r8-bookkeeper-20261017.mjs",
+      "bytes": 8231,
+      "sha256": "906108c459b7aa4ed50a9e3f82baec67b2c2b82284cdc5775f46316239b47b5f"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "bc9f27ed652a00c3bc85a51cd1df7aadf6c35c05",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_EFFECT_ADMISSION_20261017.json",
+      "bytes": 870,
+      "sha256": "63f33b767fbc75fefa623758178691443fbee11c5cc7c68028a075014a2eaf66"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "2d5496c6bea7ce559ca1575e357b2147fd474090",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_AFTER_EFFECT_QUALIFICATION_20261017.json",
+      "bytes": 812,
+      "sha256": "00323f57272f687183fc0a2c8b74bafabc7f569cdc2f39b3b17e421661ace9b4"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/git-image-batch.mjs",
+      "bytes": 23257,
+      "sha256": "ae3053a74df75781fdf155c1c94fd3bd55bbd617d59336ed6f414732bdf0eaec"
+    }
+  ]
+}
