@@ -1328,3 +1328,10 @@ SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_POSITIVE_CONTACT_CONSTRUC
 
 
 17 October actualR8: initialreadyHOLD made0login/refresh/browserclosed; onefollowupready200 andoneboundednewauth thenPASS with genuineME200AdminUUID/workspacecontract+queries, one login/zero refresh/one suppressedping/zero forbiddenwrites. Actualreceiptb29 pushed; state dbc620 retainedunread. RealR8mounts5bb226/59b2aa/1502cc pluscontinuationK4b1b327 pushed/freshremote/sourceadmitted. ReportHEADfixedK4 throughS0-S4. R5rootbookkeeper independentreadaccepted after2scopefixes (S0phasebinding and exactownedindexcommit); fullfreshness/allscopes/originalR4history preserved. ActualS0retry follows; no fixtures/deployment claimed. Install2 NOT_INSTALLED/finalcritics NOT_RUN.
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","status":"TAKEN","takenAt":"2026-10-17T12:31:20.765Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","status":"RELEASED","takenAt":"2026-10-17T12:31:20.765Z","releasedAt":"2026-10-17T12:31:23.650Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+
+17 October actualS0R5: fulloperator source guard refuses reviewed additive9helper registry c10->f357, other8inputs/receipts exact. Root preflight had omitted fulloperator sourcePreflight; original guard correctly closes. OwnA explicitunlock/close12:31:23.650Z/provedfalse/exit1; no browser/privatebinding/nativeB/attempt/prefix. Exact finite registry-binding successor assigned, no unchanged retry. Nativecmd/PTY launch route now independently proved READY/QUIT0; earlier launch-only failures retained. Shared Git buffer8b846/peer3b837 accepted: actual1,335,296byte/8192filename regression and full8194set plus6adverse cases PASS; ownmarkedfixture removed. One8MiB output-bound line, completebase/fourinputs/assertions/nativecaps retained; fulljoinedgate follows. Install2 NOT_INSTALLED/finalcritics NOT_RUN/no ownerquestion.

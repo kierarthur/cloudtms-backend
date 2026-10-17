@@ -1,0 +1,82 @@
+{
+  "version": "SHARED_FINAL_DEFINER_GIT_BUFFER_ACTUAL_REGRESSION_V1",
+  "fixture": {
+    "indexOnlyEvidencePaths": 8192,
+    "actualUnionPaths": 8194,
+    "stdoutBytes": 1335296,
+    "stdoutSha256": "01cedb2c8ec556cd1e574ad7bdc9af9bd3e04573cb159f75b9efa14dfd7fac98",
+    "originalDefaultStatus": null,
+    "originalError": "ENOBUFS",
+    "correctedStatus": 0,
+    "completeExactGeneratedSet": true,
+    "ancestryRefusal": true,
+    "invalidBaseRefusal": true,
+    "partialAndOverflowFailClosed": true,
+    "checkedOutEvidenceFiles": 0
+  },
+  "ownedFixtureRemoved": true,
+  "actualRoot": {
+    "head": "ef55b440d4a4501c891bd68a82bb8b799e50ec97",
+    "releaseBaseCommit": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+    "completeUnionPaths": 13741,
+    "baseDiffBytes": 1436346,
+    "baseDiffSha256": "0f57f52443143ff71f3b678d8854fe330499d53aa17c665a238ab7c3649ac1d8",
+    "originalFourInputs": [
+      {
+        "args": [
+          "diff-tree",
+          "--root",
+          "-m",
+          "--first-parent",
+          "--no-commit-id",
+          "--name-only",
+          "-r",
+          "HEAD"
+        ],
+        "stdoutBytes": 6081,
+        "stdoutSha256": "54c5a816d0e43a4568cf9220842d2235585ac97e2e305df1a1eb4741dbb16f01",
+        "paths": 55
+      },
+      {
+        "args": [
+          "diff",
+          "--name-only",
+          "HEAD",
+          "--"
+        ],
+        "stdoutBytes": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "paths": 0
+      },
+      {
+        "args": [
+          "ls-files",
+          "--others",
+          "--exclude-standard",
+          "--",
+          "supabase"
+        ],
+        "stdoutBytes": 0,
+        "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "paths": 0
+      },
+      {
+        "args": [
+          "diff",
+          "--name-only",
+          "a6f7423eb71e6e7cd173e705c2290e5408a1d077..HEAD",
+          "--"
+        ],
+        "stdoutBytes": 1436346,
+        "stdoutSha256": "0f57f52443143ff71f3b678d8854fe330499d53aa17c665a238ab7c3649ac1d8",
+        "paths": 13741
+      }
+    ],
+    "ancestryCheckUnchanged": true
+  },
+  "newMaxBufferBytes": 8388608,
+  "onlySourceLineChanged": true,
+  "fullGlobalGate": "ROOT_AFTER_REVIEW_NOT_RUN_THIS_LANE",
+  "BankSemanticAssertionsChanged": false,
+  "native": "NOT_RUN"
+}

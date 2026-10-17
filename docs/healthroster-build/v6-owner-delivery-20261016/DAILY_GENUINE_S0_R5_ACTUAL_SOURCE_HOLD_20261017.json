@@ -1,0 +1,53 @@
+{
+  "version": "DAILY_GENUINE_S0_R5_ACTUAL_SOURCE_ADMISSION_HOLD_V1",
+  "rootExecutionCommit": "eb905101574e188d12eec6dcb98af85360184579",
+  "reportSourceCommit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+  "actualClosedCoordinator": {
+    "status": "HOLD",
+    "code": "FIXTURE_SELECTED_CURRENT_SOURCE_CHANGED",
+    "ownedDirectory": null,
+    "stage": "S0",
+    "businessRequests": 0,
+    "sourceCommit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+    "qualifiedPrefix": "READ_ACTUAL_CLOSED_CHILD_RECORDS_NO_SYNTHETIC_VERDICT",
+    "sharedTurn": "SEE_ORIGINAL_SEND7_RELEASE_RECORD"
+  },
+  "processExitCode": 1,
+  "nativeCalls": 0,
+  "browserOpened": false,
+  "privateBindingCreated": false,
+  "businessAttemptCreated": false,
+  "qualifiedPrefix": "NONE",
+  "actualSharedTurn": {
+    "takenAt": "2026-10-17T12:31:20.765Z",
+    "releasedAt": "2026-10-17T12:31:23.650Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false
+  },
+  "exactDiagnosis": {
+    "file": "docs/bpay-next/final-definer-closures.json",
+    "oldBytes": 1746259,
+    "oldSha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c",
+    "approvedBytes": 1753534,
+    "approvedSha256": "f357496129f0d1eab1f2a2115a8da788be9c2f4a42f50e4d41baa1c700fc3cc0",
+    "reason": "Reviewed69dde additive9helpers/all1650 earlier chains retained; fulloperator sourcePreflight had not been included in root preflight",
+    "allOtherCensusInputsAndReceiptsEqual": 8
+  },
+  "launchOnlyHoldFolder": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-progress-20261017-92dc3cb15a15d0e464d36f5eafdfa096",
+  "launchOnlyHold": "Bare /d not recognised; exit1 before coordinator/A",
+  "correctedLauncherProbe": {
+    "folder": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-cmd-launch-probe-ed3232febaa210e2f933046b08b82358",
+    "ready": "ACTUAL_READY",
+    "control": "QUIT",
+    "normalExitCode": 0,
+    "command": "C:/Windows/System32/cmd.exe /d /c node <D-script> > <fresh-D-progress>",
+    "shell": "C:/Windows/System32/cmd.exe",
+    "quotedNestedVariant": "Failed before Node, retained"
+  },
+  "actualProgressFile": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-progress-20261017-3eb825460048444d0f9fdecbe70fc1c9/PROGRESS.jsonl",
+  "next": "Finite exact approved registry-binding successor; actual full sourcePreflight before another turn",
+  "privateStateOrJournalReadHashedCopied": false,
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

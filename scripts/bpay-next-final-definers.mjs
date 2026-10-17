@@ -163,7 +163,7 @@ export function closeFinalDefinerSelection(pending, current = inventory()) {
 }
 
 const git = args => {
-  const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', windowsHide: true });
+  const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, windowsHide: true });
   if (result.status !== 0) throw Error('BPAY_NEXT_FINAL_DEFINER_GIT_FAILED');
   return result.stdout.split(/\r?\n/).filter(Boolean).map(file => file.replaceAll('\\', '/'));
 };
