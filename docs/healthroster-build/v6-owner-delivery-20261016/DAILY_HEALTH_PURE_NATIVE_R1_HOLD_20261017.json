@@ -1,0 +1,45 @@
+{
+  "version": "DAILY_PURE_NATIVE_LAUNCH_R1_HOLD_V1",
+  "sourceCommit": "0bd825a869740b82ab9ebb06056d119b6a8dd6ba",
+  "originalHold": {
+    "status": "HOLD",
+    "code": "LOCAL_METADATA_TURN_LOST",
+    "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+    "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+    "elapsedMilliseconds": 2073,
+    "completeMapsPersisted": false
+  },
+  "originalHoldSha256": "8da730b72d8dd229361650f3e4d54d306284eb025f658c74936fd9d8b8b65d02",
+  "outputFolder": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-health-pure-native-20261017-r1",
+  "sharedTurn": {
+    "takenAt": "2026-10-17T02:26:47.063Z",
+    "releasedAt": "2026-10-17T02:26:50.987Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false
+  },
+  "trialInputCreated": false,
+  "mcpBDispatched": false,
+  "programmeDefinitionsOrMarkerCreated": false,
+  "metadataCStarted": false,
+  "diagnosis": {
+    "nativeCallsInProbe": 0,
+    "plainPipe": {
+      "stdinEnded": true,
+      "aborted": true,
+      "code": "CONTROL_EOF_ABORT",
+      "tty": false
+    },
+    "interactiveProbe": {
+      "tty": true,
+      "prepareReceived": true,
+      "status": "PASS_SOURCE_ONLY_INTERACTIVE_CONTROL"
+    },
+    "fix": "Launch the unchanged reviewed finite holder with tty=true so PREPARE/RELEASE stdin remains open."
+  },
+  "noDatabaseOrConnectorConfigurationChanged": true,
+  "backgroundJobsPaused": false,
+  "remainingFolder": "RETAINED_NON_SECRET_PARTIAL_HOLD_ONLY",
+  "deletionRefused": false,
+  "native": "NOT_RUN"
+}
