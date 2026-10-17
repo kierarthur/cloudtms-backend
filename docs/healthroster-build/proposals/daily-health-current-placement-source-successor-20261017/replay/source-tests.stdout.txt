@@ -1,0 +1,24 @@
+✔ all five current complete-parent forwards invert exactly to frozen Git source (191.0904ms)
+✔ one new private signature, no public DTO/schema/registry/runtime installation (0.9174ms)
+✔ complete nine-owner selection retains five unchanged full files and exactly three held Bank slots (2.5228ms)
+✔ new routine admission is name-wide before definitions, owner-only ACL and independent exact verifier (0.8294ms)
+✔ actual source scalar types are bigint ordinals, integer versions and opaque text booking (1.2613ms)
+✔ actual existing native approval owns exact current-operation/review provenance (0.5412ms)
+✔ new current reader preserves active Office role basis, no mutation-context financial shortcut (0.4631ms)
+✔ Result composes current Health placement before and after the genuine unprovided Bank join (0.3938ms)
+✔ retained accepted association remains separate and old receipt scalar is never a current selector (0.6251ms)
+✔ existing exact Daily public Result decoder accepts structural AST A_current (0.6618ms)
+✔ existing exact Daily public Result decoder accepts structural AST A_after_B (0.1274ms)
+✔ existing exact Daily public Result decoder accepts structural AST A_after_C (0.0856ms)
+✔ existing exact Daily public Result decoder accepts structural AST A_after_new_A (0.0678ms)
+✔ existing exact Daily public Result decoder accepts structural AST large_int63 (0.0521ms)
+✔ existing exact Daily public Result decoder accepts structural AST max_int63 (0.051ms)
+✔ existing Result decoder still refuses zero committed ordinal and unrelated physical identity (0.7989ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 313.6478
