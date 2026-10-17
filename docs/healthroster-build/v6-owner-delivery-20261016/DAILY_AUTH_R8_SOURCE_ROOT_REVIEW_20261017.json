@@ -1,0 +1,31 @@
+{
+  "version": "DAILY_AUTH_R8_SOURCE_ROOT_REVIEW_V1",
+  "status": "ACCEPT_BOUNDED_SOURCE_RECIPE_BEFORE_ACTUAL_AUTH",
+  "authorCommit": "6028253427ff6bf9bc1d2f4b2d4da0dee57fb66f",
+  "authorFiles": 33,
+  "authorManifestSha256": "1def645ed648213f619493327dd2442f972b759695d3d301ff01905fa40566c8",
+  "peerCommit": "81a6dc50540f0ca4f990c3f215e34841eef0c22c",
+  "peerFiles": 37,
+  "peerManifestSha256": "26ed7e05a978590bdba277a74c58515d306ede674e41eb18a62ceed2f587a168",
+  "peerResultsSha256": "24ee5eeb954a103e5aee896a80eb3d49ee7014d9d3cd147858ed43567bb126a6",
+  "rootReplay": {
+    "tests": 38,
+    "failures": 0,
+    "pureVerifier": "PASS",
+    "publicParents": 14
+  },
+  "rootReview": "Full README/recipe/materializer/holderbody/reader and complete inverse mechanisms reviewed. Holder3hunks reduce metadataGit10→3 per invocation while exactphysical/HEAD/current/index/history/hash/byte/refusal/endHEAD/protectedRelease checks and every callback remain; no cross-callcache. ActualfutureR8 publicreceipt and real operator3/K1holder3/K1K2coordinator2 required. R7network/worker/diagnostics/P1 unchanged, no statecontents or fakefutureauthority. P2 public-reader5000→30000 exactone-literal inverse retains all9oldpredicate tests and controlled6000ms vector; original nativefresh30/runtime120-60-180 untouched. Nativecmdstdout route retains originalTTYstdin/actualclosedREADY only.",
+  "exactCopiedFiles": 70,
+  "fixes": {
+    "holderBatch": 1,
+    "progressReaderP2": 1,
+    "rejected": 0
+  },
+  "actualR8": "NOT_RUN",
+  "actualMounts": "NOT_RUN",
+  "nativeS0": "NOT_RUN",
+  "privateStateContentsReadHashedCopied": false,
+  "next": "Finish peer-reviewed one-stage continuation boilerplate before freshauth; then actualreceipt and realK1/K2/K3/K4 only, sourcefixed duringownedS0→S4.",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

@@ -1,0 +1,12 @@
+{
+  "version": "DAILY_GENUINE_HOLDER_INVOCATION_BATCH_PUBLIC_PROFILE_V1",
+  "qualification": "ALGORITHM_ON_GENUINE_CURRENT_PUBLIC_IMAGES_NOT_MOUNTED_OR_RUNTIME_ADMISSION",
+  "samplesMs": [{"original":1112,"batched":559},{"original":1061,"batched":526}],
+  "controlledMetadataGitCallsPerInvocation": {"original":10,"batched":3},
+  "currentHistoricalIndexImageTupleSet": "UNCHANGED_IN_CONTROLLED_COMPLETE_OWNER_REPLAY",
+  "rootSourcePins": {"rows":2,"distinctActualRoots":1},
+  "repeatedSourceCallbacks": "ALL_RETAINED_NO_CROSS_INVOCATION_CACHE",
+  "profileHarness": "holder-profile.mjs binds only two import specifiers and import.meta-derived here to actual registered original source location; full exact harness inverse checked. All actual public saved/index/current/historical data checks still execute. This is not a virtual Git or installed-source authority.",
+  "privateStateAccess": "NONE",
+  "nativeBrowserIpc": "NOT_RUN"
+}

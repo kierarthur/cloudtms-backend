@@ -1,0 +1,125 @@
+{
+  "version": "CONTACT_CONSTRUCTORS_SOURCE_BATCH_R2_ACTUAL_V1",
+  "executionCommit": "5fca2b5894681347491d60a2aa923839b89a3f80",
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/contact-qt-positive-native-20261017-constructors-source-batch-r2",
+  "caseId": "CONTACT_CONSTRUCTORS_V1",
+  "ready": {
+    "sequenceStartedAt": "2026-10-17T12:04:05.353Z",
+    "workDeadlineAt": "2026-10-17T12:06:05.353Z",
+    "readyAt": "2026-10-17T12:05:08.056Z",
+    "sqlSha256": "b326bf57e21e283e8947f5d4ac6fa7112a309a69988e6a33a3c479c3b5e25c8a"
+  },
+  "hold": {
+    "status": "HOLD",
+    "caseId": "CONTACT_CONSTRUCTORS_V1",
+    "code": "ACTOR_SEQUENCE_WORK_BUDGET_HELD",
+    "observedErrorCode": "LOCAL_METADATA_TURN_LOST",
+    "deadlineObserved": true,
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T12:04:05.353Z",
+      "workDeadlineAt": "2026-10-17T12:06:05.353Z",
+      "readyAt": "2026-10-17T12:05:08.056Z",
+      "resultReadAt": "2026-10-17T12:05:14.106Z",
+      "workTimerFiredAt": "2026-10-17T12:06:05.355Z"
+    },
+    "metadataDiagnostic": {
+      "version": "CONTACT_QT_FIXED_METADATA_DIAGNOSTIC_V1",
+      "phase": "AFTER",
+      "startedAt": "2026-10-17T12:05:14.182Z",
+      "spawnReturnedAt": "2026-10-17T12:05:14.916Z",
+      "firstStderrAt": null,
+      "finishedAt": "2026-10-17T12:06:05.363Z",
+      "elapsedMilliseconds": 51181,
+      "sqlstate": null
+    },
+    "rootCallTiming": {
+      "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+      "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+      "sqlSha256": "b326bf57e21e283e8947f5d4ac6fa7112a309a69988e6a33a3c479c3b5e25c8a",
+      "callStartedAt": "2026-10-17T12:05:10.924Z",
+      "callReturnedAt": "2026-10-17T12:05:13.167Z",
+      "rootObservedCallMilliseconds": 2243,
+      "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+    },
+    "nativeClockFrames": [
+      {
+        "phase": "B_GUARD_BEFORE",
+        "readOnly": false,
+        "holderPid": 280356,
+        "backendPid": 280410,
+        "observedAt": "2026-10-17T12:05:12.917977+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T12:05:12.911669+00:00",
+        "transactionStartedAt": "2026-10-17T12:05:12.728118+00:00"
+      },
+      {
+        "phase": "B_GUARD_AFTER",
+        "readOnly": false,
+        "holderPid": 280356,
+        "backendPid": 280410,
+        "observedAt": "2026-10-17T12:05:12.983289+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T12:05:12.982029+00:00",
+        "transactionStartedAt": "2026-10-17T12:05:12.728118+00:00"
+      }
+    ],
+    "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+    "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+    "elapsedMilliseconds": 120044,
+    "completeMapsPersisted": false
+  },
+  "actualNative": {
+    "accepted": true,
+    "rolledBack": true,
+    "database": "cloudtms_test_clone",
+    "statementCount": 34,
+    "errors": 0,
+    "closedReadStageValidation": "PASS_ALL_EXACT_NATIVE_CONSTRUCTOR_ASSERTIONS_AND_STATEMENT_BOUNDARIES",
+    "backendPid": 280410,
+    "connectedFresh": true,
+    "identity": {
+      "module": "LEGACY:1",
+      "identityTest": true,
+      "markerAbsent": true,
+      "applyingCount": 0,
+      "latestRelease": {
+        "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+        "status": "VERIFIED",
+        "releaseId": "20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537",
+        "completedAt": "2026-10-14T15:47:03.075975+00:00",
+        "installedContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+        "repositoryContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6"
+      },
+      "customerKeyNull": true,
+      "physicalDatabase": "cloudtms_test_clone"
+    },
+    "fixtureAbsence": {
+      "readOnly": true,
+      "backendPid": 280411,
+      "userFixtureRowsRemaining": 0
+    }
+  },
+  "nativeResultSha256": "b05d31201f51869b0151bcb487eb24fdfecc330fd60457333cfe91e204a65b95",
+  "inputSqlSha256": "b326bf57e21e283e8947f5d4ac6fa7112a309a69988e6a33a3c479c3b5e25c8a",
+  "sharedTurn": {
+    "takenAt": "2026-10-17T12:04:04.252Z",
+    "releasedAt": "2026-10-17T12:06:05.392Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "processExitCode": 1
+  },
+  "fullCbefore": "COMPLETED_MEMORY_ONLY_BEFORE_READY",
+  "fullCafter": "WORK_DEADLINE_HOLD_NOT_COMPLETE",
+  "canonicalRestorationQualified": false,
+  "weakMapMinted": false,
+  "completeMapsPersisted": false,
+  "sourceFixObservation": "After reader started→spawn0.734s vs prior5.438s; full before-to-READY62.703s vs75.995s. Distinct actual turns, not additive server timings or exact query allocation.",
+  "next": "No unchanged QT/constructor retry. Genuine setup continues while independent exact-hash snapshot cost diagnosis proceeds; no caps/checks weakened.",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

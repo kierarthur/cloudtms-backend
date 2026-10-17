@@ -1312,3 +1312,10 @@ SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_POSITIVE_CONTACT_CONSTRUC
 
 
 17 October ContactGitbatch ca286/independent036593 accepted; rootcompletebinary/source review+47tests+54actualparents/3wholeinverses/51unchanged PASS. Exact3postimages mounted; callback8406→867ms offlineoverlay, no nativefitclaim.189complete source/104adapterimages freshlycomparedpercall; original24MBbound/allsource/ownershipinvocations/canonicalmaps/WeakMap and45/70/120/180caps unchanged. Actualbothcaseadmission/sourcebackup precedeconstructorR2; original34statementBpass/CafterdeadlineHOLD retained. One rootbookkeepingfile-name assumption corrected to actualpeerRESULTS.json beforecommit; no trial ran from dirtysource. Install2 NOT_INSTALLED/finalcritics NOT_RUN.
+
+SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_POSITIVE_CONTACT_CONSTRUCTORS_V1","status":"TAKEN","takenAt":"2026-10-17T12:04:04.252Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_POSITIVE_CONTACT_CONSTRUCTORS_V1","status":"RELEASED","takenAt":"2026-10-17T12:04:04.252Z","releasedAt":"2026-10-17T12:06:05.392Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+
+17 October constructorR2 on5fca: realB34assertionsPASS accepted/rolledBack/freshmarker+usersabsent again. Cbefore-toREADY62.703s; Cafterstart→spawn0.734s (prior5.438s), confirming source-overhead reduction locally, butfullCafteragainreaches120sworkdeadline at12:06:05.355 withnostderr/SQLSTATE. OwnAexplicitunlock/close12:06:05.392Z/provedfalse/exit1; fullrestoration/WeakMapHOLD/mapsnotpersisted. No unchangedQTtrial. GenuineDailysetupcontinuesindependently; exactfullsnapshotcostanalysiscontinueswithoutcapsraise/checkremoval. R8recipe602825/peer81a6 androot38tests/14publicparents accepted;70exactfiles backed beforefreshlogin. Same-invocationholderbatch/eightrealmountimages and finite30spublicprogressreader preserve nativefresh30/runtime120/60/180/P1/allownership/sourceguards. ActualR8NOTRUN, ordinarycontinuationboilerplatepreparingbeforeauthwindow; no owneranswerpending. Install2 NOT_INSTALLED/finalcritics NOT_RUN.

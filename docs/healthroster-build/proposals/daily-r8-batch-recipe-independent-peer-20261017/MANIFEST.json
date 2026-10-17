@@ -1,0 +1,185 @@
+{
+  "version": "DAILY_R8_BATCH_RECIPE_INDEPENDENT_PEER_V1",
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 2500,
+      "sha256": "aeb3f712226a8ab9a50e6b8387c09b2ee2c10061e1c05283fe25c243431a64b2"
+    },
+    {
+      "file": "reference/holder-profile.mjs",
+      "bytes": 2290,
+      "sha256": "c9b5e2b1c9c3a244da3cb3422dbf4bbbf0c30f6d3e418152f635a90a90a2e48e"
+    },
+    {
+      "file": "reference/holder.test.mjs",
+      "bytes": 5555,
+      "sha256": "cd432983f3ce9cd3cda4439f3f9a8a2c2a152a32148024149cf8538e64fd0986"
+    },
+    {
+      "file": "reference/HOLDER_FULL_PARENT_FORWARD.json",
+      "bytes": 2583,
+      "sha256": "11777e6b5725987c430221ffb659dd3a496f2d536bca0dcb9c868fee0571ef0c"
+    },
+    {
+      "file": "reference/MANIFEST.json",
+      "bytes": 5231,
+      "sha256": "1def645ed648213f619493327dd2442f972b759695d3d301ff01905fa40566c8"
+    },
+    {
+      "file": "reference/materialize.mjs",
+      "bytes": 5291,
+      "sha256": "602ed6dbae631b1418cc4b862db46adafb0276fca55590329240a1a8ff1298aa"
+    },
+    {
+      "file": "reference/payload/holder/source.mjs",
+      "bytes": 4069,
+      "sha256": "9bcf873383794c3195ba51cf07b8246ca966b83b8a3a7e8b70106035f0dd4c88"
+    },
+    {
+      "file": "reference/payload/progress.mjs",
+      "bytes": 4417,
+      "sha256": "7229524c58454a542adb6bb457959c7c5143646c7df55cf2f60b108b2ef04676"
+    },
+    {
+      "file": "reference/prepare.mjs",
+      "bytes": 9187,
+      "sha256": "ef73681d9176711a8c604bc2513a7ef1c0fcac1d4c67f0f1c37b02d415de4de1"
+    },
+    {
+      "file": "reference/PROFILE.json",
+      "bytes": 931,
+      "sha256": "2239f0ac7ff3abb430a2e47e0994411e7339c7f954b316587b9dd0674687170f"
+    },
+    {
+      "file": "reference/reader-retained.test.mjs",
+      "bytes": 2952,
+      "sha256": "99fad4f57b38b46b8e2b586f9e7759e5f8e80d6e9d799860d87357199a44a8c9"
+    },
+    {
+      "file": "reference/reader.test.mjs",
+      "bytes": 1727,
+      "sha256": "f8af381ebf70fabc9ad3edc0c03665673b77a3042addda6a780f06dda13c2594"
+    },
+    {
+      "file": "reference/READER_FULL_PARENT_FORWARD.json",
+      "bytes": 477,
+      "sha256": "7a1994a529b82e404c156438480291b0636d8342dda992e32fd78871db2d21e8"
+    },
+    {
+      "file": "reference/README.md",
+      "bytes": 8566,
+      "sha256": "5e3e9d4899d1cf6ffa05daa8758eddb2ca6671ef0d9a29df647f2c6f15e9fdb4"
+    },
+    {
+      "file": "reference/recipe.mjs",
+      "bytes": 8079,
+      "sha256": "b6182e3f1f6b9d57660632e0a31024fc6c45aded3f9c9b2c9fce463be7c99a3a"
+    },
+    {
+      "file": "reference/recipe.test.mjs",
+      "bytes": 6354,
+      "sha256": "939b52246f60055571eff398272e08c35bbe51a69e4b7a6399aefca7446fcca0"
+    },
+    {
+      "file": "reference/reference/coordinator/MANIFEST.json",
+      "bytes": 2417,
+      "sha256": "059e1d53d64db6f183336503cb1b1b93881d156ae0bdad3102108298c156b8a6"
+    },
+    {
+      "file": "reference/reference/coordinator/SOURCE_PINS.json",
+      "bytes": 45299,
+      "sha256": "639a114ec741b89fb86516513e54957c7a1ea5b408b97390b8eede9cfdac0448"
+    },
+    {
+      "file": "reference/reference/holder/EXTERNAL_SOURCE_PINS.json",
+      "bytes": 2057,
+      "sha256": "3e691dc5cbf31ddc3710b29d3ac0ef87992c26265326e7ae3292778d5011e64a"
+    },
+    {
+      "file": "reference/reference/holder/MANIFEST.json",
+      "bytes": 2880,
+      "sha256": "f5222274ac13932298b70f6931344130cb623cc93688cb2e03b38046958e6590"
+    },
+    {
+      "file": "reference/reference/holder/ROOT_SOURCE_PINS.json",
+      "bytes": 616,
+      "sha256": "a7665c14bb64412b68f60271d80f25505165b64f0d9eef971e430ad2f26e4e28"
+    },
+    {
+      "file": "reference/reference/holder/source.mjs",
+      "bytes": 3759,
+      "sha256": "4d2e9fe18522883360e79a0c65c22e09c3c2d4215cd185ff4911a8c0d4324770"
+    },
+    {
+      "file": "reference/reference/operator/contract.mjs",
+      "bytes": 7643,
+      "sha256": "a02f4e8c6e9f26c0b780490bcc09f9c860ffbb534095b0f10857fb149e297801"
+    },
+    {
+      "file": "reference/reference/operator/MANIFEST.json",
+      "bytes": 24284,
+      "sha256": "765830a91a449d4ebbc3a6a8beae95d01c9f8d5243434c4efff6739cdffc1d82"
+    },
+    {
+      "file": "reference/reference/operator/network.mjs",
+      "bytes": 5141,
+      "sha256": "595c1a8aae1d13f42a14d0651f28749e0ca46e0ea81ad301079b0e3c4b349928"
+    },
+    {
+      "file": "reference/reference/operator/SOURCE_PINS.json",
+      "bytes": 4362,
+      "sha256": "65f08a57af9a807225bff0e17bd0fb27b831cb88987ad08957c7c7741462d980"
+    },
+    {
+      "file": "reference/reference/operator/worker.mjs",
+      "bytes": 12684,
+      "sha256": "ef082cac41ef6f653d044a33b3801d83eb0b1bc1275a6bb9684d06a46b4d9f60"
+    },
+    {
+      "file": "reference/reference/progress-before.mjs",
+      "bytes": 4416,
+      "sha256": "e625a92bd036564224792c51dff6358f7b65124105f953df12b220a9900fb089"
+    },
+    {
+      "file": "reference/reference/progress-retained.test.mjs",
+      "bytes": 2944,
+      "sha256": "d2de8a2dd2e0ded7d0e4877bb698caccb90ebb48785915457bc2a6d6494fd08c"
+    },
+    {
+      "file": "reference/reference/R7_PUBLIC_RECEIPT.json",
+      "bytes": 1739,
+      "sha256": "338e23c9e81be3b8a820f798ba2a57d009fa08779e5ecb4c06fbb792d4f6c073"
+    },
+    {
+      "file": "reference/RESULT.json",
+      "bytes": 585,
+      "sha256": "8134665a05659a7d361c95ecbf1dfad9cb895e788940dc45e5308100c8d54f96"
+    },
+    {
+      "file": "reference/seal.mjs",
+      "bytes": 891,
+      "sha256": "838a1ec91f0fc75d79c844e519aafce6f4a5861875110124bb33414f3f2ac0d7"
+    },
+    {
+      "file": "reference/SOURCE_PINS.json",
+      "bytes": 4623,
+      "sha256": "9b77524d4d4c9955bb2bd8337768c342e85175b58551c62fdf6b6f359559264d"
+    },
+    {
+      "file": "reference/verify.mjs",
+      "bytes": 1063,
+      "sha256": "d0a3817bbd3e9f4c2ad54a32ae2692b5f5ce0dc355ee13a8c329e3928e5c44c7"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 553,
+      "sha256": "24ee5eeb954a103e5aee896a80eb3d49ee7014d9d3cd147858ed43567bb126a6"
+    },
+    {
+      "file": "SOURCE_PROOF.json",
+      "bytes": 5689,
+      "sha256": "f8cf7a1c425c469be5f6b10041c27140b824f94ac48fe47ba05e9d444e8db4a0"
+    }
+  ]
+}

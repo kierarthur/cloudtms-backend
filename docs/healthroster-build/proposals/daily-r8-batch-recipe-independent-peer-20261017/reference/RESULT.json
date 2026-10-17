@@ -1,0 +1,16 @@
+{
+  "version": "DAILY_GENUINE_R8_BATCH_RECIPE_SOURCE_CHECK_V1",
+  "tests": 38,
+  "passed": 38,
+  "holderWholeParentHunks": 3,
+  "readerWholeParentHunks": 1,
+  "originalProgressTestsRetainedAgainstPostimage": 9,
+  "controlledDelayedReadyMs": 6000,
+  "actualPublicProfileMs": [{"original":1112,"postimage":559},{"original":1061,"postimage":526}],
+  "actualRuntimeMount": false,
+  "futureR8": "NOT_PROVIDED",
+  "privateStatePreflightBrowserIpcNative": "NOT_ACCESSED_OR_RUN",
+  "sourceCallbacksSkipped": 0,
+  "crossInvocationCache": false,
+  "nativeFreshnessWorkWholeCapsChanged": false
+}
