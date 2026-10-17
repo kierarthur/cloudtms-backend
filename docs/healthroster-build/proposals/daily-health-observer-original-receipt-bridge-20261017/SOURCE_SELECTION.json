@@ -1,0 +1,33 @@
+{
+  "version": "OBSERVER_RECEIPT_BRIDGE_SELECTION_V1",
+  "originalFactory": {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/native-read.mjs",
+    "bytes": 18744,
+    "sha256": "b8449f6bc901f41c2d058c6618b11bab70337579133fd99360c6988eb820cf07"
+  },
+  "originalRootCheckpoint": "c0507d6963d3a9cd792fef9f2a9acd6c1823babf",
+  "originalRootS1File": "docs/healthroster-build/proposals/daily-health-s1-scoped-effects-observer-20261017/observer.mjs",
+  "originalRootS1RawEqual": true,
+  "newStandaloneFiles": [
+    {
+      "file": "runtime/observer-s1.mjs",
+      "bytes": 14098,
+      "sha256": "01b51a70102e4d81c8ef0c4b3d30b1d48ba1a8cbd78128ce2bfd0743d17cf1c6"
+    },
+    {
+      "file": "runtime/observer-s23.mjs",
+      "bytes": 13721,
+      "sha256": "3ce371bbc2d003b227ef6bbdf625079707027860ee9d563c997635ea8affbea5"
+    },
+    {
+      "file": "runtime/original-stage-receipt.mjs",
+      "bytes": 4263,
+      "sha256": "dad4f9f33fc31ff2c21127cef4ed15ec6dd83310d45e2d90ee72e607465ef79a"
+    }
+  ],
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "productTargets": [],
+  "original11And12ScopesChanged": false
+}

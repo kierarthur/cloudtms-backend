@@ -1,0 +1,53 @@
+{
+  "version": "OBSERVER_ORIGINAL_RECEIPT_BRIDGE_V1",
+  "oldFilesChanged": 0,
+  "productTargets": [],
+  "native": "NOT_RUN",
+  "files": [
+    {
+      "file": "FULL_PARENT_INVERSES.json",
+      "bytes": 110642,
+      "sha256": "ecb709f393a65e75e58ff63e2a7b48ee29826b53094e3192c0352a12037e2a7d"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 3375,
+      "sha256": "7055d57251b2895685357bb2f16a1d4b75280775b04336f4091c855bbc7c2333"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4322,
+      "sha256": "798da7ddfc5348e3c1bbc1a55b0952102c92f99e1bb116139d7fbb58dd8102e9"
+    },
+    {
+      "file": "runtime/observer-s1.mjs",
+      "bytes": 14098,
+      "sha256": "01b51a70102e4d81c8ef0c4b3d30b1d48ba1a8cbd78128ce2bfd0743d17cf1c6"
+    },
+    {
+      "file": "runtime/observer-s23.mjs",
+      "bytes": 13721,
+      "sha256": "3ce371bbc2d003b227ef6bbdf625079707027860ee9d563c997635ea8affbea5"
+    },
+    {
+      "file": "runtime/original-stage-receipt.mjs",
+      "bytes": 4263,
+      "sha256": "dad4f9f33fc31ff2c21127cef4ed15ec6dd83310d45e2d90ee72e607465ef79a"
+    },
+    {
+      "file": "SOURCE_SELECTION.json",
+      "bytes": 1245,
+      "sha256": "9d591462fba1eeb9dfd2d39009fa2a08d36d5e3486c9ab99b94cf6df648538e0"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 4609,
+      "sha256": "e5329914dc37ccd196c6bf3c14bf5cfac14f9b18cd9844fd11eaf1f172ec4b9a"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1411,
+      "sha256": "dd3456b94ad78425e49b4dd159c81812ac2f3c744fb9bfd8b452b4b17300abd8"
+    }
+  ]
+}
