@@ -1,0 +1,11 @@
+{
+  "version": "HEALTHROSTER_MECHANICAL_R3_ROOT_INVOCATION_V1",
+  "candidate": "96e4ebffddf38a2123d3ccc6d94f21735fa7e422",
+  "template": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\v6-owner-delivery-20261016\\LOCAL_MECHANICAL_PRE_SCHEMA_HOLDS_20261017\\R2_ROOT_DRIVER.mjs.txt",
+  "templateSha256": "7fbdeec79f8aa27c3a1a89fa3fbab18e87c81f9c8852b00b0bac7bbc7400fa94",
+  "driverSha256": "ef15586721a1be28f146370e68c319806c1b57c00da1b4f7e9dc5aa8a3090628",
+  "literalHunks": 1,
+  "qualification": "Fresh current runtime-schema compile only, interim candidate; final verifier source and source binding remain pending.",
+  "freshResources": "hr-i2-seal-pg17-20261017 / hr-i2-seal-data-20261017 / fixed output vacant",
+  "noSecretsWritten": true
+}

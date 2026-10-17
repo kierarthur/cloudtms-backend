@@ -1,0 +1,10 @@
+{
+  "version": "HEALTHROSTER_R3_OWN_PROVIDER_OUTPUT_ARCHIVE_V1",
+  "oldOutput": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\healthroster-install2-mechanical-seal-20261017",
+  "archive": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\i2-mechanical-r3-20261017-65c78b88aff8464eb83ae9357412efd1\\GENERATED_PROVIDER_OUTPUT",
+  "oldOutputVacant": true,
+  "providerBackupRawEqual": true,
+  "providerContents": "Safe provider metadata plus empty tmp directory only",
+  "filesDeleted": 0,
+  "containerAndVolumeRemovedBeforeMove": true
+}

@@ -1,0 +1,51 @@
+{
+  "version": "HEALTHROSTER_ACTUAL_R3_LOCAL_MECHANICAL_HOLD_V1",
+  "files": [
+    {
+      "file": "ROOT_DRIVER.mjs.txt",
+      "source": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\i2-mechanical-r3-20261017-65c78b88aff8464eb83ae9357412efd1\\RUN.mjs",
+      "bytes": 7133,
+      "sha256": "ef15586721a1be28f146370e68c319806c1b57c00da1b4f7e9dc5aa8a3090628"
+    },
+    {
+      "file": "SOURCE_REVIEW.json",
+      "source": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\i2-mechanical-r3-20261017-65c78b88aff8464eb83ae9357412efd1\\SOURCE_REVIEW.json",
+      "bytes": 809,
+      "sha256": "1022d984e69f0629881412ad9dbdd383b90f434d19b2ff0e491354a726103815"
+    },
+    {
+      "file": "RECEIPT.json",
+      "source": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\i2-mechanical-r3-20261017-65c78b88aff8464eb83ae9357412efd1\\RECEIPT.json",
+      "bytes": 3500,
+      "sha256": "4f7f67e7d9aae5d631038cf83901d6e48a63f1c2eb3221c44b7353fb24fa056a"
+    },
+    {
+      "file": "PROVIDER.log",
+      "source": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\i2-mechanical-r3-20261017-65c78b88aff8464eb83ae9357412efd1\\PROVIDER.log",
+      "bytes": 266,
+      "sha256": "d8559526a2bf2a727d6eb2d55a3b355b09bacdf678d34e143e030f277a91f08b"
+    },
+    {
+      "file": "SCHEMA.log",
+      "source": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\i2-mechanical-r3-20261017-65c78b88aff8464eb83ae9357412efd1\\SCHEMA.log",
+      "bytes": 811,
+      "sha256": "7b36813ecb3b45cd59d528b44eb4e88815cd8b1eba4f7dfa8d72ca2f659d0a7f"
+    },
+    {
+      "file": "PROVIDER.json",
+      "source": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\healthroster-install2-mechanical-seal-20261017\\PROVIDER.json",
+      "bytes": 1301,
+      "sha256": "43dd3ebe0f1f882071ee0d645369a0a008985edbf44d60a1dcb5901ce9a25c8e"
+    },
+    {
+      "file": "OUTPUT_ARCHIVE.json",
+      "bytes": 624,
+      "sha256": "50b2e732601f59de7e6b78556b14b2d06a62ce28dfad6d73c0950c23f941468a"
+    },
+    {
+      "file": "DISPOSITION.md",
+      "bytes": 1506,
+      "sha256": "c892f26b85e3b9f97ba0fbd5c06378287a13ee804fc8892255c47383ecc8d5cb"
+    }
+  ]
+}

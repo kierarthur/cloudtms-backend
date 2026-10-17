@@ -1,0 +1,7 @@
+# Actual R3 mechanical hold
+
+On exact pushed96e4ebff, the corrected TCP provider passed. The first schema phase stopped with SQLSTATE42501 before an application-load marker or schema checkpoint. Its own container8e5090a557bd4cd8f865e341571e7b3a5041e78e6b53efaf19257b451e7d3484 and unshared named volume were verified and removed; the original nine containers/eight volumes remain. No contract was generated, no hosted connection or business test ran, and no app data was copied.
+
+Source inspection identifies a required local prerequisite mismatch: the nonsuperuser owner is granted REFERENCES on auth.users and SELECT on vault.decrypted_secrets, while the unchanged mandatory empty-schema proof reads auth.users and vault.secrets directly. Those two base-table SELECT grants are absent from the fresh provider setup. This is a source-derived diagnosis pending the exact bounded repair and native catalogue/fresh-rebuild confirmation; the closed error alone does not identify its failing statement. Preserve all role/freshness checks and do not switch to superuser or weaken the empty-table proof.
+
+All files here are safe metadata, data-free source and fixed error text. The driver generates local-only passwords in memory; no value is in this evidence. Its generated provider-output directory will be preserved under the own R3 archive before the next fresh attempt. No image was pulled/built; no task network/cache was created. Reclaimed space was not attributed from concurrent global counters.

@@ -1,0 +1,15 @@
+file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/cloudtms-managed-psql.mjs:31
+      if (!this.closing || code !== 0) this.fail(new ManagedPsqlError('CONNECTION_CLOSED', this.sqlState()));
+                                                 ^
+
+ManagedPsqlError: Managed database writer failed: CONNECTION_CLOSED (42501)
+    at ChildProcess.<anonymous> (file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/cloudtms-managed-psql.mjs:31:50)
+    at Object.onceWrapper (node:events:631:26)
+    at ChildProcess.emit (node:events:509:28)
+    at maybeClose (node:internal/child_process:1124:16)
+    at ChildProcess._handle.onexit (node:internal/child_process:306:5) {
+  code: 'CONNECTION_CLOSED',
+  sqlState: '42501'
+}
+
+Node.js v24.15.0
