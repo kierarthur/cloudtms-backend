@@ -1,0 +1,7 @@
+{
+  "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+  "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+  "sqlSha256": "16301630f9b1aa23ae031810ed8b37f8f2ee6a7062f685348f191b053391fad8",
+  "callStartedAt": "2026-10-17T20:05:15.353Z",
+  "callReturnedAt": "2026-10-17T20:05:59.402Z"
+}

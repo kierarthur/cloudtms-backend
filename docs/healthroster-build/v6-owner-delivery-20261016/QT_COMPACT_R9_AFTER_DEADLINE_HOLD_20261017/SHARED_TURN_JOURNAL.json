@@ -1,0 +1,26 @@
+[
+  {
+    "chat": "HealthRoster",
+    "task": "CONTACT_QT_POSITIVE_QT_ADMIN_CONTROLS_V1",
+    "status": "TAKEN",
+    "takenAt": "2026-10-17T20:04:28.022Z",
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  {
+    "chat": "HealthRoster",
+    "task": "CONTACT_QT_POSITIVE_QT_ADMIN_CONTROLS_V1",
+    "status": "RELEASED",
+    "takenAt": "2026-10-17T20:04:28.022Z",
+    "releasedAt": "2026-10-17T20:06:28.815Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "key": [
+      20261013,
+      1
+    ]
+  }
+]

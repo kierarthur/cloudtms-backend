@@ -1,0 +1,63 @@
+{
+  "status": "HOLD",
+  "caseId": "QT_ADMIN_CONTROLS_V1",
+  "code": "ACTOR_SEQUENCE_WORK_BUDGET_HELD",
+  "observedErrorCode": "LOCAL_METADATA_TURN_LOST",
+  "deadlineObserved": true,
+  "localTiming": {
+    "sequenceStartedAt": "2026-10-17T20:04:28.759Z",
+    "workDeadlineAt": "2026-10-17T20:06:28.759Z",
+    "readyAt": "2026-10-17T20:05:14.140Z",
+    "resultReadAt": "2026-10-17T20:06:00.103Z",
+    "workTimerFiredAt": "2026-10-17T20:06:28.771Z"
+  },
+  "metadataDiagnostic": {
+    "version": "CONTACT_QT_FIXED_METADATA_DIAGNOSTIC_V1",
+    "phase": "AFTER",
+    "startedAt": "2026-10-17T20:06:00.154Z",
+    "spawnReturnedAt": "2026-10-17T20:06:00.827Z",
+    "firstStderrAt": null,
+    "finishedAt": "2026-10-17T20:06:28.778Z",
+    "elapsedMilliseconds": 28624,
+    "sqlstate": null
+  },
+  "rootCallTiming": {
+    "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "sqlSha256": "16301630f9b1aa23ae031810ed8b37f8f2ee6a7062f685348f191b053391fad8",
+    "callStartedAt": "2026-10-17T20:05:15.353Z",
+    "callReturnedAt": "2026-10-17T20:05:59.402Z",
+    "rootObservedCallMilliseconds": 44049,
+    "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+  },
+  "nativeClockFrames": [
+    {
+      "phase": "B_GUARD_BEFORE",
+      "readOnly": false,
+      "holderPid": 306206,
+      "backendPid": 306242,
+      "observedAt": "2026-10-17T20:05:17.881594+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T20:05:17.873732+00:00",
+      "transactionStartedAt": "2026-10-17T20:05:17.546157+00:00"
+    },
+    {
+      "phase": "B_GUARD_AFTER",
+      "readOnly": false,
+      "holderPid": 306206,
+      "backendPid": 306242,
+      "observedAt": "2026-10-17T20:05:17.988698+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T20:05:17.987194+00:00",
+      "transactionStartedAt": "2026-10-17T20:05:17.546157+00:00"
+    }
+  ],
+  "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+  "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+  "elapsedMilliseconds": 120060,
+  "completeMapsPersisted": false
+}

@@ -1,0 +1,33 @@
+[
+  {
+    "phase": "HOLDER_LAUNCHED",
+    "at": "2026-10-17T20:04:34.849Z",
+    "session": 88922
+  },
+  {
+    "phase": "READY_OBSERVED",
+    "at": "2026-10-17T20:05:14.893Z"
+  },
+  {
+    "phase": "NATIVE_CALL_STARTED",
+    "at": "2026-10-17T20:05:15.353Z"
+  },
+  {
+    "phase": "NATIVE_CALL_RETURNED",
+    "at": "2026-10-17T20:05:59.403Z",
+    "accepted": true,
+    "rolledBack": true,
+    "connectedFresh": true
+  },
+  {
+    "phase": "EXACT_NATIVE_PAYLOAD_SAVED",
+    "at": "2026-10-17T20:05:59.428Z"
+  },
+  {
+    "phase": "HOLDER_COMPLETED",
+    "at": "2026-10-17T20:06:28.852Z",
+    "dispatched": true,
+    "released": false,
+    "output": "\r\n\u001b[?25l\u001b[9;1H\u001b[?25h{\"status\":\"HOLD\",\"code\":\"ACTOR_SEQUENCE_WORK_BUDGET_HELD\"}\r\n\u001b[?9001l\u001b[?1004l"
+  }
+]

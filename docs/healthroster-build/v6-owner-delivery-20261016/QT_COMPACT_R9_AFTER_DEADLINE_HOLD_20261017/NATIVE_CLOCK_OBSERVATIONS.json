@@ -1,0 +1,30 @@
+{
+  "status": "ACTUAL_CLOCK_FRAMES_ONLY_NO_SUCCESS_VERDICT",
+  "frames": [
+    {
+      "phase": "B_GUARD_BEFORE",
+      "readOnly": false,
+      "holderPid": 306206,
+      "backendPid": 306242,
+      "observedAt": "2026-10-17T20:05:17.881594+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T20:05:17.873732+00:00",
+      "transactionStartedAt": "2026-10-17T20:05:17.546157+00:00"
+    },
+    {
+      "phase": "B_GUARD_AFTER",
+      "readOnly": false,
+      "holderPid": 306206,
+      "backendPid": 306242,
+      "observedAt": "2026-10-17T20:05:17.988698+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T20:05:17.987194+00:00",
+      "transactionStartedAt": "2026-10-17T20:05:17.546157+00:00"
+    }
+  ],
+  "sqlSha256": "16301630f9b1aa23ae031810ed8b37f8f2ee6a7062f685348f191b053391fad8"
+}
