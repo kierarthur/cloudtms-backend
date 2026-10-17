@@ -1,0 +1,310 @@
+TAP version 13
+# Subtest: immutable8c reproduces peer queued dispatch after exit-code-before-close
+ok 1 - immutable8c reproduces peer queued dispatch after exit-code-before-close
+  ---
+  duration_ms: 1.2673
+  type: 'test'
+  ...
+# Subtest: corrected queued callback skips actual dispatch after exit-code-before-close
+ok 2 - corrected queued callback skips actual dispatch after exit-code-before-close
+  ---
+  duration_ms: 0.6187
+  type: 'test'
+  ...
+# Subtest: immutable8c reproduces peer queued dispatch after signal-before-close
+ok 3 - immutable8c reproduces peer queued dispatch after signal-before-close
+  ---
+  duration_ms: 0.1088
+  type: 'test'
+  ...
+# Subtest: corrected queued callback skips actual dispatch after signal-before-close
+ok 4 - corrected queued callback skips actual dispatch after signal-before-close
+  ---
+  duration_ms: 0.0996
+  type: 'test'
+  ...
+# Subtest: immutable8c reproduces peer queued dispatch after observed-close
+ok 5 - immutable8c reproduces peer queued dispatch after observed-close
+  ---
+  duration_ms: 0.1289
+  type: 'test'
+  ...
+# Subtest: corrected queued callback skips actual dispatch after observed-close
+ok 6 - corrected queued callback skips actual dispatch after observed-close
+  ---
+  duration_ms: 0.0838
+  type: 'test'
+  ...
+# Subtest: still-live queued dispatch uses exact spawn PID once; forcedTree changes only when dispatch runs
+ok 7 - still-live queued dispatch uses exact spawn PID once; forcedTree changes only when dispatch runs
+  ---
+  duration_ms: 0.2584
+  type: 'test'
+  ...
+# Subtest: changed child.pid between scheduling and callback cannot transfer captured ownership
+ok 8 - changed child.pid between scheduling and callback cannot transfer captured ownership
+  ---
+  duration_ms: 0.1713
+  type: 'test'
+  ...
+# Subtest: normal actual close without termination keeps forcedTree false; browser proof remains separate
+ok 9 - normal actual close without termination keeps forcedTree false; browser proof remains separate
+  ---
+  duration_ms: 0.2471
+  type: 'test'
+  ...
+# Subtest: source README qualifies the JavaScript check without an OS PID-reuse immunity claim
+ok 10 - source README qualifies the JavaScript check without an OS PID-reuse immunity claim
+  ---
+  duration_ms: 0.5562
+  type: 'test'
+  ...
+# Subtest: fixed S0 bind/native/entry/real commit/submit/native/qualify/release sequence
+ok 11 - fixed S0 bind/native/entry/real commit/submit/native/qualify/release sequence
+  ---
+  duration_ms: 2.2416
+  type: 'test'
+  ...
+# Subtest: fail at bind cannot advance next phase
+ok 12 - fail at bind cannot advance next phase
+  ---
+  duration_ms: 0.388
+  type: 'test'
+  ...
+# Subtest: unclosed at bind cannot advance next phase
+ok 13 - unclosed at bind cannot advance next phase
+  ---
+  duration_ms: 0.4478
+  type: 'test'
+  ...
+# Subtest: abort at bind cannot advance next phase
+ok 14 - abort at bind cannot advance next phase
+  ---
+  duration_ms: 0.2623
+  type: 'test'
+  ...
+# Subtest: deadline at bind cannot advance next phase
+ok 15 - deadline at bind cannot advance next phase
+  ---
+  duration_ms: 0.2236
+  type: 'test'
+  ...
+# Subtest: fail at entry cannot advance next phase
+ok 16 - fail at entry cannot advance next phase
+  ---
+  duration_ms: 0.2494
+  type: 'test'
+  ...
+# Subtest: unclosed at entry cannot advance next phase
+ok 17 - unclosed at entry cannot advance next phase
+  ---
+  duration_ms: 0.1522
+  type: 'test'
+  ...
+# Subtest: abort at entry cannot advance next phase
+ok 18 - abort at entry cannot advance next phase
+  ---
+  duration_ms: 0.172
+  type: 'test'
+  ...
+# Subtest: deadline at entry cannot advance next phase
+ok 19 - deadline at entry cannot advance next phase
+  ---
+  duration_ms: 0.135
+  type: 'test'
+  ...
+# Subtest: fail at submit cannot advance next phase
+ok 20 - fail at submit cannot advance next phase
+  ---
+  duration_ms: 0.228
+  type: 'test'
+  ...
+# Subtest: unclosed at submit cannot advance next phase
+ok 21 - unclosed at submit cannot advance next phase
+  ---
+  duration_ms: 0.1485
+  type: 'test'
+  ...
+# Subtest: abort at submit cannot advance next phase
+ok 22 - abort at submit cannot advance next phase
+  ---
+  duration_ms: 0.1157
+  type: 'test'
+  ...
+# Subtest: deadline at submit cannot advance next phase
+ok 23 - deadline at submit cannot advance next phase
+  ---
+  duration_ms: 0.1117
+  type: 'test'
+  ...
+# Subtest: fail at qualify cannot advance next phase
+ok 24 - fail at qualify cannot advance next phase
+  ---
+  duration_ms: 0.155
+  type: 'test'
+  ...
+# Subtest: unclosed at qualify cannot advance next phase
+ok 25 - unclosed at qualify cannot advance next phase
+  ---
+  duration_ms: 0.1332
+  type: 'test'
+  ...
+# Subtest: abort at qualify cannot advance next phase
+ok 26 - abort at qualify cannot advance next phase
+  ---
+  duration_ms: 0.1438
+  type: 'test'
+  ...
+# Subtest: deadline at qualify cannot advance next phase
+ok 27 - deadline at qualify cannot advance next phase
+  ---
+  duration_ms: 0.1014
+  type: 'test'
+  ...
+# Subtest: unknown root control at BEFORE_READY holds
+ok 28 - unknown root control at BEFORE_READY holds
+  ---
+  duration_ms: 0.1188
+  type: 'test'
+  ...
+# Subtest: abort root control at BEFORE_READY holds
+ok 29 - abort root control at BEFORE_READY holds
+  ---
+  duration_ms: 0.0696
+  type: 'test'
+  ...
+# Subtest: unknown root control at SETUP_ENTRY_READY holds
+ok 30 - unknown root control at SETUP_ENTRY_READY holds
+  ---
+  duration_ms: 0.0814
+  type: 'test'
+  ...
+# Subtest: abort root control at SETUP_ENTRY_READY holds
+ok 31 - abort root control at SETUP_ENTRY_READY holds
+  ---
+  duration_ms: 0.6276
+  type: 'test'
+  ...
+# Subtest: unknown root control at AFTER_READY holds
+ok 32 - unknown root control at AFTER_READY holds
+  ---
+  duration_ms: 0.1294
+  type: 'test'
+  ...
+# Subtest: abort root control at AFTER_READY holds
+ok 33 - abort root control at AFTER_READY holds
+  ---
+  duration_ms: 0.1108
+  type: 'test'
+  ...
+# Subtest: unknown root control at S0_QUALIFIED_PENDING_RELEASE holds
+ok 34 - unknown root control at S0_QUALIFIED_PENDING_RELEASE holds
+  ---
+  duration_ms: 0.0795
+  type: 'test'
+  ...
+# Subtest: abort root control at S0_QUALIFIED_PENDING_RELEASE holds
+ok 35 - abort root control at S0_QUALIFIED_PENDING_RELEASE holds
+  ---
+  duration_ms: 0.0927
+  type: 'test'
+  ...
+# Subtest: original owned-child normal close is awaited; guard never invokes tree kill
+ok 36 - original owned-child normal close is awaited; guard never invokes tree kill
+  ---
+  duration_ms: 6.6759
+  type: 'test'
+  ...
+# Subtest: original abort sends only ABORT to actual captured child then awaits cooperative close
+ok 37 - original abort sends only ABORT to actual captured child then awaits cooperative close
+  ---
+  duration_ms: 0.5132
+  type: 'test'
+  ...
+# Subtest: forced original escalation targets captured live PID once and awaits tree command plus real close
+ok 38 - forced original escalation targets captured live PID once and awaits tree command plus real close
+  ---
+  duration_ms: 0.1935
+  type: 'test'
+  ...
+# Subtest: tree command refusal never becomes confirmed closure
+ok 39 - tree command refusal never becomes confirmed closure
+  ---
+  duration_ms: 0.276
+  type: 'test'
+  ...
+# Subtest: exited PID is never passed to taskkill and missing close remains HOLD
+ok 40 - exited PID is never passed to taskkill and missing close remains HOLD
+  ---
+  duration_ms: 0.115
+  type: 'test'
+  ...
+# Subtest: complete derived launcher runs all four fixed S0 phases under controlled source/ACL/filesystem doubles
+ok 41 - complete derived launcher runs all four fixed S0 phases under controlled source/ACL/filesystem doubles
+  ---
+  duration_ms: 4.1166
+  type: 'test'
+  ...
+# Subtest: complete derived launcher refuses tree-unknown without replacing real closure by parent exit
+ok 42 - complete derived launcher refuses tree-unknown without replacing real closure by parent exit
+  ---
+  duration_ms: 0.8041
+  type: 'test'
+  ...
+# Subtest: complete derived launcher refuses browser-unknown without replacing real closure by parent exit
+ok 43 - complete derived launcher refuses browser-unknown without replacing real closure by parent exit
+  ---
+  duration_ms: 0.8088
+  type: 'test'
+  ...
+# Subtest: complete derived launcher refuses exit-failed without replacing real closure by parent exit
+ok 44 - complete derived launcher refuses exit-failed without replacing real closure by parent exit
+  ---
+  duration_ms: 0.7913
+  type: 'test'
+  ...
+# Subtest: complete derived launcher refuses signal without replacing real closure by parent exit
+ok 45 - complete derived launcher refuses signal without replacing real closure by parent exit
+  ---
+  duration_ms: 0.7823
+  type: 'test'
+  ...
+# Subtest: complete derived launcher refuses wrong-phase without replacing real closure by parent exit
+ok 46 - complete derived launcher refuses wrong-phase without replacing real closure by parent exit
+  ---
+  duration_ms: 0.7888
+  type: 'test'
+  ...
+# Subtest: coordinator does not add provider, arbitrary stage or arbitrary effect argument
+ok 47 - coordinator does not add provider, arbitrary stage or arbitrary effect argument
+  ---
+  duration_ms: 0.2977
+  type: 'test'
+  ...
+# Subtest: lost turn bounds a nonclosing original owned operation without inventing a close event
+ok 48 - lost turn bounds a nonclosing original owned operation without inventing a close event
+  ---
+  duration_ms: 0.2308
+  type: 'test'
+  ...
+# Subtest: unconfirmed owned close has an additional bounded wait and never returns a closed flag
+ok 49 - unconfirmed owned close has an additional bounded wait and never returns a closed flag
+  ---
+  duration_ms: 0.1369
+  type: 'test'
+  ...
+# Subtest: non-S0 choreography phases cannot enter the genuine launcher
+ok 50 - non-S0 choreography phases cannot enter the genuine launcher
+  ---
+  duration_ms: 0.1251
+  type: 'test'
+  ...
+1..50
+# tests 50
+# suites 0
+# pass 50
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 154.0068

@@ -1,0 +1,51 @@
+[
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/owned-worker.mjs",
+    "commit": "8c4eb1f88db25ff6b7b88889be9f36dddc1387ed",
+    "bytes": 2635,
+    "sha256": "5e2e0298a27a11bf06652aeee6e3a00cca55ba540d03c5402270e3775e68d95e"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/README.md",
+    "commit": "8c4eb1f88db25ff6b7b88889be9f36dddc1387ed",
+    "bytes": 8923,
+    "sha256": "13c39e6acb334e1c4736321d42aef22c9c9e0a2b24f00106a31d03c6064a56a2"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json",
+    "commit": "8c4eb1f88db25ff6b7b88889be9f36dddc1387ed",
+    "bytes": 2417,
+    "sha256": "f3fb37a16b7e4aa256c89a9ab80b40fe070046f73333f98e2202844aefb66928"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/coordinator.test.mjs",
+    "commit": "8c4eb1f88db25ff6b7b88889be9f36dddc1387ed",
+    "bytes": 10683,
+    "sha256": "2f594c66da1a87b71de9dbc94d2e28be7697619e988c8af92a42c138f2c7254b"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-s0-stage-coordinator-independent-peer-20261017/pid-window.mjs",
+    "commit": "3cdd40d0afcc71b9e69a0e44f1ae976431e1d7a6",
+    "bytes": 2223,
+    "sha256": "b43579b0549ea609cdb88244e948ce429b3a5fcb786ff2d8febe830096cc8517"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-s0-stage-coordinator-independent-peer-20261017/PID_WINDOW_RESULTS.json",
+    "commit": "3cdd40d0afcc71b9e69a0e44f1ae976431e1d7a6",
+    "bytes": 1642,
+    "sha256": "67013faea4f99c09c82bd366d9057df0e71cf6eaa91b6f044cd8232b9941ecf5"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-s0-stage-coordinator-independent-peer-20261017/REVIEW.json",
+    "commit": "3cdd40d0afcc71b9e69a0e44f1ae976431e1d7a6",
+    "bytes": 1940,
+    "sha256": "52c330376706dd761817fa074666ce0e91fa7953f20d2ba3da6ede8adc502018"
+  }
+]

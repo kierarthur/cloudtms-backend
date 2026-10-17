@@ -1,0 +1,101 @@
+{
+  "version": "DAILY_S0_OWNED_PID_SOURCE_FORWARD_V1",
+  "heldParentCommit": "8c4eb1f88db25ff6b7b88889be9f36dddc1387ed",
+  "independentFindingCommit": "3cdd40d0afcc71b9e69a0e44f1ae976431e1d7a6",
+  "forwards": [
+    {
+      "file": "owned-worker.mjs",
+      "parent": "reference/owned-worker.mjs",
+      "payload": "payload/owned-worker.mjs",
+      "parentBytes": 2635,
+      "parentSha256": "5e2e0298a27a11bf06652aeee6e3a00cca55ba540d03c5402270e3775e68d95e",
+      "bytes": 2788,
+      "sha256": "0b0ebce2a60d2958511d3df8d8d472bdbdde688bec13f53aab313996eac20d67",
+      "edits": [
+        {
+          "before": "let child,closed=false,closing=false,forced=null,forceFailed=false,exitCode=null,resolveClose;",
+          "after": "let child,ownedPid,closed=false,closing=false,forced=null,forcedTree=false,forceFailed=false,exitCode=null,resolveClose;"
+        },
+        {
+          "before": " const force=()=>{if(closed)return;if(!child||!Number.isSafeInteger(child.pid)||child.pid<1||child.exitCode!==null||child.signalCode!==null){forceFailed=true;return;}forced??=Promise.resolve().then(()=>killTree(child.pid)).catch(()=>{forceFailed=true;});};",
+          "after": " const live=()=>child&&Number.isSafeInteger(ownedPid)&&ownedPid>0&&child.pid===ownedPid&&child.exitCode===null&&child.signalCode===null;\n const force=()=>{if(closed)return;if(!live()){forceFailed=true;return;}forced??=Promise.resolve().then(()=>{if(closed)return;if(!live()){forceFailed=true;return;}forcedTree=true;return killTree(ownedPid);}).catch(()=>{forceFailed=true;});};"
+        },
+        {
+          "before": "child=spawnChild(file,args,options);",
+          "after": "child=spawnChild(file,args,options);ownedPid=child.pid;"
+        },
+        {
+          "before": "cooperativeAbort:closing,forcedTree:forced!==null,exitCode",
+          "after": "cooperativeAbort:closing,forcedTree,exitCode"
+        }
+      ],
+      "wholeRawInverse": true
+    },
+    {
+      "file": "README.md",
+      "parent": "reference/README.md",
+      "payload": "payload/README.md",
+      "parentBytes": 8923,
+      "parentSha256": "13c39e6acb334e1c4736321d42aef22c9c9e0a2b24f00106a31d03c6064a56a2",
+      "bytes": 9315,
+      "sha256": "d3ce40915955c31a33571937c5131e3b89a14f08f6330e8ddd5e79f59d913796",
+      "edits": [
+        {
+          "before": "It never searches processes or targets an exited/reused PID.",
+          "after": "It never searches processes. It captures the worker PID once at spawn and rechecks the same ChildProcess's observed close/exit/signal state inside the queued callback immediately before dispatch. A scheduled or skipped callback is not an actual tree dispatch or browser-close proof. These JavaScript checks narrow the observed scheduling window; they do not provide general operating-system PID-reuse race immunity between the final check and taskkill."
+        }
+      ],
+      "wholeRawInverse": true
+    }
+  ],
+  "manifest": {
+    "parent": "reference/MANIFEST.json",
+    "payload": "payload/MANIFEST.json",
+    "beforeRows": [
+      {
+        "file": "owned-worker.mjs",
+        "bytes": 2635,
+        "sha256": "5e2e0298a27a11bf06652aeee6e3a00cca55ba540d03c5402270e3775e68d95e"
+      },
+      {
+        "file": "README.md",
+        "bytes": 8923,
+        "sha256": "13c39e6acb334e1c4736321d42aef22c9c9e0a2b24f00106a31d03c6064a56a2"
+      }
+    ],
+    "afterRows": [
+      {
+        "file": "owned-worker.mjs",
+        "bytes": 2788,
+        "sha256": "0b0ebce2a60d2958511d3df8d8d472bdbdde688bec13f53aab313996eac20d67"
+      },
+      {
+        "file": "README.md",
+        "bytes": 9315,
+        "sha256": "d3ce40915955c31a33571937c5131e3b89a14f08f6330e8ddd5e79f59d913796"
+      }
+    ],
+    "retainedRows": 13,
+    "wholeRawInverse": true
+  },
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/owned-worker.mjs",
+      "source": "payload/owned-worker.mjs",
+      "beforeSha256": "5e2e0298a27a11bf06652aeee6e3a00cca55ba540d03c5402270e3775e68d95e",
+      "afterSha256": "0b0ebce2a60d2958511d3df8d8d472bdbdde688bec13f53aab313996eac20d67"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/README.md",
+      "source": "payload/README.md",
+      "beforeSha256": "13c39e6acb334e1c4736321d42aef22c9c9e0a2b24f00106a31d03c6064a56a2",
+      "afterSha256": "d3ce40915955c31a33571937c5131e3b89a14f08f6330e8ddd5e79f59d913796"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json",
+      "source": "payload/MANIFEST.json",
+      "beforeSha256": "f3fb37a16b7e4aa256c89a9ab80b40fe070046f73333f98e2202844aefb66928",
+      "afterSha256": "7a8a4278f47483ae91794a239181f173aae7ee83c63bbb8b0dc62b25f8730474"
+    }
+  ]
+}

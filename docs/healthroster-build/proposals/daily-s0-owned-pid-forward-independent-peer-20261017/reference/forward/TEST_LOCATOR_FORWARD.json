@@ -1,0 +1,31 @@
+{
+  "originalTests": 40,
+  "productionBodyChanges": 0,
+  "testLocatorEdits": [
+    {
+      "before": "from './sequence.mjs'",
+      "after": "from '../daily-health-s0-stage-coordinator-20261017/sequence.mjs'"
+    },
+    {
+      "before": "from './owned-worker.mjs'",
+      "after": "from './factory-loader.mjs'"
+    },
+    {
+      "before": "from './phase.mjs'",
+      "after": "from '../daily-health-s0-stage-coordinator-20261017/phase.mjs'"
+    },
+    {
+      "before": "from './phase-parent.mjs'",
+      "after": "from '../daily-health-s0-stage-coordinator-20261017/phase-parent.mjs'"
+    },
+    {
+      "before": "new URL('./phase-parent.mjs',import.meta.url)",
+      "after": "new URL('../daily-health-s0-stage-coordinator-20261017/phase-parent.mjs',import.meta.url)"
+    },
+    {
+      "before": "new URL('./coordinate.mjs',import.meta.url)",
+      "after": "new URL('../daily-health-s0-stage-coordinator-20261017/coordinate.mjs',import.meta.url)"
+    }
+  ],
+  "wholeRawTestInverse": true
+}
