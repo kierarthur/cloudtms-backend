@@ -5,13 +5,14 @@ import {profile,parseArguments,configureLocalProcess,assertProject,inspectOwnRes
 const candidate=parseArguments(process.argv.slice(2));
 const sourceIdentity=assertProject(repoRoot,candidate);
 configureLocalProcess(process.env);
+if(typeof process.env.POSTGRES_PASSWORD!=='string'||process.env.POSTGRES_PASSWORD.length===0)throw Error('I2_SEAL_LOCAL_ADMIN_PASSWORD_REQUIRED');
 const {container,owner,database}=profile,resources=inspectOwnResources();
 const output=path.join(repoRoot,profile.output);
 if(fs.existsSync(output))throw Error('I2_SEAL_FRESH_OUTPUT_REQUIRED');
 function execute(sql,target='postgres'){
- const result=spawnSync('docker',['exec','-i',container,'psql','-U','postgres','-d',target,
+ const result=spawnSync('docker',['exec','-i','--env','PGPASSWORD',container,'psql','-h','127.0.0.1','-U','postgres','-d',target,
   '-X','-q','-A','-t','-v','ON_ERROR_STOP=on','-v','VERBOSITY=sqlstate','-v','SHOW_CONTEXT=never'],
- {input:sql,encoding:'utf8',windowsHide:true,maxBuffer:2000000});
+ {input:sql,encoding:'utf8',windowsHide:true,maxBuffer:2000000,env:{...process.env,PGPASSWORD:process.env.POSTGRES_PASSWORD}});
  if(result.status!==0)throw Error('OWN_LOCAL_PROVIDER_SQL_FAILED_'+(result.stderr.match(/(?:ERROR|FATAL):\s*([A-Z0-9]{5})/)?.[1]??'CONNECTION'));
  return result.stdout.trim();
 }

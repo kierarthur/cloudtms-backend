@@ -1,0 +1,10 @@
+{
+  "rows": [
+    {
+      "target": "scripts/healthroster-install2-local-provider.mjs",
+      "changed": true,
+      "beforeSha256": "d891d33aa0065d0dd4a05d0be37059899bbcbc66bebcf620a7611daf4a5aca64",
+      "sha256": "2caf96a8d898c7650a6a23f7156ee43f8b73db6fab6830ef21484973e39fcc49"
+    }
+  ]
+}

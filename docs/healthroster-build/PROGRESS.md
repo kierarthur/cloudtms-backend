@@ -1555,3 +1555,6 @@ Fresh-only local mechanical contract seal source passes10 controlled tests and e
 
 
 17 October17:58 local mechanical schema preparation held before schema compilation: launcherpostgres argv omission corrected; then original provider fixture refused Unix-socket connection because inet_server_addr must be non-null. Both own task containers/volumes verified and removed immediately; no contract/schema/hosted change. TCP provider source correction under review, original guards retained. Exact receipts/secret-free drivers preserved in LOCAL_MECHANICAL_PRE_SCHEMA_HOLDS_20261017.
+
+
+17 October local provider TCP/admin environment correction accepted after4 complete actual-body controlled tests and exact raw inverses. Ownlocal attempts/cleanup remain historical; all original resource/fixture guards and loader/caps retained. Further mechanical schema/contract execution is deferred until genuineDaily/native source qualification because generated-contract changes would correctly invalidate the current strict Daily source binding. This sequencing preserves every gate and avoids invalidating a fresh auth session.

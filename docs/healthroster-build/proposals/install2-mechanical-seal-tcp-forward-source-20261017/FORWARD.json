@@ -1,0 +1,35 @@
+{
+  "target": "scripts/healthroster-install2-local-provider.mjs",
+  "beforeSha256": "d891d33aa0065d0dd4a05d0be37059899bbcbc66bebcf620a7611daf4a5aca64",
+  "afterSha256": "2caf96a8d898c7650a6a23f7156ee43f8b73db6fab6830ef21484973e39fcc49",
+  "hunks": [
+    {
+      "before": "configureLocalProcess(process.env);",
+      "after": "configureLocalProcess(process.env);\nif(typeof process.env.POSTGRES_PASSWORD!=='string'||process.env.POSTGRES_PASSWORD.length===0)throw Error('I2_SEAL_LOCAL_ADMIN_PASSWORD_REQUIRED');"
+    },
+    {
+      "before": "['exec','-i',container,'psql','-U','postgres','-d',target,",
+      "after": "['exec','-i','--env','PGPASSWORD',container,'psql','-h','127.0.0.1','-U','postgres','-d',target,"
+    },
+    {
+      "before": "{input:sql,encoding:'utf8',windowsHide:true,maxBuffer:2000000}",
+      "after": "{input:sql,encoding:'utf8',windowsHide:true,maxBuffer:2000000,env:{...process.env,PGPASSWORD:process.env.POSTGRES_PASSWORD}}"
+    }
+  ],
+  "commandForward": {
+    "before": "--env POSTGRES_PASSWORD postgres:17.11-bookworm -c jit=off",
+    "after": "--env POSTGRES_PASSWORD postgres:17.11-bookworm postgres -c jit=off",
+    "beforeSha256": "50937fe789dd21c02fea2a4406b5d45f66487a7884580ec40c26e33e487127c2",
+    "afterSha256": "55594ad0fdd75cce0fc4749d9018cbdd228b60caf134bf3cb23e48bda274d58c"
+  },
+  "unchangedProfile": {
+    "path": "scripts/healthroster-install2-local-seal-profile.mjs",
+    "bytes": 6315,
+    "sha256": "16d33a3d5803610f2c17adbdb1bf207f61c7c48c217daac782d2a96d4867b5f8"
+  },
+  "unchangedSchema": {
+    "path": "scripts/healthroster-install2-local-schema.mjs",
+    "bytes": 11569,
+    "sha256": "372dd18d33cd976379c82350b4dd386e02b45844aab31f7cd2765c0720346dbe"
+  }
+}

@@ -1,0 +1,69 @@
+# REVIEW ONLY. Not a launcher. Never dot-source this file during source review.
+# All commands below are future root-owned mechanical-seal steps, not authority
+# to run Docker/a database now. No credentials or environment dumps are included.
+
+# PRE-FLIGHT: active Codex tasks/worktrees and migration report must be reviewed.
+# Confirm Docker Desktop's approved D: disk location from actual nonsecret storage
+# evidence; DockerRootDir inside the Linux VM alone does not prove the host drive.
+Get-Volume -DriveLetter D | Select-Object DriveLetter,Size,SizeRemaining
+docker info --format '{{json .DockerRootDir}}'
+docker system df --format '{{json .}}'
+docker container ls --all --format '{{.ID}} {{.Names}} {{.Image}} {{.Status}}'
+docker image ls --digests --format '{{.Repository}} {{.Tag}} {{.ID}} {{.Digest}}'
+docker volume ls --format '{{.Name}} {{.Driver}}'
+docker network ls --format '{{.ID}} {{.Name}} {{.Driver}}'
+# Check every command exit status; Docker/inventory failure is not vacancy.
+docker container ls --all --filter 'name=^/hr-i2-seal-pg17-20261017$' --format '{{.Names}}'
+docker volume ls --filter 'name=^hr-i2-seal-data-20261017$' --format '{{.Name}}'
+# Both results must be empty, and the fixed output directory must not exist.
+docker image inspect --format '{{.Id}}' postgres:17.11-bookworm
+# Missing image: HOLD; no auto pull or broad cleanup.
+
+# ROOT-OWNED CONSTRUCTION, after all preflight checks and source approval:
+# Root supplies ephemeral process-only POSTGRES_PASSWORD and PGPASSWORD via its
+# non-disclosing local mechanism. Do not put values on a command line or in files.
+# No fixed/weak example credential is supplied. Never print those values.
+docker volume create --driver local --label codex.task=hr-i2-seal-20261017 hr-i2-seal-data-20261017
+docker run --detach --pull=never --restart=no --network bridge --name hr-i2-seal-pg17-20261017 --label codex.task=hr-i2-seal-20261017 --publish 127.0.0.1:55448:5432 --mount type=volume,source=hr-i2-seal-data-20261017,target=/var/lib/postgresql/data --env POSTGRES_PASSWORD postgres:17.11-bookworm postgres -c jit=off -c pg_show_plans.is_enabled=off
+docker exec --user postgres hr-i2-seal-pg17-20261017 pg_isready -U postgres -d postgres
+# Require ready; never start/reuse an old task container. No business workload.
+
+# Fixed nonsecret process settings, scoped to the root's own process/children:
+$env:CLOUDTMS_ALLOW_LOCAL='1'
+$env:CLOUDTMS_LOGICAL_POSTGRES_OWNER='CURRENT_USER'
+$env:CLOUDTMS_DATABASE_URL='postgresql://cloudtms_hr_install2_seal_owner@127.0.0.1:55448/banking_modal_v2_test'
+$env:PGOPTIONS='-c jit=off -c pg_show_plans.is_enabled=off'
+$env:TEMP='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/healthroster-install2-mechanical-seal-20261017/tmp'
+$env:TMP=$env:TEMP
+# Start in actual physical D: I2 after checking repo/Git/common/source/push.
+# Replace ACTUAL_CANDIDATE only with the real reviewed committed/pushed HEAD.
+node scripts/healthroster-install2-local-provider.mjs NEW --candidate=ACTUAL_CANDIDATE
+node scripts/healthroster-install2-local-schema.mjs NEW --candidate=ACTUAL_CANDIDATE
+npm run db:contract:seal-local
+npm run db:contract:verify
+# No CHANGED/replay, fixture/test programme, local acceptance or hosted operation.
+# Review the complete generated contract, preserve receipts; root owns Git.
+
+# CLEANUP, immediately after complete or failed mechanical work and own clients
+# closed. Re-read active tasks/inventory; refuse any uncertain ownership.
+docker inspect --format '{{json .Name}} {{json .Config.Image}} {{json .Config.Labels}} {{json .HostConfig.PortBindings}} {{json .Mounts}}' hr-i2-seal-pg17-20261017
+docker volume inspect --format '{{json .Name}} {{json .Driver}} {{json .Scope}} {{json .Labels}} {{json .Options}} {{json .UsageData}}' hr-i2-seal-data-20261017
+docker container ls --all --filter volume=hr-i2-seal-data-20261017 --format '{{.ID}} {{.Names}} {{.Status}}'
+# Require exact label/image/name/single named mount/loopback and no other consumer.
+docker stop hr-i2-seal-pg17-20261017
+docker rm hr-i2-seal-pg17-20261017
+docker volume rm hr-i2-seal-data-20261017
+docker container ls --all --filter 'name=^/hr-i2-seal-pg17-20261017$' --format '{{.Names}}'
+docker volume ls --filter 'name=^hr-i2-seal-data-20261017$' --format '{{.Name}}'
+docker system df --format '{{json .}}'
+# Clear only the root's task-scoped environment afterwards; do not change user/
+# machine variables. Report actual removed IDs/names and measured reclaimed
+# bytes only when available; concurrent global disk deltas are not attribution.
+# Existing base image/all other resources remain; no broad prune/network/image/
+# build-cache removal, Docker disk deletion or compaction. This task built/pulled
+# no image and created no task network/build cache/anonymous volume.
+# Canonical temp trees normally clean themselves on process exit. If leftovers
+# remain, first verify resolved absolute path is the exact task's D: tmp parent,
+# no running own process needs it, and inspect its owned child names. Any later
+# recursive deletion must use native PowerShell Remove-Item -LiteralPath on only
+# that verified task tmp target; never compose deletion across shells.
