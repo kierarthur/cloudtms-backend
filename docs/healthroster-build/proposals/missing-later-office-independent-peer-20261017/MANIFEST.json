@@ -1,0 +1,30 @@
+{
+  "version": "OFFICE_MISSING_LATER_INDEPENDENT_PEER_V1",
+  "files": [
+    {
+      "file": "COUNTER_SOURCES.json",
+      "bytes": 3167,
+      "sha256": "ebfd216b7a2aee73c198b3ecbedffabedcaa516008af145a80b47e0977bc3a85"
+    },
+    {
+      "file": "peer.test.mjs",
+      "bytes": 3729,
+      "sha256": "b43e06f425b6f209d0ddf6e5a58e1323081911f1bd188aedeb58da65b49d6414"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 567,
+      "sha256": "826bd59b4377541f807f72ada7d9061e0fa55fe85cb7f1f7454a22d4a8a62552"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 3854,
+      "sha256": "41344a648d42434412f71c41d3b13e3ca1b6724a2274d3cbd6457ea3c3447ce4"
+    },
+    {
+      "file": "SOURCE_RESULTS.json",
+      "bytes": 690,
+      "sha256": "b0527dbdc2884bdea56dfff855653f5417c00f1f5f97baacbff72f933cf88721"
+    }
+  ]
+}

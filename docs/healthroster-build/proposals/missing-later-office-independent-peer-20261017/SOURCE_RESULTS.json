@@ -1,0 +1,18 @@
+{
+  "verdict": "PASS",
+  "oldCommit": "cad4fd975dbe2e9d3bfecdd90b81c32408fb28ec",
+  "correctedCommit": "353d402f7d44efb8693775f8922f26fabd8c31dd",
+  "originalManifestSha256": "d3deee0a03d14827f0a5278593090b6af0c716ee2b6de333f7a1024a5bccde1b",
+  "forwardManifestSha256": "9838cfe1afae624929b125872598861fce16ea9c24a97527875e23bab5641feb",
+  "forwardFrozenFiles": 12,
+  "oldManifestRecordsComposed": 24,
+  "completeParentReversals": 13,
+  "literalHunks": 30,
+  "explicitCompleteRawGitCheckoutForms": 52,
+  "backendSourcePinsCurrentIndexHistorical": 6,
+  "authorityPins": 4,
+  "runtimeTargets": 6,
+  "nativeCalls": 0,
+  "BankSemanticBodyReads": 0,
+  "privateAccess": false
+}
