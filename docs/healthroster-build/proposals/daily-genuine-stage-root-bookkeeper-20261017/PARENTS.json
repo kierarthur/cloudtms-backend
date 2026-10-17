@@ -151,9 +151,9 @@
     },
     {
       "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/git-image-batch.mjs",
-      "commit": "ef3fbd69c5540a8b7b4157da0b72a537a3a033a1",
-      "bytes": 17997,
-      "sha256": "25b77b9234a879fd2ca18bca7d8cf10547ad644a83513ccf050dab171a011426"
+      "commit": "d678877b165c27bbb045e5d097cbac76c574d39b",
+      "bytes": 23257,
+      "sha256": "ae3053a74df75781fdf155c1c94fd3bd55bbd617d59336ed6f414732bdf0eaec"
     },
     {
       "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/stage.mjs",
