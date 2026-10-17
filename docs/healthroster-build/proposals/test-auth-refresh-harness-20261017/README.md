@@ -1,0 +1,5 @@
+Unfinished source checkpoint. No runnable authentication invocation has been authored or executed. No credentials or saved-state contents were read, copied or printed. The reference files are the approved public auth harness and config from TEST-Frontend; SOURCE_PINS records their complete saved bytes and explicit CRLF/Git-LF comparison boundary.
+
+The proposed invocation will retain the existing login UI and 2FA refusal, use a standalone Playwright child to avoid test-runner error-context captures, load the approved env only inside that child, and write only fresh ignored I2 state after genuine ME/admin and exact queries-workspace admission. Root supplied the fixed authFetch literals and auth401Mode return requirement. Existing shared state remains untouched. Existing R3 static CDN origins in policy.mjs are source-only draft scope and await final review.
+
+Work is checkpointed while the root-requested Source R2 alias correction takes priority. No root command is available at this checkpoint. Source tests, browser/network/login, new state, native calls and authentication refresh are NOT_RUN.
