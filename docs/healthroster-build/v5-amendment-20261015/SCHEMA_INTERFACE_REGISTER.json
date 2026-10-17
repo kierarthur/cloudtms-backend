@@ -7373,5 +7373,19 @@
     "native": "NOT_RUN",
     "fullCanonicalRestoration": "NOT_RUN",
     "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PURE_R2_ALIAS_ROOT_REVIEW_20261017.json"
+  },
+  "source_status_child_native_r2_20261017": {
+    "status": "PASS_COMPONENT_AND_ORIGINAL_CANONICAL_RESTORATION",
+    "executionCommit": "aa3b541d48767215262d622cfa974349206a1c5d",
+    "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_STATUS_CHILD_NATIVE_R2_PASS_20261017.json",
+    "statements": 19,
+    "positiveBoundaries": 4,
+    "negativeRefusals": 12,
+    "qualifiedBackgroundReceiptCreates": 1,
+    "fixtureMatches": 0,
+    "existingKeyHelperReplaced": false,
+    "ownTurnUnlockedAndClosed": true,
+    "publicFinancialSuccess": "NOT_PROVIDED",
+    "install2": "NOT_INSTALLED"
   }
 }

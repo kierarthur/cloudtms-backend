@@ -1,0 +1,320 @@
+{
+  "accepted": true,
+  "databaseTarget": "agency_test",
+  "database": "cloudtms_test_clone",
+  "label": "HR_SOURCE_STATUS_CHILD_PURE_2FA2FFF957A595FF60853480C36CDF91",
+  "sqlSha256": "e9f21b31a616528af6a0cd2ade8d93cd0e4dc9ffea60b8826bb4b3c01e5c788d",
+  "statementCount": 19,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_guard_clock"
+      ],
+      "rows": [
+        {
+          "hr_guard_clock": {
+            "phase": "B_GUARD_BEFORE",
+            "readOnly": false,
+            "holderPid": 267414,
+            "backendPid": 266097,
+            "observedAt": "2026-10-17T08:16:29.521269+00:00",
+            "databaseOid": 324139,
+            "holderGranted": true,
+            "physicalDatabase": "cloudtms_test_clone",
+            "statementStartedAt": "2026-10-17T08:16:29.51722+00:00",
+            "transactionStartedAt": "2026-10-17T08:16:29.313257+00:00"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 7,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_guard_clock"
+      ],
+      "rows": [
+        {
+          "hr_guard_clock": {
+            "phase": "B_GUARD_AFTER",
+            "readOnly": false,
+            "holderPid": 267414,
+            "backendPid": 266097,
+            "observedAt": "2026-10-17T08:16:29.570456+00:00",
+            "databaseOid": 324139,
+            "holderGranted": true,
+            "physicalDatabase": "cloudtms_test_clone",
+            "statementStartedAt": "2026-10-17T08:16:29.569321+00:00",
+            "transactionStartedAt": "2026-10-17T08:16:29.313257+00:00"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 8,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 9,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "?column?"
+      ],
+      "rows": [
+        {
+          "?column?": "HR_REHEARSAL_TRANSACTION_JSON {\"xid\": \"414570562\", \"database\": \"cloudtms_test_clone\", \"epochZero\": true, \"backendPid\": 266097}"
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 10,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 11,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 12,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 13,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 14,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 15,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "result"
+      ],
+      "rows": [
+        {
+          "result": "HR_SOURCE_STATUS_CHILD_PURE_PASS_4_12"
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 16,
+      "command": "RESET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 17,
+      "command": "RESET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 18,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "?column?"
+      ],
+      "rows": [
+        {
+          "?column?": "HR_FIXTURE_OBSERVATION_JSON {\"xid\": \"414570562\", \"rows\": [], \"unit\": 0, \"database\": \"cloudtms_test_clone\", \"epochZero\": true, \"backendPid\": 266097}"
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 19,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "jsonb_build_object"
+      ],
+      "rows": [
+        {
+          "jsonb_build_object": {
+            "xid": "414570562",
+            "marker": "hr_install2_2fa2fff957a595ff60853480c36cdf91",
+            "holderPid": 267414,
+            "backendPid": 266097,
+            "markerRows": 0,
+            "observedAt": "2026-10-17T08:16:29.959517+00:00",
+            "databaseOid": 324139,
+            "noRoleSwitch": true,
+            "holderGranted": true,
+            "markerPresent": true,
+            "physicalDatabase": "cloudtms_test_clone",
+            "statementStartedAt": "2026-10-17T08:16:29.955838+00:00",
+            "transactionStartedAt": "2026-10-17T08:16:29.313257+00:00"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "set_config"
+        ],
+        "rows": [
+          {
+            "set_config": "pg_catalog, public"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": "{\"module\": \"LEGACY:1\", \"identityTest\": true, \"markerAbsent\": true, \"applyingCount\": 0, \"latestRelease\": {\"commit\": \"f743b81fe537830d81b1de93ec4f9cb0331532a7\", \"status\": \"VERIFIED\", \"releaseId\": \"20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537\", \"completedAt\": \"2026-10-14T15:47:03.075975+00:00\", \"installedContract\": \"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\", \"repositoryContract\": \"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\"}, \"customerKeyNull\": true, \"physicalDatabase\": \"cloudtms_test_clone\"}"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "readOnly": true,
+              "holderPid": 267414,
+              "backendPid": 266453,
+              "observedAt": "2026-10-17T08:16:30.124177+00:00",
+              "databaseOid": 324139,
+              "noRoleSwitch": true,
+              "holderGranted": true,
+              "physicalDatabase": "cloudtms_test_clone",
+              "statementStartedAt": "2026-10-17T08:16:30.123083+00:00",
+              "transactionStartedAt": "2026-10-17T08:16:30.013758+00:00"
+            }
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "readOnly": true,
+              "backendPid": 266453,
+              "databaseOid": 324139,
+              "noRoleSwitch": true,
+              "physicalDatabase": "cloudtms_test_clone",
+              "statusChildNameCount": 0
+            }
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+  ]
+}

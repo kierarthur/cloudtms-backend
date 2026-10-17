@@ -1,0 +1,236 @@
+{
+  "version": "ROOT_SOURCE_STATUS_CHILD_NATIVE_R2_PASS_V1",
+  "reviewedExecutionCommit": "aa3b541d48767215262d622cfa974349206a1c5d",
+  "authorCommit": "d56db402e8b415a1303b0ae5956ceab2ec6822ca",
+  "independentPeerCommit": "b8293a0d306e9a94b32455a24ab32238e23f9026",
+  "actualNativeResultFile": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_STATUS_CHILD_NATIVE_R2_UNCHANGED_RESULT_20261017.json",
+  "actualNativeResultSha256": "a6e9373f6f263494e78c32168d33b16d08abab6f1b74d358e8ff260d0a427157",
+  "nativeStatementCount": 19,
+  "accepted": true,
+  "explicitOwnReleaseFromOriginalJournal": {
+    "chat": "HealthRoster",
+    "task": "SOURCE_STATUS_CHILD_EXACT_PURE_NATIVE_PROOF",
+    "status": "RELEASED",
+    "takenAt": "2026-10-17T08:15:56.765Z",
+    "releasedAt": "2026-10-17T08:17:03.884Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": true,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "summary": {
+    "status": "PASS_EXACT_PURE_PROGRAMME_AND_ORIGINAL_CANONICAL_RESTORATION",
+    "scope": "SOURCE_STATUS_CHILD_PURE_NO_BUSINESS_DML_BOTH_COMPLETE_BACKGROUND_RELATIONS_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "programmeSha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64",
+    "programmeBytes": 20447,
+    "definitions": 1,
+    "positiveBoundaryVectors": 4,
+    "negativeBoundaryRefusals": 12,
+    "existingDependencyReplaced": false,
+    "sqlSha256": "e9f21b31a616528af6a0cd2ade8d93cd0e4dc9ffea60b8826bb4b3c01e5c788d",
+    "rolledBack": true,
+    "connectedFresh": true,
+    "markerAbsent": true,
+    "realMarkerCreatedInB": true,
+    "businessFixtureRows": 0,
+    "statusChildAbsentOnFreshVerification": true,
+    "readerPids": {
+      "holder": 267414,
+      "before": 267439,
+      "nativeB": 266097,
+      "mcpVerification": 266453,
+      "after": 267461
+    },
+    "localTransport": {
+      "before": {
+        "stdoutBytes": 28424402,
+        "snapshotUtf8Bytes": 28424226,
+        "snapshotSha256": "138d88bb51ff62b7d0bdcacfda552e6000ee20784cd40c6ab5c1353149a0b519",
+        "frameCount": 2
+      },
+      "after": {
+        "stdoutBytes": 28425160,
+        "snapshotUtf8Bytes": 28424610,
+        "snapshotSha256": "ef121b75a97d5c2036c5ddded24372d8d325f85d8961aaa59eb74a54a317d520",
+        "frameCount": 3,
+        "fixtureProofUtf8Bytes": 372,
+        "fixtureProofSha256": "3f98254946b24bf4eb6b12a2bfadd2845394d62721cb74a857d91852ee0b485c"
+      }
+    },
+    "before": {
+      "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+      "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+      "relationCensus": "d54216995c5217b9493feabbca0eb34778ac302eff81afc36c1f44044df82eb8",
+      "businessCountsFingerprint": "9cd952dae3617b8c2876662ddb3e8d7d4afd1a82c31994b75ed1d97fa9cef532",
+      "businessRowsFingerprint": "17da2913f3b8cda6da5556ca10f94b0ac283404bc6ef7f8f853c89b036913aa9",
+      "businessRelations": [
+        {
+          "hash": "c320931a069b7b3e8eddecec36e054c474fb8f0f83896d4d86e7faa4828ba700",
+          "count": 74419,
+          "relation": "private.candidate_daily_batch_receipts"
+        },
+        {
+          "hash": "7833e8121d9652591fd1e16455a8895fe672ff3293fbf57c88de84235d15c221",
+          "count": 20,
+          "relation": "public.ts_financials_outbox"
+        }
+      ],
+      "otherActivityCount": 0
+    },
+    "after": {
+      "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+      "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+      "relationCensus": "d54216995c5217b9493feabbca0eb34778ac302eff81afc36c1f44044df82eb8",
+      "businessCountsFingerprint": "67f768756408da8d3cbece8cf3ec062b2afc0c3a3fec0b5c53215b7ee31715ee",
+      "businessRowsFingerprint": "2cfe4b364a145ae9ed5dd217aee7746f0430c9d0dec2ed58c0deae3ade864f96",
+      "businessRelations": [
+        {
+          "hash": "16e87e73555bf8283436f550f52349672dc3b4f9b6a8f09ab75f8e967a73a0a4",
+          "count": 74420,
+          "relation": "private.candidate_daily_batch_receipts"
+        },
+        {
+          "hash": "7833e8121d9652591fd1e16455a8895fe672ff3293fbf57c88de84235d15c221",
+          "count": 20,
+          "relation": "public.ts_financials_outbox"
+        }
+      ],
+      "otherActivityCount": 0
+    },
+    "restoration": {
+      "connectedFresh": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "module": "LEGACY:1",
+      "markerAbsent": true,
+      "compared": [
+        "ledgerFingerprint",
+        "catalogueFingerprint",
+        "businessCountsFingerprint",
+        "businessRowsFingerprint"
+      ],
+      "liveRestoration": {
+        "status": "LIVE_TEST_RESTORATION_QUALIFIED",
+        "ownerRuling": "14 October 2026: background changes require attribution, never job pause",
+        "relationCount": 2,
+        "unchangedBusinessRelations": 1,
+        "qualifiedBusinessChanges": [
+          {
+            "relation": "private.candidate_daily_batch_receipts",
+            "beforeCount": 74419,
+            "afterCount": 74420,
+            "beforeHash": "c320931a069b7b3e8eddecec36e054c474fb8f0f83896d4d86e7faa4828ba700",
+            "afterHash": "16e87e73555bf8283436f550f52349672dc3b4f9b6a8f09ab75f8e967a73a0a4",
+            "created": 1,
+            "updated": 0,
+            "attribution": "NATIVE_SIGNED_SYSTEM_PROJECTION_CLAIM_RECEIPT",
+            "fixtureMatches": 0
+          }
+        ],
+        "parentRollback": {
+          "database": "cloudtms_test_clone",
+          "backendPid": 266097,
+          "xid": "414570562",
+          "status": "aborted",
+          "connectedFresh": true
+        },
+        "fixtureAbsence": {
+          "allUnchangedRelationsBound": true,
+          "exceptionCaptureUnits": 1,
+          "observedExceptionFixtureKeys": 0,
+          "remaining": 0
+        },
+        "writerProof": {
+          "matched": true,
+          "routines": [
+            {
+              "schema": "private",
+              "identity": "_candidate_daily_json_sha256_v1(p_value jsonb)",
+              "definitionSha256": "91bb08b79571e0e9937e8d82f4388959eea6dadf9981e259e537e7cb7fc199fd"
+            },
+            {
+              "schema": "public",
+              "identity": "candidate_daily_projection_claim_v1(p_internal_context jsonb, p_claim_request_id uuid, p_idempotency_key text, p_target text, p_claimant text, p_max_items integer, p_lease_seconds integer, p_correlation_id text)",
+              "definitionSha256": "f9323cdcb4f2163f97c8b0c31bf1f0f92c3e2766041f0e0571c3dc22698eae3d"
+            },
+            {
+              "schema": "public",
+              "identity": "tsfin_dequeue_batch_ids(p_limit integer)",
+              "definitionSha256": "3daeab18828c11b4b18a42cd07842f1c5fcc672e4940aa5824830a201a26e82d"
+            },
+            {
+              "schema": "public",
+              "identity": "tsfin_work_fail(p_id uuid, p_error text)",
+              "definitionSha256": "02f9b0d49608eeb7525a848c25eed3196f02dc24cf7493d2ec45060fa8701ace"
+            }
+          ],
+          "authority": "Exact original sealed four writer records equal genuine complete C-before and distinct C-after catalogue records"
+        },
+        "backgroundPaused": false,
+        "proofSha256": "19287cf38622bfb6b487eaff1ba139f2b4d1135dd356f1b6a1b4f2de69aa5fde"
+      },
+      "otherActivityCountObserved": 0,
+      "activityIsRestorationEvidence": false
+    },
+    "nativeClockFrames": [
+      {
+        "phase": "B_GUARD_BEFORE",
+        "readOnly": false,
+        "holderPid": 267414,
+        "backendPid": 266097,
+        "observedAt": "2026-10-17T08:16:29.521269+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T08:16:29.51722+00:00",
+        "transactionStartedAt": "2026-10-17T08:16:29.313257+00:00"
+      },
+      {
+        "phase": "B_GUARD_AFTER",
+        "readOnly": false,
+        "holderPid": 267414,
+        "backendPid": 266097,
+        "observedAt": "2026-10-17T08:16:29.570456+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T08:16:29.569321+00:00",
+        "transactionStartedAt": "2026-10-17T08:16:29.313257+00:00"
+      }
+    ],
+    "nativeCompletionObservedAt": "2026-10-17T08:16:29.959517+00:00",
+    "mcpVerificationObservedAt": "2026-10-17T08:16:30.124177+00:00",
+    "fullInstallRehearsal": "NOT_RUN",
+    "sourcePublicResult": "NOT_PROVIDED",
+    "nativeBankingProducer": "NOT_PROVIDED",
+    "businessCurrentness": "NOT_QUALIFIED",
+    "rootCallTiming": {
+      "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+      "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+      "sqlSha256": "e9f21b31a616528af6a0cd2ade8d93cd0e4dc9ffea60b8826bb4b3c01e5c788d",
+      "callStartedAt": "2026-10-17T08:16:28.227Z",
+      "callReturnedAt": "2026-10-17T08:16:29.704Z",
+      "rootObservedCallMilliseconds": 1477,
+      "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+    },
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T08:15:59.440Z",
+      "workDeadlineAt": "2026-10-17T08:17:59.440Z",
+      "readyAt": "2026-10-17T08:16:27.426Z",
+      "resultReadAt": "2026-10-17T08:16:32.719Z"
+    },
+    "elapsedMilliseconds": 64448,
+    "wholeSequenceBudgetMilliseconds": 180000,
+    "workBudgetMilliseconds": 120000,
+    "canonicalSharedTurnUnlockedAndClosed": true,
+    "completeMapsPersisted": false
+  },
+  "originalR1": "PRESERVED_HOLD_42702_C_AFTER_NOT_RUN",
+  "retainedOwnProtocolFolder": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\source-status-child-pure-native-20261017-r2",
+  "retainedPrivateMaps": false,
+  "deletionAttempted": false,
+  "finalCriticSignoff": false
+}
