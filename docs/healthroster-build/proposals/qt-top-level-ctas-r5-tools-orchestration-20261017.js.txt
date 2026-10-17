@@ -33,4 +33,3 @@ try{
  if(state.sessionId&&!state.ended){try{absorb(await tools.write_stdin({session_id:state.sessionId,chars:'ABORT\n',yield_time_ms:1000,max_output_tokens:2000}));for(let n=0;n<12&&!state.ended;n++)absorb(await tools.write_stdin({session_id:state.sessionId,chars:'',yield_time_ms:1000,max_output_tokens:2000}));}catch{state.closeReadError=true;store(key,state);}}
  text({status:'ROOT_ORCHESTRATION_HOLD',code:state.rootError,dispatched:state.dispatched,ended:state.ended,exitCode:state.exitCode,out,reconciliationRequired:state.dispatched&&!state.nativeSaved});
 }
-
