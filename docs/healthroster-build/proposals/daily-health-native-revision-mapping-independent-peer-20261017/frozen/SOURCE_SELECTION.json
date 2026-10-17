@@ -1,0 +1,28 @@
+{
+  "version": "DAILY_HEALTH_NATIVE_REVISION_MAPPING_FORWARD_V1",
+  "completeSourceParent": "4b1067c859f921855989eb7f147636cebf9286c3",
+  "parentFolder": "docs/healthroster-build/proposals/daily-health-composer-current0910-forward-20261017/",
+  "parentSelectionSha256": "a1cfef7882687083db65d3f99c4ff40915b9651d373cd0dce19d919a9c115ff3",
+  "parentManifestSha256": "4eb6407252c0d6f9ccc5d5cbcca421c06ef73775f2ca56deaff53f0cc286293c",
+  "overrides": [
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "sha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d",
+      "wholeParent": "reference/parent/health/10_revision_apply.sqlinc"
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "sha256": "81e786d99c75a14b0896ffe53d4e9d3b71de15c2c91f3ef94ada5a33eae95768",
+      "wholeParent": "reference/parent/templates/03_result.sql.tmpl"
+    }
+  ],
+  "runtimeTargets": [],
+  "newSignatures": [],
+  "aclChanges": 0,
+  "registryChanges": 0,
+  "sourceOnly": true,
+  "bankJoins": "THREE_UNPROVIDED",
+  "currentPlacementProjection": "EXPLICIT_DEPENDENCY_REFUSAL_NOT_IMPLEMENTED",
+  "newOwnerPermissionRequired": false,
+  "native": "NOT_RUN"
+}

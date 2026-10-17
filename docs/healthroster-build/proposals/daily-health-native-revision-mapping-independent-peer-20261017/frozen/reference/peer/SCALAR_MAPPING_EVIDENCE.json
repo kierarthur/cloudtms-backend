@@ -1,0 +1,67 @@
+{
+  "evidence": [
+    {
+      "name": "operation-local initial billing revision",
+      "source": "schema",
+      "wholeSha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+      "line": 53,
+      "exact": "billing_revision bigint not null default 0 check(billing_revision>=0)"
+    },
+    {
+      "name": "one increment in candidate apply",
+      "source": "apply",
+      "wholeSha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf",
+      "line": 42,
+      "exact": "billing_revision=billing_revision+1,to_timesheet_id=from_timesheet_id,state_revision=state_revision+1"
+    },
+    {
+      "name": "unsupported receipt scalar",
+      "source": "apply",
+      "wholeSha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf",
+      "line": 75,
+      "exact": "'placement_revision',o.billing_revision::text"
+    },
+    {
+      "name": "unsupported Result scalar equality",
+      "source": "result",
+      "wholeSha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b",
+      "line": 23,
+      "exact": "placement_revision is distinct from o.billing_revision::text"
+    },
+    {
+      "name": "genuine existing Health native financial counter",
+      "source": "context",
+      "wholeSha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "line": 144,
+      "exact": "'current_financial_revision',case when w.id is not null then w.current_revision_no::text else null end"
+    },
+    {
+      "name": "genuine existing Health typed same-ID current binding",
+      "source": "scope",
+      "wholeSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "line": 34,
+      "exact": "'current_placement',jsonb_build_object('version','CURRENT_DAILY_REVISION_V1','timesheet_id',t.timesheet_id,'financial_id',f.id,\n   'work_id',context#>'{identity,current_work_id}','revision_no',context->'current_financial_revision')"
+    }
+  ],
+  "independentOperations": [
+    {
+      "operation": "A",
+      "operationLocalBillingRevision": "1"
+    },
+    {
+      "operation": "B",
+      "operationLocalBillingRevision": "1"
+    },
+    {
+      "operation": "C",
+      "operationLocalBillingRevision": "1"
+    }
+  ],
+  "historicalBasisChecksAcceptedFinancialWithoutCurrentRequirement": true,
+  "historicalBasisRequiresNewScalar": false,
+  "currentProjectionABI": "UNPROVIDED",
+  "nativeWorkRevisionOrdinalContract": "NOT_PROVED_BY_BANK_IMPLEMENTATION",
+  "publicDTOChangesProposed": 0,
+  "ownerBusinessDecisionRequired": false,
+  "native": "NOT_RUN"
+}
