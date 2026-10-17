@@ -1,0 +1,14 @@
+{
+  "version": "QT_RECORD_SHA256_INDEPENDENT_SOURCE_PEER_V1",
+  "packet": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/.codex-tmp/qt-audit-record-sha256-design-20261017-6ef344744c26453a8aa99f946a85a7d3",
+  "manifestSha256": "9313aee7e24378b2c88a1d4a3899b57a9df69888f955cd2655a313d14bd683f7",
+  "forwardSha256": "4f0770f79858b7b11a6f3f7cf3acc77d0bbb8eb1247538394a5ee946b4ede144",
+  "pg17SourceProofSha256": "1622a6114a403882e38a566106688fc64b7b64d42cc77839b592301d8e1fddc0",
+  "completeParents": 52,
+  "selectedTargets": 6,
+  "unchangedAdapterImages": 46,
+  "unchangedSharedOwners": 3,
+  "sourcePrimaryFiles": 19,
+  "sourceCompleteCFunctions": 25,
+  "parentCommit": "1c60802423f854ea7664051ba4b82d2d0e3e9ca8"
+}

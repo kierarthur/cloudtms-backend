@@ -1,0 +1,1 @@
+{"sourceOnly":true,"completeParents":52,"targets":6,"unchangedAdapterImages":46,"sharedWholeOwners":3,"primarySourceFiles":19,"completeCFunctions":25,"fullLiteralParentInverses":3,"wholeJsonParentInverses":"three in source.test.mjs","actualCurrentSavedIndexHeadHistorical":true,"native":"NOT_RUN","performance":"NOT_PROVED","qtAcceptance":"NOT_PROVED"}

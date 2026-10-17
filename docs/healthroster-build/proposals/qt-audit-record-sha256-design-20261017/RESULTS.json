@@ -1,0 +1,53 @@
+{
+  "sourceOnly": true,
+  "runs": [
+    {
+      "command": [
+        "C:/Program Files/nodejs/node.exe",
+        "--test",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\qt-audit-record-sha256-design-20261017-6ef344744c26453a8aa99f946a85a7d3\\typed-model.test.mjs",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\qt-audit-record-sha256-design-20261017-6ef344744c26453a8aa99f946a85a7d3\\source.test.mjs"
+      ],
+      "exitCode": 0,
+      "output": "RESULT_1.txt",
+      "outputSha256": "8abf25b86dea9ec881ff5f935935620146660ff71562e1341c23e2d439108333"
+    },
+    {
+      "command": [
+        "C:/Users/KierArthur/AppData/Local/Programs/Python/Python312/python.exe",
+        "-B",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\qt-audit-record-sha256-design-20261017-6ef344744c26453a8aa99f946a85a7d3\\pg17-proof.py"
+      ],
+      "exitCode": 0,
+      "output": "RESULT_2.txt",
+      "outputSha256": "fe33d5a551a66aab7cb8684f3387361bafec63715a569db10ebc0dee683c3fc5"
+    },
+    {
+      "command": [
+        "C:/Users/KierArthur/AppData/Local/Programs/Python/Python312/python.exe",
+        "-B",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\qt-audit-record-sha256-design-20261017-6ef344744c26453a8aa99f946a85a7d3\\catalogue-source-proof.py"
+      ],
+      "exitCode": 0,
+      "output": "RESULT_3.txt",
+      "outputSha256": "8b7da0736b794621443020db3f6cf717be6993e0ae177f1c7bfa45f29a54de0b"
+    },
+    {
+      "command": [
+        "C:/Program Files/nodejs/node.exe",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\qt-audit-record-sha256-design-20261017-6ef344744c26453a8aa99f946a85a7d3\\verify.mjs"
+      ],
+      "exitCode": 0,
+      "output": "RESULT_4.txt",
+      "outputSha256": "14b254ed863b7631e7c6e32846fcdc889c6efe553a3b6d7d1467fca7ce498811"
+    }
+  ],
+  "typedReferenceTests": 30,
+  "actualPureConsumerAndWholeSourceTests": 9,
+  "pg17CompleteDoBodies": 4,
+  "pg17AstMutationsRefused": 18,
+  "native": "NOT_RUN",
+  "performance": "NOT_PROVED",
+  "qtAcceptance": "NOT_PROVED",
+  "sourceAdmission": "NOT_RUN"
+}

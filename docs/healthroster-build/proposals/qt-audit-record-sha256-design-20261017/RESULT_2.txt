@@ -1,0 +1,1 @@
+{"sourceOnly": true, "parser": "v7.20", "parserPostgresql": [17, 7], "qtStatements": 8, "completeDos": 4, "programmeStatements": 56, "inputStatements": 69, "freshStatements": 4, "ctasWholeAst": 2, "metadataColumnsTypesFunctions": [16, 6, 3], "rawWholeAstInverse": true, "mutationsRefused": 18, "native": "NOT_RUN", "performance": "NOT_PROVED", "noSubstitutions": true}

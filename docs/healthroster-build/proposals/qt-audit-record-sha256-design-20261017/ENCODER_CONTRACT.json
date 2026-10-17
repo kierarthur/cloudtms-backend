@@ -1,0 +1,221 @@
+{
+  "version": "QT_RECORD_CONTEXT_TYPED_CLOSURE_V1",
+  "columns": [
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "ts_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "actor_user_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "actor_display",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "actor_role_at_time",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "object_type",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "object_id_text",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "action",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "before_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "after_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "reason",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "ip",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "user_agent",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "correlation_id",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "event_sequence_is_authoritative",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "event_sequence",
+      "data_type": "bigint",
+      "identity": "a",
+      "generated": null
+    }
+  ],
+  "types": [
+    [
+      "uuid",
+      2950,
+      "uuid_send",
+      "uuid_out",
+      "i",
+      "i"
+    ],
+    [
+      "timestamp with time zone",
+      1184,
+      "timestamptz_send",
+      "timestamptz_out",
+      "i",
+      "s"
+    ],
+    [
+      "text",
+      25,
+      "textsend",
+      "textout",
+      "s",
+      "i"
+    ],
+    [
+      "jsonb",
+      3802,
+      "jsonb_send",
+      "jsonb_out",
+      "i",
+      "i"
+    ],
+    [
+      "boolean",
+      16,
+      "boolsend",
+      "boolout",
+      "i",
+      "i"
+    ],
+    [
+      "bigint",
+      20,
+      "int8send",
+      "int8out",
+      "i",
+      "i"
+    ]
+  ],
+  "functions": [
+    [
+      "pg_catalog.record_send(record)",
+      "record_send",
+      2249,
+      17,
+      "s"
+    ],
+    [
+      "pg_catalog.sha256(bytea)",
+      "sha256_bytea",
+      17,
+      17,
+      "i"
+    ],
+    [
+      "pg_catalog.current_setting(text)",
+      "show_config_by_name",
+      25,
+      25,
+      "s"
+    ]
+  ],
+  "composite": {
+    "relation": "public.audit_events",
+    "descriptor": "exact16 ordered names/OIDs/identity, no other live attributes",
+    "typsend": "pg_catalog.record_send(record)"
+  },
+  "expression": "pg_catalog.sha256(pg_catalog.record_send(ROW(a,pg_catalog.current_setting('TimeZone'))))",
+  "hashBytes": 32,
+  "serverVersionNum": "170011",
+  "encodings": "UTF8",
+  "native": "NOT_RUN",
+  "metadataSource": {
+    "file": "docs/healthroster-build/proposals/qt-audit-readonly-cost1000-success-runtime-20261017/reference/S0_METADATA.json",
+    "bytes": 119766,
+    "sha256": "c1e91c6507d3624dd69e92707f6f7fd0e8614479b3f5a75c3b4fd9268f152f8c"
+  }
+}

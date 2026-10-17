@@ -5,7 +5,7 @@ const here=path.dirname(fileURLToPath(import.meta.url)),plans=JSON.parse(fs.read
  relations=JSON.parse(fs.readFileSync(here+'/SOURCE_PINS.json')).relationNames;
 const pid=v=>Number.isSafeInteger(v)&&v>0;
 const ordered=value=>JSON.stringify(Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))));
-const fixedAuditCtasHashes=new Set(["aa304ef3e1bfe169d9b3f99ceab8f1e96707070907e9cb0654002cbe53e4c2ee","2b1c0c4fc67bf5789264e57e5f061f79b608cdc4926e057570c44bc206b1337d"]);
+const fixedAuditCtasHashes=new Set(["0904dcc7587186f0a4e97fe8e8689281623cc41a9f1368611e5e93c768de0053","cdcad1677f200c91390d0196a79b084127924b9b810de229d6895e1f133f8025"]);
 function statementResponse(s,e){
  if(!s||!e||s.statement!==e.statement||s.error||s.rowsTruncated!==false||s.command!==e.command
   ||JSON.stringify(Object.keys(s).sort())!==JSON.stringify(['command','fields','rowCount','rows','rowsTruncated','statement'])||!Array.isArray(s.rows)||!Array.isArray(s.fields))return false;

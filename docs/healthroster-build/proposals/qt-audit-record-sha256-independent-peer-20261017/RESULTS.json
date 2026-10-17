@@ -1,0 +1,51 @@
+{
+  "version": "QT_RECORD_SHA256_INDEPENDENT_RESULTS_V1",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_CANDIDATE",
+  "findings": [],
+  "authorReplay": {
+    "nodeTests": {
+      "tests": 39,
+      "pass": 39,
+      "fail": 0
+    },
+    "pg17Grammar": {
+      "parser": "pglast v7.20, grammar17.7",
+      "completeDos": 4,
+      "qtTopLevelStatements": 8,
+      "programmeStatements": 56,
+      "inputStatements": 69,
+      "verificationStatements": 4,
+      "refusedMutations": 18,
+      "rawWholeSqlAstInverse": true
+    },
+    "catalogueProof": {
+      "sixBuiltinTypeDeclarations": 6,
+      "actualSendOutputDirectDeclarations": 15,
+      "headerDefaults": 4,
+      "outerComposite": 1
+    },
+    "sourceVerify": {
+      "completeParents": 52,
+      "targets": 6,
+      "unchanged": 46,
+      "shared": 3,
+      "primaryFiles": 19,
+      "completeCFunctions": 25,
+      "allActualSavedIndexHeadHistorical": true
+    }
+  },
+  "independent": {
+    "actualCompleteParentPairs": 6,
+    "actualSavedIndexHeadHistoricalChecks": 24,
+    "rawCodeInverses": 3,
+    "exactCtas": 2,
+    "repeatedDescriptorGuards": 2,
+    "completeControlsUnchanged": true,
+    "pinnedCSourceLinks": 6,
+    "r11Overlap": []
+  },
+  "native": "NOT_RUN",
+  "sourceAdmission": "NOT_RUN",
+  "performance": "NOT_PROVED",
+  "wholeTableAcceptance": "NOT_PROVED"
+}

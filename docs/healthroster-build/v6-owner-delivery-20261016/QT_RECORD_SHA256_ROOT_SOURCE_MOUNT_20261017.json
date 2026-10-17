@@ -1,0 +1,58 @@
+{
+  "version": "QT_RECORD_SHA256_ROOT_SOURCE_MOUNT_V1",
+  "parent": "0626c2e35aa40610f31ac094898c7e803b01fbfd",
+  "packetManifestSha256": "9313aee7e24378b2c88a1d4a3899b57a9df69888f955cd2655a313d14bd683f7",
+  "peerManifestSha256": "1ba683d34598ae7829f189290eeae489a9ebadb7efe654f9510803f903f22726",
+  "selectedTargets": [
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+      "beforeBytes": 16266,
+      "beforeSha256": "ff38691201bf33472ca6355a55605114b0077baa8f62b56c9ccda189dede32b8",
+      "bytes": 27584,
+      "sha256": "a21a9314646f167b924bce1fc0e4c997ef8396991e963573f810c22bc4b7db30"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/input-builder.mjs",
+      "beforeBytes": 7966,
+      "beforeSha256": "80f80e517dcca68d672fbc2349c02573009740d87dbffb3e2d953fb74bdeb37c",
+      "bytes": 8048,
+      "sha256": "5809dcbd703fb95450ef9dd782cf7d36192d454b07805f2b46030ad7bd606426"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/result-validator.mjs",
+      "beforeBytes": 12196,
+      "beforeSha256": "7256e287f323932745e6b54d928c5d1db42eb4f5edf0e2bd5e18927a8a89e6a9",
+      "bytes": 12196,
+      "sha256": "881d2be8d7d34c11ca6db9d9e5d2092afae87a6fb03ceba534ee39cd25800e11"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/PROGRAMMES.json",
+      "beforeBytes": 63226,
+      "beforeSha256": "ae130b4e0c414fe0a380029ad960f107b8f0bfd4f8d7221c5a7db744a1eb5200",
+      "bytes": 74594,
+      "sha256": "08e618c1ac9cf4842591175f4016457ce49ad7dfc55b9f1fd6eb4f54f27ef118"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/OFFLINE_INPUTS.json",
+      "beforeBytes": 119598,
+      "beforeSha256": "ad4444554dcc64d8ee8ac22fbc6f9e347dde8ef29b93bb9416aa00f93c108681",
+      "bytes": 130966,
+      "sha256": "8ac6d102e431ea03355706e1c6dfa554ebd833ebb043218437b63b999ce9cf3d"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "beforeBytes": 8530,
+      "beforeSha256": "6fc7c1502e302facfd336467adc449cfb0f2873d62ae931112ad1b7d387c7354",
+      "bytes": 8530,
+      "sha256": "67a58d8125ae4bbb51a2e8dc447d88af65f3f5b348abdfb1520d9189ef6d6f40"
+    }
+  ],
+  "rootTests": "39 PASS",
+  "peer": "ACCEPT_BOUNDED_SOURCE_CANDIDATE",
+  "native": "NOT_RUN",
+  "performance": "NOT_PROVED",
+  "qtAcceptance": "NOT_PROVED",
+  "capsControlsSharedOwnersUnchanged": true,
+  "r11WatchedPathIntersection": 0,
+  "noBusinessOrDatabaseAction": true
+}

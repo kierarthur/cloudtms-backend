@@ -1,0 +1,45 @@
+{
+  "version": "QT_RECORD_SHA256_INDEPENDENT_PEER_MANIFEST_V1",
+  "files": [
+    {
+      "file": "AUTHOR_REPLAY_OUTPUTS.json",
+      "bytes": 4359,
+      "sha256": "34bfec7847c1657f0629c4ca533695d2c5ebe4637e65b31909ca16d00882deb3"
+    },
+    {
+      "file": "independent.mjs",
+      "bytes": 4672,
+      "sha256": "1837de5982890f4f3ef48037d0664a9daf4ea941e712403ebc683afb273d31f7"
+    },
+    {
+      "file": "INDEPENDENT_RESULTS.json",
+      "bytes": 287,
+      "sha256": "fb19f6d27c0d5d13c86debb2b50f2d799d4f693d650888ed0a466d0dccca7a60"
+    },
+    {
+      "file": "R11_OVERLAP.json",
+      "bytes": 1032,
+      "sha256": "c59cb584b08bf0ab72a709031a721a6e76bf3e2b64d53644ebfd68ae5d0dba50"
+    },
+    {
+      "file": "R11_WATCHED_PUBLIC_SOURCE_PATHS.json",
+      "bytes": 63949,
+      "sha256": "6268864e17263678e421683fdc6bd50c18169393154cbab3abe1a4e14ca8aa4b"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1322,
+      "sha256": "f9cdf3806eacfdf1d19d1982847589f88dbf290fd12e47f7caa34a7b627dbdf8"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 3278,
+      "sha256": "6a47786cc20588ff405b77553143b618b84718a7fa3ee5f694bea347dcaba9d8"
+    },
+    {
+      "file": "SOURCE.json",
+      "bytes": 742,
+      "sha256": "9d415a97fd9d455670ef00ce88b49a4e17cc76a9ea8ea8cb09ce5b7d2a59783b"
+    }
+  ]
+}

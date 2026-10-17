@@ -1,0 +1,15 @@
+{
+  "version": "R11_SELECTED_SOURCE_OVERLAP_REVIEW_V1",
+  "watchedPaths": 231,
+  "rootPaths": 56,
+  "selected": [
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/input-builder.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/result-validator.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/PROGRAMMES.json",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/OFFLINE_INPUTS.json",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json"
+  ],
+  "overlap": [],
+  "note": "Exact path intersection against the prepared R11 original-parent/B2-baseline/coordinator/holder/full-operator audit and mapping source pin closure. This is a source inventory comparison; it is not actual admission or permission to mutate during an owned turn."
+}

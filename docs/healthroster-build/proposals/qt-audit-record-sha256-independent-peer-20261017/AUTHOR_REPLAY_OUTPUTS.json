@@ -1,0 +1,26 @@
+[
+  {
+    "check": 0,
+    "chunk_id": "c81909",
+    "wall_time_seconds": 0.6850796,
+    "exit_code": 0,
+    "original_token_count": 801,
+    "output": "✔ actual proposed pure result function admits only new exact CTAS hashes/bounds (1.1623ms)\n✔ actual statement decoder refuses fields/rows/extra keys/truncation/sequence (0.214ms)\n✔ complete validator raw inverse is only the two closed CTAS hash substitutions (0.1176ms)\n✔ complete input builder raw inverse is only fixed two CTAS SQL constants (1.8526ms)\n✔ whole programme JSON derivation only changes actual QT assertions/hash/bytes (3.0121ms)\n✔ whole input preserves verification/preamble/caps/indices and original non-QT case (3.6774ms)\n✔ original pure response classification preserves every shape; only two CTAS/three DO hashes change (1.3182ms)\n✔ complete nested MF reverse changes exactly five expected rows, all46 companions retained (3.4935ms)\n✔ all whole SQL literal groups reverse and complete controls stay raw identical (1.1891ms)\n✔ model framing records exact16 nested fields, two envelope fields, OIDs, lengths (2.1409ms)\n✔ synthetic single column 1 change remains visible (1.6072ms)\n✔ synthetic single column 2 change remains visible (0.4064ms)\n✔ synthetic single column 3 change remains visible (0.3925ms)\n✔ synthetic single column 4 change remains visible (0.2955ms)\n✔ synthetic single column 5 change remains visible (0.3263ms)\n✔ synthetic single column 6 change remains visible (0.3206ms)\n✔ synthetic single column 7 change remains visible (0.3514ms)\n✔ synthetic single column 8 change remains visible (0.3867ms)\n✔ synthetic single column 9 change remains visible (0.5401ms)\n✔ synthetic single column 10 change remains visible (0.3528ms)\n✔ synthetic single column 11 change remains visible (0.3108ms)\n✔ synthetic single column 12 change remains visible (0.1902ms)\n✔ synthetic single column 13 change remains visible (0.1943ms)\n✔ synthetic single column 14 change remains visible (0.2265ms)\n✔ synthetic single column 15 change remains visible (0.7268ms)\n✔ synthetic single column 16 change remains visible (0.1948ms)\n✔ SQL NULL, JSONB null and empty object have distinct framed preimages (0.343ms)\n✔ nullable text empty/NULL and UUID NULL remain distinct (0.1932ms)\n✔ length framing defeats delimiter and cross-field concatenation ambiguity (0.1579ms)\n✔ text retains Unicode, quotes, escapes and normalization distinctions (0.4175ms)\n✔ all signed bigint boundaries and unsafe JS numbers remain lossless/refused (0.5472ms)\n✔ timestamp integer microseconds, epoch sides and infinity sentinels retain exact bits (0.2264ms)\n✔ timezone-only context change is visible without UTC conversion or caller field (0.3484ms)\n✔ JSONB leaf fixture preserves native-rendered numeric scale/Unicode/nested NULL text (0.3463ms)\n✔ binary comparison has no text collation or locale folding (1.2264ms)\n✔ whole bag is order independent and duplicate multiplicity remains exact (1.3616ms)\n✔ key changed, row changed and missing row remain refusals (0.3544ms)\n✔ explicit constant-hash counterexample prevents collision-free detector claim (0.193ms)\n✔ wrong framing rejects count/length/truncation/trailer (0.2515ms)\nℹ tests 39\nℹ suites 0\nℹ pass 39\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 184.748\n"
+  },
+  {
+    "check": 1,
+    "chunk_id": "35b9a2",
+    "wall_time_seconds": 0.5938069,
+    "exit_code": 0,
+    "original_token_count": 93,
+    "output": "{\"sourceOnly\": true, \"parser\": \"v7.20\", \"parserPostgresql\": [17, 7], \"qtStatements\": 8, \"completeDos\": 4, \"programmeStatements\": 56, \"inputStatements\": 69, \"freshStatements\": 4, \"ctasWholeAst\": 2, \"metadataColumnsTypesFunctions\": [16, 6, 3], \"rawWholeAstInverse\": true, \"mutationsRefused\": 18, \"native\": \"NOT_RUN\", \"performance\": \"NOT_PROVED\", \"noSubstitutions\": true}\r\n"
+  },
+  {
+    "check": 2,
+    "chunk_id": "7204ae",
+    "wall_time_seconds": 0.5249055,
+    "exit_code": 0,
+    "original_token_count": 54,
+    "output": "{\"sourceOnly\": true, \"sixBuiltinTypeDeclarations\": 6, \"actualSendOutAndDirectFunctionDeclarations\": 15, \"catalogueHeaderDefaults\": 4, \"outerRecordTypeDeclaration\": 1, \"nativeMetadataForCandidate\": \"NOT_OBSERVED\"}\r\n"
+  }
+]

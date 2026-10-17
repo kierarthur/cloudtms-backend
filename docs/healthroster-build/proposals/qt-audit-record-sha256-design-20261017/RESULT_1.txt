@@ -1,0 +1,47 @@
+✔ actual proposed pure result function admits only new exact CTAS hashes/bounds (0.8148ms)
+✔ actual statement decoder refuses fields/rows/extra keys/truncation/sequence (0.1523ms)
+✔ complete validator raw inverse is only the two closed CTAS hash substitutions (0.0828ms)
+✔ complete input builder raw inverse is only fixed two CTAS SQL constants (1.2671ms)
+✔ whole programme JSON derivation only changes actual QT assertions/hash/bytes (2.2334ms)
+✔ whole input preserves verification/preamble/caps/indices and original non-QT case (2.901ms)
+✔ original pure response classification preserves every shape; only two CTAS/three DO hashes change (0.9924ms)
+✔ complete nested MF reverse changes exactly five expected rows, all46 companions retained (2.4323ms)
+✔ all whole SQL literal groups reverse and complete controls stay raw identical (0.8157ms)
+✔ model framing records exact16 nested fields, two envelope fields, OIDs, lengths (2.0949ms)
+✔ synthetic single column 1 change remains visible (0.6959ms)
+✔ synthetic single column 2 change remains visible (0.2986ms)
+✔ synthetic single column 3 change remains visible (0.2987ms)
+✔ synthetic single column 4 change remains visible (0.2365ms)
+✔ synthetic single column 5 change remains visible (0.2363ms)
+✔ synthetic single column 6 change remains visible (0.21ms)
+✔ synthetic single column 7 change remains visible (0.2797ms)
+✔ synthetic single column 8 change remains visible (0.2194ms)
+✔ synthetic single column 9 change remains visible (0.3401ms)
+✔ synthetic single column 10 change remains visible (0.2172ms)
+✔ synthetic single column 11 change remains visible (0.2651ms)
+✔ synthetic single column 12 change remains visible (0.1437ms)
+✔ synthetic single column 13 change remains visible (0.1534ms)
+✔ synthetic single column 14 change remains visible (0.1547ms)
+✔ synthetic single column 15 change remains visible (0.2349ms)
+✔ synthetic single column 16 change remains visible (0.143ms)
+✔ SQL NULL, JSONB null and empty object have distinct framed preimages (0.2462ms)
+✔ nullable text empty/NULL and UUID NULL remain distinct (0.1436ms)
+✔ length framing defeats delimiter and cross-field concatenation ambiguity (0.1165ms)
+✔ text retains Unicode, quotes, escapes and normalization distinctions (0.297ms)
+✔ all signed bigint boundaries and unsafe JS numbers remain lossless/refused (0.3799ms)
+✔ timestamp integer microseconds, epoch sides and infinity sentinels retain exact bits (0.1014ms)
+✔ timezone-only context change is visible without UTC conversion or caller field (0.2213ms)
+✔ JSONB leaf fixture preserves native-rendered numeric scale/Unicode/nested NULL text (0.2517ms)
+✔ binary comparison has no text collation or locale folding (0.4415ms)
+✔ whole bag is order independent and duplicate multiplicity remains exact (0.9376ms)
+✔ key changed, row changed and missing row remain refusals (0.2305ms)
+✔ explicit constant-hash counterexample prevents collision-free detector claim (0.1316ms)
+✔ wrong framing rejects count/length/truncation/trailer (0.1575ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 127.1019

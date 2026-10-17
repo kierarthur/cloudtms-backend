@@ -1,0 +1,333 @@
+{
+  "version": "QT_PG17_11_TYPED_ENCODER_SOURCE_BASIS_V1",
+  "functions": [
+    {
+      "file": "reference/pg17/src/backend/utils/adt/rowtypes.c",
+      "name": "record_send",
+      "start": 18074,
+      "end": 21283,
+      "line": 687,
+      "endLine": 808,
+      "sha256": "1a042b3b82e80710c55b0062830bf6d0e65ae88b29b83340d18a3fd68dba006e",
+      "requiredTokens": [
+        "lookup_rowtype_tupdesc(tupType, tupTypmod)",
+        "heap_deform_tuple",
+        "pq_sendint32(&buf, validcols)",
+        "pq_sendint32(&buf, column_type)",
+        "pq_sendint32(&buf, -1)",
+        "getTypeBinaryOutputInfo(column_type,",
+        "SendFunctionCall(&column_info->proc, attr)"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/cache/lsyscache.c",
+      "name": "getTypeBinaryOutputInfo",
+      "start": 74099,
+      "end": 74856,
+      "line": 3086,
+      "endLine": 3111,
+      "sha256": "788aa1c43e4542025f131bc41753f2a95a9e102144f9c1cefdefee78900995b8",
+      "requiredTokens": [
+        "*typSend = pt->typsend",
+        "if (!pt->typisdefined)"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/uuid.c",
+      "name": "uuid_send",
+      "start": 3625,
+      "end": 3839,
+      "line": 156,
+      "endLine": 164,
+      "sha256": "389583cf5938787713de757486dcc39ea5076f2ae3f07122ad35eea4ffd4e2ba",
+      "requiredTokens": [
+        "UUID_LEN"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/uuid.c",
+      "name": "uuid_out",
+      "start": 1437,
+      "end": 2183,
+      "line": 53,
+      "endLine": 86,
+      "sha256": "f9ec2d0e39d5c1633e7696ee982d6400daf7cde9f7dc1f4bdbe3bc1afc2dd1c0",
+      "requiredTokens": [
+        "hex_chars"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/timestamp.c",
+      "name": "timestamptz_send",
+      "start": 21091,
+      "end": 21299,
+      "line": 847,
+      "endLine": 855,
+      "sha256": "3438359ffb0cb6afea1e0f09b0b9d47c33f1730def5a59c548bb3e8e6a8392d8",
+      "requiredTokens": [
+        "pq_sendint64(&buf, timestamp)"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/timestamp.c",
+      "name": "timestamptz_out",
+      "start": 19629,
+      "end": 20190,
+      "line": 785,
+      "endLine": 807,
+      "sha256": "7592d7ce598faa0efdb299c59147e44fbd80cf88f70c15ee83718c9a4394a7e6",
+      "requiredTokens": [
+        "timestamp2tm",
+        "EncodeDateTime"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/varlena.c",
+      "name": "textsend",
+      "start": 17246,
+      "end": 17457,
+      "line": 620,
+      "endLine": 628,
+      "sha256": "ca6ec8826bc1496c662fc577f2b23f66b12292ff0629a6de5e9cb2333613c05d",
+      "requiredTokens": [
+        "pq_sendtext",
+        "VARSIZE_ANY_EXHDR"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/varlena.c",
+      "name": "textout",
+      "start": 16719,
+      "end": 16829,
+      "line": 591,
+      "endLine": 596,
+      "sha256": "3b6d02a6b66a40a61393548f051805f89b1f919062f52381f90f84b454365dca",
+      "requiredTokens": [
+        "TextDatumGetCString"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/jsonb.c",
+      "name": "jsonb_send",
+      "start": 3674,
+      "end": 4047,
+      "line": 124,
+      "endLine": 139,
+      "sha256": "db8818f156a2af275b35d30cc7b9762ac7f2ca96e1f318c0b6ff0727f6e528a9",
+      "requiredTokens": [
+        "JsonbToCString",
+        "pq_sendint8(&buf, version)",
+        "pq_sendtext"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/jsonb.c",
+      "name": "jsonb_out",
+      "start": 3402,
+      "end": 3566,
+      "line": 108,
+      "endLine": 116,
+      "sha256": "2c82c0ad133171c282542ddc9a21bc6e41ea0b8f74d543d5a31130ec657571db",
+      "requiredTokens": [
+        "JsonbToCString"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/bool.c",
+      "name": "boolsend",
+      "start": 3700,
+      "end": 3884,
+      "line": 187,
+      "endLine": 195,
+      "sha256": "2b5293add0172d6b44193a8bab8fd9fab519f2887066c872c662d35e6ed3a129",
+      "requiredTokens": [
+        "pq_sendbyte",
+        "arg1 ? 1 : 0"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/bool.c",
+      "name": "boolout",
+      "start": 3150,
+      "end": 3326,
+      "line": 157,
+      "endLine": 165,
+      "sha256": "34ab46528496b268f576e1eb05b2947a5d3d9bf404c7a9c28871a1b89fa1411f",
+      "requiredTokens": [
+        "'t'",
+        "'f'"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/int8.c",
+      "name": "int8send",
+      "start": 1988,
+      "end": 2167,
+      "line": 94,
+      "endLine": 102,
+      "sha256": "203e2d31bd44c08f652363be6a1ce7ad23383a9fe901ac5a1286165c76b72504",
+      "requiredTokens": [
+        "pq_sendint64(&buf, arg1)"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/int8.c",
+      "name": "int8out",
+      "start": 1339,
+      "end": 1730,
+      "line": 61,
+      "endLine": 77,
+      "sha256": "9d0cf3415861d4a7fc7b62a2fbb5da908a9e4a0a6b6832b3f7e80081107d9e27",
+      "requiredTokens": [
+        "pg_lltoa"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/jsonb.c",
+      "name": "JsonbToCString",
+      "start": 12043,
+      "end": 12177,
+      "line": 473,
+      "endLine": 476,
+      "sha256": "2656136d38e0b95fc1a2909b50f553fe9fe92998479b5d792266509164460672",
+      "requiredTokens": [
+        "JsonbToCStringWorker"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/jsonb.c",
+      "name": "JsonbToCStringWorker",
+      "start": 12441,
+      "end": 15218,
+      "line": 491,
+      "endLine": 612,
+      "sha256": "610a4fbc2f65f454d1116dff6f5e3e8ccbb47304399a36332f3803f8f86d78db",
+      "requiredTokens": [
+        "jsonb_put_escaped_value",
+        "JsonbIteratorNext"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/jsonb.c",
+      "name": "jsonb_put_escaped_value",
+      "start": 8906,
+      "end": 9580,
+      "line": 349,
+      "endLine": 373,
+      "sha256": "bf89d033b0a4e7d8145bb81a5bca6189b68d62bb96ed9c49576c1e5c2b69e2cf",
+      "requiredTokens": [
+        "numeric_out",
+        "escape_json"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/jsonb.c",
+      "name": "datum_to_jsonb_internal",
+      "start": 15842,
+      "end": 21540,
+      "line": 638,
+      "endLine": 854,
+      "sha256": "2c99e1f4653dc1eba9401a442bf71d1c3063e46a4799aa7ad044a7d2d6cd140d",
+      "requiredTokens": [
+        "JSONTYPE_TIMESTAMPTZ",
+        "JsonEncodeDateTime",
+        "JSONTYPE_JSONB"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/jsonb.c",
+      "name": "composite_to_jsonb",
+      "start": 23534,
+      "end": 25103,
+      "line": 942,
+      "endLine": 1005,
+      "sha256": "073aaf8b730689d042d2da304b9b33c08f419e35eea2eed5a3f107ac738d39c3",
+      "requiredTokens": [
+        "lookup_rowtype_tupdesc",
+        "attisdropped",
+        "NameStr(att->attname)",
+        "datum_to_jsonb_internal"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/json.c",
+      "name": "JsonEncodeDateTime",
+      "start": 8130,
+      "end": 10994,
+      "line": 301,
+      "endLine": 414,
+      "sha256": "40549b99fdc1f752b589d9377412e34a3c393ae6bbbe775f7a0cca384ae07765",
+      "requiredTokens": [
+        "TIMESTAMPTZOID",
+        "timestamp2tm",
+        "USE_XSD_DATES",
+        "EncodeSpecialTimestamp"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/numeric.c",
+      "name": "numeric_out",
+      "start": 28579,
+      "end": 29087,
+      "line": 814,
+      "endLine": 841,
+      "sha256": "cdc9b0f4fcabb1df630ea817ae0420b751a6a34a5470ff62bb833b17ff4237dc",
+      "requiredTokens": [
+        "get_str_from_var"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/libpq/pqformat.c",
+      "name": "pq_sendtext",
+      "start": 6263,
+      "end": 6555,
+      "line": 172,
+      "endLine": 185,
+      "sha256": "feefae280a40f50ba8c6e21a1fe72c43f9c2adca8f85b9fa180c5dbc7a42fdf0",
+      "requiredTokens": [
+        "pg_server_to_client",
+        "appendBinaryStringInfo"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/mb/mbutils.c",
+      "name": "pg_server_to_any",
+      "start": 22888,
+      "end": 23759,
+      "line": 758,
+      "endLine": 783,
+      "sha256": "635a85552c601b1c0eb12ffddc02c45a32fae53ff648a1226ee9df679042a14b",
+      "requiredTokens": [
+        "encoding == DatabaseEncoding->encoding",
+        "return unconstify(char *, s)"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/misc/guc_funcs.c",
+      "name": "show_config_by_name",
+      "start": 20038,
+      "end": 20303,
+      "line": 807,
+      "endLine": 817,
+      "sha256": "6d0381c7a6369d539f996e8b9ce0ad3a7cfb4fd7b173bcc6792648ba83bb7584",
+      "requiredTokens": [
+        "GetConfigOptionByName"
+      ]
+    },
+    {
+      "file": "reference/pg17/src/backend/utils/adt/cryptohashfuncs.c",
+      "name": "sha256_bytea",
+      "start": 3400,
+      "end": 3538,
+      "line": 148,
+      "endLine": 153,
+      "sha256": "3ebe945556c51d2f1ed1ea1ab1e8d5f2b0f11645e874c7b1b6cb26c1de79dce4",
+      "requiredTokens": [
+        "PG_SHA256"
+      ]
+    }
+  ],
+  "claims": "Exact source-symbol/framing facts only; no native invocation, binary-output equality oracle, performance or hash injectivity proof.",
+  "nestedJsonbNumericOutput": "numeric_out is a direct C call in jsonb_put_escaped_value; no user routine resolution. UTF8 equal encoding bypasses conversion dispatch.",
+  "anonymousOuterRecord": "Direct qualified record_send receives ROW(named audit row,text); inner named composite typsend separately admitted via its relation pg_type."
+}
