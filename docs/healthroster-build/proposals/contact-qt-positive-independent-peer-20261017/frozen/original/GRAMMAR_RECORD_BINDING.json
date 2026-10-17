@@ -1,0 +1,299 @@
+{
+  "version": "CONTACT_QT_PG17_GRAMMAR_RECORD_BINDING_SOURCE_V1",
+  "parser": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "programmes": 2,
+  "outerStatements": {
+    "CONTACT_CONSTRUCTORS_V1": 34,
+    "QT_ADMIN_CONTROLS_V1": 64
+  },
+  "plpgsqlBodies": [
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "statement": 6,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 2,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "statement": 13,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 2,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "statement": 15,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 4,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "statement": 19,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 2,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "statement": 21,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 4,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "statement": 29,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 21,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 6,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 2,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 11,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 12,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 12,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 2,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 13,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 2,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 14,
+      "kind": "CreateFunctionStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 2,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 17,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 2,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 21,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 2,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 36,
+      "kind": "CreateFunctionStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 3,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 37,
+      "kind": "CreateFunctionStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 6,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 38,
+      "kind": "CreateFunctionStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 20,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 39,
+      "kind": "CreateFunctionStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 3,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 40,
+      "kind": "CreateFunctionStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [
+          "new",
+          "old"
+        ],
+        "parsedSqlExpressions": 10,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 45,
+      "kind": "CreateFunctionStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [
+          "v_policy"
+        ],
+        "parsedSqlExpressions": 14,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 46,
+      "kind": "CreateFunctionStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [
+          "v_policy",
+          "v_saved"
+        ],
+        "parsedSqlExpressions": 33,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "statement": 59,
+      "kind": "DoStmt",
+      "plpgsqlGrammar": "PASS",
+      "recordRangeAliasCensus": {
+        "recordVariables": [],
+        "parsedSqlExpressions": 84,
+        "unparsedSqlExpressions": [],
+        "recordRangeCollisions": []
+      },
+      "nativeCompilation": "NOT_PROVED"
+    }
+  ],
+  "unprovedBodies": [],
+  "nativeExecution": "NOT_RUN",
+  "noBodySubstitution": true
+}

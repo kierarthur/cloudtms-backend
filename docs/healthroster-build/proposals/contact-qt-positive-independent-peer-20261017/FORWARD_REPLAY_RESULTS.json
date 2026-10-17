@@ -1,0 +1,45 @@
+{
+  "runs": [
+    {
+      "name": "forward16",
+      "exitCode": 0
+    },
+    {
+      "name": "forward-ast-grammar",
+      "exitCode": 0
+    }
+  ],
+  "rebuilt": [
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "sqlSha256": "2ee9712aa357c9db4c8fbde1cd9e541de38b0721e19aec7d6fc9a31c692b9c91",
+      "bytes": 13974,
+      "programmeStatements": 21,
+      "inputStatements": 34,
+      "allProgrammeAndInputBytesEqual": true
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "sqlSha256": "6e8feb37c2177f674b0ff372264dca1c8572b24e83e03f4cdf3e35acac114e93",
+      "bytes": 39738,
+      "programmeStatements": 51,
+      "inputStatements": 64,
+      "allProgrammeAndInputBytesEqual": true
+    }
+  ],
+  "selectionFiles": 45,
+  "wholeRawParentInverses": 6,
+  "exactRawParents": 39,
+  "builderSemanticHunks": 1,
+  "programmeSemanticHunks": 1,
+  "originalConstructorsFullyEqual": true,
+  "rootPins": 63,
+  "currentRootHead": "d3bf033e1ccb171d2b382f3c59b9fc2a85448933",
+  "actualAstVectors": 81,
+  "astMutationRefusals": 4,
+  "grammarOuterStatements": 98,
+  "grammarPlBodies": 21,
+  "native": "NOT_RUN",
+  "nativeCompilation": "NOT_PROVED",
+  "rootWrites": 0
+}

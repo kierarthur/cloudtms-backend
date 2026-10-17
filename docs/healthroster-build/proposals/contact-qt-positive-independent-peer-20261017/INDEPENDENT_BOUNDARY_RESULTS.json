@@ -1,0 +1,90 @@
+{
+  "version": "CONTACT_QT_INDEPENDENT_PHYSICAL_FRAME_BOUNDARIES_V1",
+  "cases": [
+    {
+      "case": "closed independent physical identities",
+      "expected": "ACCEPT_SYNTHETIC_FRAME_ONLY"
+    },
+    {
+      "case": "C-after equals holder A",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "C-after equals native B",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "C-after equals C-before",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "C-after equals MCP verification",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "C-before equals holder A",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "C-before equals native B",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "after fixture proof belongs to another peer",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "after fixture proof is not fresh",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "copied or unclosed C-before",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "copied or unclosed C-after",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "missing complete scope",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "duplicate relation instead of genuine twelfth",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "altered canonical query hash",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "wrong snapshot scope",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "writable C-after",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "role-switched C-after",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "not repeatable-read C-after",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "stale marker present",
+      "expected": "REFUSE"
+    },
+    {
+      "case": "copied fixture proof provenance",
+      "expected": "REFUSE"
+    }
+  ],
+  "vectorCount": 20,
+  "actualExport": "bindSnapshots",
+  "syntheticOnly": true,
+  "native": "NOT_RUN",
+  "noRestorationQualificationClaim": true
+}

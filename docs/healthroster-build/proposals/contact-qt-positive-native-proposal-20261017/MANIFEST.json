@@ -1,5 +1,5 @@
 {
-  "version": "CONTACT_QT_POSITIVE_SOURCE_ONLY_FREEZE_V1",
+  "version": "CONTACT_QT_POSITIVE_NAME_ADMISSION_FORWARD_FREEZE_V1",
   "sourceParent": "feb36c0c13c87b57b7566172e4bfaa1254117794",
   "sourceTests": 16,
   "parsedNativeInputPlBodies": 21,
@@ -8,8 +8,8 @@
   "files": [
     {
       "file": "build-program.mjs",
-      "bytes": 6961,
-      "sha256": "4e909987c17366c081b245a7591b692a4399db39e35b25d91646e2e7f172f73a"
+      "bytes": 7043,
+      "sha256": "d4c1c806fa3b5884ace7e7671335cd8956edf1cbf727e264b46d99b10689baee"
     },
     {
       "file": "capture.mjs",
@@ -63,8 +63,8 @@
     },
     {
       "file": "OFFLINE_INPUTS.json",
-      "bytes": 113614,
-      "sha256": "b0368e714436debcbb3085a1b57165cdc47c356f8f35b4367cc45bc799f4c99c"
+      "bytes": 113699,
+      "sha256": "449d920d0c267303c37264eac775c00fe0cf6715dc84cfa9312741585f589eab"
     },
     {
       "file": "prepare-adapter.mjs",
@@ -83,8 +83,8 @@
     },
     {
       "file": "PROGRAMMES.json",
-      "bytes": 58871,
-      "sha256": "ed78ba9ccd814dca75ae228ad73dadfa998181c9f35622cb18aa611383248188"
+      "bytes": 58956,
+      "sha256": "8c006889bf628d350fd94b5826c6aa6beb0477f40900e98383bbc29904343d42"
     },
     {
       "file": "qt-assertions.sql",
@@ -99,7 +99,7 @@
     {
       "file": "README.md",
       "bytes": 5500,
-      "sha256": "c98ebc445e1b535570b30455d18febc1ad6e7b5dfb3901c1eb3e57b1a45de6d5"
+      "sha256": "9dad7cdd67efa9395d7ba49d4d3d4cee682df0dcf415b0f2e3717e4e1826de8d"
     },
     {
       "file": "reference/actor/build-program.mjs",
@@ -213,8 +213,8 @@
     },
     {
       "file": "TEST_RESULTS.txt",
-      "bytes": 1594,
-      "sha256": "4994d301c9ead28a0865f5f295bf9eb5dbe84c0c432019cd506cf8fb0653a710"
+      "bytes": 1589,
+      "sha256": "3964d86c61ae13cbf51a48186c5f963eb0ea30f9578bb45dfdc08509eb1499af"
     },
     {
       "file": "test.mjs",
@@ -226,5 +226,6 @@
       "bytes": 1313,
       "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9"
     }
-  ]
+  ],
+  "parentManifestSha256": "1fba7ea3a91147d75ea69df68b0e80be1300fccba1e5e0be4fe17eaf75713204"
 }

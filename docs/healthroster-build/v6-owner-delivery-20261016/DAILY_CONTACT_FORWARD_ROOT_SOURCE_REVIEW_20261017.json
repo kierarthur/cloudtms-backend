@@ -36,6 +36,17 @@
       },
       "fixesApplied": 1,
       "rejected": 0
+    },
+    "actualNativeReaderSourceBinding": {
+      "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_CURRENT_NATIVE_CONTEXT_READONLY_20261017.json",
+      "matched": 1,
+      "nativeDefinitionBytes": 13852,
+      "nativeDefinitionSha256": "f84d6893cbe6f8568dcd601811debbb4a1a1fe470674730ff738eca690f8a6ea",
+      "bodySha256": "4b78e141ddcb28db01381d8e8fce05fcd748f75c0cc58ced09117c648dfa088a",
+      "rawInnerBodyEqualsSelectedSource": true,
+      "normalisation": false,
+      "invocation": false,
+      "nestedEffectClosure": "NOT_QUALIFIED"
     }
   },
   "contactQt": {
@@ -59,7 +70,44 @@
     "correction": "One namespace-OID joined pg_proc predicate rejects every overload/prokind for exactly seven schema/name pairs; constructors and all control/restoration/timing unchanged",
     "sourceReview": "ROOT_PASS_INDEPENDENT_PEER_PENDING",
     "selectedAdapterMounted": false,
-    "native": "NOT_RUN"
+    "native": "NOT_RUN",
+    "independentPeerCompletion": {
+      "commit": "a58f09e986bc35b440e1f7a98bd7b2b02c73da05",
+      "files": 130,
+      "manifestSha256": "86adfe60d11eec9b5fddf664408b7836ea2a60d73849f2f88f78a0bcbcbb11e6",
+      "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+      "newFindings": 0,
+      "namespaceFixApplied": 1,
+      "rejected": 0,
+      "rootAdditionalBinderVectors": 20
+    },
+    "exactReviewed45PostimagesMounted": true,
+    "setupEntry": {
+      "unchangedPriorPrefixBytes": 61383,
+      "unchangedPriorPrefixSha256": "a5cd4a8a660b51045e5d1942f216ea04efa373caa44889eccebc0235610c0aab",
+      "exactEntrySha256": "f3d2eeaec0f1c87f71f331d542a2df15ed72feec82787bf57c8cf25ceb70a15d",
+      "appendedBeforeNative": true
+    },
+    "nativePreflight": {
+      "account": "kier@arthur-rai.co.uk",
+      "directRoute": "cloudtms-miget-operations-kier-codex",
+      "authenticated": true,
+      "rollbackOnly": true,
+      "durableWritesAllowed": false,
+      "secretsReturned": false,
+      "agency": "cloudtms_test_clone",
+      "mytms": "uofvkfi5",
+      "services": "healthy",
+      "agencyPostmaster": "2026-10-14T09:07:33.240Z",
+      "mytmsPostmaster": "2026-09-17T23:40:44.934Z",
+      "normalReadyz": 200,
+      "anonymousMcp": 401,
+      "dbCheck": {
+        "migrations": 426,
+        "repeatables": 1096
+      },
+      "operationalFormerCDevelopmentPaths": 0
+    }
   },
   "originalHistory": "Preserved; this checkpoint backs source/evidence, not execution approval",
   "ownerDecisionNeeded": false,

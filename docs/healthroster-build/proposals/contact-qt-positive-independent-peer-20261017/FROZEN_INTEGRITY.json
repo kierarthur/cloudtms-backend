@@ -1,0 +1,22 @@
+{
+  "version": "CONTACT_QT_INDEPENDENT_PEER_RAW_FREEZE_CHECK_V1",
+  "captures": [
+    {
+      "commit": "ddcb87b6f357ffa5064e3a2f8e15946cd0e12938",
+      "files": 45,
+      "manifestSha256": "1fba7ea3a91147d75ea69df68b0e80be1300fccba1e5e0be4fe17eaf75713204",
+      "frozenAuthorSavedGitEqual": true
+    },
+    {
+      "commit": "de9e2dcc0d6e337bf7ceaf27beb16741ec50dbd2",
+      "files": 56,
+      "manifestSha256": "ef31532e9189b3cee0b25c750f7cd76b01b4e5a16b5a360f32fc8d711de4fb3f",
+      "frozenAuthorSavedGitEqual": true
+    }
+  ],
+  "currentRootHead": "d3bf033e1ccb171d2b382f3c59b9fc2a85448933",
+  "rootPins": 63,
+  "rootSavedIndexHeadPinnedParentEqual": true,
+  "rootWrites": 0,
+  "native": "NOT_RUN"
+}

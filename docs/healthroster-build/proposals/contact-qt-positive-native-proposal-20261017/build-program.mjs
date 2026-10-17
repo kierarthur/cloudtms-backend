@@ -50,10 +50,13 @@ export async function buildProgram({root,caseId}){
     `\nalter function ${row.signature} owner to current_user;revoke all on function ${row.signature} from public,anon,authenticated,service_role;`;
   });
   const absent=`do $qt_absence$ begin if to_regclass('public.candidate_push_timing_policy') is not null or to_regclass('public.candidate_push_timing_commands') is not null
-   or exists(select 1 from unnest(array['private.weekly_contact_assert_closed_v1(jsonb,text[],text[],text)',
-   'private.weekly_contact_revision_v1(jsonb,boolean)','private.candidate_push_timing_policy_validate_v1(jsonb)',
-   'private.weekly_contact_deployment_lock_v1(uuid,text)','private.candidate_push_timing_immutable_guard_v1()',
-   'public.candidate_push_timing_get_v1(jsonb)','public.candidate_push_timing_save_v1(jsonb)']) n where to_regprocedure(n) is not null)
+   or exists(select 1 from pg_catalog.pg_proc qt_routine
+   join pg_catalog.pg_namespace qt_namespace on qt_namespace.oid=qt_routine.pronamespace
+   where (qt_namespace.nspname,qt_routine.proname) in (
+    ('private','weekly_contact_assert_closed_v1'),('private','weekly_contact_revision_v1'),
+    ('private','candidate_push_timing_policy_validate_v1'),('private','weekly_contact_deployment_lock_v1'),
+    ('private','candidate_push_timing_immutable_guard_v1'),('public','candidate_push_timing_get_v1'),
+    ('public','candidate_push_timing_save_v1')))
    then raise exception 'CONTACT_QT_ONE_TIME_NATIVE_ABSENCE_REQUIRED' using errcode='55000';end if;end;$qt_absence$;`;
   sql=[preflight,absent,...helpers,atomic('supabase/migrations/15102026_0800_candidate_push_timing_authority.sql'),atomic('supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql'),fs.readFileSync(here+'/qt-assertions.sql','utf8')].join('\n');
   expected={programme:caseId,fixtureUsers:6,policyRows:1,commandAuditRows:2,ordinaryPayInactiveDenials:10,sameTransactionRevocationRefusals:2,

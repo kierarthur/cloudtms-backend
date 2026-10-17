@@ -1,0 +1,858 @@
+{
+  "version": "CONTACT_QT_NAME_ADMISSION_ACTUAL_PREDICATE_AST_PROOF_V1",
+  "parser": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "sourceProgrammeSha256": "6e8feb37c2177f674b0ff372264dca1c8572b24e83e03f4cdf3e35acac114e93",
+  "admissionBody": "do $qt_absence$ begin if to_regclass('public.candidate_push_timing_policy') is not null or to_regclass('public.candidate_push_timing_commands') is not null\n   or exists(select 1 from pg_catalog.pg_proc qt_routine\n   join pg_catalog.pg_namespace qt_namespace on qt_namespace.oid=qt_routine.pronamespace\n   where (qt_namespace.nspname,qt_routine.proname) in (\n    ('private','weekly_contact_assert_closed_v1'),('private','weekly_contact_revision_v1'),\n    ('private','candidate_push_timing_policy_validate_v1'),('private','weekly_contact_deployment_lock_v1'),\n    ('private','candidate_push_timing_immutable_guard_v1'),('public','candidate_push_timing_get_v1'),\n    ('public','candidate_push_timing_save_v1')))\n   then raise exception 'CONTACT_QT_ONE_TIME_NATIVE_ABSENCE_REQUIRED' using errcode='55000';end if;end;$qt_absence$;",
+  "parsedCondition": "to_regclass('public.candidate_push_timing_policy') is not null or to_regclass('public.candidate_push_timing_commands') is not null\n   or exists(select 1 from pg_catalog.pg_proc qt_routine\n   join pg_catalog.pg_namespace qt_namespace on qt_namespace.oid=qt_routine.pronamespace\n   where (qt_namespace.nspname,qt_routine.proname) in (\n    ('private','weekly_contact_assert_closed_v1'),('private','weekly_contact_revision_v1'),\n    ('private','candidate_push_timing_policy_validate_v1'),('private','weekly_contact_deployment_lock_v1'),\n    ('private','candidate_push_timing_immutable_guard_v1'),('public','candidate_push_timing_get_v1'),\n    ('public','candidate_push_timing_save_v1')))",
+  "actualConditionAst": {
+    "BoolExpr": {
+      "boolop": "OR_EXPR",
+      "args": [
+        {
+          "NullTest": {
+            "arg": {
+              "FuncCall": {
+                "funcname": [
+                  {
+                    "String": {
+                      "sval": "to_regclass"
+                    }
+                  }
+                ],
+                "args": [
+                  {
+                    "A_Const": {
+                      "sval": {
+                        "sval": "public.candidate_push_timing_policy"
+                      },
+                      "location": 19
+                    }
+                  }
+                ],
+                "funcformat": "COERCE_EXPLICIT_CALL",
+                "location": 7
+              }
+            },
+            "nulltesttype": "IS_NOT_NULL",
+            "location": 58
+          }
+        },
+        {
+          "NullTest": {
+            "arg": {
+              "FuncCall": {
+                "funcname": [
+                  {
+                    "String": {
+                      "sval": "to_regclass"
+                    }
+                  }
+                ],
+                "args": [
+                  {
+                    "A_Const": {
+                      "sval": {
+                        "sval": "public.candidate_push_timing_commands"
+                      },
+                      "location": 85
+                    }
+                  }
+                ],
+                "funcformat": "COERCE_EXPLICIT_CALL",
+                "location": 73
+              }
+            },
+            "nulltesttype": "IS_NOT_NULL",
+            "location": 126
+          }
+        },
+        {
+          "SubLink": {
+            "subLinkType": "EXISTS_SUBLINK",
+            "subselect": {
+              "SelectStmt": {
+                "targetList": [
+                  {
+                    "ResTarget": {
+                      "val": {
+                        "A_Const": {
+                          "ival": {
+                            "ival": 1
+                          },
+                          "location": 158
+                        }
+                      },
+                      "location": 158
+                    }
+                  }
+                ],
+                "fromClause": [
+                  {
+                    "JoinExpr": {
+                      "jointype": "JOIN_INNER",
+                      "larg": {
+                        "RangeVar": {
+                          "schemaname": "pg_catalog",
+                          "relname": "pg_proc",
+                          "inh": true,
+                          "relpersistence": "p",
+                          "alias": {
+                            "aliasname": "qt_routine"
+                          },
+                          "location": 165
+                        }
+                      },
+                      "rarg": {
+                        "RangeVar": {
+                          "schemaname": "pg_catalog",
+                          "relname": "pg_namespace",
+                          "inh": true,
+                          "relpersistence": "p",
+                          "alias": {
+                            "aliasname": "qt_namespace"
+                          },
+                          "location": 203
+                        }
+                      },
+                      "quals": {
+                        "A_Expr": {
+                          "kind": "AEXPR_OP",
+                          "name": [
+                            {
+                              "String": {
+                                "sval": "="
+                              }
+                            }
+                          ],
+                          "lexpr": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "qt_namespace"
+                                  }
+                                },
+                                {
+                                  "String": {
+                                    "sval": "oid"
+                                  }
+                                }
+                              ],
+                              "location": 243
+                            }
+                          },
+                          "rexpr": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "qt_routine"
+                                  }
+                                },
+                                {
+                                  "String": {
+                                    "sval": "pronamespace"
+                                  }
+                                }
+                              ],
+                              "location": 260
+                            }
+                          },
+                          "location": 259
+                        }
+                      }
+                    }
+                  }
+                ],
+                "whereClause": {
+                  "A_Expr": {
+                    "kind": "AEXPR_IN",
+                    "name": [
+                      {
+                        "String": {
+                          "sval": "="
+                        }
+                      }
+                    ],
+                    "lexpr": {
+                      "RowExpr": {
+                        "args": [
+                          {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "qt_namespace"
+                                  }
+                                },
+                                {
+                                  "String": {
+                                    "sval": "nspname"
+                                  }
+                                }
+                              ],
+                              "location": 294
+                            }
+                          },
+                          {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "qt_routine"
+                                  }
+                                },
+                                {
+                                  "String": {
+                                    "sval": "proname"
+                                  }
+                                }
+                              ],
+                              "location": 315
+                            }
+                          }
+                        ],
+                        "row_format": "COERCE_IMPLICIT_CAST",
+                        "location": 293
+                      }
+                    },
+                    "rexpr": {
+                      "List": {
+                        "items": [
+                          {
+                            "RowExpr": {
+                              "args": [
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "private"
+                                    },
+                                    "location": 345
+                                  }
+                                },
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "weekly_contact_assert_closed_v1"
+                                    },
+                                    "location": 355
+                                  }
+                                }
+                              ],
+                              "row_format": "COERCE_IMPLICIT_CAST",
+                              "location": 344
+                            }
+                          },
+                          {
+                            "RowExpr": {
+                              "args": [
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "private"
+                                    },
+                                    "location": 391
+                                  }
+                                },
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "weekly_contact_revision_v1"
+                                    },
+                                    "location": 401
+                                  }
+                                }
+                              ],
+                              "row_format": "COERCE_IMPLICIT_CAST",
+                              "location": 390
+                            }
+                          },
+                          {
+                            "RowExpr": {
+                              "args": [
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "private"
+                                    },
+                                    "location": 437
+                                  }
+                                },
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "candidate_push_timing_policy_validate_v1"
+                                    },
+                                    "location": 447
+                                  }
+                                }
+                              ],
+                              "row_format": "COERCE_IMPLICIT_CAST",
+                              "location": 436
+                            }
+                          },
+                          {
+                            "RowExpr": {
+                              "args": [
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "private"
+                                    },
+                                    "location": 492
+                                  }
+                                },
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "weekly_contact_deployment_lock_v1"
+                                    },
+                                    "location": 502
+                                  }
+                                }
+                              ],
+                              "row_format": "COERCE_IMPLICIT_CAST",
+                              "location": 491
+                            }
+                          },
+                          {
+                            "RowExpr": {
+                              "args": [
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "private"
+                                    },
+                                    "location": 545
+                                  }
+                                },
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "candidate_push_timing_immutable_guard_v1"
+                                    },
+                                    "location": 555
+                                  }
+                                }
+                              ],
+                              "row_format": "COERCE_IMPLICIT_CAST",
+                              "location": 544
+                            }
+                          },
+                          {
+                            "RowExpr": {
+                              "args": [
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "public"
+                                    },
+                                    "location": 600
+                                  }
+                                },
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "candidate_push_timing_get_v1"
+                                    },
+                                    "location": 609
+                                  }
+                                }
+                              ],
+                              "row_format": "COERCE_IMPLICIT_CAST",
+                              "location": 599
+                            }
+                          },
+                          {
+                            "RowExpr": {
+                              "args": [
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "public"
+                                    },
+                                    "location": 647
+                                  }
+                                },
+                                {
+                                  "A_Const": {
+                                    "sval": {
+                                      "sval": "candidate_push_timing_save_v1"
+                                    },
+                                    "location": 656
+                                  }
+                                }
+                              ],
+                              "row_format": "COERCE_IMPLICIT_CAST",
+                              "location": 646
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "location": 335
+                  }
+                },
+                "limitOption": "LIMIT_OPTION_DEFAULT",
+                "op": "SETOP_NONE"
+              }
+            },
+            "location": 144
+          }
+        }
+      ],
+      "location": 70
+    }
+  },
+  "closedPairs": [
+    [
+      "private",
+      "weekly_contact_assert_closed_v1"
+    ],
+    [
+      "private",
+      "weekly_contact_revision_v1"
+    ],
+    [
+      "private",
+      "candidate_push_timing_policy_validate_v1"
+    ],
+    [
+      "private",
+      "weekly_contact_deployment_lock_v1"
+    ],
+    [
+      "private",
+      "candidate_push_timing_immutable_guard_v1"
+    ],
+    [
+      "public",
+      "candidate_push_timing_get_v1"
+    ],
+    [
+      "public",
+      "candidate_push_timing_save_v1"
+    ]
+  ],
+  "syntheticCatalogueVectors": [
+    {
+      "case": "empty catalogue admitted",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "original table presence public.candidate_push_timing_policy",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "original table presence public.candidate_push_timing_commands",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected f overload private.weekly_contact_assert_closed_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected f overload private.weekly_contact_assert_closed_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload private.weekly_contact_assert_closed_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload private.weekly_contact_assert_closed_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload private.weekly_contact_assert_closed_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload private.weekly_contact_assert_closed_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload private.weekly_contact_assert_closed_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload private.weekly_contact_assert_closed_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "same name in unrelated schema weekly_contact_assert_closed_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unrelated name in target schema weekly_contact_assert_closed_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unjoined namespace oid weekly_contact_assert_closed_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unexpected f overload private.weekly_contact_revision_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected f overload private.weekly_contact_revision_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload private.weekly_contact_revision_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload private.weekly_contact_revision_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload private.weekly_contact_revision_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload private.weekly_contact_revision_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload private.weekly_contact_revision_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload private.weekly_contact_revision_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "same name in unrelated schema weekly_contact_revision_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unrelated name in target schema weekly_contact_revision_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unjoined namespace oid weekly_contact_revision_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unexpected f overload private.candidate_push_timing_policy_validate_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected f overload private.candidate_push_timing_policy_validate_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload private.candidate_push_timing_policy_validate_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload private.candidate_push_timing_policy_validate_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload private.candidate_push_timing_policy_validate_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload private.candidate_push_timing_policy_validate_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload private.candidate_push_timing_policy_validate_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload private.candidate_push_timing_policy_validate_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "same name in unrelated schema candidate_push_timing_policy_validate_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unrelated name in target schema candidate_push_timing_policy_validate_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unjoined namespace oid candidate_push_timing_policy_validate_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unexpected f overload private.weekly_contact_deployment_lock_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected f overload private.weekly_contact_deployment_lock_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload private.weekly_contact_deployment_lock_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload private.weekly_contact_deployment_lock_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload private.weekly_contact_deployment_lock_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload private.weekly_contact_deployment_lock_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload private.weekly_contact_deployment_lock_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload private.weekly_contact_deployment_lock_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "same name in unrelated schema weekly_contact_deployment_lock_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unrelated name in target schema weekly_contact_deployment_lock_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unjoined namespace oid weekly_contact_deployment_lock_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unexpected f overload private.candidate_push_timing_immutable_guard_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected f overload private.candidate_push_timing_immutable_guard_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload private.candidate_push_timing_immutable_guard_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload private.candidate_push_timing_immutable_guard_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload private.candidate_push_timing_immutable_guard_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload private.candidate_push_timing_immutable_guard_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload private.candidate_push_timing_immutable_guard_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload private.candidate_push_timing_immutable_guard_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "same name in unrelated schema candidate_push_timing_immutable_guard_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unrelated name in target schema candidate_push_timing_immutable_guard_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unjoined namespace oid candidate_push_timing_immutable_guard_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unexpected f overload public.candidate_push_timing_get_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected f overload public.candidate_push_timing_get_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload public.candidate_push_timing_get_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload public.candidate_push_timing_get_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload public.candidate_push_timing_get_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload public.candidate_push_timing_get_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload public.candidate_push_timing_get_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload public.candidate_push_timing_get_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "same name in unrelated schema candidate_push_timing_get_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unrelated name in target schema candidate_push_timing_get_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unjoined namespace oid candidate_push_timing_get_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unexpected f overload public.candidate_push_timing_save_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected f overload public.candidate_push_timing_save_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload public.candidate_push_timing_save_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected p overload public.candidate_push_timing_save_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload public.candidate_push_timing_save_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected a overload public.candidate_push_timing_save_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload public.candidate_push_timing_save_v1(bigint)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "unexpected w overload public.candidate_push_timing_save_v1(text,integer)",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    },
+    {
+      "case": "same name in unrelated schema candidate_push_timing_save_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unrelated name in target schema candidate_push_timing_save_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "unjoined namespace oid candidate_push_timing_save_v1",
+      "expectedRefusal": false,
+      "actualRefusal": false
+    },
+    {
+      "case": "mixed catalogue includes genuine unexpected procedure",
+      "expectedRefusal": true,
+      "actualRefusal": true
+    }
+  ],
+  "mutationRefusals": [
+    "omitted seventh name",
+    "wrong namespace join",
+    "extra prokind filter",
+    "removed original table guard"
+  ],
+  "oldExactSignatureGap": "Every tested unexpected overload/procedure is absent from the original parsed seven-signature array and was not refused by that old signature-only test.",
+  "cataloguePresenceOrNamesNotObserved": true,
+  "nativeExecution": "NOT_RUN",
+  "nativeCompilation": "NOT_PROVED"
+}
