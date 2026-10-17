@@ -1,0 +1,114 @@
+{
+  "version": "BANKING_NAMED_PUBLISHED_DEPENDENCY_CHECKPOINT_V1",
+  "capturedAt": "2026-10-17T16:23:40.135Z",
+  "bankLocalHead": "5ba6d17f34dba37ad4aa7ce3bdf7ed1222286063",
+  "freshRemoteBranch": "codex/bpay-next-build-20261009",
+  "freshRemoteHead": "40193adc09e55c804b44b76f322b0e08e9533e74",
+  "localRemoteEqual": false,
+  "namedSavedInputs": [
+    {
+      "file": "docs/bpay-next/TEST_INSTALLS.md",
+      "bytes": 6628,
+      "sha256": "d7eed66e7a0dde18defa4628fbbbb3137e50017742195b387ab1a817f17cc1ca",
+      "savedIndexHeadEqual": true
+    },
+    {
+      "file": "docs/bpay-next/IMPLEMENTATION_CHECKLIST.csv",
+      "bytes": 9213207,
+      "sha256": "1b413e919e465c3ed1d922239c3b7badc5ea71093e01ecc46cfde607f48d0ab9",
+      "savedIndexHeadEqual": true
+    }
+  ],
+  "selectedOriginalItemRows": [
+    {
+      "Item ID": "DY-02",
+      "BUILT revised deliverable": "[x]",
+      "REVIEWED implementation": "[x]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "BASELINE_COMPLETE",
+      "V5 implementation": "",
+      "V5 review": "",
+      "Implementation commit": "1552e0c97051b48becf4aeb58cd026f15d7792fc",
+      "Implementation evidence": "design/DY-04-completion.md; design/DY-04-successor-provenance.json; reviews/DY-04-source-review.md; reviews/DY-04-authorise-source-review.md",
+      "Notes": "Card is not complete until every required deliverable and owner gate is satisfied. Scheduled DY04 closes genuine missing-rate bucket refusal before Authorise and full contractless publisher; helper assigned scope complete, ITEM remains open. DY04 closes the native contractless path and named missing-bucket source dependency. Joined acceptance remains NOT_RUN."
+    },
+    {
+      "Item ID": "CM-02",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN — original boxes prove prior scope only",
+      "V5 implementation": "REQUIRED_NOT_BUILT_OR_VERIFIED",
+      "V5 review": "NOT_REVIEWED",
+      "Implementation commit": "",
+      "Implementation evidence": "",
+      "Notes": "Card is not complete until every required deliverable and owner gate is satisfied. Historical flags/evidence retain prior scope only. Current amendment acceptance remains OPEN until every linked parent and required consumer check closes; reuse requires evidence, not a new implementation."
+    },
+    {
+      "Item ID": "CM-16",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN — original boxes prove prior scope only",
+      "V5 implementation": "REQUIRED_NOT_BUILT_OR_VERIFIED",
+      "V5 review": "NOT_REVIEWED",
+      "Implementation commit": "",
+      "Implementation evidence": "",
+      "Notes": "Card is not complete until every required deliverable and owner gate is satisfied. Historical flags/evidence retain prior scope only. Current amendment acceptance remains OPEN until every linked parent and required consumer check closes; reuse requires evidence, not a new implementation."
+    },
+    {
+      "Item ID": "CM-17",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN — original boxes prove prior scope only",
+      "V5 implementation": "REQUIRED_NOT_BUILT_OR_VERIFIED",
+      "V5 review": "NOT_REVIEWED",
+      "Implementation commit": "",
+      "Implementation evidence": "",
+      "Notes": "Card is not complete until every required deliverable and owner gate is satisfied. Historical flags/evidence retain prior scope only. Current amendment acceptance remains OPEN until every linked parent and required consumer check closes; reuse requires evidence, not a new implementation."
+    },
+    {
+      "Item ID": "F-17",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN_BASELINE",
+      "V5 implementation": "",
+      "V5 review": "",
+      "Implementation commit": "ed1034e49c454f6e0ebfd0cd9d6e8713935b0881",
+      "Implementation evidence": "docs/bpay-next/design/F-17-apply-successor-provenance.json",
+      "Notes": "Card is not complete until every required deliverable and owner gate is satisfied. Partial source; activation BLOCKED R17-01: existing telemetry does not establish complete earlier unfinished-admission coverage or a trusted native consumption seam; no actual old outstanding call inferred. See design/F-17-external-quiet-observability.md; retry at end. Source retirement is built, activation is not. Priority retry14October: independent applicability and native CAS/route source review PASS; all native compilation/current source gates/seal/coupling/catalogue checks pass. Full activation/quiet not claimed. Historical non-descriptor preparation suite failures recorded separately; correct shared product unchanged."
+    },
+    {
+      "Item ID": "HR-06",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN — original boxes prove prior scope only",
+      "V5 implementation": "REQUIRED_NOT_BUILT_OR_VERIFIED",
+      "V5 review": "NOT_REVIEWED",
+      "Implementation commit": "",
+      "Implementation evidence": "",
+      "Notes": "Card is not complete until every required deliverable and owner gate is satisfied. Historical SEND1/SEND4 publication wait is satisfied only as to the dated WP-PP v2 producer receipt; the exact Banking consumer adoption check remains open. Banking consumes only; no second producer. No original owner tick/evidence is changed. Historical flags/evidence retain prior scope only. Current amendment acceptance remains OPEN until every linked parent and required consumer check closes; reuse requires evidence, not a new implementation."
+    },
+    {
+      "Item ID": "HR-11",
+      "BUILT revised deliverable": "[x]",
+      "REVIEWED implementation": "[x]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN — original boxes prove prior scope only",
+      "V5 implementation": "REQUIRED_NOT_BUILT_OR_VERIFIED",
+      "V5 review": "NOT_REVIEWED",
+      "Implementation commit": "1d9b1a1a2d69b7ae81e3ca5cd47bec849c37127d",
+      "Implementation evidence": "docs/bpay-next/design/HR-11_WORKER_PERMISSION_SITE_MAP.md; twelve exact predicates and unchanged published helper; final source gate PASS1652/43/186/70; HR-06 native consumers remain OPEN",
+      "Notes": "Card is not complete until every required deliverable and owner gate is satisfied. Historical flags/evidence retain prior scope only. Current amendment acceptance remains OPEN until every linked parent and required consumer check closes; reuse requires evidence, not a new implementation."
+    }
+  ],
+  "firstDisabledInstall": "COMPLETE with explicit shared-lock release in TEST_INSTALLS; no newer switch-on install recorded.",
+  "consumerDisposition": "Prior absence holds remain historical. Exact unprovided amendment receipts remain scoped to their original CM/HR owners; F17 delays only NEXT-dependent acceptance. Continue independent Health implementation and revisit at next integration boundary.",
+  "semanticBankingBodiesRead": false,
+  "bankingCodeChanged": false,
+  "bankingChatMessaged": false,
+  "comparison": "Both named complete saved/index/HEAD byte images equal dated R6; selected original status rows and first-disabled-install interpretation retained without reading Banking semantic bodies."
+}

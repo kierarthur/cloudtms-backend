@@ -1,0 +1,15 @@
+{
+  "version": "MYTMS_FRESH_MAIN_SOURCE_CHECK_V2",
+  "capturedAt": "2026-10-17T16:23:40.139Z",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-mytms-13102026",
+  "gitDirectory": "D:/Development/GitHub/mytms-app/.git/worktrees/healthroster-v2-mytms-13102026",
+  "commonGitDirectory": "D:/Development/GitHub/mytms-app/.git",
+  "featureBranch": "codex/healthroster-v2-mytms-13102026",
+  "featureLocalAndRemote": "45c50c9a541e05cd0f5915729da3d0332f0884db",
+  "freshFetchedAndRemoteMain": "ed9270088f8ca555d6b2e7258aed86dff58b90b8",
+  "mainAncestorOfFeature": true,
+  "dirtyFiles": 0,
+  "mergeRequiredNow": false,
+  "futureAction": "Recheck immediately before TestFlight; merge any newer main non-forced and rerun app checks.",
+  "appBuildUploadOrDeployment": "NOT_RUN"
+}
