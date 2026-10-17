@@ -1,0 +1,70 @@
+-- Health-only closed shape checks. They do not grant financial visibility or
+-- turn a Banking SummaryDTO into money. Native owner blocks must supply that.
+create or replace function private.daily_rate_correction_health_financial_projection_assert_v1(p_financial jsonb,p_visible boolean)
+returns jsonb language plpgsql stable security definer
+set search_path=pg_catalog,private,pg_temp
+as $function$
+begin
+ if p_visible is null then raise exception 'DAILY_RATE_FINANCIAL_VISIBILITY_UNBOUND' using errcode='55000';end if;
+ perform private.daily_rate_correction_public_assert_v1(p_financial,'FINANCIAL');
+ if not p_visible and (p_financial->'command_id' is distinct from 'null'::jsonb
+  or p_financial->'cut_id' is distinct from 'null'::jsonb
+  or (p_financial->'summary' is distinct from 'null'::jsonb
+    and p_financial->'summary' is distinct from '{"visibility":"REDACTED"}'::jsonb)) then
+  raise exception 'DAILY_RATE_FINANCIAL_PROJECTION_DENIED' using errcode='42501';end if;
+ return p_financial;
+end;
+$function$;
+
+create or replace function private.daily_rate_correction_health_invoice_effect_v1(p_invoice jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path=pg_catalog,private,pg_temp
+as $function$
+declare effect text;
+begin
+ -- Called only after actual current Admin mutation admission and real0955
+ -- inspection. Text describes native disposition; no reconstructed valuation.
+ if jsonb_typeof(p_invoice->'slices') is distinct from 'array' then
+  raise exception 'DAILY_RATE_INVOICE_EFFECT_UNBOUND' using errcode='23514';end if;
+ if exists(select 1 from jsonb_array_elements(p_invoice->'slices') s
+   where coalesce(s->>'disposition','') not in('REPLACE_ISSUED','RELOCATE_DRAFT','EDIT_DRAFT','PRESERVE_SOURCE','NO_INVOICE')) then
+  raise exception 'DAILY_RATE_INVOICE_EFFECT_UNBOUND' using errcode='23514';end if;
+ if exists(select 1 from jsonb_array_elements(p_invoice->'slices') s where s->>'disposition'='REPLACE_ISSUED') then
+  effect:='The original invoice lines require native credits and replacement Drafts.';
+ elsif exists(select 1 from jsonb_array_elements(p_invoice->'slices') s where s->>'disposition'='RELOCATE_DRAFT') then
+  effect:='The selected invoice Draft lines require native relocation.';
+ elsif exists(select 1 from jsonb_array_elements(p_invoice->'slices') s where s->>'disposition'='EDIT_DRAFT') then
+  effect:='The selected invoice Draft lines will be updated.';
+ elsif exists(select 1 from jsonb_array_elements(p_invoice->'slices') s where s->>'disposition'='PRESERVE_SOURCE') then
+  effect:='Source invoice history remains unchanged.';
+ elsif jsonb_array_length(p_invoice->'slices')>0 and not exists(select 1 from jsonb_array_elements(p_invoice->'slices') s
+   where s->>'disposition' is distinct from 'NO_INVOICE') then
+  effect:='No invoice change is required.';
+ else raise exception 'DAILY_RATE_INVOICE_EFFECT_UNBOUND' using errcode='23514';end if;
+ return private.daily_rate_correction_public_assert_v1(jsonb_build_object('visibility','FULL','text',effect),'EFFECT');
+end;
+$function$;
+
+create or replace function private.daily_rate_correction_health_actions_assert_v1(p_actions jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path=pg_catalog,private,pg_temp
+as $function$
+declare item jsonb;
+begin
+ if jsonb_typeof(p_actions) is distinct from 'array' then
+  raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ for item in select value from jsonb_array_elements(p_actions) loop
+  perform private.daily_rate_correction_public_assert_v1(item,'ACTION');
+ end loop;
+ -- Same semantic identity as the unchanged Health Worker actionKey. Captions,
+ -- disabled text or URLs cannot create two actions for one native target.
+ if (select count(*) from jsonb_array_elements(p_actions))<>
+  (select count(distinct jsonb_build_array(x->'kind',x->'target_type',x->'target_id',x->'decision_id',x->'member_key',
+    x->'client_id',x->'period_start',x->'period_end')) from jsonb_array_elements(p_actions) x) then
+  raise exception 'DAILY_RATE_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ return p_actions;
+end;
+$function$;
+revoke all on function private.daily_rate_correction_health_financial_projection_assert_v1(jsonb,boolean) from public,anon,authenticated,service_role;
+revoke all on function private.daily_rate_correction_health_invoice_effect_v1(jsonb) from public,anon,authenticated,service_role;
+revoke all on function private.daily_rate_correction_health_actions_assert_v1(jsonb) from public,anon,authenticated,service_role;

@@ -1,0 +1,20 @@
+{
+  "version": "ROOT_DAILY_FULL_HEALTH_SOURCE_REPLAY_V1",
+  "authorCommit": "bc9f07844759bb3a914d6a48488dd25c2946489c",
+  "rootCheckpoint": "9ac9d497e24d1bffaa5990fc45416a3f18be9e2a",
+  "rawGitExactFiles": 46,
+  "manifestSha256": "ccd5bf622b2f8f42644004a369c49db7f2c6e3ce8979431ee6c80033e26f2c13",
+  "independentSourceTests": 16,
+  "negativeMutationCases": 5,
+  "grammarInputs": 7,
+  "closedHelpers": 5,
+  "heldTemplatesNotParsed": 3,
+  "grammarSubstitutions": 0,
+  "unprovidedGenuineBankJoins": 3,
+  "placementHistory": "TECHNICAL_MAPPING_REQUIRES_SOURCE_SUCCESSOR_NOT_OWNER_DECISION",
+  "runtimeTargets": 0,
+  "native": "NOT_RUN",
+  "independentPeer": "IN_PROGRESS",
+  "rootVerdict": "SOURCE_REPLAY_PASS_FINAL_COMPOSITION_HELD",
+  "temporaryResources": "Owned negative-test folder validates its physical D parent and removes itself; no refusal."
+}
