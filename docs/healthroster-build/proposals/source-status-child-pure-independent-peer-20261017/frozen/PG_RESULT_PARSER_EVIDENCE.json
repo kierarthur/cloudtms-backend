@@ -1,0 +1,57 @@
+{
+  "version": "DAILY_PURE_LOCAL_PG_RESULT_PARSER_SOURCE_EVIDENCE_V1",
+  "physicalSource": "D:\\Development\\GitHub\\cloudtms-backend\\infra\\miget\\cloudtms-miget-operations\\node_modules\\pg\\lib\\result.js",
+  "sourceSha256": "6d7193da53f8557600a065e4356626026e8c5baf12c477dc19e439d8f204225c",
+  "physicalPackage": "D:\\Development\\GitHub\\cloudtms-backend\\infra\\miget\\cloudtms-miget-operations\\node_modules\\pg\\package.json",
+  "packageSha256": "e42dd36cba6e9dd8dbb6f773a2f7be8a8c3c273e18b155e42e75961a4cb8bc28",
+  "pgVersion": "8.23.0",
+  "evidence": "Actual local pg Result.addCommandComplete parses synthetic command tags; constructor defaults rowCount=null and empty fields/rows",
+  "samples": [
+    {
+      "syntheticCommandCompleteTag": "SET",
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": []
+    },
+    {
+      "syntheticCommandCompleteTag": "DO",
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": []
+    },
+    {
+      "syntheticCommandCompleteTag": "CREATE TABLE",
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": []
+    },
+    {
+      "syntheticCommandCompleteTag": "CREATE FUNCTION",
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": []
+    },
+    {
+      "syntheticCommandCompleteTag": "RESET",
+      "command": "RESET",
+      "rowCount": null,
+      "fields": [],
+      "rows": []
+    },
+    {
+      "syntheticCommandCompleteTag": "SELECT 1",
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [],
+      "rows": []
+    }
+  ],
+  "responseBound": "Receipt fixes exact generated statement indices and command classes; null permitted only for matching no-row command; SELECT requires actual integer1, one field and one row",
+  "deploymentIdentity": "NOT_PROVED_FROM_LOCAL_DEPENDENCY",
+  "nativeObserved": "Only R2 SET and verification SELECT are observed; DO CREATE RESET remain unobserved source ABI expectations",
+  "dbConnections": 0
+}

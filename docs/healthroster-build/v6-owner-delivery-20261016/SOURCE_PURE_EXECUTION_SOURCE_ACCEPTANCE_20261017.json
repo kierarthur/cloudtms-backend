@@ -1,0 +1,19 @@
+{
+  "version": "ROOT_SOURCE_PURE_EXECUTION_SOURCE_ACCEPTANCE_V1",
+  "authorCommit": "5931ae9e2f1ab11de810996f5aea6a02570b7ce9",
+  "independentPeerCommit": "9089c29ded175ab42220ff53bbac4e19dddda50b",
+  "peerManifestSha256": "22e5bad88777a093866fa32edb886ff3cba5b73d9eb5c0619c9e409045573ad3",
+  "peerRawGitExactFiles": 61,
+  "peerVerdict": "ACCEPT_BOUNDED_EXECUTION_ADAPTER_SOURCE",
+  "rootSourceFindings": 0,
+  "peerSourceFindings": 0,
+  "rootVerdict": "ACCEPT_EXACT_BOUNDED_TRIAL_SOURCE_UNDER_EXISTING_D9_AND_SEND7_AUTHORITY",
+  "setupCommittedAt": "17a0ec1b5b9c31454c29b2a3b18cf004192ba810",
+  "programmeSha256": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8",
+  "native": "NOT_RUN",
+  "publicResult": "NOT_PROVIDED",
+  "businessFixtureRows": 0,
+  "existingKeyHelperReplaced": false,
+  "routePreflight": "SOURCE_PURE_ROUTE_PREFLIGHT_20261017.json",
+  "finalCriticSignoff": false
+}
