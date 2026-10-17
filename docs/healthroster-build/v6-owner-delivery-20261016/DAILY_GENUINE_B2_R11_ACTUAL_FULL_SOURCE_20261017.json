@@ -1,0 +1,15 @@
+{
+  "version": "DAILY_R11_ACTUAL_FULL_SOURCE_V1",
+  "full": {
+    "operator": {
+      "operatorCommit": "aa6a57b964b7916ca0a689ead1555ef0774a39e2",
+      "rootCommit": "5cf0a18f161327d9513c6b107761aa437997c10b"
+    },
+    "coordinator": "aa6a57b964b7916ca0a689ead1555ef0774a39e2",
+    "continuation": "aa6a57b964b7916ca0a689ead1555ef0774a39e2"
+  },
+  "originalPreflightRetained": true,
+  "privateStateContentsReadHashedCopied": false,
+  "securityMetadataCheck": "Original sourcePreflight lstat/isFile/no-symlink and physical-parent/ignored checks retained; no root direct state read/hash/copy.",
+  "native": "NOT_RUN"
+}
