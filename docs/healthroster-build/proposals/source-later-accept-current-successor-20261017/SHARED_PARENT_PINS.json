@@ -1,0 +1,8 @@
+{
+  "checkpoint": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+  "registryTarget": "docs/bpay-next/final-definer-closures.json",
+  "registrySha256": "e6ee24f8f541b4e31d28ba625623b7bb7674a54a6dcabd808a5aa8e17b6e3aaa",
+  "classInput": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+  "classSha256": "587a7bd81efa24d721b1632a4c1a5af902fdeb56a3d39c0736615df51024fd78",
+  "missingClassHunksSha256": "cc7c5a3baae419a439e1cde5422c0d151e11d3712a41a8e991d47211ab34f97d"
+}

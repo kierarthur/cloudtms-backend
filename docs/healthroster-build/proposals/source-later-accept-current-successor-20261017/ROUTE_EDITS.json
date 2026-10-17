@@ -1,0 +1,41 @@
+{
+  "checkpoint": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+  "dependencyCommit": "a34cd60f2c75580a9e37aabfaf26f7dab680cb37",
+  "inputPath": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/broker/src/weekly-source/routes.js",
+  "target": "broker/src/weekly-source/routes.js",
+  "inputSha256": "e735ba9cc5b52323e72229f6ff2569dfee22268041b8ccf2cafbc1b11da9c279",
+  "outputSha256": "ad1378679bcc02c7b10134e97a06e7daf20906e95945160cc9207e53c272d781",
+  "hunks": [
+    {
+      "name": "finite closed preparation parser import",
+      "before": "import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';",
+      "after": "import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';\r\nimport {missingAcceptPrepareRequest,missingAcceptContextRequest} from './missing-accept.mjs';"
+    },
+    {
+      "name": "real Office admin commands to literal Source context/producer only",
+      "before": "  if (action === 'LATER_CHANGE_DECISION') {",
+      "after": "  if (action === 'MISSING_ACCEPT_CONTEXT' || action === 'PREPARE_MISSING_ACCEPT') {\r\n    if (body.action !== action || Object.keys(body).length !== 2 || !Object.hasOwn(body,'payload')) {\r\n      fail('WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID','This proposal could not be prepared.',400);\r\n    }\r\n    let preparation;\r\n    try { preparation=action==='MISSING_ACCEPT_CONTEXT'\r\n      ? missingAcceptContextRequest(payload,user.id) : missingAcceptPrepareRequest(payload,user.id); }\r\n    catch { fail('WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID','This proposal could not be prepared.',400); }\r\n    let owner;\r\n    try {\r\n      if (typeof dependencies.bpayNextOwnerStatusRpc !== 'function') throw new Error();\r\n      owner=normalizeBpayNextOwnerStatus(await dependencies.bpayNextOwnerStatusRpc(env));\r\n    } catch { fail('BPAY_NEXT_OWNER_STATUS_UNAVAILABLE','This proposal is unavailable; try again shortly.',503); }\r\n    if (owner.active_owner !== 'NEXT') {\r\n      fail('WEEKLY_SOURCE_COMMAND_NOT_SUPPORTED','This proposal is not available for this agency yet.',409);\r\n    }\r\n    const rpc=action==='MISSING_ACCEPT_CONTEXT' ? 'weekly_source_missing_accept_context_v1'\r\n      : 'weekly_source_missing_accept_prepare_atomic_v1';\r\n    const result=await withRefusalRecording(dependencies,'broker:weekly-source:'+rpc,user.id,\r\n      ()=>callRpc(dependencies,rpc,preparation));\r\n    return jsonResponse(200,result);\r\n  }\r\n\r\n  if (action === 'LATER_CHANGE_DECISION') {"
+    },
+    {
+      "before": "const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;",
+      "after": "const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;",
+      "purpose": "canonicalUuid already lowercases; accept the genuine full PostgreSQL UUID domain at the actual actor/route boundary."
+    },
+    {
+      "before": "  'KEEP_AS_PAID',",
+      "after": "  'KEEP_AS_PAID', 'MISSING_ACCEPT_CONTEXT', 'PREPARE_MISSING_ACCEPT', 'LATER_CHANGE_DECISION',",
+      "purpose": "The actual payment-authoriser route shares the native protected-pay purpose."
+    },
+    {
+      "before": "import {missingAcceptPrepareRequest,missingAcceptContextRequest} from './missing-accept.mjs';",
+      "after": "import {missingAcceptPrepareRequest,missingAcceptContextRequest,positiveDecimal} from './missing-accept.mjs';",
+      "purpose": "Lossless new bigint revision with bounded historical numeric compatibility."
+    },
+    {
+      "before": "|| !Number.isSafeInteger(payload.bundle_revision) || payload.bundle_revision < 1",
+      "after": "|| !(positiveDecimal(payload.bundle_revision)\n          || (Number.isSafeInteger(payload.bundle_revision) && payload.bundle_revision >= 1))",
+      "purpose": "Admit new canonical string without converting it to Number; keep the existing native request domain."
+    }
+  ],
+  "completeReverseByteEquality": true
+}

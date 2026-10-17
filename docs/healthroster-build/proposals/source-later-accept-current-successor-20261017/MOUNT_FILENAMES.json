@@ -1,0 +1,4 @@
+{
+  "guard": "supabase/migrations/17102026_0141_weekly_source_later_accept_native_proof.sql",
+  "repeatable": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql"
+}
