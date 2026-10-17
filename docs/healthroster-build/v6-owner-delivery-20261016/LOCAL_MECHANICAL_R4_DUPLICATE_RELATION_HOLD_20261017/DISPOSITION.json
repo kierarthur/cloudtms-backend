@@ -1,0 +1,23 @@
+{
+  "status": "ACTUAL_LOCAL_MECHANICAL_HOLD",
+  "candidate": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+  "provider": "PASS_GENUINE_FOUR_PRIVILEGE_ABSENCE_BOOLEANS",
+  "schema": "FAILED_42P07_DUPLICATE_RELATION",
+  "loggedLoadStatements": 225,
+  "lastLogged": "LOCAL LOAD migration supabase/migrations/16102026_1100_nhsp_v6_source_health_metadata.sql",
+  "exactFailedRelation": "NOT_OBSERVED_CLOSED_SQLSTATE_ONLY",
+  "contract": "NOT_GENERATED",
+  "nativeAcceptance": "NOT_RUN",
+  "hostedExecution": false,
+  "cleanup": {
+    "ownContainerRemoved": true,
+    "ownVolumeRemoved": true,
+    "noImagePullOrBuild": true,
+    "noNetworkCreated": true,
+    "containerVacant": true,
+    "volumeVacant": true,
+    "after": "{\"Active\":\"1\",\"Reclaimable\":\"207.4MB (24%)\",\"Size\":\"832.9MB\",\"TotalCount\":\"3\",\"Type\":\"Images\"}\n{\"Active\":\"1\",\"Reclaimable\":\"331.8kB (94%)\",\"Size\":\"352.3kB\",\"TotalCount\":\"9\",\"Type\":\"Containers\"}\n{\"Active\":\"8\",\"Reclaimable\":\"0B (0%)\",\"Size\":\"14.56GB\",\"TotalCount\":\"8\",\"Type\":\"Local Volumes\"}\n{\"Active\":\"0\",\"Reclaimable\":\"0B\",\"Size\":\"0B\",\"TotalCount\":\"0\",\"Type\":\"Build Cache\"}",
+    "reclaimedBytes": "NOT_ATTRIBUTED_GLOBAL_CONCURRENT_DELTA"
+  },
+  "followup": "Source diagnosis of Health-owned metadata migration; no skip, drop or blind retry."
+}

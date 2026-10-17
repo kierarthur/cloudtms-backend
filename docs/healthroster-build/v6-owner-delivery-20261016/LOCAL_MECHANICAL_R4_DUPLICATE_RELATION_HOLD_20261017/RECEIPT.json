@@ -1,0 +1,45 @@
+{
+  "version": "HEALTHROSTER_ACTUAL_MECHANICAL_SEAL_V1",
+  "candidate": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+  "beganAt": "2026-10-17T19:53:26.929Z",
+  "scope": "EMPTY_LOCAL_SCHEMA_CONTRACT_ONLY_NO_BUSINESS_DATA_OR_ACCEPTANCE",
+  "status": "MECHANICAL_HOLD",
+  "resources": {
+    "container": "hr-i2-seal-pg17-20261017",
+    "volume": "hr-i2-seal-data-20261017",
+    "image": "postgres:17.11-bookworm",
+    "imageId": "sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0",
+    "containerId": "ba0e8b3974b18e04265148919d04dafa6951bcd5031d3c73aa61b82a34a9fc57"
+  },
+  "steps": [
+    {
+      "label": "PROVIDER",
+      "file": "scripts/healthroster-install2-local-provider.mjs",
+      "exitCode": 0,
+      "elapsedMs": 2310
+    },
+    {
+      "label": "SCHEMA",
+      "file": "scripts/healthroster-install2-local-schema.mjs",
+      "exitCode": 1,
+      "elapsedMs": 51487
+    }
+  ],
+  "cleanup": {
+    "ownContainerRemoved": true,
+    "ownVolumeRemoved": true,
+    "noImagePullOrBuild": true,
+    "noNetworkCreated": true,
+    "containerVacant": true,
+    "volumeVacant": true,
+    "after": "{\"Active\":\"1\",\"Reclaimable\":\"207.4MB (24%)\",\"Size\":\"832.9MB\",\"TotalCount\":\"3\",\"Type\":\"Images\"}\n{\"Active\":\"1\",\"Reclaimable\":\"331.8kB (94%)\",\"Size\":\"352.3kB\",\"TotalCount\":\"9\",\"Type\":\"Containers\"}\n{\"Active\":\"8\",\"Reclaimable\":\"0B (0%)\",\"Size\":\"14.56GB\",\"TotalCount\":\"8\",\"Type\":\"Local Volumes\"}\n{\"Active\":\"0\",\"Reclaimable\":\"0B\",\"Size\":\"0B\",\"TotalCount\":\"0\",\"Type\":\"Build Cache\"}",
+    "reclaimedBytes": "NOT_ATTRIBUTED_GLOBAL_CONCURRENT_DELTA"
+  },
+  "inventoryBefore": {
+    "containers": "101e2765fd25 bpay-next-build-pg17 postgres:17.11-bookworm Up 20 hours\nd28e963d8a44 codex-lane-c-h03-auth-scratch-20261008 051f7b7b3abd Exited (0) 9 days ago\n0f441319efe0 codex-lane-b-cold-h02-20261008 051f7b7b3abd Exited (0) 9 days ago\n3e5e3685f3f9 codex-protected-authorised-pg17-20261004 postgres:17.11-bookworm Exited (255) 11 days ago\nb9905d27c62c codex-protected-local-save-pg17-20261004 postgres:17.11-bookworm Exited (0) 11 days ago\nef454337be10 codex-bpay-reset-release-pg17-20261003 postgres:17.11-bookworm Exited (0) 7 days ago\n451169e2e37a codex-packet2-record-page-20260929 postgres:17.11-bookworm Exited (255) 11 days ago\na64e2dac687d codex-packet2-source-head-20260929 postgres:17.11-bookworm Exited (255) 11 days ago\n89e48ba9a8b0 codex-stage2-expense-bypass-20260924 postgres:17.11-bookworm Exited (255) 11 days ago",
+    "volumes": "0d71db9ec3062cb4785e67ff0aaaee1423fc2c7693801c31f72947a0abe72d6b\n98ba9e3a7e1dc1de4046c7d28adcf4250a9886e650461abcf0822b7c40f3071b\nbpay-next-build-pg17-data-20261009\ncodex-lane-b-baseline02-data-20261008\ncodex-lane-c-h03-auth-scratch-data-20261008\ncodex-protected-authorised-pg17-20261004\ncodex-protected-local-save-pg17-20261004\nde8ed3a00c33e34cca43a4f8014c0c50a85e5bba1c4ac44bee5924b908cf3da3",
+    "disk": "{\"Active\":\"1\",\"Reclaimable\":\"207.4MB (24%)\",\"Size\":\"832.9MB\",\"TotalCount\":\"3\",\"Type\":\"Images\"}\n{\"Active\":\"1\",\"Reclaimable\":\"331.8kB (94%)\",\"Size\":\"352.3kB\",\"TotalCount\":\"9\",\"Type\":\"Containers\"}\n{\"Active\":\"8\",\"Reclaimable\":\"0B (0%)\",\"Size\":\"14.56GB\",\"TotalCount\":\"8\",\"Type\":\"Local Volumes\"}\n{\"Active\":\"0\",\"Reclaimable\":\"0B\",\"Size\":\"0B\",\"TotalCount\":\"0\",\"Type\":\"Build Cache\"}"
+  },
+  "code": "LOCAL_STEP_FAILED_SCHEMA",
+  "endedAt": "2026-10-17T19:54:30.663Z"
+}

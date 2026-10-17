@@ -1,0 +1,10 @@
+{
+  "version": "HEALTHROSTER_R4_ACTUAL_DRIVER_SOURCE_REVIEW_V1",
+  "candidate": "907ee50aaaacefeedfc4a52afc637c7144731ee0",
+  "parentDriver": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\i2-mechanical-r3-20261017-65c78b88aff8464eb83ae9357412efd1\\RUN.mjs",
+  "parentSha256": "ef15586721a1be28f146370e68c319806c1b57c00da1b4f7e9dc5aa8a3090628",
+  "driverSha256": "ed472f5e592b7f3ff09993a1af73887d8a88c92cbebf31c6d5b1aa9c65cf4d54",
+  "completeParentInverse": true,
+  "changedHunks": 1,
+  "scope": "Actual clean pushed candidate only; same fresh exact local PG17 mechanical compiler sequence, original guards, secret-free logs and immediate owned cleanup. No C development paths."
+}
