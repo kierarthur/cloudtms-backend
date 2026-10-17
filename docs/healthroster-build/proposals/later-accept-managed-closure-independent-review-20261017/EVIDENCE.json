@@ -1,0 +1,36 @@
+{
+  "version": "LATER_MANAGED_CLOSURE_FORWARD_INDEPENDENT_REVIEW_V1",
+  "sourceCommit": "fb120833704623fa1265b4f4a70db6b7d3b317e4",
+  "parentCommit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+  "frozenFiles": 6,
+  "payloads": 38,
+  "unchangedParentPayloads": 37,
+  "registryChanges": 35,
+  "actualPriorHealthDefinitionOccurrences": 65,
+  "checks": [
+    "all six saved forward files equal exactfb120 Git blobs",
+    "exact38 selection has37 unchangedb692 payloads and one repaired registry",
+    "35 exact real-current before/after rows and full raw Unicode-preserving reverse",
+    "all claimed actual prior definitions are genuine current Health physical definitions",
+    "all25 former phantom chains closed; only genuine current/new managed roots and pages",
+    "all three actual Entry reader chains stay exact",
+    "actual scoped loader reproduces original error then closes repaired real0135 without phantom"
+  ],
+  "originalFailure": "BPAY_NEXT_FINAL_CLOSURE_MISSING: supabase/repeatable/17102026_0126_weekly_source_missing_health_authority_v1.sql",
+  "repairedScopedActualLoader": "PASS",
+  "selected": [
+    "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+    "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+    "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+    "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql"
+  ],
+  "closureFunctionSha256": "8156520d7640edb2fa10369c639909f93e2db25280b593561f973aabf0dfa0b6",
+  "sourceRegistryMount": "PASS_SOURCE_ONLY",
+  "fullAuthorVerifierResult": "PASS",
+  "fullAuthorVerifierIndependentlyRerun": false,
+  "reason": "No Bank body inventory executed by this reviewer; full verification remains author-supplied evidence. Independent actual-loader invocation is metadata-only and explicitly stubs later final-definer verification.",
+  "native": "NOT_RUN",
+  "fullPlpgsqlCatalogueGrammar": "NOT_PROVED",
+  "dbConnections": 0,
+  "rootWrites": 0
+}
