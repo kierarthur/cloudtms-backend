@@ -1,0 +1,41 @@
+{
+  "checkpoint": "5ecc4c73113660edf48a5bca2f3a478453a81c2b",
+  "target": "broker/src/weekly-source/routes.js",
+  "inputSha256": "5c639cd21f579f34ea3b7c9e2b832fa4d148f8caf3d9ecdceba88756b7013471",
+  "outputSha256": "e735ba9cc5b52323e72229f6ff2569dfee22268041b8ccf2cafbc1b11da9c279",
+  "hunks": [
+    {
+      "before": "import { isActivePaymentActor } from '../payment-actor-permission.js';",
+      "after": "import { isActivePaymentActor } from '../payment-actor-permission.js';\nimport{parseKeptPayCommand,validateKeptPayCommand,decodeKeptPayAcknowledgement,keptPayFailure,readWeeklySourceBoundedText}from'./kept-pay-command.mjs';",
+      "purpose": "Concrete kept command parser/receipt and bounded actual-parent reader."
+    },
+    {
+      "before": "  'OPEN_MANUAL_REVIEW', 'RESOLVE_MANUAL_REVIEW', 'PREPARE_PROTECTED_EDITOR',",
+      "after": "  'OPEN_MANUAL_REVIEW', 'RESOLVE_MANUAL_REVIEW', 'PREPARE_PROTECTED_EDITOR',\n  'KEEP_AS_PAID',",
+      "purpose": "Preserve WP-PP role rule for non-admin genuine payment actors."
+    },
+    {
+      "before": "    text = new TextDecoder('utf-8',{fatal:true}).decode(await req.arrayBuffer());\n  } catch {",
+      "after": "    text = await readWeeklySourceBoundedText(req, maximumBytes);\n  } catch (error) {\n    if(error?.code==='WEEKLY_SOURCE_REQUEST_TOO_LARGE')fail('WEEKLY_SOURCE_REQUEST_TOO_LARGE', 'The request is too large.', 413);",
+      "purpose": "Enforce byte cap before retaining overflow; preserve exact older command parsing and error envelope."
+    },
+    {
+      "before": "    const parsed = plainObject(JSON.parse(text || '{}'), 'WEEKLY_SOURCE_REQUEST_INVALID', 'Request');",
+      "after": "    const parsed = plainObject(JSON.parse(text || '{}'), 'WEEKLY_SOURCE_REQUEST_INVALID', 'Request');\n    if(typeof parsed.action==='string'&&parsed.action.trim().toUpperCase()==='KEEP_AS_PAID')return parseKeptPayCommand(text);",
+      "purpose": "Strict duplicate-aware JSON and closed browser fields for the new action."
+    },
+    {
+      "before": "  if (action === 'LATER_CHANGE_DECISION') {",
+      "after": "  if (action === 'KEEP_AS_PAID') {\n    try{validateKeptPayCommand(body);}catch{fail('WEEKLY_SOURCE_KEEP_AS_PAID_REQUEST_INVALID','This decision could not be prepared.',400);}\n    let result;\n    try{result=await withRefusalRecording(dependencies,\n      'broker:weekly-source:weekly_source_keep_as_paid_decide_atomic_v1',user.id,\n      ()=>callRpc(dependencies,'weekly_source_keep_as_paid_decide_atomic_v1',request));}\n    catch(error){const refusal=keptPayFailure(error);fail(refusal.code,'Open the current review before continuing.',refusal.status);}\n    try{return jsonResponse(200,decodeKeptPayAcknowledgement(result,payload,user.id));}\n    catch{fail('WEEKLY_SOURCE_KEEP_AS_PAID_RESULT_INVALID','Open the current review before continuing.',502);}\n  }\n\n  if (action === 'LATER_CHANGE_DECISION') {",
+      "purpose": "One actual service RPC with authenticated actor; closed factual ACK output; no retry or financial assertion."
+    }
+  ],
+  "completeReverseByteEquality": true,
+  "sourceHttpComposition": "Complete current5ecc parent retains Source pay HTTP route composition. Integrator applies these unique anchors to its saved current complete parent and proves combined reverse; refuse any current source drift.",
+  "module": {
+    "path": "runtime/kept-pay-command.mjs",
+    "target": "broker/src/weekly-source/kept-pay-command.mjs",
+    "sha256": "0460915380ef38aeff9437164ae93562b924712af996d89c8d880456c4d8c273"
+  },
+  "native": "NOT_RUN"
+}

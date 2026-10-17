@@ -1,0 +1,5 @@
+{
+  "schema": "supabase/migrations/17102026_0113_weekly_source_kept_10_decision_schema.sql",
+  "guards": "supabase/migrations/17102026_0113_weekly_source_kept_20_audit_guards.sql",
+  "repeatable": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+}

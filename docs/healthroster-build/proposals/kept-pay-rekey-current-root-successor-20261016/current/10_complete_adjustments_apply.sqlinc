@@ -1,0 +1,76 @@
+create or replace function private.weekly_source_invoice_adjustments_apply_v1(p_invoice_id uuid,p_payload jsonb,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare inv public.invoices%rowtype; line public.invoice_lines%rowtype; v_authority jsonb; item jsonb; v_rate numeric;
+  v_ex numeric; v_vat numeric; v_token text; v_description text; v_meta jsonb; v_ids uuid[]; v_id uuid; v_result jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if not exists(select 1 from public.tms_users where id=p_actor_user_id and is_active and lower(btrim(role))='admin') then
+    raise exception 'WEEKLY_SOURCE_OFFICE_ADMIN_REQUIRED' using errcode='42501'; end if;
+  perform public._ctms_assert_invoice_mutable_draft_v1(p_invoice_id,'INVOICE_APPLY_EDITS',true);
+  select * into strict inv from public.invoices where id=p_invoice_id for update;
+  v_authority:=private.weekly_source_invoice_adjustment_authority_v1(p_invoice_id,null);
+  if v_authority->>'allowed' is distinct from 'true' then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENTS_NOT_ALLOWED' using errcode='55000'; end if;
+  if jsonb_typeof(p_payload) is distinct from 'object' or exists(select 1 from jsonb_object_keys(p_payload) k
+    where k not in('add_adjustments','remove_invoice_line_ids')) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_EDIT_ADJUSTMENT_ONLY' using errcode='22023'; end if;
+  if p_payload ? 'remove_invoice_line_ids' then
+    if jsonb_typeof(p_payload->'remove_invoice_line_ids') is distinct from 'array' then
+      raise exception 'WEEKLY_SOURCE_INVOICE_EDIT_ADJUSTMENT_ONLY' using errcode='22023'; end if;
+    for v_id in select value::uuid from jsonb_array_elements_text(p_payload->'remove_invoice_line_ids') value loop
+      select * into strict line from public.invoice_lines where id=v_id and invoice_id=p_invoice_id for update;
+      if private.weekly_source_invoice_adjustment_line_valid_v1(line.id,p_invoice_id) is distinct from true then
+        raise exception 'WEEKLY_SOURCE_INVOICE_EDIT_ADJUSTMENT_ONLY' using errcode='22023'; end if;
+      delete from public.invoice_lines where id=line.id;
+    end loop;
+  end if;
+  v_rate:=(v_authority->>'vat_rate_pct')::numeric;
+  if p_payload ? 'add_adjustments' then
+    if jsonb_typeof(p_payload->'add_adjustments') is distinct from 'array' then
+      raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_INVALID' using errcode='22023'; end if;
+    for item in select value from jsonb_array_elements(p_payload->'add_adjustments') loop
+      if jsonb_typeof(item) is distinct from 'object' or exists(select 1 from jsonb_object_keys(item) k
+        where k not in('client_token','description','amount_ex_vat','vat_amount','credited_work_event_id')) then
+        raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_INVALID' using errcode='22023'; end if;
+      if item ? 'credited_work_event_id' then
+        raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_AUTHORITY_UNAVAILABLE' using errcode='55000'; end if;
+      v_token:=btrim(item->>'client_token'); v_description:=btrim(item->>'description');
+      if coalesce(v_token,'') !~ '^[A-Za-z0-9:_-]{1,200}$' or length(coalesce(v_description,'')) not between 1 and 1000
+        or coalesce(item->>'amount_ex_vat','') !~ '^-[0-9]+([.][0-9]{1,2})?$'
+        or (item ? 'vat_amount' and coalesce(item->>'vat_amount','') !~ '^[+-]?[0-9]+([.][0-9]{1,2})?$') then
+        raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_INVALID' using errcode='22023'; end if;
+      v_ex:=(item->>'amount_ex_vat')::numeric;
+      v_vat:=case when item ? 'vat_amount' then (item->>'vat_amount')::numeric else public._inv_round2(v_ex*v_rate/100) end;
+      if v_ex>=0 or abs(v_ex)>9999999999.99 or abs(v_vat)>9999999999.99 then
+        raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_INVALID' using errcode='22023'; end if;
+      v_meta:=jsonb_build_object('line_type','ADJUSTMENT','client_token',v_token,'description',v_description,
+        'amount_ex_vat',v_ex,'vat_rate_pct',v_rate,'vat_amount',v_vat,'vat_chargeable',v_rate<>0,
+        'vat_overridden',item ? 'vat_amount','weekly_source_adjustment_authority',v_authority);
+      select * into line from public.invoice_lines where invoice_id=p_invoice_id and source_key='ADJ:'||v_token;
+      if found then
+        if line.meta_json is distinct from v_meta or private.weekly_source_invoice_adjustment_line_valid_v1(line.id,p_invoice_id) is distinct from true then
+          raise exception 'WEEKLY_SOURCE_INVOICE_ADJUSTMENT_REPLAY_CONFLICT' using errcode='23505'; end if;
+      else
+        insert into public.invoice_lines(invoice_id,timesheet_id,booking_id,description,hours_day,hours_night,hours_sat,hours_sun,hours_bh,
+          pay_day,pay_night,pay_sat,pay_sun,pay_bh,charge_day,charge_night,charge_sat,charge_sun,charge_bh,
+          total_pay_ex_vat,total_charge_ex_vat,margin_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,meta_json,source_key)
+          values(p_invoice_id,null,null,v_description,0,0,0,0,0,null,null,null,null,null,null,null,null,null,null,
+            0,v_ex,v_ex,v_rate,v_vat,round(v_ex+v_vat,2),v_meta,'ADJ:'||v_token);
+      end if;
+    end loop;
+  end if;
+  perform public.invoice_recompute_totals(p_invoice_id);
+  perform private.weekly_source_invoice_allocation_assert_v1(p_invoice_id);
+  perform public._audit_insert('invoices',p_invoice_id::text,'INVOICE_ADJUSTMENTS_APPLIED',null,
+    jsonb_build_object('source','WEEKLY_FINAL_SOURCE','payload',p_payload),'Trust credit',p_actor_user_id);
+  select jsonb_build_object('invoice_id',id,'status',status,'subtotal_ex_vat',subtotal_ex_vat,'vat_amount',vat_amount,'total_inc_vat',total_inc_vat,
+    'document_revision',document_revision,'document_state',document_state,'preview_document_version_id',preview_document_version_id,
+    'active_document_operation_id',active_document_operation_id,'issue_state',issue_state,'active_issue_operation_id',active_issue_operation_id,
+    'reference_updates_applied',0,'timesheet_location_updates_applied',0,'timesheet_source_changed',false,
+    'source_edit_queue_contract',null,'changed_timesheet_ids','[]'::jsonb,'changed_timesheet_revisions','[]'::jsonb,
+    'source_edit_preexisting_preview',false,'invoice_replacement_required',false,'accepted_operations','[]'::jsonb,'document_queue_requested',false)
+    into v_result from public.invoices where id=p_invoice_id;
+  return v_result;
+end;
+$function$;

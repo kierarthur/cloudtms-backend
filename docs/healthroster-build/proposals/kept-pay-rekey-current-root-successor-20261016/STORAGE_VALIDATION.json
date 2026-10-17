@@ -1,0 +1,27 @@
+{
+  "actualDefaultCwd": "D:/Development/GitHub",
+  "physicalProject": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026",
+  "physicalGitDirectory": "D:/Development/GitHub/cloudtms-backend/.git/worktrees/healthroster-v2-money-build-13102026",
+  "physicalCommonGitDirectory": "D:/Development/GitHub/cloudtms-backend/.git",
+  "branch": "codex/healthroster-v2-money-build-13102026",
+  "startingHead": "aa51acc6cb5f0d831099fb676b55ce9da5c69878",
+  "logicalStagingSha256": "30f4b0cd2290c972ad8a65c015875dc16f286602f0dde94df0dbfff7d2c91b25",
+  "migrationBaselineStagingMatches": true,
+  "migrationManifestMatchingFiles": 12241,
+  "longPathsMatchingFiles": 119,
+  "unresolvedMismatchMissingReadErrors": 0,
+  "longPathNote": "Python MAX_PATH false negatives were resolved by reading the same D files through the Windows extended-path syntax; all119 hashes matched. No C fallback or source replacement.",
+  "uniqueTinyDWriteReadRemove": "PASS",
+  "codexHome": "D:/Development/Codex",
+  "observedActiveStateFile": "D:/Development/Codex/state_5.sqlite",
+  "stateFileObservedLastWriteLocal": "2026-10-17 01:14:43 Europe/London",
+  "parserDependency": "D:/Development/Legacy-Work/C-tmp/healthroster-v6-invoice-parser-20261016",
+  "docker": "NOT_USED",
+  "runtimeExecutables": "Installed Windows Python/Node binaries remain on C as allowed; project inputs and output remain D.",
+  "preexistingUntrackedPreserved": [
+    "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016",
+    "docs/healthroster-build/proposals/missing-source-retained-basis-current-native-20261014"
+  ],
+  "retainedCReadOrWrite": false,
+  "originalsDeleted": false
+}

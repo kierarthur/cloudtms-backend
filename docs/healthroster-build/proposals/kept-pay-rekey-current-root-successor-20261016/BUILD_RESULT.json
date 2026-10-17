@@ -1,0 +1,88 @@
+{
+  "checkpoint": "5ecc4c73113660edf48a5bca2f3a478453a81c2b",
+  "old": "a6739abd7382759ebdbf8a58e7877835258ede9c",
+  "completeCurrentOwners": 5,
+  "outputs": [
+    {
+      "path": "forward/02_complete_upload_context.sqlinc",
+      "sha256": "a9149686b3aa1456603550dfa8eb93af1936606e498113286110a4f900274902",
+      "bytes": 28499
+    },
+    {
+      "path": "forward/03_complete_projection_rows.sqlinc",
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35",
+      "bytes": 68884
+    },
+    {
+      "path": "forward/09_complete_invoice_apply_edits.sqlinc",
+      "sha256": "b68439cb5928e008d4b315303a83e0b97ef867ea779b0ba1dabbc553974ed16b",
+      "bytes": 149546
+    },
+    {
+      "path": "forward/10_complete_adjustments_apply.sqlinc",
+      "sha256": "a88d2dffcbcbe2aac4af67edd1a93c4de255f2525c859cd94796c602fe7a5e7b",
+      "bytes": 9652
+    },
+    {
+      "path": "forward/11_complete_adjustment_line_valid.sqlinc",
+      "sha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc",
+      "bytes": 4213
+    },
+    {
+      "path": "forward/01_identical_rekey_prior.sqlinc",
+      "sha256": "1f102a04838e30fb0d0dcb12593d2024a7b67e99d77e68404f19f35a675449f0",
+      "bytes": 9377
+    },
+    {
+      "path": "forward/05_kept_as_paid_facts.sqlinc",
+      "sha256": "c06e67b60dd71b2cc748a22da8b4089ac44a140f4014e181b0abb8d170ac2afa",
+      "bytes": 9220
+    },
+    {
+      "path": "forward/06_kept_as_paid_context.sqlinc",
+      "sha256": "aee3cfccffcff7e81a98ac1e8dac212d0803310e91a810d8536c845b1cd84592",
+      "bytes": 20648
+    },
+    {
+      "path": "forward/07_keep_as_paid_decide.sqlinc",
+      "sha256": "2532ae8f82630d66230712c966a7913c1011c3f8f4ae7f5e74e5f2aa9e4f1922",
+      "bytes": 10767
+    },
+    {
+      "path": "forward/08_credited_targets_admit.sqlinc",
+      "sha256": "a4fae82f9b01a139923834d853310c175daebeef559874ed50c3c0436399f10c",
+      "bytes": 9084
+    },
+    {
+      "path": "forward/12_keep_ack_native_guard.sqlinc",
+      "sha256": "e6744c534740ddc5c15e860ba4b1eee501386ece84c2468ea10c0ac951f129c2",
+      "bytes": 7182
+    },
+    {
+      "path": "forward/04_kept_read_admission.sqlinc",
+      "sha256": "cdcac4c2c2053194bc3bc68c28d701c5bbb334e82bda3e8e41b79ca59e53a9aa",
+      "bytes": 3881
+    },
+    {
+      "path": "forward/00_original_decision_schema.sqlinc",
+      "sha256": "8162e3e8cb4b520252ade615cb3a6ec131842e6ee7df791aa592ca2d9e1b6cf0",
+      "bytes": 4968
+    },
+    {
+      "path": "forward/13_one_time_audit_guards.sqlinc",
+      "sha256": "70de74c875ea2a731030cef16e39b4d10885bd97dc2340eceded1719cb4435ae",
+      "bytes": 8348
+    },
+    {
+      "path": "forward/99_exact_function_acl.sqlinc",
+      "sha256": "7c8c73f8eb949db888afdc566968c442433ab92ced5c45b571f9e1fc9081cb32",
+      "bytes": 3418
+    }
+  ],
+  "declarations": 14,
+  "rootEdits": 0,
+  "dbConnections": 0,
+  "native": "NOT_RUN",
+  "contractSeal": "NOT_RUN",
+  "managedMount": "NOT_RUN"
+}

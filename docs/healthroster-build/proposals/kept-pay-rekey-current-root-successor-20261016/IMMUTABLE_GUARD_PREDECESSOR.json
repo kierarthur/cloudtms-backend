@@ -1,0 +1,25 @@
+{
+  "checkpoint": "5ecc4c73113660edf48a5bca2f3a478453a81c2b",
+  "signature": "private._weekly_source_immutable_record_guard_v1()",
+  "finalRoot": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+  "finalPhysical": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+  "allowedPhysical": [
+    "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+    "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc"
+  ],
+  "predecessors": [
+    "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+    "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql"
+  ],
+  "finalClosures": [
+    "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql"
+  ],
+  "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+  "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+  "sourceSha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8",
+  "completeStatementSha256": "e51a6afc4cc8575f081bb43bbb094d64d3c07e63cfc77b104586b18f8fc12a8d",
+  "bodySha256": "34cfb47b73e45a5da42fe8c2484a5f46d2cd7bae6440eb5561a9d08b3e119d19",
+  "oneTimeReason": "Exact existing complete native immutable owner is required by the newly planned schema triggers before repeatables in canonical NEW. Existing body/owner/security drift refuses.",
+  "native": "NOT_RUN"
+}
