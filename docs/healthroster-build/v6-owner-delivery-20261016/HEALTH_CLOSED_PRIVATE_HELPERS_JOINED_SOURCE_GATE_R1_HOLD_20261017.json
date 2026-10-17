@@ -1,0 +1,38 @@
+{
+  "status": "FULL_JOINED_SOURCE_GATE_HOLD",
+  "commit": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+  "elapsedMs": 279828,
+  "code": "HEALTHROSTER_PREBODY_DYNAMIC_BOUND_SOURCE_CHANGED\nHEALTHROSTER_PREBODY_DYNAMIC_BOUND_SOURCE_CHANGED",
+  "version": "HEALTH_CLOSED9_JOINED_SOURCE_GATE_ACTUAL_R1_HOLD_V1",
+  "diagnosis": {
+    "historicalDependencies": 95,
+    "matchingAfterExistingExactForwards": 92,
+    "mismatches": [
+      {
+        "file": "scripts/bpay-next-final-definers.mjs",
+        "before": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+        "current": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
+      },
+      {
+        "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+        "before": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+        "current": "31acd390acf2ef6dbbd062fbb157feea66f9b5d328440414e67b2bfd4a3f78ab"
+      },
+      {
+        "file": "scripts/healthroster-live-test-restoration.mjs",
+        "before": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+        "current": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc"
+      }
+    ],
+    "originalClassificationSha256": "69d2b3aee092e78e36386642a8fbf65df406d5fc9f5d8e6a6d42bccf993895b0",
+    "actualCurrentCompiledAtomicRehearsalUnitSha256": "a5d561c241f8e593a08d1c865d100f391a27f1f01a036a30ec9b89e2bd754caf",
+    "actualCurrentCompiledUnitOccursRawCanonicalInOriginal428": true
+  },
+  "originalSchemaInterfaceEntries": 92,
+  "originalSchemaRegisterSha256": "d02e93106243a2c388038a0ee2aca2231c5502126e8e8d555275d1e8dbe3b0da",
+  "next": "Exact reviewed three-file historical raw-inverse successor; all95dependencies/four actual packets/compiler exports/prior99points retained; fullgate rerun only after actualsource change.",
+  "waiver": false,
+  "native": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

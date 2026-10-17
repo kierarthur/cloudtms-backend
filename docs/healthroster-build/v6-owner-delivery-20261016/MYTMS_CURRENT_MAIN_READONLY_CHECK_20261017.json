@@ -1,0 +1,20 @@
+{
+  "version": "MYTMS_CURRENT_MAIN_READONLY_CHECK_V1",
+  "checkedAt": "2026-10-17T12:43:09.044Z",
+  "worktree": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-mytms-13102026",
+  "gitDirectory": "D:/Development/GitHub/mytms-app/.git/worktrees/healthroster-v2-mytms-13102026",
+  "commonGitDirectory": "D:/Development/GitHub/mytms-app/.git",
+  "featureBranch": "codex/healthroster-v2-mytms-13102026",
+  "featureHead": "45c50c9a541e05cd0f5915729da3d0332f0884db",
+  "remoteFeatureEqual": true,
+  "currentRemoteMain": "ed9270088f8ca555d6b2e7258aed86dff58b90b8",
+  "currentMainIsAncestorOfFeature": true,
+  "workingTreeClean": true,
+  "mergeRequiredAtThisCheckpoint": false,
+  "newSourceChanges": false,
+  "testsRerun": false,
+  "reason": "Current feature already contains exact fresh remote main; prior exact-feature app checks are retained, no new app code changed.",
+  "beforeTestFlight": "Recheck current remote main immediately before build; non-forced integration and app checks required if it moves. Never push main.",
+  "testFlightBuildUploadPhoneTests": "NOT_RUN",
+  "mutation": false
+}
