@@ -1,0 +1,26 @@
+{
+  "parser": "pglast v7.20",
+  "postgresGrammar": "17.7",
+  "files": [
+    {
+      "path": "supabase/migrations/17102026_0135_correction_entry_admission.sql",
+      "sha256": "9af6c9b8993e918a0c28bdc29dae0d6b4cc9477cc13075329180395d53fbd8e7",
+      "statements": 3,
+      "plpgsqlBodies": 1
+    },
+    {
+      "path": "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc",
+      "sha256": "0f7c01eb27ba3842b90524e550a0c2bbbe3a5406664c8e4c4bf1f27d831386f5",
+      "statements": 8,
+      "plpgsqlBodies": 3
+    },
+    {
+      "path": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+      "sha256": "587a7bd81efa24d721b1632a4c1a5af902fdeb56a3d39c0736615df51024fd78",
+      "statements": 41,
+      "plpgsqlBodies": 8
+    }
+  ],
+  "native": "NOT_RUN",
+  "catalogue": "NOT_RUN"
+}

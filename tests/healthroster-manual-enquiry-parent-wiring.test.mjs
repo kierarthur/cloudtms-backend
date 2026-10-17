@@ -18,8 +18,20 @@ assert.equal(sourceRecipe.checkpoint,'39aa5b30042711956b83a7bf899f416d2f3b4771')
 const sourceRoute=sourceRecipe.files.find(row=>row.target===proof.routes.source);
 assert.equal(sourceRoute.edits.length,4);
 const actualRouteRaw=fs.readFileSync(path.join(root,proof.routes.source),'utf8');
-assert.equal(hash(actualRouteRaw),sourceRoute.postimageSha256);
-let manualOnlyRaw=actualRouteRaw;
+const keptRecipeBytes=fs.readFileSync(path.join(root,'docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/PARENT_EDITS.json'));
+assert.equal(hash(keptRecipeBytes),'b82c3b0ab1a9e1282c5963e4db3b1eaa66948bc5383efa4d4a8821f65d2b2a7a');
+const keptRecipe=JSON.parse(keptRecipeBytes);
+assert.equal(keptRecipe.target,proof.routes.source);
+assert.equal(keptRecipe.inputSha256,sourceRoute.postimageSha256);
+assert.equal(keptRecipe.hunks.length,5);
+function reverseKeptParent(source){
+ assert.equal(hash(source),keptRecipe.outputSha256);
+ for(const {before,after} of [...keptRecipe.hunks].reverse()){
+  assert.equal(source.split(after).length,2);source=source.replace(after,()=>before);
+ }
+ assert.equal(hash(source),keptRecipe.inputSha256);return source;
+}
+let manualOnlyRaw=reverseKeptParent(actualRouteRaw);
 for(const {before,after,beforeSha256,afterSha256} of [...sourceRoute.edits].reverse()){
  assert.equal(hash(before),beforeSha256);assert.equal(hash(after),afterSha256);
  assert.equal(manualOnlyRaw.split(after).length,2);manualOnlyRaw=manualOnlyRaw.replace(after,before);
@@ -36,6 +48,12 @@ const executable=proposed.replace(/(from\s*['"])(\.[^'"]+)(['"])/g,(_,a,b,c)=>a+
 const {dispatchWeeklySourceRequest,WEEKLY_SOURCE_OFFICE_ROUTE_CONTRACT}=await import('data:text/javascript;base64,'+Buffer.from(executable).toString('base64'));
 const id=n=>`f7160000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const env={CANDIDATE_APP_ENVIRONMENT:'TEST',MYTMS_OFFICE_AGENCY_ID:id(19)};
+test('reviewed kept-parent successor refuses missing, duplicated and unrelated drift',()=>{
+ assert.equal(hash(reverseKeptParent(actualRouteRaw)),sourceRoute.postimageSha256);
+ const anchor=keptRecipe.hunks[0].after;
+ for(const source of [actualRouteRaw.replace(anchor,''),actualRouteRaw+anchor,actualRouteRaw+'\n// drift'])
+  assert.throws(()=>reverseKeptParent(source));
+});
 async function run(action,options={}){
  const f=fixture(),payload=copy(action.endsWith('PREVIEW')?f.request:f.accept),calls=[];
  if(options.edit)options.edit(payload);

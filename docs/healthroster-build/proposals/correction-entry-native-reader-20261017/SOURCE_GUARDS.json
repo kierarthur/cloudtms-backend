@@ -1,0 +1,123 @@
+{
+  "version": "HEALTH_ENTRY_CURRENT_SOURCE_GUARDS_V1",
+  "integrationHeadObserved": "5ecc4c73113660edf48a5bca2f3a478453a81c2b",
+  "files": [
+    {
+      "authority": "INTEGRATION",
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "canonicalSha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "authority": "INTEGRATION",
+      "file": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "canonicalSha256": "eea7731bf679f68ba0e5e038dc4cb4b4ed312f83276425863b2f7bd6abaf302b"
+    }
+  ],
+  "spans": [
+    {
+      "authority": "INTEGRATION",
+      "file": "broker/src/index.js",
+      "name": "requireUser",
+      "start": "async function requireUser(",
+      "end": "// KV session helpers",
+      "canonicalSha256": "7108146127fbeb4c71ed883f23fbf27add1b7aa9fa1d56da6f8f676246439d88"
+    },
+    {
+      "authority": "INTEGRATION",
+      "file": "broker/src/index.js",
+      "name": "bankingPayCorrectionTenantAuthority",
+      "start": "function bankingPayCorrectionTenantAuthority(",
+      "end": "async function mintAccessToken(",
+      "canonicalSha256": "01f7003f4a965ce9aa610e28e618b506849eeeb4840fc219c22931c9814de8ca"
+    },
+    {
+      "authority": "INTEGRATION",
+      "file": "broker/src/index.js",
+      "name": "sbRpc",
+      "start": "async function sbRpc(",
+      "end": "function weeklySourceGuardRefusalCorrelationId(",
+      "canonicalSha256": "b8a27c5e2c2a096c89ed0edfede4828a0394f424dc1e4a166886eaa8b6d86a79"
+    },
+    {
+      "authority": "OFFICE",
+      "file": "js/main.js",
+      "name": "openTimesheetContractMoveReview",
+      "start": "async function openTimesheetContractMoveReview(",
+      "end": "function openNativeDailyRateCorrection",
+      "canonicalSha256": "5b8c08d9585aa08860e502105ed3e31e86355c478b642754dea2d56897b8ce7c"
+    }
+  ],
+  "finalOwners": [
+    {
+      "signature": "private.weekly_source_pay_actor_allowed_v1(uuid)",
+      "finalRoot": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "finalPhysical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+    },
+    {
+      "signature": "private.timesheet_contract_current_placement_v1(uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_move_evidence_v1(uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+    }
+  ],
+  "requiredColumns": {
+    "tms_users": [
+      "id",
+      "is_active",
+      "role",
+      "payment_authoriser",
+      "payment_golden_key"
+    ],
+    "timesheets": [
+      "timesheet_id",
+      "archived_at_utc",
+      "sheet_scope",
+      "contract_id",
+      "week_ending_date",
+      "is_current",
+      "revoked_at",
+      "actual_schedule_json",
+      "worked_start_iso",
+      "worked_end_iso",
+      "line_type",
+      "version"
+    ],
+    "contracts": [
+      "id",
+      "candidate_id",
+      "client_id"
+    ],
+    "clients": [
+      "id"
+    ],
+    "candidates": [
+      "id"
+    ],
+    "timesheets_financials": [
+      "id",
+      "timesheet_id",
+      "is_current",
+      "timesheet_version",
+      "candidate_id",
+      "client_id",
+      "actual_schedule_json"
+    ],
+    "candidate_submission_workflows": [
+      "id",
+      "scope",
+      "candidate_id",
+      "contract_id",
+      "week_ending_date"
+    ],
+    "candidate_expense_components": [
+      "owning_timesheet_id",
+      "workflow_id",
+      "expense_component_id"
+    ]
+  },
+  "configuredTenant": "8467e881-9691-4181-a738-f9834922d747"
+}

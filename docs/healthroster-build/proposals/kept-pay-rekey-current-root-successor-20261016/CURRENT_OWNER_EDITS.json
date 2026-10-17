@@ -1,0 +1,279 @@
+{
+  "version": "CURRENT_KEPT_REKEY_COMPLETE_OWNER_RECIPE_V1",
+  "checkpoint": "5ecc4c73113660edf48a5bca2f3a478453a81c2b",
+  "old": "a6739abd7382759ebdbf8a58e7877835258ede9c",
+  "recipes": [
+    {
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "declaredSecurity": "SECURITY DEFINER",
+      "authority": "Current exact final-definer closure chain",
+      "finalRoot": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "currentPhysicalSha256": "a02bb2c4a5e75502c3206c5d71af2452a6354aac9a77868fa43ca6f6a1385561",
+      "completeCurrentStatementSha256": "d1cec8aaf630daf2d550bb75b44eb39db2f948a3148ee04891f17ce4c7341975",
+      "sourceSpan": [
+        68,
+        27464
+      ],
+      "file": "current/02_complete_upload_context.sqlinc",
+      "oldInputCommit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "oldInputStatementSha256": "37355a64d3472dea5f2010f154925a548c3c4d8177c55a9dc9ff2dbea9ebcf57",
+      "hunks": [
+        {
+          "before": "        order by event.created_at_utc,event.id limit 1;",
+          "after": "        order by event.created_at_utc,event.id limit 1;\r\n        -- Primary03 section6.1: unmatched finalised external keys use one\r\n        -- native exact-tuple/absent-old-key proof, not schedule compatibility.\r\n        if v_prior_work_event_id is null then\r\n          begin\r\n            v_prior_work_event_id:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);\r\n          exception when sqlstate '55000' then\r\n            if SQLERRM is distinct from 'WEEKLY_SOURCE_IDENTICAL_REKEY_AMBIGUOUS' then raise; end if;\r\n            -- Keep discovery usable, but expose a real ambiguity. The native\r\n            -- projection independently repeats the helper and refuses it.\r\n            v_prior_candidate_count:=2; v_prior_work_event_id:=null;\r\n          end;\r\n          if v_prior_work_event_id is not null then\r\n            select saved.contract_id into v_prior_contract_id\r\n            from public.weekly_source_row_resolutions saved\r\n            where saved.work_event_id=v_prior_work_event_id and saved.mapping_state='RESOLVED'\r\n            order by saved.created_at_utc desc,saved.id desc limit 1;\r\n          end if;\r\n        end if;"
+        }
+      ],
+      "successorFile": "forward/02_complete_upload_context.sqlinc",
+      "completeSuccessorStatementSha256": "2c573e24d53d21e30672c4328cd539c2209e661a2bbaa07ff9f2fd320965e9aa",
+      "fullReverseByteEquality": true,
+      "completeSuccessorFileSha256": "a9149686b3aa1456603550dfa8eb93af1936606e498113286110a4f900274902"
+    },
+    {
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "declaredSecurity": "SECURITY DEFINER",
+      "authority": "Current exact final-definer closure chain",
+      "finalRoot": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "currentPhysicalSha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d",
+      "completeCurrentStatementSha256": "b3fe796d797bd130bc55caaf858b7bf578fe3be25b3194bd5801e766086d27fc",
+      "sourceSpan": [
+        13166,
+        80593
+      ],
+      "file": "current/03_complete_projection_rows.sqlinc",
+      "oldInputCommit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "oldInputStatementSha256": "b3fe796d797bd130bc55caaf858b7bf578fe3be25b3194bd5801e766086d27fc",
+      "hunks": [
+        {
+          "before": "  v_prior_work_event_id uuid;",
+          "after": "  v_prior_work_event_id uuid;\n  v_identical_rekey_prior uuid;"
+        },
+        {
+          "before": "      if v_prior_work_event_id is not null then",
+          "after": "      -- A new external key may reuse an old event only through the native\n      -- identical proof or the independently admitted explicit Office choice.\n      -- The current protected choice above was re-proved, never caller flags.\n      if v_source_authority and v_identity_kind='PROFILE_EXTERNAL_KEY'\n        and not exists(select 1 from public.weekly_work_events key_event\n          where key_event.first_source_group_id=v_group.id\n            and key_event.source_format_profile_id=v_upload.source_format_profile_id\n            and key_event.identity_kind='PROFILE_EXTERNAL_KEY'\n            and key_event.profile_external_key=v_profile_external_key)\n        and not (v_source_authority and v_protected_choice is not null\n          and v_protected_choice=v_prior_work_event_id) then\n        v_identical_rekey_prior:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);\n        if v_identical_rekey_prior is distinct from v_prior_work_event_id\n          or (v_identical_rekey_prior is not null and (select saved.contract_id from public.weekly_source_row_resolutions saved\n            where saved.work_event_id=v_prior_work_event_id and saved.mapping_state='RESOLVED'\n            order by saved.created_at_utc desc,saved.id desc limit 1) is distinct from v_contract_id) then\n          raise exception 'WEEKLY_SOURCE_REKEY_MATCH_UNPROVEN' using errcode='40001';\n        end if;\n      end if;\n      if v_prior_work_event_id is not null then"
+        }
+      ],
+      "successorFile": "forward/03_complete_projection_rows.sqlinc",
+      "completeSuccessorStatementSha256": "fd5857ec2b864ff479989901fa93febf8ac2fe590f5e6e1d96a97ce99134cd14",
+      "fullReverseByteEquality": true,
+      "completeSuccessorFileSha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35"
+    },
+    {
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "declaredSecurity": "SECURITY DEFINER",
+      "authority": "Current exact final-definer closure chain",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "currentPhysicalSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "completeCurrentStatementSha256": "b42a727a94d8adf5336f4b865ec9c332fe528be66611d08682de8a00ef334b41",
+      "sourceSpan": [
+        567946,
+        716260
+      ],
+      "file": "current/09_complete_invoice_apply_edits.sqlinc",
+      "oldInputCommit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "oldInputStatementSha256": "6ab4e16d569e3dddfa48de9b3b09a94328d6f4a9571039cf56edc014bfc5a204",
+      "hunks": [
+        {
+          "before": "  perform public._ctms_assert_invoice_mutable_draft_v1(",
+          "after": "  -- Source F4 target admission takes complete native I-1 roots BEFORE the\n  -- original first invoice mutability/row lock. Ordinary owners are untouched.\n  if exists(select 1 from public.invoices invoice where invoice.id=p_invoice_id\n    and invoice.header_snapshot_json->>'schema_version'='WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'\n    and invoice.header_snapshot_json#>>'{meta,source}'='WEEKLY_FINAL_SOURCE')\n    and exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n      then p_payload->'add_adjustments' else '[]'::jsonb end) item where item ? 'credited_work_event_id') then\n    perform private.weekly_source_invoice_credited_targets_admit_v1(p_invoice_id,p_payload,p_actor_user_id);\n  end if;\n  perform public._ctms_assert_invoice_mutable_draft_v1("
+        }
+      ],
+      "successorFile": "forward/09_complete_invoice_apply_edits.sqlinc",
+      "completeSuccessorStatementSha256": "31e7291055db63c1289af86016b97a55035ff4614fb9e796c431df8fe9da3bd5",
+      "fullReverseByteEquality": true,
+      "completeSuccessorFileSha256": "b68439cb5928e008d4b315303a83e0b97ef867ea779b0ba1dabbc553974ed16b"
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "declaredSecurity": "SECURITY DEFINER",
+      "authority": "Explicit SECURITY DEFINER declaration in the exact controlling1705 include closure, absent from the limited final-definer chain selection. Unique managed definition is separately verified.",
+      "finalRoot": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "currentPhysicalSha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "completeCurrentStatementSha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "sourceSpan": [
+        9697,
+        16137
+      ],
+      "file": "current/10_complete_adjustments_apply.sqlinc",
+      "oldInputCommit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "oldInputStatementSha256": "2f60a2eea19cf4f5fb1b22c22f892b21508ac124a7e75465d4881078c3cb0b86",
+      "hunks": [
+        {
+          "before": "  v_ex numeric; v_vat numeric; v_token text; v_description text; v_meta jsonb; v_ids uuid[]; v_id uuid; v_result jsonb;",
+          "after": "  v_ex numeric; v_vat numeric; v_token text; v_description text; v_meta jsonb; v_ids uuid[]; v_id uuid; v_result jsonb;\n  v_credit_frame jsonb; v_pg_context text; v_credit_context jsonb;"
+        },
+        {
+          "before": "  perform public._ctms_assert_invoice_mutable_draft_v1(p_invoice_id,'INVOICE_APPLY_EDITS',true);",
+          "after": "  if exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n    then p_payload->'add_adjustments' else '[]'::jsonb end) requested where requested ? 'credited_work_event_id') then\n    get diagnostics v_pg_context=PG_CONTEXT;\n    v_credit_frame:=nullif(current_setting('cloudtms.weekly_source_credit_target_frame',true),'')::jsonb;\n    if v_pg_context !~* 'PL/pgSQL function (public[.])?invoice_apply_edits[(]uuid,jsonb,uuid[)]'\n      or jsonb_typeof(v_credit_frame) is distinct from 'object'\n      or v_credit_frame->>'schema_version' is distinct from 'WEEKLY_SOURCE_CREDIT_TARGET_FRAME_V1'\n      or v_credit_frame->>'invoice_id' is distinct from p_invoice_id::text\n      or v_credit_frame->>'actor_user_id' is distinct from p_actor_user_id::text\n      or v_credit_frame->>'native_backend_pid' is distinct from pg_backend_pid()::text\n      or v_credit_frame->>'native_transaction_id' is distinct from txid_current()::text\n      or v_credit_frame->>'payload_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_CREDIT_TARGET_PAYLOAD_V1',p_payload),'hex')\n      or v_credit_frame->>'frame_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_CREDIT_TARGET_FRAME_V1',v_credit_frame-'frame_sha256'),'hex') then\n      raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_NATIVE_FRAME_REQUIRED' using errcode='55000'; end if;\n  end if;\n  perform public._ctms_assert_invoice_mutable_draft_v1(p_invoice_id,'INVOICE_APPLY_EDITS',true);"
+        },
+        {
+          "before": "  if v_authority->>'allowed' is distinct from 'true' then",
+          "after": "  if v_credit_frame is not null and v_credit_frame->'adjustment_authority' is distinct from v_authority then\n    raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n  if v_authority->>'allowed' is distinct from 'true' then"
+        },
+        {
+          "before": "      if item ? 'credited_work_event_id' then\n        raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_AUTHORITY_UNAVAILABLE' using errcode='55000'; end if;",
+          "after": "      if item ? 'credited_work_event_id' then\n        if jsonb_typeof(item->'credited_work_event_id') is distinct from 'string'\n          or pg_input_is_valid(item->>'credited_work_event_id','uuid') is distinct from true then\n          raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_INVALID' using errcode='22023'; end if;\n        select saved into v_credit_context from jsonb_array_elements(v_credit_frame->'native_contexts') saved\n          where (saved->>'work_event_id')::uuid=(item->>'credited_work_event_id')::uuid;\n        if v_credit_context is null or v_credit_context->>'facts_fingerprint' is distinct from encode(\n          private.weekly_source_kept_as_paid_facts_v1((item->>'credited_work_event_id')::uuid,'CREDITED'),'hex') then\n          raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n      end if;"
+        },
+        {
+          "before": "        'vat_overridden',item ? 'vat_amount','weekly_source_adjustment_authority',v_authority);",
+          "after": "        'vat_overridden',item ? 'vat_amount','weekly_source_adjustment_authority',v_authority)\n        ||case when item ? 'credited_work_event_id' then jsonb_build_object('credited_work_event_id',(item->>'credited_work_event_id')::uuid) else '{}'::jsonb end;"
+        }
+      ],
+      "successorFile": "forward/10_complete_adjustments_apply.sqlinc",
+      "completeSuccessorStatementSha256": "3739accff7eb6fab0ca2124afa943088b94bfca3f68f9b87f797d5f4c76205c6",
+      "fullReverseByteEquality": true,
+      "completeSuccessorFileSha256": "a88d2dffcbcbe2aac4af67edd1a93c4de255f2525c859cd94796c602fe7a5e7b"
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "declaredSecurity": "SECURITY DEFINER",
+      "authority": "Explicit SECURITY DEFINER declaration in the exact controlling1705 include closure, absent from the limited final-definer chain selection. Unique managed definition is separately verified.",
+      "finalRoot": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments_v1.sql",
+      "finalPhysical": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "currentPhysicalSha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e",
+      "completeCurrentStatementSha256": "5a4142c7f9e26861401dab3570a08cd88f31564353c29165dc89d2dfc93baa03",
+      "sourceSpan": [
+        5328,
+        8394
+      ],
+      "file": "current/11_complete_adjustment_line_valid.sqlinc",
+      "oldInputCommit": "5db7abee7925fffbeaf7c4e885cce809980fa079",
+      "oldInputStatementSha256": "50f848ccd573221b5b7e2eacc59fc5449f64da4a3fcbe405e9cac2e9dfca1140",
+      "hunks": [
+        {
+          "before": "    or line.meta_json ? 'credited_work_event_id' then return false; end if;",
+          "after": "    then return false; end if;"
+        },
+        {
+          "before": "    'vat_overridden','weekly_source_adjustment_authority')) then return false; end if;",
+          "after": "    'vat_overridden','weekly_source_adjustment_authority','credited_work_event_id')) then return false; end if;"
+        },
+        {
+          "before": "  return coalesce(v_actual->>'allowed'='true' and v_actual=v_authority",
+          "after": "  -- A retained issued credit re-proves immutable actual target identity, not\n  -- today's Keep availability. Changed facts cannot erase a genuine credit.\n  if v_meta ? 'credited_work_event_id' and (jsonb_typeof(v_meta->'credited_work_event_id') is distinct from 'string'\n    or pg_input_is_valid(v_meta->>'credited_work_event_id','uuid') is distinct from true\n    or not exists(select 1 from public.weekly_work_events event\n      join public.invoices invoice on invoice.id=p_invoice_id and invoice.client_id=event.client_id\n        and invoice.header_snapshot_json#>>'{meta,source_group_id}'=event.first_source_group_id::text\n      where event.id=(v_meta->>'credited_work_event_id')::uuid\n        and exists(select 1 from public.weekly_source_row_resolutions resolution\n          join public.contracts contract on contract.id=resolution.contract_id\n          where resolution.work_event_id=event.id and resolution.mapping_state='RESOLVED'\n            and resolution.candidate_id=event.candidate_id and resolution.client_id=event.client_id\n            and contract.candidate_id=event.candidate_id and contract.client_id=event.client_id))) then return false; end if;\n  return coalesce(v_actual->>'allowed'='true' and v_actual=v_authority"
+        }
+      ],
+      "successorFile": "forward/11_complete_adjustment_line_valid.sqlinc",
+      "completeSuccessorStatementSha256": "f96f300828e3c1ea123c2756cb86aa6ad4acabdaaef16f75cd046ca9607834ca",
+      "fullReverseByteEquality": true,
+      "completeSuccessorFileSha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc"
+    }
+  ],
+  "newChanges": [
+    {
+      "file": "forward/06_kept_as_paid_context.sqlinc",
+      "before": "  if v_reason is not null then\n    v_facts:=private.weekly_source_kept_as_paid_facts_v1(v_event.id,v_reason);\n    -- Owner-approved recurrence: latest genuine ACK first, then current hash.\n    -- Do not pre-filter acknowledgements by the present fingerprint.\n    select audit.* into v_ack from public.audit_events audit\n    where audit.object_type='weekly_source_kept_as_paid_decisions' and audit.object_id_text=v_event.id::text\n      and audit.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED'\n      and audit.after_json->>'schema_version'='WEEKLY_SOURCE_KEEP_AS_PAID_ACK_V1'\n      and audit.after_json->>'work_event_id'=v_event.id::text and audit.after_json->>'reason'=v_reason\n    order by (audit.after_json->>'acknowledgement_sequence')::bigint desc,audit.id desc limit 1;\n    if found then\n      select * into v_decision from public.weekly_source_kept_as_paid_decisions\n        where id=(v_ack.after_json->>'decision_id')::uuid and work_event_id=v_event.id and reason=v_reason;\n      v_applies:=found and not v_source_present and v_decision.facts_fingerprint=v_facts\n        and v_ack.after_json->>'facts_fingerprint'=encode(v_decision.facts_fingerprint,'hex')\n        and v_ack.after_json->>'actor_user_id'=v_ack.actor_user_id::text;\n    end if;\n  end if;\n",
+      "after": "  -- Latest actual event acknowledgement remains visible even when today's\n  -- reason is unavailable/different. No reason/hash filter resurrects history.\n  select audit.* into v_ack from public.audit_events audit\n  where audit.object_type='weekly_source_kept_as_paid_decisions' and audit.object_id_text=v_event.id::text\n    and audit.action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED'\n    and audit.after_json->>'schema_version'='WEEKLY_SOURCE_KEEP_AS_PAID_ACK_V1'\n    and audit.after_json->>'work_event_id'=v_event.id::text\n  order by (audit.after_json->>'acknowledgement_sequence')::bigint desc,audit.id desc limit 1;\n  if found then\n    select * into strict v_decision from public.weekly_source_kept_as_paid_decisions\n      where id=(v_ack.after_json->>'decision_id')::uuid and work_event_id=v_event.id;\n    if v_ack.after_json->>'reason' is distinct from v_decision.reason\n      or v_ack.after_json->'credit_invoice_line_id' is distinct from coalesce(to_jsonb(v_decision.credit_invoice_line_id),'null'::jsonb)\n      or v_ack.after_json->>'facts_fingerprint' is distinct from encode(v_decision.facts_fingerprint,'hex')\n      or v_ack.after_json->>'actor_user_id' is distinct from v_ack.actor_user_id::text then\n      raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_ACK_LINEAGE_UNBOUND' using errcode='55000'; end if;\n  end if;\n  if v_reason is not null then\n    v_facts:=private.weekly_source_kept_as_paid_facts_v1(v_event.id,v_reason);\n    v_applies:=v_ack.id is not null and not v_source_present and v_decision.reason=v_reason\n      and v_decision.facts_fingerprint=v_facts;\n  end if;\n",
+      "reason": "Latest genuine event ACK before current reason/facts; retain old actor/time/history."
+    },
+    {
+      "file": "forward/07_keep_as_paid_decide.sqlinc",
+      "before": "  v_request_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_KEEP_AS_PAID_REQUEST_V1',p_request);\n",
+      "after": "  v_request_hash:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_KEEP_AS_PAID_REQUEST_V1',p_request);\n  perform private.weekly_source_kept_as_paid_read_admit_v1(v_event_id,v_actor);\n",
+      "reason": "Fresh actual event/group/client/date VIEW_PAY_WORK admission before revealing exact saved ACK."
+    },
+    {
+      "file": "forward/07_keep_as_paid_decide.sqlinc",
+      "before": "  perform pg_advisory_xact_lock(hashtextextended('weekly-source-kept-as-paid-event:'||v_event.id::text,0));",
+      "after": "  perform pg_advisory_xact_lock(hashtextextended('weekly-source-kept-as-paid-event:'||v_event.id::text,0));\n  perform private.weekly_source_kept_as_paid_read_admit_v1(v_event_id,v_actor);",
+      "reason": "Fresh actual event/group/client/date VIEW_PAY_WORK admission before revealing exact saved ACK."
+    },
+    {
+      "file": "forward/07_keep_as_paid_decide.sqlinc",
+      "before": "'acknowledgement_sequence',v_sequence,'idempotent_replay',false",
+      "after": "'acknowledgement_sequence',v_sequence::text,'idempotent_replay',false",
+      "reason": "V6 canonical decimal-string counter in the retained actual result, including replay."
+    },
+    {
+      "file": "forward/07_keep_as_paid_decide.sqlinc",
+      "before": "'actor_user_id',v_actor,'acknowledged_at_utc',v_acknowledged_at,'acknowledgement_sequence',v_sequence,",
+      "after": "'actor_user_id',v_actor,'acknowledged_at_utc',v_acknowledged_at,'acknowledgement_sequence',v_sequence::text,",
+      "reason": "V6 canonical decimal-string counter in the immutable typed audit payload."
+    },
+    {
+      "file": "forward/12_keep_ack_native_guard.sqlinc",
+      "before": "    or v_after->>'schema_version' is distinct from 'WEEKLY_SOURCE_KEEP_AS_PAID_ACK_V1'",
+      "after": "    or v_after->>'schema_version' is distinct from 'WEEKLY_SOURCE_KEEP_AS_PAID_ACK_V1'\n    or jsonb_typeof(v_after->'acknowledgement_sequence') is distinct from 'string'\n    or v_after->>'acknowledgement_sequence' !~ '^[1-9][0-9]{0,18}$'\n    or (length(v_after->>'acknowledgement_sequence')=19\n      and v_after->>'acknowledgement_sequence'>'9223372036854775807')\n    or jsonb_typeof(v_after#>'{result,acknowledgement_sequence}') is distinct from 'string'",
+      "reason": "Validate canonical positive bounded PGbigint strings before any sequence cast; forbid numeric JSON in both retained representations."
+    },
+    {
+      "file": "forward/09_complete_invoice_apply_edits.sqlinc",
+      "before": "  -- Source F4 target admission takes complete native I-1 roots BEFORE the\n  -- original first invoice mutability/row lock. Ordinary owners are untouched.\n  if exists(select 1 from public.invoices invoice where invoice.id=p_invoice_id\n    and invoice.header_snapshot_json->>'schema_version'='WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'\n    and invoice.header_snapshot_json#>>'{meta,source}'='WEEKLY_FINAL_SOURCE')\n    and exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n      then p_payload->'add_adjustments' else '[]'::jsonb end) item where item ? 'credited_work_event_id') then\n    perform private.weekly_source_invoice_credited_targets_admit_v1(p_invoice_id,p_payload,p_actor_user_id);\n  end if;\n  perform public._ctms_assert_invoice_mutable_draft_v1(",
+      "after": "  -- Source F4 target admission takes complete native I-1 roots BEFORE the\n  -- original first invoice mutability/row lock. Ordinary owners are untouched.\n  if exists(select 1 from public.invoices invoice where invoice.id=p_invoice_id\n    and invoice.header_snapshot_json->>'schema_version'='WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'\n    and invoice.header_snapshot_json#>>'{meta,source}'='WEEKLY_FINAL_SOURCE')\n    and (exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n      then p_payload->'add_adjustments' else '[]'::jsonb end) item where item ? 'credited_work_event_id')\n    or exists(select 1 from public.invoice_lines removed\n      cross join lateral jsonb_array_elements_text(case when jsonb_typeof(p_payload->'remove_invoice_line_ids')='array'\n        then p_payload->'remove_invoice_line_ids' else '[]'::jsonb end) requested(value)\n      where removed.invoice_id=p_invoice_id and removed.id=case when pg_input_is_valid(requested.value,'uuid')\n        then requested.value::uuid else null end and removed.meta_json ? 'credited_work_event_id')) then\n    perform private.weekly_source_invoice_credited_targets_admit_v1(p_invoice_id,p_payload,p_actor_user_id);\n  end if;\n  perform public._ctms_assert_invoice_mutable_draft_v1(",
+      "reason": "Include genuine pointed-credit removals in the actual early native I-1 prehook."
+    },
+    {
+      "file": "forward/10_complete_adjustments_apply.sqlinc",
+      "before": "  if exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n    then p_payload->'add_adjustments' else '[]'::jsonb end) requested where requested ? 'credited_work_event_id') then",
+      "after": "  if exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n    then p_payload->'add_adjustments' else '[]'::jsonb end) requested where requested ? 'credited_work_event_id')\n    or exists(select 1 from public.invoice_lines removed\n      cross join lateral jsonb_array_elements_text(case when jsonb_typeof(p_payload->'remove_invoice_line_ids')='array'\n        then p_payload->'remove_invoice_line_ids' else '[]'::jsonb end) requested(value)\n      where removed.invoice_id=p_invoice_id and removed.id=case when pg_input_is_valid(requested.value,'uuid')\n        then requested.value::uuid else null end and removed.meta_json ? 'credited_work_event_id') then",
+      "reason": "Removal-only pointed credits require the same actual parent/PID/XID/full-payload frame."
+    },
+    {
+      "file": "forward/08_credited_targets_admit.sqlinc",
+      "before": "v_authority jsonb; v_ids uuid[]; v_id uuid;",
+      "after": "v_authority jsonb; v_ids uuid[]; v_add_ids uuid[]; v_id uuid;",
+      "reason": "Separate add eligibility from immutable removal identity."
+    },
+    {
+      "file": "forward/08_credited_targets_admit.sqlinc",
+      "before": "  if jsonb_typeof(p_payload) is distinct from 'object' or jsonb_typeof(p_payload->'add_adjustments') is distinct from 'array' then",
+      "after": "  if jsonb_typeof(p_payload) is distinct from 'object'\n    or (p_payload ? 'add_adjustments' and jsonb_typeof(p_payload->'add_adjustments') is distinct from 'array')\n    or (p_payload ? 'remove_invoice_line_ids' and jsonb_typeof(p_payload->'remove_invoice_line_ids') is distinct from 'array') then",
+      "reason": "Permit bounded genuine removal-only requests; native existing edit owner retains all field/value validation."
+    },
+    {
+      "file": "forward/08_credited_targets_admit.sqlinc",
+      "before": "  select array_agg(distinct (item->>'credited_work_event_id')::uuid order by (item->>'credited_work_event_id')::uuid)\n    into v_ids from jsonb_array_elements(p_payload->'add_adjustments') item where item ? 'credited_work_event_id';",
+      "after": "  select array_agg(distinct (item->>'credited_work_event_id')::uuid order by (item->>'credited_work_event_id')::uuid)\n    into v_add_ids from jsonb_array_elements(p_payload->'add_adjustments') item where item ? 'credited_work_event_id';\n  if exists(select 1 from public.invoice_lines removed\n    cross join lateral jsonb_array_elements_text(p_payload->'remove_invoice_line_ids') requested(value)\n    where removed.invoice_id=p_invoice_id and removed.id=case when pg_input_is_valid(requested.value,'uuid')\n      then requested.value::uuid else null end and removed.meta_json ? 'credited_work_event_id'\n      and private.weekly_source_invoice_adjustment_line_valid_v1(removed.id,p_invoice_id) is distinct from true) then\n    raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_INVALID' using errcode='22023'; end if;\n  select array_agg(distinct target order by target) into v_ids from (\n    select unnest(v_add_ids) target\n    union all\n    select (removed.meta_json->>'credited_work_event_id')::uuid\n    from public.invoice_lines removed\n    cross join lateral jsonb_array_elements_text(p_payload->'remove_invoice_line_ids') requested(value)\n    where removed.invoice_id=p_invoice_id and removed.id=case when pg_input_is_valid(requested.value,'uuid')\n      then requested.value::uuid else null end and removed.meta_json ? 'credited_work_event_id'\n  ) actual;",
+      "reason": "Actual valid removed-line membership joins the same complete distinct Candidate/root lock census."
+    },
+    {
+      "file": "forward/08_credited_targets_admit.sqlinc",
+      "before": "      or v_context->'source_present' is distinct from 'false'::jsonb\n      or not (v_context->'invoiced'='true'::jsonb or v_context->'paid'='true'::jsonb)\n      or v_context->'current_pay_head_movement_id'='null'::jsonb\n      or jsonb_array_length(v_context->'root_timesheet_ids')=0 then",
+      "after": "      or jsonb_array_length(v_context->'root_timesheet_ids')=0\n      or (v_id=any(coalesce(v_add_ids,'{}'::uuid[])) and (\n        v_context->'source_present' is distinct from 'false'::jsonb\n        or not (v_context->'invoiced'='true'::jsonb or v_context->'paid'='true'::jsonb)\n        or v_context->'current_pay_head_movement_id'='null'::jsonb)) then",
+      "reason": "Adding requires current Keep eligibility; deleting an actual historical credit does not borrow today Keep eligibility."
+    },
+    {
+      "file": "forward/08_credited_targets_admit.sqlinc",
+      "before": "      or v_context->'source_present' is distinct from 'false'::jsonb\n      or not (v_context->'invoiced'='true'::jsonb or v_context->'paid'='true'::jsonb) then",
+      "after": "      or jsonb_array_length(v_context->'root_timesheet_ids')=0\n      or (v_id=any(coalesce(v_add_ids,'{}'::uuid[])) and (\n        v_context->'source_present' is distinct from 'false'::jsonb\n        or not (v_context->'invoiced'='true'::jsonb or v_context->'paid'='true'::jsonb)\n        or v_context->'current_pay_head_movement_id'='null'::jsonb)) then",
+      "reason": "Repeat exact role/identity/add eligibility after actual family/group/cycle waits."
+    },
+    {
+      "file": "forward/10_complete_adjustments_apply.sqlinc",
+      "before": "        select saved into v_credit_context from jsonb_array_elements(v_credit_frame->'native_contexts') saved\n          where (saved->>'work_event_id')::uuid=(item->>'credited_work_event_id')::uuid;\n        if v_credit_context is null or v_credit_context->>'facts_fingerprint' is distinct from encode(\n          private.weekly_source_kept_as_paid_facts_v1((item->>'credited_work_event_id')::uuid,'CREDITED'),'hex') then\n          raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;",
+      "after": "        select saved into strict v_credit_context from jsonb_array_elements(v_credit_frame->'native_contexts') saved\n          where (saved->>'work_event_id')::uuid=(item->>'credited_work_event_id')::uuid;",
+      "reason": "Require exact already admitted target per item, without comparing against this request own earlier writes."
+    },
+    {
+      "file": "forward/10_complete_adjustments_apply.sqlinc",
+      "before": "  if p_payload ? 'remove_invoice_line_ids' then",
+      "after": "  if v_credit_frame is not null then\n    for v_credit_context in select value from jsonb_array_elements(v_credit_frame->'native_contexts') loop\n      if v_credit_context->>'facts_fingerprint' is distinct from encode(private.weekly_source_kept_as_paid_facts_v1(\n        (v_credit_context->>'work_event_id')::uuid,'CREDITED'),'hex') then\n        raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n    end loop;\n  end if;\n  if p_payload ? 'remove_invoice_line_ids' then",
+      "reason": "Revalidate entire native census under existing locks before any DELETE/INSERT; native race proof remains required."
+    },
+    {
+      "file": "forward/12_keep_ack_native_guard.sqlinc",
+      "before": "v_context text; v_after jsonb:=new.after_json; v_request jsonb;",
+      "after": "v_context text; v_after jsonb; v_request jsonb;",
+      "reason": "Do not dereference NEW for statement-level TRUNCATE."
+    },
+    {
+      "file": "forward/12_keep_ack_native_guard.sqlinc",
+      "before": "begin\n  if tg_op='DELETE' then",
+      "after": "begin\n  if tg_op='TRUNCATE' then\n    if exists(select 1 from public.audit_events where action='WEEKLY_SOURCE_KEEP_AS_PAID_ACKNOWLEDGED') then\n      raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_ACK_IMMUTABLE' using errcode='55000'; end if;\n    return null;\n  end if;\n  if tg_op='DELETE' then",
+      "reason": "Protect actual typed history against TRUNCATE without blocking other audit operations."
+    },
+    {
+      "file": "forward/12_keep_ack_native_guard.sqlinc",
+      "before": "  get diagnostics v_context=PG_CONTEXT;",
+      "after": "  v_after:=new.after_json;\n  get diagnostics v_context=PG_CONTEXT;",
+      "reason": "Only INSERT/UPDATE paths read NEW."
+    }
+  ],
+  "authorityPrefixSha256": "3f12e44dbf96dfd4083c0e4ce1d7f77d5f3fd50e163f1dd6bf7c0e5cd6aade48",
+  "authorityPrefixByteEquality": true,
+  "fullCurrentOwnerReversals": 5,
+  "native": "NOT_RUN"
+}

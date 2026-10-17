@@ -1,0 +1,21 @@
+// Proposed import (root applies once after reviewing exact current source):
+import { matchCorrectionEntry, handleCorrectionEntry } from './correction-entry.mjs';
+
+// Insert immediately after fetch's existing `const p = url.pathname;`, before
+// NEXT/source route recognition. The existing preflight remains ahead of it.
+const correctionEntry = matchCorrectionEntry(req);
+if (correctionEntry) {
+  let agencyId;
+  try { agencyId = bankingPayCorrectionTenantAuthority(env,{required:true}); }
+  catch { return withCORS(env, req, new Response(JSON.stringify({error:'CORRECTION_ENTRY_UNAVAILABLE'}), {
+    status:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}
+  })); }
+  return withCORS(env, req, await handleCorrectionEntry(req, {
+    timesheetId:correctionEntry.timesheetId,agencyId,
+    requireOfficeUser:() => requireUser(env,req),
+    rpc:(fn,args) => {
+      if(fn!=='timesheet_correction_entry_v1')throw new Error('CORRECTION_ENTRY_RPC_NOT_ALLOWED');
+      return sbRpc(env,fn,args,{timeoutMs:12000,allowAuthRefreshRetry:false});
+    }
+  }));
+}

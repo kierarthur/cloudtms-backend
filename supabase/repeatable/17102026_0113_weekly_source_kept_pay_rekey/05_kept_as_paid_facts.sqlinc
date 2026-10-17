@@ -1,0 +1,115 @@
+create or replace function private.weekly_source_kept_as_paid_facts_v1(p_work_event_id uuid,p_reason text)
+returns bytea language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_event public.weekly_work_events%rowtype;
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_upload public.weekly_source_uploads%rowtype;
+  v_roots uuid[]; v_root uuid; v_revision uuid; v_segments jsonb; v_segment jsonb;
+  v_movements uuid[]:='{}'::uuid[]; v_movement uuid; v_present boolean; v_credits uuid[];
+begin
+  if p_work_event_id is null or p_reason is null or p_reason not in ('CREDITED','NOT_INVOICED_DISAPPEARED') then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_REASON_INVALID' using errcode='22023'; end if;
+  select * into strict v_event from public.weekly_work_events where id=p_work_event_id;
+  -- Latest actual export publication covering this date. A report is never
+  -- substituted for an export, and absence is distinct from an unreadable file.
+  select publication.* into v_publication
+  from public.weekly_source_projection_publications publication
+  join public.weekly_source_uploads upload on upload.id=publication.upload_id
+  join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id
+  join public.weekly_source_format_profiles profile on profile.id=upload.source_format_profile_id
+  where cycle.source_group_id=v_event.first_source_group_id
+    and (cycle.scope_client_id is null or cycle.scope_client_id=v_event.client_id)
+    and publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'
+    and publication.authority_scope_kind='CYCLE' and upload.report_scope_id is null
+    and profile.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',
+      'HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1')
+    and upload.row_manifest_hash is not null and upload.coverage_state='COMPLETE'
+    and upload.coverage_timezone='Europe/London'
+    and v_event.work_date between upload.confirmed_coverage_start_local_date and upload.confirmed_coverage_end_local_date
+    and (upload.file_metadata_json->>'client_id'=v_event.client_id::text
+      or (nullif(upload.file_metadata_json->>'client_id','') is null and
+        (select count(*) from public.weekly_source_group_clients gc
+          where gc.source_group_id=cycle.source_group_id
+            and cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))=1
+        and exists(select 1 from public.weekly_source_group_clients gc
+          where gc.source_group_id=cycle.source_group_id and gc.client_id=v_event.client_id
+            and cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))))
+  order by publication.published_at_utc desc,publication.created_at_utc desc,publication.id desc limit 1;
+  if not found then raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_EXPORT_UNAVAILABLE' using errcode='55000'; end if;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id;
+  v_present:=exists(select 1 from public.weekly_source_upload_rows row
+    join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=row.id
+      and resolution.generation=v_publication.projection_generation and resolution.mapping_state='RESOLVED'
+    where row.upload_id=v_upload.id and resolution.work_event_id=v_event.id
+      and resolution.candidate_id=v_event.candidate_id and resolution.client_id=v_event.client_id)
+    or exists(select 1 from public.weekly_source_upload_rows row where row.upload_id=v_upload.id
+      and row.external_source_key=v_event.profile_external_key
+      and v_event.identity_kind='PROFILE_EXTERNAL_KEY');
+  -- Actual current segments supply the pay-head movement identity. All real
+  -- lineages/families are considered; zero is nullable, more than one refuses.
+  select coalesce(array_agg(distinct scope.canonical_timesheet_id order by scope.canonical_timesheet_id),'{}'::uuid[])
+    into v_roots from public.weekly_source_row_timesheet_lineages lineage
+    cross join lateral public._pay_timesheet_rotation_scope(array[lineage.timesheet_id]) scope
+    where lineage.work_event_id=v_event.id and lineage.candidate_id=v_event.candidate_id
+      and lineage.client_id=v_event.client_id;
+  foreach v_root in array v_roots loop
+    select revision.id into v_revision from public.weekly_source_final_revisions revision
+    join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id
+    where revision.state='CURRENT' and cycle.source_group_id=v_event.first_source_group_id
+      and revision.authority_scope_kind='CYCLE'
+      and (cycle.scope_client_id is null or cycle.scope_client_id=v_event.client_id)
+    order by cycle.finalisation_week_ending desc,revision.finalised_at_utc desc,revision.revision_number desc,revision.id desc limit 1;
+    if v_revision is not null then
+      v_segments:=private.weekly_source_ordinary_projection_current_segments_v1(v_root,v_revision);
+      for v_segment in select value from jsonb_array_elements(v_segments) loop
+        if v_segment#>>'{weekly_source,work_event_id}'=v_event.id::text then
+          v_movement:=(v_segment#>>'{weekly_source,movement_id}')::uuid;
+          if v_movement is null or not exists(select 1 from public.weekly_source_billing_movements m
+            join public.contracts c on c.id=m.contract_id
+            where m.id=v_movement and m.work_event_id=v_event.id and m.candidate_id=v_event.candidate_id
+              and m.actual_client_id=v_event.client_id and c.candidate_id=v_event.candidate_id and c.client_id=v_event.client_id
+              and m.movement_role in ('POSITIVE','REPLACEMENT')
+              and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')) then
+            raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_HEAD_UNBOUND' using errcode='55000'; end if;
+          if not v_movement=any(v_movements) then v_movements:=array_append(v_movements,v_movement); end if;
+        end if;
+      end loop;
+    end if;
+  end loop;
+  if cardinality(v_movements)>1 then raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_HEAD_AMBIGUOUS' using errcode='55000'; end if;
+  -- Full real credit-line census: actual CURRENT bindings/line IDs, negative
+  -- Report lines bound to this event, and native validated unbound Office ADJ.
+  select coalesce(array_agg(distinct line_id order by line_id),'{}'::uuid[]) into v_credits from (
+    select binding.invoice_line_id line_id
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement on movement.id=binding.billing_movement_id
+    join public.invoice_lines line on line.id=binding.invoice_line_id and line.invoice_id=binding.invoice_id
+    join public.invoices invoice on invoice.id=line.invoice_id and invoice.client_id=v_event.client_id
+    join public.weekly_source_final_revisions revision on revision.id=movement.final_revision_id
+    join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id and cycle.source_group_id=v_event.first_source_group_id
+    join public.weekly_source_upload_rows report_row on report_row.id=movement.self_bill_report_row_id
+      and report_row.upload_id=revision.upload_id and report_row.row_finalisation_state='SOURCE_REPORT_LINE'
+      and report_row.source_shift_charge_pence<0
+    where binding.state='CURRENT' and movement.work_event_id=v_event.id
+      and movement.source_line_kind='SELF_BILL_REPORT_LINE' and movement.source_profile_kind='SELF_BILL_REPORT'
+      and line.total_charge_ex_vat<0 and (exists(select 1 from public.weekly_source_self_bill_report_line_bindings report_binding
+        where report_binding.report_row_id=report_row.id and report_binding.work_event_id=v_event.id)
+        or exists(select 1 from public.weekly_source_billing_movements prior
+          join public.weekly_source_upload_rows prior_report_row on prior_report_row.id=prior.self_bill_report_row_id
+          where prior.id=movement.prior_movement_id and prior.work_event_id=v_event.id
+            and prior.source_line_kind='SELF_BILL_REPORT_LINE' and prior_report_row.external_source_key=report_row.external_source_key))
+    union
+    select line.id from public.invoice_lines line join public.invoices invoice on invoice.id=line.invoice_id
+    where invoice.client_id=v_event.client_id and line.meta_json->>'credited_work_event_id'=v_event.id::text
+      and invoice.header_snapshot_json#>>'{meta,source_group_id}'=v_event.first_source_group_id::text
+      and private.weekly_source_invoice_adjustment_line_valid_v1(line.id,invoice.id)
+  ) actual;
+  return private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_KEPT_AS_PAID_FACTS_V1',
+    jsonb_build_object('work_event_id',v_event.id,'reason',p_reason,'present_in_latest_export',v_present,
+      'current_pay_head_movement_id',v_movements[1],'credit_invoice_line_ids',to_jsonb(v_credits)));
+end;
+$function$;
+alter function private.weekly_source_kept_as_paid_facts_v1(uuid,text) owner to postgres;
+revoke all on function private.weekly_source_kept_as_paid_facts_v1(uuid,text) from public,anon,authenticated,service_role;

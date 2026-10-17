@@ -1,0 +1,12 @@
+// Proposed import of Health's standalone helper in its real Office module
+// integration. Root must bundle/adapt the .mjs dependency into the existing
+// script convention; this is not a second CM17 loader or browser API.
+// Replace only the current constant-closed capability span inside the saved
+// complete `openTimesheetContractMoveReview` caller; preserve its overlay body.
+const entry = await readCorrectionEntryForHost({binding,timesheetId,authFetch,api:API});
+if (entry.current_timesheet_id === null) throw new Error('CURRENT_ALLOCATION_PENDING');
+if (entry.current_timesheet_id !== timesheetId) throw new Error('CORRECTION_CURRENT_PARENT_REQUIRED');
+// Deliberately closed: even a malformed/changed server cannot enable CM17.
+// Root must seal a future complete Preview-backed entry contract before
+// replacing this refusal. No SQL event capability is created or exposed.
+throw new Error(entry.disabled_reason);

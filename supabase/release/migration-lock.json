@@ -1669,6 +1669,18 @@
     {
       "path": "supabase/migrations/tms_ref_nums.sql",
       "sha256": "d0099d400b9d5f692d40e052c64bf7627f2378dce7fe50785bb8935e6c2b6f16"
+    },
+    {
+      "path": "supabase/migrations/17102026_0113_weekly_source_kept_10_decision_schema.sql",
+      "sha256": "726853c33c9ace512c96a225db448504443c723020e43eebd889b8903c356c15"
+    },
+    {
+      "path": "supabase/migrations/17102026_0113_weekly_source_kept_20_audit_guards.sql",
+      "sha256": "1c71853bbf810eb8270b1f0ec63477ef97a534bfd11a1d7140d16de639fbdf00"
+    },
+    {
+      "path": "supabase/migrations/17102026_0135_correction_entry_admission.sql",
+      "sha256": "9af6c9b8993e918a0c28bdc29dae0d6b4cc9477cc13075329180395d53fbd8e7"
     }
   ]
 }

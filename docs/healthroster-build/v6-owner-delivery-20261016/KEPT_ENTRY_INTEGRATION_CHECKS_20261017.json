@@ -1,0 +1,41 @@
+{
+  "version": "HEALTH_KEPT_ENTRY_INTEGRATION_CHECKS_V1",
+  "keptOfflineChecks": 70,
+  "frozenByteIdenticalWritesSuppressed": 21,
+  "backendParentAndEntryTests": {
+    "passed": 24,
+    "failed": 0
+  },
+  "officeNativeHostTests": {
+    "passed": 23,
+    "failed": 0
+  },
+  "backendWorkerSyntax": "PASS",
+  "officeClassicAndMainSyntax": "PASS",
+  "databaseSourceIntegrity": {
+    "migrations": 420,
+    "repeatables": 1088,
+    "status": "PASS"
+  },
+  "entryGrammar": {
+    "statements": 52,
+    "plpgsqlBodies": 12,
+    "status": "PASS_GRAMMAR_ONLY"
+  },
+  "trackedSecretScanBeforeStage": {
+    "files": 11140,
+    "status": "PASS"
+  },
+  "historyTests": "PASS_WITH_FINITE_EXACT_NEW_REVERSALS_AND_DRIFT_REFUSALS_ORIGINAL_EVIDENCE_UNCHANGED",
+  "f23": "HOLD_NEW_EXACT_SOURCE_TYPE_CLASSIFICATIONS_REQUIRED",
+  "nativeAcceptance": "NOT_RUN",
+  "generatedContract": "NOT_RESEALED",
+  "release": "NOT_RUN",
+  "testflight": "NOT_RUN",
+  "finalCritics": "NOT_RUN",
+  "bankingChatMessaged": false,
+  "stagedSecretScan": {
+    "files": 11247,
+    "status": "PASS"
+  }
+}

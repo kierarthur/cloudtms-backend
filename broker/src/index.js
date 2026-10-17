@@ -70,6 +70,7 @@ import { parseWeeklySourceFile } from './weekly-source/index.js';
 import { dispatchWeeklySourceRequest, weeklySourceDeploymentContext } from './weekly-source/routes.js';
 import { previewSourcePayDecision,confirmSourcePayDecision,readSourcePayDecisionSource } from './weekly-source/source-pay-decision-worker.mjs';
 import {dispatchDailyRateCorrectionRequest,createDailyRateCorrectionRpc} from './daily-rate-correction.js';
+import {matchCorrectionEntry,handleCorrectionEntry} from './correction-entry.mjs';
 
 import { createPushTimingOfficeHandler } from './weekly-source/push-timing-office.mjs';
 import { createPushTimingInternalHandler, PUSH_TIMING_INTERNAL_PATH } from './weekly-source/push-timing-internal.mjs';
@@ -199068,6 +199069,22 @@ export default {
 
     const url = new URL(req.url);
     const p = url.pathname;
+    const correctionEntry = matchCorrectionEntry(req);
+    if (correctionEntry) {
+      let agencyId;
+      try { agencyId = bankingPayCorrectionTenantAuthority(env,{required:true}); }
+      catch { return withCORS(env, req, new Response(JSON.stringify({error:'CORRECTION_ENTRY_UNAVAILABLE'}), {
+        status:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}
+      })); }
+      return withCORS(env, req, await handleCorrectionEntry(req, {
+        timesheetId:correctionEntry.timesheetId,agencyId,
+        requireOfficeUser:() => requireUser(env,req),
+        rpc:(fn,args) => {
+          if(fn!=='timesheet_correction_entry_v1')throw new Error('CORRECTION_ENTRY_RPC_NOT_ALLOWED');
+          return sbRpc(env,fn,args,{timeoutMs:12000,allowAuthRefreshRetry:false});
+        }
+      }));
+    }
 
     if (req.method === 'POST'
         && p === '/private/mytms-control/v1/auth/challenge-delivery') {

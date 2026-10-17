@@ -1,0 +1,90 @@
+{
+  "status": "ROOT_REVIEW_REQUIRED_UNSEALED",
+  "purpose": "Contract-only advisory subject admission; actual Preview and CM17 remain separate dependencies",
+  "transport": {
+    "method": "GET",
+    "path": "/api/timesheets/:timesheet_id/correction-entry",
+    "queryKeys": [],
+    "bodyKeys": [],
+    "serviceFunction": "public.timesheet_correction_entry_v1(jsonb)",
+    "serviceRequestKeys": [
+      "version",
+      "timesheet_id",
+      "actor_user_id"
+    ],
+    "workerTrustedAgency": "existing bankingPayCorrectionTenantAuthority(env) must match verified requireUser tenant_id"
+  },
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "version",
+      "requested_timesheet_id",
+      "current_timesheet_id",
+      "placement_revision",
+      "purpose",
+      "may_open_review",
+      "disabled_reason"
+    ],
+    "properties": {
+      "version": {
+        "const": "TIMESHEET_CORRECTION_ENTRY_V1"
+      },
+      "requested_timesheet_id": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "current_timesheet_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "format": "uuid"
+      },
+      "placement_revision": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)$",
+        "maxLength": 19
+      },
+      "purpose": {
+        "const": "CONTRACT_CORRECTION"
+      },
+      "may_open_review": {
+        "const": false
+      },
+      "disabled_reason": {
+        "enum": [
+          "REVIEW_UNAVAILABLE",
+          "CURRENT_ALLOCATION_PENDING"
+        ]
+      }
+    },
+    "oneOf": [
+      {
+        "properties": {
+          "current_timesheet_id": {
+            "type": "null"
+          },
+          "disabled_reason": {
+            "const": "CURRENT_ALLOCATION_PENDING"
+          }
+        }
+      },
+      {
+        "properties": {
+          "current_timesheet_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "disabled_reason": {
+            "const": "REVIEW_UNAVAILABLE"
+          }
+        }
+      }
+    ]
+  },
+  "integerBoundary": "canonical unsigned int63 decimal text; decoder also checks <=9223372036854775807",
+  "native": "NOT_RUN",
+  "api": "NOT_RUN",
+  "browser": "NOT_RUN"
+}

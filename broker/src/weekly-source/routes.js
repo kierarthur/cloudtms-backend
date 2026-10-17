@@ -6,6 +6,7 @@ import {
 } from './guard-refusal-record.mjs';
 import { bpayBusyEnvelope } from '../bpay-busy.js';
 import { isActivePaymentActor } from '../payment-actor-permission.js';
+import{parseKeptPayCommand,validateKeptPayCommand,decodeKeptPayAcknowledgement,keptPayFailure,readWeeklySourceBoundedText}from'./kept-pay-command.mjs';
 import { WeeklyProtectedActionError } from './protected-action-orchestrator.mjs';
 import { normalizeBpayNextOwnerStatus } from '../bpay-next-legacy-fence.js';
 import { validateRuleSetValues } from './rule-set-validation.js';
@@ -157,6 +158,7 @@ const PROTECTED_ACTIONS = new Set([
 const PAY_VIEW_COMMANDS = new Set([
   'WORKSPACE_SCOPES', 'COMBINED_REVIEW_WORKSPACE', 'PROTECTED_EDITOR_CONTEXT',
   'OPEN_MANUAL_REVIEW', 'RESOLVE_MANUAL_REVIEW', 'PREPARE_PROTECTED_EDITOR',
+  'KEEP_AS_PAID',
   'ACCEPT_SYSTEM_HOURS', 'FIRST_AUTHORISE', 'WITHDRAW_FIRST_AUTHORISATION',
   ...PROTECTED_ACTIONS,
 ]);
@@ -250,8 +252,9 @@ async function readJsonBody(req, maximumBytes = MAX_COMMAND_BYTES) {
   }
   let text;
   try {
-    text = new TextDecoder('utf-8',{fatal:true}).decode(await req.arrayBuffer());
-  } catch {
+    text = await readWeeklySourceBoundedText(req, maximumBytes);
+  } catch (error) {
+    if(error?.code==='WEEKLY_SOURCE_REQUEST_TOO_LARGE')fail('WEEKLY_SOURCE_REQUEST_TOO_LARGE', 'The request is too large.', 413);
     fail('WEEKLY_SOURCE_REQUEST_INVALID', 'The request could not be read.', 400);
   }
   if (new TextEncoder().encode(text).byteLength > maximumBytes) {
@@ -259,6 +262,7 @@ async function readJsonBody(req, maximumBytes = MAX_COMMAND_BYTES) {
   }
   try {
     const parsed = plainObject(JSON.parse(text || '{}'), 'WEEKLY_SOURCE_REQUEST_INVALID', 'Request');
+    if(typeof parsed.action==='string'&&parsed.action.trim().toUpperCase()==='KEEP_AS_PAID')return parseKeptPayCommand(text);
     if(isContactManualEnquiryCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null))return parseContactManualEnquiryBody(text);
     return isContactPauseCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null)
       ? parseContactPauseCommandBody(text) : parsed;
@@ -700,6 +704,17 @@ async function handleCommand(req, env, ctx, dependencies, user) {
     return handleContactManualEnquiryOfficeCommand({body,user,search:new URL(req.url).search,
       deploymentContext:()=>weeklySourceDeploymentContext(env),
       rpc:(name,request)=>callRpc(dependencies,name,request,20_000)});
+  }
+
+  if (action === 'KEEP_AS_PAID') {
+    try{validateKeptPayCommand(body);}catch{fail('WEEKLY_SOURCE_KEEP_AS_PAID_REQUEST_INVALID','This decision could not be prepared.',400);}
+    let result;
+    try{result=await withRefusalRecording(dependencies,
+      'broker:weekly-source:weekly_source_keep_as_paid_decide_atomic_v1',user.id,
+      ()=>callRpc(dependencies,'weekly_source_keep_as_paid_decide_atomic_v1',request));}
+    catch(error){const refusal=keptPayFailure(error);fail(refusal.code,'Open the current review before continuing.',refusal.status);}
+    try{return jsonResponse(200,decodeKeptPayAcknowledgement(result,payload,user.id));}
+    catch{fail('WEEKLY_SOURCE_KEEP_AS_PAID_RESULT_INVALID','Open the current review before continuing.',502);}
   }
 
   if (action === 'LATER_CHANGE_DECISION') {

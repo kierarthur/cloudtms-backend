@@ -1,0 +1,486 @@
+{
+  "version": "CORRECTION_ENTRY_ROOT_SOURCE_MOUNT_V1",
+  "sourceCommit": "4a954fb172ad86baec58ffd7c1a4622687b99749",
+  "peerCommit": "7226cc087d109b7ab73c8b7ec8ececce5265034d",
+  "schemaAdmission": "ROOT_REVIEWED_CLOSED_7_FIELDS_NATIVE_UNSEALED",
+  "native": "NOT_RUN",
+  "api": "NOT_RUN",
+  "browser": "NOT_RUN",
+  "mayOpenReview": false,
+  "hunks": [
+    {
+      "target": "broker/src/index.js",
+      "before": "import {dispatchDailyRateCorrectionRequest,createDailyRateCorrectionRpc} from './daily-rate-correction.js';",
+      "after": "import {dispatchDailyRateCorrectionRequest,createDailyRateCorrectionRpc} from './daily-rate-correction.js';\nimport {matchCorrectionEntry,handleCorrectionEntry} from './correction-entry.mjs';"
+    },
+    {
+      "target": "broker/src/index.js",
+      "before": "    const p = url.pathname;",
+      "after": "    const p = url.pathname;\n    const correctionEntry = matchCorrectionEntry(req);\n    if (correctionEntry) {\n      let agencyId;\n      try { agencyId = bankingPayCorrectionTenantAuthority(env,{required:true}); }\n      catch { return withCORS(env, req, new Response(JSON.stringify({error:'CORRECTION_ENTRY_UNAVAILABLE'}), {\n        status:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}\n      })); }\n      return withCORS(env, req, await handleCorrectionEntry(req, {\n        timesheetId:correctionEntry.timesheetId,agencyId,\n        requireOfficeUser:() => requireUser(env,req),\n        rpc:(fn,args) => {\n          if(fn!=='timesheet_correction_entry_v1')throw new Error('CORRECTION_ENTRY_RPC_NOT_ALLOWED');\n          return sbRpc(env,fn,args,{timeoutMs:12000,allowAuthRefreshRetry:false});\n        }\n      }));\n    }"
+    }
+  ],
+  "classifier": {
+    "predecessor": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+    "inputSha256": "fe1cbb0de3332a021d1459a2e46f5c201e58d4ded7ade5f9f58fae876b8547e4",
+    "target": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+    "outputSha256": "587a7bd81efa24d721b1632a4c1a5af902fdeb56a3d39c0736615df51024fd78",
+    "hunks": [
+      {
+        "before": "    ('private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)'),",
+        "after": "    ('private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)'),\n    ('private.timesheet_correction_entry_subject_v1(uuid,uuid)'),\n    ('private.timesheet_correction_entry_v1(uuid,uuid)'),"
+      },
+      {
+        "before": "    ('public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)'),",
+        "after": "    ('public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)'),\n    ('public.timesheet_correction_entry_v1(jsonb)'),"
+      }
+    ],
+    "fullReverse": true,
+    "relationCount": 106
+  },
+  "registry": {
+    "inputSha256": "08f1e4b2ce26471523a9f814658a52b5dbe2b076b524e6c9c86d3fdbb6e9b998",
+    "outputSha256": "e6ee24f8f541b4e31d28ba625623b7bb7674a54a6dcabd808a5aa8e17b6e3aaa",
+    "changes": [
+      {
+        "signature": "private._weekly_source_acl_table_contract_v1()",
+        "before": {
+          "signature": "private._weekly_source_acl_table_contract_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md"
+        },
+        "after": {
+          "signature": "private._weekly_source_acl_table_contract_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+            "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+            "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md",
+          "healthEntrySourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json"
+        }
+      },
+      {
+        "signature": "private._weekly_source_acl_lifecycle_column_contract_v1()",
+        "before": {
+          "signature": "private._weekly_source_acl_lifecycle_column_contract_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md"
+        },
+        "after": {
+          "signature": "private._weekly_source_acl_lifecycle_column_contract_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+            "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+            "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md",
+          "healthEntrySourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json"
+        }
+      },
+      {
+        "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+        "before": {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md"
+        },
+        "after": {
+          "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+            "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+            "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md",
+          "healthEntrySourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json"
+        }
+      },
+      {
+        "signature": "private._weekly_source_acl_service_rpc_contract_v1()",
+        "before": {
+          "signature": "private._weekly_source_acl_service_rpc_contract_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md"
+        },
+        "after": {
+          "signature": "private._weekly_source_acl_service_rpc_contract_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/12_complete_private_registry_union.sqlinc",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+            "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_1436_weekly_source_invoice_money_acl_inventory_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+            "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md",
+          "healthEntrySourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json"
+        }
+      },
+      {
+        "signature": "private._weekly_source_immutable_record_guard_v1()",
+        "before": {
+          "signature": "private._weekly_source_immutable_record_guard_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md"
+        },
+        "after": {
+          "signature": "private._weekly_source_immutable_record_guard_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+            "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+            "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md",
+          "healthEntrySourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json"
+        }
+      },
+      {
+        "signature": "private._weekly_source_immutable_fact_guard_v1()",
+        "before": {
+          "signature": "private._weekly_source_immutable_fact_guard_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md"
+        },
+        "after": {
+          "signature": "private._weekly_source_immutable_fact_guard_v1()",
+          "finalRoot": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/13_complete_final_acl_union.sqlinc",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+            "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc"
+          ],
+          "predecessors": [
+            "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+            "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta_v1.sql",
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql"
+          ],
+          "finalClosures": [
+            "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+            "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+            "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql"
+          ],
+          "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+          "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json",
+          "healthKeptPaySourceReview": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md",
+          "healthEntrySourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json"
+        }
+      },
+      {
+        "signature": "private.timesheet_correction_entry_subject_v1(uuid,uuid)",
+        "before": null,
+        "after": {
+          "signature": "private.timesheet_correction_entry_subject_v1(uuid,uuid)",
+          "finalRoot": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc"
+          ],
+          "predecessors": [],
+          "finalClosures": [
+            "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql"
+          ],
+          "owner": "HealthRoster Contract advisory entry reader",
+          "healthEntrySourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json"
+        }
+      },
+      {
+        "signature": "private.timesheet_correction_entry_v1(uuid,uuid)",
+        "before": null,
+        "after": {
+          "signature": "private.timesheet_correction_entry_v1(uuid,uuid)",
+          "finalRoot": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc"
+          ],
+          "predecessors": [],
+          "finalClosures": [
+            "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql"
+          ],
+          "owner": "HealthRoster Contract advisory entry reader",
+          "healthEntrySourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json"
+        }
+      },
+      {
+        "signature": "public.timesheet_correction_entry_v1(jsonb)",
+        "before": null,
+        "after": {
+          "signature": "public.timesheet_correction_entry_v1(jsonb)",
+          "finalRoot": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc",
+          "allowedPhysical": [
+            "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc"
+          ],
+          "predecessors": [],
+          "finalClosures": [
+            "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql"
+          ],
+          "owner": "HealthRoster Contract advisory entry reader",
+          "healthEntrySourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json"
+        }
+      }
+    ]
+  },
+  "workerParent": {
+    "inputSha256": "31e294b12da5c4cffe3b44bc42d8eb2ff0b6777b85defed2c246bc51a30e6334",
+    "outputSha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a",
+    "fullReverse": true
+  },
+  "sqlRoot": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+  "oneTimeAdmission": "supabase/migrations/17102026_0135_correction_entry_admission.sql",
+  "payloads": [
+    {
+      "target": "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc",
+      "sha256": "0f7c01eb27ba3842b90524e550a0c2bbbe3a5406664c8e4c4bf1f27d831386f5",
+      "bytes": 11967
+    },
+    {
+      "target": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+      "sha256": "05aed1c5a2d5feb6971b5e9260ec8a2748e8d46a628bb62fd733de6ad9d57bb9",
+      "bytes": 225
+    },
+    {
+      "target": "supabase/migrations/17102026_0135_correction_entry_admission.sql",
+      "sha256": "9af6c9b8993e918a0c28bdc29dae0d6b4cc9477cc13075329180395d53fbd8e7",
+      "bytes": 631
+    },
+    {
+      "target": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+      "sha256": "587a7bd81efa24d721b1632a4c1a5af902fdeb56a3d39c0736615df51024fd78",
+      "bytes": 85548
+    },
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "e6ee24f8f541b4e31d28ba625623b7bb7674a54a6dcabd808a5aa8e17b6e3aaa",
+      "bytes": 1643244
+    },
+    {
+      "target": "broker/src/correction-entry.mjs",
+      "sha256": "f7b04091b1246f09e5408177f8ae26f67686277d7dd8b946bd503eb3eabcf0cd",
+      "bytes": 3347
+    },
+    {
+      "target": "broker/src/index.js",
+      "sha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a",
+      "bytes": 8936781
+    },
+    {
+      "target": "supabase/release/migration-lock.json",
+      "sha256": "a04f29591d51594f7b73991e8ec0a093e694b54dfafdd041f9455c2a458c4b79",
+      "bytes": 78340
+    }
+  ],
+  "frozenEvidenceFiles": 13
+}

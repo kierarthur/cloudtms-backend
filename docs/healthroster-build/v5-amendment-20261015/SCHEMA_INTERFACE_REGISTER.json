@@ -6986,5 +6986,41 @@
     "positiveConstructors": "NOT_RUN",
     "fullRehearsal": "NOT_RUN",
     "install2": "NOT_INSTALLED"
+  },
+  "kept_pay_rekey_source_continuation_20261017": {
+    "sourceCommit": "a34cd60f2c75580a9e37aabfaf26f7dab680cb37",
+    "peerCommit": "47a98818c9807ffea267fcd0affacc2911dd1e48",
+    "status": "SOURCE_MOUNTED_NATIVE_NOT_RUN",
+    "rootReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/KEPT_PAY_REKEY_ROOT_MOUNT_20261017.json",
+    "immutableOriginalDecisionRelation": "public.weekly_source_kept_as_paid_decisions",
+    "newAcknowledgementStore": false,
+    "counterBoundary": "CANONICAL_POSITIVE_INT63_STRING",
+    "oneTimeSchemaAndAuditOrder": "17102026_0113_schema10_then_audit20",
+    "offlineChecks": 70,
+    "native": "NOT_RUN",
+    "f23": "NEW_EXACT_TYPE_CLASSIFICATIONS_REQUIRED",
+    "original92ObjectsUnchanged": true
+  },
+  "correction_entry_reader_source_continuation_20261017": {
+    "sourceCommit": "4a954fb172ad86baec58ffd7c1a4622687b99749",
+    "peerCommit": "7226cc087d109b7ab73c8b7ec8ececce5265034d",
+    "status": "CLOSED_ADVISORY_SOURCE_MOUNTED_NATIVE_UNSEALED",
+    "schemaProposal": "docs/healthroster-build/proposals/correction-entry-native-reader-20261017/ENTRY_RESPONSE_PROPOSAL.json",
+    "rootReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json",
+    "officeReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_CLASSIC_HOST_MOUNT_20261017.json",
+    "responseKeys": [
+      "version",
+      "requested_timesheet_id",
+      "current_timesheet_id",
+      "placement_revision",
+      "purpose",
+      "may_open_review",
+      "disabled_reason"
+    ],
+    "mayOpenReview": false,
+    "native": "NOT_RUN",
+    "api": "NOT_RUN",
+    "browser": "NOT_RUN",
+    "original92ObjectsUnchanged": true
   }
 }

@@ -1,0 +1,40 @@
+{
+  "checkpoint": "5ecc4c73113660edf48a5bca2f3a478453a81c2b",
+  "target": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+  "successorTarget": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+  "inputSha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8",
+  "outputSha256": "fe1cbb0de3332a021d1459a2e46f5c201e58d4ded7ade5f9f58fae876b8547e4",
+  "hunks": [
+    {
+      "before": "    ('weekly_source_self_bill_report_line_bindings', 'STATEFUL_SERVER_OWNED'),",
+      "after": "    ('weekly_source_kept_as_paid_decisions', 'IMMUTABLE_APPEND_ONLY'),\n    ('weekly_source_self_bill_report_line_bindings', 'STATEFUL_SERVER_OWNED'),",
+      "purpose": "The one original immutable decision relation joins the current exact table contract."
+    },
+    {
+      "before": "    ('private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])'),",
+      "after": "    ('private.weekly_source_identical_rekey_prior_v1(uuid)'),\n    ('private.weekly_source_invoice_credited_targets_admit_v1(uuid,jsonb,uuid)'),\n    ('private.weekly_source_keep_ack_native_guard_v1()'),\n    ('private.weekly_source_kept_as_paid_context_v1(uuid,uuid)'),\n    ('private.weekly_source_kept_as_paid_facts_v1(uuid,text)'),\n    ('private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)'),\n    ('private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])'),",
+      "purpose": "Only six new private implementation helpers; service/browser execution remains denied."
+    },
+    {
+      "before": "    ('public.weekly_source_upload_context_v1(jsonb)'),",
+      "after": "    ('public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)'),\n    ('public.weekly_source_upload_context_v1(jsonb)'),",
+      "purpose": "One deliberately granted service RPC; no direct browser or relation access."
+    },
+    {
+      "before": "v_contract_count<>105",
+      "after": "v_contract_count<>106",
+      "purpose": "Exact current 105 relation contract plus one planned immutable relation."
+    },
+    {
+      "before": "v_distinct_contract_count<>105",
+      "after": "v_distinct_contract_count<>106",
+      "purpose": "Exact current 105 relation contract plus one planned immutable relation."
+    },
+    {
+      "before": "exactly 105 unique relations.",
+      "after": "exactly 106 unique relations.",
+      "purpose": "Exact current 105 relation contract plus one planned immutable relation."
+    }
+  ],
+  "completeReverseByteEquality": true
+}

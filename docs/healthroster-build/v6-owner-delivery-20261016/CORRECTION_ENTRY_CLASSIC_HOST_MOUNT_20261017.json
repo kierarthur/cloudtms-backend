@@ -1,0 +1,32 @@
+{
+  "version": "CORRECTION_ENTRY_CLASSIC_HOST_MOUNT_V1",
+  "sourceCommit": "4a954fb172ad86baec58ffd7c1a4622687b99749",
+  "officeInputCommit": "9716a59e1ee4b3322db3c51c38128ab118c10d23",
+  "native": "NOT_RUN",
+  "browser": "NOT_RUN",
+  "enabling": false,
+  "hunks": [
+    {
+      "target": "js/main.js",
+      "before": "  // The reviewed pack requires an actual native Move capability. Current Office\r\n  // has no declared projection for it. Presence of CM17, Admin, a Contract or a\r\n  // private SQL event capability cannot substitute for that missing authority.\r\n  // Preserve this closed seam until the exact public producer ABI is published.\r\n  const publishedNativeMoveCapability = false;\r\n  if (!publishedNativeMoveCapability) throw new Error('CONTRACT_MOVE_CAPABILITY_PROJECTION_REQUIRED');\r\n",
+      "after": "  const entryReader = window.CloudTMSCorrectionEntryV1;\r\n  if (typeof entryReader?.readCorrectionEntryForHost !== 'function') throw new Error('CORRECTION_ENTRY_UNAVAILABLE');\r\n  const entry = await entryReader.readCorrectionEntryForHost({binding,timesheetId,authFetch,api:API});\r\n  if (entry.current_timesheet_id === null) throw new Error('CURRENT_ALLOCATION_PENDING');\r\n  if (entry.current_timesheet_id !== timesheetId) throw new Error('CORRECTION_CURRENT_PARENT_REQUIRED');\r\n  // This advisory contract cannot enable CM17 or create a native capability.\r\n  throw new Error(entry.disabled_reason);\r\n",
+      "inputSha256": "5e7f4c3b793c8dcb29ec0b89650111065183eb943aeef5b15b85b385177ab1d0",
+      "outputSha256": "ec01905facc35f501c1f6ccf08161c6f897eb5e3612a17d79e49134aa627e716",
+      "fullReverse": true
+    },
+    {
+      "target": "index.html",
+      "before": "<script src=\"./js/main.js?v=20261012-sp10-r1&healthroster=20261014-checklist-r4&correction-host=5e7f4c3b793c8dcb29ec0b89650111065183eb943aeef5b15b85b385177ab1d0\"></script>",
+      "after": "<script src=\"./js/timesheet-correction-entry-v1.js?v=43dd1f6fff00fde6bcff9cbd29bebfce6d321672072ddac15aac00ccf8241d4a\"></script>\r\n<script src=\"./js/main.js?v=20261012-sp10-r1&healthroster=20261014-checklist-r4&correction-host=ec01905facc35f501c1f6ccf08161c6f897eb5e3612a17d79e49134aa627e716\"></script>",
+      "inputSha256": "81934ab673376dbdc39143d69f20e5813273652da235d6b7c1336c43f7896dc6",
+      "outputSha256": "1d5587fe3f64468961f1d38c9df21a29e60ec19bd592da51ebeabde441ad79b1",
+      "fullReverse": true
+    }
+  ],
+  "derivation": {
+    "decoderSourceSha256": "f7b04091b1246f09e5408177f8ae26f67686277d7dd8b946bd503eb3eabcf0cd",
+    "hostSourceSha256": "b352f204c6f86b162ba384dfe1f7bb9f96037d619f2dd1ae4a887cadaed4426b",
+    "outputSha256": "43dd1f6fff00fde6bcff9cbd29bebfce6d321672072ddac15aac00ccf8241d4a",
+    "changes": "Keep exact UUID/KEYS and complete decoder; remove ES exports/import; wrap classic frozen namespace; helper body unchanged"
+  }
+}
