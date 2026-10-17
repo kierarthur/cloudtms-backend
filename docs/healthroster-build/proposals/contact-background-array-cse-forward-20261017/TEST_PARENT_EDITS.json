@@ -1,0 +1,110 @@
+[
+  {
+    "file": "batch.test.mjs",
+    "oldSource": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/contact-same-rr-native-batch-forward-20261017/batch.test.mjs",
+    "beforeSha256": "52002a386780508d28244eed0ed09d7b7fac866070460f193e4909466a0cbdcf",
+    "afterSha256": "dd82237a4af9d89550a0b4f7d48c87077fbe5e829d4e850cb9fd0e6d73c40e65",
+    "hunks": [
+      {
+        "before": "import './batch-overlay.mjs';",
+        "after": "import './overlay.mjs';"
+      },
+      {
+        "before": "assert(!r.batch.backgroundQuery.includes(\"'backgroundWriterRoutines',\"));",
+        "after": "assert(!r.batch.parts.bgFields.includes(\"'backgroundWriterRoutines',\"));assert.equal(r.batch.descriptor.completeBackgroundArraysMaterializedOnce,true);"
+      },
+      {
+        "before": "assert.equal(r.parts.other.length+1,12);",
+        "after": "assert.equal(r.parts.other.length+1,10);assert.equal(r.parts.backgroundBusiness.length,2);"
+      }
+    ]
+  },
+  {
+    "file": "coordinator.test.mjs",
+    "oldSource": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/contact-same-rr-native-batch-forward-20261017/coordinator.test.mjs",
+    "beforeSha256": "d5d2cae4f2a2fff094cd656fba7f383c654c1ecedb6b3833a944158ab43ed2bd",
+    "afterSha256": "62fe9efee8383bbbfe16cac3edb615bbd9127b0455289e1b2d7992cc2616a4fb",
+    "hunks": [
+      {
+        "before": "import './batch-overlay.mjs';",
+        "after": "import './overlay.mjs';"
+      }
+    ]
+  },
+  {
+    "file": "verify.mjs",
+    "oldSource": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/contact-same-rr-native-batch-forward-20261017/verify.mjs",
+    "beforeSha256": "8339ee1e30bc76167c5b3858ea56058804bcf5d072178710b10cb1c7109d5eb2",
+    "afterSha256": "5d602e337a0157770c707796d2d9a9d5871228120f4dbc88d8eedfcbc821902a",
+    "hunks": [
+      {
+        "before": "assert.equal(unchanged,48);assert.equal(newCount,1);",
+        "after": "assert.equal(unchanged,49);assert.equal(newCount,0);"
+      },
+      {
+        "before": "let child=coordinator(after);child=child.replace('diagnosticMode=null,batch=false','diagnosticMode=null').replace('new BoundedMemoryCapture(phase,batch)','new BoundedMemoryCapture(phase)');assert.equal(child,coordinator(before));",
+        "after": "assert.equal(coordinator(after),coordinator(before));const captures=s=>s.slice(s.indexOf('export class BoundedMemoryCapture'),s.indexOf('function assertPins('));assert.equal(captures(after),captures(before));const oldBatch=old(ADAPTER+'/batch-source.mjs').toString(),newBatch=proposed(ADAPTER+'/batch-source.mjs').toString();assert.equal(newBatch.slice(newBatch.indexOf('// Retain complete native JSON')),oldBatch.slice(oldBatch.indexOf('// Retain complete native JSON')));"
+      },
+      {
+        "before": "assert(proposed(ADAPTER+'/batch-source.mjs').equals(read('batch-source.mjs')));",
+        "after": "assert.equal(sha(proposed(ADAPTER+'/batch-source.mjs')),selection.files.find(r=>r.target===ADAPTER+'/batch-source.mjs').sha256);"
+      },
+      {
+        "before": "assert.equal(actual.length,6);",
+        "after": "assert.equal(actual.length,5);"
+      },
+      {
+        "before": "pathToFileURL(here+'/batch-overlay.mjs').href",
+        "after": "pathToFileURL(here+'/overlay.mjs').href"
+      },
+      {
+        "before": "here+'/coordinator.test.mjs',ROOT",
+        "after": "here+'/coordinator.test.mjs',here+'/array.test.mjs',ROOT"
+      },
+      {
+        "before": "# pass 37\\b",
+        "after": "# pass 43\\b"
+      },
+      {
+        "before": "assert.equal(ast.counterexamples.length,17);",
+        "after": "assert.equal(ast.counterexamples.length,21);"
+      },
+      {
+        "before": "version:'CONTACT_SAME_RR_NATIVE_BATCH_FINITE_SOURCE_PROOF_V1'",
+        "after": "version:'CONTACT_BACKGROUND_ARRAY_CSE_FINITE_SOURCE_PROOF_V1'"
+      },
+      {
+        "before": "changedExisting:5,newFiles:1,unchangedParentReferences:48,actualPayloadFiles:6",
+        "after": "changedExisting:5,newFiles:0,unchangedParentReferences:49,actualPayloadFiles:5"
+      },
+      {
+        "before": "privateChildControlRawUnchangedExceptCaptureSelection:true",
+        "after": "privateChildCaptureAndControlRawUnchanged:true,raw21MemberJoinRawUnchanged:true,backgroundCompleteArraysMaterializedOnce:true,businessBagRecords:[1,9],businessArrayRecords:2"
+      },
+      {
+        "before": "tests:37,originalContactTestSha256",
+        "after": "tests:43,originalContactTestSha256"
+      },
+      {
+        "before": "payloadFiles:6,wholeReverses:5,unchanged:48,tests:37,stageAstCases:2,astNegatives:17",
+        "after": "payloadFiles:5,wholeReverses:5,unchanged:49,tests:43,stageAstCases:2,astNegatives:21"
+      }
+    ]
+  },
+  {
+    "file": "freeze.mjs",
+    "oldSource": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/contact-same-rr-native-batch-forward-20261017/freeze.mjs",
+    "beforeSha256": "4bc88cbde9ec2ce7f6bf9db48447ab2b89af60a4521f538947a49d75b166f5a6",
+    "afterSha256": "3c15d4d86500b320dbe5c115cecfe600e9c4233cf687fa263b72d7c2f7f5d522",
+    "hunks": [
+      {
+        "before": "version:'CONTACT_SAME_RR_NATIVE_BATCH_FREEZE_V1'",
+        "after": "version:'CONTACT_BACKGROUND_ARRAY_CSE_FREEZE_V1'"
+      },
+      {
+        "before": "actualPayloadFiles:6,wholeParentInverses:5,unchangedParentReferences:48,tests:37",
+        "after": "actualPayloadFiles:5,wholeParentInverses:5,unchangedParentReferences:49,tests:43"
+      }
+    ]
+  }
+]

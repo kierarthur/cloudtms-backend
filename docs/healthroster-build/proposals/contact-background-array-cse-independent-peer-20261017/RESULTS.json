@@ -1,0 +1,109 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_EQUIVALENCE_CURRENT_ADMISSION_HOLD",
+  "sourceCommit": "fe2366f44c1514f9074e4c1413b7043330a3f4d7",
+  "sourceManifestSha256": "4af20def35c5a76a0a6c5fd45c9d5c4694ccc992ba4e26dd439fb05230c5374c",
+  "sourceFiles": 27,
+  "targets": 54,
+  "changed": 5,
+  "unchanged": 49,
+  "wholeRawInverses": 5,
+  "literalHunks": 5,
+  "all54OriginalParentsSavedIndexHeadHistoricalEqualAtCapture": true,
+  "rawCaptureAndPrivateChildAndRaw21JoinUnchanged": true,
+  "originalSharedOwnersAndWeakMapUnchanged": true,
+  "readerSingleFinalQueryAnchorEdit": true,
+  "initialUnamendedReplay": {
+    "targets": 54,
+    "payloadFiles": 5,
+    "wholeReverses": 5,
+    "unchanged": 49,
+    "tests": 43,
+    "stageAstCases": 2,
+    "astNegatives": 21,
+    "native": "NOT_RUN",
+    "restorationQualified": false
+  },
+  "currentUnamendedReplay": {
+    "status": "HOLD_APPROVED_MECHANICAL_SOURCE_PIN_DRIFT",
+    "code": "LOCAL_METADATA_REVIEWED_SOURCE_CHANGED",
+    "rootSourceCommit": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+    "mismatches": [
+      {
+        "file": "scripts/bpay-next-final-definers.mjs",
+        "reviewed": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+        "current": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
+      }
+    ],
+    "native": "NOT_RUN"
+  },
+  "independent": {
+    "actualFinalQueryAstRefusals": [
+      "NULL hashes must still count",
+      "empty aggregate must retain empty string",
+      "text default collation cannot be replaced",
+      "text must not be padded to char",
+      "count cannot narrow to int4",
+      "row membership cannot be filtered",
+      "relation identity cannot borrow the other array",
+      "full map null fields cannot be stripped"
+    ],
+    "originalAllTwelveRecordsRetained": true,
+    "twoNativeCountStarNoCast": true,
+    "syntheticBagVectors": [
+      {
+        "entries": 0,
+        "nullHashes": 0,
+        "multiplicityAndPermutation": true
+      },
+      {
+        "entries": 1,
+        "nullHashes": 1,
+        "multiplicityAndPermutation": true
+      },
+      {
+        "entries": 2,
+        "nullHashes": 2,
+        "multiplicityAndPermutation": true
+      },
+      {
+        "entries": 3,
+        "nullHashes": 1,
+        "multiplicityAndPermutation": true
+      },
+      {
+        "entries": 3,
+        "nullHashes": 0,
+        "multiplicityAndPermutation": true
+      },
+      {
+        "entries": 5,
+        "nullHashes": 0,
+        "multiplicityAndPermutation": true
+      }
+    ],
+    "nullCountDistinguishedFromEmpty": true,
+    "UTF8AndDelimiterCounterexamples": true,
+    "postgreSQLCollationExecuted": false,
+    "queriesExecuted": 0,
+    "native": "NOT_RUN"
+  },
+  "sourceAssertions": {
+    "completeAllRowArrays": true,
+    "allTwelveBusinessScopes": true,
+    "bigintCountStar": true,
+    "sameRowHashTextLineages": true,
+    "pipeDelimiterAndAscendingDefaultCollationAndNullEmptyRules": true,
+    "catalogueTextExporterAndGuardPrefixAndRollbackUnchanged": true,
+    "base15Background6Disjoint": true,
+    "observationsAtActualNewExecutionPoints": true
+  },
+  "algorithmFindings": [],
+  "integrationRequirements": [
+    "Finite exact approved mechanical Git-wrapper pin and historical source-binding successor before actual admission"
+  ],
+  "native": "NOT_RUN",
+  "performance": "NOT_MEASURED",
+  "actualPostimageSourceAdmission": "HOLD_PENDING_EXACT_APPROVED_PIN_FORWARD",
+  "restorationQualified": false,
+  "BankSemanticBodiesRead": false
+}

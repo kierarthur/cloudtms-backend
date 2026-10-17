@@ -1,0 +1,67 @@
+{
+  "version": "CONTACT_BG_CSE_EXACT_BINDING_ROOT_REVIEW_V1",
+  "verdict": "ACCEPT_SOURCE_ONLY_PENDING_ACTUAL_COMMITTED_ADMISSION_AND_NATIVE",
+  "packets": [
+    {
+      "folder": "contact-background-array-cse-forward-20261017",
+      "commit": "fe2366f44c1514f9074e4c1413b7043330a3f4d7",
+      "count": 27,
+      "manifestSha256": "4af20def35c5a76a0a6c5fd45c9d5c4694ccc992ba4e26dd439fb05230c5374c"
+    },
+    {
+      "folder": "contact-background-array-cse-independent-peer-20261017",
+      "commit": "b3b0fa0806f4d596075701297e9b2ae19db422e4",
+      "count": 36,
+      "manifestSha256": "8108c836696b8aa0fa5a0f6ca19341849dbbac47c68d5a5a50906d59c0b1af87"
+    },
+    {
+      "folder": "contact-approved-git-wrapper-binding-forward-20261017",
+      "commit": "abf7946f7cba41d2a39a04f781cd600acad6f9fe",
+      "count": 21,
+      "manifestSha256": "b778b363c9ab2ab9a7bcc638fdfa9812858bdbca2e5b7753b7f24368bda31e47"
+    },
+    {
+      "folder": "contact-approved-git-wrapper-binding-independent-peer-20261017",
+      "commit": "3ea3831ee63fb736297ba2dd6985409fc6116c87",
+      "count": 4,
+      "manifestSha256": "51b29e374430bb0fc8e6fbbd75a19c0ecbb7d06a416db0c73a95dc30e199c463"
+    }
+  ],
+  "mountOrder": [
+    "BG_FIVE",
+    "EXACT_BRIDGE_THREE"
+  ],
+  "uniqueRuntimeTargets": 7,
+  "bgWholeRawInverses": 5,
+  "bridgeWholeRawInverses": 3,
+  "bgUnchangedParents": 49,
+  "rootReplays": {
+    "bridgeTests": 19,
+    "bgOriginalTests": 43,
+    "bgPg17WholePrograms": 2,
+    "bgOriginalAstRefusals": 21,
+    "independentAstRefusals": 8,
+    "independentBagVectors": 6
+  },
+  "allOriginal63SourceInputsAndSnapshot2Retained": true,
+  "complete12ScopesNativeBigintMultiplicityNullAndHashRulesRetained": true,
+  "raw21MembersPrivateCaptureCanonicalOwnersWeakMapAndFreshCafterRetained": true,
+  "limitsUnchanged": {
+    "statementSeconds": 45,
+    "childSeconds": 70,
+    "workSeconds": 120,
+    "wholeSeconds": 180,
+    "stdoutBytes": 67108864,
+    "controlBytes": 16384
+  },
+  "performance": "NOT_MEASURED",
+  "native": "NOT_RUN",
+  "actualSourceAdmission": "ROOT_NEXT_AFTER_COMMIT",
+  "fullRestoration": "NOT_QUALIFIED",
+  "policyXDrift": false,
+  "bankingSemanticBodiesRead": false,
+  "rootDbCheckBefore": "PASS_427_MIGRATIONS_1097_REPEATABLES",
+  "incidentalWrongWorktreeCheck": "Money dbcheck refused an existing unrecorded migration before edits; not the integrated release candidate. Actual I2 check PASS; no lock/source repair made.",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

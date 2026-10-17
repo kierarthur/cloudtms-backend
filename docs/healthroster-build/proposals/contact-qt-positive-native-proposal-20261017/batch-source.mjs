@@ -13,20 +13,35 @@ export function compileNativeBatch(original,managed,backgroundFields){
  const pieces=s.map(x=>original.input.slice(x.start,x.end)),canon=managed.scanManagedSql(original.canonicalSql);check(pieces[0]==='begin isolation level repeatable read read only;'&&pieces[3]==='set local search_path = pg_catalog, public;'&&pieces[5]==='rollback;'&&canon.meta.length===0&&canon.statements.length===2&&canon.statements[0].tokens[0]==='SET'&&canon.statements[1].tokens[0]==='WITH','LOCAL_METADATA_BATCH_PARENT_REFUSED');
  const whole=original.canonicalSql.slice(canon.statements[1].start,canon.statements[1].end);check(whole===pieces[4],'LOCAL_METADATA_BATCH_PARENT_REFUSED');
  const business=between(whole,'business as (','),\n ledger as ('),branches=business.split('\nunion all\n');check(branches.length===12,'LOCAL_METADATA_BATCH_SCOPE_REFUSED');
- const audit=branches.filter(x=>x.startsWith("select 'public.audit_events' relation,count(*) row_count,"));check(audit.length===1,'LOCAL_METADATA_BATCH_AUDIT_REFUSED');const other=branches.filter(x=>x!==audit[0]);check(other.length===11,'LOCAL_METADATA_BATCH_SCOPE_REFUSED');
+ const audit=branches.filter(x=>x.startsWith("select 'public.audit_events' relation,count(*) row_count,"));check(audit.length===1,'LOCAL_METADATA_BATCH_AUDIT_REFUSED');
+ const backgroundRelations=['private.candidate_daily_batch_receipts','public.ts_financials_outbox'];
+ const backgroundBranches=backgroundRelations.map(name=>{const found=branches.filter(x=>x.startsWith(`select '${name}' relation,count(*) row_count,`));check(found.length===1,'LOCAL_METADATA_BATCH_SCOPE_REFUSED');return found[0];});
+ const other=branches.filter(x=>x!==audit[0]&&!backgroundBranches.includes(x));check(other.length===9,'LOCAL_METADATA_BATCH_SCOPE_REFUSED');
  const snapshot='background_statement_snapshot as materialized (select pg_current_snapshot() snapshot_value)';check(whole.split(snapshot).length===2,'LOCAL_METADATA_BATCH_SNAPSHOT_REFUSED');
  const cut=",\n  'backgroundWriterRoutines',";check(backgroundFields.split(cut).length===2,'LOCAL_METADATA_BATCH_FIELDS_REFUSED');const at=backgroundFields.indexOf(cut),bgFields=backgroundFields.slice(0,at),writer=backgroundFields.slice(at+cut.length-"'backgroundWriterRoutines',".length);
  check(bgFields.startsWith("'backgroundObservedAt',")&&writer.startsWith("'backgroundWriterRoutines',"),'LOCAL_METADATA_BATCH_FIELDS_REFUSED');
- const typedBusiness="select retained.relation,retained.row_count,retained.row_fingerprint from jsonb_to_recordset(:'hr_contact_audit_bag'::jsonb || :'hr_contact_other_bag'::jsonb) as retained(relation text,row_count bigint,row_fingerprint text)";
+ const typedBags="select retained.relation,retained.row_count,retained.row_fingerprint from jsonb_to_recordset(:'hr_contact_audit_bag'::jsonb || :'hr_contact_other_bag'::jsonb) as retained(relation text,row_count bigint,row_fingerprint text)";
+ // These are complete arrays, not key-indexed objects. Every entry contributes
+ // one native count(*) and its original rowHash to the same sorted aggregate.
+ const backgroundBusiness=backgroundRelations.map(name=>`select '${name}' relation,count(*) row_count,
+   encode(pg_catalog.sha256(pg_catalog.convert_to(coalesce(string_agg(bg_entry.value->>'rowHash','|' order by bg_entry.value->>'rowHash'),''),'UTF8')),'hex') row_fingerprint
+   from jsonb_array_elements((select value->'${name}' from contact_background_maps)) as bg_entry(value)`);
+ const typedBusiness=[typedBags,...backgroundBusiness].join('\nunion all\n');
  const inverses=[{before:'business as ('+business+')',after:'business as ('+typedBusiness+')'},{before:', '+snapshot,after:''},{before:backgroundFields,after:writer}];let base=whole;for(const h of inverses)base=replaceOnce(base,h.before,h.after);
- const background=`with ${snapshot}\nselect jsonb_build_object(${bgFields})::text;`;
+ const mapKey="'backgroundRows',";check(bgFields.split(mapKey).length===2,'LOCAL_METADATA_BATCH_MAPS_REFUSED');const maps=bgFields.slice(bgFields.indexOf(mapKey)+mapKey.length);
+ check(maps.startsWith('jsonb_build_object(')&&maps.endsWith(')'), 'LOCAL_METADATA_BATCH_MAPS_REFUSED');
+ const backgroundFieldsFromMaps=replaceOnce(bgFields,maps,'(select value from contact_background_maps)');
+ const selectAnchor='\n select (identity_proof.jsonb_build_object';check(base.startsWith('with ')&&base.split(selectAnchor).length===2&&base.endsWith(';'),'LOCAL_METADATA_BATCH_FINAL_REFUSED');
+ const selectAt=base.indexOf(selectAnchor),baseSelect=base.slice(selectAt+2,-1);
+ const finalQuery='with '+snapshot+',\n contact_background_maps as materialized (select '+maps+' as value),\n '+base.slice(5,selectAt)+
+  '\n select contact_fragments.frame from (\n select 1 as ordinal, contact_base.frame from ('+baseSelect+') as contact_base(frame)\n union all\n select 2 as ordinal, jsonb_build_object('+backgroundFieldsFromMaps+')::text as frame\n ) as contact_fragments order by contact_fragments.ordinal;';
  const bag=(leaves,name)=>`with retained_business as (${leaves.join('\nunion all\n')}), fixed_bag as (select jsonb_agg(jsonb_build_object('relation',relation,'row_count',row_count,'row_fingerprint',row_fingerprint) order by relation)::text value from retained_business)\nselect value as ${name} from fixed_bag where octet_length(value)<=16384`;
  const bags=[bag(audit,BAG_NAMES[0]),bag(other,BAG_NAMES[1])];
  // No delimiter before gset: it sends the pending query exactly once. The only
  // retained values are <=12 fixed relation/bigint/count/hash records (not maps).
- const input=pieces.slice(0,4).join('\n')+'\n'+bags.map(x=>x+'\n\\gset\n').join('')+base+'\n'+background+'\n'+pieces[5]+'\n';
+ const input=pieces.slice(0,4).join('\n')+'\n'+bags.map(x=>x+'\n\\gset\n').join('')+finalQuery+'\n'+pieces[5]+'\n';
  check((input.match(/^\\gset$/gm)||[]).length===2&&!input.includes(';\n\\gset'),'LOCAL_METADATA_BATCH_GSET_REFUSED');
- return {input,canonicalSql:original.canonicalSql,originalInput:original.input,wholeQuery:whole,baseQuery:base,backgroundQuery:background,bagQueries:bags,parts:{business,branches,audit:audit[0],other,snapshot,backgroundFields,bgFields,writer,typedBusiness},inverses,descriptor:{version:'CONTACT_SAME_RR_NATIVE_BATCH_V1',referenceCanonicalSqlSha256:sha(original.canonicalSql),referenceInputSha256:sha(original.input),executedBatchInputSha256:sha(input),baseQuerySha256:sha(base),backgroundQuerySha256:sha(background),bagQuerySha256:bags.map(sha),bagNames:BAG_NAMES,bagControlBytes:16384,businessRelationRecords:12,baseKeys:BASE_KEYS,backgroundKeys:BACKGROUND_KEYS,snapshotKeys:SNAPSHOT_KEYS,canonicalStatementExecuted:false,sourceOnly:true,nativeQualification:'NOT_PROVED_BY_BATCH_COMPILER'}};
+ return {input,canonicalSql:original.canonicalSql,originalInput:original.input,wholeQuery:whole,baseQuery:base,finalQuery,bagQueries:bags,parts:{business,branches,audit:audit[0],other,backgroundBranches,backgroundRelations,backgroundBusiness,snapshot,backgroundFields,bgFields,maps,backgroundFieldsFromMaps,writer,typedBusiness,typedBags},inverses,descriptor:{version:'CONTACT_SAME_RR_NATIVE_ARRAY_CSE_V1',referenceCanonicalSqlSha256:sha(original.canonicalSql),referenceInputSha256:sha(original.input),executedBatchInputSha256:sha(input),finalQuerySha256:sha(finalQuery),bagQuerySha256:bags.map(sha),bagNames:BAG_NAMES,bagControlBytes:16384,businessRelationRecords:12,bagRelationRecords:[1,9],backgroundBusinessRecords:2,completeBackgroundArraysMaterializedOnce:true,baseKeys:BASE_KEYS,backgroundKeys:BACKGROUND_KEYS,snapshotKeys:SNAPSHOT_KEYS,canonicalStatementExecuted:false,sourceOnly:true,nativeQualification:'NOT_PROVED_BY_BATCH_COMPILER'}};
 }
 
 // Retain complete native JSON member substrings. Values are never parsed,

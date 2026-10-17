@@ -8,8 +8,8 @@
   "files": [
     {
       "file": "batch-source.mjs",
-      "bytes": 7811,
-      "sha256": "5c1b0b7d2050daa4009903a361d2e98a4e7d0073b5161b960a70f825f142ae7c"
+      "bytes": 9947,
+      "sha256": "d8ae4bd26c310f610a1549edbe4baf00dd9b0bcb0fb63fdb6db5f907e80bee4d"
     },
     {
       "file": "build-program.mjs",
@@ -43,8 +43,8 @@
     },
     {
       "file": "fixed-metadata-reader.mjs",
-      "bytes": 20601,
-      "sha256": "2a8c0085016a18243e94c8a940e95d21ffca946e09d4cfcc18543b9a217f1564"
+      "bytes": 20596,
+      "sha256": "7c2810461e8b3b671b7ac2e5e553487258a3cc36e3c196ff8dccdde79da5335b"
     },
     {
       "file": "freeze.mjs",
@@ -128,13 +128,13 @@
     },
     {
       "file": "READER_PARENT_REVERSE.json",
-      "bytes": 50757,
-      "sha256": "198025464b1df4db8bf5c4b63c37458a65be94b5959a63f0a592b195f409fb44"
+      "bytes": 50942,
+      "sha256": "f1aae48feab2fc504ea94ab252719fbbd6c17a09226d03e958a212eabb6c5475"
     },
     {
       "file": "README.md",
-      "bytes": 10500,
-      "sha256": "56dc3b4246700b05b182959e938d60e6c1613e54dda0ebdeddb7db2ecb09f2fd"
+      "bytes": 11407,
+      "sha256": "5a65fae3b0b6362a67cabf5a187d99385c768e18e82db9abc8d59912581c5ad3"
     },
     {
       "file": "reference/actor/build-program.mjs",
@@ -233,8 +233,8 @@
     },
     {
       "file": "SOURCE_PINS.json",
-      "bytes": 26765,
-      "sha256": "89cbf1f3cb60100388431e966d1d31ceb02a513ab08e165c2d37cc4167249ace"
+      "bytes": 27619,
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751"
     },
     {
       "file": "SOURCE_REVIEW.json",
@@ -243,8 +243,8 @@
     },
     {
       "file": "source.mjs",
-      "bytes": 9879,
-      "sha256": "33bfe952c5d8c32eafbbd75709587e5da573cfac735ddc3b467644c52d8d4056"
+      "bytes": 14702,
+      "sha256": "24449c3b195c6b552547536c0ce93c3ce88e3059b105724d014d33d2a0468313"
     },
     {
       "file": "TEST_RESULTS.txt",

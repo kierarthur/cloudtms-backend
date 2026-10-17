@@ -34,6 +34,35 @@ export function assertPinnedSourceImages(row,{saved,index,current,parent,parentF
  requireThat(parentForward?parentForward.file===row.file&&parent.length===parentForward.parentBytes&&sha(parent)===parentForward.parentSha256:saved.equals(parent),'CONTACT_QT_ROOT_COMMITTED_PREDECESSOR_REQUIRED');
  return true;
 }
+// Exactly the reviewed complete-path Git-buffer correction; no general source
+// forwarding rule. The original root and both snapshot forwards remain intact.
+const APPROVED_FINAL_DEFINER_FORWARD=Object.freeze({
+ file:'scripts/bpay-next-final-definers.mjs',parentBytes:13611,parentSha256:'51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09',
+ approvedCommit:'51177b9abcdc9f089e680c9e7e9ef5285f09ff57',bytes:13639,sha256:'b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa',
+ proofFile:'docs/healthroster-build/proposals/shared-final-definer-git-buffer-forward-20261017/FULL_PARENT_FORWARD.json',proofBytes:759,proofSha256:'48aa1a207637aa27846ea22a146fa57991af585a821bad3e754c89d6da847fcb',
+ reviewFile:'docs/healthroster-build/v6-owner-delivery-20261016/SHARED_FINAL_DEFINER_GIT_BUFFER_ROOT_REVIEW_20261017.json',reviewBytes:1356,reviewSha256:'fc7a0a9492fd101f894520b0f97c91a59fc2b3ce1bbe05a7cfc1d4843761ea40'
+});
+const exactFinalDefinerForward=f=>f&&Object.keys(f).sort().join('|')===Object.keys(APPROVED_FINAL_DEFINER_FORWARD).sort().join('|')&&Object.entries(APPROVED_FINAL_DEFINER_FORWARD).every(([k,v])=>f[k]===v);
+export function assertApprovedFinalDefinerForward(pins){
+ const f=pins.approvedFinalDefinerForward;
+ requireThat(pins.rootCommit==='42802228977b941325f0feb44c11918b0f42190f'&&exactFinalDefinerForward(f),'CONTACT_QT_EXACT_FINAL_DEFINER_FORWARD_REQUIRED');
+ requireThat(Array.isArray(pins.rootInputs)&&pins.rootInputs.length===63&&new Set(pins.rootInputs.map(r=>r.file)).size===63,'CONTACT_QT_ORIGINAL_ROOT_INPUT_SET_REQUIRED');
+ const rows=pins.rootInputs.filter(r=>r.file===f.file);
+ requireThat(rows.length===1&&rows[0].bytes===f.bytes&&rows[0].sha256===f.sha256,'CONTACT_QT_EXACT_FINAL_DEFINER_PIN_REQUIRED');return f;
+}
+export function assertApprovedFinalDefinerImages(row,images,f){
+ requireThat(exactFinalDefinerForward(f)&&row.file===f.file&&row.bytes===f.bytes&&row.sha256===f.sha256,'CONTACT_QT_EXACT_FINAL_DEFINER_FORWARD_REQUIRED');
+ const {saved,index,current,parent,approved,proof,review}=images;
+ requireThat([saved,index,current,parent,approved,proof,review].every(Buffer.isBuffer),'CONTACT_QT_FINAL_DEFINER_RAW_IMAGES_REQUIRED');
+ assertPinnedSourceImages(row,{saved,index,current,parent,parentForward:f});
+ requireThat(saved.equals(approved)&&approved.length===f.bytes&&sha(approved)===f.sha256,'CONTACT_QT_FINAL_DEFINER_APPROVED_COMMIT_REQUIRED');
+ requireThat(proof.length===f.proofBytes&&sha(proof)===f.proofSha256&&review.length===f.reviewBytes&&sha(review)===f.reviewSha256,'CONTACT_QT_FINAL_DEFINER_COMMITTED_REVIEW_REQUIRED');
+ const p=JSON.parse(proof),r=JSON.parse(review),before="  const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', windowsHide: true });",after="  const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, windowsHide: true });";
+ requireThat(p.parent==='69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f'&&p.target===f.file&&p.beforeSha256===f.parentSha256&&p.afterSha256===f.sha256&&p.hunks.length===1&&p.hunks[0].before===before&&p.hunks[0].after===after&&p.newMaxBufferBytes===8388608&&p.sourceChanges===1&&p.sqlRuntimePolicyChanges===0&&p.unchangedReleaseBaseCommit==='a6f7423eb71e6e7cd173e705c2290e5408a1d077','CONTACT_QT_FINAL_DEFINER_ONE_LINE_PROOF_REQUIRED');
+ requireThat(r.verdict==='ACCEPT_ONE_LINE_COMPLETE_PATH_BUFFER_FORWARD'&&r.authorCommit==='8b846bf0dd1057cf4bd1ae1908088571d8771641'&&r.peerCommit==='3b837183c1dbe5b7817638fa628393074c3fabce'&&r.target===f.file&&r.beforeSha256===f.parentSha256&&r.afterSha256===f.sha256&&r.allOriginalPathInputsBaseAncestryAssertionsPreserved===true&&r.libSourceGatesRegistrySqlNativeCapsPermissionsUnchanged===true,'CONTACT_QT_FINAL_DEFINER_ROOT_REVIEW_REQUIRED');
+ const text=saved.toString('utf8');requireThat(text.split(after).length===2&&Buffer.from(text.replace(after,()=>before)).equals(parent),'CONTACT_QT_FINAL_DEFINER_WHOLE_RAW_INVERSE_REQUIRED');return true;
+}
+
 export const sortWriters=rows=>[...rows].sort((a,b)=>(a.schema+'|'+a.identity).localeCompare(b.schema+'|'+b.identity));
 export const markerFor=identity=>'hr_install2_'+identity.turnId.slice('hr_turn_'.length);
 export function assertPhysical(root){
@@ -64,10 +93,15 @@ export async function source(root,caseId){
  const pins=JSON.parse(fs.readFileSync(here+'/SOURCE_PINS.json')),head=git(root,['rev-parse','HEAD']).toString().trim();
  const forward=pins.snapshotSourceForward,forwardNames=['scripts/healthroster-live-test-restoration.mjs','scripts/healthroster-install1-full-rehearsal.mjs'];
  if(forward!==undefined)requireThat(pins.rootCommit==='42802228977b941325f0feb44c11918b0f42190f'&&Array.isArray(forward)&&forward.length===2&&forward.every((r,i)=>Object.keys(r).sort().join('|')==='file|parentBytes|parentSha256'&&r.file===forwardNames[i]&&Number.isSafeInteger(r.parentBytes)&&r.parentBytes>0&&/^[0-9a-f]{64}$/.test(r.parentSha256)),'CONTACT_QT_EXACT_SNAPSHOT_SOURCE_FORWARD_REQUIRED');
+ const mechanical=assertApprovedFinalDefinerForward(pins);
  git(root,['merge-base','--is-ancestor',pins.rootCommit,head]);
+ git(root,['merge-base','--is-ancestor',mechanical.approvedCommit,head]);
  try{git(root,['diff','--cached','--quiet',head,'--',...pins.rootInputs.map(r=>r.file)]);}catch{throw Error('CONTACT_QT_ROOT_INDEX_SOURCE_CHANGED');}
- const images=gitBlobs(root,pins.rootInputs.flatMap(row=>[{spec:':'+row.file,bytes:row.bytes},{spec:head+':'+row.file,bytes:row.bytes},{spec:pins.rootCommit+':'+row.file,bytes:forward?.find(r=>r.file===row.file)?.parentBytes??row.bytes}]));
- for(const row of pins.rootInputs){const b=fs.readFileSync(root+'/'+row.file);requireThat(b.length===row.bytes&&sha(b)===row.sha256,'CONTACT_QT_REVIEWED_ROOT_SOURCE_CHANGED');assertPinnedSourceImages(row,{saved:b,index:images.get(':'+row.file),current:images.get(head+':'+row.file),parent:images.get(pins.rootCommit+':'+row.file),parentForward:forward?.find(r=>r.file===row.file)??null});}
+ const parentForwardFor=row=>forward?.find(r=>r.file===row.file)??(row.file===mechanical.file?mechanical:null);
+ const images=gitBlobs(root,[...pins.rootInputs.flatMap(row=>[{spec:':'+row.file,bytes:row.bytes},{spec:head+':'+row.file,bytes:row.bytes},{spec:pins.rootCommit+':'+row.file,bytes:parentForwardFor(row)?.parentBytes??row.bytes}]),
+  ...head===mechanical.approvedCommit?[]:[{spec:mechanical.approvedCommit+':'+mechanical.file,bytes:mechanical.bytes}],
+  {spec:mechanical.approvedCommit+':'+mechanical.proofFile,bytes:mechanical.proofBytes},{spec:mechanical.approvedCommit+':'+mechanical.reviewFile,bytes:mechanical.reviewBytes}]);
+ for(const row of pins.rootInputs){const b=fs.readFileSync(root+'/'+row.file);requireThat(b.length===row.bytes&&sha(b)===row.sha256,'CONTACT_QT_REVIEWED_ROOT_SOURCE_CHANGED');const frame={saved:b,index:images.get(':'+row.file),current:images.get(head+':'+row.file),parent:images.get(pins.rootCommit+':'+row.file)};if(row.file===mechanical.file)assertApprovedFinalDefinerImages(row,{...frame,approved:images.get(mechanical.approvedCommit+':'+row.file),proof:images.get(mechanical.approvedCommit+':'+mechanical.proofFile),review:images.get(mechanical.approvedCommit+':'+mechanical.reviewFile)},mechanical);else assertPinnedSourceImages(row,{...frame,parentForward:forward?.find(r=>r.file===row.file)??null});}
  const expected=JSON.parse(fs.readFileSync(here+'/PROGRAMMES.json'))[caseId],programme=await buildProgram({root,caseId});
  requireThat(expected&&programme.sqlSha256===expected.sqlSha256&&programme.sqlBytes===expected.sqlBytes&&programme.statements===expected.statements,'CONTACT_QT_SEALED_PROGRAMME_REQUIRED');
  if(fs.existsSync(here+'/MANIFEST.json'))for(const row of JSON.parse(fs.readFileSync(here+'/MANIFEST.json')).files)requireThat(sha(fs.readFileSync(here+'/'+row.file))===row.sha256,'CONTACT_QT_ADAPTER_SOURCE_CHANGED');

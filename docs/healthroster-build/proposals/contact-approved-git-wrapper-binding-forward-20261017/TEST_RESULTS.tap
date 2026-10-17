@@ -1,0 +1,124 @@
+TAP version 13
+# Subtest: genuine saved/index/HEAD plus exact51177 and original428 complete images pass pure guard
+ok 1 - genuine saved/index/HEAD plus exact51177 and original428 complete images pass pure guard
+  ---
+  duration_ms: 1.2936
+  type: 'test'
+  ...
+# Subtest: all twelve metadata fields reject wrong value, absence and extra authority
+ok 2 - all twelve metadata fields reject wrong value, absence and extra authority
+  ---
+  duration_ms: 3.2816
+  type: 'test'
+  ...
+# Subtest: missing forward, changed original root or changed root input membership refuses
+ok 3 - missing forward, changed original root or changed root input membership refuses
+  ---
+  duration_ms: 0.6021
+  type: 'test'
+  ...
+# Subtest: changed pin bytes/hash or arbitrary current hash refuses before image admission
+ok 4 - changed pin bytes/hash or arbitrary current hash refuses before image admission
+  ---
+  duration_ms: 0.4554
+  type: 'test'
+  ...
+# Subtest: complete saved cannot be dirty, missing or borrowed
+ok 5 - complete saved cannot be dirty, missing or borrowed
+  ---
+  duration_ms: 0.1835
+  type: 'test'
+  ...
+# Subtest: complete index cannot be dirty, missing or borrowed
+ok 6 - complete index cannot be dirty, missing or borrowed
+  ---
+  duration_ms: 0.1689
+  type: 'test'
+  ...
+# Subtest: complete current cannot be dirty, missing or borrowed
+ok 7 - complete current cannot be dirty, missing or borrowed
+  ---
+  duration_ms: 0.1675
+  type: 'test'
+  ...
+# Subtest: complete parent cannot be dirty, missing or borrowed
+ok 8 - complete parent cannot be dirty, missing or borrowed
+  ---
+  duration_ms: 0.1394
+  type: 'test'
+  ...
+# Subtest: complete approved cannot be dirty, missing or borrowed
+ok 9 - complete approved cannot be dirty, missing or borrowed
+  ---
+  duration_ms: 0.1648
+  type: 'test'
+  ...
+# Subtest: complete proof cannot be dirty, missing or borrowed
+ok 10 - complete proof cannot be dirty, missing or borrowed
+  ---
+  duration_ms: 0.2265
+  type: 'test'
+  ...
+# Subtest: complete review cannot be dirty, missing or borrowed
+ok 11 - complete review cannot be dirty, missing or borrowed
+  ---
+  duration_ms: 0.1603
+  type: 'test'
+  ...
+# Subtest: actual complete raw inverse has exactly one original buffer line
+ok 12 - actual complete raw inverse has exactly one original buffer line
+  ---
+  duration_ms: 0.1749
+  type: 'test'
+  ...
+# Subtest: actual complete proposed loop checks all63 real source frames and both committed review records
+ok 13 - actual complete proposed loop checks all63 real source frames and both committed review records
+  ---
+  duration_ms: 247.4677
+  type: 'test'
+  ...
+# Subtest: same-approved-head and later-head batch shapes retain every image without duplicate requests
+ok 14 - same-approved-head and later-head batch shapes retain every image without duplicate requests
+  ---
+  duration_ms: 49.1103
+  type: 'test'
+  ...
+# Subtest: actual complete proposed loop refuses dirtySaved without changing real files
+ok 15 - actual complete proposed loop refuses dirtySaved without changing real files
+  ---
+  duration_ms: 23.1094
+  type: 'test'
+  ...
+# Subtest: actual complete proposed loop refuses dirtyIndex without changing real files
+ok 16 - actual complete proposed loop refuses dirtyIndex without changing real files
+  ---
+  duration_ms: 20.0875
+  type: 'test'
+  ...
+# Subtest: actual complete proposed loop refuses dirtyParent without changing real files
+ok 17 - actual complete proposed loop refuses dirtyParent without changing real files
+  ---
+  duration_ms: 19.1445
+  type: 'test'
+  ...
+# Subtest: both original snapshot records/rootCommit and other62 rows remain exact
+ok 18 - both original snapshot records/rootCommit and other62 rows remain exact
+  ---
+  duration_ms: 1.492
+  type: 'test'
+  ...
+# Subtest: all51 BG manifest rows except source/pin metadata remain unchanged
+ok 19 - all51 BG manifest rows except source/pin metadata remain unchanged
+  ---
+  duration_ms: 0.7793
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 880.114

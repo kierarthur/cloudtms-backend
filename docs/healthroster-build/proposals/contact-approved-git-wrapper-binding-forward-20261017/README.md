@@ -1,0 +1,19 @@
+# Contact approved Git-wrapper source-binding forward
+
+Three complete source targets: Contact `SOURCE_PINS.json`, `source.mjs` and `MANIFEST.json`. Physical parent is root `51177b9abcdc9f089e680c9e7e9ef5285f09ff57`. Compose **exact BG5 first, then bridge3**, commit all selected bytes, then run actual source admission. No native trial or admission waiver follows from this proposal.
+
+The current guard correctly refuses the approved final-definer Git-wrapper change. This forward admits that exact complete file only: original 428 root bytes 13611/SHA `51ab7fd6...`, current saved/index/HEAD plus actual 51177 historical bytes 13639/SHA `b6a8143f...`. It additionally reads the exact committed one-line full-parent proof and root independent-review receipt from 51177, checks their closed fixed hashes/lengths and identities, and reverses the complete new file to the original 428 bytes. The one allowed difference is explicit 8 MiB Git stdout buffering; release base and all source assertions stay unchanged.
+
+Original `rootCommit=428022...`, both exact snapshot-forward records and every other 62 source-input row remain unchanged. The original snapshot validation, 24 MB length-framed Git transport, fresh per-call image checks, cached-index refusal, all beforePhase callbacks, programmes, shared canonical owners, complete twelve scopes, private reader, raw 21-member assembly, WeakMap, route/lock/fixture/capture/cleanup/caps and all permissions are retained. The new closed twelve-field record cannot name another file, commit, current hash, proof or review. No arbitrary ancestry-only forwarding or generic baseline refresh is introduced.
+
+The final manifest composes on the complete reviewed BG manifest at Physical `fe2366f44c1514f9074e4c1413b7043330a3f4d7` (SHA `21759ca4...`). It changes only its source/pin rows and retains its other 49 entries exactly. The physical manifest and proposed BG manifest are both supplied; the latter is documentary composition provenance, not proof of current admission. Each of the three candidate files has a complete raw inverse in `FULL_PARENT_FORWARD.json`; the source body has three finite hunks. Root's independent prebody historical compiler bridge is a separate scope and is unaffected.
+
+Nineteen tests pass. The exact proposed image loop reads all 63 public-source frames through the existing actual Git batch reader and checks the 51177 proof/review blobs, while offline mutations prove dirty saved/index/HEAD/old-parent/approved-parent/proof/review refusal. Twenty-five malformed/missing/extra metadata variants refuse, as do changed original root/membership/pin values. Both approved-head and later-head request shapes retain every image without duplicates; the later-head vector is explicitly controlled source data, not an invented real commit. The pure guard/import hook adds a test-only export in memory and never calls `source()` or current adapter admission. Node grammar and complete parent/manifest/inverse checks pass. No DB, native reader, psql, API, fixture, auth/private-state, IPC, browser, worker, root edit or Banking semantic body is involved.
+
+Non-writing before-mount source replay from Money:
+
+```powershell
+node docs/healthroster-build/proposals/contact-approved-git-wrapper-binding-forward-20261017/verify.mjs --committed
+```
+
+The verifier accepts only exact physical pre-BG or exact between-BG/bridge manifest state, with the original physical historical image always required. It does not grant adapter admission and will intentionally cease to be a pre-mount check after the bridge itself is mounted. Root owns actual committed adapter/source admission after BG5+bridge3, the complete source gate, and any separately authorized native trial. Actual source admission, native execution and performance are NOT_RUN here; original BG/native HOLD evidence remains intact.

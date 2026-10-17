@@ -135,7 +135,7 @@ async function createMetadataReader({root,turn,caseId},batch){
   const fixtureSql=live.freshFixtureProofSql(transaction,observations,before);
   check(Buffer.byteLength(fixtureSql)<16384,'LOCAL_METADATA_CONTROL_SQL_BOUND');
   const afterInput=input.slice(0,-'rollback;\n'.length)+fixtureSql+'\nrollback;\n';
-  check((batch?afterInput.startsWith(input.slice(0,-'rollback;\n'.length))&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(built.backgroundQuery):afterInput.split(canonicalSql).length===2&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(canonicalSql)),'LOCAL_METADATA_CANONICAL_ORDER_REFUSED');
+  check((batch?afterInput.startsWith(input.slice(0,-'rollback;\n'.length))&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(built.finalQuery):afterInput.split(canonicalSql).length===2&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(canonicalSql)),'LOCAL_METADATA_CANONICAL_ORDER_REFUSED');
   return {input:afterInput,fixtureSql};
  };
  const read=async(wanted,args)=>{

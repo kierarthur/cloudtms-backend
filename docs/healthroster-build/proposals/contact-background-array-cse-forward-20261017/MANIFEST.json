@@ -1,0 +1,144 @@
+{
+  "version": "CONTACT_BACKGROUND_ARRAY_CSE_FREEZE_V1",
+  "requiredModel": "gpt-6.1-sol/xhigh",
+  "parent": "22d82c88b7a28ff9b17e0352f33a4639299b2bdb",
+  "selectedTargets": 54,
+  "actualPayloadFiles": 5,
+  "wholeParentInverses": 5,
+  "unchangedParentReferences": 49,
+  "tests": 43,
+  "native": "NOT_RUN",
+  "restorationQualified": false,
+  "files": [
+    {
+      "file": "array.test.mjs",
+      "bytes": 4863,
+      "sha256": "438688b077a07e80cacd2f6a47aaf424c4ffa6a2de89ed346b621a7ecf98b282"
+    },
+    {
+      "file": "ast-proof.py",
+      "bytes": 14220,
+      "sha256": "a239243e2cf3b787a39ff7582a80ae704e69541c15e48c5fe8348a17b586bbfc"
+    },
+    {
+      "file": "batch-source.mjs",
+      "bytes": 125,
+      "sha256": "13cf393cf4ee31f2e091c26691f591f2419a8d845b90ddf89be1ec59cdb7e01a"
+    },
+    {
+      "file": "batch.test.mjs",
+      "bytes": 12851,
+      "sha256": "dd82237a4af9d89550a0b4f7d48c87077fbe5e829d4e850cb9fd0e6d73c40e65"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/batch-source.mjs",
+      "bytes": 9947,
+      "sha256": "d8ae4bd26c310f610a1549edbe4baf00dd9b0bcb0fb63fdb6db5f907e80bee4d"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "bytes": 20596,
+      "sha256": "7c2810461e8b3b671b7ac2e5e553487258a3cc36e3c196ff8dccdde79da5335b"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "bytes": 8529,
+      "sha256": "21759ca4fa8276d5f89f3a0898f419dafae77f2644aba63b383b09317eb55ec7"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/READER_PARENT_REVERSE.json",
+      "bytes": 50942,
+      "sha256": "f1aae48feab2fc504ea94ab252719fbbd6c17a09226d03e958a212eabb6c5475"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/README.md",
+      "bytes": 11407,
+      "sha256": "5a65fae3b0b6362a67cabf5a187d99385c768e18e82db9abc8d59912581c5ad3"
+    },
+    {
+      "file": "compose.mjs",
+      "bytes": 3514,
+      "sha256": "0f27d3acde8d98b144676d55b7e0261141d10d63426ddf283d062ff18278e4c2"
+    },
+    {
+      "file": "coordinator.test.mjs",
+      "bytes": 8209,
+      "sha256": "62fe9efee8383bbbfe16cac3edb615bbd9127b0455289e1b2d7992cc2616a4fb"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 1121,
+      "sha256": "3c15d4d86500b320dbe5c115cecfe600e9c4233cf687fa263b72d7c2f7f5d522"
+    },
+    {
+      "file": "FULL_PARENT_INVERSES.json",
+      "bytes": 370756,
+      "sha256": "adc7909743266ca8d11b300f32fbc47f861f051fdeae14421792ea035551e1af"
+    },
+    {
+      "file": "overlay.mjs",
+      "bytes": 674,
+      "sha256": "ecb9363ade4ae8eea828964982910664f29f89626ef6cfd21ebfd2349813fc2e"
+    },
+    {
+      "file": "PARENT_PINS.json",
+      "bytes": 12907,
+      "sha256": "ec3a0b5caa9ea7d59a1a7abd41394b1c2cf67ca3d4764311a440a95559e8f887"
+    },
+    {
+      "file": "PAYLOAD_SELECTION.json",
+      "bytes": 22374,
+      "sha256": "619c55985e361d356819914be105b0795e32055f25f3f0ee8074c666c4615bd4"
+    },
+    {
+      "file": "prepare-tests.mjs",
+      "bytes": 4203,
+      "sha256": "4d470f44a14030078305c523479ff25e213c0e4101f3e65927ae480471ebde60"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 2151,
+      "sha256": "59917c91bed52b932cb77a017df024fba720cbda84966ebda4558a5c6f85953a"
+    },
+    {
+      "file": "README.md",
+      "bytes": 6670,
+      "sha256": "c6d644a5751e69d423907be8dd0207fb70b4ba07db3587685993cf737afa5fbc"
+    },
+    {
+      "file": "render.mjs",
+      "bytes": 1189,
+      "sha256": "fa396f8ef99d5b2768760a6d49410a242a6b044511cf9c8462c90e99b9eb8ae3"
+    },
+    {
+      "file": "rendered/CONTACT_CONSTRUCTORS_V1.json",
+      "bytes": 201922,
+      "sha256": "2faf3344ab2fec4603d272666c272f106a589159ad39303b330ceab7ade60d56"
+    },
+    {
+      "file": "rendered/QT_ADMIN_CONTROLS_V1.json",
+      "bytes": 201922,
+      "sha256": "2faf3344ab2fec4603d272666c272f106a589159ad39303b330ceab7ade60d56"
+    },
+    {
+      "file": "TEST_PARENT_EDITS.json",
+      "bytes": 5649,
+      "sha256": "1014cfdd0a59a21f54fb3eda1277d6f07ee63b5773ac5ff039dfa339f097d416"
+    },
+    {
+      "file": "TEST_RESULTS.tap",
+      "bytes": 10395,
+      "sha256": "23ccaafb32cb8907003611da75765ce057b04e9084bbef72f09a31df30dd3535"
+    },
+    {
+      "file": "VERIFY_PROOF.json",
+      "bytes": 7876,
+      "sha256": "9174ae26faf73f1e13f1b431a3edc3fc6d2063993a9cf32dcd5298fce587c288"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 8302,
+      "sha256": "5d602e337a0157770c707796d2d9a9d5871228120f4dbc88d8eedfcbc821902a"
+    }
+  ]
+}

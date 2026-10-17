@@ -182,8 +182,8 @@
     },
     {
       "file": "scripts/bpay-next-final-definers.mjs",
-      "bytes": 13611,
-      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+      "bytes": 13639,
+      "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
     },
     {
       "file": "scripts/weekly-source-reader-release.mjs",
@@ -779,5 +779,19 @@
       "parentSha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
       "parentBytes": 48190
     }
-  ]
+  ],
+  "approvedFinalDefinerForward": {
+    "file": "scripts/bpay-next-final-definers.mjs",
+    "parentBytes": 13611,
+    "parentSha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+    "approvedCommit": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+    "bytes": 13639,
+    "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa",
+    "proofFile": "docs/healthroster-build/proposals/shared-final-definer-git-buffer-forward-20261017/FULL_PARENT_FORWARD.json",
+    "proofBytes": 759,
+    "proofSha256": "48aa1a207637aa27846ea22a146fa57991af585a821bad3e754c89d6da847fcb",
+    "reviewFile": "docs/healthroster-build/v6-owner-delivery-20261016/SHARED_FINAL_DEFINER_GIT_BUFFER_ROOT_REVIEW_20261017.json",
+    "reviewBytes": 1356,
+    "reviewSha256": "fc7a0a9492fd101f894520b0f97c91a59fc2b3ce1bbe05a7cfc1d4843761ea40"
+  }
 }
