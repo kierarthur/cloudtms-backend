@@ -1,0 +1,22 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "authorCommit": "218dec4b93632b167d38434ed03530fa0e86a314",
+  "authorManifestSha256": "51ce676b14e714dfd7b58aea1852f2f9e8f16feaf8d632699114c2a36e21c29b",
+  "selectionSha256": "c59b6b9b392725aa97855041422d560714ecf4e0c77ef42470a93d88f3af90ac",
+  "fullParentInversesSha256": "e55f2cb03e1fb6e44683f343318a49a8629213e837fcde9a645f6f60d4c26cdf",
+  "prior6389RealInputVerdict": "HOLD_REPRODUCED_FULL7_REFUSAL",
+  "frozenFiles": 9,
+  "wholeParentInverses": 3,
+  "exactCurrentSourcePins": 3,
+  "originalControlledTests": 6,
+  "full7OutputEqualityCases": 18,
+  "independentControlledTests": 4,
+  "moduleGrammarChecks": 3,
+  "legacyUuid5Compatibility": true,
+  "receiptPathRequiresAndPreserves7": true,
+  "oldFilesChanged": 0,
+  "productTargets": 0,
+  "native": "NOT_RUN",
+  "privateTargetAccess": "NONE",
+  "reviewer": "GPT-6.1-sol/xhigh"
+}

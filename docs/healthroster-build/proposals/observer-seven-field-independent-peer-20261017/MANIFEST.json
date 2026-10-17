@@ -1,0 +1,25 @@
+{
+  "version": "OBSERVER_SEVEN_FIELD_INDEPENDENT_PEER_V1",
+  "files": [
+    {
+      "file": "extra.test.mjs",
+      "bytes": 3363,
+      "sha256": "adce8032ea704d6fcaf75a15925132ee0cc774954bc2f277f8ab00bfebf18edf"
+    },
+    {
+      "file": "replay.py",
+      "bytes": 1788,
+      "sha256": "a565e4625c01339d41026b2aa2dee206889055f358f3adda735aa9621117cbcc"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 882,
+      "sha256": "4775ecc8ffd9c2400482abed6e1710bfa7be889e48a3d76c6f129ce86ababc07"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 2990,
+      "sha256": "ae988da53bd84316757eac97d1f303c57209ce07e41df969925c65904d77cc80"
+    }
+  ]
+}
