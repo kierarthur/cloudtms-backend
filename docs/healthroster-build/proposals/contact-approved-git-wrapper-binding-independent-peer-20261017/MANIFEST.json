@@ -1,0 +1,21 @@
+{
+  "format": "finite-independent-source-peer-v1",
+  "frozenSubject": "abf7946f7cba41d2a39a04f781cd600acad6f9fe",
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 3125,
+      "sha256": "2006d8ea3d8684d185dddf2495f45df4df0919091ff1a587e62f1d9985a046e4"
+    },
+    {
+      "file": "replay.mjs",
+      "bytes": 6408,
+      "sha256": "d88759a4f863719b7494c2d810afcf09428f283cce8ba6f577cfd0e93582c81b"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1272,
+      "sha256": "1e5d943116f3c891d0c9d6d5ac8b5f5cfa1a34be096e5183b5620f11c73b0d39"
+    }
+  ]
+}

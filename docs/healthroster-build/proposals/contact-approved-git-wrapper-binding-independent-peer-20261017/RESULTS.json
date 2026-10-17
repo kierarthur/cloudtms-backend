@@ -1,0 +1,37 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_BINDING_FORWARD",
+  "frozenCommit": "abf7946f7cba41d2a39a04f781cd600acad6f9fe",
+  "files": 21,
+  "targets": 3,
+  "wholeRawInverses": 3,
+  "originalRoot": "42802228977b941325f0feb44c11918b0f42190f",
+  "approvedCommit": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+  "otherRootRowsUnchanged": 62,
+  "originalSnapshotRecordsUnchanged": 2,
+  "bgManifestRowsUnchanged": 49,
+  "genuineRequestCases": [
+    {
+      "sourceHead": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+      "requestCount": 191,
+      "genuineGitImages": true,
+      "normalRows": 62,
+      "mechanicalRows": 1
+    },
+    {
+      "sourceHead": "c1fa25175de807c912a8ad56fdbd9e51ba478bed",
+      "requestCount": 192,
+      "genuineGitImages": true,
+      "normalRows": 62,
+      "mechanicalRows": 1
+    }
+  ],
+  "independentNegativeCases": [
+    "dirty current approved wrapper image",
+    "dirty nonmechanical original parent",
+    "old original head cannot stand in for approved current"
+  ],
+  "coverageNote": "Author named approved/later branch test uses its actual current HEAD; independent peer forces both genuine historical approved51177 and current later-head image sets.",
+  "actualSourceOrAdapterAdmission": "NOT_RUN",
+  "native": "NOT_RUN",
+  "rootWrites": 0
+}
