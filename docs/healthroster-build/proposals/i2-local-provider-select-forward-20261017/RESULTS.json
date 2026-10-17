@@ -1,0 +1,85 @@
+{
+  "version": "I2_LOCAL_PROVIDER_SELECT_SOURCE_RESULTS_V1",
+  "status": "SOURCE_CANDIDATE_ONLY_NATIVE_NOT_RUN",
+  "observedAtUtc": "2026-10-17T19:49:36.852512+00:00",
+  "observedRootHead": "284035b174aa57e28b9e1c64530854be66c1011b",
+  "parentCommit": "96e4ebffddf38a2123d3ccc6d94f21735fa7e422",
+  "targetCount": 1,
+  "rawFullInverseHunks": 3,
+  "completeSourceParents": [
+    {
+      "file": "scripts/healthroster-install2-local-provider.mjs",
+      "sha256": "2caf96a8d898c7650a6a23f7156ee43f8b73db6fab6830ef21484973e39fcc49",
+      "currentBinding": "ACTUAL_SAVED_INDEX_HEAD_EXACT",
+      "historicalCommit": "96e4ebffddf38a2123d3ccc6d94f21735fa7e422"
+    },
+    {
+      "file": "scripts/healthroster-install2-local-schema.mjs",
+      "sha256": "372dd18d33cd976379c82350b4dd386e02b45844aab31f7cd2765c0720346dbe",
+      "currentBinding": "ACTUAL_SAVED_INDEX_HEAD_EXACT",
+      "historicalCommit": "96e4ebffddf38a2123d3ccc6d94f21735fa7e422"
+    },
+    {
+      "file": "scripts/healthroster-install2-local-seal-profile.mjs",
+      "sha256": "16d33a3d5803610f2c17adbdb1bf207f61c7c48c217daac782d2a96d4867b5f8",
+      "currentBinding": "ACTUAL_SAVED_INDEX_HEAD_EXACT",
+      "historicalCommit": "96e4ebffddf38a2123d3ccc6d94f21735fa7e422"
+    },
+    {
+      "file": "tests/fixtures/28082026_1229_banking_modal_local_pg17_prerequisites.sql",
+      "sha256": "2ad099729e74044959bb1084c0356869467a306934c9b5e29a128cecbb2e26b1",
+      "currentBinding": "ACTUAL_SAVED_INDEX_HEAD_EXACT",
+      "historicalCommit": "96e4ebffddf38a2123d3ccc6d94f21735fa7e422"
+    },
+    {
+      "file": "scripts/cloudtms-managed-psql.mjs",
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d",
+      "currentBinding": "ACTUAL_SAVED_INDEX_HEAD_EXACT",
+      "historicalCommit": "96e4ebffddf38a2123d3ccc6d94f21735fa7e422"
+    }
+  ],
+  "tests": [
+    {
+      "argv": [
+        "C:/Program Files/nodejs/node.exe",
+        "--experimental-vm-modules",
+        "--test",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\i2-local-provider-select-forward-20261017\\test.mjs"
+      ],
+      "exitCode": 0,
+      "stdout": "(node:39880) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n\u2714 three full raw hunks reverse exactly to current complete parent (0.8672ms)\n\u2714 actual old whole body lacks base SELECT while postimage adds precisely one two-table grant (3.625ms)\n\u2714 whole postimage emits only existing provider record with four genuine-query-shaped observations (1.028ms)\n\u2714 every new privilege/absence false or missing observation refuses before output (9.6577ms)\n\u2714 missing one required new identity field cannot pass (3.6132ms)\n\u2714 all original PG17/role/NOBYPASS identity refusals remain (4.5279ms)\n\u2714 existing-output, nonvacant DB/owner and incomplete scaffold guards remain (2.0401ms)\n\u2714 actual source check before publish and existing closed SQLSTATE refusal remain (2.7032ms)\n\u2714 supplemental grant template changes no other statements or grantees (0.1089ms)\n\u2139 tests 9\n\u2139 suites 0\n\u2139 pass 9\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 131.8082\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "C:/Users/KierArthur/AppData/Local/Programs/Python/Python312/python.exe",
+        "-B",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\i2-local-provider-select-forward-20261017\\grammar.py"
+      ],
+      "exitCode": 0,
+      "stdout": "{\"status\": \"PG17_AST_PASS_SOURCE_ONLY\", \"setupStatementsBefore\": 7, \"setupStatementsAfter\": 8, \"grantDelta\": 1, \"newBaseTableSelectPrivileges\": 2, \"unchangedGrantStatements\": 4, \"grantSurfaceNegativeVectors\": 5, \"fixtureStatements\": 13, \"fixtureBaseTables\": 2, \"fixtureGrantOrDefaultAclStatements\": 0, \"identitySelectStatements\": 1, \"native\": false}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "C:/Program Files/nodejs/node.exe",
+        "--check",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\i2-local-provider-select-forward-20261017\\payload\\healthroster-install2-local-provider.mjs"
+      ],
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "wholeProviderVmSuites": 9,
+  "grantSurfaceAstNegatives": 5,
+  "SQL": "NOT_EXECUTED",
+  "Docker": "NOT_EXECUTED",
+  "native": "NOT_RUN",
+  "network": false,
+  "rootWrites": false,
+  "privateStateOrCredentialAccess": false,
+  "trackedWrite": false,
+  "commitOrPush": false,
+  "causeQualification": "Source prerequisite gap established. Actual R3 SQLSTATE42501 identifies no failing relation."
+}

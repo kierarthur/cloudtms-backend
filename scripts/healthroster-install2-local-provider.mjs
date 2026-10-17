@@ -25,7 +25,7 @@ if(execute(`select (not exists(select 1 from pg_database where datname='${databa
  const password="'"+process.env.PGPASSWORD.replaceAll("'","''")+"'";
  execute(`create role ${owner} login nosuperuser nobypassrls nocreatedb nocreaterole password ${password};\ncreate database ${database} owner ${owner};\n`);
  execute(source,database);
- execute(`alter role service_role nobypassrls;\ncreate extension if not exists "uuid-ossp" with schema extensions;\ncreate extension if not exists pg_stat_statements with schema extensions;\ngrant usage on schema extensions,auth,vault to ${owner};\ngrant references on auth.users to ${owner};\ngrant select on vault.decrypted_secrets to ${owner};\ngrant execute on all functions in schema auth,vault to ${owner};\n`,database);
+ execute(`alter role service_role nobypassrls;\ncreate extension if not exists "uuid-ossp" with schema extensions;\ncreate extension if not exists pg_stat_statements with schema extensions;\ngrant usage on schema extensions,auth,vault to ${owner};\ngrant references on auth.users to ${owner};\ngrant select on auth.users,vault.secrets to ${owner};\ngrant select on vault.decrypted_secrets to ${owner};\ngrant execute on all functions in schema auth,vault to ${owner};\n`,database);
 }
 const scaffold=execute(`select (not exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
  where n.nspname in ('public','private') and c.relkind in ('r','p')) and not exists(select 1 from auth.users)
@@ -39,8 +39,14 @@ if(scaffold!=='true')throw Error('OWN_LOCAL_PROVIDER_SCAFFOLD_INCOMPLETE');
 const identity=JSON.parse(execute(`select json_build_object('database',current_database(),'major',current_setting('server_version_num')::integer/10000,
  'owner',(select rolname from pg_roles where oid=(select datdba from pg_database where datname=current_database())),
  'ownerSuperuser',(select rolsuper from pg_roles where rolname='${owner}'),'ownerBypass',(select rolbypassrls from pg_roles where rolname='${owner}'),
- 'serviceBypass',(select rolbypassrls from pg_roles where rolname='service_role'));`,database));
-if(identity.database!==database||identity.major!==17||identity.owner!==owner||identity.ownerSuperuser||identity.ownerBypass||identity.serviceBypass)throw Error('OWN_LOCAL_SEAL_PROFILE_REFUSED');
+ 'serviceBypass',(select rolbypassrls from pg_roles where rolname='service_role'),
+ 'ownerAuthUsersSelect',has_table_privilege('${owner}','auth.users','SELECT'),
+ 'ownerVaultSecretsSelect',has_table_privilege('${owner}','vault.secrets','SELECT'),
+ 'authUsersEmpty',not exists(select 1 from auth.users),
+ 'vaultSecretsEmpty',not exists(select 1 from vault.secrets));`,database));
+if(identity.database!==database||identity.major!==17||identity.owner!==owner||identity.ownerSuperuser||identity.ownerBypass||identity.serviceBypass
+ ||identity.ownerAuthUsersSelect!==true||identity.ownerVaultSecretsSelect!==true
+ ||identity.authUsersEmpty!==true||identity.vaultSecretsEmpty!==true)throw Error('OWN_LOCAL_SEAL_PROFILE_REFUSED');
 assertProject(repoRoot,candidate);
 fs.mkdirSync(output);
 fs.mkdirSync(path.join(output,'tmp'));

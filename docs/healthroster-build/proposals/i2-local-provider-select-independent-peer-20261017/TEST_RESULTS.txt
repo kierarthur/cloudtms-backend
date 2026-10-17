@@ -1,0 +1,14 @@
+(node:12132) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ each new observation refuses additional truthy/non-Boolean values (18.767ms)
+✔ missing either exact base-table grant refuses future privilege record (1.6749ms)
+✔ source failure before operations leaves zero fake SQL calls/writes; end source failure never publishes (1.7258ms)
+✔ whole before is the complete selection capture, no snippet; every frozen byte retained (2.8837ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 127.0976

@@ -1,0 +1,75 @@
+{
+  "version": "I2_LOCAL_PROVIDER_SELECT_FORWARD_FREEZE_V1",
+  "files": [
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 12243,
+      "sha256": "4dfebeac7dde9499c3537bed762194124afb4243d3b5e6e76d7e5a1c10d8ba29"
+    },
+    {
+      "file": "grammar.py",
+      "bytes": 3086,
+      "sha256": "54a5ffe894de9a8b213a500c30489473571c2218b9f912ba5804bfbe2a4b283b"
+    },
+    {
+      "file": "payload/healthroster-install2-local-provider.mjs",
+      "bytes": 5207,
+      "sha256": "685b19c729470c477c2642c8a6b8bd2237cafb89f1318e031de80690c76124f7"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4193,
+      "sha256": "e77e284351026c6983d0a857a641bdce1b12632916cbafcfb53c9dfef7c7fcd3"
+    },
+    {
+      "file": "reference/00-healthroster-install2-local-provider.mjs",
+      "bytes": 4720,
+      "sha256": "2caf96a8d898c7650a6a23f7156ee43f8b73db6fab6830ef21484973e39fcc49"
+    },
+    {
+      "file": "reference/01-healthroster-install2-local-schema.mjs",
+      "bytes": 11569,
+      "sha256": "372dd18d33cd976379c82350b4dd386e02b45844aab31f7cd2765c0720346dbe"
+    },
+    {
+      "file": "reference/02-healthroster-install2-local-seal-profile.mjs",
+      "bytes": 6315,
+      "sha256": "16d33a3d5803610f2c17adbdb1bf207f61c7c48c217daac782d2a96d4867b5f8"
+    },
+    {
+      "file": "reference/03-28082026_1229_banking_modal_local_pg17_prerequisites.sql",
+      "bytes": 2941,
+      "sha256": "2ad099729e74044959bb1084c0356869467a306934c9b5e29a128cecbb2e26b1"
+    },
+    {
+      "file": "reference/04-cloudtms-managed-psql.mjs",
+      "bytes": 5398,
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d"
+    },
+    {
+      "file": "reference/SCHEMA.log",
+      "bytes": 811,
+      "sha256": "7b36813ecb3b45cd59d528b44eb4e88815cd8b1eba4f7dfa8d72ca2f659d0a7f"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 4831,
+      "sha256": "5ed44bd56593f02d6f00ae574d19c18690feec9f40fc7e190c1462a9b6342c52"
+    },
+    {
+      "file": "SELECTION.json",
+      "bytes": 2211,
+      "sha256": "c1249a045778dffc41c31ce7ee2d8434d92cfe06e1df18eb180e04d326a40c6f"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 8678,
+      "sha256": "ca3d57b1acd9a8e44af0211296f987594a06b15154768876872a3a05599d547f"
+    },
+    {
+      "file": "verify.py",
+      "bytes": 2055,
+      "sha256": "38d9c3e4de3bde281ef504e36d983bc7849592dfc4539917835a1606212d2134"
+    }
+  ]
+}

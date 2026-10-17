@@ -1,0 +1,25 @@
+{
+  "version": "I2_LOCAL_PROVIDER_SELECT_INDEPENDENT_SOURCE_PEER_V1",
+  "files": [
+    {
+      "file": "REVIEW.json",
+      "bytes": 1116,
+      "sha256": "2843912290ea3618e52f733122c2d2c425df7fa6b21bbc3478401ebe0fc2fb95"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 746,
+      "sha256": "5a0ffd3d7bdf0b9e226836b58848b85d1b4d6e24866aa93e775da74ad9442cb3"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 3158,
+      "sha256": "b47e44a9bd1ed2ab0bc9056c49b0f43a646f2a3b28d5298d0bb5f2b85121ace6"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 672,
+      "sha256": "d783f0f60cdf8b20de6a3371c93999ed9d2055968b2c00c9168cb9cafefb46da"
+    }
+  ]
+}

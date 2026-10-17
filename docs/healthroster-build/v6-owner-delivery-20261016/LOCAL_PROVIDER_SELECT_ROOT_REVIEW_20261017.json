@@ -1,0 +1,18 @@
+{
+  "status": "ACCEPT_BOUNDED_PROVIDER_SOURCE_ONLY",
+  "actualParentCommit": "284035b174aa57e28b9e1c64530854be66c1011b",
+  "target": "scripts/healthroster-install2-local-provider.mjs",
+  "beforeSha256": "2caf96a8d898c7650a6a23f7156ee43f8b73db6fab6830ef21484973e39fcc49",
+  "afterSha256": "685b19c729470c477c2642c8a6b8bd2237cafb89f1318e031de80690c76124f7",
+  "rootReplay": {
+    "authorSuites": 9,
+    "peerSuites": 4,
+    "pg17GrantAst": true,
+    "broadeningNegatives": 5,
+    "fullCurrentParents": 5,
+    "hunks": 3
+  },
+  "native": "NOT_RUN",
+  "exactR3FailingRelation": "NOT_OBSERVED",
+  "scope": "Two fixed empty local base-table SELECT grants and four strict future identity booleans; no schema/profile/hosted/service/browser/default grant changes."
+}

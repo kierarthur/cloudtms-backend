@@ -1,0 +1,12 @@
+{
+  "disposition": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "findings": [],
+  "authorTests": 9,
+  "independentSuites": 4,
+  "independentObservationValueVectors": 20,
+  "PG17": "One exact SELECT grant on two fixed empty local base tables; 4 old grant statements retained; 5 broadening mutations refused; 13 unchanged fixture statements; identity SELECT parsed",
+  "currentParents": "5 complete saved/index/HEAD/historical parents exact; 3 complete raw hunks reverse",
+  "scope": "Only fixed task-owned local-provider source. No hosted grants, browser/service/PUBLIC grants, ALL/default grants/grant option or data copy. Four new future privilege/absence booleans strictly true before output. Original source/fresh/scaffold/physical/role/PG17/NOBYPASS guards retained.",
+  "diagnosticLimits": "Actual811-byte R3 log only proves closed42501; failing object remains unobserved. Source prerequisite repair is not native reproduction or successful provider/schema qualification.",
+  "untouched": "All15 author bytes exact after replay. No Docker/provider/native/auth/source admission/private/tracked/root/Report HEAD operation."
+}
