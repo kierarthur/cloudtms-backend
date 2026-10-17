@@ -1,0 +1,98 @@
+[
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json",
+    "commit": "1502ccc414ccf90424f5d29cdb057516a07d539f",
+    "bytes": 2417,
+    "sha256": "eea1ef950e95e33254ceacf3a496f338d885bd6de418416d9c5b9a1fc1b0a219"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/LAUNCHER_FULL_PARENT_FORWARD.json",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 4002,
+    "sha256": "b6547e58c0a8c222fd5131998fe62c3f797670be7a7c12a44f5a54771ccbf7bc"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/OFFLINE_RESULT.json",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 538,
+    "sha256": "5360929a2890b5857f86352e2a4f468e5d654a6016740b2f2b40131586f6daa2"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/OFFLINE_TEST_OUTPUT.tap",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 7628,
+    "sha256": "fff3926bda0e0f9db346b2b8da9de0ab43b077ef5f813dac59d627b2cd8f5d74"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/README.md",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 9315,
+    "sha256": "d3ce40915955c31a33571937c5131e3b89a14f08f6330e8ddd5e79f59d913796"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/SOURCE_PINS.json",
+    "commit": "1502ccc414ccf90424f5d29cdb057516a07d539f",
+    "bytes": 45299,
+    "sha256": "e96b61c18863929635c2c3059793a7acbbee5da7b75e2b943fb7aa069ea1ea9c"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/coordinate.mjs",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 4630,
+    "sha256": "570ccb26ad180f10909eb13e05dc652efab03f8a67a1b9239a56ec858fcc7f92"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/coordinator.test.mjs",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 10683,
+    "sha256": "2f594c66da1a87b71de9dbc94d2e28be7697619e988c8af92a42c138f2c7254b"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/derive-phase.mjs",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 3832,
+    "sha256": "cbb8aaf477fd66abec58dd3d512010a03437294513fc47dac2cbde886377673e"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/owned-worker.mjs",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 2788,
+    "sha256": "0b0ebce2a60d2958511d3df8d8d472bdbdde688bec13f53aab313996eac20d67"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 5111,
+    "sha256": "5d487a9ba1b6f5c742e17d3d2b06bbfc6bb0e2937ea23600694122a3f2ca2c8b"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase.mjs",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 859,
+    "sha256": "908efe47f24e00be5b2ca0b606079f61dac488a6c70d58ead3fe2eb592ce4cf0"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/reference/run-staged-parent.mjs",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 5540,
+    "sha256": "533aa6bfc109bd0aa4d07b892ce027ce5ea0d99643df7cce2741128fd70558ec"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/sequence.mjs",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 1574,
+    "sha256": "f0d1c7e95bb9f81ab064bfc5bcb1145b81b0d991bbe3c584dadc0f74b25981a7"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/source.mjs",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 2056,
+    "sha256": "fc7de33f9e40ab9429692127b466444195f6894fc03aef700a0fc255a773363d"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/verify.mjs",
+    "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+    "bytes": 699,
+    "sha256": "a0ee567f4df33bcc5882849e952007316a640b19ab05233ff3499686a2ad4a3d"
+  }
+]

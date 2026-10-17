@@ -1,0 +1,66 @@
+{
+  "file": "docs/bpay-next/final-definer-closures.json",
+  "original": {
+    "commit": "5b4f4e4c196871fa85722435deeee3ad418908f2",
+    "bytes": 1746259,
+    "sha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c"
+  },
+  "approved": {
+    "commit": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+    "bytes": 1753534,
+    "sha256": "f357496129f0d1eab1f2a2115a8da788be9c2f4a42f50e4d41baa1c700fc3cc0"
+  },
+  "review": {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/HEALTH_CLOSED_PRIVATE_HELPERS_ROOT_REVIEW_20261017.json",
+    "commit": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+    "bytes": 6781,
+    "sha256": "0658771b97e9ba5c50340980969bb3b02e3a36a655d9f0b6884e23a8bafe58f9"
+  },
+  "retainedChains": 1650,
+  "addedSignatures": [
+    "private.daily_rate_correction_health_financial_projection_assert_v1(jsonb,boolean)",
+    "private.daily_rate_correction_health_invoice_effect_v1(jsonb)",
+    "private.daily_rate_correction_health_actions_assert_v1(jsonb)",
+    "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+    "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+    "private.daily_rate_correction_health_current_placement_v1(uuid,uuid)",
+    "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+    "private.timesheet_contract_move_actions_assert_v1(jsonb)",
+    "private.timesheet_contract_move_invoice_effect_v1(jsonb,uuid)"
+  ],
+  "release": {
+    "file": "supabase/release/current-release.json",
+    "original": {
+      "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+      "bytes": 36636,
+      "sha256": "1396346c26872e318231f0815594b2efe206eac4180de7b3c9120f14be24726d"
+    },
+    "approved": {
+      "commit": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+      "bytes": 36808,
+      "sha256": "b9b045c6038c46238a8a47945bb201e336ffb8dc0afdee86f9524ece9d29cbe2"
+    },
+    "verifier": "supabase/verification/17102026_1251_health_closed_private_helpers_security.sql"
+  },
+  "sourceBuffer": {
+    "file": "scripts/bpay-next-final-definers.mjs",
+    "original": {
+      "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+      "bytes": 13611,
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    },
+    "approved": {
+      "commit": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+      "bytes": 13639,
+      "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
+    },
+    "beforeLine": "  const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', windowsHide: true });",
+    "afterLine": "  const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, windowsHide: true });",
+    "review": {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/SHARED_FINAL_DEFINER_GIT_BUFFER_ROOT_REVIEW_20261017.json",
+      "commit": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+      "bytes": 1356,
+      "sha256": "fc7a0a9492fd101f894520b0f97c91a59fc2b3ce1bbe05a7cfc1d4843761ea40"
+    }
+  }
+}
