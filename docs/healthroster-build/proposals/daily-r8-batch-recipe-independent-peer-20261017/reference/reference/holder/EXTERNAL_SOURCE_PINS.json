@@ -1,0 +1,44 @@
+[
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/contract.mjs",
+    "commit": "57beec7e349ab394306c73ae8fdbda5f23a25eab",
+    "bytes": 7643,
+    "sha256": "a02f4e8c6e9f26c0b780490bcc09f9c860ffbb534095b0f10857fb149e297801"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/stage.mjs",
+    "commit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
+    "bytes": 1201,
+    "sha256": "f64b0dcac218e582b848d24660b11b7f8bf9c22161d97b2a23397c960354ab0f"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/daily-health-genuine-fixture-recipe-20261017/RECIPE.json",
+    "commit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
+    "bytes": 11525,
+    "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-preflight-batch-forward-20261017/git-image-batch.mjs",
+    "commit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
+    "bytes": 9138,
+    "sha256": "4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-preflight-batch-forward-20261017/s0-scope.mjs",
+    "commit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
+    "bytes": 8599,
+    "sha256": "e2c5c97ed5d909ca8b507ed3453b90e0506d5d865a1a66524221349a6418c389"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/test-auth-refresh-suppressed-startup-forward-20261017/run-auth-refresh.mjs",
+    "commit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
+    "bytes": 9514,
+    "sha256": "abe211b76df1b3700972de37dc194ed9561815d9e2fb4163f5601274447990fd"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/test-auth-refresh-suppressed-startup-forward-20261017/policy.mjs",
+    "commit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
+    "bytes": 7669,
+    "sha256": "62f4daa452ece71dc6189155a85bb13af716120a8d6cbbf28551a6f23fc379cd"
+  }
+]

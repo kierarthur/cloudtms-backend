@@ -1,0 +1,21 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_RECIPE",
+  "actionableFindings": [],
+  "controlledTests": {
+    "tests": 38,
+    "pass": 38,
+    "fail": 0
+  },
+  "completeHolderInverseHunks": 3,
+  "completeReaderInverseHunks": 1,
+  "readerP2": "CLOSED_AT_SOURCE_CONTROLLED_READY6000MS_ADMITTED",
+  "futureMountTargets": {
+    "operator": 3,
+    "holder": 3,
+    "coordinator": 2
+  },
+  "futureR8": "NOT_PROVIDED",
+  "rootWrites": 0,
+  "privateStateContentHashCopyMetadata": false,
+  "sourcePreflightOperatorBrowserIPCAuthNative": "NOT_RUN"
+}

@@ -1,0 +1,22 @@
+{
+  "beforeSha256": "4d2e9fe18522883360e79a0c65c22e09c3c2d4215cd185ff4911a8c0d4324770",
+  "afterSha256": "9bcf873383794c3195ba51cf07b8246ca966b83b8a3a7e8b70106035f0dd4c88",
+  "changes": [
+    {
+      "before": " for(const r of [ROOT,report]){check(physical(git(r,'rev-parse','--show-toplevel').toString().trim())===r&&physical(git(r,'rev-parse','--absolute-git-dir').toString().trim())==='D:/Development/GitHub/cloudtms-backend/.git/worktrees/'+path.basename(r),'S0_PHYSICAL_REPOSITORY_REQUIRED');check(physical(path.resolve(r,git(r,'rev-parse','--git-common-dir').toString().trim()))==='D:/Development/GitHub/cloudtms-backend/.git','S0_COMMON_GIT_REQUIRED');}",
+      "after": " const metadata=new Map();\n for(const r of [ROOT,report]){const fields=git(r,'rev-parse','--show-toplevel','--absolute-git-dir','--git-common-dir','HEAD').toString().trim().split(/\\r?\\n/);check(fields.length===4&&physical(fields[0])===r&&physical(fields[1])==='D:/Development/GitHub/cloudtms-backend/.git/worktrees/'+path.basename(r),'S0_PHYSICAL_REPOSITORY_REQUIRED');check(physical(path.resolve(r,fields[2]))==='D:/Development/GitHub/cloudtms-backend/.git','S0_COMMON_GIT_REQUIRED');metadata.set(r,{head:fields[3]});}"
+    },
+    {
+      "before": "head=git(report,'rev-parse','HEAD').toString().trim(),relative=",
+      "after": "head=metadata.get(report).head,relative="
+    },
+    {
+      "before": " for(const r of JSON.parse(fs.readFileSync(here+'/ROOT_SOURCE_PINS.json'))){const h=git(r.root,'rev-parse','HEAD').toString().trim(),b=fs.readFileSync(r.root+'/'+r.file),i=blobImages(r.root,[h,r.commit,null].map(ref=>({ref,file:r.file})));check(b.length===r.bytes&&sha(b)===r.sha256&&[h,r.commit,null].every(ref=>b.equals(i.get(ref,r.file))),'S0_ORIGINAL_SHARED_OWNER_CHANGED');}",
+      "after": " const rootPins=JSON.parse(fs.readFileSync(here+'/ROOT_SOURCE_PINS.json')),groups=new Map();\n for(const r of rootPins){if(!groups.has(r.root))groups.set(r.root,{head:metadata.get(r.root)?.head??git(r.root,'rev-parse','HEAD').toString().trim(),rows:[]});groups.get(r.root).rows.push(r);}\n for(const [root,group] of groups){const h=group.head,i=blobImages(root,group.rows.flatMap(r=>[h,r.commit,null].map(ref=>({ref,file:r.file}))));for(const r of group.rows){const b=fs.readFileSync(r.root+'/'+r.file);check(b.length===r.bytes&&sha(b)===r.sha256&&[h,r.commit,null].every(ref=>b.equals(i.get(ref,r.file))),'S0_ORIGINAL_SHARED_OWNER_CHANGED');}}"
+    }
+  ],
+  "wholeRawInverse": true,
+  "cacheLifetime": "ONE_SOURCE_INVOCATION",
+  "skippedAssertions": 0,
+  "transportImplementationChanged": false
+}
