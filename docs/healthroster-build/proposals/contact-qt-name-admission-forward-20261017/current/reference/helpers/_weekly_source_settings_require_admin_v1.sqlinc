@@ -1,0 +1,20 @@
+create or replace function private._weekly_source_settings_require_admin_v1(
+  p_actor_user_id uuid
+) returns void
+language plpgsql
+stable
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  if p_actor_user_id is null or not exists(
+    select 1
+    from public.tms_users office_user
+    where office_user.id=p_actor_user_id
+      and office_user.is_active
+      and pg_catalog.lower(pg_catalog.btrim(coalesce(office_user.role,'')))='admin'
+  ) then
+    raise exception 'WEEKLY_SOURCE_SETTINGS_ADMIN_REQUIRED' using errcode='42501';
+  end if;
+end;
+$function$;
