@@ -4,7 +4,8 @@ const error=code=>Error(code);
 export class FiniteControls {
  constructor(input,signal,processLike=process){
   this.input=input;this.processLike=processLike;this.controller=new AbortController();this.signal=this.controller.signal;this.buffer='';this.pending=null;
-  this.data=chunk=>this.feed(chunk);this.eof=()=>this.abort('CONTROL_EOF_ABORT');this.external=()=>this.abort('CONTROL_OWNED_TURN_LOST');this.interrupt=()=>this.abort('CONTROL_ROOT_ABORT');
+  this.data=chunk=>this.feed(chunk);this.eof=()=>this.abort('CONTROL_EOF_ABORT');
+  this.external=()=>this.abort(signal?.reason?.message==='PURE_SEQUENCE_WORK_BUDGET_HELD'?'PURE_SEQUENCE_WORK_BUDGET_HELD':'CONTROL_OWNED_TURN_LOST');this.interrupt=()=>this.abort('CONTROL_ROOT_ABORT');
   this.externalSignal=signal;input.setEncoding?.('utf8');input.on('data',this.data);input.once('end',this.eof);
   processLike.once?.('SIGINT',this.interrupt);processLike.once?.('SIGTERM',this.interrupt);signal?.addEventListener('abort',this.external,{once:true});input.resume?.();
   if(signal?.aborted)this.external();

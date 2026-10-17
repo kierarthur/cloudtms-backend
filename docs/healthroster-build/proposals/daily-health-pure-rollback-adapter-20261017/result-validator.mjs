@@ -1,8 +1,20 @@
 // Closed native-shaped evidence validation. No database, file or substitute qualifier.
 import {source,requireThat,sha,SCOPE,sortWriters} from './source.mjs';
+import {observedInstant} from './timing.mjs';
 const positivePid=value=>Number.isSafeInteger(value)&&value>0;
-function statements(rows,count){return Array.isArray(rows)&&rows.length===count&&rows.every((s,i)=>s&&s.statement===i+1
- &&!s.error&&s.rowsTruncated===false&&Number.isSafeInteger(s.rowCount)&&s.rowCount>=0&&Array.isArray(s.rows)&&s.rows.length===s.rowCount);}
+function statementResponse(s,e){
+  if(!s||!e||!Number.isSafeInteger(e.statement)||e.statement<1||s.statement!==e.statement||s.error||s.rowsTruncated!==false||s.command!==e.command
+   ||JSON.stringify(Object.keys(s).sort())!==JSON.stringify(['command','fields','rowCount','rows','rowsTruncated','statement'])
+   ||!Array.isArray(s.rows)||!Array.isArray(s.fields))return false;
+  if(e.kind==='EMPTY_COMMAND')return ['SET','DO','CREATE','RESET'].includes(e.command)&&s.rowCount===null&&s.rows.length===0&&s.fields.length===0;
+  return e.kind==='ONE_ROW'&&e.command==='SELECT'&&s.rowCount===1&&s.rows.length===1&&s.fields.length===1
+   &&typeof s.fields[0]==='string'&&s.fields[0].length>0&&s.fields[0].length<=128
+   &&s.rows[0]&&typeof s.rows[0]==='object'&&!Array.isArray(s.rows[0])&&JSON.stringify(Object.keys(s.rows[0]))===JSON.stringify(s.fields);
+}
+export function statementResponses(rows,expected){
+ return Array.isArray(expected)&&Array.isArray(rows)&&rows.length===expected.length
+  &&rows.every((s,i)=>expected[i]?.statement===i+1&&statementResponse(s,expected[i]));
+}
 export function oneField(statement){
  requireThat(statement&&!statement.error&&statement.rowCount===1&&statement.rowsTruncated===false&&statement.rows?.length===1,'PURE_MCP_ONE_NATIVE_ROW_REQUIRED');
  const fields=Object.values(statement.rows[0]);requireThat(fields.length===1,'PURE_MCP_ONE_NATIVE_FIELD_REQUIRED');return fields[0];
@@ -15,14 +27,28 @@ export function oneRow(statement,prefix=''){
  }
  requireThat(value&&typeof value==='object'&&!Array.isArray(value),'PURE_MCP_OBJECT_REQUIRED');return value;
 }
+export function nativeClockFrames(result,receipt){
+ const frames=[];
+ for(const[key,phase]of [['guardBefore','B_GUARD_BEFORE'],['guardAfter','B_GUARD_AFTER']]){
+  const index=receipt.indices[key],s=result?.statements?.find(row=>row.statement===index);if(!s||s.error)continue;
+  const expected=receipt.responses[index-1];
+  requireThat(statementResponse(s,expected),'PURE_NATIVE_CLOCK_RESPONSE_REFUSED');
+  const value=oneRow(s);requireThat(value.phase===phase&&value.physicalDatabase==='cloudtms_test_clone'
+   &&value.databaseOid===receipt.holderIdentity.databaseOid&&positivePid(value.backendPid)
+   &&value.holderPid===receipt.holderIdentity.backendPid&&typeof value.holderGranted==='boolean'&&value.readOnly===false,'PURE_NATIVE_CLOCK_IDENTITY_REFUSED');
+  const times=['transactionStartedAt','statementStartedAt','observedAt'].map(key=>observedInstant(value[key]));
+  requireThat(times[0]<=times[1]&&times[1]<=times[2],'PURE_NATIVE_CLOCK_ORDER_REFUSED');frames.push(value);
+ }
+ return frames;
+}
 export function readStage(result,receipt){
  requireThat(result?.database==='cloudtms_test_clone'&&result.databaseTarget==='agency_test'
   &&result.label==='HR_DAILY_HEALTH_PURE_'+receipt.holderIdentity.turnId.slice(8).toUpperCase()
   &&result.sqlSha256===receipt.sqlSha256&&result.statementCount===receipt.statements
   &&result.accepted===true&&result.rolledBack===true&&!result.fatalError,'PURE_MCP_ROLLBACK_ENVELOPE_REFUSED');
- requireThat(statements(result.statements,receipt.statements),'PURE_MCP_STATEMENT_SEQUENCE_REFUSED');
+ requireThat(statementResponses(result.statements,receipt.responses)&&receipt.responses.length===receipt.statements,'PURE_MCP_STATEMENT_SEQUENCE_REFUSED');
  const at=key=>result.statements[receipt.indices[key]-1];
- requireThat(at('markerCreation').rowCount===0,'PURE_REAL_MARKER_DDL_REQUIRED');
+ requireThat(at('markerCreation').command==='CREATE'&&at('markerCreation').rowCount===null,'PURE_REAL_MARKER_DDL_REQUIRED');
  const transaction=oneRow(at('transaction'),'HR_REHEARSAL_TRANSACTION_JSON '),observation=oneRow(at('fixtureObservation'),'HR_FIXTURE_OBSERVATION_JSON ');
  requireThat(positivePid(transaction.backendPid)&&transaction.backendPid!==receipt.holderIdentity.backendPid
   &&observation.rows?.length===0,'PURE_ACTUAL_EMPTY_B_OBSERVATION_REQUIRED');
@@ -32,15 +58,23 @@ export function readStage(result,receipt){
   &&completed.backendPid===transaction.backendPid&&completed.xid===transaction.xid&&completed.marker===receipt.marker
   &&completed.markerPresent===true&&completed.markerRows===0&&completed.holderGranted===true
   &&completed.holderPid===receipt.holderIdentity.backendPid&&completed.noRoleSwitch===true,'PURE_REAL_B_MARKER_AND_TURN_REQUIRED');
+ const clocks=nativeClockFrames(result,receipt);
+ requireThat(clocks.length===2&&clocks.every(c=>c.backendPid===transaction.backendPid&&c.holderGranted===true)
+  &&clocks[0].transactionStartedAt===clocks[1].transactionStartedAt
+  &&observedInstant(clocks[1].observedAt)>=observedInstant(clocks[0].observedAt)
+  &&observedInstant(completed.observedAt)>=observedInstant(clocks[1].observedAt),'PURE_NATIVE_GUARD_CLOCKS_REQUIRED');
  const fresh=result.rollbackVerification;
- requireThat(fresh?.connectedFresh===true&&fresh.database==='cloudtms_test_clone'&&statements(fresh.statements,3),'PURE_MCP_FRESH_VERIFICATION_REQUIRED');
+ requireThat(fresh?.connectedFresh===true&&fresh.database==='cloudtms_test_clone'&&receipt.verificationResponses.length===3
+  &&statementResponses(fresh.statements,receipt.verificationResponses),'PURE_MCP_FRESH_VERIFICATION_REQUIRED');
  const identity=oneRow(fresh.statements[1]),held=oneRow(fresh.statements[2]);
  requireThat(identity.physicalDatabase==='cloudtms_test_clone'&&identity.identityTest===true&&identity.customerKeyNull===true
   &&identity.module==='LEGACY:1'&&identity.applyingCount===0&&identity.markerAbsent===true,'PURE_MCP_FRESH_MARKER_ABSENCE_REQUIRED');
  requireThat(held.physicalDatabase==='cloudtms_test_clone'&&held.databaseOid===receipt.holderIdentity.databaseOid
   &&held.holderGranted===true&&held.holderPid===receipt.holderIdentity.backendPid&&held.readOnly===true&&held.noRoleSwitch===true
   &&positivePid(held.backendPid)&&held.backendPid!==receipt.holderIdentity.backendPid,'PURE_MCP_FRESH_HELD_TURN_REQUIRED');
- return {transaction,observations:[observation],expectedUnits:[0],freshPeerPid:held.backendPid};
+ for(const field of ['transactionStartedAt','statementStartedAt','observedAt'])observedInstant(held[field]);
+ return {transaction,observations:[observation],expectedUnits:[0],freshPeerPid:held.backendPid,nativeClocks:clocks,
+  nativeCompletionObservedAt:completed.observedAt,mcpVerificationObservedAt:held.observedAt};
 }
 export function bindSnapshots({receipt,stage,beforePacket,afterPacket}){
  for(const [packet,phase]of [[beforePacket,'BEFORE'],[afterPacket,'AFTER']]){
@@ -82,5 +116,6 @@ export async function validateRestoration({root,result,receipt,beforePacket,afte
   sqlSha256:receipt.sqlSha256,rolledBack:true,connectedFresh:true,markerAbsent:true,realMarkerCreatedInB:true,businessFixtureRows:0,
   readerPids:{holder:receipt.holderIdentity.backendPid,before:beforePacket.peer.readerPid,nativeB:stage.transaction.backendPid,mcpVerification:stage.freshPeerPid,after:afterPacket.peer.readerPid},
   localTransport:{before:beforePacket.transport,after:afterPacket.transport},before:safe(local.before),after:safe(local.after),restoration,
+  nativeClockFrames:stage.nativeClocks,nativeCompletionObservedAt:stage.nativeCompletionObservedAt,mcpVerificationObservedAt:stage.mcpVerificationObservedAt,
   fullInstallRehearsal:'NOT_RUN',dailyComposers:'NOT_RUN',businessCurrentness:'NOT_QUALIFIED'};
 }

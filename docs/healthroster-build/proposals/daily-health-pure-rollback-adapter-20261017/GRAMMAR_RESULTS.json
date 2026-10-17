@@ -15,7 +15,7 @@
     },
     {
       "example": "SYNTHETIC_B",
-      "statements": 18,
+      "statements": 20,
       "parsedPlpgsqlBodies": 7,
       "definitions": 5,
       "grammar": "PASS",

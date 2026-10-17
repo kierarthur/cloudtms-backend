@@ -45,5 +45,16 @@
     "sourceOnly": true,
     "originalQualifierChanged": false,
     "pureProgrammeChanged": false
+  },
+  "r2ForwardReview": {
+    "parent": "a20a074114ed84173a56cf34c39e97eb8777101b",
+    "actualR2Status": "HOLD_NOT_QUALIFIED",
+    "actualProgramme": "NOT_RUN",
+    "finding": "Exact per-index provider command response expectations, strict SELECT integer counts, explicit deadline cause and actual root/server clock diagnostics; original guards, programme, canonical snapshots and private WeakMap unchanged",
+    "nativeEvidence": "Only genuine R2 SET-null and fresh SELECT shapes observed; DO CREATE RESET remain source expectations NOT_NATIVE_PROVED",
+    "localPgResultParser": "8.23.0 actual local parser tested with synthetic command messages; deployed dependency identity NOT_PROVED",
+    "currentForwardNative": "NOT_RUN",
+    "budgetsChanged": false,
+    "dbConnections": 0
   }
 }

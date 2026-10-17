@@ -5,28 +5,33 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {execFileSync} from 'node:child_process';
+import {createRequire} from 'node:module';
 import {source,ROOT,here,sha,PROGRAMME_SHA,SCOPE,ROUTE} from './source.mjs';
 import {buildInput} from './input-builder.mjs';
 import {createFixedMetadataReader,BoundedMemoryCapture,LIMITS} from './fixed-metadata-reader.mjs';
-import {readStage,bindSnapshots,validateRestoration} from './result-validator.mjs';
+import {readStage,bindSnapshots,validateRestoration,statementResponses,nativeClockFrames} from './result-validator.mjs';
+import {rootCallTiming,WORK_DEADLINE_CODE} from './timing.mjs';
 import {FiniteControls,assertElapsed,assertNoMaps,BUDGET} from './control.mjs';
 import {holdPure} from './hold-pure.mjs';
 const identity={physicalDatabase:'cloudtms_test_clone',databaseOid:123,backendPid:100,turnId:'hr_turn_'+'a'.repeat(32),key:[20261013,1]};
 const src=await source(ROOT),built=await buildInput({root:ROOT,identity});
-const row=(value,prefix='')=>({rowCount:1,rowsTruncated:false,rows:[{result:prefix?prefix+JSON.stringify(value):value}]});
-const empty=()=>({rowCount:0,rowsTruncated:false,rows:[]});
+const row=(value,prefix='')=>({command:'SELECT',rowCount:1,fields:['result'],rowsTruncated:false,rows:[{result:prefix?prefix+JSON.stringify(value):value}]});
+const empty=command=>({command,rowCount:null,fields:[],rowsTruncated:false,rows:[]});
+const clock=observedAt=>({transactionStartedAt:'2026-10-17T10:00:00.000Z',statementStartedAt:observedAt,observedAt});
 const transaction={database:'cloudtms_test_clone',backendPid:200,xid:'50',epochZero:true};
 const observation={...transaction,unit:0,rows:[]};
 function nativeFixture(){
  const result={database:'cloudtms_test_clone',databaseTarget:'agency_test',label:built.input.label,sqlSha256:built.receipt.sqlSha256,
-  statementCount:built.receipt.statements,accepted:true,rolledBack:true,statements:Array.from({length:built.receipt.statements},(_,i)=>({statement:i+1,...empty()}))};
+  statementCount:built.receipt.statements,accepted:true,rolledBack:true,statements:built.receipt.responses.map(e=>({statement:e.statement,...e.kind==='ONE_ROW'?row(null):empty(e.command)}))};
  const set=(key,value)=>Object.assign(result.statements[built.receipt.indices[key]-1],value);
  set('transaction',row(transaction,'HR_REHEARSAL_TRANSACTION_JSON '));set('fixtureObservation',row(observation,'HR_FIXTURE_OBSERVATION_JSON '));
  set('programmeResult',row('DAILY_HEALTH_NATIVE_UNICODE_REASON_ROUNDTRIP_ASSERTED'));
+ for(const [key,phase,time]of [['guardBefore','B_GUARD_BEFORE','2026-10-17T10:00:00.001Z'],['guardAfter','B_GUARD_AFTER','2026-10-17T10:00:00.002Z']])
+  set(key,row({phase,physicalDatabase:'cloudtms_test_clone',databaseOid:123,backendPid:200,holderPid:100,holderGranted:true,readOnly:false,...clock(time)}));
  set('completion',row({physicalDatabase:'cloudtms_test_clone',databaseOid:123,backendPid:200,xid:'50',marker:built.receipt.marker,
-  markerPresent:true,markerRows:0,holderPid:100,holderGranted:true,noRoleSwitch:true}));
+  markerPresent:true,markerRows:0,holderPid:100,holderGranted:true,noRoleSwitch:true,...clock('2026-10-17T10:00:00.003Z')}));
  result.rollbackVerification={connectedFresh:true,database:'cloudtms_test_clone',statements:[row('pg_catalog, public'),row({physicalDatabase:'cloudtms_test_clone',identityTest:true,customerKeyNull:true,module:'LEGACY:1',applyingCount:0,markerAbsent:true}),
-  row({physicalDatabase:'cloudtms_test_clone',databaseOid:123,holderPid:100,backendPid:300,holderGranted:true,readOnly:true,noRoleSwitch:true})].map((s,i)=>({statement:i+1,...s}))};
+  row({physicalDatabase:'cloudtms_test_clone',databaseOid:123,holderPid:100,backendPid:300,holderGranted:true,readOnly:true,noRoleSwitch:true,...clock('2026-10-17T10:00:00.004Z')})].map((s,i)=>({statement:i+1,...s}))};
  return result;
 }
 function snapshots(){
@@ -102,6 +107,58 @@ test('native-shaped success requires real B marker, original assertion and genui
   const r=nativeFixture();mutate(r);assert.throws(()=>readStage(r,built.receipt));
  }
 });
+test('genuine R2 SET null responses pass exact command ABI, but actual guard failure never becomes success',()=>{
+ const e=JSON.parse(fs.readFileSync(path.join(here,'GENUINE_R2_COMMAND_EVIDENCE.json'),'utf8'));
+ assert.equal(e.accepted,false);assert.equal(e.failure.statement,5);assert.equal(e.nativeProgrammeRan,false);
+ assert.ok(statementResponses(e.observedCommandRows,built.receipt.responses.slice(0,4)));
+ const failed=nativeFixture();failed.accepted=e.accepted;failed.statements=[...e.observedCommandRows,{statement:5,error:{code:'55000'}}];
+ assert.throws(()=>readStage(failed,built.receipt),/PURE_MCP_ROLLBACK_ENVELOPE_REFUSED/);
+ for(const mutate of [r=>r[0].command='DO',r=>r[0].rowCount=0,r=>r[0].rows=[{}],r=>r[0].fields=['unexpected'],r=>r[0].rowsTruncated=true]){
+  const rows=structuredClone(e.observedCommandRows);mutate(rows);assert.equal(statementResponses(rows,built.receipt.responses.slice(0,4)),false);
+ }
+});
+test('unobserved DO CREATE RESET ABI stays synthetic closed expectation; SELECT never accepts null counts',()=>{
+ const result=nativeFixture();assert.ok(statementResponses(result.statements,built.receipt.responses));
+ for(const command of ['DO','CREATE','RESET']){
+  const index=built.receipt.responses.findIndex(e=>e.command===command);assert.ok(index>=0);
+  assert.equal(built.receipt.responses[index].abiQualification,'SOURCE_EXPECTATION_NATIVE_NOT_PROVED');
+  for(const mutate of [s=>s.rowCount=0,s=>s.command='SET',s=>s.fields=['unexpected'],s=>s.rows=[{}]]){
+   const r=nativeFixture();mutate(r.statements[index]);assert.equal(statementResponses(r.statements,built.receipt.responses),false);
+  }
+ }
+ const selected=nativeFixture();selected.statements[built.receipt.indices.transaction-1].rowCount=null;
+ assert.equal(statementResponses(selected.statements,built.receipt.responses),false);
+ const wrongFields=nativeFixture();wrongFields.statements[built.receipt.indices.transaction-1].fields=['other'];
+ assert.equal(statementResponses(wrongFields.statements,built.receipt.responses),false);
+});
+test('actual local pg8.23 Result parser derives exact no-row tags from synthetic messages without a connection',()=>{
+ const evidence=JSON.parse(fs.readFileSync(path.join(here,'PG_RESULT_PARSER_EVIDENCE.json'),'utf8'));
+ assert.equal(evidence.pgVersion,'8.23.0');assert.equal(sha(fs.readFileSync(evidence.physicalSource)),evidence.sourceSha256);
+ assert.equal(sha(fs.readFileSync(evidence.physicalPackage)),evidence.packageSha256);
+ assert.match(fs.realpathSync.native(evidence.physicalSource),/^D:[\\/]Development[\\/]GitHub[\\/]/);
+ const Result=createRequire(import.meta.url)(evidence.physicalSource);
+ for(const sample of evidence.samples){const result=new Result();result.addCommandComplete({text:sample.syntheticCommandCompleteTag});
+  assert.equal(result.command,sample.command);assert.equal(result.rowCount,sample.rowCount);assert.deepEqual(result.fields,sample.fields);assert.deepEqual(result.rows,sample.rows);
+ }
+ assert.equal(evidence.deploymentIdentity,'NOT_PROVED_FROM_LOCAL_DEPENDENCY');
+});
+test('native guard clocks are actual frame observations and require same B identity and ordered timestamps',()=>{
+ const r=nativeFixture();assert.equal(nativeClockFrames(r,built.receipt).length,2);
+ for(const mutate of [r=>r.statements[built.receipt.indices.guardBefore-1].rows[0].result.observedAt='invalid',
+  r=>r.statements[built.receipt.indices.guardAfter-1].rows[0].result.backendPid=999,
+  r=>r.statements[built.receipt.indices.guardAfter-1].rows[0].result.holderGranted=false,
+  r=>r.statements[built.receipt.indices.guardAfter-1].rows[0].result.observedAt='2026-10-17T09:00:00.000Z']){
+  const r=nativeFixture();mutate(r);assert.throws(()=>readStage(r,built.receipt));
+ }
+});
+test('root timing is exact observed envelope, bound to input and local READY/result-read order',()=>{
+ const value={version:'ROOT_OBSERVED_MCP_CALL_TIMING_V1',route:ROUTE,sqlSha256:built.receipt.sqlSha256,
+  callStartedAt:'2026-10-17T10:00:00.200Z',callReturnedAt:'2026-10-17T10:00:00.300Z'},
+ context={sqlSha256:built.receipt.sqlSha256,readyAt:'2026-10-17T10:00:00.100Z',resultReadAt:'2026-10-17T10:00:00.400Z'};
+ assert.equal(rootCallTiming(value,context).rootObservedCallMilliseconds,100);
+ for(const mutate of [v=>v.sqlSha256=sha('other'),v=>v.route='other',v=>v.callStartedAt='2026-10-17T10:00:00.000Z',
+  v=>v.callReturnedAt='2026-10-17T10:00:00.500Z',v=>v.extra=true]){const v=structuredClone(value);mutate(v);assert.throws(()=>rootCallTiming(v,context));}
+});
 test('distinct C-after bound to original fixture proof; no aliases or omitted relation scope',()=>{
  const stage=readStage(nativeFixture(),built.receipt),p=snapshots();assert.ok(bindSnapshots({receipt:built.receipt,stage,...p}));
  for(const pid of [100,200,300,400]){const q=snapshots();q.afterPacket.peer.readerPid=pid;assert.throws(()=>bindSnapshots({receipt:built.receipt,stage,...q}));}
@@ -153,6 +210,13 @@ test('control protocol refuses unsolicited, duplicate, oversized and EOF signals
  for(const message of ['anything\n','x'.repeat(BUDGET.controlBytes+1),'ABORT\n']){const c=new FiniteControls(new EventEmitter(),new AbortController().signal,new EventEmitter());const p=c.wait('PREPARE');c.feed(message);await assert.rejects(p);c.dispose();}
  const c=new FiniteControls(new EventEmitter(),new AbortController().signal,new EventEmitter()),p=c.wait('PREPARE');c.input.emit('end');await assert.rejects(p,/CONTROL_EOF_ABORT/);c.dispose();
  assert.throws(()=>assertElapsed(0,180001));assert.equal(BUDGET.workMilliseconds+BUDGET.cleanupReserveMilliseconds,BUDGET.wholeMilliseconds);
+});
+test('work timer cause survives finite controls; genuine turn loss remains distinct with unchanged budgets',async()=>{
+ for(const [reason,expected]of [[WORK_DEADLINE_CODE,WORK_DEADLINE_CODE],['TURN_OWNERSHIP_LOST','CONTROL_OWNED_TURN_LOST']]){
+  const external=new AbortController(),c=new FiniteControls(new EventEmitter(),external.signal,new EventEmitter()),pending=c.wait('PREPARE');
+  external.abort(Error(reason));await assert.rejects(pending,e=>e.message===expected);assert.equal(c.signal.reason.message,expected);c.dispose();
+ }
+ assert.equal(BUDGET.workMilliseconds,120000);assert.equal(BUDGET.wholeMilliseconds,180000);
 });
 test('source/authority boundaries refuse another root and unauthorised execution before a connection',async()=>{
  await assert.rejects(()=>source(path.resolve(here,'../../../..')),/PURE_REGISTERED_PHYSICAL_ROOT_REQUIRED/);

@@ -34,7 +34,7 @@ fs.writeFileSync(path.join(here,'SOURCE_PINS.json'),JSON.stringify({version:'DAI
  expectedWritersSha256:sha(JSON.stringify(writers)),expectedWriters: writers.map(r=>({schema:r.schema,identity:r.identity,definitionSha256:r.definition_sha256})),
  catalogueAndLedger:'WHOLE_UNCHANGED_ORIGINAL_CANONICAL_QUERY',businessSnapshotScope:['private.candidate_daily_batch_receipts','public.ts_financials_outbox'],
  businessProgrammeReadsAndWrites:[],externalEffects:false,native:'NOT_RUN'},null,2)+'\n');
-const executable=['source.mjs','input-builder.mjs','fixed-metadata-reader.mjs','control.mjs','result-validator.mjs','hold-pure.mjs'];
+const executable=['source.mjs','input-builder.mjs','fixed-metadata-reader.mjs','control.mjs','result-validator.mjs','timing.mjs','hold-pure.mjs'];
 const manifest={version:'DAILY_HEALTH_PURE_ADAPTER_EXECUTABLE_V1',sourcePinsSha256:sha(fs.readFileSync(path.join(here,'SOURCE_PINS.json'))),
  files:executable.map(file=>({file,sha256:sha(fs.readFileSync(path.join(here,file)))})),native:'NOT_RUN'};
 fs.writeFileSync(path.join(here,'SOURCE_MANIFEST.json'),JSON.stringify(manifest,null,2)+'\n');

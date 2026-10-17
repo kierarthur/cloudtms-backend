@@ -1,10 +1,31 @@
 # Daily pure rollback adapter — source proposal
 
-Native execution and restoration: **NOT_RUN**. This is a root-owned component
+Current forward native execution: **NOT_RUN**. Earlier R2: **HOLD_NOT_QUALIFIED**.
+This is a root-owned component
 adapter for the exact five-function programme at root `728a2c32e624fed2db577b7deba70600d27885b1`.
 It supplies no installation, public Daily composer, Banking body, payment, release
 or feature-completion verdict. The separate six-helper managed proposal remains
 subject to root review and native qualification.
+
+The genuine root R2 attempt is separately **HOLD_NOT_QUALIFIED**: its guard
+refused before marker creation or any function definition. Its four SET results
+have `command:"SET", rowCount:null, fields:[], rows:[], rowsTruncated:false`.
+`GENUINE_R2_COMMAND_EVIDENCE.json` pins that actual response. The original
+programme, C-after and original restoration qualifier were not run in R2. The
+120-second work timer expired and cleanup explicitly unlocked/closed A;
+dispatch/transport timing was not captured and is not inferred.
+
+This forward response boundary checks the command at each exact generated
+statement index. SET, DO, CREATE and RESET accept only null count and empty
+fields/rows for their matching no-row command. Every SELECT requires integer1,
+one declared field, one actual row with that same sole key and no truncation.
+No native result is rewritten. The local provider source forwards pg results
+directly, and actual local pg8.23.0 `Result.addCommandComplete` derives CREATE
+from CREATE TABLE/FUNCTION tags and leaves non-row command counts null. The
+source-only parser experiment is pinned in `PG_RESULT_PARSER_EVIDENCE.json`.
+Local provider source/dependency deployment identity is NOT_PROVED; DO, CREATE
+and RESET responses remain unobserved native ABI expectations. Synthetic tests
+do not upgrade them. A different real response shape holds for review.
 
 The independently reviewed original programme is 8,029 UTF-8 bytes, SHA256
 `779aff554ca8bce78a7e21520a41574beba211503ab1c79d492eccb6b5ad8ab6`.
@@ -23,6 +44,11 @@ and a final marker/holder proof. The genuine observation is expected to contain
 zero keys but is still read from actual B. Five definitions and the marker are
 temporary changes inside the server-owned outer transaction. There is no outer
 transaction control in the input and no caller-supplied SQL, target or case.
+Two small actual SQL clock frames, immediately before and after the unchanged
+guard, expose database/PID/holder/read-only state plus PostgreSQL transaction,
+statement and observation timestamps. Completion and fresh verification also
+report actual SQL timestamps. These add no function or business read/write;
+the original8,029-byte programme remains unchanged inside the20-statement B.
 
 The only B route is
 `mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback`,
@@ -44,12 +70,14 @@ in process memory. Background jobs keep running; only the original native claim
 and finance retry attribution rules can admit their changes.
 
 `SOURCE_TRANSFERS.json` records the exact full-parent reverse of Report's fixed
-reader at `826e8d7d47a1b9961668bc523e86a898eae7742a` and unchanged finite controls
+reader at `826e8d7d47a1b9961668bc523e86a898eae7742a` and finite controls
 at `bf11b6f2c4dbdcba4d381f02a302922ea510b755`. The reader change removes Contact
 case/witness scope and supplies the explicit pure scope. No Contact case is
 aliased. Buffer limits, timeouts, original snapshot query, actual C-after third
 fixture frame and transport refusal semantics are retained. The runtime original
 modules, especially their private WeakMap qualifier, are never copied or edited.
+The finite controls' one explicit deadline-cause hunk also reverses to its exact
+Report parent; original shared-turn code and all budgets remain unchanged.
 
 The reader's independent C-after must be a different backend from A, B,
 C-before and any distinct MCP verification backend. A fresh MCP client may
@@ -89,7 +117,8 @@ The future root protocol is finite:
    `INPUT_RECEIPT.json` and `TURN_IDENTITY.json`, then reports
    `READY_ROOT_KIER_MCP_B_REQUIRED`. Root dispatches that exact `INPUT.json`
    through the exact named Kier tool and saves its unchanged structured result
-   as `NATIVE_RESULT.json`; send `PREPARE` on the process's stdin.
+   as `NATIVE_RESULT.json`, plus the actual root call timing envelope below;
+   send `PREPARE` on the process's stdin.
 3. The process validates every successful statement, original final assertion,
    real B marker, genuine observations and small fresh MCP verification. Its
    separate fixed C-after reads full canonical snapshots and actual fixture
@@ -107,8 +136,38 @@ child deadline. Work plus cleanup must finish within 180 seconds. An already
 dispatched external MCP call cannot be cancelled by this local process: root
 must reconcile its result before another trial. Never dispatch a stale READY
 input after abort/timeout. No final PASS is emitted for unconfirmed cleanup.
+The work deadline now remains `PURE_SEQUENCE_WORK_BUDGET_HELD`; genuine external
+turn loss remains `CONTROL_OWNED_TURN_LOST`. HOLD preserves both the causal
+deadline observation and any lower-level closed error code. No deadline or
+transport cap is increased.
 
-Offline validation: 12 adapter tests and 44 unchanged original restoration/turn
+Root must execute READY/read-input/actual-tool/save/PREPARE/C-after/RELEASE in
+one bounded tool orchestration without intervening model delays. Read exact
+`INPUT.json` silently, capture `new Date().toISOString()` immediately before the
+awaited actual Kier tool call, and capture it again immediately after return.
+Save the unchanged server structured result separately. Write exactly this
+five-key JSON shape to `NATIVE_CALL_TIMING.json` (template values are not evidence):
+
+```json
+{
+  "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+  "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+  "sqlSha256": "<actual INPUT_RECEIPT.sqlSha256>",
+  "callStartedAt": "<actual pre-call Date ISO string>",
+  "callReturnedAt": "<actual post-call Date ISO string>"
+}
+```
+
+No other keys are accepted. Both timestamps must be canonical UTC ISO strings,
+ordered after actual READY and before the holder reads the result. Do not create
+accepted flags, statement results or SQL clock values in root orchestration.
+`READY_TIMING.json`, validated root call timing and genuine native clock frames
+are separate small diagnostics. Server timestamps and root timestamps remain
+separate clock observations; no unobserved transport latency is inferred. The
+actual R2 response still refuses as a failed guard even though its SET responses
+now satisfy the correct command boundary.
+
+Offline validation: 18 adapter tests and 44 unchanged original restoration/turn
 tests pass. PG17 grammar parses the original programme, complete B, MCP
 verification and both C source examples without substitutions; native body
 compilation remains NOT_PROVED. `OFFLINE_INPUTS.json` contains **synthetic source
@@ -118,7 +177,9 @@ complete scope, original WeakMap copy refusal, parent/fixture/writer/ledger
 refusals, caps, malformed UTF-8, finite controls and elapsed bounds. The pooled
 MCP regression accepts B/C-before reuse only with independent C-after and actual
 original restoration qualification; C-after reuse and stale/copied proofs refuse.
-`FORWARD_REVERSE.json` records complete bounded reversals to frozen `b6d4dc6b`.
+`FORWARD_REVERSE.json` retains the earlier bounded reversals to frozen `b6d4dc6b`;
+`R2_FORWARD_REVERSE.json` supplies the current complete successor reversal to
+`a20a0741`, including exact response, clock and deadline edits.
 
 All current work is isolated source-only. No database connection, lock, Docker,
 release, runtime/root edit, Banking body read, or credential access occurred.
