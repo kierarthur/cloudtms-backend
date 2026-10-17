@@ -1,0 +1,13 @@
+{
+  "parentCommit": "eb0aa9633fa284c088da6e7c12196974619cd48b",
+  "files": [
+    {
+      "target": "broker/src/weekly-source/kept-pay-context.mjs",
+      "bytes": 5944,
+      "sha256": "2c7afe36e931e556624fdd2fba2c2b8379c903941dbd03b88475b255bcbd73dd"
+    }
+  ],
+  "native": "NOT_RUN",
+  "dbConnections": 0,
+  "ABI": "unchanged 27-field public read"
+}
