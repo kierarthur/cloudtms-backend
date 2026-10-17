@@ -1,0 +1,15 @@
+async function handleGetHospital(env, req, clientId, hospitalId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized();
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_hospitals?id=eq.${encodeURIComponent(hospitalId)}&client_id=eq.${encodeURIComponent(clientId)}&select=*`
+    );
+    if (!rows.length) return withCORS(env, req, notFound("Hospital not found"));
+    return withCORS(env, req, ok({ hospital: rows[0] }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to fetch client hospital"));
+  }
+}

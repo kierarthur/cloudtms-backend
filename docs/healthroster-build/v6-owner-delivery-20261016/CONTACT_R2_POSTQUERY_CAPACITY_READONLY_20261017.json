@@ -1,0 +1,194 @@
+{
+  "version": "CONTACT_R2_POSTQUERY_CAPACITY_READONLY_V1",
+  "observation": {
+    "observation_contract": "CLOUDTMS_BANKING_PAY_CAPACITY_OBSERVATION_V1",
+    "authenticated": true,
+    "read_only": true,
+    "secrets_returned": false,
+    "caller_supplied_sql_accepted": false,
+    "caller_supplied_promql_accepted": false,
+    "business_rows_returned": 0,
+    "database": "agency_test",
+    "observed_at": "2026-10-17T09:21:12.838Z",
+    "target_metric_identities": [
+      "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+      "cloudtms-codex-poc-pg17",
+      "postgres-service-p0qoe"
+    ],
+    "service": {
+      "uuid": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+      "name": "postgres-service-p0qoe",
+      "label": "cloudtms-codex-poc-pg17",
+      "service_type": "postgres",
+      "state": "healthy",
+      "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+      "created_at": "2026-08-23T16:00:33.774Z",
+      "updated_at": "2026-09-30T19:16:42.824Z"
+    },
+    "resource": {
+      "uuid": "01a02ef7-1977-79bd-ad56-7e86927d5f81",
+      "name": "migetuq4",
+      "state": "active",
+      "total_disk_size": 171798691840,
+      "total_ram_size": 8589934592,
+      "total_cpu_size": 4,
+      "total_used_disk_size": 92341796864,
+      "total_used_ram_size": 8455716864,
+      "total_used_cpu_size": 0,
+      "available_cpu_size": 4,
+      "available_disk_size": 79456894976,
+      "available_ram_size": 134217728,
+      "created_at": "2026-08-23T14:12:20.983Z",
+      "updated_at": "2026-10-13T13:03:33.648Z",
+      "assigned": false
+    },
+    "database_observation": {
+      "database_name": "cloudtms_test_clone",
+      "connection_role": "dee50tht",
+      "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+      "server_version_num": 170011,
+      "in_recovery": false,
+      "postmaster_started_at": "2026-10-14T09:07:33.240Z",
+      "database_bytes": "4203443891",
+      "connected_replica_count": 0,
+      "active_replication_slot_count": 0,
+      "prepared_transaction_count": 0
+    },
+    "metrics": [
+      {
+        "metric": "miget_volume_used_bytes",
+        "status": "success",
+        "result_type": "vector",
+        "workspace_total_series": 3,
+        "workspace_result_truncated": false,
+        "observed_app_or_addon_identities": [
+          "postgres-service-kpqwi",
+          "postgres-service-rflek",
+          "shared-storage-service-rfqxp"
+        ],
+        "target_total_series": 0,
+        "target_series_found": false,
+        "series": []
+      },
+      {
+        "metric": "miget_volume_size_bytes",
+        "status": "success",
+        "result_type": "vector",
+        "workspace_total_series": 3,
+        "workspace_result_truncated": false,
+        "observed_app_or_addon_identities": [
+          "postgres-service-kpqwi",
+          "postgres-service-rflek",
+          "shared-storage-service-rfqxp"
+        ],
+        "target_total_series": 0,
+        "target_series_found": false,
+        "series": []
+      },
+      {
+        "metric": "miget_addon_pg_database_size_bytes",
+        "status": "success",
+        "result_type": "vector",
+        "workspace_total_series": 10,
+        "workspace_result_truncated": false,
+        "observed_app_or_addon_identities": [
+          "postgres-service-kpqwi",
+          "postgres-service-p0qoe",
+          "postgres-service-rflek"
+        ],
+        "target_total_series": 4,
+        "target_series_found": true,
+        "series": [
+          {
+            "labels": {
+              "addon": "postgres-service-p0qoe",
+              "addon_type": "postgres",
+              "app": "postgres-service-p0qoe",
+              "database": "cloudtms_test_clone",
+              "instance": "postgres-service-p0qoe-1",
+              "namespace": "migetuq4"
+            },
+            "value": {
+              "timestamp": 1792228872.709,
+              "value": "4203443891"
+            }
+          },
+          {
+            "labels": {
+              "addon": "postgres-service-p0qoe",
+              "addon_type": "postgres",
+              "app": "postgres-service-p0qoe",
+              "database": "postgres",
+              "instance": "postgres-service-p0qoe-1",
+              "namespace": "migetuq4"
+            },
+            "value": {
+              "timestamp": 1792228872.709,
+              "value": "8066739"
+            }
+          },
+          {
+            "labels": {
+              "addon": "postgres-service-p0qoe",
+              "addon_type": "postgres",
+              "app": "postgres-service-p0qoe",
+              "database": "template1",
+              "instance": "postgres-service-p0qoe-1",
+              "namespace": "migetuq4"
+            },
+            "value": {
+              "timestamp": 1792228872.709,
+              "value": "7886515"
+            }
+          },
+          {
+            "labels": {
+              "addon": "postgres-service-p0qoe",
+              "addon_type": "postgres",
+              "app": "postgres-service-p0qoe",
+              "database": "thnw5qst",
+              "instance": "postgres-service-p0qoe-1",
+              "namespace": "migetuq4"
+            },
+            "value": {
+              "timestamp": 1792228872.709,
+              "value": "9115315"
+            }
+          }
+        ]
+      },
+      {
+        "metric": "miget_addon_pg_up",
+        "status": "success",
+        "result_type": "vector",
+        "workspace_total_series": 3,
+        "workspace_result_truncated": false,
+        "observed_app_or_addon_identities": [
+          "postgres-service-kpqwi",
+          "postgres-service-p0qoe",
+          "postgres-service-rflek"
+        ],
+        "target_total_series": 1,
+        "target_series_found": true,
+        "series": [
+          {
+            "labels": {
+              "addon": "postgres-service-p0qoe",
+              "addon_type": "postgres",
+              "app": "postgres-service-p0qoe",
+              "instance": "postgres-service-p0qoe-1",
+              "namespace": "migetuq4"
+            },
+            "value": {
+              "timestamp": 1792228872.791,
+              "value": "1"
+            }
+          }
+        ]
+      }
+    ],
+    "metric_series_missing_is_zero": false,
+    "activation_evidence_complete": false
+  },
+  "inference": "Agency healthy and postmaster unchanged; missing volume metrics unavailable, resource allocation not measured process memory; no cancellation-cause conclusion"
+}

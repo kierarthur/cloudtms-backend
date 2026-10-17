@@ -1,0 +1,162 @@
+{
+  "version": "DAILY_GENUINE_S1A_CURRENT_PUBLISHED_SOURCE_PINS_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+  "publishedCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "publishedWholeIndexSha256": "5d6912b6e502af72b586d6205dd6f99fdc1347c73e4bdeae98dc36b6c73ba5d8",
+  "wholeCurrentWorkerClaimedDeployed": false,
+  "inputs": [
+    {
+      "file": "broker/src/index.js",
+      "bytes": 8936784,
+      "sha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db"
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "supabase/release/current-release.json",
+      "bytes": 36636,
+      "sha256": "1396346c26872e318231f0815594b2efe206eac4180de7b3c9120f14be24726d"
+    },
+    {
+      "file": "supabase/repeatable/05012026_fix_trg_tsfin_client_hospitals_wakeup.sql",
+      "bytes": 1785,
+      "sha256": "9023ceb4e0bef1d91299732948fe2b9cc6bafafd59ac8e154cb9db9b468be7f3"
+    },
+    {
+      "file": "supabase/repeatable/05012026_tsfin_work_success_bulk.sql",
+      "bytes": 509,
+      "sha256": "509ade551e9ed4113e278de6684f253312605505a752c098f49d14e2d7696704"
+    },
+    {
+      "file": "supabase/repeatable/19012026_extras.sql",
+      "bytes": 325476,
+      "sha256": "8c8dadbaaf5e45e377f4cee4586080677627236bda91aea423bac743c30a0c36"
+    },
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "bytes": 32174,
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "bytes": 13611,
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+      "bytes": 5618,
+      "sha256": "b9ba019fc9f2ec59e5ae9ddd7d2257f214c5bc76246e2e3089bb76e38a588275"
+    }
+  ],
+  "functions": [
+    {
+      "name": "handleCreateHospital",
+      "file": "reference/worker/handleCreateHospital.js.txt",
+      "currentSha256": "f96f048f91d44f2a5cfeeb73a2e4a153d156c462c040acffa50e68b7edf50cc9",
+      "publishedSha256": "f96f048f91d44f2a5cfeeb73a2e4a153d156c462c040acffa50e68b7edf50cc9",
+      "rawPublishedEqual": true,
+      "currentBytes": 1718,
+      "currentStartLine": 123160,
+      "completeFunction": true
+    },
+    {
+      "name": "handleListHospitals",
+      "file": "reference/worker/handleListHospitals.js.txt",
+      "currentSha256": "494fc81a030d553a6eb701d1ab13b76622fa1e59c88c5ef1c745369dbaa98848",
+      "publishedSha256": "494fc81a030d553a6eb701d1ab13b76622fa1e59c88c5ef1c745369dbaa98848",
+      "rawPublishedEqual": true,
+      "currentBytes": 466,
+      "currentStartLine": 147409,
+      "completeFunction": true
+    },
+    {
+      "name": "handleGetHospital",
+      "file": "reference/worker/handleGetHospital.js.txt",
+      "currentSha256": "68582fb213d7ee8b67a9a77d11720a4d4dd9e0dff8cf640a44540d0381dd16d7",
+      "publishedSha256": "68582fb213d7ee8b67a9a77d11720a4d4dd9e0dff8cf640a44540d0381dd16d7",
+      "rawPublishedEqual": true,
+      "currentBytes": 603,
+      "currentStartLine": 147424,
+      "completeFunction": true
+    },
+    {
+      "name": "requireUser",
+      "file": "reference/worker/requireUser.js.txt",
+      "currentSha256": "72cb3dc069bbec6c973eff2e7258f1649b721978c47cd56d75dd8ad81089ca2a",
+      "publishedSha256": "72cb3dc069bbec6c973eff2e7258f1649b721978c47cd56d75dd8ad81089ca2a",
+      "rawPublishedEqual": true,
+      "currentBytes": 1385,
+      "currentStartLine": 139791,
+      "completeFunction": true
+    },
+    {
+      "name": "sbGetUserById",
+      "file": "reference/worker/sbGetUserById.js.txt",
+      "currentSha256": "26ee14fcf93557a495aaf8b14841703c34c2bf7381d4c5a716155d35e4a5af20",
+      "publishedSha256": "26ee14fcf93557a495aaf8b14841703c34c2bf7381d4c5a716155d35e4a5af20",
+      "rawPublishedEqual": true,
+      "currentBytes": 407,
+      "currentStartLine": 137048,
+      "completeFunction": true
+    },
+    {
+      "name": "sbFetch",
+      "file": "reference/worker/sbFetch.js.txt",
+      "currentSha256": "30f8cc1b32eb74e777986bf4266229d1cca96f79a5ce27bce6380acbba803b8b",
+      "publishedSha256": "30f8cc1b32eb74e777986bf4266229d1cca96f79a5ce27bce6380acbba803b8b",
+      "rawPublishedEqual": true,
+      "currentBytes": 2259,
+      "currentStartLine": 165181,
+      "completeFunction": true
+    },
+    {
+      "name": "parseJSONBody",
+      "file": "reference/worker/parseJSONBody.js.txt",
+      "currentSha256": "2dd32f3e09267a26bd89d297269131836abbaa5cf7155ed683774b400ce50d93",
+      "publishedSha256": "2dd32f3e09267a26bd89d297269131836abbaa5cf7155ed683774b400ce50d93",
+      "rawPublishedEqual": true,
+      "currentBytes": 70,
+      "currentStartLine": 135878,
+      "completeFunction": true
+    },
+    {
+      "name": "ok",
+      "file": "reference/worker/ok.js.txt",
+      "currentSha256": "9237487d38182bfba46940bbdbba4cab23a4fcbcb61ea236a3dcfac47204ed36",
+      "publishedSha256": "9237487d38182bfba46940bbdbba4cab23a4fcbcb61ea236a3dcfac47204ed36",
+      "rawPublishedEqual": true,
+      "currentBytes": 139,
+      "currentStartLine": 135847,
+      "completeFunction": true
+    }
+  ],
+  "route": {
+    "file": "reference/worker/hospital-route.js.txt",
+    "sha256": "637bacbb79016c357724ba1e88f8d854d2dcc55201d0bd77a0a14bedd293d968",
+    "publishedSha256": "637bacbb79016c357724ba1e88f8d854d2dcc55201d0bd77a0a14bedd293d968",
+    "rawPublishedEqual": true
+  },
+  "originalRecipe": {
+    "commit": "ad02698589fa28b1a73af26390fad7cf4c0466f9",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-fixture-recipe-20261017/RECIPE.json",
+    "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c",
+    "preserved": true
+  },
+  "authority": {
+    "file": "D:/Development/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/SEND_5_TO_HEALTHROSTER_BUILD_STAGE_NONSTOP.md",
+    "sha256": "62174e646395f01c199558ebc8f5bb1e04839c0127ab182e08fb207edd9bed91",
+    "scope": "SEND5_D9_TEST_SETUP_EXACT_COMMITTED_MANIFEST_BEFORE_MUTATION"
+  },
+  "native": "NOT_RUN",
+  "businessRowsCreated": 0,
+  "bankingBodiesSelected": 0
+}

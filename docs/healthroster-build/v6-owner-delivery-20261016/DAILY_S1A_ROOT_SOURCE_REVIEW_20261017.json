@@ -1,0 +1,26 @@
+{
+  "version": "DAILY_S1A_ROOT_SOURCE_REVIEW_V1",
+  "sourceCommit": "bb2acf3eb32f80b5b73f462fbf39e41272acadc4",
+  "filesGitExact": 28,
+  "manifestSha256": "1d6bd4efe842421893fede8b8234e68c8cc74c6862315c1caa09edf2a7c348e5",
+  "actualFunctionTests": 8,
+  "actualTriggerAstVectors": 9,
+  "frozenProofReplayWrites": 0,
+  "publishedFunctionBindings": 8,
+  "publishedCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_REQUEST_AND_NO_TARGET_GUARDS",
+  "independentPeer": "Report /root/resume_contact_restoration: same bounded verdict, all28 Git exact, eight tests and nine AST vectors independently passed",
+  "prerequisites": [
+    "Genuine S1 Client/settings and active Admin",
+    "Fresh global alias, mapping UUID/Client and all current/history Timesheet alias vacancy",
+    "Exact committed setup manifest with real before evidence before POST",
+    "Current shared turn and one-shot operator admission",
+    "Actual HTTP row plus independent current committed readback, global cardinality1 and wakeup0"
+  ],
+  "rawNativeTriggerBodyEqual": false,
+  "nativeTriggerNewlinesOnlyDifference": true,
+  "setupRowsCreated": 0,
+  "runtimeChanges": 0,
+  "original92ObjectHistoryPreserved": true,
+  "immutableCaptureWhitespaceException": "Only reference/worker/hospital-route.js.txt:13 has a captured source blank EOF; preserve exact published/current source bytes. All other staged paths must pass diff --check."
+}
