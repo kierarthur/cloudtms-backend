@@ -1,0 +1,4686 @@
+{
+  "version": "DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_V1",
+  "route": "cloudtms-miget-operations-kier-codex",
+  "database": "agency_test",
+  "businessRowsReturned": 0,
+  "relations": [
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "audit_events",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 16,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 2,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "candidate_job_titles",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 6,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 6,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "candidates",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 47,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 267,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "client_settings",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 60,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 8,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "clients",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 24,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 137,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "rates_candidate_overrides",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 15,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 4,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "rates_client_defaults",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 25,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 4,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "timesheets",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 90,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 217,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "timesheets_financials",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 95,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 53,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "ts_financials_outbox",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 7,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 2,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "client_hospitals",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 6,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 3,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "tms_users",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 15,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 267,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "private",
+      "present": true,
+      "relation": "cloudtms_database_identity",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": false,
+      "column_count": 5,
+      "policy_count": 0,
+      "relation_kind": "table",
+      "trigger_count": 0,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "private",
+      "present": true,
+      "relation": "bpay_next_module_control",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": false,
+      "column_count": 4,
+      "policy_count": 0,
+      "relation_kind": "table",
+      "trigger_count": 0,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "private",
+      "present": true,
+      "relation": "cloudtms_database_releases",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": false,
+      "column_count": 9,
+      "policy_count": 0,
+      "relation_kind": "table",
+      "trigger_count": 4,
+      "replica_identity": "default"
+    }
+  ],
+  "policies": [
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "audit_events",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "candidate_job_titles",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "candidates",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "client_settings",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "clients",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "rates_candidate_overrides",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "rates_client_defaults",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "timesheets",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "timesheets_financials",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "ts_financials_outbox",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "client_hospitals",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "tms_users",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    }
+  ],
+  "rulesCount": 0,
+  "columns": [
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "ts_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "actor_user_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "actor_display",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "actor_role_at_time",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "object_type",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "object_id_text",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "action",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "before_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "after_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "reason",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "ip",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "user_agent",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "correlation_id",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "event_sequence_is_authoritative",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "column": "event_sequence",
+      "data_type": "bigint",
+      "identity": "a",
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidate_job_titles",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidate_job_titles",
+      "column": "candidate_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidate_job_titles",
+      "column": "job_title_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidate_job_titles",
+      "column": "is_primary",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidate_job_titles",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidate_job_titles",
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "tms_ref",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "first_name",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "last_name",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "display_name",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "email",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "phone",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "pay_method",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "umbrella_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "active",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "key_norm",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "mileage_pay_rate",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "account_holder",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "bank_name",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "sort_code",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "account_number",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "roles",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "notes",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "rev",
+      "data_type": "bigint",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "job_title_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "prof_reg_number",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "prof_reg_type",
+      "data_type": "professional_reg_type_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "ni_number",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "date_of_birth",
+      "data_type": "date",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "gender",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "address_line1",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "address_line2",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "address_line3",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "town_city",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "county",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "postcode",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "country",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "nhsp_hr_name_aliases",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "title",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "opt_in_email",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "opt_in_sms",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "opt_in_whatsapp",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "band",
+      "data_type": "smallint",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "tms_ref_num",
+      "data_type": "integer",
+      "identity": null,
+      "generated": "s"
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "bank_details_hash",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "remittance_overrides_enabled",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "remittance_receive_enabled",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "remittances_detailed_breakdown",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "remittance_receive_when_umbrella_paid",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "column": "min_take_home_wtd",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "client_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "timezone_id",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "day_start",
+      "data_type": "time without time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "day_end",
+      "data_type": "time without time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "night_start",
+      "data_type": "time without time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "night_end",
+      "data_type": "time without time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "bh_source",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "bh_list",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "bh_feed_url",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "vat_rate_pct",
+      "data_type": "numeric(5,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "holiday_pay_pct",
+      "data_type": "numeric(5,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "erni_pct",
+      "data_type": "numeric(5,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "apply_holiday_to",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "apply_erni_to",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "margin_includes",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "effective_from",
+      "data_type": "date",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "hr_validation_required",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "ts_reference_required",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "week_ending_weekday",
+      "data_type": "smallint",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "autoprocess_hr",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "pay_reference_required",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "invoice_reference_required",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "default_submission_mode",
+      "data_type": "submission_mode_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "sat_start",
+      "data_type": "time without time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "sat_end",
+      "data_type": "time without time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "sun_start",
+      "data_type": "time without time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "sun_end",
+      "data_type": "time without time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "is_nhsp",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "self_bill_no_invoices_sent",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "daily_calc_of_invoices",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "no_timesheet_required",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "group_nightsat_sunbh",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "requires_hr",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "hr_attach_to_invoice",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "ts_attach_to_invoice",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "bh_start",
+      "data_type": "time without time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "bh_end",
+      "data_type": "time without time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "auto_invoice_default",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "send_manual_invoices_to_different_email",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "manual_invoices_alt_email_address",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "invoice_consolidation_mode",
+      "data_type": "invoice_consolidation_mode_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "reference_number_required_to_issue_invoice",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "opt_in_email",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "opt_in_sms",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "opt_in_whatsapp",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "healthroster_import_auto_authorise",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "nhsp_import_auto_authorise",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "reversal_complete_financials_date",
+      "data_type": "correction_financials_date_basis_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "reversal_replacement_financials_date",
+      "data_type": "correction_financials_date_basis_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "candidate_electronic_auto_authorise",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "candidate_expenses_require_separate_timesheet",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "candidate_paper_submission_enabled",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "candidate_expense_invoice_email",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "candidate_manager_approval_policy_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "allow_daily_manager_authorise_on_phone",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "allow_daily_manager_authorise_by_email",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "column": "timesheet_break_entry_mode",
+      "data_type": "timesheet_break_entry_mode_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "cli_ref",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "name",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "invoice_address",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "primary_invoice_email",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "ap_phone",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "vat_chargeable",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "payment_terms_days",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "mileage_charge_rate",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "ts_queries_email",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "rev",
+      "data_type": "bigint",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "client_address",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "contact_title",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "contact_known_as",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "contact_forename",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "contact_surname",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "contact_job_title",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "contact_tel",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "contact_mobile",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "contact_email",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "website",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "column": "notes",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "candidate_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "client_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "role",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "band",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "pay_day",
+      "data_type": "numeric(10,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "pay_night",
+      "data_type": "numeric(10,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "pay_sat",
+      "data_type": "numeric(10,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "pay_sun",
+      "data_type": "numeric(10,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "pay_bh",
+      "data_type": "numeric(10,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "date_from",
+      "data_type": "date",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "date_to",
+      "data_type": "date",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "column": "rate_type",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "client_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "role",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "band",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "charge_day",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "charge_night",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "charge_sat",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "charge_sun",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "charge_bh",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "date_from",
+      "data_type": "date",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "date_to",
+      "data_type": "date",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "paye_day",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "paye_night",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "paye_sat",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "paye_sun",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "paye_bh",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "umb_day",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "umb_night",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "umb_sat",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "umb_sun",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "umb_bh",
+      "data_type": "numeric(12,2)",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "disabled_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "column": "disabled_by",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "timesheet_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "booking_id",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "occupant_key_norm",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "hospital_norm",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "ward_norm",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "job_title_norm",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "shift_label_norm",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "scheduled_start_iso",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "scheduled_end_iso",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "worked_start_iso",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "worked_end_iso",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "break_start_iso",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "break_end_iso",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "break_minutes",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "worked_minutes",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "week_ending_date",
+      "data_type": "date",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "auth_name",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "auth_job_title",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "authorised_at_server",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "r2_nurse_key",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "r2_auth_key",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "img_sha256_nurse",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "img_sha256_auth",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "reference_number",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "reference_set_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "status",
+      "data_type": "timesheet_status_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "idempotency_key",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "client_hash",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "client_ua",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "version",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "is_current",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "revoked_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "revoked_reason",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "revoked_by",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "contract_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "submission_mode",
+      "data_type": "submission_mode_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "manual_pdf_r2_key",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "line_type",
+      "data_type": "timesheet_line_type_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "sheet_scope",
+      "data_type": "timesheet_scope_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "actual_schedule_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "additional_units_week",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "additional_units_per_day",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_token",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_status",
+      "data_type": "timesheet_qr_status_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_payload_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_generated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_scanned_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_scan_info_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_r2_key",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "day_references_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "manual_pdf_rotation_degrees",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_last_sent_hash",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_last_sent_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_signed_hash",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_signed_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "candidate_hint_text",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "band",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "generated_pdf_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "is_adjustment",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "parent_timesheet_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "generated_pdf_refs_sig",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "generated_pdf_refs_snapshot_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "generated_pdf_refs_captured_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_sent_refs_sig",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_sent_refs_snapshot_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "qr_sent_refs_captured_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "correction_id",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "correction_kind",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "adjustment_origin",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "archived_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "archived_by_user_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "archived_reason_code",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "document_revision",
+      "data_type": "bigint",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "document_state",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "current_document_version_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "active_document_operation_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "manual_document_asset_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "last_document_error_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "candidate_submission_route_intent",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "candidate_workflow_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "candidate_workflow_generation",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "candidate_manager_approved_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "settings_authority_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "settings_authority_version",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "settings_authority_fingerprint",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "settings_authority_resolved_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "bpay_work_key_v1",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "column": "bpay_work_revision_v1",
+      "data_type": "bigint",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "timesheet_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "timesheet_version",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "basis",
+      "data_type": "timesheet_fin_basis_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "is_current",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "is_stale",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "stale_reason",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "worked_start_iso",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "worked_end_iso",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "break_start_iso",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "break_end_iso",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "break_minutes",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "candidate_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "client_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "role",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "band",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_method",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "policy_snapshot_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "rate_source_refs_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "hours_day",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "hours_night",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "hours_sat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "hours_sun",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "hours_bh",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_day",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_night",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_sat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_sun",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_bh",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "charge_day",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "charge_night",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "charge_sat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "charge_sun",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "charge_bh",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "total_hours",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "total_pay_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "total_charge_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "margin_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "computed_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "locked_by_invoice_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "locked_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "unlocked_by_credit_note_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "occupant_key_norm",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "candidate_assignment",
+      "data_type": "candidate_assignment_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "processing_status",
+      "data_type": "ts_fin_processing_status_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "expenses_pay_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "expenses_charge_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "expenses_description",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "expenses_evidence_r2_key",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "mileage_pay_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "mileage_charge_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "mileage_evidence_r2_key",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "mileage_pay_rate",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "mileage_charge_rate",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "po_number",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_on_hold",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_on_hold_reason",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_on_hold_since_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "paid_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "paid_by_user_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "payment_reference",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "remittance_last_sent_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "remittance_send_count",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_wtr_rate_pct_snapshot",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_vat_rate_pct_snapshot",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_vat_amount_snapshot",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "pay_total_inc_vat_snapshot",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "processed_by_user_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "processed_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "authorised_by_user_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "authorised_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "expenses_evidence_manifest",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "mileage_evidence_manifest",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "actual_schedule_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "actual_minutes_by_day_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "additional_units_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "additional_pay_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "additional_charge_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "additional_margin_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "invoice_breakdown_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "nhsp_import_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "has_rate_issue",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "has_pay_channel_issue",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "hr_crosscheck_status",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "hr_crosscheck_issues",
+      "data_type": "text[]",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "external_source_rows_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "mileage_units",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "travel_pay_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "travel_charge_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "accommodation_pay_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "accommodation_charge_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "other_pay_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "column": "other_charge_ex_vat",
+      "data_type": "numeric",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "ts_financials_outbox",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "ts_financials_outbox",
+      "column": "timesheet_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "ts_financials_outbox",
+      "column": "reason",
+      "data_type": "ts_fin_reason_enum",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "ts_financials_outbox",
+      "column": "attempt_count",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "ts_financials_outbox",
+      "column": "next_attempt_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "ts_financials_outbox",
+      "column": "last_error",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "ts_financials_outbox",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_hospitals",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_hospitals",
+      "column": "client_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_hospitals",
+      "column": "hospital_name_norm",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_hospitals",
+      "column": "ward_hint",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_hospitals",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "client_hospitals",
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "email",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "role",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "is_active",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "password_hash",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "session_version",
+      "data_type": "integer",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "created_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "updated_at",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "display_name",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "grid_prefs_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "email_settings",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "last_login_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "payment_authoriser",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "payment_golden_key",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "column": "email_signature_html",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_identity",
+      "column": "singleton",
+      "data_type": "boolean",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_identity",
+      "column": "environment",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_identity",
+      "column": "customer_key",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_identity",
+      "column": "installation_id",
+      "data_type": "uuid",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_identity",
+      "column": "installed_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_module_control",
+      "column": "id",
+      "data_type": "smallint",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_module_control",
+      "column": "active_owner",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_module_control",
+      "column": "owner_epoch",
+      "data_type": "bigint",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_module_control",
+      "column": "changed_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_releases",
+      "column": "release_id",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_releases",
+      "column": "git_commit",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_releases",
+      "column": "repository_contract_sha256",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_releases",
+      "column": "installed_contract_sha256",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_releases",
+      "column": "install_mode",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_releases",
+      "column": "status",
+      "data_type": "text",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_releases",
+      "column": "started_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_releases",
+      "column": "completed_at_utc",
+      "data_type": "timestamp with time zone",
+      "identity": null,
+      "generated": null
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_releases",
+      "column": "evidence_json",
+      "data_type": "jsonb",
+      "identity": null,
+      "generated": null
+    }
+  ],
+  "types": [
+    "bigint",
+    "boolean",
+    "candidate_assignment_enum",
+    "correction_financials_date_basis_enum",
+    "date",
+    "integer",
+    "invoice_consolidation_mode_enum",
+    "jsonb",
+    "numeric",
+    "numeric(10,2)",
+    "numeric(12,2)",
+    "numeric(5,2)",
+    "professional_reg_type_enum",
+    "smallint",
+    "submission_mode_enum",
+    "text",
+    "text[]",
+    "time without time zone",
+    "timesheet_break_entry_mode_enum",
+    "timesheet_fin_basis_enum",
+    "timesheet_line_type_enum",
+    "timesheet_qr_status_enum",
+    "timesheet_scope_enum",
+    "timesheet_status_enum",
+    "timestamp with time zone",
+    "ts_fin_processing_status_enum",
+    "ts_fin_reason_enum",
+    "uuid"
+  ],
+  "indexCount": 121,
+  "nonPgIndexBindings": [
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "index": "idx_candidates_display_trgm",
+      "definition": "CREATE INDEX idx_candidates_display_trgm ON public.candidates USING gin (display_name gin_trgm_ops)",
+      "keys": [
+        {
+          "column": "display_name",
+          "definition": "display_name",
+          "operatorClass": "public.gin_trgm_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gin_extract_value_trgm",
+              "identityArguments": "text, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_extract_query_trgm",
+              "identityArguments": "text, internal, smallint, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_consistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_triconsistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "index": "idx_candidates_email_trgm",
+      "definition": "CREATE INDEX idx_candidates_email_trgm ON public.candidates USING gin (email gin_trgm_ops)",
+      "keys": [
+        {
+          "column": "email",
+          "definition": "email",
+          "operatorClass": "public.gin_trgm_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gin_extract_value_trgm",
+              "identityArguments": "text, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_extract_query_trgm",
+              "identityArguments": "text, internal, smallint, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_consistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_triconsistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "index": "idx_candidates_first_trgm",
+      "definition": "CREATE INDEX idx_candidates_first_trgm ON public.candidates USING gin (first_name gin_trgm_ops)",
+      "keys": [
+        {
+          "column": "first_name",
+          "definition": "first_name",
+          "operatorClass": "public.gin_trgm_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gin_extract_value_trgm",
+              "identityArguments": "text, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_extract_query_trgm",
+              "identityArguments": "text, internal, smallint, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_consistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_triconsistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "index": "idx_candidates_last_trgm",
+      "definition": "CREATE INDEX idx_candidates_last_trgm ON public.candidates USING gin (last_name gin_trgm_ops)",
+      "keys": [
+        {
+          "column": "last_name",
+          "definition": "last_name",
+          "operatorClass": "public.gin_trgm_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gin_extract_value_trgm",
+              "identityArguments": "text, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_extract_query_trgm",
+              "identityArguments": "text, internal, smallint, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_consistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_triconsistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "index": "idx_clients_email_trgm",
+      "definition": "CREATE INDEX idx_clients_email_trgm ON public.clients USING gin (primary_invoice_email gin_trgm_ops)",
+      "keys": [
+        {
+          "column": "primary_invoice_email",
+          "definition": "primary_invoice_email",
+          "operatorClass": "public.gin_trgm_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gin_extract_value_trgm",
+              "identityArguments": "text, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_extract_query_trgm",
+              "identityArguments": "text, internal, smallint, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_consistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_triconsistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "index": "idx_clients_name_trgm",
+      "definition": "CREATE INDEX idx_clients_name_trgm ON public.clients USING gin (name gin_trgm_ops)",
+      "keys": [
+        {
+          "column": "name",
+          "definition": "name",
+          "operatorClass": "public.gin_trgm_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gin_extract_value_trgm",
+              "identityArguments": "text, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_extract_query_trgm",
+              "identityArguments": "text, internal, smallint, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_consistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gin_trgm_triconsistent",
+              "identityArguments": "internal, smallint, text, integer, internal, internal, internal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "index": "rco_no_overlap",
+      "definition": "CREATE INDEX rco_no_overlap ON public.rates_candidate_overrides USING gist (candidate_id, client_id, role, COALESCE(band, ''::text), rate_type, daterange(date_from, COALESCE((date_to + 1), 'infinity'::date), '[)'::text))",
+      "keys": [
+        {
+          "column": "candidate_id",
+          "definition": "candidate_id",
+          "operatorClass": "public.gist_uuid_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gbt_uuid_consistent",
+              "identityArguments": "internal, uuid, smallint, oid, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_union",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_compress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_decompress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_penalty",
+              "identityArguments": "internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_picksplit",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_same",
+              "identityArguments": "gbtreekey32, gbtreekey32, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_fetch",
+              "identityArguments": "internal"
+            }
+          ]
+        },
+        {
+          "column": "client_id",
+          "definition": "client_id",
+          "operatorClass": "public.gist_uuid_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gbt_uuid_consistent",
+              "identityArguments": "internal, uuid, smallint, oid, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_union",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_compress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_decompress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_penalty",
+              "identityArguments": "internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_picksplit",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_same",
+              "identityArguments": "gbtreekey32, gbtreekey32, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_fetch",
+              "identityArguments": "internal"
+            }
+          ]
+        },
+        {
+          "column": "role",
+          "definition": "role",
+          "operatorClass": "public.gist_text_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gbt_text_consistent",
+              "identityArguments": "internal, text, smallint, oid, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_union",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_compress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_var_decompress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_penalty",
+              "identityArguments": "internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_picksplit",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_same",
+              "identityArguments": "gbtreekey_var, gbtreekey_var, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_var_fetch",
+              "identityArguments": "internal"
+            }
+          ]
+        },
+        {
+          "column": null,
+          "definition": "COALESCE(band, ''::text)",
+          "operatorClass": "public.gist_text_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gbt_text_consistent",
+              "identityArguments": "internal, text, smallint, oid, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_union",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_compress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_var_decompress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_penalty",
+              "identityArguments": "internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_picksplit",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_same",
+              "identityArguments": "gbtreekey_var, gbtreekey_var, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_var_fetch",
+              "identityArguments": "internal"
+            }
+          ]
+        },
+        {
+          "column": "rate_type",
+          "definition": "rate_type",
+          "operatorClass": "public.gist_text_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gbt_text_consistent",
+              "identityArguments": "internal, text, smallint, oid, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_union",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_compress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_var_decompress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_penalty",
+              "identityArguments": "internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_picksplit",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_same",
+              "identityArguments": "gbtreekey_var, gbtreekey_var, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_var_fetch",
+              "identityArguments": "internal"
+            }
+          ]
+        },
+        {
+          "column": null,
+          "definition": "daterange(date_from, COALESCE(date_to + 1, 'infinity'::date), '[)'::text)",
+          "operatorClass": "pg_catalog.range_ops",
+          "nonPgSupport": []
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "index": "rcd_enabled_no_overlap",
+      "definition": "CREATE INDEX rcd_enabled_no_overlap ON public.rates_client_defaults USING gist (client_id, role, COALESCE(band, ''::text), daterange(date_from, COALESCE((date_to + 1), 'infinity'::date), '[)'::text)) WHERE (disabled_at_utc IS NULL)",
+      "keys": [
+        {
+          "column": "client_id",
+          "definition": "client_id",
+          "operatorClass": "public.gist_uuid_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gbt_uuid_consistent",
+              "identityArguments": "internal, uuid, smallint, oid, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_union",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_compress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_decompress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_penalty",
+              "identityArguments": "internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_picksplit",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_same",
+              "identityArguments": "gbtreekey32, gbtreekey32, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_uuid_fetch",
+              "identityArguments": "internal"
+            }
+          ]
+        },
+        {
+          "column": "role",
+          "definition": "role",
+          "operatorClass": "public.gist_text_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gbt_text_consistent",
+              "identityArguments": "internal, text, smallint, oid, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_union",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_compress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_var_decompress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_penalty",
+              "identityArguments": "internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_picksplit",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_same",
+              "identityArguments": "gbtreekey_var, gbtreekey_var, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_var_fetch",
+              "identityArguments": "internal"
+            }
+          ]
+        },
+        {
+          "column": null,
+          "definition": "COALESCE(band, ''::text)",
+          "operatorClass": "public.gist_text_ops",
+          "nonPgSupport": [
+            {
+              "schema": "public",
+              "name": "gbt_text_consistent",
+              "identityArguments": "internal, text, smallint, oid, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_union",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_compress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_var_decompress",
+              "identityArguments": "internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_penalty",
+              "identityArguments": "internal, internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_picksplit",
+              "identityArguments": "internal, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_text_same",
+              "identityArguments": "gbtreekey_var, gbtreekey_var, internal"
+            },
+            {
+              "schema": "public",
+              "name": "gbt_var_fetch",
+              "identityArguments": "internal"
+            }
+          ]
+        },
+        {
+          "column": null,
+          "definition": "daterange(date_from, COALESCE(date_to + 1, 'infinity'::date), '[)'::text)",
+          "operatorClass": "pg_catalog.range_ops",
+          "nonPgSupport": []
+        }
+      ]
+    }
+  ],
+  "expressionIndexes": [
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "index": "idx_audit_import_correction_source_v1",
+      "definition": "CREATE INDEX idx_audit_import_correction_source_v1 ON public.audit_events USING btree (((after_json ->> 'shift_id'::text)), ((after_json ->> 'external_row_key'::text)), ((after_json ->> 'correction_id'::text)), action, ts_utc DESC, id) WHERE ((object_type = ANY (ARRAY['timesheets'::text, 'invoices'::text, 'contract_weeks'::text])) AND (action = ANY (ARRAY['NHSP_IMPORT_CORRECTION_APPLIED'::text, 'HR_IMPORT_CORRECTION_APPLIED'::text])))"
+    },
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "index": "idx_weekly_source_later_change_receipt_v1",
+      "definition": "CREATE INDEX idx_weekly_source_later_change_receipt_v1 ON public.audit_events USING btree (((after_json ->> 'idempotency_key'::text)), ts_utc, id) WHERE (action = 'WEEKLY_SOURCE_LATER_CHANGE_DECIDED'::text)"
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "index": "candidates_active_normalized_cid1_uq",
+      "definition": "CREATE UNIQUE INDEX candidates_active_normalized_cid1_uq ON public.candidates USING btree (upper(btrim(key_norm))) WHERE ((active IS TRUE) AND (key_norm IS NOT NULL) AND (upper(btrim(key_norm)) ~ '^CID1-[0-9A-HJKMNP-TV-Z]{5,160}$'::text))"
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "index": "rates_candidate_overrides_uniq",
+      "definition": "CREATE UNIQUE INDEX rates_candidate_overrides_uniq ON public.rates_candidate_overrides USING btree (candidate_id, client_id, role, COALESCE(band, ''::text), date_from, rate_type)"
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "index": "rco_no_overlap",
+      "definition": "CREATE INDEX rco_no_overlap ON public.rates_candidate_overrides USING gist (candidate_id, client_id, role, COALESCE(band, ''::text), rate_type, daterange(date_from, COALESCE((date_to + 1), 'infinity'::date), '[)'::text))"
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "index": "rates_client_defaults_uniq_window_enabled",
+      "definition": "CREATE UNIQUE INDEX rates_client_defaults_uniq_window_enabled ON public.rates_client_defaults USING btree (client_id, role, COALESCE(band, ''::text), date_from) WHERE (disabled_at_utc IS NULL)"
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "index": "rcd_enabled_date_span_idx",
+      "definition": "CREATE INDEX rcd_enabled_date_span_idx ON public.rates_client_defaults USING btree (client_id, role, COALESCE(band, ''::text), date_from, date_to) WHERE (disabled_at_utc IS NULL)"
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "index": "rcd_enabled_no_overlap",
+      "definition": "CREATE INDEX rcd_enabled_no_overlap ON public.rates_client_defaults USING gist (client_id, role, COALESCE(band, ''::text), daterange(date_from, COALESCE((date_to + 1), 'infinity'::date), '[)'::text)) WHERE (disabled_at_utc IS NULL)"
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "index": "bpay_next_timesheet_current_trim_booking_idx",
+      "definition": "CREATE INDEX bpay_next_timesheet_current_trim_booking_idx ON public.timesheets USING btree (btrim(booking_id)) WHERE (is_current AND (booking_id IS NOT NULL) AND (btrim(booking_id) <> ''::text))"
+    }
+  ],
+  "ownerEffectiveSelect": [
+    {
+      "schema": "public",
+      "relation": "audit_events",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "candidate_job_titles",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "candidates",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "client_settings",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "clients",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "rates_candidate_overrides",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "rates_client_defaults",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "timesheets_financials",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "ts_financials_outbox",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "client_hospitals",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "public",
+      "relation": "tms_users",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_identity",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "private",
+      "relation": "bpay_next_module_control",
+      "select": true,
+      "schemaUsage": true
+    },
+    {
+      "schema": "private",
+      "relation": "cloudtms_database_releases",
+      "select": true,
+      "schemaUsage": true
+    }
+  ],
+  "browserSelectCount": 0,
+  "pagination": {
+    "relations": [
+      {
+        "offset": 0,
+        "total": 15,
+        "returned": 15,
+        "eof": true
+      }
+    ],
+    "policies": [
+      {
+        "offset": 0,
+        "total": 12,
+        "returned": 12,
+        "eof": true
+      }
+    ],
+    "rules": [
+      {
+        "offset": 0,
+        "total": 0,
+        "returned": 0,
+        "eof": true
+      }
+    ],
+    "columns": [
+      {
+        "offset": 0,
+        "total": 424,
+        "returned": 100,
+        "eof": false,
+        "truncated": true,
+        "nextOffset": 100
+      },
+      {
+        "offset": 100,
+        "total": 424,
+        "returned": 100,
+        "eof": false,
+        "truncated": true,
+        "nextOffset": 200
+      },
+      {
+        "offset": 200,
+        "total": 424,
+        "returned": 100,
+        "eof": false,
+        "truncated": true,
+        "nextOffset": 300
+      },
+      {
+        "offset": 300,
+        "total": 424,
+        "returned": 100,
+        "eof": false,
+        "truncated": true,
+        "nextOffset": 400
+      },
+      {
+        "offset": 400,
+        "total": 424,
+        "returned": 24,
+        "eof": true,
+        "truncated": false,
+        "nextOffset": null
+      }
+    ],
+    "indexes": [
+      {
+        "offset": 0,
+        "total": 121,
+        "returned": 100,
+        "eof": false,
+        "truncated": true,
+        "nextOffset": 100
+      },
+      {
+        "offset": 100,
+        "total": 121,
+        "returned": 21,
+        "eof": true,
+        "truncated": false,
+        "nextOffset": null
+      }
+    ],
+    "privileges": [
+      {
+        "offset": 0,
+        "total": 284,
+        "returned": 100,
+        "eof": false,
+        "truncated": true,
+        "nextOffset": 100
+      },
+      {
+        "offset": 100,
+        "total": 284,
+        "returned": 100,
+        "eof": false,
+        "truncated": true,
+        "nextOffset": 200
+      },
+      {
+        "offset": 200,
+        "total": 284,
+        "returned": 84,
+        "eof": true,
+        "truncated": false,
+        "nextOffset": null
+      }
+    ]
+  },
+  "remaining": [
+    "No inheritance/foreign-table/domain/extension membership proof from these fixed fields",
+    "Only actual S0 read-only scope; mutation callbacks and ordinary producer effects separately qualified",
+    "Current original turn and actor, fresh vacancy, exact effect/setup entries and native envelopes not run"
+  ],
+  "nativeS0Invocation": "NOT_RUN",
+  "mutationAttempted": false
+}

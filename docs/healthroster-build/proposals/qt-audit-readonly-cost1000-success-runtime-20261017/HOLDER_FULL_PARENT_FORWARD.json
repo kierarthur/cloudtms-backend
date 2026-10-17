@@ -1,0 +1,98 @@
+{
+  "version": "QT_COST1000_ORIGINAL_HOLDER_FULL_RAW_FORWARD_V1",
+  "parent": {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/hold.mjs",
+    "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "bytes": 5433,
+    "sha256": "55606963aff145a83a1a82352c9077a3f5cebf472c16b0c965e627d12c3a3109"
+  },
+  "derived": {
+    "file": "hold.mjs",
+    "bytes": 5738,
+    "sha256": "f073c306f1a428be4c552b1b833ff0f2303b3c37a71d1f4a896f366f0944c251"
+  },
+  "edits": [
+    {
+      "before": "import {ROOT,check} from '../daily-health-genuine-staged-operator-20261017/contract.mjs';",
+      "after": "import {ROOT} from './source.mjs';import {check} from './factory.mjs';"
+    },
+    {
+      "before": "import {aclChildEnvironment} from '../test-auth-refresh-suppressed-startup-forward-20261017/run-auth-refresh.mjs';",
+      "after": "import {aclChildEnvironment} from 'file:///D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/docs/healthroster-build/proposals/test-auth-refresh-suppressed-startup-forward-20261017/run-auth-refresh.mjs';"
+    },
+    {
+      "before": "import {buildS0CatalogueInput} from '../daily-health-genuine-staged-preflight-batch-forward-20261017/s0-scope.mjs';",
+      "after": "import {buildCostInput,MODES} from './factory.mjs';"
+    },
+    {
+      "before": "BUDGET,Controls,catalogueWork,save,nativeResult",
+      "after": "BUDGET,Controls,costWork,save,nativeResult"
+    },
+    {
+      "before": "export async function hold(){",
+      "after": "export async function hold(mode){check(MODES.includes(mode),'COST_EXACT_MODE_REQUIRED');"
+    },
+    {
+      "before": "source();within();const parent=",
+      "after": "await originalHolderSource();within();const parent="
+    },
+    {
+      "before": "source,protectedRelease,here",
+      "after": "source,originalHolderSource,protectedRelease,here"
+    },
+    {
+      "before": "daily-s0-catalogue-20261017-",
+      "after": "qt-audit-cost1000-20261017-"
+    },
+    {
+      "before": "task:'DAILY_S0_CATALOGUE_ONLY_CAPTURE'",
+      "after": "task:'QT_AUDIT_COST_1000_DIAGNOSTIC'"
+    },
+    {
+      "before": "beforePhase:async()=>{source();within();}",
+      "after": "beforePhase:async()=>{await originalHolderSource();within();}"
+    },
+    {
+      "before": "return await catalogueWork({turn,signal,controls,build:buildS0CatalogueInput,within,",
+      "after": "return await costWork({turn,signal,controls,build:identity=>buildCostInput(identity,mode),within,"
+    },
+    {
+      "before": "businessScope:'NOT_RUN'}))",
+      "after": "businessScope:'NOT_RUN',mode}))"
+    },
+    {
+      "before": "checkProtectedRelease:()=>{within();protectedRelease();within();}",
+      "after": "checkProtectedRelease:async()=>{within();await protectedRelease();within();}"
+    },
+    {
+      "before": "'healthroster_s0_catalogue_holder'",
+      "after": "'healthroster_qt_cost1000_holder'"
+    },
+    {
+      "before": "'CATALOGUE_CAPTURED_OWN_TURN_RELEASED'",
+      "after": "'COST_CAPTURED_OWN_TURN_RELEASED'"
+    },
+    {
+      "before": "process.argv.length!==3||process.argv[2]!=='--authorised-root-s0-catalogue'",
+      "after": "process.argv.length!==5||process.argv[2]!=='--authorised-root-qt-cost1000'||process.argv[3]!=='--mode'||!MODES.includes(process.argv[4])"
+    },
+    {
+      "before": "try{await hold();}",
+      "after": "try{await hold(process.argv[4]);}"
+    },
+    {
+      "before": "remainingWorkMs:Math.max(0,deadline-Date.now())",
+      "after": "holderStartedAt:new Date(deadline-BUDGET.work).toISOString(),remainingWorkMs:Math.max(0,deadline-Date.now())"
+    }
+  ],
+  "secure": {
+    "parentSha256": "3fb1bb6dce1ee7d488d6f56e0225e0ce6508253c14ed95f8c037827739fba7d8",
+    "afterSha256": "1e3ad4cfeb16fa1d2fec6aaa25750ea1b727416f1f6bbba4f032927ba2f16cc3",
+    "before": "daily-s0-catalogue-20261017-",
+    "after": "qt-audit-cost1000-20261017-"
+  },
+  "originalSharedTurnUnchanged": true,
+  "originalOwnedACloseFunctionRawUnchanged": true,
+  "original12060060180Budgets": true,
+  "actualNative": "NOT_RUN"
+}

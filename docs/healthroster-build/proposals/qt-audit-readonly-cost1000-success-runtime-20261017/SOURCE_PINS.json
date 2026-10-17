@@ -1,0 +1,58 @@
+[
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/hold.mjs",
+    "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "bytes": 5433,
+    "sha256": "55606963aff145a83a1a82352c9077a3f5cebf472c16b0c965e627d12c3a3109"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/secure-owned.ps1",
+    "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "bytes": 1350,
+    "sha256": "3fb1bb6dce1ee7d488d6f56e0225e0ce6508253c14ed95f8c037827739fba7d8"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/source.mjs",
+    "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "bytes": 4069,
+    "sha256": "9bcf873383794c3195ba51cf07b8246ca966b83b8a3a7e8b70106035f0dd4c88"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/protocol.mjs",
+    "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "bytes": 6451,
+    "sha256": "6474897d63080657c43ca14160364057b950580feea22de6871bdd92dfdb4e1a"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "scripts/healthroster-rehearsal-turn.mjs",
+    "commit": "5564a2e5e9e8f57196596b28c7bff526eaa7429d",
+    "bytes": 12827,
+    "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "scripts/healthroster-turn-control.mjs",
+    "commit": "5564a2e5e9e8f57196596b28c7bff526eaa7429d",
+    "bytes": 9580,
+    "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_20261017.json",
+    "commit": "783d97c8e844fedce9e300d5051aabf7f484ed7a",
+    "bytes": 119766,
+    "sha256": "c1e91c6507d3624dd69e92707f6f7fd0e8614479b3f5a75c3b4fd9268f152f8c"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/test-auth-refresh-suppressed-startup-forward-20261017/run-auth-refresh.mjs",
+    "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "bytes": 9514,
+    "sha256": "abe211b76df1b3700972de37dc194ed9561815d9e2fb4163f5601274447990fd"
+  }
+]

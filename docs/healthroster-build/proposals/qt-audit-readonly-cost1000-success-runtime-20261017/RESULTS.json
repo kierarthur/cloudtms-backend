@@ -1,0 +1,32 @@
+{
+  "version": "QT_COST1000_COMPLETE_BUFFERED_STREAM_SOURCE_RESULTS_V1",
+  "status": "SOURCE_TESTS_PASS",
+  "parentManifestSha256": "ed10acad577a90a40ea5aa31749933ad725755e09ae4efb864198a1e9b8f53eb",
+  "originalFrozenBytesVerifiedUnchanged": 32,
+  "retainedOriginalAssertions": 77,
+  "newStreamTests": 23,
+  "totalCurrentTests": 100,
+  "originalMoneyThreeTestScriptReplayed": true,
+  "oldBodyFourOmissionsReproducedAndFixedBodyRefusesBeforeRelease": true,
+  "runtimeWholeRawInverseHunks": 3,
+  "actualSummaryMockFixtureRawInverseHunks": 1,
+  "pg17Grammar": {
+    "modes": 5,
+    "programmes": 10,
+    "mainStatements": 20,
+    "freshStatements": 5
+  },
+  "exactCurrentIndexHistoricalPins": 8,
+  "sourceParentsObserved": {
+    "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+    "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026": "02cf530b823d68e5ac986f824d481af55dcd14fc"
+  },
+  "allSQLHolderNativeValidationSourceGateBudgetsUnchanged": true,
+  "originalHolderInverseHunks": 18,
+  "securePathInverseHunks": 1,
+  "native": "NOT_RUN",
+  "privateAuthState": "NOT_ACCESSED",
+  "runtimeSourceAdmission": "NOT_RUN",
+  "reportTrackedMutation": "NONE",
+  "scope": "SOURCE_PARSER_FIX_ONLY_NO_NATIVE_OR_PERFORMANCE_CLAIM"
+}

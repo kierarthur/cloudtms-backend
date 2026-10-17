@@ -1,0 +1,12 @@
+file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/healthroster-install2-local-provider.mjs:15
+ if(result.status!==0)throw Error('OWN_LOCAL_PROVIDER_SQL_FAILED_'+(result.stderr.match(/(?:ERROR|FATAL):\s*([A-Z0-9]{5})/)?.[1]??'CONNECTION'));
+                            ^
+
+Error: OWN_LOCAL_PROVIDER_SQL_FAILED_P0001
+    at execute (file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/healthroster-install2-local-provider.mjs:15:29)
+    at file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/healthroster-install2-local-provider.mjs:26:2
+    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)
+    at async node:internal/modules/esm/loader:639:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.15.0

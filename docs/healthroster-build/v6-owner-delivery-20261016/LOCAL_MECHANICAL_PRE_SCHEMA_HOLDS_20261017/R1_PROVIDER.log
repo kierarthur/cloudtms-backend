@@ -1,0 +1,14 @@
+file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/healthroster-install2-local-seal-profile.mjs:15
+const requireThat=(ok,code)=>{if(!ok)throw Error(code);};
+                                           ^
+
+Error: I2_SEAL_OWN_CONTAINER_REFUSED
+    at requireThat (file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/healthroster-install2-local-seal-profile.mjs:15:44)
+    at validateContainer (file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/healthroster-install2-local-seal-profile.mjs:37:2)
+    at inspectOwnResources (file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/healthroster-install2-local-seal-profile.mjs:62:32)
+    at file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/healthroster-install2-local-provider.mjs:8:52
+    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)
+    at async node:internal/modules/esm/loader:639:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.15.0

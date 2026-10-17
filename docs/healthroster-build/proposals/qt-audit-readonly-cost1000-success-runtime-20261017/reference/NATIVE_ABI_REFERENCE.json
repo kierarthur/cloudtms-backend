@@ -1,0 +1,43 @@
+{
+  "version": "ACTUAL_ACCEPTED_SUCCESS_NATIVE_HEADER_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "file": "docs/healthroster-build/v6-owner-delivery-20261016/QT_COST1000_ACTUAL_SCAN_PROJECT_HEADER_HOLD_20261017.json",
+  "observedRootHead": "1f91895a78dd213ae8088937e4839b4db33b7424",
+  "commit": null,
+  "provenance": "SAVED_ROOT_ACTUAL_RECEIPT_NOT_YET_COMMITTED",
+  "bytes": 32625,
+  "sha256": "843c6f38d289bc86617a29efa9bbc5d3442a8b34845d0b1bf217612fcdeac054",
+  "originalDisposition": "ACTUAL_COST_HOLD",
+  "originalCode": "COST_NATIVE_CLOSED_SCALARS_REQUIRED",
+  "topKeys": [
+    "accepted",
+    "databaseTarget",
+    "database",
+    "label",
+    "sqlSha256",
+    "statementCount",
+    "statements",
+    "rolledBack",
+    "rollbackVerification",
+    "warnings"
+  ],
+  "freshKeys": [
+    "connectedFresh",
+    "database",
+    "statements"
+  ],
+  "statementKeys": [
+    "statement",
+    "command",
+    "rowCount",
+    "fields",
+    "rows",
+    "rowsTruncated"
+  ],
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+  ],
+  "scope": "Actual SCAN_PROJECT returned accepted/rolledBack/fresh true without fatalError; original actual controller HOLD is not requalified. Exact present fatalError or any unknown top key is refused."
+}
