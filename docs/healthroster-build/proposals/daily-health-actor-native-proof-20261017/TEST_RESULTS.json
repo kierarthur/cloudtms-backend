@@ -1,15 +1,15 @@
 {
-  "version": "DAILY_ACTOR_OFFLINE_BOUNDARY_TESTS_V1",
-  "rootCommit": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "version": "DAILY_ACTOR_R2_OFFLINE_BOUNDARY_TESTS_V1",
+  "rootCommit": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
   "groups": [
     {
-      "name": "ACTOR_ADAPTER_SOURCE_AND_SYNTHETIC_BOUNDARY",
+      "name": "ACTOR_R2_SOURCE_AND_SYNTHETIC_BOUNDARY",
       "command": [
         "node",
         "--test",
         "--test-reporter=tap",
-        "docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/test.mjs",
-        "docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/programme-test.mjs"
+        "docs/healthroster-build/proposals/daily-health-actor-r2-forward-20261017/payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/test.mjs",
+        "docs/healthroster-build/proposals/daily-health-actor-r2-forward-20261017/payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/programme-test.mjs"
       ],
       "counts": {
         "tests": 17,
@@ -20,19 +20,19 @@
       },
       "sourceFiles": [
         {
-          "file": "docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/test.mjs",
-          "sha256": "7874b6db73fb433cd48de4cd84f77271b853053488eaab7995b3347e7d2fe3c7"
+          "file": "docs/healthroster-build/proposals/daily-health-actor-r2-forward-20261017/payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/test.mjs",
+          "sha256": "11921bdeb74d2e1ad5295b61298762574f4f0bd57a23a9a54eecaa6f6161ae18"
         },
         {
-          "file": "docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/programme-test.mjs",
-          "sha256": "65b71b4f8a2fde11ad4fb905fe1412a3dd64ec20a62a74f0db91f218c180ffb9"
+          "file": "docs/healthroster-build/proposals/daily-health-actor-r2-forward-20261017/payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/programme-test.mjs",
+          "sha256": "a55207bbe8ce9c85471e8c7410d5983e1fdf53e2bd9f930714f9d50245b94134"
         }
       ],
       "tests": [
         "source programme equals frozen hash/counts and only one complete genuine actor definition",
         "caller cannot add SQL, fixture identity or root path to the finite programme",
         "native row store, genuine WP-PP, touch trigger and full owner/RLS boundaries are required before insertion",
-        "private effective ACL and real role transitions cannot be replaced by grants or a SET ROLE failure",
+        "private effective ACL uses genuine catalogue checks without unsupported SET ROLE",
         "golden invariant remains native and all state transitions affect only fixture001",
         "actor result retains explicit unsupported-path holds and zero financial/queue effects",
         "exact complete one-helper actor programme, six native users and closed store boundary",

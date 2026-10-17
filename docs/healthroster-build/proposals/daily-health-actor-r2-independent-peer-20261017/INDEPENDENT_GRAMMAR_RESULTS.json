@@ -1,0 +1,48 @@
+{
+  "sourceSha256": "a8b3d343fabac28f53677b5b695256b6ab9c48017f255bf5a47e552367f56b9f",
+  "parser": "v7.20",
+  "PostgreSQLGrammar": [
+    17,
+    7
+  ],
+  "examples": [
+    {
+      "example": "ORIGINAL_PROGRAMME",
+      "sha256": "4157d0e2d9de71e1a5d6bdef8523b8aed3c8e6ff45b01c5dcfa1f7722813f314",
+      "statements": 7,
+      "programs": 4,
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "example": "SYNTHETIC_B",
+      "sha256": "9972c17a0b4af9f0b4036e40b3de598e336055acb4c0ede7b4a26577cd682269",
+      "statements": 20,
+      "programs": 5,
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "example": "SYNTHETIC_MCP_VERIFICATION",
+      "sha256": "a32584321ed98845f1a884d674e04a377522d8bd1e3ea1b67a4a5ec331c3561f",
+      "statements": 4,
+      "programs": 0,
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "example": "SYNTHETIC_C_BEFORE",
+      "sha256": "6a0b0f133a9ce0cba8fcdddf19f232ec36ebc14b6e35d3a9404873ec6a361de5",
+      "statements": 6,
+      "programs": 1,
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "example": "SYNTHETIC_C_AFTER",
+      "sha256": "cfadfc878cf6fad90e4445b3d03ecb645d2327e1811a200368331a71ee427d9b",
+      "statements": 7,
+      "programs": 1,
+      "nativeBodyCompilation": "NOT_PROVED"
+    }
+  ],
+  "noSubstitutions": true,
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

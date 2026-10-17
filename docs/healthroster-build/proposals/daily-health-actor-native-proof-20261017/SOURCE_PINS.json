@@ -1,6 +1,6 @@
 {
   "version": "DAILY_HEALTH_ACTOR_ADAPTER_SOURCE_V1",
-  "rootCommit": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "rootCommit": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
   "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
   "rootInputs": [
     {
@@ -593,7 +593,8 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f6ea6fb5bdd1a6db720dd669ebd8da61f86651674a74ce7df23cdd4e630eefe6"
+      "definition_sha256": "f6ea6fb5bdd1a6db720dd669ebd8da61f86651674a74ce7df23cdd4e630eefe6",
+      "nativeRawDefinitionSha256": "d5d7808078fd3fa302415a450a4e8255e6a2519f0a5f29b89416583637499b63"
     }
   },
   "fixtureIDs": [
@@ -613,5 +614,17 @@
     "daily-health-actor-inactive-authoriser-20261017@example.invalid"
   ],
   "pureR3ABIReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PURE_NATIVE_R3_PASS_20261017.json",
-  "rootSourceForward": "ROOT_SOURCE_FORWARD.json"
+  "rootSourceForward": "ROOT_SOURCE_FORWARD.json",
+  "nativeDependencyProof": {
+    "file": "NATIVE_DEPENDENCY_DIAG_R1.json",
+    "sha256": "1a140b79364a0d873b03143f9575f64a82dcbe73a2f42b9330b98d2ba1598486",
+    "rootReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_ACTOR_R1_READONLY_DEPENDENCY_DIAG_20261017.json",
+    "rootCheckpoint": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
+    "rootReceiptGitStatus": "EXACT_GIT_BACKED_DIAGNOSTIC",
+    "sealedTouchCompleteLfSha256": "f6ea6fb5bdd1a6db720dd669ebd8da61f86651674a74ce7df23cdd4e630eefe6",
+    "rawTouchSha256": "d5d7808078fd3fa302415a450a4e8255e6a2519f0a5f29b89416583637499b63",
+    "runtimeComparison": "EXACT_RAW_HASH_ONLY_NO_SQL_NORMALIZATION",
+    "rootReceiptCommit": "b4cb19f04be68f67b8aad81692c26e96f7b6f0ed",
+    "originallyCapturedSavedBeforeCommit": true
+  }
 }

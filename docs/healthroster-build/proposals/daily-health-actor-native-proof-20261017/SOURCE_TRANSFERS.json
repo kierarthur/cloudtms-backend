@@ -8,7 +8,7 @@
       "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/source.mjs",
       "completeParent": "reference/pure/source.mjs",
       "inputSha256": "26884004baae754df196c8efd34fd19f3234ec82909f184362a34c7a31d84e13",
-      "outputSha256": "93a228812d25b13c70b80487518a04c1355e2235e318bff0bda1f74cc063b50a",
+      "outputSha256": "36237090e24f43b92e1f4cb8364c6c5f39200685cf35afd6300c47f7232986a0",
       "fullLiteralReverse": true
     },
     {
@@ -53,7 +53,7 @@
       "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/result-validator.mjs",
       "completeParent": "reference/pure/result-validator.mjs",
       "inputSha256": "a95635e396281a0d2d51c160097c9a174eb5d98d25ae35dcd8df846f6d3d13a0",
-      "outputSha256": "dcf8321c0a30c686381a5cc098a7ce61378d2bc96ba14df290782b934a8304cc",
+      "outputSha256": "f767ea0db172c3a310b463a5d7449a18c6f51430af4043bb23b85d8447d2b3ad",
       "fullLiteralReverse": true
     },
     {

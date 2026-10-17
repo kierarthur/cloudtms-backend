@@ -1,0 +1,219 @@
+{
+  "version": "DAILY_HEALTH_ACTOR_SOURCE_PROPOSAL_FREEZE_V1",
+  "rootCommit": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "programmeSha256": "4157d0e2d9de71e1a5d6bdef8523b8aed3c8e6ff45b01c5dcfa1f7722813f314",
+  "programmeBytes": 19447,
+  "definitions": 1,
+  "businessFixtureRows": 6,
+  "actorTests": 17,
+  "originalTests": 76,
+  "files": [
+    {
+      "file": "ADAPTER_DIFF.patch",
+      "bytes": 115180,
+      "sha256": "25d2c51bbb7c1b760297f2cbde61bbe12cab1a3dc14bf0d87c56c695af1f9805"
+    },
+    {
+      "file": "COMPOSER_DEPENDENCIES.json",
+      "bytes": 15533,
+      "sha256": "bd2c0740b86168a2089a5db4277e99d0b53e0034e0c1251e2f956cff7d617b4d"
+    },
+    {
+      "file": "COMPOSER_DEPENDENCIES.md",
+      "bytes": 5325,
+      "sha256": "f723453e08d73553f8f960bc28e030f07e7ebfa4a30639ab735e9835b32cc3c8"
+    },
+    {
+      "file": "GRAMMAR_RESULTS.json",
+      "bytes": 1313,
+      "sha256": "6dcb075dd5fe667e222fb9d81bbee53183af47e7c437224eb2cc933a025f8739"
+    },
+    {
+      "file": "NATIVE_DEPENDENCY_DIAG_R1.json",
+      "bytes": 3891,
+      "sha256": "1a140b79364a0d873b03143f9575f64a82dcbe73a2f42b9330b98d2ba1598486"
+    },
+    {
+      "file": "OFFLINE_INPUTS.json",
+      "bytes": 97072,
+      "sha256": "a8b3d343fabac28f53677b5b695256b6ab9c48017f255bf5a47e552367f56b9f"
+    },
+    {
+      "file": "OFFLINE_PROGRAMME.json",
+      "bytes": 20811,
+      "sha256": "130c47539a6fb2d1ab2b43c8230f8ed292cb5c49639cce778cad4a4792f8d6dc"
+    },
+    {
+      "file": "PROGRAMME.json",
+      "bytes": 740,
+      "sha256": "d8458edcfa2bd7f8a229075de181f9eba87f7c3e5109f54bfa27c77c665646c1"
+    },
+    {
+      "file": "README.md",
+      "bytes": 11072,
+      "sha256": "9ee7b359c24e54e5bda22035096b628d7970f285a2e57ea1a7eb877306b5b7d9"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 3637,
+      "sha256": "153f7cbbd7d5f714ae6a2f925254e3d69f7fd242efa349b65dbb9d7fe0547726"
+    },
+    {
+      "file": "ROOT_SOURCE_FORWARD.json",
+      "bytes": 10951,
+      "sha256": "b669d44309c79d81302dae848de0bc115d8c4afd20fb58a914c7a1b704af9947"
+    },
+    {
+      "file": "SETUP_ENTRY.md",
+      "bytes": 7564,
+      "sha256": "9346db720135b2f928d890d619f718a7f549c30eb24b01e031f8a7317fbc26c2"
+    },
+    {
+      "file": "SOURCE_MANIFEST.json",
+      "bytes": 1498,
+      "sha256": "01e06c87f94bf77e8a3bf4117133053c3d5323c6822501b1cd52a538259fa6b7"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 20797,
+      "sha256": "21144bb7647c4ff3d764ae09d23366c6bf21f637392c386481f06b1f1611fb7d"
+    },
+    {
+      "file": "SOURCE_TRANSFERS.json",
+      "bytes": 4852,
+      "sha256": "fa9aa976a8dc9e33ee27037c27029ddae407643408e4e82d03ac34e47e65638b"
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "bytes": 11670,
+      "sha256": "0d5dfe2fdb9c18e24368f21222b5cb46761fd161f05f9b1831ae83beaaecfc5a"
+    },
+    {
+      "file": "build-program.mjs",
+      "bytes": 16157,
+      "sha256": "cbb099f9e238252933204d73da78d792d1afd140aa86fb2d2feb22203e828cae"
+    },
+    {
+      "file": "control.mjs",
+      "bytes": 3227,
+      "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8"
+    },
+    {
+      "file": "fixed-metadata-reader.mjs",
+      "bytes": 12484,
+      "sha256": "8713d13168b49d046f8d85b91352143ccfe283cc04682702366074dc30eaad34"
+    },
+    {
+      "file": "freeze-source.mjs",
+      "bytes": 4947,
+      "sha256": "4de1cede19b234d3bb0ec620aa3a29f367f3d470a468f10652fe7dcadfaa0da5"
+    },
+    {
+      "file": "grammar.py",
+      "bytes": 1923,
+      "sha256": "67abbac3a52cbb52ca63de31bc913327b5a16eb016f0fce656b43ce0e2d71738"
+    },
+    {
+      "file": "hold-actor.mjs",
+      "bytes": 8537,
+      "sha256": "be3f798a7521bdfc7a36fd370595a513807364f40b82de81def0c23aa504d4a2"
+    },
+    {
+      "file": "input-builder.mjs",
+      "bytes": 7397,
+      "sha256": "43bd23352aa8f8b25b38f58a4e9c9fdb563f75ab000b13653976e57dfe426470"
+    },
+    {
+      "file": "prepare-offline.mjs",
+      "bytes": 1729,
+      "sha256": "7d8672557b9f0e1eac9bfd3289c8fbbff0ffc580edb2090de29abb4bc1e88d54"
+    },
+    {
+      "file": "programme-test.mjs",
+      "bytes": 5571,
+      "sha256": "a55207bbe8ce9c85471e8c7410d5983e1fdf53e2bd9f930714f9d50245b94134"
+    },
+    {
+      "file": "reference/pure/control.mjs",
+      "bytes": 3225,
+      "sha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9"
+    },
+    {
+      "file": "reference/pure/fixed-metadata-reader.mjs",
+      "bytes": 12270,
+      "sha256": "ed641533595b6a04b82f027183b82d2fc9b9a03c674bb2db6c294f52ff4f4173"
+    },
+    {
+      "file": "reference/pure/grammar.py",
+      "bytes": 1824,
+      "sha256": "3a4cca3471032f7c2158ae93609037d6dcc8508832fec7c1be24038314d825e2"
+    },
+    {
+      "file": "reference/pure/hold-pure.mjs",
+      "bytes": 8328,
+      "sha256": "3a1d5346f32669f76938386bb2260372109673dc1c654de15a78e6439b1dda5f"
+    },
+    {
+      "file": "reference/pure/input-builder.mjs",
+      "bytes": 6914,
+      "sha256": "930ccc5a393a499b0f8a7ee9c752178b80ee35acd7c83df9bcc333b70475c47a"
+    },
+    {
+      "file": "reference/pure/prepare-offline.mjs",
+      "bytes": 1694,
+      "sha256": "15157d3ca1760cdc788fcbd86413d77914e3bd5b83f640a350f13caa4b18336c"
+    },
+    {
+      "file": "reference/pure/result-validator.mjs",
+      "bytes": 11297,
+      "sha256": "a95635e396281a0d2d51c160097c9a174eb5d98d25ae35dcd8df846f6d3d13a0"
+    },
+    {
+      "file": "reference/pure/source.mjs",
+      "bytes": 6267,
+      "sha256": "26884004baae754df196c8efd34fd19f3234ec82909f184362a34c7a31d84e13"
+    },
+    {
+      "file": "reference/pure/timing.mjs",
+      "bytes": 1308,
+      "sha256": "db5a330bd11c4f1d1c5c23d68b1ec297f5503d21a86be0863f633f997f51531c"
+    },
+    {
+      "file": "reference/root/off-rule-native-proxy.after.mjs",
+      "bytes": 3851,
+      "sha256": "c46b57f1b923e57674a13a7d0b2d19a0745bd583257174aea0aecf86d0ac4a0c"
+    },
+    {
+      "file": "reference/root/off-rule-native-proxy.before.mjs",
+      "bytes": 3685,
+      "sha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef"
+    },
+    {
+      "file": "result-validator.mjs",
+      "bytes": 12734,
+      "sha256": "f767ea0db172c3a310b463a5d7449a18c6f51430af4043bb23b85d8447d2b3ad"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 3330,
+      "sha256": "917b2070f3e8417386cc9822e3846193b1116295543eae6089a6ea4901f18ddd"
+    },
+    {
+      "file": "source.mjs",
+      "bytes": 6912,
+      "sha256": "36237090e24f43b92e1f4cb8364c6c5f39200685cf35afd6300c47f7232986a0"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 13656,
+      "sha256": "11921bdeb74d2e1ad5295b61298762574f4f0bd57a23a9a54eecaa6f6161ae18"
+    },
+    {
+      "file": "timing.mjs",
+      "bytes": 1313,
+      "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9"
+    }
+  ]
+}

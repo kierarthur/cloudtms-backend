@@ -269,5 +269,10 @@
     }
   ],
   "savedIndexCommitEquality": true,
-  "native": "NOT_RUN"
+  "native": "NOT_RUN",
+  "runtimeUnchangedSuccessor": {
+    "previousRoot": "84738fe4057d9d693ccd723eb1835106f1091f57",
+    "currentRoot": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
+    "all49Exact": true
+  }
 }

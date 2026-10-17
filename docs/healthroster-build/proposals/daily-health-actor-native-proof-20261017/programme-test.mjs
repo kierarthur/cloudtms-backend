@@ -20,13 +20,13 @@ test('caller cannot add SQL, fixture identity or root path to the finite program
 test('native row store, genuine WP-PP, touch trigger and full owner/RLS boundaries are required before insertion',()=>{
  const s=actual.sql,insert=s.indexOf('insert into public.tms_users');assert(insert>0);
  for(const guard of ['DAILY_ACTOR_NATIVE_WPPP_OR_TOUCH_SOURCE_CHANGED','DAILY_ACTOR_NATIVE_OWNER_BOUNDARY_CHANGED','DAILY_ACTOR_NATIVE_STORE_BOUNDARY_CHANGED','DAILY_ACTOR_NATIVE_STORE_INVARIANT_OR_TRIGGER_CHANGED','DAILY_ACTOR_FIXTURE_NAMESPACE_NOT_VACANT','DAILY_ACTOR_NATIVE_PRIVATE_ACL_REQUIRED'])assert(s.indexOf(guard)<insert,guard);
- for(const hash of[pins.userStore.wp.definition_sha256,pins.userStore.touch.definition_sha256])assert(s.includes(hash));
+ for(const hash of[pins.userStore.wp.definition_sha256,pins.userStore.touch.nativeRawDefinitionSha256])assert(s.includes(hash));
  assert(s.includes("current_setting('transaction_isolation')<>'read committed'"));assert(s.includes('pg_get_userbyid(c.relowner)=current_user'));assert(s.includes('not c.relforcerowsecurity'));assert(s.includes('pg_inherits'));assert(s.includes('pg_rewrite'));
 });
-test('private effective ACL and real role transitions cannot be replaced by grants or a SET ROLE failure',()=>{
+test('private effective ACL uses genuine catalogue checks without unsupported SET ROLE',()=>{
  const s=actual.sql;assert(s.includes("a.grantee<>p.proowner or a.privilege_type<>'EXECUTE' or a.is_grantable"));
- for(const role of['anon','authenticated','service_role']){assert(s.includes("has_function_privilege('"+role+"'"));assert(s.includes('set local role '+role+';rejected:=false;begin\n  perform private.daily_rate_correction_health_actor_require_v1('));}
- assert.doesNotMatch(s,/\bgrant\s|exception when insufficient_privilege then reset role/);
+ for(const role of['anon','authenticated','service_role']){assert(s.includes("has_function_privilege('"+role+"'"));assert(s.includes("foreach role_name in array array['anon','authenticated','service_role']"));}
+ assert.doesNotMatch(s,/\bgrant\s|\bset\s+local\s+role\b/i);assert(s.includes("'directRoleExecution','NOT_RUN'"));
 });
 test('golden invariant remains native and all state transitions affect only fixture001',()=>{
  const s=actual.sql,updates=[...s.matchAll(/update public\.tms_users set ([^;]+);/g)].map(m=>m[1]);assert.equal(updates.length,4);

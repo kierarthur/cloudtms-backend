@@ -1,0 +1,26 @@
+{
+  "sqlSha256": "4157d0e2d9de71e1a5d6bdef8523b8aed3c8e6ff45b01c5dcfa1f7722813f314",
+  "sqlBytes": 19447,
+  "definitionCount": 1,
+  "businessFixtureRows": 6,
+  "signature": "private.daily_rate_correction_health_actor_require_v1(uuid,boolean)",
+  "matrixChecks": 12,
+  "matrixDenials": 10,
+  "sameTransactionChanges": 3,
+  "constraintRefusals": 1,
+  "effectiveRoleAclChecks": 3,
+  "directRoleExecution": "NOT_RUN",
+  "nullGuardRefusals": 2,
+  "directBusinessRelations": [
+    "public.tms_users"
+  ],
+  "snapshotRelations": [
+    "private.candidate_daily_batch_receipts",
+    "public.tms_users",
+    "public.ts_financials_outbox"
+  ],
+  "native": "NOT_RUN",
+  "dailyBasis": "NOT_RUN",
+  "isolation": "RC_ONLY",
+  "bankBody": "NOT_INCLUDED"
+}

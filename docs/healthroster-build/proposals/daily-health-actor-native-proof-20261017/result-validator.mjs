@@ -53,9 +53,9 @@ export function readStage(result,receipt){
  requireThat(positivePid(transaction.backendPid)&&transaction.backendPid!==receipt.holderIdentity.backendPid
   &&observation.rows?.length===0,'ACTOR_ACTUAL_EMPTY_B_OBSERVATION_REQUIRED');
  const actorResult=oneRow(at('programmeResult'));
- requireThat(JSON.stringify(Object.keys(actorResult).sort())===JSON.stringify(['programme','fixtureRows','matrixChecks','matrixDenials','sameTransactionChanges','constraintRefusals','nullGuardRefusals','directRoleRefusals','nativeWPPP','dailyBasis','postWaitRace','outerIsolation'].sort())
+ requireThat(JSON.stringify(Object.keys(actorResult).sort())===JSON.stringify(['programme','fixtureRows','matrixChecks','matrixDenials','sameTransactionChanges','constraintRefusals','nullGuardRefusals','effectiveRoleAclChecks','directRoleExecution','nativeWPPP','dailyBasis','postWaitRace','outerIsolation'].sort())
   &&actorResult.programme==='DAILY_HEALTH_ACTOR_NATIVE_V1'&&actorResult.fixtureRows===6&&actorResult.matrixChecks===12&&actorResult.matrixDenials===10
-  &&actorResult.sameTransactionChanges===3&&actorResult.constraintRefusals===1&&actorResult.nullGuardRefusals===2&&actorResult.directRoleRefusals===3
+  &&actorResult.sameTransactionChanges===3&&actorResult.constraintRefusals===1&&actorResult.nullGuardRefusals===2&&actorResult.effectiveRoleAclChecks===3&&actorResult.directRoleExecution==='NOT_RUN'
   &&actorResult.nativeWPPP===true&&actorResult.dailyBasis==='NOT_RUN'&&actorResult.postWaitRace==='NOT_RUN'&&actorResult.outerIsolation==='read committed','ACTOR_ACTUAL_ASSERTION_COUNTS_REQUIRED');
  const completed=oneRow(at('completion'));
  requireThat(completed.physicalDatabase==='cloudtms_test_clone'&&completed.databaseOid===receipt.holderIdentity.databaseOid
@@ -118,7 +118,7 @@ export async function validateRestoration({root,result,receipt,beforePacket,afte
  const safe=s=>({ledgerFingerprint:s.ledgerFingerprint,catalogueFingerprint:s.catalogueFingerprint,relationCensus:s.relationCensus,
   businessCountsFingerprint:s.businessCountsFingerprint,businessRowsFingerprint:s.businessRowsFingerprint,businessRelations:s.businessRelations,otherActivityCount:s.otherActivityCount});
  return {status:'ACTOR_PROGRAMME_AND_ORIGINAL_RESTORATION_QUALIFIED_PENDING_SHARED_TURN_CLOSE',scope:SCOPE,route:receipt.route,
-  programmeSha256:receipt.programmeSha256,programmeBytes:receipt.programmeBytes,definitions:1,actorMatrixChecks:12,matrixDenials:10,sameTransactionChanges:3,directRoleRefusals:3,nullGuardRefusals:2,
+  programmeSha256:receipt.programmeSha256,programmeBytes:receipt.programmeBytes,definitions:1,actorMatrixChecks:12,matrixDenials:10,sameTransactionChanges:3,effectiveRoleAclChecks:3,directRoleExecution:'NOT_RUN',nullGuardRefusals:2,
   sqlSha256:receipt.sqlSha256,rolledBack:true,connectedFresh:true,markerAbsent:true,realMarkerCreatedInB:true,businessFixtureRows:6,
   readerPids:{holder:receipt.holderIdentity.backendPid,before:beforePacket.peer.readerPid,nativeB:stage.transaction.backendPid,mcpVerification:stage.freshPeerPid,after:afterPacket.peer.readerPid},
   localTransport:{before:beforePacket.transport,after:afterPacket.transport},before:safe(local.before),after:safe(local.after),restoration,

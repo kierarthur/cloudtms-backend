@@ -1,7 +1,7 @@
-diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/source.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/source.mjs"
-index 9a19b712..f479456b 100644
---- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/source.mjs"
-+++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/source.mjs"
+diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/source.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/source.mjs"
+index 9a19b712..ef3c9af1 100644
+--- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/source.mjs"
++++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/source.mjs"
 @@ -1,72 +1,78 @@
 -// Closed source loader. Importing this module never opens a database or turn.
 -import fs from 'node:fs';
@@ -85,7 +85,7 @@ index 9a19b712..f479456b 100644
 +export const ROOT='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026';
 +export const ROUTE='mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback';
 +export const SCOPE='DAILY_HEALTH_ACTOR_REAL_USERS_BOTH_COMPLETE_BACKGROUND_RELATIONS_V1';
-+export const PROGRAMME_SHA='69789fd5fef651a39d04d4ef2a9c2d3666be04f551d51f38b833e3a420d9eb3e';
++export const PROGRAMME_SHA='4157d0e2d9de71e1a5d6bdef8523b8aed3c8e6ff45b01c5dcfa1f7722813f314';
 +export const requireThat=(ok,code)=>{if(!ok)throw Error(code);};
 +export const sha=value=>crypto.createHash('sha256').update(value).digest('hex');
 +export const literal=value=>`'${String(value).replaceAll("'","''")}'`;
@@ -137,7 +137,7 @@ index 9a19b712..f479456b 100644
 + const builder=await import('./build-program.mjs');
 + const programme=await builder.buildActorProgram({root});
 + requireThat(programme.sqlSha256===PROGRAMME_SHA&&programme.definitionCount===1&&programme.businessFixtureRows===6
-+  &&programme.matrixChecks===12&&programme.matrixDenials===10&&programme.sameTransactionChanges===3&&programme.nullGuardRefusals===2,'ACTOR_EXACT_PROGRAMME_REQUIRED');
++  &&programme.effectiveRoleAclChecks===3&&programme.directRoleExecution==='NOT_RUN'&&programme.matrixChecks===12&&programme.matrixDenials===10&&programme.sameTransactionChanges===3&&programme.nullGuardRefusals===2,'ACTOR_EXACT_PROGRAMME_REQUIRED');
 + const rehearsal=await load('scripts/healthroster-install1-full-rehearsal.mjs'),live=await load('scripts/healthroster-live-test-restoration.mjs'),
 +  sql=await load('scripts/cloudtms-managed-release-sql.mjs'),control=await load('scripts/healthroster-turn-control.mjs');
 + requireThat(JSON.stringify(live.backgroundRelations)===JSON.stringify(['private.candidate_daily_batch_receipts','public.ts_financials_outbox']),'ACTOR_BOTH_BACKGROUND_RELATIONS_REQUIRED');
@@ -154,10 +154,10 @@ index 9a19b712..f479456b 100644
 + requireThat(actual.equals(git(root,['show','HEAD:'+target]))&&actual.equals(git(root,['show',':'+target])),'ACTOR_SETUP_SAVED_INDEX_HEAD_EQUALITY_REQUIRED');return true;
 +}
 
-diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/input-builder.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/input-builder.mjs"
+diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/input-builder.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/input-builder.mjs"
 index 9c1832c9..abdf8315 100644
---- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/input-builder.mjs"
-+++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/input-builder.mjs"
+--- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/input-builder.mjs"
++++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/input-builder.mjs"
 @@ -1,76 +1,78 @@
 -// This builder accepts an original turn identity, never caller SQL or a case alias.
 -import fs from 'node:fs';
@@ -314,10 +314,10 @@ index 9c1832c9..abdf8315 100644
 + return {input,receipt};
 +}
 
-diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/fixed-metadata-reader.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/fixed-metadata-reader.mjs"
+diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/fixed-metadata-reader.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/fixed-metadata-reader.mjs"
 index 0ebb7056..c24c24e1 100644
---- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/fixed-metadata-reader.mjs"
-+++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/fixed-metadata-reader.mjs"
+--- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/fixed-metadata-reader.mjs"
++++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/fixed-metadata-reader.mjs"
 @@ -1,156 +1,156 @@
 -// SOURCE PROPOSAL ONLY. Import only from the root's live withSharedRehearsalTurn
 -// callback. There is deliberately no CLI, arbitrary SQL, query callback or file sink.
@@ -632,10 +632,10 @@ index 0ebb7056..c24c24e1 100644
 +
 +if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))throw Error('SOURCE_ONLY_ROOT_METADATA_CALLBACK_REQUIRED');
 
-diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/control.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/control.mjs"
+diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/control.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/control.mjs"
 index 2c64aa59..15a1900a 100644
---- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/control.mjs"
-+++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/control.mjs"
+--- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/control.mjs"
++++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/control.mjs"
 @@ -5,7 +5,7 @@ export class FiniteControls {
   constructor(input,signal,processLike=process){
    this.input=input;this.processLike=processLike;this.controller=new AbortController();this.signal=this.controller.signal;this.buffer='';this.pending=null;
@@ -646,10 +646,10 @@ index 2c64aa59..15a1900a 100644
    processLike.once?.('SIGINT',this.interrupt);processLike.once?.('SIGTERM',this.interrupt);signal?.addEventListener('abort',this.external,{once:true});input.resume?.();
    if(signal?.aborted)this.external();
 
-diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/timing.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/timing.mjs"
+diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/timing.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/timing.mjs"
 index 18652d3c..e381ac5d 100644
---- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/timing.mjs"
-+++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/timing.mjs"
+--- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/timing.mjs"
++++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/timing.mjs"
 @@ -1,15 +1,15 @@
  // Finite actual-observation timing metadata; never a native authority substitute.
  import {requireThat,ROUTE} from './source.mjs';
@@ -672,10 +672,10 @@ index 18652d3c..e381ac5d 100644
   return {...value,rootObservedCallMilliseconds:end-start,authority:'ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY'};
  }
 
-diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/result-validator.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/result-validator.mjs"
-index a19bb100..42bdbb1e 100644
---- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/result-validator.mjs"
-+++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/result-validator.mjs"
+diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/result-validator.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/result-validator.mjs"
+index a19bb100..e65aa5b9 100644
+--- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/result-validator.mjs"
++++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/result-validator.mjs"
 @@ -1,121 +1,127 @@
 -// Closed native-shaped evidence validation. No database, file or substitute qualifier.
 -import {source,requireThat,sha,SCOPE,sortWriters} from './source.mjs';
@@ -853,9 +853,9 @@ index a19bb100..42bdbb1e 100644
 + requireThat(positivePid(transaction.backendPid)&&transaction.backendPid!==receipt.holderIdentity.backendPid
 +  &&observation.rows?.length===0,'ACTOR_ACTUAL_EMPTY_B_OBSERVATION_REQUIRED');
 + const actorResult=oneRow(at('programmeResult'));
-+ requireThat(JSON.stringify(Object.keys(actorResult).sort())===JSON.stringify(['programme','fixtureRows','matrixChecks','matrixDenials','sameTransactionChanges','constraintRefusals','nullGuardRefusals','directRoleRefusals','nativeWPPP','dailyBasis','postWaitRace','outerIsolation'].sort())
++ requireThat(JSON.stringify(Object.keys(actorResult).sort())===JSON.stringify(['programme','fixtureRows','matrixChecks','matrixDenials','sameTransactionChanges','constraintRefusals','nullGuardRefusals','effectiveRoleAclChecks','directRoleExecution','nativeWPPP','dailyBasis','postWaitRace','outerIsolation'].sort())
 +  &&actorResult.programme==='DAILY_HEALTH_ACTOR_NATIVE_V1'&&actorResult.fixtureRows===6&&actorResult.matrixChecks===12&&actorResult.matrixDenials===10
-+  &&actorResult.sameTransactionChanges===3&&actorResult.constraintRefusals===1&&actorResult.nullGuardRefusals===2&&actorResult.directRoleRefusals===3
++  &&actorResult.sameTransactionChanges===3&&actorResult.constraintRefusals===1&&actorResult.nullGuardRefusals===2&&actorResult.effectiveRoleAclChecks===3&&actorResult.directRoleExecution==='NOT_RUN'
 +  &&actorResult.nativeWPPP===true&&actorResult.dailyBasis==='NOT_RUN'&&actorResult.postWaitRace==='NOT_RUN'&&actorResult.outerIsolation==='read committed','ACTOR_ACTUAL_ASSERTION_COUNTS_REQUIRED');
 + const completed=oneRow(at('completion'));
 + requireThat(completed.physicalDatabase==='cloudtms_test_clone'&&completed.databaseOid===receipt.holderIdentity.databaseOid
@@ -918,7 +918,7 @@ index a19bb100..42bdbb1e 100644
 + const safe=s=>({ledgerFingerprint:s.ledgerFingerprint,catalogueFingerprint:s.catalogueFingerprint,relationCensus:s.relationCensus,
 +  businessCountsFingerprint:s.businessCountsFingerprint,businessRowsFingerprint:s.businessRowsFingerprint,businessRelations:s.businessRelations,otherActivityCount:s.otherActivityCount});
 + return {status:'ACTOR_PROGRAMME_AND_ORIGINAL_RESTORATION_QUALIFIED_PENDING_SHARED_TURN_CLOSE',scope:SCOPE,route:receipt.route,
-+  programmeSha256:receipt.programmeSha256,programmeBytes:receipt.programmeBytes,definitions:1,actorMatrixChecks:12,matrixDenials:10,sameTransactionChanges:3,directRoleRefusals:3,nullGuardRefusals:2,
++  programmeSha256:receipt.programmeSha256,programmeBytes:receipt.programmeBytes,definitions:1,actorMatrixChecks:12,matrixDenials:10,sameTransactionChanges:3,effectiveRoleAclChecks:3,directRoleExecution:'NOT_RUN',nullGuardRefusals:2,
 +  sqlSha256:receipt.sqlSha256,rolledBack:true,connectedFresh:true,markerAbsent:true,realMarkerCreatedInB:true,businessFixtureRows:6,
 +  readerPids:{holder:receipt.holderIdentity.backendPid,before:beforePacket.peer.readerPid,nativeB:stage.transaction.backendPid,mcpVerification:stage.freshPeerPid,after:afterPacket.peer.readerPid},
 +  localTransport:{before:beforePacket.transport,after:afterPacket.transport},before:safe(local.before),after:safe(local.after),restoration,
@@ -926,10 +926,10 @@ index a19bb100..42bdbb1e 100644
 +  fullInstallRehearsal:'NOT_RUN',dailyComposers:'NOT_RUN',businessCurrentness:'NOT_QUALIFIED',dailyBasis:'NOT_RUN',incompleteReview:'NOT_RUN',isolationRefusal:'NOT_RUN',postWaitRace:'NOT_RUN'};
 +}
 
-diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/hold-pure.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/hold-actor.mjs"
+diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/hold-pure.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/hold-actor.mjs"
 index c13079fa..4dba990b 100644
---- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/hold-pure.mjs"
-+++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/hold-actor.mjs"
+--- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/hold-pure.mjs"
++++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/hold-actor.mjs"
 @@ -1,99 +1,100 @@
 -// ROOT-OWNED operator. Source proposal: do not invoke without the owner's native authority.
 -// Only A and fixed read-only C connect locally. B is the exact server-owned Kier MCP input.
@@ -1131,10 +1131,10 @@ index c13079fa..4dba990b 100644
 + catch(error){console.error(JSON.stringify({status:'HOLD',code:closed(error)}));process.exitCode=1;}
 +}
 
-diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/prepare-offline.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/prepare-offline.mjs"
+diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/prepare-offline.mjs" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/prepare-offline.mjs"
 index 9bfde136..496e4b85 100644
---- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/prepare-offline.mjs"
-+++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/prepare-offline.mjs"
+--- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/prepare-offline.mjs"
++++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/prepare-offline.mjs"
 @@ -1,17 +1,17 @@
 -// Generates clearly synthetic SQL source examples for grammar inspection only.
 -import fs from 'node:fs';
@@ -1171,10 +1171,10 @@ index 9bfde136..496e4b85 100644
 +fs.writeFileSync(path.join(here,'OFFLINE_INPUTS.json'),JSON.stringify(value,null,2)+'\n');
 +console.log(JSON.stringify({...value,examples:value.examples.map(({name,sha256,bytes})=>({name,sha256,bytes}))}));
 
-diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/grammar.py" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/grammar.py"
+diff --git "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/grammar.py" "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/grammar.py"
 index 9eb463ca..65eff2bb 100644
---- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/grammar.py"
-+++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/grammar.py"
+--- "parent/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/reference/pure/grammar.py"
++++ "actor/D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-forward-20261017\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017/grammar.py"
 @@ -1,32 +1,32 @@
 -"""PG17 source grammar only; no connection, catalogue compilation or native verdict."""
 -from pathlib import Path

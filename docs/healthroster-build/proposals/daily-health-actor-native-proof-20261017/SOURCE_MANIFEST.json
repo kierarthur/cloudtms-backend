@@ -1,14 +1,14 @@
 {
   "version": "DAILY_HEALTH_ACTOR_ADAPTER_EXECUTABLE_V1",
-  "sourcePinsSha256": "f0601a9308651e40c3490d298d402258588023562ffcdd6777534b4bb2205ac3",
+  "sourcePinsSha256": "21144bb7647c4ff3d764ae09d23366c6bf21f637392c386481f06b1f1611fb7d",
   "files": [
     {
       "file": "source.mjs",
-      "sha256": "93a228812d25b13c70b80487518a04c1355e2235e318bff0bda1f74cc063b50a"
+      "sha256": "36237090e24f43b92e1f4cb8364c6c5f39200685cf35afd6300c47f7232986a0"
     },
     {
       "file": "build-program.mjs",
-      "sha256": "643b6fc1010c588358982644251da48b419b72bb711a89f6e19e25de20c2b141"
+      "sha256": "cbb099f9e238252933204d73da78d792d1afd140aa86fb2d2feb22203e828cae"
     },
     {
       "file": "input-builder.mjs",
@@ -24,7 +24,7 @@
     },
     {
       "file": "result-validator.mjs",
-      "sha256": "dcf8321c0a30c686381a5cc098a7ce61378d2bc96ba14df290782b934a8304cc"
+      "sha256": "f767ea0db172c3a310b463a5d7449a18c6f51430af4043bb23b85d8447d2b3ad"
     },
     {
       "file": "timing.mjs",
@@ -36,7 +36,11 @@
     },
     {
       "file": "SETUP_ENTRY.md",
-      "sha256": "9604ad0a836eccea6d5ccb80b7244e9ed88c91114e09d031611c37c3729fae37"
+      "sha256": "9346db720135b2f928d890d619f718a7f549c30eb24b01e031f8a7317fbc26c2"
+    },
+    {
+      "file": "NATIVE_DEPENDENCY_DIAG_R1.json",
+      "sha256": "1a140b79364a0d873b03143f9575f64a82dcbe73a2f42b9330b98d2ba1598486"
     }
   ],
   "native": "NOT_RUN"

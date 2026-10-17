@@ -1,10 +1,10 @@
 {
   "version": "DAILY_HEALTH_ACTOR_SOURCE_PROPOSAL_FREEZE_V1",
-  "rootCommit": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "rootCommit": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
   "sourceOnly": true,
   "native": "NOT_RUN",
-  "programmeSha256": "69789fd5fef651a39d04d4ef2a9c2d3666be04f551d51f38b833e3a420d9eb3e",
-  "programmeBytes": 19993,
+  "programmeSha256": "4157d0e2d9de71e1a5d6bdef8523b8aed3c8e6ff45b01c5dcfa1f7722813f314",
+  "programmeBytes": 19447,
   "definitions": 1,
   "businessFixtureRows": 6,
   "actorTests": 17,
@@ -12,13 +12,13 @@
   "files": [
     {
       "file": "ADAPTER_DIFF.patch",
-      "bytes": 111894,
-      "sha256": "225a2cc28f296e1b6582969bfdc475e0fb00ab83308fc9d40ae7056abce36a7e"
+      "bytes": 115180,
+      "sha256": "25d2c51bbb7c1b760297f2cbde61bbe12cab1a3dc14bf0d87c56c695af1f9805"
     },
     {
       "file": "COMPOSER_DEPENDENCIES.json",
       "bytes": 15533,
-      "sha256": "9c1bee4642508691e7f88f5cb2aa01be6bb06f0ce5963e961d546c6e04225d3f"
+      "sha256": "bd2c0740b86168a2089a5db4277e99d0b53e0034e0c1251e2f956cff7d617b4d"
     },
     {
       "file": "COMPOSER_DEPENDENCIES.md",
@@ -31,64 +31,69 @@
       "sha256": "6dcb075dd5fe667e222fb9d81bbee53183af47e7c437224eb2cc933a025f8739"
     },
     {
+      "file": "NATIVE_DEPENDENCY_DIAG_R1.json",
+      "bytes": 3891,
+      "sha256": "1a140b79364a0d873b03143f9575f64a82dcbe73a2f42b9330b98d2ba1598486"
+    },
+    {
       "file": "OFFLINE_INPUTS.json",
-      "bytes": 98174,
-      "sha256": "fcbe68cf8c507e84eedfd40cc69f9f52c33676f5c3cce1f2ea42e760785a5de1"
+      "bytes": 97072,
+      "sha256": "a8b3d343fabac28f53677b5b695256b6ab9c48017f255bf5a47e552367f56b9f"
     },
     {
       "file": "OFFLINE_PROGRAMME.json",
-      "bytes": 21322,
-      "sha256": "b59e9592d99e3b0b7cb5d82da9d4ab95dacd14a786b937c8bc5891c9d527a1e4"
+      "bytes": 20811,
+      "sha256": "130c47539a6fb2d1ab2b43c8230f8ed292cb5c49639cce778cad4a4792f8d6dc"
     },
     {
       "file": "PROGRAMME.json",
-      "bytes": 700,
-      "sha256": "1668a2747fd460891f5ce17da42e51db5217b7ec739a5ab03739bee923069717"
+      "bytes": 740,
+      "sha256": "d8458edcfa2bd7f8a229075de181f9eba87f7c3e5109f54bfa27c77c665646c1"
     },
     {
       "file": "README.md",
-      "bytes": 10736,
-      "sha256": "a4ccef5049c6fe937935e11cfb8ce5c2607e436f4176b608cecd18a217785deb"
+      "bytes": 11072,
+      "sha256": "9ee7b359c24e54e5bda22035096b628d7970f285a2e57ea1a7eb877306b5b7d9"
     },
     {
       "file": "REVIEW.json",
-      "bytes": 3533,
-      "sha256": "f1e24088bbd529e2a6deb0aadd30c63706583e0aa3a59ebbb571da7adcb615b6"
+      "bytes": 3637,
+      "sha256": "153f7cbbd7d5f714ae6a2f925254e3d69f7fd242efa349b65dbb9d7fe0547726"
     },
     {
       "file": "ROOT_SOURCE_FORWARD.json",
-      "bytes": 10763,
-      "sha256": "e14b9b950c1f49014c60ac3ed8687e1eb8d00a64cb624676ef57b4d198815a04"
+      "bytes": 10951,
+      "sha256": "b669d44309c79d81302dae848de0bc115d8c4afd20fb58a914c7a1b704af9947"
     },
     {
       "file": "SETUP_ENTRY.md",
-      "bytes": 6977,
-      "sha256": "9604ad0a836eccea6d5ccb80b7244e9ed88c91114e09d031611c37c3729fae37"
+      "bytes": 7564,
+      "sha256": "9346db720135b2f928d890d619f718a7f549c30eb24b01e031f8a7317fbc26c2"
     },
     {
       "file": "SOURCE_MANIFEST.json",
-      "bytes": 1354,
-      "sha256": "47f505cc43ae99b25d0e7f12c1db76e75b0ea2e60da5b547424c86720f6b1441"
+      "bytes": 1498,
+      "sha256": "01e06c87f94bf77e8a3bf4117133053c3d5323c6822501b1cd52a538259fa6b7"
     },
     {
       "file": "SOURCE_PINS.json",
-      "bytes": 19901,
-      "sha256": "f0601a9308651e40c3490d298d402258588023562ffcdd6777534b4bb2205ac3"
+      "bytes": 20797,
+      "sha256": "21144bb7647c4ff3d764ae09d23366c6bf21f637392c386481f06b1f1611fb7d"
     },
     {
       "file": "SOURCE_TRANSFERS.json",
       "bytes": 4852,
-      "sha256": "a2b131353013c1d0e98d3f60448d302edbb359c7ab603a9ef0a8191a09b09c29"
+      "sha256": "fa9aa976a8dc9e33ee27037c27029ddae407643408e4e82d03ac34e47e65638b"
     },
     {
       "file": "TEST_RESULTS.json",
-      "bytes": 11366,
-      "sha256": "3c798c35b255403fd9a993cc8f907f16b08133f33d1319245782117233e039c8"
+      "bytes": 11670,
+      "sha256": "0d5dfe2fdb9c18e24368f21222b5cb46761fd161f05f9b1831ae83beaaecfc5a"
     },
     {
       "file": "build-program.mjs",
-      "bytes": 14587,
-      "sha256": "643b6fc1010c588358982644251da48b419b72bb711a89f6e19e25de20c2b141"
+      "bytes": 16157,
+      "sha256": "cbb099f9e238252933204d73da78d792d1afd140aa86fb2d2feb22203e828cae"
     },
     {
       "file": "control.mjs",
@@ -102,8 +107,8 @@
     },
     {
       "file": "freeze-source.mjs",
-      "bytes": 4737,
-      "sha256": "72ea57e4a45c5822c7a909063aeb147fa2ad928a42c78517f1af60e554f51b2f"
+      "bytes": 4947,
+      "sha256": "4de1cede19b234d3bb0ec620aa3a29f367f3d470a468f10652fe7dcadfaa0da5"
     },
     {
       "file": "grammar.py",
@@ -127,8 +132,8 @@
     },
     {
       "file": "programme-test.mjs",
-      "bytes": 5597,
-      "sha256": "65b71b4f8a2fde11ad4fb905fe1412a3dd64ec20a62a74f0db91f218c180ffb9"
+      "bytes": 5571,
+      "sha256": "a55207bbe8ce9c85471e8c7410d5983e1fdf53e2bd9f930714f9d50245b94134"
     },
     {
       "file": "reference/pure/control.mjs",
@@ -187,8 +192,8 @@
     },
     {
       "file": "result-validator.mjs",
-      "bytes": 12625,
-      "sha256": "dcf8321c0a30c686381a5cc098a7ce61378d2bc96ba14df290782b934a8304cc"
+      "bytes": 12734,
+      "sha256": "f767ea0db172c3a310b463a5d7449a18c6f51430af4043bb23b85d8447d2b3ad"
     },
     {
       "file": "seal.mjs",
@@ -197,13 +202,13 @@
     },
     {
       "file": "source.mjs",
-      "bytes": 6831,
-      "sha256": "93a228812d25b13c70b80487518a04c1355e2235e318bff0bda1f74cc063b50a"
+      "bytes": 6912,
+      "sha256": "36237090e24f43b92e1f4cb8364c6c5f39200685cf35afd6300c47f7232986a0"
     },
     {
       "file": "test.mjs",
-      "bytes": 13386,
-      "sha256": "7874b6db73fb433cd48de4cd84f77271b853053488eaab7995b3347e7d2fe3c7"
+      "bytes": 13656,
+      "sha256": "11921bdeb74d2e1ad5295b61298762574f4f0bd57a23a9a54eecaa6f6161ae18"
     },
     {
       "file": "timing.mjs",

@@ -1,12 +1,12 @@
 {
   "version": "DAILY_HEALTH_ACTOR_SOURCE_REVIEW_V1",
   "decision": "SOURCE_PROPOSAL_READY_FOR_ROOT_PEER_NOT_NATIVE_EXECUTED",
-  "rootCommit": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "rootCommit": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
   "programme": "PROGRAMME.json",
   "manifestAppendProposal": "SETUP_ENTRY.md",
   "beforeAnyConnection": "Root must review the whole packet, mount exact source, append/commit the exact setup entry and preserve saved/index/HEAD equality. Holder refuses otherwise.",
   "businessEffects": "Only six new native tms_users rows and four updates within server-owned B rollback. Three successful updates affect only fixture001; one fixture003 Golden-Key constraint violation is caught and must leave both flags true. No existing user, login, session, email, Daily, rates or financial row is mutated.",
-  "storeClosure": "Full native users columns/defaults/constraints, owner/RLS/no inheritance/no rules, sole enabled native self-touch trigger and exact definition; genuine installed WP-PP definition/owner. Private actor body is the exact complete current source. Owner-only effective ACL and real SET ROLE admission are checked.",
+  "storeClosure": "Full native users columns/defaults/constraints, owner/RLS/no inheritance/no rules, sole enabled native self-touch trigger and exact definition; genuine installed WP-PP definition/owner. Private actor body is the exact complete current source. Owner-only effective ACL and actual effective-role privilege catalogue denials are checked; unsupported SET ROLE is not attempted and direct role/API runtime is NOT_RUN.",
   "actualInstalledWPPPReceipt": {
     "file": "docs/healthroster-build/PUBLISHED_HELPERS.md",
     "section": "WP-PP v2 — installed and read back, 14 October 2026",

@@ -10,12 +10,12 @@ const src=await source(ROOT),built=await buildInput({root:ROOT,identity});
 const row=(value,prefix='')=>({command:'SELECT',rowCount:1,fields:['result'],rowsTruncated:false,rows:[{result:prefix?prefix+JSON.stringify(value):value}]}),empty=command=>({command,rowCount:null,fields:[],rows:[],rowsTruncated:false});
 const clock=t=>({transactionStartedAt:'2026-10-17T10:00:00.000Z',statementStartedAt:t,observedAt:t});
 const transaction={database:'cloudtms_test_clone',backendPid:200,xid:'50',epochZero:true},observation={...transaction,unit:0,rows:[]};
-const actorResult={programme:'DAILY_HEALTH_ACTOR_NATIVE_V1',fixtureRows:6,matrixChecks:12,matrixDenials:10,sameTransactionChanges:3,constraintRefusals:1,nullGuardRefusals:2,directRoleRefusals:3,nativeWPPP:true,dailyBasis:'NOT_RUN',postWaitRace:'NOT_RUN',outerIsolation:'read committed'};
+const actorResult={programme:'DAILY_HEALTH_ACTOR_NATIVE_V1',fixtureRows:6,matrixChecks:12,matrixDenials:10,sameTransactionChanges:3,constraintRefusals:1,nullGuardRefusals:2,effectiveRoleAclChecks:3,directRoleExecution:'NOT_RUN',nativeWPPP:true,dailyBasis:'NOT_RUN',postWaitRace:'NOT_RUN',outerIsolation:'read committed'};
 function nativeFixture(){
  const result={database:'cloudtms_test_clone',databaseTarget:'agency_test',label:built.input.label,sqlSha256:built.receipt.sqlSha256,
  statementCount:built.receipt.statements,accepted:true,rolledBack:true,statements:built.receipt.responses.map(e=>({statement:e.statement,...e.kind==='ONE_ROW'?row(null):empty(e.command)}))};
  const set=(key,value)=>Object.assign(result.statements[built.receipt.indices[key]-1],value);
- set('transaction',row(transaction,'HR_REHEARSAL_TRANSACTION_JSON '));set('fixtureObservation',row(observation,'HR_FIXTURE_OBSERVATION_JSON '));set('programmeResult',row(actorResult));
+ set('transaction',row(transaction,'HR_REHEARSAL_TRANSACTION_JSON '));set('fixtureObservation',row(observation,'HR_FIXTURE_OBSERVATION_JSON '));set('programmeResult',row(structuredClone(actorResult)));
  for(const[key,phase,t]of [['guardBefore','B_GUARD_BEFORE','2026-10-17T10:00:00.001Z'],['guardAfter','B_GUARD_AFTER','2026-10-17T10:00:00.002Z']])set(key,row({phase,physicalDatabase:'cloudtms_test_clone',databaseOid:123,backendPid:200,holderPid:100,holderGranted:true,readOnly:false,...clock(t)}));
  set('completion',row({physicalDatabase:'cloudtms_test_clone',databaseOid:123,backendPid:200,xid:'50',marker:built.receipt.marker,markerPresent:true,markerRows:0,holderPid:100,holderGranted:true,noRoleSwitch:true,...clock('2026-10-17T10:00:00.003Z')}));
  result.rollbackVerification={connectedFresh:true,database:'cloudtms_test_clone',statements:[row('pg_catalog, public'),row({physicalDatabase:'cloudtms_test_clone',identityTest:true,customerKeyNull:true,module:'LEGACY:1',applyingCount:0,markerAbsent:true}),
@@ -34,7 +34,7 @@ function snapshots(){
  afterPacket.fixtureProof={database:'cloudtms_test_clone',backendPid:500,connectedFresh:true,rehearsalBackendPid:200,rehearsalXid:'50',parentStatus:'aborted',relations:src.live.backgroundRelations.map(relation=>({relation,observed_fixture_keys:0,remaining:0}))};return{beforePacket,afterPacket};
 }
 test('exact complete one-helper actor programme, six native users and closed store boundary',()=>{
- assert.equal(src.programme.sqlSha256,PROGRAMME_SHA);assert.equal(src.programme.sqlBytes,19993);assert.equal(src.programme.definitionCount,1);assert.equal(src.programme.businessFixtureRows,6);
+ assert.equal(src.programme.sqlSha256,PROGRAMME_SHA);assert.equal(src.programme.sqlBytes,19447);assert.equal(src.programme.definitionCount,1);assert.equal(src.programme.businessFixtureRows,6);
  assert.match(src.programme.sql,/pg_get_constraintdef\(c.oid,true\)/);assert.match(src.programme.sql,/pg_get_triggerdef\(t.oid,true\)/);assert.match(src.programme.sql,/get stacked diagnostics violated_constraint=CONSTRAINT_NAME/);
  assert.match(src.programme.sql,/revoke all on function private.daily_rate_correction_health_actor_require_v1\(uuid,boolean\) from public,anon,authenticated,service_role/);
  assert.doesNotMatch(src.programme.sql,/grant\s|insert into (?:private|public)\.(?!tms_users)|update (?:private|public)\.(?!tms_users)|\b(?:commit|rollback)\s*;|daily_rate_correction_health_(?:basis|review_prepare|accept_basis|result_basis)_v1/);
@@ -55,7 +55,8 @@ test('20-statement finite B includes native observations, real marker and four f
 });
 test('closed response admits genuine pooled MCP PID shape and actual asserted counts only',()=>{
  const r=nativeFixture();assert(statementResponses(r.statements,built.receipt.responses));const s=readStage(r,built.receipt);assert.equal(s.freshPeerPid,transaction.backendPid);
- for(const key of ['fixtureRows','matrixChecks','matrixDenials','sameTransactionChanges','constraintRefusals','nullGuardRefusals','directRoleRefusals']){const bad=nativeFixture();bad.statements[built.receipt.indices.programmeResult-1].rows[0].result={...actorResult,[key]:0};assert.throws(()=>readStage(bad,built.receipt),/ACTUAL_ASSERTION_COUNTS/);}
+ for(const key of ['fixtureRows','matrixChecks','matrixDenials','sameTransactionChanges','constraintRefusals','nullGuardRefusals','effectiveRoleAclChecks']){const bad=nativeFixture();bad.statements[built.receipt.indices.programmeResult-1].rows[0].result={...actorResult,[key]:0};assert.throws(()=>readStage(bad,built.receipt),/ACTUAL_ASSERTION_COUNTS/);}
+ const claimed=nativeFixture();claimed.statements[built.receipt.indices.programmeResult-1].rows[0].result.directRoleExecution='PASS';assert.throws(()=>readStage(claimed,built.receipt),/ACTUAL_ASSERTION_COUNTS/);
  const fake=nativeFixture();fake.statements[built.receipt.indices.programmeResult-1].rows[0].result={...actorResult,dailyBasis:'PASS'};assert.throws(()=>readStage(fake,built.receipt),/ACTUAL_ASSERTION_COUNTS/);
 });
 test('strict SELECT counts and closed per-index command/null ABI refuse invented success',()=>{
@@ -86,5 +87,5 @@ test('bounded capture, protocol and deadlines retain original limits and reject 
 test('holder rejects authorization before connecting and wrong root independent of mount location',async()=>{
  await assert.rejects(()=>holdActor({root:ROOT,out:'unused'}),/ROOT_HOLDER_AUTHORIZATION/);await assert.rejects(()=>source(path.dirname(ROOT)),/REGISTERED_PHYSICAL_ROOT/);
  // Only a committed exact root manifest entry may authorize business fixtures.
- if(!fs.readFileSync(ROOT+'/docs/healthroster-build/TEST_SETUP_MANIFEST.md','utf8').includes('### DAILY-HEALTH-ACTOR-RB-20261017'))assert.throws(()=>assertManifestedFixtureEntry(ROOT),/EXACT_COMMITTED_SETUP_ENTRY/);
+ if(!fs.readFileSync(ROOT+'/docs/healthroster-build/TEST_SETUP_MANIFEST.md','utf8').includes('### DAILY-HEALTH-ACTOR-RB-R2-20261017'))assert.throws(()=>assertManifestedFixtureEntry(ROOT),/EXACT_COMMITTED_SETUP_ENTRY/);
 });

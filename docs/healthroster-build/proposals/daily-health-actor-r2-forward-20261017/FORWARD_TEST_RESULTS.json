@@ -1,0 +1,13 @@
+{
+  "tests": 5,
+  "pass": 5,
+  "fail": 0,
+  "names": [
+    "complete genuine saved raw touch definition has exact approved raw and full-LF predecessor hashes",
+    "altered diagnostic bytes refuse before using any metadata",
+    "synthetic local diagnostic edits cannot authorize another function, non-readonly source or incomplete match",
+    "all-LF/all-CRLF, trailing whitespace and changed function logic refuse even under synthetic metadata hashes",
+    "emitted native comparison is exact raw only and preserves genuine actor/default/constraint checks"
+  ],
+  "native": "NOT_RUN"
+}

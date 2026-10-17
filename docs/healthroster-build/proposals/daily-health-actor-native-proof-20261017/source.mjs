@@ -8,7 +8,7 @@ export const here=path.dirname(fileURLToPath(import.meta.url));
 export const ROOT='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026';
 export const ROUTE='mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback';
 export const SCOPE='DAILY_HEALTH_ACTOR_REAL_USERS_BOTH_COMPLETE_BACKGROUND_RELATIONS_V1';
-export const PROGRAMME_SHA='69789fd5fef651a39d04d4ef2a9c2d3666be04f551d51f38b833e3a420d9eb3e';
+export const PROGRAMME_SHA='4157d0e2d9de71e1a5d6bdef8523b8aed3c8e6ff45b01c5dcfa1f7722813f314';
 export const requireThat=(ok,code)=>{if(!ok)throw Error(code);};
 export const sha=value=>crypto.createHash('sha256').update(value).digest('hex');
 export const literal=value=>`'${String(value).replaceAll("'","''")}'`;
@@ -60,7 +60,7 @@ export async function source(root){
  const builder=await import('./build-program.mjs');
  const programme=await builder.buildActorProgram({root});
  requireThat(programme.sqlSha256===PROGRAMME_SHA&&programme.definitionCount===1&&programme.businessFixtureRows===6
-  &&programme.matrixChecks===12&&programme.matrixDenials===10&&programme.sameTransactionChanges===3&&programme.nullGuardRefusals===2,'ACTOR_EXACT_PROGRAMME_REQUIRED');
+  &&programme.effectiveRoleAclChecks===3&&programme.directRoleExecution==='NOT_RUN'&&programme.matrixChecks===12&&programme.matrixDenials===10&&programme.sameTransactionChanges===3&&programme.nullGuardRefusals===2,'ACTOR_EXACT_PROGRAMME_REQUIRED');
  const rehearsal=await load('scripts/healthroster-install1-full-rehearsal.mjs'),live=await load('scripts/healthroster-live-test-restoration.mjs'),
   sql=await load('scripts/cloudtms-managed-release-sql.mjs'),control=await load('scripts/healthroster-turn-control.mjs');
  requireThat(JSON.stringify(live.backgroundRelations)===JSON.stringify(['private.candidate_daily_batch_receipts','public.ts_financials_outbox']),'ACTOR_BOTH_BACKGROUND_RELATIONS_REQUIRED');
