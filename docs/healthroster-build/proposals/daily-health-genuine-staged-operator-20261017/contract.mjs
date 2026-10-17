@@ -6,7 +6,7 @@ import {STAGE as mappingStage} from './reference/mapping/stage.mjs';
 export const ROOT='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026';
 export const FRONT='https://testmode.arthur-rai.co.uk';
 export const BACK='https://test-cloudtms-backend.kier-88a.workers.dev';
-export const PRIVATE_STATE=ROOT+'/.codex-tmp/test-auth-refresh-20261017-aaf115570abdb329f814d32bb0fcf5a7/storage-state.json';
+export const PRIVATE_STATE=ROOT+'/.codex-tmp/test-auth-refresh-20261017-f4f8f8ff6e7b38ad07e8785aa843fb93/storage-state.json';
 export const PW='file:///D:/Development/GitHub/TEST-Frontend/node_modules/@playwright/test/index.mjs';
 export const CLIENT='f717d043-0000-4000-8000-000000000010';
 export const CANDIDATE='f717d043-0000-4000-8000-000000000030';
