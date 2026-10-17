@@ -1,0 +1,50 @@
+{
+  "version": "R5_ACTUAL_SCHEMA_DEPENDENCY_EVIDENCE_V1",
+  "files": [
+    {
+      "file": "DISPOSITION.json",
+      "bytes": 2464,
+      "sha256": "bc8017755aa56abfcbf1b6cdda1712cdef6cb6d701c8d1595ce5e754320acb93"
+    },
+    {
+      "file": "PROVIDER.json",
+      "bytes": 1431,
+      "sha256": "075595b5b374cfa8da1d7b32662f5ddb72a7b67d0729646ab6cdd632026915d0"
+    },
+    {
+      "file": "PROVIDER.log",
+      "bytes": 372,
+      "sha256": "97fea3f5681970998b1fc9dd4b611840b2895dd5b07078f85bbf4bb19b7d1d0e"
+    },
+    {
+      "file": "RECEIPT.json",
+      "bytes": 3501,
+      "sha256": "169b98e5fbbfce55fed830e84c341c13dcc09f3c94aff98ec8c6d1cb09bdd4e2"
+    },
+    {
+      "file": "ROOT_DRIVER.mjs.txt",
+      "bytes": 7133,
+      "sha256": "83feb38420717c5e7b5b2aa7c1d6e8540eec3e0c33e85a3778d7f5ffc275d427"
+    },
+    {
+      "file": "SCHEMA.json",
+      "bytes": 991592,
+      "sha256": "f6a802b2d282122de18c2b4e35dbdffd9755ba56e72fd1489286f18ac9267371"
+    },
+    {
+      "file": "SCHEMA.log",
+      "bytes": 23641,
+      "sha256": "4358f4291a0f1b31313aad38a8a0763a7e7df14aa955280f0ed57e8c224ab5b3"
+    },
+    {
+      "file": "SOURCE_REVIEW.json",
+      "bytes": 722,
+      "sha256": "07bdd24a7184d5fc564e5adf043d4393882ee49a75e0e2fffa1b0315f4d454f8"
+    },
+    {
+      "file": "OUTPUT_ARCHIVE.json",
+      "bytes": 396,
+      "sha256": "7c3bc39ed907489a29b7920b9efa3656fd17146cea59182152f6140efac2cff2"
+    }
+  ]
+}

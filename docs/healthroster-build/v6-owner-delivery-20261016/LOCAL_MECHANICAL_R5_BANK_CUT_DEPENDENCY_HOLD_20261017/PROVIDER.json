@@ -1,0 +1,35 @@
+{
+  "status": "LOCAL_MECHANICAL_FRESH_PROVIDER_ONLY",
+  "version": "HEALTHROSTER_INSTALL2_MECHANICAL_SEAL_V1",
+  "sourceIdentity": {
+    "candidate": "76222c77265087a363644fc51dc5bdc2f669bedf",
+    "branch": "codex/healthroster-install2-14102026",
+    "physicalRoot": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026"
+  },
+  "resources": {
+    "container": "hr-i2-seal-pg17-20261017",
+    "containerId": "8b4e90dc6038c65196c76b9805646ee945ef0a54bc4080308ba5227195042f0b",
+    "image": "postgres:17.11-bookworm",
+    "imageId": "sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0",
+    "volume": "hr-i2-seal-data-20261017",
+    "port": 55448,
+    "task": "hr-i2-seal-20261017"
+  },
+  "sourcePath": "tests/fixtures/28082026_1229_banking_modal_local_pg17_prerequisites.sql",
+  "sourceSha256": "2ad099729e74044959bb1084c0356869467a306934c9b5e29a128cecbb2e26b1",
+  "identity": {
+    "database": "banking_modal_v2_test",
+    "major": 17,
+    "owner": "cloudtms_hr_install2_seal_owner",
+    "ownerSuperuser": false,
+    "ownerBypass": false,
+    "serviceBypass": false,
+    "ownerAuthUsersSelect": true,
+    "ownerVaultSecretsSelect": true,
+    "authUsersEmpty": true,
+    "vaultSecretsEmpty": true
+  },
+  "applicationRowsCopied": 0,
+  "hostedConnection": false,
+  "qualification": "Fresh local provider scaffolding only; no local business test, native/API acceptance or hosted installation."
+}

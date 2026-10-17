@@ -1,0 +1,30 @@
+{
+  "status": "ACTUAL_NATIVE_PARTIAL_SCHEMA_PASS_THEN_DEPENDENCY_HOLD",
+  "candidate": "76222c77265087a363644fc51dc5bdc2f669bedf",
+  "provider": "PASS",
+  "nativeServer": "PG17.11_EXISTING_PINNED_IMAGE",
+  "coverage1100and1101": "PASS_CANONICAL_AWAITED_UNITS_COMPLETED_BEFORE_NEXT_LOGGED_LOAD",
+  "coverageScope": "Exact0159ledger,8native source-relative TEMP table comparisons,31 complete FK definitions and old8 owner/RLS/ACL/policy passed twice; temp reference cleanup and unchanged normal unit ledgers completed",
+  "lastLogged": "LOCAL LOAD migration supabase/migrations/16102026_1102_nhsp_v6_source_acceptance_applications_and_adoptions.sql",
+  "sqlstate": "42P01",
+  "exactFailedRelation": "NOT_RETURNED_BY_CLOSED_NATIVE_DIAGNOSTIC",
+  "sourcePrediction": "1102 first CREATE requires actual Banking-owned private.bpay_next_source_pay_decision_cut(decision_id,id); prior Health references were just verified. Its source expressly requires actual Banking cut schema first. Named published Banking checkpoint has no new interface evidence in its two scoped records.",
+  "schemaSearchScope": "No anchored unquoted CREATE TABLE private.bpay_next_source_pay_decision_cut declaration matched current supabase/migrations and supabase/repeatable .sql/.sqlinc search; not a universal claim about unpublished or dynamic source.",
+  "action": "Do not stub, skip, remove FK, implement Banking-owned schema or retry unchanged. Await real dependency publication/integration while continuing independent Health work.",
+  "coverage1104": "NOT_REACHED",
+  "contract": "NOT_GENERATED",
+  "hostedExecution": false,
+  "localApplicationRowsCopied": 0,
+  "cleanup": {
+    "ownContainerRemoved": true,
+    "ownVolumeRemoved": true,
+    "noImagePullOrBuild": true,
+    "noNetworkCreated": true,
+    "containerVacant": true,
+    "volumeVacant": true,
+    "after": "{\"Active\":\"1\",\"Reclaimable\":\"207.4MB (24%)\",\"Size\":\"832.9MB\",\"TotalCount\":\"3\",\"Type\":\"Images\"}\n{\"Active\":\"1\",\"Reclaimable\":\"331.8kB (94%)\",\"Size\":\"352.3kB\",\"TotalCount\":\"9\",\"Type\":\"Containers\"}\n{\"Active\":\"8\",\"Reclaimable\":\"0B (0%)\",\"Size\":\"14.56GB\",\"TotalCount\":\"8\",\"Type\":\"Local Volumes\"}\n{\"Active\":\"0\",\"Reclaimable\":\"0B\",\"Size\":\"0B\",\"TotalCount\":\"0\",\"Type\":\"Build Cache\"}",
+    "reclaimedBytes": "NOT_ATTRIBUTED_GLOBAL_CONCURRENT_DELTA"
+  },
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
