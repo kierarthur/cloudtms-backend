@@ -1,0 +1,23 @@
+{
+  "wholeParents": [
+    {
+      "commit": "8d13d7035db66a125b9b78cf4f96fc70b80b3ecc",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-preflight-batch-forward-20261017/s0-scope.mjs",
+      "captured": "docs/healthroster-build/proposals/daily-health-genuine-staged-preflight-batch-forward-20261017/s0-scope.mjs",
+      "bytes": 8599,
+      "sha256": "e2c5c97ed5d909ca8b507ed3453b90e0506d5d865a1a66524221349a6418c389",
+      "wholeParentEqual": true
+    },
+    {
+      "commit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/secure-owned.ps1",
+      "captured": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/reference/secure-owned-parent.ps1",
+      "bytes": 1352,
+      "sha256": "3086757bb8f932d0cc32e31b603a8a960cd8ea5dc87a2e6603e7f05fbe43b4aa",
+      "wholeParentEqual": true
+    }
+  ],
+  "aclInverse": "one exact output namespace substitution; independently replayed",
+  "protectedReleaseInverse": "full original function; name and15s timeout only; independently replayed",
+  "native": "NOT_RUN"
+}

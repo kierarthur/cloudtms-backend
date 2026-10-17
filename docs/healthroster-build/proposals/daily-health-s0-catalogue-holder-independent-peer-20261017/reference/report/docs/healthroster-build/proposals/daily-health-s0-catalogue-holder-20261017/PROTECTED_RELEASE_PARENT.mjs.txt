@@ -1,0 +1,4 @@
+export function assertNoProtectedRelease(){
+ const runs=JSON.parse(execFileSync('C:/Program Files/GitHub CLI/gh.exe',['run','list','--repo','kierarthur/cloudtms-backend','--workflow','340102476','--limit','50','--json','databaseId,status'],{encoding:'utf8',windowsHide:true}));
+ if(runs.some(x=>x.status!=='completed'))throw Error('PROTECTED_RELEASE_RUNNING_HOLD');
+}
