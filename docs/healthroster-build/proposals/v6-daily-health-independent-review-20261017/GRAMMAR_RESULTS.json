@@ -1,0 +1,54 @@
+{
+  "parserVersion": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "programs": [
+    {
+      "file": "17102026_0120_daily_health_composition.sql",
+      "statements": 12,
+      "plpgsqlBodies": 6,
+      "parse": "PASS",
+      "executed": false
+    },
+    {
+      "file": "17102026_0120_daily_health_composition_reverse.sql",
+      "statements": 6,
+      "plpgsqlBodies": 0,
+      "parse": "PASS",
+      "executed": false
+    },
+    {
+      "file": "17102026_0120_daily_health_isolation_program.sql",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "parse": "PASS",
+      "executed": false
+    },
+    {
+      "file": "17102026_0120_daily_health_native_program.sql",
+      "statements": 4,
+      "plpgsqlBodies": 1,
+      "parse": "PASS",
+      "executed": false
+    },
+    {
+      "file": "17102026_0126_daily_health_reader_program.sql",
+      "statements": 4,
+      "plpgsqlBodies": 1,
+      "parse": "PASS",
+      "executed": false
+    },
+    {
+      "file": "17102026_0126_daily_health_reason_program.sql",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "parse": "PASS",
+      "executed": false
+    }
+  ],
+  "fullForwardReverseNamesMatch": true,
+  "definerCount": 6,
+  "nativeExecuted": false
+}

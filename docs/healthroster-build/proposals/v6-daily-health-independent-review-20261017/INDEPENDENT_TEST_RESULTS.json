@@ -1,0 +1,12 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\docs\\healthroster-build\\proposals\\v6-daily-health-independent-review-20261017\\independent-boundaries.test.mjs"
+  ],
+  "cwd": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+  "exitCode": 0,
+  "stdout": "\u2714 all native TrimString boundary codepoints retain the same canonical Details identity (2.6069ms)\n\u2714 Unicode full1969 boundary and exact single prefix inverse preserve codepoints (1.6346ms)\n\u2714 actual GET admits current active nonAdmin and forwards only operation and authenticated actor (46.0186ms)\n\u2714 actual GET refuses inactive reader before RPC; mutation still refuses active nonAdmin (1.1882ms)\n\u2714 actual GET strict public decoder rejects raw receipt/unknown command fields (1.8172ms)\n\u2139 tests 5\n\u2139 suites 0\n\u2139 pass 5\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 206.8136\n",
+  "stderr": "",
+  "nativeDatabaseExecuted": false
+}
