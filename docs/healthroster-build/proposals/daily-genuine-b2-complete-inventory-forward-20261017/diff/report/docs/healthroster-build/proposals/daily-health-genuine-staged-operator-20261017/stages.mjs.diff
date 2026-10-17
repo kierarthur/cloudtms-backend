@@ -1,0 +1,35 @@
+--- docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs
++++ docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs
+@@ -2,6 +2,7 @@
+ import path from 'node:path';
+ import {check,exact,sha,STAGES,nextStage,requestSha,entryText} from './contract.mjs';
+ import {scopes} from './native-read.mjs';
++import {assertCurrentPrefix} from './current-read.mjs';
+ export function assertBefore(stage,before,previous){
+  const index=STAGES.indexOf(stage);check(index>=0,'FIXTURE_STAGE_REQUIRED');
+  const qualified=previous?.qualified??[];check(nextStage(qualified)===stage,'FIXTURE_STAGE_ORDER_REFUSED');
+@@ -66,7 +67,7 @@
+ }
+ export function readJournal(directory){
+  const file=path.join(directory,'QUALIFIED.json');if(!fs.existsSync(file))return {qualified:[],after:null,generated:{}};
+- const j=JSON.parse(fs.readFileSync(file,'utf8'));check(Array.isArray(j.qualified)&&j.qualified.every((s,i)=>s===STAGES[i]),'FIXTURE_QUALIFIED_PREFIX_REQUIRED');return j;
++ const j=JSON.parse(fs.readFileSync(file,'utf8'));check(Array.isArray(j.qualified)&&j.qualified.every((s,i)=>s===STAGES[i]),'FIXTURE_QUALIFIED_PREFIX_REQUIRED');if(j.qualified.length>1)assertCurrentPrefix(j.currentBefore,j.qualified.at(-1));return j;
+ }
+ export function persistAttempt(directory,stage,binding){
+  // A file exists before network dispatch. It is NEVER removed, including after 4xx/500/timeout/kill.
+@@ -81,11 +82,12 @@
+  const file=path.join(directory,name);const fd=fs.openSync(file,'wx',0o600);
+  try{fs.writeSync(fd,JSON.stringify(value)+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+ }
+-export function saveQualification(directory,stage,before,after,projection,previous){
++export function saveQualification(directory,stage,before,after,projection,previous,currentBefore=null){
++ if(stage!=='S0')assertCurrentPrefix(currentBefore,stage);
+  assertAfter(stage,before,after,projection);
+  const qualified=[...previous.qualified,stage];check(qualified.every((s,i)=>s===STAGES[i]),'FIXTURE_STAGE_ORDER_REFUSED');
+- writeClosed(directory,stage+'_QUALIFIED.json',{stage,after,projection});
+- const value={qualified,after,generated:{...previous.generated,...projection}};
++ writeClosed(directory,stage+'_QUALIFIED.json',{stage,after,projection,...stage==='S0'?{}:{currentBefore}});
++ const value={qualified,after,generated:{...previous.generated,...projection},...stage==='S0'?{}:{currentBefore}};
+  const next=path.join(directory,'QUALIFIED.next');check(!fs.existsSync(next),'FIXTURE_JOURNAL_TEMP_EXISTS');
+  const fd=fs.openSync(next,'wx',0o600);try{fs.writeSync(fd,JSON.stringify(value)+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+  fs.renameSync(next,path.join(directory,'QUALIFIED.json'));

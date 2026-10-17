@@ -1,0 +1,92 @@
+{
+  "version": "DAILY_S0_CATALOGUE_HOLDER_FREEZE_V1",
+  "baseReportCommit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
+  "rootSharedOwnerCommit": "5564a2e5e9e8f57196596b28c7bff526eaa7429d",
+  "files": [
+    {
+      "file": "EXTERNAL_SOURCE_PINS.json",
+      "bytes": 2057,
+      "sha256": "474d76922c63e01c41f26010f5db9a0c42553a26b90623696bdc182488bc5272"
+    },
+    {
+      "file": "FULL_PARENT_COMPOSITION.json",
+      "bytes": 2450,
+      "sha256": "d62618b084c47e1326da8fc375d72b24e373f277015a40b05cf0054affec6f54"
+    },
+    {
+      "file": "OFFLINE_TEST_OUTPUT.tap",
+      "bytes": 7121,
+      "sha256": "746ee5f1c3952e9399a1394edfbceb67f576be736e647269a05f2aa757e529f5"
+    },
+    {
+      "file": "OFFLINE_TEST_RESULT.json",
+      "bytes": 455,
+      "sha256": "3516d82a5d1edf420144b9bfd66a10e598bf1927cf8d07f9ce877e044403e199"
+    },
+    {
+      "file": "PROTECTED_RELEASE_DERIVED.mjs.txt",
+      "bytes": 374,
+      "sha256": "0ee0c0df4b5f862db2f776f5b12e80274158396641ea8e79b5901851ba191551"
+    },
+    {
+      "file": "PROTECTED_RELEASE_PARENT.mjs.txt",
+      "bytes": 368,
+      "sha256": "c62c3b05def4c6c6e4fb05009f97dd7e850d7999f8d1f6b8f8c82bb8b52254eb"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4551,
+      "sha256": "a1c26d9d75c511f8a3276ddd77aea112302c3c38ace4ac5fcac86b6fe815b8c4"
+    },
+    {
+      "file": "ROOT_SOURCE_PINS.json",
+      "bytes": 616,
+      "sha256": "a7665c14bb64412b68f60271d80f25505165b64f0d9eef971e430ad2f26e4e28"
+    },
+    {
+      "file": "hold.mjs",
+      "bytes": 5433,
+      "sha256": "55606963aff145a83a1a82352c9077a3f5cebf472c16b0c965e627d12c3a3109"
+    },
+    {
+      "file": "holder.test.mjs",
+      "bytes": 12391,
+      "sha256": "a4271339a214461e2e7568238e52d57fd73d14f9bdce808525aa4aaee581c39a"
+    },
+    {
+      "file": "protocol.mjs",
+      "bytes": 6451,
+      "sha256": "6474897d63080657c43ca14160364057b950580feea22de6871bdd92dfdb4e1a"
+    },
+    {
+      "file": "reference/healthroster-rehearsal-turn.mjs",
+      "bytes": 12827,
+      "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa"
+    },
+    {
+      "file": "reference/healthroster-turn-control.mjs",
+      "bytes": 9580,
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "reference/secure-owned-parent.ps1",
+      "bytes": 1352,
+      "sha256": "3086757bb8f932d0cc32e31b603a8a960cd8ea5dc87a2e6603e7f05fbe43b4aa"
+    },
+    {
+      "file": "secure-owned.ps1",
+      "bytes": 1350,
+      "sha256": "3fb1bb6dce1ee7d488d6f56e0225e0ce6508253c14ed95f8c037827739fba7d8"
+    },
+    {
+      "file": "source.mjs",
+      "bytes": 4069,
+      "sha256": "9bcf873383794c3195ba51cf07b8246ca966b83b8a3a7e8b70106035f0dd4c88"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 690,
+      "sha256": "8f1fbc1bfde997d1dd29b4d2c5be9c464179a850ede29a384c8bb17ef7d50e19"
+    }
+  ]
+}

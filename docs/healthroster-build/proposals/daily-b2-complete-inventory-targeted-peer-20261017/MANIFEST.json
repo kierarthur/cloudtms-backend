@@ -1,0 +1,31 @@
+{
+  "version": "DAILY_B2_COMPLETE_INVENTORY_TARGETED_CODE_PEER_V1",
+  "qualification": "ACCEPT_BOUNDED_SELECTED_SOURCE_ONLY_REAL_ADMISSION_HELD",
+  "files": [
+    {
+      "file": "integration.test.mjs",
+      "bytes": 4549,
+      "sha256": "931a97a8fc8acfaeaf9759564b4eba54f7bfb926e4900c1b3fded899bb4adb11"
+    },
+    {
+      "file": "pure-guard.test.mjs",
+      "bytes": 4144,
+      "sha256": "f2ac15edb3cf7739a08df8f88d48e427398065028272c52c0a3cff12dd044676"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 9685,
+      "sha256": "0d061968e54df9cc4d497974f9622fb0347f906a3668ae95db409d0f17c85b22"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 3282,
+      "sha256": "40edbddc2d0a6450bcc0363d608bb5f1a3d1674e9226807828b7686c1d2bbfc6"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 4063,
+      "sha256": "56999a1f7f9c097c9a256d8d0df164ae08e947a61ef37fad30f13af7278b7240"
+    }
+  ]
+}

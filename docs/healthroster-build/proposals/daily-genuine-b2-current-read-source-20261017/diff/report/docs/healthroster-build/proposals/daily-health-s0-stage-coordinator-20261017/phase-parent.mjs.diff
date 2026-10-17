@@ -1,0 +1,32 @@
+--- docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs
++++ docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs
+@@ -11,7 +11,7 @@
+  check((options['--phase']==='bind')===(options['--owned']===undefined),'FIXTURE_EXISTING_SESSION_REQUIRED');
+  check(options['--phase']!=='bind'||options['--stage']==='S0','FIXTURE_BIND_S0_ONLY');return options;
+ }
+-export async function runStaged(flags,{controlEnvironment,signal,assertHeld,runOwnedTurnChild,treeFactory=ownedWorker}){
++export async function runStaged(flags,{controlEnvironment,signal,assertHeld,runOwnedTurnChild,treeFactory=ownedWorker,currentNative=null}){
+  const options=argumentsFor(flags);sourcePreflight();let out;
+  // Only the existing original turn coordinator supplies this authenticated pipe/capability pair.
+  for(const key of ['CLOUDTMS_SHARED_TURN_PIPE','CLOUDTMS_SHARED_TURN_CAPABILITY'])check(typeof controlEnvironment[key]==='string'&&controlEnvironment[key].length>0,'FIXTURE_LIVE_ORIGINAL_TURN_CONTROL_REQUIRED');
+@@ -31,15 +31,16 @@
+  const env=childEnvironment(out);delete env.HEALTH_TEST_AUTH_OWNED_OUT;
+  for(const key of ['CLOUDTMS_SHARED_TURN_PIPE','CLOUDTMS_SHARED_TURN_CAPABILITY'])env[key]=controlEnvironment[key];
+  env.HEALTH_GENUINE_OWNED_OUT=out;
+- const tree=treeFactory();let execution;
+- try{execution=await tree.wait(runOwnedTurnChild({file:process.execPath,args:[here+'/worker.mjs',JSON.stringify({...options,resultName})],options:{cwd:out,env,stdio:['ignore','ignore','ignore','ipc']},signal,assertHeld,spawnChild:tree.spawn,resourceGuard:tree}),signal);}
+- finally{await tree.confirm();}
++ const tree=treeFactory();let execution;const spawnOwned=(...args)=>{const child=tree.spawn(...args);currentNative?.attach(child);return child;};
++ try{execution=await tree.wait(runOwnedTurnChild({file:process.execPath,args:[here+'/worker.mjs',JSON.stringify({...options,resultName})],options:{cwd:out,env,stdio:['ignore','ignore','ignore','ipc']},signal,assertHeld,spawnChild:spawnOwned,resourceGuard:tree}),signal);}
++ finally{await tree.confirm();currentNative?.close();}
+  check(execution.signal===null,'S0_STAGE_CHILD_SIGNAL_HELD');const exit=execution.code;
+  const file=out+'/'+resultName,s=fs.lstatSync(file);check(s.isFile()&&!s.isSymbolicLink()&&s.size<=2048,'FIXTURE_CLOSED_RESULT_REQUIRED');
+  const r=JSON.parse(fs.readFileSync(file,'utf8'));
+  check(Object.keys(r).sort().join(',')==='browserClosed,code,phase,stage,status'&&['PASS','HOLD'].includes(r.status)&&/^FIXTURE_[A-Z0-9_]+$/.test(r.code)
+   &&r.phase===options['--phase']&&r.stage===options['--stage']&&typeof r.browserClosed==='boolean','FIXTURE_CLOSED_RESULT_REQUIRED');
+  check(r.status!=='PASS'||exit===0&&r.browserClosed===true,'FIXTURE_PASS_REQUIRES_CONFIRMED_CLOSE_AND_EXIT');
+- return {...r,ownedDirectory:out,childClosed:true,qualification:'SOURCE_OPERATOR_PHASE_ONLY_NOT_PUBLIC_COMPOSER_OR_FINANCIAL_SUCCESS'};
++ if(r.status==='PASS')currentNative?.assertCompleted();
++  return {...r,ownedDirectory:out,childClosed:true,qualification:'SOURCE_OPERATOR_PHASE_ONLY_NOT_PUBLIC_COMPOSER_OR_FINANCIAL_SUCCESS'};
+ }
+ // No standalone CLI: root S0 coordinator supplies the authenticated context.

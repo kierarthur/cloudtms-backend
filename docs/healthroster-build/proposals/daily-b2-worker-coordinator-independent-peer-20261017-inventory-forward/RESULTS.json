@@ -1,0 +1,18 @@
+{
+  "verdict": "ACCEPT_PACKAGING_ONLY_FORWARD",
+  "authorManifestSha256": "29fc5acee6a0dd454516c708edf0b473e0ca27afc8e91dffaee77ec3c4555af8",
+  "completeNoncacheFilesIncludingManifest": 159,
+  "manifestedEntries": 158,
+  "nestedManifests": 18,
+  "independentOmissionRefusals": 18,
+  "runtimePostimagesUnchanged": 18,
+  "rawInverseHunksUnchanged": 76,
+  "actualParentsReverified": 55,
+  "packagingVerifier": "PASS",
+  "actualParentVerifier": "PASS",
+  "originalComplementaryPeerManifest": "a017bc8a9de547247986cbdad2cd560cd16f51cccfc9cb9d67b097f0266c3f29",
+  "findings": [],
+  "actualSourceAdmission": "HELD_REQUIRES_REAL_RESEAL",
+  "native": "NOT_RUN",
+  "reportHeadUnchanged": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23"
+}

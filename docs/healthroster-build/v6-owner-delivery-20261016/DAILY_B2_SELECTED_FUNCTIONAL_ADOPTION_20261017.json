@@ -1,0 +1,159 @@
+{
+  "version": "DAILY_B2_SELECTED_FUNCTIONAL_ADOPTION_V1",
+  "recordedAt": "2026-10-17T17:08:43.580128+00:00",
+  "status": "FUNCTIONAL_SOURCE_MOUNTED_ONLY",
+  "sourcePacketManifest": "29fc5acee6a0dd454516c708edf0b473e0ca27afc8e91dffaee77ec3c4555af8",
+  "originalArchiveManifest": "de17d867f5b1a0ca4c3da073c5f173974f185dbbf79f1c07d919c4f18fd178b8",
+  "completeInventoryFiles": 159,
+  "originalSiblingFiles": 153,
+  "packagingReplay": "PASS",
+  "currentParentSavedIndexHistoricalChecks": 55,
+  "literalInverseHunks": 76,
+  "selectedTargets": [
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "beforeBytes": 12684,
+      "beforeSha256": "ef082cac41ef6f653d044a33b3801d83eb0b1bc1275a6bb9684d06a46b4d9f60",
+      "bytes": 15899,
+      "sha256": "fb0f8e6c3935448c346cb61ddd2a281e408a4ebf8c250a50577a370671e776ef"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
+      "beforeBytes": 7292,
+      "beforeSha256": "c167833e193d3fac9b9de40c0a9b4447f5a193c024cb4caab19401264440e1f5",
+      "bytes": 7576,
+      "sha256": "4f91ffea9ce323ae24b9333b3ff51eb2c69cdcb86eb692de4d33ec2fc3652eb2"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "beforeBytes": 5111,
+      "beforeSha256": "5d487a9ba1b6f5c742e17d3d2b06bbfc6bb0e2937ea23600694122a3f2ca2c8b",
+      "bytes": 5315,
+      "sha256": "b0653a4e7f7e0700b5fffb0e557873dcc1f009d59f73e050600b8ab9e5224310"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/coordinate.mjs",
+      "beforeBytes": 4938,
+      "beforeSha256": "13127c4af70d3fdb32057d8c0a0cceaa58e430bbd22e2ec6accfaab169dcd614",
+      "bytes": 5280,
+      "sha256": "8e092dcd7947156684a7284c8fd774b2ba8e2320b93f7f1beba15fd44b53d60a"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/stage.mjs",
+      "beforeBytes": 2089,
+      "beforeSha256": "b33cd9943a80b87a04af6d0290e22a76549c741aed6666e338cf306ea784b39b",
+      "bytes": 2117,
+      "sha256": "82fff5d95e548fe510ceb351b587586e833133e8f88edaf8d0d7b47d5e71e0d0"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/progress.mjs",
+      "beforeBytes": 4560,
+      "beforeSha256": "fda0b2de5a53f29c1fbd77bee5ed172ee22d80bb0d081794bf63e2a3ee2e076c",
+      "bytes": 4917,
+      "sha256": "dd918d8222a028dd6ccac06d8f5a997f0190fc45b9e9b54c37c115abab14c3c2"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "beforeBytes": 10764,
+      "beforeSha256": "0101582d00801709d57c9f518cf17506f457fbd64ff33e965ac4821be9953f25",
+      "bytes": 12515,
+      "sha256": "09a9d6653d5ffccbfe41a8f502d049a7749dc4586bbd09fe3d4f2efd69770a7f"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+      "beforeBytes": 10331,
+      "beforeSha256": "5121f9d3ac3e087d7153937a64d5d4e0cfef51e1868f681e1cdd5e432fd1943f",
+      "bytes": 14376,
+      "sha256": "d0c641ce8c56cc973a5ab0c7b0398b0ead59e46f8059a7e148ae88009904b016"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "beforeBytes": 11508,
+      "beforeSha256": "7e90f2ccb4ef993891a09d616b8458dee0125a6c4414b38501714ae460d4a590",
+      "bytes": 15553,
+      "sha256": "0ef2875795c1c051e43abc3a942b89d6b4fc7d9b58016261c823ce8ed530c68c"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+      "beforeBytes": 14975,
+      "beforeSha256": "a247aca92d5be78878766b12793c7399089574446633a6fd0b6dcc656a1f46a1",
+      "bytes": 15425,
+      "sha256": "ce73b2b44c0d45b224471260b7e8bff4e380776d5a66dc10dc3a9dfe0c304fae"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs",
+      "beforeBytes": 8235,
+      "beforeSha256": "0e2cee7749f55deaf2fa76ce4c2fece5b069dfbddd01d7a7d6da3b8ffb86fb22",
+      "bytes": 8370,
+      "sha256": "13ad4957923dcbfc053e0762a8306233b7adbf42d184014b42cef03f2e042394"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs",
+      "beforeBytes": 8472,
+      "beforeSha256": "028cefd464b1ece2349b1c2eb6f53c49721f7e57be68debade208a9eccefa5f9",
+      "bytes": 8803,
+      "sha256": "c540e73a9f4e2904e7e3eba1554c0effff743dc720b589f530f7bebda30319cf"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs",
+      "beforeBytes": 8876,
+      "beforeSha256": "e7e51ad09ec7f619fbddb3c8385d8251309eb275419222e1ae6900cdef05f413",
+      "bytes": 9023,
+      "sha256": "3667d63e081e3ad64d0dae7966c7b781f9fce85927d8f6bb4a7b7939f5332a86"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/validate.mjs",
+      "beforeBytes": 1832,
+      "beforeSha256": "339fc7372a0c86ccff6fae9f0203d40b7f7f539c4575600f48aad8f535c7d786",
+      "bytes": 2120,
+      "sha256": "643575524db3492d37e678168b5c706a11b4fe7552efff6caec4aaa189003267"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/current-read.mjs",
+      "parent": "ABSENT",
+      "bytes": 12940,
+      "sha256": "db5332b466f979fd78e1e9d58477990d72e012c2f7d94ea84324b204e53471fc"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/current-ipc.mjs",
+      "parent": "ABSENT",
+      "bytes": 3158,
+      "sha256": "7276f1555f25675f67752c6e6fba46972a15f63d1ff2974d278eeda7d928c85e"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-b2-current-effect-20261017/current-effect.mjs",
+      "parent": "ABSENT",
+      "bytes": 2340,
+      "sha256": "4e407f3c0148e326ac000c19da3876ae102943481a05df74363ce22ed7c8f25e"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-b2-current-effect-20261017/SOURCE_SELECTION.json",
+      "parent": "ABSENT",
+      "bytes": 1649,
+      "sha256": "b9dad05ebbb5e9dea0d5b8e568fa16d5a7a43b97ad4b251945de94259ce2f92c"
+    }
+  ],
+  "aclBatchCombined": false,
+  "metadataReseal": "PENDING_REAL_FUNCTIONAL_COMMITS",
+  "realSourceAdmission": "NOT_RUN",
+  "nativeExecution": "NOT_RUN",
+  "install2": "NOT_INSTALLED"
+}

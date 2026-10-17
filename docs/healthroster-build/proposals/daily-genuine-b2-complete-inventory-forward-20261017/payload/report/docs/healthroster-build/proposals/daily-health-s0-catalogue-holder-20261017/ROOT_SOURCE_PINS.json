@@ -1,0 +1,16 @@
+[
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "scripts/healthroster-rehearsal-turn.mjs",
+    "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa",
+    "bytes": 12827,
+    "commit": "5564a2e5e9e8f57196596b28c7bff526eaa7429d"
+  },
+  {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "file": "scripts/healthroster-turn-control.mjs",
+    "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8",
+    "bytes": 9580,
+    "commit": "5564a2e5e9e8f57196596b28c7bff526eaa7429d"
+  }
+]

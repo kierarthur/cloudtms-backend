@@ -1,0 +1,17 @@
+--- docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs
++++ docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs
+@@ -49,11 +49,11 @@
+  const{publicPath}=await import(pathToFileURL(REPORT+'/'+CORE).href);
+  const reader=()=>checkedPublicReader({root:ROOT,rootHead:git(ROOT,'rev-parse','HEAD').toString().trim(),physicalPath:physical,readSmall:small,gitBytes:git,validatePublicPath:publicPath});
+  const readPublic=reader();
+- const names=new Set(['S1_BEFORE_INPUT.json','S1_BEFORE_NATIVE.json','S1_AFTER_INPUT.json','S1_AFTER_NATIVE.json','S1_RESPONSE.json','S1_AUX_BEFORE_INPUT.json','S1_AUX_BEFORE_NATIVE.json','S1_AUX_AFTER_INPUT.json','S1_AUX_AFTER_NATIVE.json']);
++ const names=new Set(['S1_BEFORE_INPUT.json','S1_BEFORE_NATIVE.json','S1_AFTER_INPUT.json','S1_AFTER_NATIVE.json','S1_RESPONSE.json','S1_CURRENT_CONSUMPTION.json','S1_AUX_BEFORE_INPUT.json','S1_AUX_BEFORE_NATIVE.json','S1_AUX_AFTER_INPUT.json','S1_AUX_AFTER_NATIVE.json']);
+  const read=name=>{must(names.has(name)&&physical(a.out+'/'+name)===a.out+'/'+name,'EXACT_PUBLIC_STAGE_FILE_REQUIRED');return small(a.out+'/'+name)};
+- const args={source:a.source,planFile:a.planFile,readPublic,beforeBuilt:JSON.parse(read('S1_BEFORE_INPUT.json')),beforeBytes:read('S1_BEFORE_NATIVE.json'),afterBuilt:JSON.parse(read('S1_AFTER_INPUT.json')),afterBytes:read('S1_AFTER_NATIVE.json'),responseBytes:read('S1_RESPONSE.json'),auxBeforeBuilt:JSON.parse(read('S1_AUX_BEFORE_INPUT.json')),auxBeforeBytes:read('S1_AUX_BEFORE_NATIVE.json'),auxAfterBuilt:JSON.parse(read('S1_AUX_AFTER_INPUT.json')),auxAfterBytes:read('S1_AUX_AFTER_NATIVE.json'),now:Date.now()};
++ const args={source:a.source,planFile:a.planFile,readPublic,beforeBuilt:JSON.parse(read('S1_BEFORE_INPUT.json')),beforeInputBytes:read('S1'+'_BEFORE_INPUT.json'),consumptionBytes:read('S1'+'_CURRENT_CONSUMPTION.json'),beforeBytes:read('S1_BEFORE_NATIVE.json'),afterBuilt:JSON.parse(read('S1_AFTER_INPUT.json')),afterBytes:read('S1_AFTER_NATIVE.json'),responseBytes:read('S1_RESPONSE.json'),auxBeforeBuilt:JSON.parse(read('S1_AUX_BEFORE_INPUT.json')),auxBeforeBytes:read('S1_AUX_BEFORE_NATIVE.json'),auxAfterBuilt:JSON.parse(read('S1_AUX_AFTER_INPUT.json')),auxAfterBytes:read('S1_AUX_AFTER_NATIVE.json'),now:Date.now()};
+  const result=prepareS1After(args),beforePlan=readPublic(a.planFile),files=result.records.map(r=>r.file);
+- must(files.length===4&&new Set(files).size===4&&files.at(-1)===a.planFile,'EXACT_FOUR_PUBLIC_RECORDS_REQUIRED');
++ must(files.length===5&&new Set(files).size===5&&files.at(-1)===a.planFile,'EXACT_FIVE_PUBLIC_RECORDS_REQUIRED');
+  must(git(ROOT,'rev-parse','HEAD').toString().trim()===head&&git(REPORT,'rev-parse','HEAD').toString().trim()===a.source,'SOURCE_MOVED_BEFORE_WRITES');
+  for(const r of result.records){publicPath(r.file);must(physical(path.dirname(ROOT+'/'+r.file))===path.dirname(ROOT+'/'+r.file),'PHYSICAL_DESTINATION_REQUIRED');must(r.file===a.planFile?fs.readFileSync(ROOT+'/'+r.file).equals(beforePlan):!fs.existsSync(ROOT+'/'+r.file),'EXISTING_EVIDENCE_REFUSED');}
+  for(const r of result.records)fs.writeFileSync(ROOT+'/'+r.file,r.bytes,{flag:r.file===a.planFile?'w':'wx'});

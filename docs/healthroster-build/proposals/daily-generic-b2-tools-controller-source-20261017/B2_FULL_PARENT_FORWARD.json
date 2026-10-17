@@ -1,0 +1,48 @@
+{
+  "parent": "reference/e18-tools.js.txt",
+  "parentSha256": "ee14891202c24a3fe4c47a7356e2fd17d464c58d4ea793b66fd11425cca0cc8f",
+  "afterSha256": "6bc6d827d3d2aa0dcf2deba1e91d74288cd0d617b36a47336bb3a4b7334691db",
+  "edits": [
+    {
+      "before": " const stage=load('dailySelectedStage'),K4=load('dailyR10FinalK4'),s0=load('dailyS0R8Actual');",
+      "after": " const stage=load('dailySelectedStage'),execution=load('dailyB2ReviewedExecution');\n const configKeys=['sourceCommit','helperCommit','s0','planFiles','s1AdapterCommit','s1RecorderCommit','fourStageAdapterCommit','fourStageRecorderCommit'];\n if(!execution||typeof execution!=='object'||Array.isArray(execution)||Object.keys(execution).sort().join(',')!==configKeys.sort().join(',')||['sourceCommit','helperCommit','s1AdapterCommit','s1RecorderCommit','fourStageAdapterCommit','fourStageRecorderCommit'].some(k=>!/^[a-f0-9]{40}$/.test(execution[k]??'')))throw Error('ACTUAL_B2_REVIEWED_EXECUTION_REQUIRED');\n const K4=execution.sourceCommit,helperCommit=execution.helperCommit,s0=execution.s0;\n if(!execution.planFiles||Object.keys(execution.planFiles).sort().join(',')!==['S1','S1a','S2','S3','S4'].sort().join(',')||!new RegExp('^'+B+'DAILY_GENUINE_'+stage+'_[A-Z0-9_]+\\\\.json$').test(execution.planFiles[stage]??''))throw Error('ACTUAL_COMMITTED_B2_STAGE_PLAN_REQUIRED');\n const plan=execution.planFiles[stage];"
+    },
+    {
+      "before": "key='dailyActual'+stage",
+      "after": "key='dailyB2Actual'+stage"
+    },
+    {
+      "before": "throw Error('ACTUAL_STAGE_READY_REQUIRED');}",
+      "after": "throw Error('ACTUAL_STAGE_READY_REQUIRED');return v;}"
+    },
+    {
+      "before": " async function bookkeep(phase){",
+      "after": " async function current(readyFrame){\n  const body='import fs from \"node:fs\";import{createHash}from\"node:crypto\";import{pathToFileURL}from\"node:url\";\\n'+\n   'const out='+JSON.stringify(state.out)+',stage='+JSON.stringify(stage)+',source='+JSON.stringify(K4)+',ready='+JSON.stringify(readyFrame)+',report='+JSON.stringify(report)+',P='+JSON.stringify(P)+';\\n'+\n   'if(!/^D:\\\\/Development\\\\/GitHub\\\\/\\\\.codex-worktrees\\\\/healthroster-install2-14102026\\\\/\\\\.codex-tmp\\\\/daily-genuine-stages-20261017-[a-f0-9]{32}$/.test(out)||fs.realpathSync.native(out).replaceAll(String.fromCharCode(92),\"/\")!==out)throw Error(\"ROOT_B2_PATH\");\\n'+\n   'const{assertCurrentReady,currentFiles}=await import(pathToFileURL(report+\"/\"+P+\"daily-health-genuine-staged-operator-20261017/current-read.mjs\").href);assertCurrentReady(ready,{stage,source});const files=currentFiles(stage),sha=b=>createHash(\"sha256\").update(b).digest(\"hex\"),keys=(v,k)=>v&&typeof v===\"object\"&&!Array.isArray(v)&&Object.keys(v).sort().join(\",\")===[...k].sort().join(\",\"),same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);\\n'+\n   'const read=name=>{const file=out+\"/\"+name;if(fs.realpathSync.native(file).replaceAll(String.fromCharCode(92),\"/\")!==file)throw Error(\"ROOT_B2_PHYSICAL_FILE\");const s=fs.lstatSync(file);if(!s.isFile()||s.isSymbolicLink()||s.size<=0||s.size>98304)throw Error(\"ROOT_B2_INPUT_BOUND\");return fs.readFileSync(file);},inputBytes=read(files.input),bindingBytes=read(files.binding);if(sha(inputBytes)!==ready.inputSha256||sha(bindingBytes)!==ready.bindingSha256)throw Error(\"ROOT_B2_RAW_READY_HASH\");const pair=JSON.parse(inputBytes),binding=JSON.parse(bindingBytes);if(!same(binding,ready.binding)||!keys(pair,[\"input\",\"receipt\"]))throw Error(\"ROOT_B2_BINDING_PAIR\");const i=pair.input,r=pair.receipt,label=\"HR_DAILY_CURRENT_\"+stage.toUpperCase()+\"_\"+binding.nonce.toUpperCase();\\n'+\n   'if(!keys(i,[\"database\",\"label\",\"sql\",\"verification_sql\",\"continue_on_error\",\"max_rows_per_statement\",\"statement_timeout_ms\",\"lock_timeout_ms\"])||!keys(r,[\"version\",\"stage\",\"phase\",\"identity\",\"label\",\"sqlSha256\",\"verificationSqlSha256\",\"actorBindingSha256\",\"generated\",\"statements\",\"verificationStatements\",\"roleRule\",\"native\"])||r.version!==\"DAILY_GENUINE_READ_INPUT_V1\"||r.stage!==stage||r.phase!==\"BEFORE\"||r.label!==label||i.label!==label||!same(r.identity,binding.identity)||!same(r.generated,binding.generated)||r.actorBindingSha256!==binding.actorBindingSha256||r.statements!==2||r.verificationStatements!==1||r.roleRule!==\"CURRENT_ACTIVE_ADMIN_IMPLIES_WPPP_PER_PUBLISHED_HELPER\"||r.native!==\"NOT_RUN\"||i.database!==\"agency_test\"||i.continue_on_error!==false||i.max_rows_per_statement!==1||i.statement_timeout_ms!==30000||i.lock_timeout_ms!==2000||sha(i.sql)!==r.sqlSha256||r.sqlSha256!==binding.sqlSha256||sha(i.verification_sql)!==r.verificationSqlSha256||r.verificationSqlSha256!==binding.verificationSqlSha256)throw Error(\"ROOT_B2_NATIVE_INPUT_REFUSED\");const packet=JSON.stringify(pair);if(Buffer.byteLength(packet)+1>98304)throw Error(\"ROOT_B2_PACKET_BOUND\");process.stdout.write(packet+\"\\\\n\");';\n  const built=JSON.parse(await node(body));state.dispatched.push(stage+'_CURRENT');store(key,state);\n  const startedAt=new Date().toISOString();\n  const result=await tools.mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback(built.input);\n  const finishedAt=new Date().toISOString(),v=result.structuredContent;\n  if(!v)throw Error('ACTUAL_STRUCTURED_CURRENT_NATIVE_REQUIRED');store(key+'CurrentNative',v);const raw=JSON.stringify(v,null,2)+'\\n',timing=JSON.stringify({startedAt,finishedAt},null,2)+'\\n';if(Buffer.byteLength(raw)>262144||raw.includes(\"\\n'@\"))throw Error('ROOT_B2_NATIVE_BOUND');\n  await run(\"$native=@'\\n\"+raw+\"'@\\n$timing=@'\\n\"+timing+\"'@\\nforeach($pair in @(@('\"+state.out+\"/\"+stage+\"_CURRENT_NATIVE.json',$native),@('\"+state.out+\"/\"+stage+\"_CURRENT_TIMING.json',$timing))){$b=[Text.UTF8Encoding]::new($false).GetBytes($pair[1]+[Environment]::NewLine);$f=[IO.File]::Open($pair[0],[IO.FileMode]::CreateNew);try{$f.Write($b,0,$b.Length)}finally{$f.Dispose()}}\",root,1000);\n  if(v.accepted!==true||v.rolledBack!==true||v.rollbackVerification?.connectedFresh!==true||v.database!=='cloudtms_test_clone')throw Error('ACTUAL_CURRENT_NATIVE_HELD');\n }\n async function bookkeep(phase){"
+    },
+    {
+      "before": "  const plan=B+'DAILY_GENUINE_'+stage+'_R10_PLAN_20261017.json',qualify=state.qualifyFile??'';",
+      "after": "  const qualify=state.qualifyFile??'';"
+    },
+    {
+      "before": "HR_ROOT_HELPER_COMMIT='e18d4b670d04538399aab94b9d3a4566e385a0e4'",
+      "after": "HR_ROOT_HELPER_COMMIT='\"+helperCommit+\"'"
+    },
+    {
+      "before": "  const own=stage==='S1'?load('dailyS1AdapterCommit'):load('dailyFourStageAdapterCommit'),rec=stage==='S1'?'9d92eaffbb0dab36374615aa7cc5fe6f8084b46d':'267f4e2c5fe30b02cbe69ca143f17d50dd89e960';",
+      "after": "  const own=stage==='S1'?execution.s1AdapterCommit:execution.fourStageAdapterCommit,rec=stage==='S1'?execution.s1RecorderCommit:execution.fourStageRecorderCommit;"
+    },
+    {
+      "before": "  const cmd=\"$env:HR_ROOT_STAGE='\"+stage+\"'\\n$env:HR_ROOT_OUT='\"+state.out+\"'\\n$env:HR_OPERATOR_COMMIT='\"+K4+\"'\\n$env:HR_ROOT_PLAN='\"+B+'DAILY_GENUINE_'+stage+\"_R10_PLAN_20261017.json'\\n$env:\"+(isS1?'HR_S1_ADAPTER_COMMIT':'HR_STAGE_ADAPTER_COMMIT')+\"='\"+own+\"'\\n$env:\"+(isS1?'HR_S1_RECORDER_COMMIT':'HR_STAGE_RECORDER_COMMIT')+\"='\"+rec+\"'\\nnode \"+P+relative;",
+      "after": "  const cmd=\"$env:HR_ROOT_STAGE='\"+stage+\"'\\n$env:HR_ROOT_OUT='\"+state.out+\"'\\n$env:HR_OPERATOR_COMMIT='\"+K4+\"'\\n$env:HR_ROOT_PLAN='\"+plan+\"'\\n$env:\"+(isS1?'HR_S1_ADAPTER_COMMIT':'HR_STAGE_ADAPTER_COMMIT')+\"='\"+own+\"'\\n$env:\"+(isS1?'HR_S1_RECORDER_COMMIT':'HR_STAGE_RECORDER_COMMIT')+\"='\"+rec+\"'\\nnode \"+P+relative;"
+    },
+    {
+      "before": "  await ready('AFTER_READY');",
+      "after": "  const currentReady=await ready('CURRENT_NATIVE_READY');await current(currentReady.current);await bookkeep('CURRENT');await control('CURRENT_NATIVE_SAVED');\n  await ready('AFTER_READY');"
+    },
+    {
+      "before": "setup:state.SETUPCommit,effect:state.effectCommit",
+      "after": "setup:state.SETUPCommit,current:state.CURRENTCommit,effect:state.effectCommit"
+    }
+  ],
+  "state": "FROZEN_SOURCE_TRANSPORT_REQUIRES_ACTUAL_COMPLETE_B2_SELECTION_AND_ADOPTION_COMMITS"
+}

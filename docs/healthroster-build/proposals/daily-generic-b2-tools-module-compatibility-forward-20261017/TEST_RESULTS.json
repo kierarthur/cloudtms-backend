@@ -1,0 +1,17 @@
+{
+  "qualification": "BOUNDED_PURE_MODULE_COMPATIBILITY_ONLY",
+  "node": "v24.15.0",
+  "command": [
+    "node",
+    "--test",
+    "test-current-milestone.mjs"
+  ],
+  "tests": 9,
+  "passed": 9,
+  "failed": 0,
+  "exitCode": 0,
+  "native": "NOT_RUN",
+  "sourceAdmission": "NOT_RUN",
+  "stdout": "✔ actual milestone buildCurrent/assertCurrentReady plus generated transport: S1 (6.5874ms)\n✔ actual milestone buildCurrent/assertCurrentReady plus generated transport: S1a (2.1644ms)\n✔ actual milestone buildCurrent/assertCurrentReady plus generated transport: S2 (2.1058ms)\n✔ actual milestone buildCurrent/assertCurrentReady plus generated transport: S3 (2.016ms)\n✔ actual milestone buildCurrent/assertCurrentReady plus generated transport: S4 (2.0034ms)\n✔ actual ready validator refuses source, stage, task, key count, nonce and date substitutions before any memory file read (7.9139ms)\n✔ actual milestone raw bindings and pair bytes cannot substitute under valid ready hashes (2.7009ms)\n✔ actual ready binding is bounded and cannot use an arbitrary extra progress field (4.19ms)\n✔ module milestone remains the exact author supplied image after synthetic replay (0.5967ms)\nℹ tests 9\nℹ suites 0\nℹ pass 9\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 143.4373\n",
+  "stderr": ""
+}

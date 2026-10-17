@@ -1,0 +1,23 @@
+{
+  "qualification": "BOUNDED_SOURCE_ONLY_SYNTHETIC_CALLBACKS_AND_CAPTURED_PURE_MODULE",
+  "node": "v24.15.0",
+  "command": [
+    "node",
+    "--experimental-vm-modules",
+    "--test",
+    "test-e18.mjs",
+    "test-b2.mjs",
+    "test-current-transport.mjs",
+    "test-current-milestone.mjs"
+  ],
+  "exitCode": 0,
+  "tests": 43,
+  "passed": 43,
+  "failed": 0,
+  "native": "NOT_RUN",
+  "actualToolsInvoked": 0,
+  "actualPrivateFilesRead": 0,
+  "actualSourceAdmission": "NOT_RUN",
+  "stdout": "(node:27276) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ actual full body with fake callbacks: S1 (5.0142ms)\n✔ actual full body with fake callbacks: S1a (1.4345ms)\n✔ actual full body with fake callbacks: S2 (1.3792ms)\n✔ actual full body with fake callbacks: S3 (1.1502ms)\n✔ actual full body with fake callbacks: S4 (1.0144ms)\n✔ wrong READY refuses before native and aborts only own captured session (0.3295ms)\n✔ native uncertainty stops and reconciles without retry {\"nativeHeld\":true} (1.0312ms)\n✔ native uncertainty stops and reconciles without retry {\"nativeThrow\":true} (0.3742ms)\n✔ nonzero coordinator exit never publishes (0.8318ms)\n✔ actual qualifier browser-close false never publishes (1.0143ms)\n✔ actual generated packet code accepts genuine pure original/aux builder frames for every stage and phase without file access (23.1284ms)\n✔ B2 complete parent inverse retains actual e18 layer without rewriting executed history (0.7903ms)\n✔ CURRENT uncertainty aborts without CURRENT_NATIVE_SAVED or later AFTER/PUBLISH (0.6855ms)\n✔ CURRENT native and timing are wx-persisted before helper commit and resume; consumption is never prewritten (1.0363ms)\n✔ source/helper/adapter/recorder aliases cannot stand in for real canonical commits (1.0659ms)\n✔ historical S0 cannot be relabelled under a different configured source (0.1515ms)\n✔ wrong-stage/non-public/alias plan maps refuse before the coordinator is launched (0.3513ms)\n✔ actual milestone buildCurrent/assertCurrentReady plus generated transport: S1 (7.1204ms)\n✔ actual milestone buildCurrent/assertCurrentReady plus generated transport: S1a (2.4194ms)\n✔ actual milestone buildCurrent/assertCurrentReady plus generated transport: S2 (2.407ms)\n✔ actual milestone buildCurrent/assertCurrentReady plus generated transport: S3 (2.086ms)\n✔ actual milestone buildCurrent/assertCurrentReady plus generated transport: S4 (2.1292ms)\n✔ actual ready validator refuses source, stage, task, key count, nonce and date substitutions before any memory file read (8.9972ms)\n✔ actual milestone raw bindings and pair bytes cannot substitute under valid ready hashes (2.8387ms)\n✔ actual ready binding is bounded and cannot use an arbitrary extra progress field (4.075ms)\n✔ module milestone remains the exact author supplied image after synthetic replay (0.3974ms)\n✔ all five exact original receipt pairs cross transport only after ready-validator and raw child hashes (9.0833ms)\n✔ raw input or binding substitution cannot be normalized into acceptance (1.4725ms)\n✔ physical mismatch and oversized raw pair refuse (1.5887ms)\n✔ unreviewed receipt/packet fields and relaxed native limits refuse even when raw bytes are self-consistent (9.1022ms)\n✔ emitted packet bound includes final LF without changing request fields (2.7984ms)\n(node:61256) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ actual full body with fake callbacks: S1 (3.4584ms)\n✔ actual full body with fake callbacks: S1a (1.0544ms)\n✔ actual full body with fake callbacks: S2 (1.3255ms)\n✔ actual full body with fake callbacks: S3 (0.9177ms)\n✔ actual full body with fake callbacks: S4 (0.7542ms)\n✔ wrong READY refuses before native and aborts only own captured session (0.261ms)\n✔ native uncertainty stops and reconciles without retry {\"nativeHeld\":true} (0.4205ms)\n✔ native uncertainty stops and reconciles without retry {\"nativeThrow\":true} (0.435ms)\n✔ nonzero coordinator exit never publishes (0.6854ms)\n✔ actual qualifier browser-close false never publishes (1.626ms)\n✔ actual generated packet code accepts genuine pure original/aux builder frames for every stage and phase without file access (23.3501ms)\n✔ complete e18 pin layer reverses to executed R10 body (0.6821ms)\nℹ tests 43\nℹ suites 0\nℹ pass 43\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 185.7794\n",
+  "stderr": ""
+}

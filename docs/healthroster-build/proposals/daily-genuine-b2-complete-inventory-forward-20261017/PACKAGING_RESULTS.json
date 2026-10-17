@@ -1,0 +1,24 @@
+{
+  "status": "PACKAGING_ONLY_SOURCE_PASS",
+  "tests": 51,
+  "failures": 0,
+  "parentVerification": {
+    "status": "SOURCE_ONLY_PASS",
+    "parents": 55,
+    "targets": 18,
+    "changed": 14,
+    "new": 4,
+    "literalHunks": 76,
+    "currentRawSavedIndexHistoricalChecked": true,
+    "admission": "NOT_RUN_REQUIRES_REAL_SUCCESSOR",
+    "native": "NOT_RUN"
+  },
+  "completeOriginalSourceFiles": 152,
+  "retainedOriginalManifest": 1,
+  "nestedManifestsRestored": 18,
+  "omissionCounterexamples": 18,
+  "functionalPostimagesRawUnchanged": 18,
+  "literalHunksRawUnchanged": 76,
+  "originalDe17Preserved": true,
+  "native": "NOT_RUN"
+}

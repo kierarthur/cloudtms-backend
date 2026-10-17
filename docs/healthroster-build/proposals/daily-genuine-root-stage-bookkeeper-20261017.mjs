@@ -7,7 +7,7 @@ const git=(repository,...args)=>cp.execFileSync('git',['-c','gc.auto=0','-c','ma
 const physical=p=>fs.realpathSync.native(p).replaceAll('\\','/');
 export async function run(env=process.env){
  const stage=env.HR_ROOT_STAGE,phase=env.HR_ROOT_PHASE,out=env.HR_ROOT_OUT,source=env.HR_OPERATOR_COMMIT,planFile=publicPath(env.HR_ROOT_PLAN);
- must(['BEFORE','SETUP','AFTER','PUBLISH'].includes(phase)&&['S1','S1a','S2','S3','S4',...phase==='PUBLISH'?['S0']:[]].includes(stage),'BOOKKEEPER_EXACT_PHASE_STAGE_REQUIRED');
+ must(['BEFORE','SETUP','CURRENT','AFTER','PUBLISH'].includes(phase)&&['S1','S1a','S2','S3','S4',...phase==='PUBLISH'?['S0']:[]].includes(stage),'BOOKKEEPER_EXACT_PHASE_STAGE_REQUIRED');
  must(/^[0-9a-f]{40}$/.test(source??'')&&/^D:\/Development\/GitHub\/\.codex-worktrees\/healthroster-install2-14102026\/\.codex-tmp\/daily-genuine-stages-20261017-[a-f0-9]{32}$/.test(out??''),'BOOKKEEPER_ACTUAL_SOURCE_OWNED_PATH_REQUIRED');
  must(physical(report)===report&&physical(root)===root&&physical(out)===out&&physical(here)===here.replaceAll('\\','/')&&physical(process.cwd()).startsWith('D:/Development/GitHub'),'BOOKKEEPER_REGISTERED_PHYSICAL_D_REQUIRED');
  for(const [repository,name] of [[report,'healthroster-v2-report-build-13102026'],[root,'healthroster-install2-14102026']]){
@@ -28,28 +28,45 @@ export async function run(env=process.env){
  git(root,'merge-base','--is-ancestor',helperCommit,rootHead);
  const readPublic=file=>{publicPath(file);must(physical(root+'/'+file)===root+'/'+file,'BOOKKEEPER_PHYSICAL_PUBLIC_FILE_REQUIRED');const b=small(root+'/'+file,2e6),images=blobImages(root,[rootHead,null].map(ref=>({ref,file})));must([rootHead,null].every(ref=>b.equals(images.get(ref,file))),'BOOKKEEPER_COMMITTED_PUBLIC_EVIDENCE_REQUIRED');return b;};
  const read=file=>{
-  const exact=new Set([stage+'_BEFORE_INPUT.json',stage+'_BEFORE_NATIVE.json',stage+'_AFTER_INPUT.json',stage+'_AFTER_NATIVE.json',stage+'_RESPONSE.json',stage+'_ENTRY_BINDING.json',stage+'_SETUP_ENTRY.md',stage+'_COORDINATOR_SUMMARY.json']);
+  const exact=new Set([stage+'_BEFORE_INPUT.json',stage+'_BEFORE_NATIVE.json',stage+'_AFTER_INPUT.json',stage+'_AFTER_NATIVE.json',stage+'_RESPONSE.json',stage+'_ENTRY_BINDING.json',stage+'_SETUP_ENTRY.md',stage+'_COORDINATOR_SUMMARY.json',stage+'_CURRENT_INPUT.json',stage+'_CURRENT_BINDING.json',stage+'_CURRENT_NATIVE.json',stage+'_CURRENT_TIMING.json',stage+'_CURRENT_CONSUMPTION.json']);
   must(exact.has(file)||phase==='PUBLISH'&&file===env.HR_ROOT_QUALIFY_RESULT&&new RegExp('^CLOSED_qualify_'+stage+'_[a-f0-9]{16}\\.json$').test(file),'BOOKKEEPER_CLOSED_PUBLIC_PHASE_FILE_REQUIRED');return small(out+'/'+file,2e6);
  };
  const plan=JSON.parse(readPublic(planFile));exactPlan(plan,stage,source);const prior=plan.previousEvidence?JSON.parse(readPublic(plan.previousEvidence)):null;previousWitness(plan,prior);if(prior)must(prior.originalCoordinatorSummary?.ownedDirectory===out,'BOOKKEEPER_SAME_ACTUAL_PREFIX_SESSION_REQUIRED');
- const contract=await import(pathToFileURL(report+'/'+operator+'/contract.mjs').href),native=await import(pathToFileURL(report+'/'+operator+'/native-read.mjs').href),stagesOwner=await import(pathToFileURL(report+'/'+operator+'/stages.mjs').href),owners={...contract,...native,...stagesOwner};
+ const contract=await import(pathToFileURL(report+'/'+operator+'/contract.mjs').href),native=await import(pathToFileURL(report+'/'+operator+'/native-read.mjs').href),stagesOwner=await import(pathToFileURL(report+'/'+operator+'/stages.mjs').href),currentOwner=await import(pathToFileURL(report+'/'+operator+'/current-read.mjs').href),owners={...contract,...native,...stagesOwner,...currentOwner};
  const effectFile=publicBase+'DAILY_GENUINE_'+stage+'_EFFECT_ADMISSION_20261017.json',afterFile=publicBase+'DAILY_GENUINE_'+stage+'_AFTER_EFFECT_QUALIFICATION_20261017.json';
  const get=phase=>{const built=JSON.parse(read(stage+'_'+phase+'_INPUT.json')),bytes=read(stage+'_'+phase+'_NATIVE.json');must(built.input.sql&&sha(built.input.sql)===built.receipt.sqlSha256&&sha(built.input.verification_sql)===built.receipt.verificationSqlSha256,'BOOKKEEPER_ACTUAL_INPUT_HASH_REQUIRED');return {built,bytes,result:JSON.parse(bytes)};};
- const pending=[];const write=(file,value)=>{publicPath(file);must(file.startsWith(publicBase)&&file.endsWith('.json')&&physical(path.dirname(root+'/'+file))===path.dirname(root+'/'+file).replaceAll('\\','/'),'BOOKKEEPER_PHYSICAL_QUALIFICATION_DESTINATION_REQUIRED');must(!pending.some(r=>r.file===file),'BOOKKEEPER_DUPLICATE_WRITE_REQUIRED');pending.push({file,bytes:Buffer.from(JSON.stringify(value,null,2)+'\n'),append:false});};
+ const pending=[];const write=(file,value)=>{publicPath(file);must(file.startsWith(publicBase)&&file.endsWith('.json')&&physical(path.dirname(root+'/'+file))===path.dirname(root+'/'+file).replaceAll('\\','/'),'BOOKKEEPER_PHYSICAL_QUALIFICATION_DESTINATION_REQUIRED');must(!pending.some(r=>r.file===file),'BOOKKEEPER_DUPLICATE_WRITE_REQUIRED');pending.push({file,bytes:Buffer.isBuffer(value)?Buffer.from(value):Buffer.from(JSON.stringify(value,null,2)+'\n'),append:false});};
+ if(phase==='CURRENT'){
+  const expectedEffectFiles=["docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs","docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/clock-forward.mjs","docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs","docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs","docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs","docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/validate.mjs","docs/healthroster-build/proposals/daily-b2-current-effect-20261017/current-effect.mjs"],effectCommit=env.HR_ROOT_HELPER_COMMIT;
+  must(/^[a-f0-9]{40}$/.test(effectCommit??''),'BOOKKEEPER_B2_EFFECT_SOURCE_COMMIT_REQUIRED');git(root,'merge-base','--is-ancestor',effectCommit,rootHead);
+  const file='docs/healthroster-build/proposals/daily-b2-current-effect-20261017/SOURCE_SELECTION.json',selectionBytes=readPublic(file),selection=JSON.parse(selectionBytes);
+  must(selectionBytes.equals(git(root,'show',effectCommit+':'+file))&&Object.keys(selection).sort().join(',')==='files,version'&&selection.version==='DAILY_B2_EXACT_EFFECT_SOURCE_V1'&&JSON.stringify(selection.files.map(r=>r.file))===JSON.stringify(expectedEffectFiles),'BOOKKEEPER_B2_EFFECT_SELECTION_REQUIRED');
+  for(const r of selection.files){const b=readPublic(r.file);must(Object.keys(r).sort().join(',')==='bytes,file,sha256'&&Number.isSafeInteger(r.bytes)&&r.bytes>0&&/^[a-f0-9]{64}$/.test(r.sha256)&&b.length===r.bytes&&sha(b)===r.sha256&&b.equals(git(root,'show',effectCommit+':'+r.file)),'BOOKKEEPER_B2_EFFECT_SOURCE_CHANGED');}
+ }
  if(phase==='BEFORE'){
   const data=get('BEFORE'),effect=JSON.parse(readPublic(effectFile));write(plan.beforeEvidence,beforeProof({stage,source,plan,prior,...data,effect,readPublic,now:Date.now()},owners));
  }else if(phase==='SETUP'){
   const file='docs/healthroster-build/TEST_SETUP_MANIFEST.md',old=readPublic(file),entry=JSON.parse(read(stage+'_ENTRY_BINDING.json')),before=get('BEFORE'),effectBytes=readPublic(effectFile),addition=read(stage+'_SETUP_ENTRY.md').toString();
   const next=setupAppend({stage,source,plan,entry,beforeBuilt:before.built,beforeBytes:before.bytes,effectBytes,manifest:old.toString(),addition},owners);must(Buffer.from(next).subarray(0,old.length).equals(old),'BOOKKEEPER_SETUP_PREFIX_REQUIRED');pending.push({file,bytes:Buffer.from(next),parent:old,append:true});
+ }else if(phase==='CURRENT'){
+  const b=get('BEFORE'),entry=JSON.parse(read(stage+'_ENTRY_BINDING.json')).entry,effectBytes=readPublic(effectFile);
+  const entrySha256=owners.assertSetupEntry(readPublic('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,b.bytes,b.built.receipt,effectBytes);
+  must(entry.sourceCommit===source,'BOOKKEEPER_CURRENT_SOURCE_REQUIRED');
+  const record=owners.makeCurrentEvidence({binding:JSON.parse(read(stage+'_CURRENT_BINDING.json')),builtBytes:read(stage+'_CURRENT_INPUT.json'),nativeBytes:read(stage+'_CURRENT_NATIVE.json'),timing:JSON.parse(read(stage+'_CURRENT_TIMING.json')),beforeBuilt:b.built,beforeInputBytes:read(stage+'_BEFORE_INPUT.json'),beforeBytes:b.bytes,entry,entrySha256,now:Date.now()});
+  write(plan.currentReadEvidence,record);
  }else if(phase==='AFTER'){
   const b=get('BEFORE'),data=get('AFTER'),response=JSON.parse(read(stage+'_RESPONSE.json')),afterEffect=JSON.parse(readPublic(afterFile));
-  write(plan.afterEvidence,afterProof({stage,source,plan,prior,beforeBuilt:b.built,beforeBytes:b.bytes,beforeResult:b.result,...data,response,afterEffect,readPublic,now:Date.now()},owners));
+  const entry=JSON.parse(read(stage+'_ENTRY_BINDING.json')).entry,effectBytes=readPublic(effectFile);
+  const entrySha256=owners.assertSetupEntry(readPublic('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,b.bytes,b.built.receipt,effectBytes);
+  const currentEvidenceBytes=readPublic(plan.currentReadEvidence),consumptionBytes=readPublic(plan.currentConsumptionEvidence);must(consumptionBytes.equals(read(stage+'_CURRENT_CONSUMPTION.json')),'BOOKKEEPER_COMMITTED_CONSUMPTION_BYTES_REQUIRED');
+  write(plan.afterEvidence,afterProof({entry,entrySha256,beforeInputBytes:read(stage+'_BEFORE_INPUT.json'),currentEvidenceBytes,consumptionBytes,stage,source,plan,prior,beforeBuilt:b.built,beforeBytes:b.bytes,beforeResult:b.result,...data,response,afterEffect,readPublic,now:Date.now()},owners));
  }else{
   const before=JSON.parse(readPublic(plan.beforeEvidence)),after=JSON.parse(readPublic(plan.afterEvidence)),response=JSON.parse(read(stage+'_RESPONSE.json')),summary=JSON.parse(read(stage+'_COORDINATOR_SUMMARY.json')),qualify=JSON.parse(read(env.HR_ROOT_QUALIFY_RESULT));
   must(summary.ownedDirectory===out,'BOOKKEEPER_EXACT_RELEASED_SESSION_REQUIRED');
   const beforeBytes=read(stage+'_BEFORE_NATIVE.json'),afterBytes=read(stage+'_AFTER_NATIVE.json'),effect=JSON.parse(readPublic(afterFile));
   must(effect.version==='DAILY_GENUINE_ROOT_AFTER_EFFECT_QUALIFICATION_V1'&&effect.stage===stage&&effect.beforeEnvelopeSha256===sha(beforeBytes)&&effect.afterEnvelopeSha256===sha(afterBytes)&&effect.responseProjectionSha256===sha(JSON.stringify(response.projection)),'BOOKKEEPER_ACTUAL_COMMITTED_AFTER_EFFECT_REQUIRED');for(const k of ['canonicalAfterEvidence','exactApprovedChangesEvidence','backgroundAttributionEvidence'])readPublic(effect[k]);
-  write(plan.completedEvidence,publishPrefix({stage,source,plan,prior,beforeProof:before,afterProof:after,qualify,summary,beforeBytes,afterBytes,response},owners));
+  const currentPublish=stage==='S0'?{}:(()=>{const data=get('BEFORE'),entry=JSON.parse(read(stage+'_ENTRY_BINDING.json')).entry,effectBytes=readPublic(effectFile);return {beforeBuilt:data.built,beforeInputBytes:read(stage+'_BEFORE_INPUT.json'),entry,entrySha256:owners.assertSetupEntry(readPublic('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,data.bytes,data.built.receipt,effectBytes)};})();
+  write(plan.completedEvidence,publishPrefix({...currentPublish,currentEvidenceBytes:stage==='S0'?null:readPublic(plan.currentReadEvidence),consumptionBytes:stage==='S0'?null:readPublic(plan.currentConsumptionEvidence),stage,source,plan,prior,beforeProof:before,afterProof:after,qualify,summary,beforeBytes,afterBytes,response},owners));
  }
  must(git(report,'rev-parse','HEAD').toString().trim()===source&&git(root,'rev-parse','HEAD').toString().trim()===rootHead,'BOOKKEEPER_HEAD_MOVED');
  // Decide and validate everything before any write; no dossier or private file is created.

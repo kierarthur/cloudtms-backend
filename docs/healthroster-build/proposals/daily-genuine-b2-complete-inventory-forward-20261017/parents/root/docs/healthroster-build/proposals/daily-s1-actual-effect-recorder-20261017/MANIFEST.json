@@ -1,0 +1,37 @@
+{
+  "version": "IGNORED_PUBLIC_S1_RECORDER_SOURCE_SELECTION_V1",
+  "files": [
+    {
+      "file": "recorder.mjs",
+      "bytes": 14975,
+      "sha256": "a247aca92d5be78878766b12793c7399089574446633a6fd0b6dcc656a1f46a1"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 16317,
+      "sha256": "a5dac3d483df8041fece9db020bd955c8520dbba0309da4781b5ee1b3dd34d8b"
+    },
+    {
+      "file": "README.md",
+      "bytes": 5778,
+      "sha256": "abe4f5081c8af781734f2930b9911ebd53701a81f27335cf679d1ce7e1a1928a"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 3483,
+      "sha256": "857d42074136bdd2149a95286c769d76bbd367662f46daeb0bd186410b94f788"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 1273,
+      "sha256": "40bed722742255c0bae616d19777af4efc7b5fd93de9f6434a6afce5888e40a3"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 407,
+      "sha256": "c90a3b0cb1c5611c3181d0a669683aab5dede566feaac07cfbea3e1d64546da2"
+    }
+  ],
+  "noCommitOrRootWrite": true,
+  "sourceOnly": true
+}

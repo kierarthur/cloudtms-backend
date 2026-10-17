@@ -1,0 +1,145 @@
+{
+  "version": "B2_WORKER_COORDINATOR_PEER_MANIFEST_V1",
+  "files": [
+    {
+      "file": "AUTHOR_ALL_FILES_VERIFIED.json",
+      "bytes": 30695,
+      "sha256": "de17d867f5b1a0ca4c3da073c5f173974f185dbbf79f1c07d919c4f18fd178b8"
+    },
+    {
+      "file": "capture/EDITS.json",
+      "bytes": 37648,
+      "sha256": "3a3183aa716f8c14c2ce72b0cd9e20a28d6593f459b1fb57967305a832f14e92"
+    },
+    {
+      "file": "capture/MANIFEST.json",
+      "bytes": 30695,
+      "sha256": "de17d867f5b1a0ca4c3da073c5f173974f185dbbf79f1c07d919c4f18fd178b8"
+    },
+    {
+      "file": "capture/offline-worker.mjs",
+      "bytes": 11393,
+      "sha256": "4b073fc3b0431b4fe672cdbd36fd12d58fe12490d8ecf2549903c8deb6f3439a"
+    },
+    {
+      "file": "capture/PARENTS.json",
+      "bytes": 17522,
+      "sha256": "555e0155010316c6fd0214a7ec2552d51a0422673a04613edfa0ce52e0835118"
+    },
+    {
+      "file": "capture/parents/report/docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/coordinate.mjs",
+      "bytes": 4938,
+      "sha256": "13127c4af70d3fdb32057d8c0a0cceaa58e430bbd22e2ec6accfaab169dcd614"
+    },
+    {
+      "file": "capture/parents/report/docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/progress.mjs",
+      "bytes": 4560,
+      "sha256": "fda0b2de5a53f29c1fbd77bee5ed172ee22d80bb0d081794bf63e2a3ee2e076c"
+    },
+    {
+      "file": "capture/parents/report/docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/stage.mjs",
+      "bytes": 2089,
+      "sha256": "b33cd9943a80b87a04af6d0290e22a76549c741aed6666e338cf306ea784b39b"
+    },
+    {
+      "file": "capture/parents/report/docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
+      "bytes": 7292,
+      "sha256": "c167833e193d3fac9b9de40c0a9b4447f5a193c024cb4caab19401264440e1f5"
+    },
+    {
+      "file": "capture/parents/report/docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "bytes": 12684,
+      "sha256": "ef082cac41ef6f653d044a33b3801d83eb0b1bc1275a6bb9684d06a46b4d9f60"
+    },
+    {
+      "file": "capture/parents/report/docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "bytes": 5111,
+      "sha256": "5d487a9ba1b6f5c742e17d3d2b06bbfc6bb0e2937ea23600694122a3f2ca2c8b"
+    },
+    {
+      "file": "capture/payload/report/docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/coordinate.mjs",
+      "bytes": 5280,
+      "sha256": "8e092dcd7947156684a7284c8fd774b2ba8e2320b93f7f1beba15fd44b53d60a"
+    },
+    {
+      "file": "capture/payload/report/docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/progress.mjs",
+      "bytes": 4917,
+      "sha256": "dd918d8222a028dd6ccac06d8f5a997f0190fc45b9e9b54c37c115abab14c3c2"
+    },
+    {
+      "file": "capture/payload/report/docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/stage.mjs",
+      "bytes": 2117,
+      "sha256": "82fff5d95e548fe510ceb351b587586e833133e8f88edaf8d0d7b47d5e71e0d0"
+    },
+    {
+      "file": "capture/payload/report/docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/current-ipc.mjs",
+      "bytes": 3158,
+      "sha256": "7276f1555f25675f67752c6e6fba46972a15f63d1ff2974d278eeda7d928c85e"
+    },
+    {
+      "file": "capture/payload/report/docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
+      "bytes": 7576,
+      "sha256": "4f91ffea9ce323ae24b9333b3ff51eb2c69cdcb86eb692de4d33ec2fc3652eb2"
+    },
+    {
+      "file": "capture/payload/report/docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "bytes": 15899,
+      "sha256": "fb0f8e6c3935448c346cb61ddd2a281e408a4ebf8c250a50577a370671e776ef"
+    },
+    {
+      "file": "capture/payload/report/docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "bytes": 5315,
+      "sha256": "b0653a4e7f7e0700b5fffb0e557873dcc1f009d59f73e050600b8ab9e5224310"
+    },
+    {
+      "file": "capture/PROTOCOL.md",
+      "bytes": 4507,
+      "sha256": "15c1e14212ce1b733c8ed8858b55d5d7e22af80ad0dcec779015ff43f1106dc8"
+    },
+    {
+      "file": "capture/README.md",
+      "bytes": 4248,
+      "sha256": "00d3901e3db043729afef3a341cc8237c523cf9ec2092a6ba113899fda5d9fb8"
+    },
+    {
+      "file": "capture/SELECTION.json",
+      "bytes": 6426,
+      "sha256": "a22022111151456dcb30ef0c711c27d0f76f342aa73afe6a3c2a624223c35bc2"
+    },
+    {
+      "file": "capture/SOURCE_CHAIN_MAP.json",
+      "bytes": 40234,
+      "sha256": "b3601752341e1aa110ec00a5fd08baee09513c8744968ba0b74debe0ee0107c5"
+    },
+    {
+      "file": "capture/test-support.mjs",
+      "bytes": 15091,
+      "sha256": "e0ddf5125ae8f118de57abbaaeafb101f26e98262bb62425667b576663823723"
+    },
+    {
+      "file": "capture/test.mjs",
+      "bytes": 15576,
+      "sha256": "95cd30c47e134c4abb1e4e9d3b2ebb2c8195200dc534248436a8dff5248915ba"
+    },
+    {
+      "file": "capture/verify.py",
+      "bytes": 2897,
+      "sha256": "64403876cd6b6226c42a0d7dd85d94fa5a7ecc3e721cd7bd3c1791673e0891f3"
+    },
+    {
+      "file": "extra.test.mjs",
+      "bytes": 4711,
+      "sha256": "5fa80555413b9c1dc216b7271c8a6204e58c378129ddca95211fe716960cad74"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1455,
+      "sha256": "8a8a4e8ee52ebce59d803c70de6b493e2a8137dc527df6f8d0b625ebb4a679af"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 2942,
+      "sha256": "f8fc245e2720779b347553841ee6ccd521b56f15ed314afaf9d53b7abd890d56"
+    }
+  ]
+}

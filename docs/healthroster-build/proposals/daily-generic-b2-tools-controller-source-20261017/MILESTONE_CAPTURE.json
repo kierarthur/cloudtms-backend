@@ -1,0 +1,46 @@
+{
+  "qualification": "PURE_SOURCE_MODULE_MILESTONE_NOT_PACK_FREEZE_OR_ADMISSION",
+  "origin": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/.codex-tmp/daily-genuine-b2-current-read-source-20261017/payload/report/docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017",
+  "files": [
+    {
+      "file": "contract.mjs",
+      "bytes": 7643,
+      "sha256": "66160e665fb71bb81ee994e7108fb1539c4fff8ae0189abd3d91ebd6f43eabdb"
+    },
+    {
+      "file": "current-read.mjs",
+      "bytes": 12655,
+      "sha256": "169f4f58f605a038000ae0d2257de5b6ec511bc4c19b0a3652b6b383deeb607f"
+    },
+    {
+      "file": "native-read.mjs",
+      "bytes": 18744,
+      "sha256": "b8449f6bc901f41c2d058c6618b11bab70337579133fd99360c6988eb820cf07"
+    },
+    {
+      "file": "reference/audit/FINAL_SOURCE_REVIEW.json",
+      "bytes": 6154,
+      "sha256": "d601bd9bc16d03453683bba4d298589f4f1450f06c7f09ba9d5adfe7b79151f2"
+    },
+    {
+      "file": "reference/audit/SOURCE_SCHEMA_EFFECT_BOUNDARIES.json",
+      "bytes": 236921,
+      "sha256": "b702b374a964e6368e5b7dca3caab714397d1f91d8bdd0591a63cd07bb971bbd"
+    },
+    {
+      "file": "reference/daily-health-genuine-fixture-recipe-20261017/RECIPE.json",
+      "bytes": 11525,
+      "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c"
+    },
+    {
+      "file": "reference/mapping/SOURCE_METADATA.json",
+      "bytes": 86934,
+      "sha256": "f9f14235719dab1887214992dd928790cf2b8c3962fa3845ac8b55a1c342cf01"
+    },
+    {
+      "file": "reference/mapping/stage.mjs",
+      "bytes": 1201,
+      "sha256": "f64b0dcac218e582b848d24660b11b7f8bf9c22161d97b2a23397c960354ab0f"
+    }
+  ]
+}

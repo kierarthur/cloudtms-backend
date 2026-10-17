@@ -1,0 +1,31 @@
+{
+  "version": "DAILY_B2_TARGETED_INDEPENDENT_CODE_PEER_V1",
+  "qualification": "BOUNDED_CODE_ONLY_PACKAGING_AND_REAL_ADMISSION_HELD",
+  "files": [
+    {
+      "file": "integration.test.mjs",
+      "bytes": 4542,
+      "sha256": "0d507a780983b01e92e9cf358bd235a481b67337b24fdabb519be6ddd06b9200"
+    },
+    {
+      "file": "pure-guard.test.mjs",
+      "bytes": 4137,
+      "sha256": "a337a372803595fc199b8eb4f1a75f3f73bb1a407d9d98b16485b16e0fb6777b"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 8816,
+      "sha256": "8b6bf7a3c89b5a935ceaa9474254b47d4ce197a03ae57e58312652906a64cc75"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 3816,
+      "sha256": "432b588cdfc40aff5b18b8d1bdb282216a6f1e0885a4bed046ab7b0e54e2071d"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 3730,
+      "sha256": "88b68c069d647321dfaacdb65d2f68243df48cda0c7007890c80959ab2ff76cc"
+    }
+  ]
+}

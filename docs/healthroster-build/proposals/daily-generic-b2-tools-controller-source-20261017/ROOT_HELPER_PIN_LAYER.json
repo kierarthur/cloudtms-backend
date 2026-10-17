@@ -1,0 +1,10 @@
+{
+  "parentBytes": 10610,
+  "parentSha256": "d1ccd688dbab5a5465993719f602d6e54a9ddb5ee0dd466e231d5696a96c8341",
+  "afterBytes": 10610,
+  "afterSha256": "ee14891202c24a3fe4c47a7356e2fd17d464c58d4ea793b66fd11425cca0cc8f",
+  "before": "HR_ROOT_HELPER_COMMIT='8971881e6347f4597a8547aabeb404fe578011c0'",
+  "after": "HR_ROOT_HELPER_COMMIT='e18d4b670d04538399aab94b9d3a4566e385a0e4'",
+  "wholeRawInverse": true,
+  "state": "COMPLETE_ORDINARY_HELPER_PIN_LAYER_NOT_B2_PROTOCOL"
+}

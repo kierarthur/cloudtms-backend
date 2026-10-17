@@ -1,0 +1,40 @@
+{
+  "version": "DAILY_B2_EXACT_EFFECT_SOURCE_V1",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+      "bytes": 15425,
+      "sha256": "ce73b2b44c0d45b224471260b7e8bff4e380776d5a66dc10dc3a9dfe0c304fae"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/clock-forward.mjs",
+      "bytes": 1314,
+      "sha256": "7fb4fe6d0370d4bdb2cc1cb4246046931577d700d143602b805053629732a32d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs",
+      "bytes": 8370,
+      "sha256": "13ad4957923dcbfc053e0762a8306233b7adbf42d184014b42cef03f2e042394"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs",
+      "bytes": 8803,
+      "sha256": "c540e73a9f4e2904e7e3eba1554c0effff743dc720b589f530f7bebda30319cf"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs",
+      "bytes": 9023,
+      "sha256": "3667d63e081e3ad64d0dae7966c7b781f9fce85927d8f6bb4a7b7939f5332a86"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/validate.mjs",
+      "bytes": 2120,
+      "sha256": "643575524db3492d37e678168b5c706a11b4fe7552efff6caec4aaa189003267"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-b2-current-effect-20261017/current-effect.mjs",
+      "bytes": 2340,
+      "sha256": "4e407f3c0148e326ac000c19da3876ae102943481a05df74363ce22ed7c8f25e"
+    }
+  ]
+}

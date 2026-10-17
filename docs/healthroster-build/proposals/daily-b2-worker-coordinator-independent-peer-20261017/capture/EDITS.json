@@ -1,0 +1,461 @@
+{
+  "version": "B2_LITERAL_COMPLETE_PARENT_REVERSALS_V1",
+  "hunks": [
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "before": "import fs from 'node:fs';",
+      "after": "import crypto from 'node:crypto';\nimport {buildCurrent,currentFiles,validateCurrentEvidence,currentAttempt,makeConsumption,validateCurrentAfter} from './current-read.mjs';\nimport {waitCurrentResume} from './current-ipc.mjs';\nimport fs from 'node:fs';"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "before": "let browser,closed=true,status='HOLD',code='FIXTURE_PHASE_HELD',activeNetwork,expectedWrites=0;",
+      "after": "let browser,closed=true,status='HOLD',code='FIXTURE_PHASE_HELD',activeNetwork,expectedWrites=0,current,currentResumeDispose,attemptBinding;"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "before": "p==='BEFORE'&&phase==='qualify'?180000:30000",
+      "after": "p==='BEFORE'&&(phase==='qualify'||phase==='submit'&&stage!=='S0')?180000:30000"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "before": " const openBrowser=async()=>{",
+      "after": " const readCurrent=()=>{\n   check(current,'FIXTURE_CURRENT_READ_REQUIRED');const bytes=committedRootFile(current.evidenceFile);\n   check(!current.evidenceSha256||current.evidenceSha256===sha(bytes),'FIXTURE_CURRENT_COMMITTED_EVIDENCE_CHANGED');\n   const v=validateCurrentEvidence(JSON.parse(bytes),{...current.baseline,expectedBinding:current.binding,now:Date.now(),currentMaxAgeMs:30000});\n   check(v.inputSha256===current.inputSha256,'FIXTURE_CURRENT_READY_INPUT_BYTES_CHANGED');current.evidenceSha256=sha(bytes);return {bytes,v};\n  };\n  const openBrowser=async()=>{"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "before": "try{assertActive();await turn.assertHeld('daily-genuine-'+stage+'-before-post-forward');assertActive();}catch{network.refuseTransport();return r.abort();}",
+      "after": "try{\n      assertActive();await turn.assertHeld('daily-genuine-'+stage+'-before-post-forward');assertActive();\n      check(attemptBinding&&current,'FIXTURE_CURRENT_PERSISTED_ATTEMPT_REQUIRED');readCurrent();\n      // Durable eligibility evidence, never a claim that fetch forwarded or succeeded.\n      writeClosed(out,currentFiles(stage).consumption,makeConsumption(current.binding,current.evidenceSha256,Date.now()));\n      readCurrent();assertActive(); // Recheck both native clocks AFTER fsync and every awaited held/source callback.\n     }catch{network.refuseTransport();return r.abort();}"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "before": "const b=privateBinding(),{page,network}=await openBrowser();await currentAdmission(page,b.actorId);network.assertClean(0);\n    // Recheck native freshness and exact committed entry AFTER real current actor admission.\n    load('BEFORE');await turn.assertHeld('daily-genuine-'+stage+'-before-attempt');assertActive();\n    persistAttempt(out,stage,{entrySha256:entrySha,beforeEnvelopeSha256:sha(before.bytes)});network.arm();expectedWrites=1;",
+      "after": "const b=privateBinding(),{page,network}=await openBrowser();await currentAdmission(page,b.actorId);network.assertClean(0);\n     const admittedAt=new Date().toISOString();\n     await turn.assertHeld('daily-genuine-'+stage+'-before-current-input');assertActive();\n     const baseline={beforeBuilt:before.built,beforeInputBytes:read(preparedFile('BEFORE')),beforeBytes:before.bytes,entry,entrySha256:entrySha};\n     const pending=buildCurrent({stage,identity:turn.identity,actorId:b.actorId,generated:beforeState.generated,...baseline,admittedAt,readyAt:new Date().toISOString(),nonce:crypto.randomBytes(16).toString('hex')});\n     writeClosed(out,currentFiles(stage).input,pending.built);writeClosed(out,currentFiles(stage).binding,pending.binding);\n     const resumed=await waitCurrentResume(process,pending.ready,{signal:AbortSignal.any([turn.signal,abort.signal]),onViolation:onAbort});currentResumeDispose=resumed.dispose;\n     current={binding:pending.binding,baseline,evidenceFile:resumed.evidenceFile,inputSha256:pending.ready.inputSha256};readCurrent();network.assertClean(0);\n     await turn.assertHeld('daily-genuine-'+stage+'-before-attempt');assertActive();readCurrent();\n     attemptBinding=currentAttempt(current.binding,current.evidenceSha256);persistAttempt(out,stage,attemptBinding);network.arm();expectedWrites=1;"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "before": "assertActive();saveQualification(out,stage,before.frame,after.frame,response.projection,beforeState);status='PASS';",
+      "after": "let currentBefore=null;\n    if(stage!=='S0'){\n     const {entry,effectFile}=JSON.parse(read(out+'/'+stage+'_ENTRY_BINDING.json')),effectBytes=committedRootFile(effectFile);\n     const entrySha256=assertSetupEntry(committedRootFile('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,before.bytes,before.built.receipt,effectBytes);\n     const f=currentFiles(stage),currentEvidenceBytes=committedRootFile(f.evidence),consumptionBytes=committedRootFile(f.consumptionEvidence);\n     currentBefore=validateCurrentAfter({currentEvidenceBytes,consumptionBytes,beforeBuilt:before.built,beforeInputBytes:read(preparedFile('BEFORE')),beforeBytes:before.bytes,entry,entrySha256,response});\n     check(afterEffect.currentReadEvidence===f.evidence&&afterEffect.currentConsumptionEvidence===f.consumptionEvidence&&afterEffect.currentEvidenceSha256===sha(currentEvidenceBytes)&&afterEffect.currentConsumptionSha256===sha(consumptionBytes),'FIXTURE_CURRENT_AFTER_EFFECT_BINDING_REQUIRED');\n    }\n    assertActive();saveQualification(out,stage,before.frame,after.frame,response.projection,beforeState,currentBefore);status='PASS';"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
+      "before": "clearTimeout(timer);process.removeListener('message',onMessage);",
+      "after": "clearTimeout(timer);currentResumeDispose?.();process.removeListener('message',onMessage);"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
+      "before": "import {scopes} from './native-read.mjs';",
+      "after": "import {scopes} from './native-read.mjs';\nimport {assertCurrentPrefix} from './current-read.mjs';"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
+      "before": "check(Array.isArray(j.qualified)&&j.qualified.every((s,i)=>s===STAGES[i]),'FIXTURE_QUALIFIED_PREFIX_REQUIRED');return j;",
+      "after": "check(Array.isArray(j.qualified)&&j.qualified.every((s,i)=>s===STAGES[i]),'FIXTURE_QUALIFIED_PREFIX_REQUIRED');if(j.qualified.length>1)assertCurrentPrefix(j.currentBefore,j.qualified.at(-1));return j;"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
+      "before": "export function saveQualification(directory,stage,before,after,projection,previous){",
+      "after": "export function saveQualification(directory,stage,before,after,projection,previous,currentBefore=null){\n if(stage!=='S0')assertCurrentPrefix(currentBefore,stage);"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
+      "before": "{stage,after,projection});",
+      "after": "{stage,after,projection,...stage==='S0'?{}:{currentBefore}});"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
+      "before": "const value={qualified,after,generated:{...previous.generated,...projection}};",
+      "after": "const value={qualified,after,generated:{...previous.generated,...projection},...stage==='S0'?{}:{currentBefore}};"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "before": "runOwnedTurnChild,treeFactory=ownedWorker}",
+      "after": "runOwnedTurnChild,treeFactory=ownedWorker,currentNative=null}"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "before": "const tree=treeFactory();let execution;",
+      "after": "const tree=treeFactory();let execution;const spawnOwned=(...args)=>{const child=tree.spawn(...args);currentNative?.attach(child);return child;};"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "before": "spawnChild:tree.spawn,resourceGuard:tree",
+      "after": "spawnChild:spawnOwned,resourceGuard:tree"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "before": "finally{await tree.confirm();}",
+      "after": "finally{await tree.confirm();currentNative?.close();}"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "before": "return {...r,ownedDirectory:out",
+      "after": "if(r.status==='PASS')currentNative?.assertCompleted();\n  return {...r,ownedDirectory:out"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/stage.mjs",
+      "before": "runOwnedTurnChild,treeFactory}){",
+      "after": "runOwnedTurnChild,treeFactory,currentNative}){"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/stage.mjs",
+      "before": "runOwnedTurnChild,treeFactory});",
+      "after": "runOwnedTurnChild,treeFactory,currentNative});"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/coordinate.mjs",
+      "before": "import {source} from './source.mjs';",
+      "after": "import {parentCurrentBridge} from '../daily-health-genuine-staged-operator-20261017/current-ipc.mjs';\nimport {source} from './source.mjs';"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/coordinate.mjs",
+      "before": "const report=status=>console.log(JSON.stringify({status,stage,",
+      "after": "const report=(status,current=null)=>console.log(JSON.stringify({status,...current?{current}:{},stage,"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/coordinate.mjs",
+      "before": "phase:async phase=>{const r=await runPhase({phase,stage,out,",
+      "after": "phase:async phase=>{const currentNative=phase==='submit'?parentCurrentBridge({stage,source:sourceCommit,controls,signal,assertHeld:turn.assertHeld,announce:ready=>report('CURRENT_NATIVE_READY',ready)}):null;const r=await runPhase({phase,stage,out,currentNative,"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/progress.mjs",
+      "before": "'SETUP_ENTRY_READY','AFTER_READY'",
+      "after": "'SETUP_ENTRY_READY','CURRENT_NATIVE_READY','AFTER_READY'"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/progress.mjs",
+      "before": "import fs from 'node:fs';",
+      "after": "import {assertCurrentReady} from '../daily-health-genuine-staged-operator-20261017/current-read.mjs';\nimport fs from 'node:fs';"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/progress.mjs",
+      "before": "check(ready.has(r.status)&&Object.keys(r).sort().join(',')===",
+      "after": "if(r.status==='CURRENT_NATIVE_READY'){assertCurrentReady(r.current,{stage,source:sourceCommit});}\n  check(ready.has(r.status)&&Object.keys(r).filter(k=>r.status==='CURRENT_NATIVE_READY'?k!=='current':true).sort().join(',')==="
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/progress.mjs",
+      "before": "remainingWorkMs:found.remainingWorkMs}:null;",
+      "after": "remainingWorkMs:found.remainingWorkMs,...found.status==='CURRENT_NATIVE_READY'?{current:found.current}:{}}:null;"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+      "before": "['BEFORE','SETUP','AFTER','PUBLISH'].includes(phase)",
+      "after": "['BEFORE','SETUP','CURRENT','AFTER','PUBLISH'].includes(phase)"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+      "before": "stage+'_COORDINATOR_SUMMARY.json']);",
+      "after": "stage+'_COORDINATOR_SUMMARY.json',stage+'_CURRENT_INPUT.json',stage+'_CURRENT_BINDING.json',stage+'_CURRENT_NATIVE.json',stage+'_CURRENT_TIMING.json',stage+'_CURRENT_CONSUMPTION.json']);"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+      "before": "owners={...contract,...native,...stagesOwner};",
+      "after": "currentOwner=await import(pathToFileURL(report+'/'+operator+'/current-read.mjs').href),owners={...contract,...native,...stagesOwner,...currentOwner};"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+      "before": "bytes:Buffer.from(JSON.stringify(value,null,2)+'\\n')",
+      "after": "bytes:Buffer.isBuffer(value)?Buffer.from(value):Buffer.from(JSON.stringify(value,null,2)+'\\n')"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+      "before": "}else if(phase==='AFTER'){",
+      "after": "}else if(phase==='CURRENT'){\n  const b=get('BEFORE'),entry=JSON.parse(read(stage+'_ENTRY_BINDING.json')).entry,effectBytes=readPublic(effectFile);\n  const entrySha256=owners.assertSetupEntry(readPublic('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,b.bytes,b.built.receipt,effectBytes);\n  must(entry.sourceCommit===source,'BOOKKEEPER_CURRENT_SOURCE_REQUIRED');\n  const record=owners.makeCurrentEvidence({binding:JSON.parse(read(stage+'_CURRENT_BINDING.json')),builtBytes:read(stage+'_CURRENT_INPUT.json'),nativeBytes:read(stage+'_CURRENT_NATIVE.json'),timing:JSON.parse(read(stage+'_CURRENT_TIMING.json')),beforeBuilt:b.built,beforeInputBytes:read(stage+'_BEFORE_INPUT.json'),beforeBytes:b.bytes,entry,entrySha256,now:Date.now()});\n  write(plan.currentReadEvidence,record);\n }else if(phase==='AFTER'){"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+      "before": "write(plan.afterEvidence,afterProof({",
+      "after": "const entry=JSON.parse(read(stage+'_ENTRY_BINDING.json')).entry,effectBytes=readPublic(effectFile);\n  const entrySha256=owners.assertSetupEntry(readPublic('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,b.bytes,b.built.receipt,effectBytes);\n  const currentEvidenceBytes=readPublic(plan.currentReadEvidence),consumptionBytes=readPublic(plan.currentConsumptionEvidence);must(consumptionBytes.equals(read(stage+'_CURRENT_CONSUMPTION.json')),'BOOKKEEPER_COMMITTED_CONSUMPTION_BYTES_REQUIRED');\n  write(plan.afterEvidence,afterProof({entry,entrySha256,beforeInputBytes:read(stage+'_BEFORE_INPUT.json'),currentEvidenceBytes,consumptionBytes,"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+      "before": "write(plan.completedEvidence,publishPrefix({",
+      "after": "const currentPublish=stage==='S0'?{}:(()=>{const data=get('BEFORE'),entry=JSON.parse(read(stage+'_ENTRY_BINDING.json')).entry,effectBytes=readPublic(effectFile);return {beforeBuilt:data.built,beforeInputBytes:read(stage+'_BEFORE_INPUT.json'),entry,entrySha256:owners.assertSetupEntry(readPublic('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,data.bytes,data.built.receipt,effectBytes)};})();\n  write(plan.completedEvidence,publishPrefix({...currentPublish,currentEvidenceBytes:stage==='S0'?null:readPublic(plan.currentReadEvidence),consumptionBytes:stage==='S0'?null:readPublic(plan.currentConsumptionEvidence),"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+      "before": "if(phase==='BEFORE'){",
+      "after": "if(phase==='CURRENT'){\n  const expectedEffectFiles=[\"docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs\",\"docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/clock-forward.mjs\",\"docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs\",\"docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs\",\"docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs\",\"docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/validate.mjs\",\"docs/healthroster-build/proposals/daily-b2-current-effect-20261017/current-effect.mjs\"],effectCommit=env.HR_ROOT_HELPER_COMMIT;\n  must(/^[a-f0-9]{40}$/.test(effectCommit??''),'BOOKKEEPER_B2_EFFECT_SOURCE_COMMIT_REQUIRED');git(root,'merge-base','--is-ancestor',effectCommit,rootHead);\n  const file='docs/healthroster-build/proposals/daily-b2-current-effect-20261017/SOURCE_SELECTION.json',selectionBytes=readPublic(file),selection=JSON.parse(selectionBytes);\n  must(selectionBytes.equals(git(root,'show',effectCommit+':'+file))&&Object.keys(selection).sort().join(',')==='files,version'&&selection.version==='DAILY_B2_EXACT_EFFECT_SOURCE_V1'&&JSON.stringify(selection.files.map(r=>r.file))===JSON.stringify(expectedEffectFiles),'BOOKKEEPER_B2_EFFECT_SELECTION_REQUIRED');\n  for(const r of selection.files){const b=readPublic(r.file);must(Object.keys(r).sort().join(',')==='bytes,file,sha256'&&Number.isSafeInteger(r.bytes)&&r.bytes>0&&/^[a-f0-9]{64}$/.test(r.sha256)&&b.length===r.bytes&&sha(b)===r.sha256&&b.equals(git(root,'show',effectCommit+':'+r.file)),'BOOKKEEPER_B2_EFFECT_SOURCE_CHANGED');}\n }\n if(phase==='BEFORE'){"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "before": "['BEFORE','SETUP','AFTER','PUBLISH'].includes(phase)",
+      "after": "['BEFORE','SETUP','CURRENT','AFTER','PUBLISH'].includes(phase)"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "before": "stage+'_COORDINATOR_SUMMARY.json']);",
+      "after": "stage+'_COORDINATOR_SUMMARY.json',stage+'_CURRENT_INPUT.json',stage+'_CURRENT_BINDING.json',stage+'_CURRENT_NATIVE.json',stage+'_CURRENT_TIMING.json',stage+'_CURRENT_CONSUMPTION.json']);"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "before": "owners={...contract,...native,...stagesOwner};",
+      "after": "currentOwner=await import(pathToFileURL(report+'/'+operator+'/current-read.mjs').href),owners={...contract,...native,...stagesOwner,...currentOwner};"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "before": "bytes:Buffer.from(JSON.stringify(value,null,2)+'\\n')",
+      "after": "bytes:Buffer.isBuffer(value)?Buffer.from(value):Buffer.from(JSON.stringify(value,null,2)+'\\n')"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "before": "}else if(phase==='AFTER'){",
+      "after": "}else if(phase==='CURRENT'){\n  const b=get('BEFORE'),entry=JSON.parse(read(stage+'_ENTRY_BINDING.json')).entry,effectBytes=readPublic(effectFile);\n  const entrySha256=owners.assertSetupEntry(readPublic('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,b.bytes,b.built.receipt,effectBytes);\n  must(entry.sourceCommit===source,'BOOKKEEPER_CURRENT_SOURCE_REQUIRED');\n  const record=owners.makeCurrentEvidence({binding:JSON.parse(read(stage+'_CURRENT_BINDING.json')),builtBytes:read(stage+'_CURRENT_INPUT.json'),nativeBytes:read(stage+'_CURRENT_NATIVE.json'),timing:JSON.parse(read(stage+'_CURRENT_TIMING.json')),beforeBuilt:b.built,beforeInputBytes:read(stage+'_BEFORE_INPUT.json'),beforeBytes:b.bytes,entry,entrySha256,now:Date.now()});\n  write(plan.currentReadEvidence,record);\n }else if(phase==='AFTER'){"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "before": "write(plan.afterEvidence,afterProof({",
+      "after": "const entry=JSON.parse(read(stage+'_ENTRY_BINDING.json')).entry,effectBytes=readPublic(effectFile);\n  const entrySha256=owners.assertSetupEntry(readPublic('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,b.bytes,b.built.receipt,effectBytes);\n  const currentEvidenceBytes=readPublic(plan.currentReadEvidence),consumptionBytes=readPublic(plan.currentConsumptionEvidence);must(consumptionBytes.equals(read(stage+'_CURRENT_CONSUMPTION.json')),'BOOKKEEPER_COMMITTED_CONSUMPTION_BYTES_REQUIRED');\n  write(plan.afterEvidence,afterProof({entry,entrySha256,beforeInputBytes:read(stage+'_BEFORE_INPUT.json'),currentEvidenceBytes,consumptionBytes,"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "before": "write(plan.completedEvidence,publishPrefix({",
+      "after": "const currentPublish=stage==='S0'?{}:(()=>{const data=get('BEFORE'),entry=JSON.parse(read(stage+'_ENTRY_BINDING.json')).entry,effectBytes=readPublic(effectFile);return {beforeBuilt:data.built,beforeInputBytes:read(stage+'_BEFORE_INPUT.json'),entry,entrySha256:owners.assertSetupEntry(readPublic('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,data.bytes,data.built.receipt,effectBytes)};})();\n  write(plan.completedEvidence,publishPrefix({...currentPublish,currentEvidenceBytes:stage==='S0'?null:readPublic(plan.currentReadEvidence),consumptionBytes:stage==='S0'?null:readPublic(plan.currentConsumptionEvidence),"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "before": "if(phase==='BEFORE'){",
+      "after": "if(phase==='CURRENT'){\n  const expectedEffectFiles=[\"docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs\",\"docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/clock-forward.mjs\",\"docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs\",\"docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs\",\"docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs\",\"docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/validate.mjs\",\"docs/healthroster-build/proposals/daily-b2-current-effect-20261017/current-effect.mjs\"],effectCommit=env.HR_ROOT_HELPER_COMMIT;\n  must(/^[a-f0-9]{40}$/.test(effectCommit??''),'BOOKKEEPER_B2_EFFECT_SOURCE_COMMIT_REQUIRED');git(root,'merge-base','--is-ancestor',effectCommit,rootHead);\n  const file='docs/healthroster-build/proposals/daily-b2-current-effect-20261017/SOURCE_SELECTION.json',selectionBytes=readPublic(file),selection=JSON.parse(selectionBytes);\n  must(selectionBytes.equals(git(root,'show',effectCommit+':'+file))&&Object.keys(selection).sort().join(',')==='files,version'&&selection.version==='DAILY_B2_EXACT_EFFECT_SOURCE_V1'&&JSON.stringify(selection.files.map(r=>r.file))===JSON.stringify(expectedEffectFiles),'BOOKKEEPER_B2_EFFECT_SELECTION_REQUIRED');\n  for(const r of selection.files){const b=readPublic(r.file);must(Object.keys(r).sort().join(',')==='bytes,file,sha256'&&Number.isSafeInteger(r.bytes)&&r.bytes>0&&/^[a-f0-9]{64}$/.test(r.sha256)&&b.length===r.bytes&&sha(b)===r.sha256&&b.equals(git(root,'show',effectCommit+':'+r.file)),'BOOKKEEPER_B2_EFFECT_SOURCE_CHANGED');}\n }\n if(phase==='BEFORE'){"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "before": "must(keys(plan,['version'",
+      "after": "must(keys(plan,[...stage==='S0'?[]:['currentReadEvidence','currentConsumptionEvidence'],'version'"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "before": "plan.version==='DAILY_GENUINE_ROOT_STAGE_BOOKKEEPER_PLAN_V1'",
+      "after": "plan.version===(stage==='S0'?'DAILY_GENUINE_ROOT_STAGE_BOOKKEEPER_PLAN_V1':'DAILY_GENUINE_ROOT_STAGE_BOOKKEEPER_PLAN_V2')"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "before": "const prefix=stages.slice(0,stages.indexOf(stage));",
+      "after": "if(stage!=='S0')must(plan.currentReadEvidence===publicBase+'DAILY_GENUINE_'+stage+'_CURRENT_READ_20261017.json'&&plan.currentConsumptionEvidence===publicBase+'DAILY_GENUINE_'+stage+'_CURRENT_CONSUMPTION_20261017.json','BOOKKEEPER_EXACT_CURRENT_PATHS_REQUIRED');\n const prefix=stages.slice(0,stages.indexOf(stage));"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "before": "return {qualified:plan.qualifiedPrefix,after:prior.afterFrame};",
+      "after": "if(prior.stage!=='S0')must(prior.currentBefore?.version==='DAILY_GENUINE_B2_CONSUMED_BINDING_V1'&&prior.currentBefore.stage===prior.stage&&prior.currentBefore.operatorSourceCommit===plan.operatorSourceCommit,'BOOKKEEPER_CURRENT_PREFIX_REQUIRED');\n return {qualified:plan.qualifiedPrefix,after:prior.afterFrame};"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "before": "afterEffect,readPublic,now},o){",
+      "after": "afterEffect,readPublic,now,entry,entrySha256,beforeInputBytes,currentEvidenceBytes,consumptionBytes},o){"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "before": "const refs=['canonicalAfterEvidence'",
+      "after": "const currentBefore=o.validateCurrentAfter({currentEvidenceBytes,consumptionBytes,beforeBuilt,beforeInputBytes,beforeBytes,entry,entrySha256,response,now});\n must(afterEffect.currentReadEvidence===plan.currentReadEvidence&&afterEffect.currentConsumptionEvidence===plan.currentConsumptionEvidence&&afterEffect.currentEvidenceSha256===o.sha(currentEvidenceBytes)&&afterEffect.currentConsumptionSha256===o.sha(consumptionBytes),'BOOKKEEPER_CURRENT_AFTER_EFFECT_REQUIRED');\n const refs=['canonicalAfterEvidence'"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "before": "originalChildQualification:'PENDING_ORIGINAL_QUALIFY',",
+      "after": "originalChildQualification:'PENDING_ORIGINAL_QUALIFY',currentBefore,"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "before": "beforeBytes,afterBytes,response},o){",
+      "after": "beforeBytes,afterBytes,response,currentEvidenceBytes,consumptionBytes,beforeBuilt,beforeInputBytes,entry,entrySha256},o){"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "before": "return {version:'DAILY_GENUINE_PUBLIC_COMPLETED_PREFIX_V1'",
+      "after": "if(stage!=='S0'){\n  o.assertCurrentPrefix(after.currentBefore,stage);\n  const currentBefore=o.validateCurrentAfter({currentEvidenceBytes,consumptionBytes,beforeBuilt,beforeInputBytes,beforeBytes,entry,entrySha256,response,now:Date.parse(after.validatedAt)});\n  must(after.currentBefore.operatorSourceCommit===source&&same(currentBefore,after.currentBefore),'BOOKKEEPER_CURRENT_PUBLISH_BINDING_REQUIRED');\n }\n return {version:'DAILY_GENUINE_PUBLIC_COMPLETED_PREFIX_V1',...stage==='S0'?{}:{currentBefore:after.currentBefore}"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+      "before": "import{createHash}from'node:crypto';",
+      "after": "import {bindAfterCurrent} from 'file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/daily-b2-current-effect-20261017/current-effect.mjs';\nimport{createHash}from'node:crypto';"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+      "before": "'auxAfterBytes','now']",
+      "after": "'auxAfterBytes','now','beforeInputBytes','consumptionBytes']"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+      "before": "const nextPlan={...plan",
+      "after": "const current=bindAfterCurrent({stage:'S1',plan,...a});\n const nextPlan={...plan"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+      "before": "effect={version:'DAILY_GENUINE_ROOT_AFTER_EFFECT_QUALIFICATION_V1'",
+      "after": "effect={...current.afterFields,version:'DAILY_GENUINE_ROOT_AFTER_EFFECT_QUALIFICATION_V1'"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+      "before": "bytes:json(effect)},{file:planFile",
+      "after": "bytes:json(effect)},current.consumptionRecord,{file:planFile"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+      "before": "return afterProof({stage:'S1'",
+      "after": "const current=bindAfterCurrent({stage:'S1',plan:p.plan,...a});\n return afterProof({...current.afterArgs,stage:'S1'"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+      "before": "{readEnvelope,assertBefore,assertAfter,sha});",
+      "after": "{readEnvelope,assertBefore,assertAfter,sha,...current.afterOwners});"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs",
+      "before": "import {createHash} from 'node:crypto';",
+      "after": "import {bindAfterCurrent} from 'file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/daily-b2-current-effect-20261017/current-effect.mjs';\nimport {createHash} from 'node:crypto';"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs",
+      "before": "exact(a,[...fields,...auxiliary?auxFields:[]])",
+      "after": "exact(a,[...fields,'beforeInputBytes','consumptionBytes',...auxiliary?auxFields:[]])"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs",
+      "before": "const effect={version:'DAILY_GENUINE_ROOT_AFTER_EFFECT_QUALIFICATION_V1'",
+      "after": "const current=bindAfterCurrent({plan,...a});\n const effect={...current.afterFields,version:'DAILY_GENUINE_ROOT_AFTER_EFFECT_QUALIFICATION_V1'"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs",
+      "before": "bytes:json(effect)},{file:a.planFile",
+      "after": "bytes:json(effect)},current.consumptionRecord,{file:a.planFile"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs",
+      "before": "size===4&&records.every",
+      "after": "size===5&&records.every"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs",
+      "before": "'FOUR_DISTINCT_PUBLIC_RECORD_PATHS_REQUIRED'",
+      "after": "'FIVE_DISTINCT_PUBLIC_RECORD_PATHS_REQUIRED'"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/validate.mjs",
+      "before": "import {createHash} from 'node:crypto';",
+      "after": "import {bindAfterCurrent} from 'file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/daily-b2-current-effect-20261017/current-effect.mjs';\nimport {createHash} from 'node:crypto';"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/validate.mjs",
+      "before": "return afterProof({stage:a.stage",
+      "after": "const current=bindAfterCurrent({plan,...a});\n return afterProof({...current.afterArgs,stage:a.stage"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/validate.mjs",
+      "before": "{readEnvelope,assertBefore,assertAfter,sha});",
+      "after": "{readEnvelope,assertBefore,assertAfter,sha,...current.afterOwners});"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs",
+      "before": "'S1_RESPONSE.json','S1_AUX_BEFORE_INPUT.json'",
+      "after": "'S1_RESPONSE.json','S1_CURRENT_CONSUMPTION.json','S1_AUX_BEFORE_INPUT.json'"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs",
+      "before": "beforeBuilt:JSON.parse(read('S1_BEFORE_INPUT.json'))",
+      "after": "beforeBuilt:JSON.parse(read('S1_BEFORE_INPUT.json')),beforeInputBytes:read('S1'+'_BEFORE_INPUT.json'),consumptionBytes:read('S1'+'_CURRENT_CONSUMPTION.json')"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs",
+      "before": "files.length===4&&new Set(files).size===4",
+      "after": "files.length===5&&new Set(files).size===5"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs",
+      "before": "'EXACT_FOUR_PUBLIC_RECORDS_REQUIRED'",
+      "after": "'EXACT_FIVE_PUBLIC_RECORDS_REQUIRED'"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs",
+      "before": "a.stage+'_RESPONSE.json',...auxiliary",
+      "after": "a.stage+'_RESPONSE.json',a.stage+'_CURRENT_CONSUMPTION.json',...auxiliary"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs",
+      "before": "beforeBuilt:JSON.parse(read(a.stage+'_BEFORE_INPUT.json'))",
+      "after": "beforeBuilt:JSON.parse(read(a.stage+'_BEFORE_INPUT.json')),beforeInputBytes:read(a.stage+'_BEFORE_INPUT.json'),consumptionBytes:read(a.stage+'_CURRENT_CONSUMPTION.json')"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs",
+      "before": "files.length===4&&new Set(files).size===4",
+      "after": "files.length===5&&new Set(files).size===5"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs",
+      "before": "'EXACT_FOUR_PUBLIC_RECORDS_REQUIRED'",
+      "after": "'EXACT_FIVE_PUBLIC_RECORDS_REQUIRED'"
+    }
+  ]
+}

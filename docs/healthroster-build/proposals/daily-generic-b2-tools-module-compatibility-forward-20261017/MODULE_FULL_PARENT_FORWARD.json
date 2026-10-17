@@ -1,0 +1,17 @@
+{
+  "qualification": "AUTHOR_SUPPLIED_MODULE_ONLY_NOT_CONTROLLER_LOGIC_CHANGE",
+  "beforeBytes": 12655,
+  "beforeSha256": "169f4f58f605a038000ae0d2257de5b6ec511bc4c19b0a3652b6b383deeb607f",
+  "afterBytes": 12940,
+  "afterSha256": "db5332b466f979fd78e1e9d58477990d72e012c2f7d94ea84324b204e53471fc",
+  "edits": [
+    {
+      "before": "",
+      "after": " check(currentMaxAgeMs===30000||currentMaxAgeMs===180000,'FIXTURE_CURRENT_FIXED_CLOCK_BOUND_REQUIRED');\n"
+    },
+    {
+      "before": " check(exact(v.identity,['physicalDatabase','databaseOid','backendPid','turnId','key','takenAt','task'])&&v.identity.physicalDatabase==='cloudtms_test_clone'&&v.identity.task==='DAILY_GENUINE_'+stage+'_STAGED_ONLY','FIXTURE_CURRENT_PREFIX_TURN_REQUIRED');return v;\n",
+      "after": " const i=v.identity;check(exact(i,['physicalDatabase','databaseOid','backendPid','turnId','key','takenAt','task'])&&i.physicalDatabase==='cloudtms_test_clone'&&Number.isSafeInteger(i.databaseOid)&&i.databaseOid>0&&Number.isSafeInteger(i.backendPid)&&i.backendPid>0&&/^hr_turn_[a-f0-9]{32}$/.test(i.turnId)&&same(i.key,[20261013,1])&&iso(i.takenAt)&&i.task==='DAILY_GENUINE_'+stage+'_STAGED_ONLY','FIXTURE_CURRENT_PREFIX_TURN_REQUIRED');return v;\n"
+    }
+  ]
+}

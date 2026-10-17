@@ -1,0 +1,316 @@
+TAP version 13
+# Subtest: S1: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH
+ok 1 - S1: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH
+  ---
+  duration_ms: 75.9955
+  type: 'test'
+  ...
+# Subtest: S1a: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH
+ok 2 - S1a: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH
+  ---
+  duration_ms: 41.9683
+  type: 'test'
+  ...
+# Subtest: S2: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH
+ok 3 - S2: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH
+  ---
+  duration_ms: 47.2669
+  type: 'test'
+  ...
+# Subtest: S3: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH
+ok 4 - S3: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH
+  ---
+  duration_ms: 40.8773
+  type: 'test'
+  ...
+# Subtest: S4: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH
+ok 5 - S4: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH
+  ---
+  duration_ms: 36.7547
+  type: 'test'
+  ...
+# Subtest: B1 entry retains30s: old baseline cannot create setup, while submit requires fresh mandatory B2
+ok 6 - B1 entry retains30s: old baseline cannot create setup, while submit requires fresh mandatory B2
+  ---
+  duration_ms: 23.9262
+  type: 'test'
+  ...
+# Subtest: actual submit refusal: reused-b1
+ok 7 - actual submit refusal: reused-b1
+  ---
+  duration_ms: 15.2158
+  type: 'test'
+  ...
+# Subtest: actual submit refusal: changed-scope
+ok 8 - actual submit refusal: changed-scope
+  ---
+  duration_ms: 16.0475
+  type: 'test'
+  ...
+# Subtest: actual submit refusal: old-effect-source
+ok 9 - actual submit refusal: old-effect-source
+  ---
+  duration_ms: 14.9756
+  type: 'test'
+  ...
+# Subtest: actual submit refusal: wrong-resume
+ok 10 - actual submit refusal: wrong-resume
+  ---
+  duration_ms: 15.4688
+  type: 'test'
+  ...
+# Subtest: actual submit refusal: duplicate-resume
+ok 11 - actual submit refusal: duplicate-resume
+  ---
+  duration_ms: 17.0707
+  type: 'test'
+  ...
+# Subtest: actual submit refusal: age-during-held
+ok 12 - actual submit refusal: age-during-held
+  ---
+  duration_ms: 18.2566
+  type: 'test'
+  ...
+# Subtest: actual submit refusal: age-during-consumption-fsync
+ok 13 - actual submit refusal: age-during-consumption-fsync
+  ---
+  duration_ms: 23.4999
+  type: 'test'
+  ...
+# Subtest: actual submit refusal: held-loss
+ok 14 - actual submit refusal: held-loss
+  ---
+  duration_ms: 18.2575
+  type: 'test'
+  ...
+# Subtest: lost actual POST reply never manufactures success or clears one-shot attempt
+ok 15 - lost actual POST reply never manufactures success or clears one-shot attempt
+  ---
+  duration_ms: 22.366
+  type: 'test'
+  ...
+# Subtest: same original SQL/verification/limits and fullseven identity; only new outer labels differ
+ok 16 - same original SQL/verification/limits and fullseven identity; only new outer labels differ
+  ---
+  duration_ms: 13.8671
+  type: 'test'
+  ...
+# Subtest: root accepts causal nonce ordering without assuming host/native clock alignment
+ok 17 - root accepts causal nonce ordering without assuming host/native clock alignment
+  ---
+  duration_ms: 3.9225
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: clients
+ok 18 - B2 refuses equal-count changed full scope digest: clients
+  ---
+  duration_ms: 3.4759
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: settings
+ok 19 - B2 refuses equal-count changed full scope digest: settings
+  ---
+  duration_ms: 3.5917
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: mappings
+ok 20 - B2 refuses equal-count changed full scope digest: mappings
+  ---
+  duration_ms: 3.5647
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: candidates
+ok 21 - B2 refuses equal-count changed full scope digest: candidates
+  ---
+  duration_ms: 3.8166
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: candidateJobs
+ok 22 - B2 refuses equal-count changed full scope digest: candidateJobs
+  ---
+  duration_ms: 4.3902
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: rates
+ok 23 - B2 refuses equal-count changed full scope digest: rates
+  ---
+  duration_ms: 3.4787
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: overrides
+ok 24 - B2 refuses equal-count changed full scope digest: overrides
+  ---
+  duration_ms: 3.5076
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: timesheets
+ok 25 - B2 refuses equal-count changed full scope digest: timesheets
+  ---
+  duration_ms: 3.6471
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: financials
+ok 26 - B2 refuses equal-count changed full scope digest: financials
+  ---
+  duration_ms: 3.6916
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: outbox
+ok 27 - B2 refuses equal-count changed full scope digest: outbox
+  ---
+  duration_ms: 4.1545
+  type: 'test'
+  ...
+# Subtest: B2 refuses equal-count changed full scope digest: audit
+ok 28 - B2 refuses equal-count changed full scope digest: audit
+  ---
+  duration_ms: 3.5189
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: facts
+ok 29 - closed/current substitution refusal: facts
+  ---
+  duration_ms: 3.614
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: ids
+ok 30 - closed/current substitution refusal: ids
+  ---
+  duration_ms: 3.4868
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: catalogueSha256
+ok 31 - closed/current substitution refusal: catalogueSha256
+  ---
+  duration_ms: 3.8084
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: actor
+ok 32 - closed/current substitution refusal: actor
+  ---
+  duration_ms: 3.8707
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: turn
+ok 33 - closed/current substitution refusal: turn
+  ---
+  duration_ms: 3.2938
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: source
+ok 34 - closed/current substitution refusal: source
+  ---
+  duration_ms: 3.1345
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: entry
+ok 35 - closed/current substitution refusal: entry
+  ---
+  duration_ms: 3.2601
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: effect
+ok 36 - closed/current substitution refusal: effect
+  ---
+  duration_ms: 2.9211
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: label
+ok 37 - closed/current substitution refusal: label
+  ---
+  duration_ms: 4.1878
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: sql
+ok 38 - closed/current substitution refusal: sql
+  ---
+  duration_ms: 3.9778
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: fresh
+ok 39 - closed/current substitution refusal: fresh
+  ---
+  duration_ms: 3.375
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: mainClock
+ok 40 - closed/current substitution refusal: mainClock
+  ---
+  duration_ms: 3.3049
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: freshClock
+ok 41 - closed/current substitution refusal: freshClock
+  ---
+  duration_ms: 3.4519
+  type: 'test'
+  ...
+# Subtest: closed/current substitution refusal: unknownReadyKey
+ok 42 - closed/current substitution refusal: unknownReadyKey
+  ---
+  duration_ms: 2.8023
+  type: 'test'
+  ...
+# Subtest: AFTER allows historical B2 but requires actual consumption-time currentness, not current30 after65sPOST
+ok 43 - AFTER allows historical B2 but requires actual consumption-time currentness, not current30 after65sPOST
+  ---
+  duration_ms: 4.6283
+  type: 'test'
+  ...
+# Subtest: db533 fixed age modes reject arbitrary widening, coercion, nonfinite and omitted-null bounds
+ok 44 - db533 fixed age modes reject arbitrary widening, coercion, nonfinite and omitted-null bounds
+  ---
+  duration_ms: 4.7612
+  type: 'test'
+  ...
+# Subtest: db533 qualified prefix requires every original typed seven-field turn, exact stage and fixed evidence paths
+ok 45 - db533 qualified prefix requires every original typed seven-field turn, exact stage and fixed evidence paths
+  ---
+  duration_ms: 19.2003
+  type: 'test'
+  ...
+# Subtest: mandatory B2 cannot be omitted/substituted at adapter
+ok 46 - mandatory B2 cannot be omitted/substituted at adapter
+  ---
+  duration_ms: 19.5796
+  type: 'test'
+  ...
+# Subtest: mandatory B2 cannot be omitted/substituted at after
+ok 47 - mandatory B2 cannot be omitted/substituted at after
+  ---
+  duration_ms: 19.8398
+  type: 'test'
+  ...
+# Subtest: mandatory B2 cannot be omitted/substituted at qualify
+ok 48 - mandatory B2 cannot be omitted/substituted at qualify
+  ---
+  duration_ms: 24.6627
+  type: 'test'
+  ...
+# Subtest: mandatory B2 cannot be omitted/substituted at publish
+ok 49 - mandatory B2 cannot be omitted/substituted at publish
+  ---
+  duration_ms: 25.5914
+  type: 'test'
+  ...
+# Subtest: ordered existing IPC/Controls waits before announcing; duplicate/foreign resume and lost child fail
+ok 50 - ordered existing IPC/Controls waits before announcing; duplicate/foreign resume and lost child fail
+  ---
+  duration_ms: 15.1226
+  type: 'test'
+  ...
+# Subtest: unchanged S0 submit/qualify/root PUBLISH has no mandatory CURRENT and no business POST
+ok 51 - unchanged S0 submit/qualify/root PUBLISH has no mandatory CURRENT and no business POST
+  ---
+  duration_ms: 17.3312
+  type: 'test'
+  ...
+1..51
+# tests 51
+# suites 0
+# pass 51
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 884.9036

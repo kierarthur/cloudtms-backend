@@ -1,0 +1,22 @@
+{
+  "status": "SOURCE_ONLY_PASS",
+  "tests": 51,
+  "failures": 0,
+  "completeBusinessStageFlows": 5,
+  "unchangedS0Regression": true,
+  "completeParents": 55,
+  "targets": 18,
+  "changed": 14,
+  "new": 4,
+  "literalInverseHunks": 76,
+  "sourceChainMetadataOwners": 13,
+  "originalRuntimeRecords": 12,
+  "remappedRuntimeRecords": 5,
+  "unchangedRuntimeRecords": 7,
+  "pureModuleSha256": "db5332b466f979fd78e1e9d58477990d72e012c2f7d94ea84324b204e53471fc",
+  "actualSourceAdmission": "NOT_RUN_REQUIRES_REAL_SUCCESSOR_METADATA",
+  "native": "NOT_RUN",
+  "syntheticEvidence": "MEMORY_ONLY_NOT_COMMITTED_OR_NATIVE",
+  "writes": "OWN_IGNORED_SOURCE_PACKET_ONLY",
+  "commit": null
+}

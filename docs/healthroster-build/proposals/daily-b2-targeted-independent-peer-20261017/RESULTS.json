@@ -1,0 +1,49 @@
+{
+  "verdict": "NO_ADDITIONAL_SCOPED_CODE_FINDING_PACKAGING_AND_REAL_ADMISSION_HELD",
+  "reviewedManifestSha256": "de17d867f5b1a0ca4c3da073c5f173974f185dbbf79f1c07d919c4f18fd178b8",
+  "selectionSha256": "a22022111151456dcb30ef0c711c27d0f76f342aa73afe6a3c2a624223c35bc2",
+  "independentTests": 19,
+  "originalTests": 51,
+  "packaging": "HELD_18_UNLISTED_NESTED_MANIFESTS",
+  "actualNestedAdapterSourceAdmission": "NOT_RUN_NOT_PROVED",
+  "native": "NOT_RUN",
+  "partB": "NOT_SIGNED_OFF",
+  "runs": [
+    {
+      "name": "independent19",
+      "args": [
+        "--test",
+        "pure-guard.test.mjs",
+        "integration.test.mjs"
+      ],
+      "cwd": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\daily-b2-targeted-independent-peer-20261017-6c918caeb3594eb88060be7ae40b3472",
+      "tests": 19,
+      "exitCode": 0,
+      "stdout": "✔ actual root CURRENT commits only the fixed current evidence after all seven source rows (22.0021ms)\n✔ complete CURRENT refuses changed saved effect owner before writes: docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs (9.6918ms)\n✔ complete CURRENT refuses changed saved effect owner before writes: docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/clock-forward.mjs (9.7004ms)\n✔ complete CURRENT refuses changed saved effect owner before writes: docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/run.mjs (9.0581ms)\n✔ complete CURRENT refuses changed saved effect owner before writes: docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs (8.088ms)\n✔ complete CURRENT refuses changed saved effect owner before writes: docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/run.mjs (8.4047ms)\n✔ complete CURRENT refuses changed saved effect owner before writes: docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/validate.mjs (8.0638ms)\n✔ complete CURRENT refuses changed saved effect owner before writes: docs/healthroster-build/proposals/daily-b2-current-effect-20261017/current-effect.mjs (7.4332ms)\n✔ complete CURRENT refuses index substitution for every one of seven owners (53.1477ms)\n✔ complete CURRENT refuses head substitution for every one of seven owners (52.4448ms)\n✔ complete CURRENT refuses historical substitution for every one of seven owners (47.1431ms)\n✔ seven-owner selection cannot omit, append, reorder or admit extra row keys (27.7034ms)\n✔ actual adapters with original unrevised manifests refuse, rather than treating seven body hashes as admission (44.3838ms)\n✔ only 30s and 180s choices reach the closed evidence-shape guard (1.0073ms)\n✔ every other tested age value refuses before evidence parsing (0.2205ms)\n✔ all five complete canonical seven-field consumed prefixes pass the actual guard (1.5728ms)\n✔ typed full-seven identity substitutions cannot survive prefix publication (1.6205ms)\n✔ same-source prefixes still refuse another stage or evidence path (0.3305ms)\n✔ actual earlier milestone admits typed identity counterexamples now refused by db533 (6.2312ms)\nℹ tests 19\nℹ suites 0\nℹ pass 19\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 445.6752\n",
+      "stderr": ""
+    },
+    {
+      "name": "original51",
+      "args": [
+        "--experimental-vm-modules",
+        "--test",
+        "test.mjs"
+      ],
+      "cwd": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/.codex-tmp/daily-genuine-b2-current-read-source-20261017",
+      "tests": 51,
+      "exitCode": 0,
+      "stdout": "✔ S1: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH (58.8222ms)\n✔ S1a: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH (37.7305ms)\n✔ S2: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH (43.1885ms)\n✔ S3: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH (37.7321ms)\n✔ S4: complete actual submit → CURRENT root → guarded onePOST → five-record actual adapter → AFTER root → worker qualify → PUBLISH (35.3879ms)\n✔ B1 entry retains30s: old baseline cannot create setup, while submit requires fresh mandatory B2 (24.9906ms)\n✔ actual submit refusal: reused-b1 (15.2384ms)\n✔ actual submit refusal: changed-scope (14.4206ms)\n✔ actual submit refusal: old-effect-source (13.22ms)\n✔ actual submit refusal: wrong-resume (14.6166ms)\n✔ actual submit refusal: duplicate-resume (15.8136ms)\n✔ actual submit refusal: age-during-held (17.195ms)\n✔ actual submit refusal: age-during-consumption-fsync (21.3152ms)\n✔ actual submit refusal: held-loss (16.7964ms)\n✔ lost actual POST reply never manufactures success or clears one-shot attempt (19.4198ms)\n✔ same original SQL/verification/limits and fullseven identity; only new outer labels differ (11.9149ms)\n✔ root accepts causal nonce ordering without assuming host/native clock alignment (4.1944ms)\n✔ B2 refuses equal-count changed full scope digest: clients (3.08ms)\n✔ B2 refuses equal-count changed full scope digest: settings (3.1865ms)\n✔ B2 refuses equal-count changed full scope digest: mappings (3.2558ms)\n✔ B2 refuses equal-count changed full scope digest: candidates (3.6898ms)\n✔ B2 refuses equal-count changed full scope digest: candidateJobs (3.8024ms)\n✔ B2 refuses equal-count changed full scope digest: rates (2.9374ms)\n✔ B2 refuses equal-count changed full scope digest: overrides (2.9632ms)\n✔ B2 refuses equal-count changed full scope digest: timesheets (2.8334ms)\n✔ B2 refuses equal-count changed full scope digest: financials (3.19ms)\n✔ B2 refuses equal-count changed full scope digest: outbox (3.733ms)\n✔ B2 refuses equal-count changed full scope digest: audit (2.9496ms)\n✔ closed/current substitution refusal: facts (3.0943ms)\n✔ closed/current substitution refusal: ids (2.9294ms)\n✔ closed/current substitution refusal: catalogueSha256 (2.8494ms)\n✔ closed/current substitution refusal: actor (3.4466ms)\n✔ closed/current substitution refusal: turn (2.8166ms)\n✔ closed/current substitution refusal: source (2.7158ms)\n✔ closed/current substitution refusal: entry (2.7657ms)\n✔ closed/current substitution refusal: effect (2.65ms)\n✔ closed/current substitution refusal: label (3.1488ms)\n✔ closed/current substitution refusal: sql (3.6573ms)\n✔ closed/current substitution refusal: fresh (2.9166ms)\n✔ closed/current substitution refusal: mainClock (2.99ms)\n✔ closed/current substitution refusal: freshClock (2.8683ms)\n✔ closed/current substitution refusal: unknownReadyKey (2.6447ms)\n✔ AFTER allows historical B2 but requires actual consumption-time currentness, not current30 after65sPOST (3.8421ms)\n✔ db533 fixed age modes reject arbitrary widening, coercion, nonfinite and omitted-null bounds (4.1781ms)\n✔ db533 qualified prefix requires every original typed seven-field turn, exact stage and fixed evidence paths (17.2099ms)\n✔ mandatory B2 cannot be omitted/substituted at adapter (17.7684ms)\n✔ mandatory B2 cannot be omitted/substituted at after (15.9478ms)\n✔ mandatory B2 cannot be omitted/substituted at qualify (22.6216ms)\n✔ mandatory B2 cannot be omitted/substituted at publish (23.7164ms)\n✔ ordered existing IPC/Controls waits before announcing; duplicate/foreign resume and lost child fail (13.9839ms)\n✔ unchanged S0 submit/qualify/root PUBLISH has no mandatory CURRENT and no business POST (15.6783ms)\nℹ tests 51\nℹ suites 0\nℹ pass 51\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 747.5421\n",
+      "stderr": ""
+    },
+    {
+      "name": "independentWholeSource",
+      "args": [
+        "verify.mjs"
+      ],
+      "cwd": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\daily-b2-targeted-independent-peer-20261017-6c918caeb3594eb88060be7ae40b3472",
+      "exitCode": 0,
+      "stdout": "{\"status\":\"BOUNDED_SELECTED_CODE_PARENT_INVERSE_PASS_PACKAGING_HOLD\",\"manifestRows\":134,\"unlistedNestedManifests\":18,\"physicalSourceFilesExcludingTopManifestAndCache\":152,\"targets\":18,\"parentsSavedIndexHeadHistorical\":55,\"rawHunks\":76,\"effectOwners\":7,\"metadataOwnersRequireRealReseal\":13,\"realNestedAdapterAdmission\":\"NOT_RUN_NOT_PROVED\",\"native\":\"NOT_RUN\",\"partB\":\"NOT_SIGNED_OFF\"}\n",
+      "stderr": ""
+    }
+  ]
+}

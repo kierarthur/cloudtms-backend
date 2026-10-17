@@ -1,0 +1,120 @@
+{
+  "version": "DAILY_GENERIC_B2_ROOT_TOOLS_SOURCE_TRANSPORT_V1",
+  "qualification": "FROZEN_BOUNDED_SOURCE_ONLY_REQUIRES_FINAL_B2_SELECTION_AND_ACTUAL_COMMIT_CONFIG",
+  "proposedTarget": "docs/healthroster-build/proposals/daily-genuine-stage-tools-orchestration-b2-successor-20261017.js.txt",
+  "controllerSha256": "6bc6d827d3d2aa0dcf2deba1e91d74288cd0d617b36a47336bb3a4b7334691db",
+  "historicalExecutedParentSha256": "d1ccd688dbab5a5465993719f602d6e54a9ddb5ee0dd466e231d5696a96c8341",
+  "pureModuleMilestoneSha256": "169f4f58f605a038000ae0d2257de5b6ec511bc4c19b0a3652b6b383deeb607f",
+  "files": [
+    {
+      "file": "B2_FULL_PARENT_FORWARD.json",
+      "bytes": 8234,
+      "sha256": "2a85f4ca5b432e0e0356edd118e9575a0bfd73ae0d98ad8777c33f63e276fe4d"
+    },
+    {
+      "file": "MILESTONE_CAPTURE.json",
+      "bytes": 1697,
+      "sha256": "4262c4aa76c0a4fda8e7e9a4f7ed5b45334a9a8515dd94f3dae55063a35aedd1"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3454,
+      "sha256": "26d42a66c13367ac92aa4c487be869caf3f5437768e859d56ed776d424e17a76"
+    },
+    {
+      "file": "ROOT_HELPER_PIN_LAYER.json",
+      "bytes": 472,
+      "sha256": "2873e3c569c7fd89a3ae87f9095629d87b3b049effec2d6806ee1f6ad9f97f21"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 5565,
+      "sha256": "d7708f54a3df0d90063d92d191bd862adcec16403e6ebfb1f0a8bddf6ccdb132"
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "bytes": 4683,
+      "sha256": "26dd439de1cf4bc4fbf7af358d7c3a399b09b1f271ae0a71527447e0dabd5472"
+    },
+    {
+      "file": "controller.js.txt",
+      "bytes": 15823,
+      "sha256": "6bc6d827d3d2aa0dcf2deba1e91d74288cd0d617b36a47336bb3a4b7334691db"
+    },
+    {
+      "file": "reference/e18-tools.js.txt",
+      "bytes": 10610,
+      "sha256": "ee14891202c24a3fe4c47a7356e2fd17d464c58d4ea793b66fd11425cca0cc8f"
+    },
+    {
+      "file": "reference/executed-r10-tools.js.txt",
+      "bytes": 10610,
+      "sha256": "d1ccd688dbab5a5465993719f602d6e54a9ddb5ee0dd466e231d5696a96c8341"
+    },
+    {
+      "file": "reference/milestone/contract.mjs",
+      "bytes": 7643,
+      "sha256": "66160e665fb71bb81ee994e7108fb1539c4fff8ae0189abd3d91ebd6f43eabdb"
+    },
+    {
+      "file": "reference/milestone/current-read.mjs",
+      "bytes": 12655,
+      "sha256": "169f4f58f605a038000ae0d2257de5b6ec511bc4c19b0a3652b6b383deeb607f"
+    },
+    {
+      "file": "reference/milestone/native-read.mjs",
+      "bytes": 18744,
+      "sha256": "b8449f6bc901f41c2d058c6618b11bab70337579133fd99360c6988eb820cf07"
+    },
+    {
+      "file": "reference/milestone/reference/audit/FINAL_SOURCE_REVIEW.json",
+      "bytes": 6154,
+      "sha256": "d601bd9bc16d03453683bba4d298589f4f1450f06c7f09ba9d5adfe7b79151f2"
+    },
+    {
+      "file": "reference/milestone/reference/audit/SOURCE_SCHEMA_EFFECT_BOUNDARIES.json",
+      "bytes": 236921,
+      "sha256": "b702b374a964e6368e5b7dca3caab714397d1f91d8bdd0591a63cd07bb971bbd"
+    },
+    {
+      "file": "reference/milestone/reference/daily-health-genuine-fixture-recipe-20261017/RECIPE.json",
+      "bytes": 11525,
+      "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c"
+    },
+    {
+      "file": "reference/milestone/reference/mapping/SOURCE_METADATA.json",
+      "bytes": 86934,
+      "sha256": "f9f14235719dab1887214992dd928790cf2b8c3962fa3845ac8b55a1c342cf01"
+    },
+    {
+      "file": "reference/milestone/reference/mapping/stage.mjs",
+      "bytes": 1201,
+      "sha256": "f64b0dcac218e582b848d24660b11b7f8bf9c22161d97b2a23397c960354ab0f"
+    },
+    {
+      "file": "test-b2.mjs",
+      "bytes": 11263,
+      "sha256": "7f6c21a68c300e501faecec4ccaafdfe5f6e20e625bd48111c13cfbe9b9aa60c"
+    },
+    {
+      "file": "test-current-milestone.mjs",
+      "bytes": 5873,
+      "sha256": "7b198d776e5f336f582a244f540528b40f5e15c3582a961cbe4bced720dc2690"
+    },
+    {
+      "file": "test-current-transport.mjs",
+      "bytes": 5695,
+      "sha256": "da2436f003e369447e5effd7c44e3b737d146fdd0fe32c25b86f62f32bfb748c"
+    },
+    {
+      "file": "test-e18.mjs",
+      "bytes": 8177,
+      "sha256": "bd7a981073f1295a32193333bf3c44da73df1b250343dfd42948797c6101e11d"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 2696,
+      "sha256": "e137e64702389b9c9d8f0f37a242e255b15700369c8e24239c5abab4ed5b400d"
+    }
+  ]
+}
