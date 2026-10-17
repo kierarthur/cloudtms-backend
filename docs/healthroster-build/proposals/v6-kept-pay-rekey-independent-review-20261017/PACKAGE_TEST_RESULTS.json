@@ -1,0 +1,22 @@
+{
+  "passed": 12,
+  "failed": 0,
+  "checks": [
+    "every-finite-mounted-payload-hash-and-size",
+    "fresh17October-managed-filenames-and-one-time-order",
+    "complete-standalone-recursive-order-and-final-ACL",
+    "complete-classifier-six-hunks-and-byte-reverse",
+    "one-new-immutable-relation-six-private-one-service-and-exact-count",
+    "complete-registry18-entry-change-and-byte-reverse",
+    "every-unrelated-current-registry-entry-unchanged",
+    "actual-final-recursive-definition-physical-and-root-match-every-delta",
+    "immutable-schema-before-audit-guards-with-no-ack-store",
+    "current-V6-native-invoice-and-private1705-security-retained",
+    "complete-current-SourceHTTP-parent-and-generic-command-bounds-compose",
+    "no-native-compile-mount-contract-or-API-proof-promoted"
+  ],
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "races": "NOT_RUN",
+  "dbConnections": 0
+}

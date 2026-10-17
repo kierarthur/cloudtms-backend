@@ -1,0 +1,8 @@
+{
+  "command": "node scripts/cloudtms-db-release.mjs check",
+  "exitCode": 1,
+  "stdout": "",
+  "stderr": "CloudTMS database release failed: Unrecorded migration: supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql\n",
+  "databaseCalls": 0,
+  "sourceWrites": 0
+}
