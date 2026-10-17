@@ -1,0 +1,59 @@
+{
+  "version": "DAILY_HEALTH_PURE_NATIVE_R2_HOLD",
+  "status": "HOLD_NOT_QUALIFIED",
+  "route": "cloudtms-miget-operations-kier-codex",
+  "physicalDatabase": "cloudtms_test_clone",
+  "sqlSha256": "8a306d4c84dea7086f83dea9dc47734fe8217339844c23d1ca51bd7ec9480782",
+  "programmeSha256": "779aff554ca8bce78a7e21520a41574beba211503ab1c79d492eccb6b5ad8ab6",
+  "holder": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 245417,
+    "turnId": "hr_turn_75fd6bcdb2b36a305fa1608a27b571ab",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-17T02:30:19.579Z",
+    "task": "DAILY_HEALTH_EXACT_PURE_NATIVE_PROOF"
+  },
+  "deadline": {
+    "workMilliseconds": 120000,
+    "observedElapsedMilliseconds": 120062,
+    "error": "CONTROL_OWNED_TURN_LOST",
+    "reasonEvidence": "The local work timer aborts at 120000ms; FiniteControls maps both deadline and turn abort to this common code. No LOST_INCOMPLETE journal entry was emitted. Exact transport/dispatch timing is not captured and is not inferred."
+  },
+  "release": {
+    "releasedAt": "2026-10-17T02:32:21.002Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false
+  },
+  "native": {
+    "accepted": false,
+    "rolledBack": true,
+    "connectedFresh": true,
+    "statementCount": 18,
+    "executedSetStatements": 4,
+    "failureStatement": 5,
+    "sqlstate": "55000",
+    "error": "DAILY_PURE_TURN_OR_TEST_IDENTITY_REFUSED",
+    "guardStage": "BEFORE_MARKER_AND_ALL_FUNCTION_DEFINITIONS",
+    "freshMarkerAbsent": true,
+    "freshLegacy": "LEGACY:1",
+    "freshHolderGranted": false
+  },
+  "sourceDefects": {
+    "responseBoundary": "Actual SET command returns rowCount:null, fields:[], rows:[], rowsTruncated:false. Existing validator incorrectly requires integer rowCount for all command kinds.",
+    "abortCause": "FiniteControls masks the bounded work timer as CONTROL_OWNED_TURN_LOST; preserve distinct cause forward."
+  },
+  "restoration": "NOT_QUALIFIED_NO_C_AFTER_OR_ORIGINAL_WEAKMAP_QUALIFICATION",
+  "assertions": "NOT_RUN",
+  "fullRehearsal": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "backgroundJobsPaused": false,
+  "otherSessionsCancelled": false,
+  "rawMapsPersisted": false,
+  "retainedFolder": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-health-pure-native-20261017-r2",
+  "next": "Source-review finite response/abort evidence forward before any retry. No budget increase, pool refresh or service change indicated by these receipts."
+}
