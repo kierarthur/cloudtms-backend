@@ -1,0 +1,50 @@
+{
+  "version": "DAILY_R11_S0_GENUINE_AUTH_HOLD_V1",
+  "sourceCommit": "aa6a57b964b7916ca0a689ead1555ef0774a39e2",
+  "rootExecutionCommit": "98e907a41f9e8251e591ca42699fc714fbff0f58",
+  "actualClosedBind": {
+    "status": "HOLD",
+    "code": "FIXTURE_CURRENT_ME401",
+    "phase": "bind",
+    "stage": "S0",
+    "browserClosed": true
+  },
+  "actualCoordinatorHold": {
+    "status": "HOLD",
+    "code": "S0_STAGE_PHASE_REFUSED",
+    "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-8775e0bcae685faba3f81f29b9ea4af8",
+    "stage": "S0",
+    "businessRequests": 0,
+    "sourceCommit": "aa6a57b964b7916ca0a689ead1555ef0774a39e2",
+    "qualifiedPrefix": "READ_ACTUAL_CLOSED_CHILD_RECORDS_NO_SYNTHETIC_VERDICT",
+    "sharedTurn": "SEE_ORIGINAL_SEND7_RELEASE_RECORD"
+  },
+  "actualProgressClosed": {
+    "status": "HOLD",
+    "code": "S0_STAGE_PHASE_REFUSED",
+    "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-8775e0bcae685faba3f81f29b9ea4af8",
+    "stage": "S0",
+    "businessRequests": 0,
+    "sourceCommit": "aa6a57b964b7916ca0a689ead1555ef0774a39e2",
+    "qualifiedPrefix": "READ_ACTUAL_CLOSED_CHILD_RECORDS_NO_SYNTHETIC_VERDICT",
+    "sharedTurn": "SEE_ORIGINAL_SEND7_RELEASE_RECORD"
+  },
+  "nativeDispatched": false,
+  "businessRequests": 0,
+  "browserClosed": true,
+  "ownTurn": {
+    "takenAt": "2026-10-17T18:47:52.051Z",
+    "releasedAt": "2026-10-17T18:48:09.778Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false
+  },
+  "authReceiptCommit": "3afab9f2adcef7bc6c630dfb4278f6b8771acce0",
+  "authReceiptCommitTime": "2026-10-17T18:24:52Z",
+  "workerSourceAccessTtlDefaultSeconds": 900,
+  "effectiveRuntimeTtlAnd401Cause": "NOT_PROVED",
+  "privateStateContentsReadHashedCopied": false,
+  "next": "Review correct outside-A authentication sequencing; no unchanged retry or TTL/permission weakening.",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
