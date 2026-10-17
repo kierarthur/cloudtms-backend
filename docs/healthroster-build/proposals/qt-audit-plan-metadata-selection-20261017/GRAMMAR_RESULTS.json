@@ -1,0 +1,27 @@
+{
+  "verdict": "PASS_SOURCE_ONLY",
+  "parser": [
+    17,
+    7
+  ],
+  "pglast": "v7.20",
+  "mainStatements": 8,
+  "freshStatements": 1,
+  "originalQueryASTEqual": true,
+  "originalArgumentAndOrderASTShared": true,
+  "noAnalyzeOption": true,
+  "metadataReadsAuditBusinessRows": false,
+  "mutationsRefused": [
+    "ANALYZE",
+    "changed delimiter",
+    "row filter",
+    "partial row",
+    "business SELECT outside plan",
+    "extra statement",
+    "timeout change",
+    "readonly off",
+    "unrequested EXPLAIN option"
+  ],
+  "SQLExecuted": false,
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,22 @@
+{
+  "verdict": "FIXED_SOURCE_SELECTION_ONLY",
+  "nodeTestsPassed": 12,
+  "mainStatements": 8,
+  "freshStatements": 1,
+  "astMutationsRefused": 9,
+  "parserPostgreSQL": "17.7",
+  "originalQueryWholeASTEqual": true,
+  "originalArgumentOrderExpressionASTEqual": true,
+  "fixedSettings": 26,
+  "originalQTWorkMem": "4MB",
+  "mainTimeoutMs": 30000,
+  "lockTimeoutMs": 2000,
+  "maxRowsPerStatement": 1,
+  "continueOnError": false,
+  "SQLExecuted": false,
+  "nativePlan": "NOT_RUN",
+  "nestedDOPlan": "NOT_PROVED",
+  "nativePerformance": "NOT_PROVED",
+  "effectsQualified": false,
+  "restorationClaimed": false
+}

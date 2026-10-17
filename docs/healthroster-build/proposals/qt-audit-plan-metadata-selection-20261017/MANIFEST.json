@@ -1,0 +1,45 @@
+{
+  "version": "QT_AUDIT_PLAN_METADATA_SOURCE_SELECTION_V1",
+  "files": [
+    {
+      "file": "grammar.py",
+      "bytes": 4565,
+      "sha256": "d8ab7f084a6219a05e1494b11b7ab767dbd021347e34d50bd70b848e24855dfa"
+    },
+    {
+      "file": "GRAMMAR_RESULTS.json",
+      "bytes": 599,
+      "sha256": "7c085282e92233b92c5d046abc3477a2063c25001e40d72b2e87656b9ae4cbaf"
+    },
+    {
+      "file": "QUERY.json",
+      "bytes": 632,
+      "sha256": "eea53d93d45fe320e37ba83d14f565d48929665d2357cee6ef34e7d14cce8f13"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4783,
+      "sha256": "990966e242df97dadd9d8800cae326c6a21037132f517315ff3f69d6eff8ea90"
+    },
+    {
+      "file": "reference/qt-assertions.sql",
+      "bytes": 12100,
+      "sha256": "11f720baf63f49a6f6e309d5ad4c42c67c63ebed691a216171ef12364c4adfe3"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 606,
+      "sha256": "d9be085ed927aa24537f238ce56ce49cddb0c36eb2dbf52290395212f506ebb5"
+    },
+    {
+      "file": "selection.mjs",
+      "bytes": 5260,
+      "sha256": "3107a433ee68229cb74c602e828e14b4b1e7a67900dad738025020b21808c4c7"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 3730,
+      "sha256": "4b6c1a7c0eb191af736cafd43785277a4f43803bcd5ea957e3b7303627dfd8fb"
+    }
+  ]
+}
