@@ -1,0 +1,24 @@
+{
+  "version": "QT_AUDIT_PLAN_METADATA_RECEIPT_V1",
+  "identity": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 290350,
+    "turnId": "hr_turn_28471d490135b802e40cdbe643ee24b5",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-17T15:09:47.839Z",
+    "task": "QT_AUDIT_PLAN_METADATA_READ_ONLY_20261017"
+  },
+  "sqlSha256": "e6a42b30128155c106541e3b90104e108599f846550d65a3b32dbf6e7e8b4c24",
+  "verificationSqlSha256": "ab178dceb8492010bdce55107fdaf6fc566d8437f479a3b097e0c06d6ae58500",
+  "auditQuerySha256": "9397805512911d4c340ec4f85184d0bc094dcca681f31c8349c5b25150af4e50",
+  "mainStatements": 8,
+  "freshStatements": 1,
+  "explainAnalyze": false,
+  "effectQualified": false,
+  "restorationClaimed": false,
+  "explainProviderAbi": "PROPOSED_EXPLAIN_NULL_SINGLE_QUERY_PLAN_UNOBSERVED_BEFORE_THIS_TRIAL"
+}

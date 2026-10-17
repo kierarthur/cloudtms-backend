@@ -1,0 +1,430 @@
+{
+  "accepted": true,
+  "databaseTarget": "agency_test",
+  "database": "cloudtms_test_clone",
+  "label": "QT_AUDIT_PLAN_METADATA_20261017_hr_turn_28471d490135b802e40cdbe643ee24b5",
+  "sqlSha256": "e6a42b30128155c106541e3b90104e108599f846550d65a3b32dbf6e7e8b4c24",
+  "statementCount": 8,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 7,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "qt_audit_plan_context"
+      ],
+      "rows": [
+        {
+          "qt_audit_plan_context": {
+            "version": "QT_AUDIT_PLAN_CONTEXT_V1",
+            "database": "cloudtms_test_clone",
+            "readOnly": true,
+            "settings": [
+              {
+                "name": "work_mem",
+                "unit": "kB",
+                "source": "session",
+                "present": true,
+                "setting": "4096",
+                "pendingRestart": false
+              },
+              {
+                "name": "temp_file_limit",
+                "unit": "kB",
+                "source": "default",
+                "present": true,
+                "setting": "-1",
+                "pendingRestart": false
+              },
+              {
+                "name": "max_parallel_workers_per_gather",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "2",
+                "pendingRestart": false
+              },
+              {
+                "name": "max_parallel_workers",
+                "unit": null,
+                "source": "configuration file",
+                "present": true,
+                "setting": "32",
+                "pendingRestart": false
+              },
+              {
+                "name": "max_worker_processes",
+                "unit": null,
+                "source": "configuration file",
+                "present": true,
+                "setting": "32",
+                "pendingRestart": false
+              },
+              {
+                "name": "max_parallel_maintenance_workers",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "2",
+                "pendingRestart": false
+              },
+              {
+                "name": "min_parallel_table_scan_size",
+                "unit": "8kB",
+                "source": "default",
+                "present": true,
+                "setting": "1024",
+                "pendingRestart": false
+              },
+              {
+                "name": "min_parallel_index_scan_size",
+                "unit": "8kB",
+                "source": "default",
+                "present": true,
+                "setting": "64",
+                "pendingRestart": false
+              },
+              {
+                "name": "parallel_setup_cost",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "1000",
+                "pendingRestart": false
+              },
+              {
+                "name": "parallel_tuple_cost",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "0.1",
+                "pendingRestart": false
+              },
+              {
+                "name": "parallel_leader_participation",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "on",
+                "pendingRestart": false
+              },
+              {
+                "name": "enable_sort",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "on",
+                "pendingRestart": false
+              },
+              {
+                "name": "enable_incremental_sort",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "on",
+                "pendingRestart": false
+              },
+              {
+                "name": "enable_presorted_aggregate",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "on",
+                "pendingRestart": false
+              },
+              {
+                "name": "enable_gathermerge",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "on",
+                "pendingRestart": false
+              },
+              {
+                "name": "enable_parallel_append",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "on",
+                "pendingRestart": false
+              },
+              {
+                "name": "enable_parallel_hash",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "on",
+                "pendingRestart": false
+              },
+              {
+                "name": "debug_parallel_query",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "off",
+                "pendingRestart": false
+              },
+              {
+                "name": "jit",
+                "unit": null,
+                "source": "session",
+                "present": true,
+                "setting": "off",
+                "pendingRestart": false
+              },
+              {
+                "name": "jit_above_cost",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "100000",
+                "pendingRestart": false
+              },
+              {
+                "name": "jit_inline_above_cost",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "500000",
+                "pendingRestart": false
+              },
+              {
+                "name": "jit_optimize_above_cost",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "500000",
+                "pendingRestart": false
+              },
+              {
+                "name": "jit_expressions",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "on",
+                "pendingRestart": false
+              },
+              {
+                "name": "jit_tuple_deforming",
+                "unit": null,
+                "source": "default",
+                "present": true,
+                "setting": "on",
+                "pendingRestart": false
+              },
+              {
+                "name": "pg_show_plans.is_enabled",
+                "unit": null,
+                "source": "session",
+                "present": true,
+                "setting": "off",
+                "pendingRestart": false
+              },
+              {
+                "name": "statement_timeout",
+                "unit": "ms",
+                "source": "session",
+                "present": true,
+                "setting": "30000",
+                "pendingRestart": false
+              }
+            ],
+            "holderPid": 290350,
+            "legacyOne": true,
+            "backendPid": 290357,
+            "observedAt": "2026-10-17T15:10:00.124159+00:00",
+            "databaseOid": 324139,
+            "noRoleSwitch": true,
+            "testIdentity": true,
+            "applyingCount": "0",
+            "holderGranted": true,
+            "auditRelations": [
+              {
+                "oid": 327395,
+                "rls": true,
+                "kind": "r",
+                "name": "audit_events",
+                "owner": "dee50tht",
+                "pages": 96727,
+                "schema": "public",
+                "options": null,
+                "forceRls": false,
+                "canSelect": true,
+                "persistence": "p",
+                "canUseSchema": true,
+                "tuplesEstimate": 1139545,
+                "allVisiblePages": 0
+              }
+            ]
+          }
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 8,
+      "command": "EXPLAIN",
+      "rowCount": null,
+      "fields": [
+        "QUERY PLAN"
+      ],
+      "rows": [
+        {
+          "QUERY PLAN": [
+            {
+              "Plan": {
+                "Node Type": "Aggregate",
+                "Strategy": "Plain",
+                "Partial Mode": "Simple",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Startup Cost": 575751.78,
+                "Total Cost": 575751.79,
+                "Plan Rows": 1,
+                "Plan Width": 32,
+                "Output": [
+                  "md5(COALESCE(string_agg(md5((to_jsonb(a.*))::text), '|'::text ORDER BY (md5((to_jsonb(a.*))::text))), ''::text))"
+                ],
+                "Plans": [
+                  {
+                    "Node Type": "Gather Merge",
+                    "Parent Relationship": "Outer",
+                    "Parallel Aware": false,
+                    "Async Capable": false,
+                    "Startup Cost": 420037.14,
+                    "Total Cost": 560659.23,
+                    "Plan Rows": 1207404,
+                    "Plan Width": 1022,
+                    "Output": [
+                      "a.*"
+                    ],
+                    "Workers Planned": 2,
+                    "Plans": [
+                      {
+                        "Node Type": "Sort",
+                        "Parent Relationship": "Outer",
+                        "Parallel Aware": false,
+                        "Async Capable": false,
+                        "Startup Cost": 419037.11,
+                        "Total Cost": 420294.83,
+                        "Plan Rows": 503085,
+                        "Plan Width": 1022,
+                        "Output": [
+                          "[depth limit]",
+                          "[depth limit]"
+                        ],
+                        "Sort Key": [
+                          "[depth limit]"
+                        ],
+                        "Plans": [
+                          "[depth limit]"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "Settings": {
+                "effective_cache_size": "3GB",
+                "effective_io_concurrency": "200",
+                "max_parallel_workers": "32",
+                "random_page_cost": "1.1",
+                "jit": "off",
+                "search_path": "pg_catalog, public"
+              },
+              "Query Identifier": 1526014476562793200
+            }
+          ]
+        }
+      ],
+      "rowsTruncated": false
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "qt_audit_plan_context"
+        ],
+        "rows": [
+          {
+            "qt_audit_plan_context": {
+              "version": "QT_AUDIT_PLAN_CONTEXT_V1",
+              "database": "cloudtms_test_clone",
+              "readOnly": true,
+              "holderPid": 290350,
+              "legacyOne": true,
+              "backendPid": 290007,
+              "observedAt": "2026-10-17T15:10:00.359274+00:00",
+              "databaseOid": 324139,
+              "noRoleSwitch": true,
+              "testIdentity": true,
+              "applyingCount": "0",
+              "holderGranted": true
+            }
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+  ]
+}

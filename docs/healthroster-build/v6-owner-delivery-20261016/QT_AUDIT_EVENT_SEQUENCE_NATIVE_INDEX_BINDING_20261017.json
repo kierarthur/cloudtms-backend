@@ -1,0 +1,281 @@
+{
+  "version": "QT_AUDIT_EVENT_SEQUENCE_NATIVE_INDEX_BINDING_V1",
+  "route": "cloudtms-miget-operations-kier-codex/miget_db_relation_metadata",
+  "database": "agency_test",
+  "section": "indexes",
+  "authenticated": true,
+  "readOnly": true,
+  "totalReturned": 10,
+  "eof": true,
+  "truncated": false,
+  "businessRowsReturned": 0,
+  "callerSuppliedSqlAccepted": false,
+  "actualSelectedIndex": {
+    "keys": [
+      {
+        "column": "event_sequence",
+        "position": 1,
+        "collation": null,
+        "definition": "event_sequence",
+        "operator_class": "int8_ops",
+        "operator_family": "integer_ops",
+        "attribute_number": 16,
+        "collation_schema": null,
+        "source_data_type": "bigint",
+        "stored_data_type": "bigint",
+        "support_functions": [
+          {
+            "function": "btint8cmp",
+            "left_type": "bigint",
+            "right_type": "bigint",
+            "support_number": 1,
+            "function_result": "integer",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "bigint, bigint",
+            "exact_operator_class_input_types": true
+          },
+          {
+            "function": "btint82cmp",
+            "left_type": "bigint",
+            "right_type": "smallint",
+            "support_number": 1,
+            "function_result": "integer",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "bigint, smallint",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btint84cmp",
+            "left_type": "bigint",
+            "right_type": "integer",
+            "support_number": 1,
+            "function_result": "integer",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "bigint, integer",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btint28cmp",
+            "left_type": "smallint",
+            "right_type": "bigint",
+            "support_number": 1,
+            "function_result": "integer",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "smallint, bigint",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btint2cmp",
+            "left_type": "smallint",
+            "right_type": "smallint",
+            "support_number": 1,
+            "function_result": "integer",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "smallint, smallint",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btint24cmp",
+            "left_type": "smallint",
+            "right_type": "integer",
+            "support_number": 1,
+            "function_result": "integer",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "smallint, integer",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btint48cmp",
+            "left_type": "integer",
+            "right_type": "bigint",
+            "support_number": 1,
+            "function_result": "integer",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "integer, bigint",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btint42cmp",
+            "left_type": "integer",
+            "right_type": "smallint",
+            "support_number": 1,
+            "function_result": "integer",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "integer, smallint",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btint4cmp",
+            "left_type": "integer",
+            "right_type": "integer",
+            "support_number": 1,
+            "function_result": "integer",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "integer, integer",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btint8sortsupport",
+            "left_type": "bigint",
+            "right_type": "bigint",
+            "support_number": 2,
+            "function_result": "void",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "internal",
+            "exact_operator_class_input_types": true
+          },
+          {
+            "function": "btint2sortsupport",
+            "left_type": "smallint",
+            "right_type": "smallint",
+            "support_number": 2,
+            "function_result": "void",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "internal",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btint4sortsupport",
+            "left_type": "integer",
+            "right_type": "integer",
+            "support_number": 2,
+            "function_result": "void",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "internal",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "in_range",
+            "left_type": "bigint",
+            "right_type": "bigint",
+            "support_number": 3,
+            "function_result": "boolean",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "bigint, bigint, bigint, boolean, boolean",
+            "exact_operator_class_input_types": true
+          },
+          {
+            "function": "in_range",
+            "left_type": "smallint",
+            "right_type": "bigint",
+            "support_number": 3,
+            "function_result": "boolean",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "smallint, smallint, bigint, boolean, boolean",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "in_range",
+            "left_type": "smallint",
+            "right_type": "smallint",
+            "support_number": 3,
+            "function_result": "boolean",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "smallint, smallint, smallint, boolean, boolean",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "in_range",
+            "left_type": "smallint",
+            "right_type": "integer",
+            "support_number": 3,
+            "function_result": "boolean",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "smallint, smallint, integer, boolean, boolean",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "in_range",
+            "left_type": "integer",
+            "right_type": "bigint",
+            "support_number": 3,
+            "function_result": "boolean",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "integer, integer, bigint, boolean, boolean",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "in_range",
+            "left_type": "integer",
+            "right_type": "smallint",
+            "support_number": 3,
+            "function_result": "boolean",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "integer, integer, smallint, boolean, boolean",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "in_range",
+            "left_type": "integer",
+            "right_type": "integer",
+            "support_number": 3,
+            "function_result": "boolean",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "integer, integer, integer, boolean, boolean",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btequalimage",
+            "left_type": "bigint",
+            "right_type": "bigint",
+            "support_number": 4,
+            "function_result": "boolean",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "oid",
+            "exact_operator_class_input_types": true
+          },
+          {
+            "function": "btequalimage",
+            "left_type": "smallint",
+            "right_type": "smallint",
+            "support_number": 4,
+            "function_result": "boolean",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "oid",
+            "exact_operator_class_input_types": false
+          },
+          {
+            "function": "btequalimage",
+            "left_type": "integer",
+            "right_type": "integer",
+            "support_number": 4,
+            "function_result": "boolean",
+            "function_schema": "pg_catalog",
+            "function_identity_arguments": "oid",
+            "exact_operator_class_input_types": false
+          }
+        ],
+        "operator_class_schema": "pg_catalog",
+        "operator_family_schema": "pg_catalog",
+        "operator_class_input_type": "bigint",
+        "operator_class_is_default": true
+      }
+    ],
+    "live": true,
+    "index": "audit_events_event_sequence_uq",
+    "owner": "dee50tht",
+    "ready": true,
+    "valid": true,
+    "schema": "public",
+    "unique": true,
+    "primary": false,
+    "relation": "audit_events",
+    "clustered": false,
+    "exclusion": false,
+    "immediate": true,
+    "predicate": null,
+    "definition": "CREATE UNIQUE INDEX audit_events_event_sequence_uq ON public.audit_events USING btree (event_sequence)",
+    "index_schema": "public",
+    "access_method": "btree",
+    "replica_identity": false,
+    "key_attribute_count": 1,
+    "total_attribute_count": 1,
+    "index_binding_contract": "CLOUDTMS_INDEX_OPERATOR_BINDINGS_V1"
+  },
+  "selection": "Actual fixed indexes section for public.audit_events, selected exact original source index; identity non-null column evidence is separately retained.",
+  "initialRejectedArgument": {
+    "key": "indexes",
+    "reason": "Unrecognized key; no query submitted."
+  },
+  "performanceClaimed": false
+}

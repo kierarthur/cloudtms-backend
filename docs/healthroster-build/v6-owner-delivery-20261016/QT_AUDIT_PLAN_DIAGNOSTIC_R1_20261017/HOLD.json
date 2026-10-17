@@ -1,0 +1,11 @@
+{
+  "status": "HOLD_FIXED_QT_PLAN_DIAGNOSTIC",
+  "code": "QT_PLAN_CLOSED_PLAN_NODE_REQUIRED",
+  "readyEmitted": true,
+  "rootNativeMayHaveBeenDispatched": true,
+  "nativeResultNeverOverwritten": true,
+  "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_UNLOCK_PROOF",
+  "businessRowsRead": false,
+  "fixturesAttempted": false,
+  "restorationClaimed": false
+}

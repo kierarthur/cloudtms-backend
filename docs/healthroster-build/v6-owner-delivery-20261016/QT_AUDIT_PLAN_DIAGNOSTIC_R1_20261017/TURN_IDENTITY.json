@@ -1,0 +1,12 @@
+{
+  "physicalDatabase": "cloudtms_test_clone",
+  "databaseOid": 324139,
+  "backendPid": 290350,
+  "turnId": "hr_turn_28471d490135b802e40cdbe643ee24b5",
+  "key": [
+    20261013,
+    1
+  ],
+  "takenAt": "2026-10-17T15:09:47.839Z",
+  "task": "QT_AUDIT_PLAN_METADATA_READ_ONLY_20261017"
+}

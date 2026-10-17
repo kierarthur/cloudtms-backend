@@ -1,0 +1,353 @@
+{
+  "version": "QT_AUDIT_PLAN_ACTUAL_PARTIAL_OBSERVATION_V1",
+  "sourceCommit": "769a54fc1053b57c8242d2960002c900dd716791",
+  "diagnosticVerdict": "HOLD_FULL_PLAN_INCOMPLETE_PROVIDER_DEPTH_LIMIT",
+  "actualNative": {
+    "accepted": true,
+    "rolledBack": true,
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "mainStatements": 8,
+    "freshStatements": 1,
+    "explainAbi": "Observed EXPLAIN/null rowCount/single QUERY PLAN/one JSON array",
+    "mainContext": {
+      "version": "QT_AUDIT_PLAN_CONTEXT_V1",
+      "database": "cloudtms_test_clone",
+      "readOnly": true,
+      "settings": [
+        {
+          "name": "work_mem",
+          "unit": "kB",
+          "source": "session",
+          "present": true,
+          "setting": "4096",
+          "pendingRestart": false
+        },
+        {
+          "name": "temp_file_limit",
+          "unit": "kB",
+          "source": "default",
+          "present": true,
+          "setting": "-1",
+          "pendingRestart": false
+        },
+        {
+          "name": "max_parallel_workers_per_gather",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "2",
+          "pendingRestart": false
+        },
+        {
+          "name": "max_parallel_workers",
+          "unit": null,
+          "source": "configuration file",
+          "present": true,
+          "setting": "32",
+          "pendingRestart": false
+        },
+        {
+          "name": "max_worker_processes",
+          "unit": null,
+          "source": "configuration file",
+          "present": true,
+          "setting": "32",
+          "pendingRestart": false
+        },
+        {
+          "name": "max_parallel_maintenance_workers",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "2",
+          "pendingRestart": false
+        },
+        {
+          "name": "min_parallel_table_scan_size",
+          "unit": "8kB",
+          "source": "default",
+          "present": true,
+          "setting": "1024",
+          "pendingRestart": false
+        },
+        {
+          "name": "min_parallel_index_scan_size",
+          "unit": "8kB",
+          "source": "default",
+          "present": true,
+          "setting": "64",
+          "pendingRestart": false
+        },
+        {
+          "name": "parallel_setup_cost",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "1000",
+          "pendingRestart": false
+        },
+        {
+          "name": "parallel_tuple_cost",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "0.1",
+          "pendingRestart": false
+        },
+        {
+          "name": "parallel_leader_participation",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "on",
+          "pendingRestart": false
+        },
+        {
+          "name": "enable_sort",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "on",
+          "pendingRestart": false
+        },
+        {
+          "name": "enable_incremental_sort",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "on",
+          "pendingRestart": false
+        },
+        {
+          "name": "enable_presorted_aggregate",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "on",
+          "pendingRestart": false
+        },
+        {
+          "name": "enable_gathermerge",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "on",
+          "pendingRestart": false
+        },
+        {
+          "name": "enable_parallel_append",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "on",
+          "pendingRestart": false
+        },
+        {
+          "name": "enable_parallel_hash",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "on",
+          "pendingRestart": false
+        },
+        {
+          "name": "debug_parallel_query",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "off",
+          "pendingRestart": false
+        },
+        {
+          "name": "jit",
+          "unit": null,
+          "source": "session",
+          "present": true,
+          "setting": "off",
+          "pendingRestart": false
+        },
+        {
+          "name": "jit_above_cost",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "100000",
+          "pendingRestart": false
+        },
+        {
+          "name": "jit_inline_above_cost",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "500000",
+          "pendingRestart": false
+        },
+        {
+          "name": "jit_optimize_above_cost",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "500000",
+          "pendingRestart": false
+        },
+        {
+          "name": "jit_expressions",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "on",
+          "pendingRestart": false
+        },
+        {
+          "name": "jit_tuple_deforming",
+          "unit": null,
+          "source": "default",
+          "present": true,
+          "setting": "on",
+          "pendingRestart": false
+        },
+        {
+          "name": "pg_show_plans.is_enabled",
+          "unit": null,
+          "source": "session",
+          "present": true,
+          "setting": "off",
+          "pendingRestart": false
+        },
+        {
+          "name": "statement_timeout",
+          "unit": "ms",
+          "source": "session",
+          "present": true,
+          "setting": "30000",
+          "pendingRestart": false
+        }
+      ],
+      "holderPid": 290350,
+      "legacyOne": true,
+      "backendPid": 290357,
+      "observedAt": "2026-10-17T15:10:00.124159+00:00",
+      "databaseOid": 324139,
+      "noRoleSwitch": true,
+      "testIdentity": true,
+      "applyingCount": "0",
+      "holderGranted": true,
+      "auditRelations": [
+        {
+          "oid": 327395,
+          "rls": true,
+          "kind": "r",
+          "name": "audit_events",
+          "owner": "dee50tht",
+          "pages": 96727,
+          "schema": "public",
+          "options": null,
+          "forceRls": false,
+          "canSelect": true,
+          "persistence": "p",
+          "canUseSchema": true,
+          "tuplesEstimate": 1139545,
+          "allVisiblePages": 0
+        }
+      ]
+    },
+    "freshContext": {
+      "version": "QT_AUDIT_PLAN_CONTEXT_V1",
+      "database": "cloudtms_test_clone",
+      "readOnly": true,
+      "holderPid": 290350,
+      "legacyOne": true,
+      "backendPid": 290007,
+      "observedAt": "2026-10-17T15:10:00.359274+00:00",
+      "databaseOid": 324139,
+      "noRoleSwitch": true,
+      "testIdentity": true,
+      "applyingCount": "0",
+      "holderGranted": true
+    }
+  },
+  "observedEstimatedNodes": [
+    {
+      "Node Type": "Aggregate",
+      "Startup Cost": 575751.78,
+      "Total Cost": 575751.79,
+      "Plan Rows": 1,
+      "Plan Width": 32,
+      "Parallel Aware": false
+    },
+    {
+      "Node Type": "Gather Merge",
+      "Startup Cost": 420037.14,
+      "Total Cost": 560659.23,
+      "Plan Rows": 1207404,
+      "Plan Width": 1022,
+      "Workers Planned": 2,
+      "Parallel Aware": false
+    },
+    {
+      "Node Type": "Sort",
+      "Startup Cost": 419037.11,
+      "Total Cost": 420294.83,
+      "Plan Rows": 503085,
+      "Plan Width": 1022,
+      "Parallel Aware": false
+    }
+  ],
+  "planDescendants": "Actual MCP serialization returns literal [depth limit]; rowsTruncated=false does not prove full nested plan. Original strict holder refused, not relaxed.",
+  "interpretation": "Estimated top-level Aggregate/Gather Merge/Sort for complete original audit expression. This is not an actual scan, measured timing, nested DO/SPI plan or proved cancellation cause.",
+  "ownTurn": {
+    "takenAt": "2026-10-17T15:09:47.839Z",
+    "releasedAt": "2026-10-17T15:10:03.016Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false
+  },
+  "earlierRootOnlyHolds": [
+    {
+      "out": "qt-audit-plan-native-20261017-e54412b9637740aca5884818aa9b540f",
+      "cause": "Console parser omitted CSI question-mark terminal prefixes; corrected against actual captured READY.",
+      "nativeDispatched": false,
+      "takenAt": "2026-10-17T15:06:31.687Z",
+      "releasedAt": "2026-10-17T15:07:35.457Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true
+    },
+    {
+      "out": "qt-audit-plan-native-20261017-3e40b27bbfe244edadf6391c1f8a4d93",
+      "cause": "Extra root regex expected spaces after EXPLAIN option commas. Replaced by exact original pure factory/current generated input equality, replayed against actual original public input.",
+      "nativeDispatched": false,
+      "takenAt": "2026-10-17T15:08:36.457Z",
+      "releasedAt": "2026-10-17T15:08:47.121Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true
+    }
+  ],
+  "businessScanExecuted": false,
+  "fixturesCreated": false,
+  "backgroundJobsPaused": false,
+  "constructorPass": false,
+  "fullRestorationClaimed": false,
+  "files": [
+    {
+      "file": "NATIVE_RESULT.json",
+      "bytes": 13134,
+      "sha256": "fca340bcf584f169f126e8b22b62481acda64c399d4e29741e582a64ba570c87"
+    },
+    {
+      "file": "INPUT_RECEIPT.json",
+      "bytes": 872,
+      "sha256": "73aa757835bdc20a721b285091f7e09f68916b1cf69c1a24dadd6007636f9ed7"
+    },
+    {
+      "file": "TURN_IDENTITY.json",
+      "bytes": 285,
+      "sha256": "fde1e9bb66f84eaf2db045fcbf9de1d8e69215c4cecbbdb0ab7e5c52828b47c0"
+    },
+    {
+      "file": "HOLD.json",
+      "bytes": 374,
+      "sha256": "968e77f2ff4f773085efd496893bbb4533f188885eeab9dd785db6f34240383c"
+    }
+  ]
+}
