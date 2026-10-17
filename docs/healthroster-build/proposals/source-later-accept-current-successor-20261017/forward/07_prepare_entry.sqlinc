@@ -1,0 +1,12 @@
+-- Finite service-only Source proposal entry, not generic SQL or publication.
+create or replace function public.weekly_source_missing_accept_prepare_atomic_v1(p_request jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+begin
+  return private.weekly_source_missing_accept_prepare_v1(p_request);
+end;
+$function$;
+alter function public.weekly_source_missing_accept_prepare_atomic_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_missing_accept_prepare_atomic_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_missing_accept_prepare_atomic_v1(jsonb) to postgres,service_role;

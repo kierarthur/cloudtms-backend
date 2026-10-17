@@ -11,12 +11,14 @@ import { WeeklyProtectedActionError } from './protected-action-orchestrator.mjs'
 import { normalizeBpayNextOwnerStatus } from '../bpay-next-legacy-fence.js';
 import { validateRuleSetValues } from './rule-set-validation.js';
 import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';
+import {missingAcceptPrepareRequest,missingAcceptContextRequest,positiveDecimal} from './missing-accept.mjs';
+import{validateKeptPayContextCommand,parseKeptPayContextCommand,decodeKeptPayContext}from'./kept-pay-context.mjs';
 import {CONTACT_PAUSE_RPC_COMMANDS,isContactPauseCommand,parseContactPauseCommandBody,handleContactPauseOfficeCommand} from './contact-pause-office.mjs';
 import { contactReminderRefusal } from './contact-reminder-refusal.mjs';
 import {CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,isContactManualEnquiryCommand,parseContactManualEnquiryBody,handleContactManualEnquiryOfficeCommand} from './contact-manual-enquiry-office.mjs';
 import {matchSourcePayDecisionRoute,handleSourcePayDecisionHttp,SOURCE_PAY_DECISION_HTTP_ROUTES} from './source-pay-decision-http.mjs';
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const MAX_COMMAND_BYTES = 262_144;
 const MAX_UPLOAD_PREVIEW_BYTES = 25 * 1024 * 1024;
 
@@ -158,7 +160,7 @@ const PROTECTED_ACTIONS = new Set([
 const PAY_VIEW_COMMANDS = new Set([
   'WORKSPACE_SCOPES', 'COMBINED_REVIEW_WORKSPACE', 'PROTECTED_EDITOR_CONTEXT',
   'OPEN_MANUAL_REVIEW', 'RESOLVE_MANUAL_REVIEW', 'PREPARE_PROTECTED_EDITOR',
-  'KEEP_AS_PAID',
+  'KEEP_AS_PAID', 'KEEP_AS_PAID_CONTEXT', 'MISSING_ACCEPT_CONTEXT', 'PREPARE_MISSING_ACCEPT', 'LATER_CHANGE_DECISION',
   'ACCEPT_SYSTEM_HOURS', 'FIRST_AUTHORISE', 'WITHDRAW_FIRST_AUTHORISATION',
   ...PROTECTED_ACTIONS,
 ]);
@@ -263,6 +265,7 @@ async function readJsonBody(req, maximumBytes = MAX_COMMAND_BYTES) {
   try {
     const parsed = plainObject(JSON.parse(text || '{}'), 'WEEKLY_SOURCE_REQUEST_INVALID', 'Request');
     if(typeof parsed.action==='string'&&parsed.action.trim().toUpperCase()==='KEEP_AS_PAID')return parseKeptPayCommand(text);
+    if(typeof parsed.action==='string'&&parsed.action.trim().toUpperCase()==='KEEP_AS_PAID_CONTEXT')return parseKeptPayContextCommand(text);
     if(isContactManualEnquiryCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null))return parseContactManualEnquiryBody(text);
     return isContactPauseCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null)
       ? parseContactPauseCommandBody(text) : parsed;
@@ -706,6 +709,13 @@ async function handleCommand(req, env, ctx, dependencies, user) {
       rpc:(name,request)=>callRpc(dependencies,name,request,20_000)});
   }
 
+  if(action==='KEEP_AS_PAID_CONTEXT'){
+    try{validateKeptPayContextCommand(body);}catch{fail('WEEKLY_SOURCE_KEEP_AS_PAID_CONTEXT_REQUEST_INVALID','This Source context could not be read.',400);}
+    const result=await callRpc(dependencies,'weekly_source_keep_as_paid_context_v1',request);
+    try{return jsonResponse(200,decodeKeptPayContext(result,payload));}
+    catch{fail('WEEKLY_SOURCE_KEEP_AS_PAID_CONTEXT_RESULT_INVALID','Refresh this shift before deciding.',502);}
+  }
+
   if (action === 'KEEP_AS_PAID') {
     try{validateKeptPayCommand(body);}catch{fail('WEEKLY_SOURCE_KEEP_AS_PAID_REQUEST_INVALID','This decision could not be prepared.',400);}
     let result;
@@ -715,6 +725,29 @@ async function handleCommand(req, env, ctx, dependencies, user) {
     catch(error){const refusal=keptPayFailure(error);fail(refusal.code,'Open the current review before continuing.',refusal.status);}
     try{return jsonResponse(200,decodeKeptPayAcknowledgement(result,payload,user.id));}
     catch{fail('WEEKLY_SOURCE_KEEP_AS_PAID_RESULT_INVALID','Open the current review before continuing.',502);}
+  }
+
+  if (action === 'MISSING_ACCEPT_CONTEXT' || action === 'PREPARE_MISSING_ACCEPT') {
+    if (body.action !== action || Object.keys(body).length !== 2 || !Object.hasOwn(body,'payload')) {
+      fail('WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID','This proposal could not be prepared.',400);
+    }
+    let preparation;
+    try { preparation=action==='MISSING_ACCEPT_CONTEXT'
+      ? missingAcceptContextRequest(payload,user.id) : missingAcceptPrepareRequest(payload,user.id); }
+    catch { fail('WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_INVALID','This proposal could not be prepared.',400); }
+    let owner;
+    try {
+      if (typeof dependencies.bpayNextOwnerStatusRpc !== 'function') throw new Error();
+      owner=normalizeBpayNextOwnerStatus(await dependencies.bpayNextOwnerStatusRpc(env));
+    } catch { fail('BPAY_NEXT_OWNER_STATUS_UNAVAILABLE','This proposal is unavailable; try again shortly.',503); }
+    if (owner.active_owner !== 'NEXT') {
+      fail('WEEKLY_SOURCE_COMMAND_NOT_SUPPORTED','This proposal is not available for this agency yet.',409);
+    }
+    const rpc=action==='MISSING_ACCEPT_CONTEXT' ? 'weekly_source_missing_accept_context_v1'
+      : 'weekly_source_missing_accept_prepare_atomic_v1';
+    const result=await withRefusalRecording(dependencies,'broker:weekly-source:'+rpc,user.id,
+      ()=>callRpc(dependencies,rpc,preparation));
+    return jsonResponse(200,result);
   }
 
   if (action === 'LATER_CHANGE_DECISION') {
@@ -728,7 +761,8 @@ async function handleCommand(req, env, ctx, dependencies, user) {
         || payload.schema_version !== 'WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1'
         || !['decision_bundle_id', 'root_timesheet_id', 'final_revision_id']
           .every((key) => typeof payload[key] === 'string' && sourceUuid.test(payload[key]))
-        || !Number.isSafeInteger(payload.bundle_revision) || payload.bundle_revision < 1
+        || !(positiveDecimal(payload.bundle_revision)
+          || (Number.isSafeInteger(payload.bundle_revision) && payload.bundle_revision >= 1))
         || !['APPROVE_UPDATED_HOURS', 'KEEP_CURRENTLY_APPROVED_HOURS'].includes(payload.decision)
         || typeof payload.idempotency_key !== 'string'
         || payload.idempotency_key !== payload.idempotency_key.trim()

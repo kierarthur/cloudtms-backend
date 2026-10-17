@@ -37,7 +37,10 @@ test('mandatory verifier search paths and service boundaries match ten complete 
 });
 test('independent ACL expected-set additions reverse to the entire original mandatory verifier',()=>{
  const proof=JSON.parse(fs.readFileSync('docs/healthroster-build/v6-owner-delivery-20261016/KEPT_ENTRY_MANDATORY_ACL_VERIFIER_20261017.json'));
- let value=fs.readFileSync(proof.target,'utf8');assert.equal(hash(value),proof.outputSha256);
+ const successor=JSON.parse(fs.readFileSync('docs/healthroster-build/v6-owner-delivery-20261016/LATER_KEEP_MANDATORY_VERIFIERS_20261017.json'));
+ let value=fs.readFileSync(proof.target,'utf8');assert.equal(hash(value),successor.outputSha256);
+ for(const h of [...successor.hunks].reverse()){assert.equal(value.split(h.after).length,2);value=value.replace(h.after,()=>h.before);}
+ assert.equal(hash(value),successor.inputSha256);assert.equal(hash(value),proof.outputSha256);
  for(const h of [...proof.hunks].reverse()){assert.equal(value.split(h.after).length,2);value=value.replace(h.after,()=>h.before);}
  assert.equal(hash(value),proof.inputSha256);
  assert.equal(value,execFileSync('git',['show',proof.sourceCheckpoint+':'+proof.target],{encoding:'utf8'}));

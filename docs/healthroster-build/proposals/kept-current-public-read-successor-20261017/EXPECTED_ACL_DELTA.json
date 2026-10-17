@@ -1,0 +1,14 @@
+{
+  "purpose": "Independent literal mandatory-verifier additions; expected values are not derived from installed runtime arrays.",
+  "base": "24c57 + b692 functional38 selection with fb120833 correctedregistry",
+  "newPrivate": [
+    "private.weekly_source_keep_as_paid_scope_rows_v1(uuid,uuid,uuid,uuid,uuid,date)"
+  ],
+  "newService": [
+    "public.weekly_source_keep_as_paid_context_v1(jsonb)"
+  ],
+  "newRelations": [],
+  "newImmutableRelations": [],
+  "newLifecycleExceptions": [],
+  "native": "NOT_RUN"
+}

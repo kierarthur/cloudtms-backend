@@ -1,0 +1,92 @@
+{
+  "checkpoint": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+  "parentCommit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+  "owners": [
+    {
+      "signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "leaf": "03_complete_canonical_context.sqlinc",
+      "inputSha256": "3f14d5aac6e9d29d52f1f630089d6ac20a0229e2bde43daac1c6c10c40be534d",
+      "outputSha256": "4906c26998ff9123144b61a7a163aab1dc95c718b70477c8109517fc463adac1",
+      "hunks": [
+        {
+          "before": "'decision_available',not v_accept_complete and not v_source_present and (v_invoiced or v_paid is true),",
+          "after": "'decision_available',not v_accept_complete and not v_source_present and cardinality(v_roots)>0\n      and cardinality(v_movements)=1 and (v_invoiced or v_paid is true),",
+          "purpose": "Missing genuine current Source pay head/root remains unavailable; invoice/absence alone cannot admit the writer."
+        }
+      ],
+      "provenance": {
+        "commit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+        "virtualParent": "forward/09_complete_current_context.sqlinc"
+      },
+      "completeReverseByteEquality": true
+    },
+    {
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "leaf": "04_complete_office_workspace.sqlinc",
+      "inputSha256": "74b3e3a0c11459012d9ff3a1e791dbb21c22d697ac13dfbe3756de2a15bc2367",
+      "outputSha256": "8da0e01f60ff15725f1ffc9148d84d1d8dd2d370f892e1416bcfb930f1de7f43",
+      "hunks": [
+        {
+          "before": "    'history',v_history,'notices','[]'::jsonb,",
+          "after": "    'kept_as_paid_contexts',case when private.weekly_source_pay_actor_allowed_v1(v_actor) then\n      private.weekly_source_keep_as_paid_scope_rows_v1(\n        v_actor,v_group.id,v_client_id,v_cycle.id,null::uuid,null::date) else '[]'::jsonb end,\n    'history',v_history,'notices','[]'::jsonb,",
+          "purpose": "Real current Office Source workspace contains scoped omitted/acknowledged rows, also in its existing reduced pay view."
+        }
+      ],
+      "provenance": {
+        "commit": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+        "physical": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/28_native_contact_workspace.sqlinc"
+      },
+      "completeReverseByteEquality": true
+    },
+    {
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "leaf": "05_complete_work_presentation.sqlinc",
+      "inputSha256": "a5fee7a92456ed515788d95782ff9de5678c49999b4595a4b757fe0faf24518c",
+      "outputSha256": "47b94cebe419f70ddbf23c1372aa698c5fa86faf974b2ed0aa50a33833f60629",
+      "hunks": [
+        {
+          "before": "    'lifecycle',v_lifecycle||pg_catalog.jsonb_build_object('schedules',v_schedules),",
+          "after": "    'kept_as_paid_contexts',case when v_policy->>'authority_mode'='SOURCE_AUTHORITY' then\n      private.weekly_source_keep_as_paid_scope_rows_v1(v_actor,v_group.id,v_contract.client_id,\n        null::uuid,v_timesheet.timesheet_id,null::date) else '[]'::jsonb end,\n    'lifecycle',v_lifecycle||pg_catalog.jsonb_build_object('schedules',v_schedules),",
+          "purpose": "Actual current Source Work family retains original historical facts and queries the latest genuine covering export, not its old cycle pointer."
+        }
+      ],
+      "provenance": {
+        "commit": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+        "physical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql"
+      },
+      "completeReverseByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+      "leaf": "06_complete_source_checklist_leaf.sqlinc",
+      "inputSha256": "1a18c8c4af63a2d93e6e5c3bdfc39503377e723eecf127049cacd544e2376450",
+      "outputSha256": "52c9d5d21cadfaa287e799598adc7f1655596356f1ceb7f6d4fe1ae7f6ff5f92",
+      "hunks": [
+        {
+          "before": "  v_latest_week date; v_latest_timesheet_week date; v_calendar_authority jsonb;",
+          "after": "  v_latest_week date; v_latest_timesheet_week date; v_calendar_authority jsonb; v_kept_rows jsonb;"
+        },
+        {
+          "before": "  return jsonb_build_object('applies',true,'admitted',true,'contract','WEEKLY_SOURCE_HEALTHROSTER_CHECKLIST_CONTEXT_V1',",
+          "after": "  v_kept_rows:=case when v_route in ('AGENCY_INVOICE','SELF_BILL') then\n    private.weekly_source_keep_as_paid_scope_rows_v1(v_actor,g.id,v_client,null::uuid,null::uuid,v_week)\n    else '[]'::jsonb end;\n  return jsonb_build_object('applies',true,'admitted',true,'contract','WEEKLY_SOURCE_HEALTHROSTER_CHECKLIST_CONTEXT_V1',"
+        },
+        {
+          "before": "    'qualified_waiting_count',v_wait,'engineering_gates',v_gate,",
+          "after": "    'qualified_waiting_count',v_wait,'engineering_gates',v_gate,'kept_as_paid_contexts',v_kept_rows,"
+        },
+        {
+          "before": "        'wait_count',v_wait,'gates',v_gate)),'hex'));",
+          "after": "        'wait_count',v_wait,'gates',v_gate,'kept_as_paid_contexts',v_kept_rows)),'hex'));",
+          "purpose": "A genuine changed/renewed ACK changes this existing Source Checklist read revision; no new financial process classification."
+        }
+      ],
+      "provenance": {
+        "commit": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+        "physical": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc"
+      },
+      "completeReverseByteEquality": true
+    }
+  ],
+  "bankBodies": 0,
+  "native": "NOT_RUN"
+}

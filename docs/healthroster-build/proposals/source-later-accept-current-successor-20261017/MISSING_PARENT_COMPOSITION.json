@@ -1,0 +1,157 @@
+{
+  "commit": "01ec68ef68a2cb16aa86ddb058b5d37989a60f43",
+  "completeMissingDefinitions": 19,
+  "functions": [
+    {
+      "signature": "private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)",
+      "inputLeaf": "00_target_publication_facts.sqlinc",
+      "inputSha256": "4543671e94d7fd1279a5aaf549caa20397f30e8c8fc8f9201622bafd285c264a",
+      "selected": "13_missing_01_private_weekly_source_kept_as_paid_facts_for_publication_v1.sqlinc",
+      "completeByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_kept_as_paid_facts_v1(uuid,text)",
+      "inputLeaf": "00_target_publication_facts.sqlinc",
+      "inputSha256": "77c57c74390f3353f4b7478faceba58e1119b95e0b1a560de521ef4e0f9cfca7",
+      "selected": "13_missing_02_private_weekly_source_kept_as_paid_facts_v1.sqlinc",
+      "completeByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "inputLeaf": "01_target_publication_context.sqlinc",
+      "inputSha256": "fd89d560c5685874c8f9b5254d3bc63e808ff1849dd828b4e1cead3e68ebeb73",
+      "selected": "EXPLICIT_LATER_SUCCESSOR"
+    },
+    {
+      "signature": "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+      "inputLeaf": "01_target_publication_context.sqlinc",
+      "inputSha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4",
+      "selected": "13_missing_03_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+      "completeByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "inputLeaf": "02_missing_snapshot_movement.sqlinc",
+      "inputSha256": "18a5cac5a29e5e18d913a70a870d7f5ad1de03f6300e390744e802316145fc5d",
+      "selected": "13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "completeByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)",
+      "inputLeaf": "03_missing_cancel_basis.sqlinc",
+      "inputSha256": "5d1afd4e827608d13609ec5fcb51a61eee8f4e1f48e2629dd207e5008eb5cfca",
+      "selected": "EXPLICIT_LATER_SUCCESSOR"
+    },
+    {
+      "signature": "private.weekly_source_kept_as_paid_read_for_publication_v1(uuid,uuid,uuid)",
+      "inputLeaf": "04_current_read_admission.sqlinc",
+      "inputSha256": "1044d79b09e6c2346c3db7b46fd6a0107665e41e98ee8ccc220cb6fe8eb9f000",
+      "selected": "13_missing_05_private_weekly_source_kept_as_paid_read_for_publication_v1.sqlinc",
+      "completeByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)",
+      "inputLeaf": "04_current_read_admission.sqlinc",
+      "inputSha256": "9c06acf09e85fbd9d5cc5d39d23160ef9dafa0ae65bbfeeb54fe11dce7b42325",
+      "selected": "13_missing_06_private_weekly_source_kept_as_paid_read_admit_v1.sqlinc",
+      "completeByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_missing_finalisation_roots_v1(uuid,integer,uuid,uuid,uuid,date,date)",
+      "inputLeaf": "05_missing_finalisation_root_inventory.sqlinc",
+      "inputSha256": "847a0dd09838e33fd7ce829c09c1380d35ae243098d4f44aaedbba55786a25bc",
+      "selected": "13_missing_07_private_weekly_source_missing_finalisation_roots_v1.sqlinc",
+      "completeByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "inputLeaf": "06_complete_fin4.sqlinc",
+      "originalFrozenOutputSha256": "e7bd8ea7fafdee9f9dc6a0b26b1eb88cd52c3e03082fa0dfee9d0dd010591fdf",
+      "currentPhysical": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "currentInputSha256": "11d8521f9e0d0526eef2bf0484e037a115978bde63c9f3b5011fddb46a80094c",
+      "selected": "13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "outputSha256": "e7bd8ea7fafdee9f9dc6a0b26b1eb88cd52c3e03082fa0dfee9d0dd010591fdf",
+      "completeCurrentReverseByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+      "inputLeaf": "07_missing_cancel_transition_assert.sqlinc",
+      "inputSha256": "740083554a22f27900fa2da1cc33914d7cbecf2b3604320261130be1e192a907",
+      "selected": "13_missing_09_private_weekly_source_missing_cancel_transition_assert_v1.sqlinc",
+      "completeByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_missing_cancel_native_insert_guard_v1()",
+      "inputLeaf": "08_missing_cancel_native_insert_guard.sqlinc",
+      "inputSha256": "9c702c8e13bb2ab7c45b891799ebed9ce65edbadac3deb18f17a46405682d709",
+      "selected": "13_missing_10_private_weekly_source_missing_cancel_native_insert_guard_v1.sqlinc",
+      "completeByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_missing_current_selection_v1(uuid,uuid,uuid)",
+      "inputLeaf": "10_missing_current_selection.sqlinc",
+      "inputSha256": "758152e7d3350133f663219c61671a4ce0ee540760918df62fa674d6995ba847",
+      "selected": "13_missing_11_private_weekly_source_missing_current_selection_v1.sqlinc",
+      "completeByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "inputLeaf": "11_complete_fin3_current_fin4_dispatch.sqlinc",
+      "originalFrozenOutputSha256": "89cfce7cb0fdc47bb2326b52eb8f19a33c1ac5182517975bd843737589ff0969",
+      "currentPhysical": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+      "currentInputSha256": "134165bb74b2cf18858ba27d82e6a35548f45d599c016dc9374f2278792adf40",
+      "selected": "13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "outputSha256": "89cfce7cb0fdc47bb2326b52eb8f19a33c1ac5182517975bd843737589ff0969",
+      "completeCurrentReverseByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "inputLeaf": "13_complete_invoice_duty_manifest_coupling.sqlinc",
+      "originalFrozenOutputSha256": "ad0d930f2f32d7e9b4676a2c0d319a404fd88c06d069b09b719ca491713e4a73",
+      "currentPhysical": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "currentInputSha256": "b9587301ec7a944a6ce2ef688651b9974c8bb1cc98b6348c7d2d360b7b519324",
+      "selected": "13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+      "outputSha256": "ad0d930f2f32d7e9b4676a2c0d319a404fd88c06d069b09b719ca491713e4a73",
+      "completeCurrentReverseByteEquality": true
+    },
+    {
+      "signature": "private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)",
+      "inputLeaf": "14_missing_prepared_census_recheck.sqlinc",
+      "inputSha256": "3edb844950cf1ea0eef8b6f23c761134d9a94050f149e4dd4c201dc265a7cc53",
+      "selected": "EXPLICIT_LATER_SUCCESSOR"
+    },
+    {
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "inputLeaf": "15_complete_prepared_context_missing_census.sqlinc",
+      "originalFrozenOutputSha256": "c7dda0516ac218f898881bcca9bef0eed3891c8b51784ef484767a47a6b0bca1",
+      "currentPhysical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "currentInputSha256": "bf629c7565943e1cb654949f4af34e67b1440527e4fb7120644c06ddb421f9c8",
+      "selected": "13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "outputSha256": "c7dda0516ac218f898881bcca9bef0eed3891c8b51784ef484767a47a6b0bca1",
+      "completeCurrentReverseByteEquality": true
+    },
+    {
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "inputLeaf": "16_complete_prepare_result_missing_census.sqlinc",
+      "originalFrozenOutputSha256": "bc3d04fab041800907973faa559a6d2147fb7988b35077b4b0591d82c2c75c9c",
+      "currentPhysical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "currentInputSha256": "5c4a1e776f6682efcde73327fd913d2829f0f244f79a3dfd29c0280c3f7b1be7",
+      "selected": "13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "outputSha256": "bc3d04fab041800907973faa559a6d2147fb7988b35077b4b0591d82c2c75c9c",
+      "completeCurrentReverseByteEquality": true
+    },
+    {
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "inputLeaf": "17_complete_apply_missing_census_recheck.sqlinc",
+      "originalFrozenOutputSha256": "89a579bda0ad9a569e04525a0fe4c1cb57c0cb02cd6a4ed73c83f41c157b5ef9",
+      "currentPhysical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "currentInputSha256": "ef469c9579eb0fc4c702ba9718cac942473d9bebf830aa35e457267d4b0a65e1",
+      "selected": "13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "outputSha256": "89a579bda0ad9a569e04525a0fe4c1cb57c0cb02cd6a4ed73c83f41c157b5ef9",
+      "completeCurrentReverseByteEquality": true
+    }
+  ],
+  "excludedRepeatable": "supabase/repeatable/17102026_0126_weekly_source_missing_health_authority_v1.sql",
+  "reason": "Single fresh combined root follows Entry0135; no later stale classifier can remove newly defined helper identities.",
+  "native": "NOT_RUN"
+}

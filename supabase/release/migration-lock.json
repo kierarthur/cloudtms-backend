@@ -1663,14 +1663,6 @@
       "sha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f"
     },
     {
-      "path": "supabase/migrations/remittance_config_table.sql",
-      "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
-    },
-    {
-      "path": "supabase/migrations/tms_ref_nums.sql",
-      "sha256": "d0099d400b9d5f692d40e052c64bf7627f2378dce7fe50785bb8935e6c2b6f16"
-    },
-    {
       "path": "supabase/migrations/17102026_0113_weekly_source_kept_10_decision_schema.sql",
       "sha256": "726853c33c9ace512c96a225db448504443c723020e43eebd889b8903c356c15"
     },
@@ -1679,8 +1671,28 @@
       "sha256": "1c71853bbf810eb8270b1f0ec63477ef97a534bfd11a1d7140d16de639fbdf00"
     },
     {
+      "path": "supabase/migrations/17102026_0126_weekly_source_missing_10_existing_footprint.sql",
+      "sha256": "40c78d36d2dde48d69814cc93649cb158332956ae3e61dd8a78cb2c72dff5638"
+    },
+    {
+      "path": "supabase/migrations/17102026_0126_weekly_source_missing_20_native_guard.sql",
+      "sha256": "5bcdcb19851d14689292a14924140ee4d3a92d4fc1849e148644b544cbd3bb9f"
+    },
+    {
       "path": "supabase/migrations/17102026_0135_correction_entry_admission.sql",
       "sha256": "9af6c9b8993e918a0c28bdc29dae0d6b4cc9477cc13075329180395d53fbd8e7"
+    },
+    {
+      "path": "supabase/migrations/17102026_0141_weekly_source_later_accept_native_proof.sql",
+      "sha256": "3b113d6277fa88e2417aa311d7fa28d6f6999c391f01f41ccf2c5a4fe1c1f69e"
+    },
+    {
+      "path": "supabase/migrations/remittance_config_table.sql",
+      "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
+    },
+    {
+      "path": "supabase/migrations/tms_ref_nums.sql",
+      "sha256": "d0099d400b9d5f692d40e052c64bf7627f2378dce7fe50785bb8935e6c2b6f16"
     }
   ]
 }

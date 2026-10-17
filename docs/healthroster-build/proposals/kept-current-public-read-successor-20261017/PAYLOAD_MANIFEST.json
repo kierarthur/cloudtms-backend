@@ -1,0 +1,83 @@
+{
+  "checkpoint": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+  "functionalParent": "b6922e27c18312cd4f285e31c6ad99489612d577",
+  "registryParent": "fb120833704623fa1265b4f4a70db6b7d3b317e4",
+  "registryParentSha256": "aaf45d0537d969dfeea6b2e3ea2a30dbcdabd919869c5895fa7e6d9e3cae1dc4",
+  "managedRoots": {
+    "repeatable": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read_v1.sql"
+  },
+  "files": [
+    {
+      "target": "broker/src/weekly-source/kept-pay-context.mjs",
+      "bytes": 5872,
+      "sha256": "ca2111d3ceaf99e380464afe9a082f484f252ea2bf1c2a3eeade1d4baf8657f3"
+    },
+    {
+      "target": "broker/src/weekly-source/routes.js",
+      "bytes": 72638,
+      "sha256": "91b1a323e74114490c2c15455e3c9a9db20675e8ad35a695c8061bc43d37eb1d"
+    },
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "bytes": 1677231,
+      "sha256": "b5be24d089aa3db2d79a1866a8aacee6b21f7696b1b262b2d1fe5b938d1b8dd8"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read_v1.sql",
+      "bytes": 746,
+      "sha256": "44dda7baba95ce2efc99766e0f74803f05c498718e702f6690458a6e25217f65"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/01_public_context.sqlinc",
+      "bytes": 5222,
+      "sha256": "5c668dd81b347b2c1a6a6dc806844b80024730f6ff73a4d1aadff100bb36ac6e"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/02_scope_rows.sqlinc",
+      "bytes": 6777,
+      "sha256": "ffc55c43d87fa3702c49ade87ab724d2727b4250d92053efb0664ccc161c9a96"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+      "bytes": 24728,
+      "sha256": "ea10aeb0cd3ba623399dd05f07c7a3e68e1a13c3c1a2e1f7324a367319027e70"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "bytes": 118827,
+      "sha256": "97df46e0db21c7a232c0368ad6da2a7cbc6f16f4743328757fa37a433c1ea9c3"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "bytes": 43446,
+      "sha256": "b2db739c8606a27cb309c62a5cefb9c135762c1cd2d8233d344f1d6ddd1f345e"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/06_complete_source_checklist_leaf.sqlinc",
+      "bytes": 16536,
+      "sha256": "31142909f36359ad1e3867e5843bd24f2a01c3363e1c7bac7d2708a5ae2ba54a"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc",
+      "bytes": 87143,
+      "sha256": "0ccc3bce3002fb844c88017ed66d45ecf2bbb70f92c78039d3105539c564ca79"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/99_acl.sqlinc",
+      "bytes": 1690,
+      "sha256": "dfb970deb66fc3ebc2e0999f8b11a03609a1331cb1fe03d8c1e71fbff5ca1555"
+    }
+  ],
+  "expectedIndependentVerifierDelta": {
+    "file": "EXPECTED_ACL_DELTA.json",
+    "sha256": "92b5155f431f251096d317dd8f37858e662bd126328e2b91e439cd0af2521b62"
+  },
+  "bankBodies": 0,
+  "installable": false,
+  "native": "NOT_RUN",
+  "catalogue": "NOT_RUN",
+  "API": "NOT_RUN",
+  "races": "NOT_RUN",
+  "contractSeal": "NOT_RUN",
+  "dbConnections": 0
+}

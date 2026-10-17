@@ -1,0 +1,53 @@
+{
+  "sourceCheckpoint": "4b17461436d418d8fe23acaf98b8f0f9e7e5137f",
+  "target": "tests/healthroster-manual-enquiry-parent-wiring.test.mjs",
+  "inputSha256": "f77c8eb6983f8d3f9f3e4ddab26207110cdcc7b8ba8301ab8305561e38ac4ea7",
+  "outputSha256": "2b080dfd0f772183956e0fc0de51a3e431cca49294f306917488384876189fde",
+  "canonicalHunks": [
+    {
+      "before": "const keptRecipeBytes=",
+      "after": "const laterKeepParentRecipes=[\n  {\n    \"path\": \"docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/ROUTE_EDITS.json\",\n    \"sha256\": \"34d34ac3f66371fa1df4782bd8840efb04d7c85c610b4e6aa680677a309426bc\"\n  },\n  {\n    \"path\": \"docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/ROUTE_EDITS.json\",\n    \"sha256\": \"7acde76446945888586f03ce9b017ff1b61a1ac94852fb9e159172a6a21ca438\"\n  }\n].map(pin=>{\n const bytes=fs.readFileSync(path.join(root,pin.path));assert.equal(hash(bytes),pin.sha256);return JSON.parse(bytes);\n});\nfunction reverseLaterKeepParent(source){\n for(const recipe of laterKeepParentRecipes){\n  assert.equal(hash(source),recipe.outputSha256);\n  for(const h of [...recipe.hunks].reverse()){assert.equal(source.split(h.after).length,2);source=source.replace(h.after,()=>h.before);}\n  assert.equal(hash(source),recipe.inputSha256);\n }return source;\n}\nconst actualPriorRouteRaw=reverseLaterKeepParent(actualRouteRaw);\nconst keptRecipeBytes="
+    },
+    {
+      "before": "let manualOnlyRaw=reverseKeptParent(actualRouteRaw);",
+      "after": "let manualOnlyRaw=reverseKeptParent(actualPriorRouteRaw);"
+    },
+    {
+      "before": "hash(reverseKeptParent(actualRouteRaw))",
+      "after": "hash(reverseKeptParent(actualPriorRouteRaw))"
+    },
+    {
+      "before": "for(const source of [actualRouteRaw.replace(anchor,''),actualRouteRaw+anchor,actualRouteRaw+'\\n// drift'])",
+      "after": "for(const source of [actualPriorRouteRaw.replace(anchor,''),actualPriorRouteRaw+anchor,actualPriorRouteRaw+'\\n// drift'])"
+    },
+    {
+      "before": "async function run(action,options={}){",
+      "after": "test('reviewed Later and public Keep parent successors refuse missing duplicated and unrelated drift',()=>{\n assert.equal(hash(reverseLaterKeepParent(actualRouteRaw)),keptRecipe.outputSha256);\n const anchor=laterKeepParentRecipes[0].hunks[0].after;\n for(const value of [actualRouteRaw.replace(anchor,''),actualRouteRaw+anchor,actualRouteRaw+'\\n// drift'])\n  assert.throws(()=>reverseLaterKeepParent(value));\n});\nasync function run(action,options={}){"
+    }
+  ],
+  "wholeRawReverse": true,
+  "recipePins": [
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/ROUTE_EDITS.json",
+      "sha256": "34d34ac3f66371fa1df4782bd8840efb04d7c85c610b4e6aa680677a309426bc"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/ROUTE_EDITS.json",
+      "sha256": "7acde76446945888586f03ce9b017ff1b61a1ac94852fb9e159172a6a21ca438"
+    }
+  ],
+  "oldRuntimeStillCompleteCurrentRouter": true,
+  "ACLTest": {
+    "target": "tests/healthroster-kept-entry-verifier.test.mjs",
+    "inputSha256": "bcffbc9eb49b5d3a0cfeb249455277414ab529144fd7a4d14e1028ae7dbd6cd9",
+    "outputSha256": "cd4673b310232efd457ee771a674b6d28ec33ed268861ed996076001520ffd5a",
+    "canonicalHunks": [
+      {
+        "before": " let value=fs.readFileSync(proof.target,'utf8');assert.equal(hash(value),proof.outputSha256);",
+        "after": " const successor=JSON.parse(fs.readFileSync('docs/healthroster-build/v6-owner-delivery-20261016/LATER_KEEP_MANDATORY_VERIFIERS_20261017.json'));\n let value=fs.readFileSync(proof.target,'utf8');assert.equal(hash(value),successor.outputSha256);\n for(const h of [...successor.hunks].reverse()){assert.equal(value.split(h.after).length,2);value=value.replace(h.after,()=>h.before);}\n assert.equal(hash(value),successor.inputSha256);assert.equal(hash(value),proof.outputSha256);"
+      }
+    ],
+    "fullOldVerifierProofRetained": true
+  },
+  "native": "NOT_RUN"
+}

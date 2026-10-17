@@ -1,0 +1,18 @@
+{
+  "parentCommit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+  "inputTarget": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc",
+  "inputSha256": "92d416ec6f886522be4f823b2086579c7c1018d9cd0d2378d4c117894bbd5301",
+  "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc",
+  "outputSha256": "0ccc3bce3002fb844c88017ed66d45ecf2bbb70f92c78039d3105539c564ca79",
+  "hunks": [
+    {
+      "before": "    ('private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])'),",
+      "after": "    ('private.weekly_source_keep_as_paid_scope_rows_v1(uuid,uuid,uuid,uuid,uuid,date)'),\n    ('private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])'),"
+    },
+    {
+      "before": "    ('public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)'),",
+      "after": "    ('public.weekly_source_keep_as_paid_context_v1(jsonb)'),\n    ('public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)'),"
+    }
+  ],
+  "completeReverseByteEquality": true
+}

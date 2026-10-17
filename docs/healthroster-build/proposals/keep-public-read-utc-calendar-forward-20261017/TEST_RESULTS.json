@@ -1,0 +1,21 @@
+{
+  "passed": 13,
+  "failed": 0,
+  "checks": [
+    "complete-parent-byte-reversal",
+    "original-normalisation-reproduced-fixed-refusal:2026-02-31T10:00:00Z",
+    "original-normalisation-reproduced-fixed-refusal:2026-04-31T10:00:00Z",
+    "original-normalisation-reproduced-fixed-refusal:2025-02-29T10:00:00Z",
+    "original-normalisation-reproduced-fixed-refusal:2026-10-17T24:00:00Z",
+    "genuine-UTC-preserved:2024-02-29T23:59:59Z",
+    "genuine-UTC-preserved:2026-10-17T01:12:33.123456+00:00",
+    "genuine-UTC-preserved:2026-10-17T00:00:00.000000Z",
+    "malformed-UTC-refused:2026-10-17T10:60:00Z",
+    "malformed-UTC-refused:2026-10-17T10:00:60Z",
+    "malformed-UTC-refused:0000-01-01T10:00:00Z",
+    "malformed-UTC-refused:2026-10-17T10:00:00+01:00",
+    "malformed-UTC-refused:October 17 2026"
+  ],
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

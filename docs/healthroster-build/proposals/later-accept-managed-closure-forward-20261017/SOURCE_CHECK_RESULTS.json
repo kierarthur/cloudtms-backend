@@ -1,0 +1,52 @@
+{
+  "actualImplementation": "scripts/bpay-next-final-definers.mjs closeFinalDefinerSelection + verifyFinalDefiners; full actual readManagedClosure/scanner; virtualFS read-only",
+  "actualScriptPins": [
+    {
+      "path": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "commit": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560"
+    },
+    {
+      "path": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+      "commit": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560"
+    }
+  ],
+  "originalFailure": "BPAY_NEXT_FINAL_CLOSURE_MISSING: supabase/repeatable/17102026_0126_weekly_source_missing_health_authority_v1.sql",
+  "correctedActualChecks": "PASS",
+  "baseRepeatables": 1088,
+  "baseMigrations": 418,
+  "selected": {
+    "selectedRoots": [
+      "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+      "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+      "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+      "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql"
+    ],
+    "migrations": [
+      "supabase/migrations/17102026_0126_weekly_source_missing_10_existing_footprint.sql",
+      "supabase/migrations/17102026_0126_weekly_source_missing_20_native_guard.sql",
+      "supabase/migrations/17102026_0141_weekly_source_later_accept_native_proof.sql"
+    ],
+    "verification": {
+      "signatures": 2993,
+      "registered": 1598,
+      "roots": 1089,
+      "pendingRoots": [
+        "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+        "supabase/repeatable/14102026_0709_healthroster_current_literal_classification_v1.sql",
+        "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+        "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+        "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql"
+      ]
+    }
+  },
+  "fullCurrentRegistryReverse": true,
+  "affectedEntries": 35,
+  "excludedRootAbsent": true,
+  "currentEntryPreserved": true,
+  "dbConnections": 0,
+  "rootWrites": 0,
+  "native": "NOT_RUN"
+}

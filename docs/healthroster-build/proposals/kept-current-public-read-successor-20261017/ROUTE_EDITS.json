@@ -1,0 +1,25 @@
+{
+  "parentCommit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+  "target": "broker/src/weekly-source/routes.js",
+  "inputSha256": "ad1378679bcc02c7b10134e97a06e7daf20906e95945160cc9207e53c272d781",
+  "outputSha256": "91b1a323e74114490c2c15455e3c9a9db20675e8ad35a695c8061bc43d37eb1d",
+  "hunks": [
+    {
+      "before": "import {missingAcceptPrepareRequest,missingAcceptContextRequest,positiveDecimal} from './missing-accept.mjs';",
+      "after": "import {missingAcceptPrepareRequest,missingAcceptContextRequest,positiveDecimal} from './missing-accept.mjs';\nimport{validateKeptPayContextCommand,parseKeptPayContextCommand,decodeKeptPayContext}from'./kept-pay-context.mjs';"
+    },
+    {
+      "before": "  'KEEP_AS_PAID', 'MISSING_ACCEPT_CONTEXT', 'PREPARE_MISSING_ACCEPT', 'LATER_CHANGE_DECISION',",
+      "after": "  'KEEP_AS_PAID', 'KEEP_AS_PAID_CONTEXT', 'MISSING_ACCEPT_CONTEXT', 'PREPARE_MISSING_ACCEPT', 'LATER_CHANGE_DECISION',"
+    },
+    {
+      "before": "    if(typeof parsed.action==='string'&&parsed.action.trim().toUpperCase()==='KEEP_AS_PAID')return parseKeptPayCommand(text);",
+      "after": "    if(typeof parsed.action==='string'&&parsed.action.trim().toUpperCase()==='KEEP_AS_PAID')return parseKeptPayCommand(text);\n    if(typeof parsed.action==='string'&&parsed.action.trim().toUpperCase()==='KEEP_AS_PAID_CONTEXT')return parseKeptPayContextCommand(text);"
+    },
+    {
+      "before": "  if (action === 'KEEP_AS_PAID') {",
+      "after": "  if(action==='KEEP_AS_PAID_CONTEXT'){\n    try{validateKeptPayContextCommand(body);}catch{fail('WEEKLY_SOURCE_KEEP_AS_PAID_CONTEXT_REQUEST_INVALID','This Source context could not be read.',400);}\n    const result=await callRpc(dependencies,'weekly_source_keep_as_paid_context_v1',request);\n    try{return jsonResponse(200,decodeKeptPayContext(result,payload));}\n    catch{fail('WEEKLY_SOURCE_KEEP_AS_PAID_CONTEXT_RESULT_INVALID','Refresh this shift before deciding.',502);}\n  }\n\n  if (action === 'KEEP_AS_PAID') {"
+    }
+  ],
+  "completeReverseByteEquality": true
+}

@@ -7039,5 +7039,64 @@
     "native": "NOT_RUN",
     "install2": "NOT_INSTALLED",
     "finalPartB": "NOT_RUN"
+  },
+  "kept_entry_independent_source_review_20261017": {
+    "peerCommit": "25a78e777e3f39511bd1a2bcde11f8de2f6bef03",
+    "reviewPath": "docs/healthroster-build/proposals/v6-kept-entry-root-independent-review-20261017/REVIEW.md",
+    "reviewSha256": "0a40a7b65d08a43cfd1c7723e0f64705f55f6d0b5de545742fdf193af478250b",
+    "backendCommit": "4b17461436d418d8fe23acaf98b8f0f9e7e5137f",
+    "officeCommit": "6d3d7210ac02fa2d1741f20e52461eaa75158350",
+    "verdict": "NO_ACTIONABLE_SOURCE_FINDINGS",
+    "offlineTests": 121,
+    "sqlGrammar": {
+      "files": 23,
+      "statements": 203,
+      "plpgsqlBodies": 32
+    },
+    "native": "NOT_RUN",
+    "finalPartB": "NOT_RUN"
+  },
+  "later_accept_public_keep_source_continuation_20261017": {
+    "status": "SOURCE_MOUNTED_NATIVE_AND_FINAL_SOURCE_GATE_UNSEALED",
+    "laterSourceCommit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+    "managedRegistryForward": "fb120833704623fa1265b4f4a70db6b7d3b317e4",
+    "registryIndependentPeer": "f2a0fc3f744a6bfe69a6b87fd27e1fb13cee8d57",
+    "publicContextSourceCommit": "eb0aa9633fa284c088da6e7c12196974619cd48b",
+    "utcDecoderForward": "4224f7aa21aacf103d5e15fc180d88de2046e22a",
+    "mountedRuntimeTargets": 48,
+    "frozenEvidenceFiles": 170,
+    "newColumns": [
+      "public.weekly_source_state_transitions.exclude_cancel:boolean",
+      "public.weekly_source_state_transitions.cancel_exclusion_basis:jsonb",
+      "public.weekly_source_final_revisions.missing_cancel_basis_census:jsonb"
+    ],
+    "newDecisionOrCashStores": 0,
+    "publicContextSchema": "WEEKLY_SOURCE_KEPT_AS_PAID_CONTEXT_READ_V1",
+    "publicContextFields": 27,
+    "latestGenuineAckDistinctFromApplicability": true,
+    "requestCounters": "CANONICAL_POSITIVE_INT63_STRING_WITH_BOUNDED_HISTORICAL_LATER_NUMBER_COMPATIBILITY",
+    "sourceIntegrity": {
+      "migrations": 423,
+      "repeatables": 1090
+    },
+    "finalOwners": {
+      "signatures": 2995,
+      "registered": 1601,
+      "roots": 1090
+    },
+    "mountedTests": {
+      "nodeTests": 14,
+      "laterProtocolCases": 37,
+      "publicContextCases": 29
+    },
+    "catalogueDependentGrammarOwners": 2,
+    "rootReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/LATER_KEEP_ROOT_MOUNT_20261017.json",
+    "verifierReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/LATER_KEEP_MANDATORY_VERIFIERS_20261017.json",
+    "f23": "NEW_FINITE_CLASSIFICATIONS_REQUIRED",
+    "native": "NOT_RUN",
+    "contract": "NOT_SEALED",
+    "install2": "NOT_INSTALLED",
+    "finalPartB": "NOT_RUN",
+    "original92ObjectsUnchanged": true
   }
 }

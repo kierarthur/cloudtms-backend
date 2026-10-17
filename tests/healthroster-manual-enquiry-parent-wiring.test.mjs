@@ -18,6 +18,26 @@ assert.equal(sourceRecipe.checkpoint,'39aa5b30042711956b83a7bf899f416d2f3b4771')
 const sourceRoute=sourceRecipe.files.find(row=>row.target===proof.routes.source);
 assert.equal(sourceRoute.edits.length,4);
 const actualRouteRaw=fs.readFileSync(path.join(root,proof.routes.source),'utf8');
+const laterKeepParentRecipes=[
+  {
+    "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/ROUTE_EDITS.json",
+    "sha256": "34d34ac3f66371fa1df4782bd8840efb04d7c85c610b4e6aa680677a309426bc"
+  },
+  {
+    "path": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/ROUTE_EDITS.json",
+    "sha256": "7acde76446945888586f03ce9b017ff1b61a1ac94852fb9e159172a6a21ca438"
+  }
+].map(pin=>{
+ const bytes=fs.readFileSync(path.join(root,pin.path));assert.equal(hash(bytes),pin.sha256);return JSON.parse(bytes);
+});
+function reverseLaterKeepParent(source){
+ for(const recipe of laterKeepParentRecipes){
+  assert.equal(hash(source),recipe.outputSha256);
+  for(const h of [...recipe.hunks].reverse()){assert.equal(source.split(h.after).length,2);source=source.replace(h.after,()=>h.before);}
+  assert.equal(hash(source),recipe.inputSha256);
+ }return source;
+}
+const actualPriorRouteRaw=reverseLaterKeepParent(actualRouteRaw);
 const keptRecipeBytes=fs.readFileSync(path.join(root,'docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/PARENT_EDITS.json'));
 assert.equal(hash(keptRecipeBytes),'b82c3b0ab1a9e1282c5963e4db3b1eaa66948bc5383efa4d4a8821f65d2b2a7a');
 const keptRecipe=JSON.parse(keptRecipeBytes);
@@ -31,7 +51,7 @@ function reverseKeptParent(source){
  }
  assert.equal(hash(source),keptRecipe.inputSha256);return source;
 }
-let manualOnlyRaw=reverseKeptParent(actualRouteRaw);
+let manualOnlyRaw=reverseKeptParent(actualPriorRouteRaw);
 for(const {before,after,beforeSha256,afterSha256} of [...sourceRoute.edits].reverse()){
  assert.equal(hash(before),beforeSha256);assert.equal(hash(after),afterSha256);
  assert.equal(manualOnlyRaw.split(after).length,2);manualOnlyRaw=manualOnlyRaw.replace(after,before);
@@ -49,10 +69,16 @@ const {dispatchWeeklySourceRequest,WEEKLY_SOURCE_OFFICE_ROUTE_CONTRACT}=await im
 const id=n=>`f7160000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const env={CANDIDATE_APP_ENVIRONMENT:'TEST',MYTMS_OFFICE_AGENCY_ID:id(19)};
 test('reviewed kept-parent successor refuses missing, duplicated and unrelated drift',()=>{
- assert.equal(hash(reverseKeptParent(actualRouteRaw)),sourceRoute.postimageSha256);
+ assert.equal(hash(reverseKeptParent(actualPriorRouteRaw)),sourceRoute.postimageSha256);
  const anchor=keptRecipe.hunks[0].after;
- for(const source of [actualRouteRaw.replace(anchor,''),actualRouteRaw+anchor,actualRouteRaw+'\n// drift'])
+ for(const source of [actualPriorRouteRaw.replace(anchor,''),actualPriorRouteRaw+anchor,actualPriorRouteRaw+'\n// drift'])
   assert.throws(()=>reverseKeptParent(source));
+});
+test('reviewed Later and public Keep parent successors refuse missing duplicated and unrelated drift',()=>{
+ assert.equal(hash(reverseLaterKeepParent(actualRouteRaw)),keptRecipe.outputSha256);
+ const anchor=laterKeepParentRecipes[0].hunks[0].after;
+ for(const value of [actualRouteRaw.replace(anchor,''),actualRouteRaw+anchor,actualRouteRaw+'\n// drift'])
+  assert.throws(()=>reverseLaterKeepParent(value));
 });
 async function run(action,options={}){
  const f=fixture(),payload=copy(action.endsWith('PREVIEW')?f.request:f.accept),calls=[];

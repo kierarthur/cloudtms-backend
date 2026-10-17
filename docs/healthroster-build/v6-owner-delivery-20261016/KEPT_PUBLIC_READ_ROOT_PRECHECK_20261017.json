@@ -1,0 +1,333 @@
+{
+  "version": "KEPT_PUBLIC_READ_ROOT_PRECHECK_V1",
+  "sourceCommit": "eb0aa9633fa284c088da6e7c12196974619cd48b",
+  "sourceBase": "4b17461436d418d8fe23acaf98b8f0f9e7e5137f + b692 functional/fb120833 registry selection",
+  "frozenFiles": [
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/01_public_context.sqlinc",
+      "bytes": 5222,
+      "sha256": "5c668dd81b347b2c1a6a6dc806844b80024730f6ff73a4d1aadff100bb36ac6e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/02_scope_rows.sqlinc",
+      "bytes": 6777,
+      "sha256": "ffc55c43d87fa3702c49ade87ab724d2727b4250d92053efb0664ccc161c9a96"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/CLASSIFIER_EDITS.json",
+      "bytes": 1088,
+      "sha256": "967aa696ef7e5ef31e26d0ca0f34ebafe7fe02842ee85e8287325a3863d35dbf"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/CURRENT_OWNER_EDITS.json",
+      "bytes": 5599,
+      "sha256": "3acf1ad6aa1b58634c04bcd54f58aeb3317fb0bfccfbdd2b255deb11c3d980cd"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/EXPECTED_ACL_DELTA.json",
+      "bytes": 511,
+      "sha256": "92b5155f431f251096d317dd8f37858e662bd126328e2b91e439cd0af2521b62"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/GRAMMAR_RESULTS.json",
+      "bytes": 4957,
+      "sha256": "28b4fa8fabe67c25dff8cf791d9e64d3fe161882c1ccdb5dfae4b50d13c58e3a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/INPUT_MANIFEST.json",
+      "bytes": 1552,
+      "sha256": "519b0738d8a835df864d6f6773f39e48f5aa42f3f3461cc5258158c7a9143c63"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/INTEGRATION.md",
+      "bytes": 4415,
+      "sha256": "6a4ee287361208a374c7948a933ac370e5b83f3c1b8c4a9aaee0c1f3e27728d3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/MOUNT_FILENAMES.json",
+      "bytes": 102,
+      "sha256": "a76c7f01c8a3b990b54e3faa49ab9b52b15d4b464440dc6215e76ec2406f1358"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/OWNER_DELTA.json",
+      "bytes": 1307,
+      "sha256": "18ed1446de377d384bc9bc4fef72e9f6201f01b39c76ecef69808ddccf931831"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/PAYLOAD_MANIFEST.json",
+      "bytes": 3461,
+      "sha256": "91b5af08e1e46220638d34d3faf217cbb53fd49d2a5588718aff5a6c0dfb45ef"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/PUBLIC_CONTEXT.schema.json",
+      "bytes": 9488,
+      "sha256": "a36e0204e001eab05b927d4d2908731ec9fb265019d981a28cf40a0c02d90924"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/PUBLIC_CONTEXT_CONTRACT.json",
+      "bytes": 5042,
+      "sha256": "b4b7c4b3469ca67f1e24834aebe23d19934b4e095790b825a7faeb41885f4772"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/REGISTRY_EDITS.json",
+      "bytes": 51467,
+      "sha256": "94869e21caa1941a35902a868162d23a0e33ed648db5830ecd5afacda46da600"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/ROUTE_EDITS.json",
+      "bytes": 2038,
+      "sha256": "34d34ac3f66371fa1df4782bd8840efb04d7c85c610b4e6aa680677a309426bc"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/SOURCE_CHECK_RESULTS.json",
+      "bytes": 2368,
+      "sha256": "4cbb8dce11daf20c5141c544d0353d815133085c412cb61875c47a55df8d9a53"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/TEST_RESULTS.json",
+      "bytes": 1505,
+      "sha256": "9f0b0a3a93e68f4caa524240db634bf7eb14d579807fcaa3803ef6d382b93dd4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/build.mjs",
+      "bytes": 10255,
+      "sha256": "b26d8587d7f0d037fd22a2bd57eba804ce1b9ab883b6c5d5b2c6982c928b5ea6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/current/03_complete_canonical_context.sqlinc",
+      "bytes": 24664,
+      "sha256": "a040179a16b1c274d47251f4ef908d353e7c23cda9b2b22912c6f6f7d5f4b6a4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/current/04_complete_office_workspace.sqlinc",
+      "bytes": 118581,
+      "sha256": "48c28182274acc2f27de4ee8751135b24b71afa9fcce782a616630b9b9bab028"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/current/05_complete_work_presentation.sqlinc",
+      "bytes": 43182,
+      "sha256": "fd6de30fc9d5b621b6c274b93218414f5af31546b42ea1bc9499b89e1f3d0bb1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/current/06_complete_source_checklist_leaf.sqlinc",
+      "bytes": 16242,
+      "sha256": "b81564969e02bf7cd56ed5afced892d6fe963861ef564c41b7ad2d8325376545"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/current/98_complete_current_classification.sqlinc",
+      "bytes": 86993,
+      "sha256": "92d416ec6f886522be4f823b2086579c7c1018d9cd0d2378d4c117894bbd5301"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/current/broker/src/weekly-source/routes.js",
+      "bytes": 71879,
+      "sha256": "ad1378679bcc02c7b10134e97a06e7daf20906e95945160cc9207e53c272d781"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/current/final-definer-closures.json",
+      "bytes": 1670575,
+      "sha256": "aaf45d0537d969dfeea6b2e3ea2a30dbcdabd919869c5895fa7e6d9e3cae1dc4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/forward/01_public_context.sqlinc",
+      "bytes": 5222,
+      "sha256": "5c668dd81b347b2c1a6a6dc806844b80024730f6ff73a4d1aadff100bb36ac6e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/forward/02_scope_rows.sqlinc",
+      "bytes": 6777,
+      "sha256": "ffc55c43d87fa3702c49ade87ab724d2727b4250d92053efb0664ccc161c9a96"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/forward/03_complete_canonical_context.sqlinc",
+      "bytes": 24728,
+      "sha256": "ea10aeb0cd3ba623399dd05f07c7a3e68e1a13c3c1a2e1f7324a367319027e70"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/forward/04_complete_office_workspace.sqlinc",
+      "bytes": 118827,
+      "sha256": "97df46e0db21c7a232c0368ad6da2a7cbc6f16f4743328757fa37a433c1ea9c3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/forward/05_complete_work_presentation.sqlinc",
+      "bytes": 43446,
+      "sha256": "b2db739c8606a27cb309c62a5cefb9c135762c1cd2d8233d344f1d6ddd1f345e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/forward/06_complete_source_checklist_leaf.sqlinc",
+      "bytes": 16536,
+      "sha256": "31142909f36359ad1e3867e5843bd24f2a01c3363e1c7bac7d2708a5ae2ba54a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/forward/99_acl.sqlinc",
+      "bytes": 1690,
+      "sha256": "dfb970deb66fc3ebc2e0999f8b11a03609a1331cb1fe03d8c1e71fbff5ca1555"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/forward/broker/src/weekly-source/kept-pay-context.mjs",
+      "bytes": 5872,
+      "sha256": "ca2111d3ceaf99e380464afe9a082f484f252ea2bf1c2a3eeade1d4baf8657f3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/forward/broker/src/weekly-source/routes.js",
+      "bytes": 72638,
+      "sha256": "91b1a323e74114490c2c15455e3c9a9db20675e8ad35a695c8061bc43d37eb1d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/grammar.py",
+      "bytes": 2073,
+      "sha256": "b61aed2e56da0e7055b189d6fc153cd218fd471338a36626f24a95514595cb49"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/kept-pay-context.mjs",
+      "bytes": 5872,
+      "sha256": "ca2111d3ceaf99e380464afe9a082f484f252ea2bf1c2a3eeade1d4baf8657f3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/package.mjs",
+      "bytes": 7657,
+      "sha256": "443f193b1854694797ff3c1a42d6da56ea208807432e9707696cc1867ff10e59"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/broker/src/weekly-source/kept-pay-context.mjs",
+      "bytes": 5872,
+      "sha256": "ca2111d3ceaf99e380464afe9a082f484f252ea2bf1c2a3eeade1d4baf8657f3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/broker/src/weekly-source/routes.js",
+      "bytes": 72638,
+      "sha256": "91b1a323e74114490c2c15455e3c9a9db20675e8ad35a695c8061bc43d37eb1d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1677231,
+      "sha256": "b5be24d089aa3db2d79a1866a8aacee6b21f7696b1b262b2d1fe5b938d1b8dd8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/01_public_context.sqlinc",
+      "bytes": 5222,
+      "sha256": "5c668dd81b347b2c1a6a6dc806844b80024730f6ff73a4d1aadff100bb36ac6e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/02_scope_rows.sqlinc",
+      "bytes": 6777,
+      "sha256": "ffc55c43d87fa3702c49ade87ab724d2727b4250d92053efb0664ccc161c9a96"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+      "bytes": 24728,
+      "sha256": "ea10aeb0cd3ba623399dd05f07c7a3e68e1a13c3c1a2e1f7324a367319027e70"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "bytes": 118827,
+      "sha256": "97df46e0db21c7a232c0368ad6da2a7cbc6f16f4743328757fa37a433c1ea9c3"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "bytes": 43446,
+      "sha256": "b2db739c8606a27cb309c62a5cefb9c135762c1cd2d8233d344f1d6ddd1f345e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/06_complete_source_checklist_leaf.sqlinc",
+      "bytes": 16536,
+      "sha256": "31142909f36359ad1e3867e5843bd24f2a01c3363e1c7bac7d2708a5ae2ba54a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc",
+      "bytes": 87143,
+      "sha256": "0ccc3bce3002fb844c88017ed66d45ecf2bbb70f92c78039d3105539c564ca79"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/99_acl.sqlinc",
+      "bytes": 1690,
+      "sha256": "dfb970deb66fc3ebc2e0999f8b11a03609a1331cb1fe03d8c1e71fbff5ca1555"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/payload/supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read_v1.sql",
+      "bytes": 746,
+      "sha256": "44dda7baba95ce2efc99766e0f74803f05c498718e702f6690458a6e25217f65"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/source-check.mjs",
+      "bytes": 8202,
+      "sha256": "d7038872ee686c3086093e1c83b6a944d5d5c61a3dd4a1d811dbfcaa738eff64"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/test.mjs",
+      "bytes": 9749,
+      "sha256": "bc4cd4d800fda5f0be1e7ac874b42351d9e35d8c621403534caff388ffbf652e"
+    }
+  ],
+  "payloads": [
+    {
+      "target": "broker/src/weekly-source/kept-pay-context.mjs",
+      "bytes": 5872,
+      "sha256": "ca2111d3ceaf99e380464afe9a082f484f252ea2bf1c2a3eeade1d4baf8657f3"
+    },
+    {
+      "target": "broker/src/weekly-source/routes.js",
+      "bytes": 72638,
+      "sha256": "91b1a323e74114490c2c15455e3c9a9db20675e8ad35a695c8061bc43d37eb1d"
+    },
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "bytes": 1677231,
+      "sha256": "b5be24d089aa3db2d79a1866a8aacee6b21f7696b1b262b2d1fe5b938d1b8dd8"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read_v1.sql",
+      "bytes": 746,
+      "sha256": "44dda7baba95ce2efc99766e0f74803f05c498718e702f6690458a6e25217f65"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/01_public_context.sqlinc",
+      "bytes": 5222,
+      "sha256": "5c668dd81b347b2c1a6a6dc806844b80024730f6ff73a4d1aadff100bb36ac6e"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/02_scope_rows.sqlinc",
+      "bytes": 6777,
+      "sha256": "ffc55c43d87fa3702c49ade87ab724d2727b4250d92053efb0664ccc161c9a96"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+      "bytes": 24728,
+      "sha256": "ea10aeb0cd3ba623399dd05f07c7a3e68e1a13c3c1a2e1f7324a367319027e70"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "bytes": 118827,
+      "sha256": "97df46e0db21c7a232c0368ad6da2a7cbc6f16f4743328757fa37a433c1ea9c3"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "bytes": 43446,
+      "sha256": "b2db739c8606a27cb309c62a5cefb9c135762c1cd2d8233d344f1d6ddd1f345e"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/06_complete_source_checklist_leaf.sqlinc",
+      "bytes": 16536,
+      "sha256": "31142909f36359ad1e3867e5843bd24f2a01c3363e1c7bac7d2708a5ae2ba54a"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc",
+      "bytes": 87143,
+      "sha256": "0ccc3bce3002fb844c88017ed66d45ecf2bbb70f92c78039d3105539c564ca79"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/99_acl.sqlinc",
+      "bytes": 1690,
+      "sha256": "dfb970deb66fc3ebc2e0999f8b11a03609a1331cb1fe03d8c1e71fbff5ca1555"
+    }
+  ],
+  "wholeCurrentOwnerReversals": 4,
+  "currentPhysicalOwnerEquality": true,
+  "wholeLaterRouteReverse": true,
+  "typedPublicResponseKeys": 27,
+  "sourcePrecheck": "PASS",
+  "pending": "UTC_ACK_CALENDAR_DECODER_FORWARD_FIX",
+  "mounted": false,
+  "native": "NOT_RUN",
+  "release": "NOT_RUN"
+}

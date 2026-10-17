@@ -1,0 +1,18 @@
+{
+  "base": "548208ac8d3d8c3f32f56f1c1174242d276467b1",
+  "physicalForwardSource": "50181d4a68c8fff234cc882de1e1a09a75186116",
+  "copiedFiles": 12,
+  "gateFullReverseHunks": 4,
+  "prebodyFullReverseHunks": 2,
+  "scopedPhysicalInputs": 19,
+  "hazardOccurrences": 94,
+  "originalReviewUnchanged": true,
+  "boundInputs": 95,
+  "soleExactPolicySuccessor": [
+    "scripts/cloudtms-managed-execution-policy.mjs"
+  ],
+  "gateSha256": "4f3f73b57b51ece357091ca612c4ca4abe9c33b6f69cf290f81552238580acb1",
+  "bridgeSha256": "079ea08052ad96600ee0f9bdfee70dbeccaa8d85acb8eaf51483a1be5e5f99c1",
+  "native": "NOT_RUN",
+  "otherWorktreeWrites": 0
+}

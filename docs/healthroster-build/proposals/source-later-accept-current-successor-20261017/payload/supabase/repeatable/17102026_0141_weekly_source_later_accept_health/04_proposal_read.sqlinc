@@ -1,0 +1,58 @@
+-- Fresh native reconstruction of the one genuine reserved Source proposal.
+-- A different current approver proves their own authority; no preparer actor
+-- is substituted to read current money or to accept a stale proposal.
+create or replace function private.weekly_source_missing_accept_proposal_v1(
+  p_decision_bundle_id uuid,p_bundle_revision bigint,p_actor_user_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_audit public.audit_events%rowtype;v_bundle public.weekly_source_entitlement_decision_bundles%rowtype;
+  v_count integer;v_proof jsonb;v_inputs jsonb;v_rebuilt jsonb;v_canonical jsonb;v_prepare jsonb;
+begin
+  select count(*) into v_count from public.audit_events audit
+    where audit.object_type='weekly_source_entitlement_decision_bundles'
+      and audit.object_id_text=p_decision_bundle_id::text and audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED'
+      and audit.after_json->>'bundle_revision'=p_bundle_revision::text;
+  if v_count=0 then return null;end if;
+  if v_count<>1 then raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROOF_AMBIGUOUS' using errcode='55000';end if;
+  select * into strict v_audit from public.audit_events audit
+    where audit.object_type='weekly_source_entitlement_decision_bundles'
+      and audit.object_id_text=p_decision_bundle_id::text and audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED'
+      and audit.after_json->>'bundle_revision'=p_bundle_revision::text;
+  v_proof:=v_audit.after_json;v_prepare:=v_proof->'prepare_request';
+  if v_proof->>'schema_version' is distinct from 'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_PROOF_V1'
+    or v_proof->>'proof_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_PROOF_V1',v_proof-'proof_sha256'),'hex')
+    or v_proof->>'request_hash' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_MISSING_ACCEPT_PREPARE_V1',v_prepare-'idempotency_key'),'hex')
+    or v_proof->>'actor_user_id' is distinct from v_audit.actor_user_id::text
+    or v_prepare->>'actor_user_id' is distinct from v_audit.actor_user_id::text
+    or v_proof->>'decision_bundle_id' is distinct from p_decision_bundle_id::text
+    or v_proof->>'bundle_revision' is distinct from p_bundle_revision::text then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROOF_UNBOUND' using errcode='55000';end if;
+  select * into strict v_bundle from public.weekly_source_entitlement_decision_bundles bundle
+    where bundle.decision_bundle_id=p_decision_bundle_id and bundle.bundle_revision=p_bundle_revision;
+  if v_bundle.state is distinct from 'PROPOSED' or v_bundle.bundle_kind is distinct from 'SINGLE_ROOT'
+    or cardinality(v_bundle.proposed_head_ids)<>1
+    or v_bundle.source_root_timesheet_id::text is distinct from v_proof->>'root_timesheet_id'
+    or v_bundle.decided_by_user_id is distinct from v_audit.actor_user_id then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_STALE' using errcode='40001';end if;
+  v_inputs:=private.weekly_source_missing_accept_inventory_inputs_v1((v_proof->>'work_event_id')::uuid,
+    v_bundle.source_root_timesheet_id,(v_proof->>'projection_publication_id')::uuid,p_actor_user_id);
+  if v_inputs is distinct from v_proof->'inputs' or v_inputs->'available' is distinct from 'true'::jsonb
+    or v_inputs->'final_source_ready' is distinct from 'true'::jsonb then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_FACTS_CHANGED' using errcode='40001';end if;
+  v_rebuilt:=private.weekly_source_entitlement_proposal_request_v1(v_bundle.source_root_timesheet_id,
+    (v_inputs->>'target_final_revision_id')::uuid,'LOCKED_FINAL_SOURCE',v_bundle.decision_bundle_id,
+    v_bundle.bundle_revision,v_bundle.proposed_head_ids[1],v_bundle.decision_id,v_inputs->'after_components','UNCHANGED');
+  v_canonical:=private.weekly_source_publication_request_canonical_v1(v_rebuilt,'IMMEDIATE',null::uuid);
+  if v_canonical is distinct from v_proof->'canonical_proposal' or v_rebuilt->'control' is distinct from v_proof->'proposal_control'
+    or v_bundle.request_digest is distinct from private.weekly_source_publication_request_digest_v1(v_canonical) then
+    raise exception 'WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_FACTS_CHANGED' using errcode='40001';end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSAL_READ_V1',
+    'work_event_id',v_proof->'work_event_id','projection_publication_id',v_proof->'projection_publication_id',
+    'inputs',v_inputs,'proposal',v_rebuilt,'reserved_proof',v_proof);
+end;
+$function$;
+alter function private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid) owner to postgres;
+revoke all on function private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid) from public,anon,authenticated,service_role;
