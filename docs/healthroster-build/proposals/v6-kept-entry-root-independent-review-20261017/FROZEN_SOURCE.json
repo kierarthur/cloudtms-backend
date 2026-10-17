@@ -1,0 +1,238 @@
+{
+  "backend": "4b17461436d418d8fe23acaf98b8f0f9e7e5137f",
+  "runtimeSqlWorkerBase": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+  "priorSecurityBase": "548208ac8d3d8c3f32f56f1c1174242d276467b1",
+  "office": "6d3d7210ac02fa2d1741f20e52461eaa75158350",
+  "rootStatusAtFreeze": "CLEAN",
+  "changedFilesSinceSecurityBase": 22,
+  "schemaRegisterOnlyAddsOneSourceReceipt": true,
+  "backendFiles": [
+    {
+      "file": "broker/src/correction-entry.mjs",
+      "sha256": "f7b04091b1246f09e5408177f8ae26f67686277d7dd8b946bd503eb3eabcf0cd"
+    },
+    {
+      "file": "broker/src/index.js",
+      "sha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a"
+    },
+    {
+      "file": "broker/src/weekly-source/kept-pay-command.mjs",
+      "sha256": "0460915380ef38aeff9437164ae93562b924712af996d89c8d880456c4d8c273"
+    },
+    {
+      "file": "broker/src/weekly-source/routes.js",
+      "sha256": "e735ba9cc5b52323e72229f6ff2569dfee22268041b8ccf2cafbc1b11da9c279"
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "e6ee24f8f541b4e31d28ba625623b7bb7674a54a6dcabd808a5aa8e17b6e3aaa"
+    },
+    {
+      "file": "docs/healthroster-build/PROGRESS.md",
+      "sha256": "73fd88560c633d996d58bb78efd55fb32df1dae4deeeb39c4a94196dbc43a31a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/AST_PROOF.json",
+      "sha256": "b33a7897d708ee40a5ec8d59b0cb781d31e5e518160d4508af2a3f5f117f80b2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/CENSUS.json",
+      "sha256": "5aad8f9e65820026a515fbda43ae19b7c5f2d4fdf1ff7e67cdde0cac3ff46b16"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/CLASSIFICATION.json",
+      "sha256": "6309ea0cadd0d2cd3e98537c145cd8bb49aef984d74bbfe0f11075f54982a874"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/GATE_EDITS.json",
+      "sha256": "ab513bc7deb8a6f21e2e6ca64bfd8002adf54759885da6b844b6506287b5f9da"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/ORIGINAL_ALLOWANCE_TRANSFER.json",
+      "sha256": "1704a008f6938ea94d0d6d49e60fd557d0a08507e71452063c894d50424b1091"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/README.md",
+      "sha256": "ade295a1306e6c08119b51c29f8eadc5e888592a18d49626fc791fd10cb410da"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/TEST_RESULTS.json",
+      "sha256": "97c45b59239fd69cf24a3b96bcb4dc4dfc2379584143b555f838cdef272cec7f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/ast-proof.py",
+      "sha256": "5925afbd17ca9dbcb79632d072c8348c02895f4684bb9a153883cc12671b4395"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/build-gate-hunks.mjs",
+      "sha256": "ff54cf0ad43a117bca0e7f87ba2b863f02af5acd47831f7f411ee89d2b19659c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/build-review.mjs",
+      "sha256": "46c4acd8e481f4dbca639a1d14c459e319a9fda074cb18c8bed03a14159eb171"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/test.mjs",
+      "sha256": "e3b113b5806669fc69ebce6ec33acf58b8b86f9493491f715c68897cc98953f1"
+    },
+    {
+      "file": "docs/healthroster-build/v5-amendment-20261015/SCHEMA_INTERFACE_REGISTER.json",
+      "sha256": "9818b2847eeb90b7f6b920ed64a4cd2bde129297f932176d802c1e78a263513a"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/KEPT_ENTRY_F23_ROOT_MOUNT_20261017.json",
+      "sha256": "35ba47323e8377727cc7ed5d4f1e8d950601a024594b34e569fba0a6e12b3e64"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/KEPT_ENTRY_FULL_SOURCE_GATE_20261017.json",
+      "sha256": "34ad119796cf6e15579d732c51253f30bf2d64b990e0e55ffb5b7a2026a9ca7e"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/KEPT_ENTRY_FULL_SOURCE_GATE_R1_HOLD_20261017.json",
+      "sha256": "3e1d50d864cbd2294c8a8b1af891fc22daa5da1d39aaf37ae113084b34f39d81"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/KEPT_ENTRY_FULL_SOURCE_GATE_R2_20261017.json",
+      "sha256": "34ad119796cf6e15579d732c51253f30bf2d64b990e0e55ffb5b7a2026a9ca7e"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/PREBODY_RPC_POLICY_SUCCESSOR_20261017.json",
+      "sha256": "097edee7415d9afb10a1b4905b8b6378c27f4073606e3aa3a22bf799befc6a16"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "4f3f73b57b51ece357091ca612c4ca4abe9c33b6f69cf290f81552238580acb1"
+    },
+    {
+      "file": "scripts/cloudtms-managed-execution-policy.mjs",
+      "sha256": "ba1ed5d23cdd639e814c7e009bfa07502dd633511e9e0be265d2a8486fa495d1"
+    },
+    {
+      "file": "scripts/healthroster-kept-entry-type-review.mjs",
+      "sha256": "e567a11b4399dcec4040d44ee01d6d009dd181121edb01927cd38c97061d1fa7"
+    },
+    {
+      "file": "scripts/healthroster-prebody-dynamic-review.mjs",
+      "sha256": "079ea08052ad96600ee0f9bdfee70dbeccaa8d85acb8eaf51483a1be5e5f99c1"
+    },
+    {
+      "file": "supabase/migrations/17102026_0113_weekly_source_kept_10_decision_schema.sql",
+      "sha256": "726853c33c9ace512c96a225db448504443c723020e43eebd889b8903c356c15"
+    },
+    {
+      "file": "supabase/migrations/17102026_0113_weekly_source_kept_20_audit_guards.sql",
+      "sha256": "1c71853bbf810eb8270b1f0ec63477ef97a534bfd11a1d7140d16de639fbdf00"
+    },
+    {
+      "file": "supabase/migrations/17102026_0135_correction_entry_admission.sql",
+      "sha256": "9af6c9b8993e918a0c28bdc29dae0d6b4cc9477cc13075329180395d53fbd8e7"
+    },
+    {
+      "file": "supabase/release/current-release.json",
+      "sha256": "578860fe5d1586cb1c265a3a782d8ce674973a2a68d492e7a6427bf3d1f894c5"
+    },
+    {
+      "file": "supabase/release/migration-lock.json",
+      "sha256": "a04f29591d51594f7b73991e8ec0a093e694b54dfafdd041f9455c2a458c4b79"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/01_identical_rekey_prior.sqlinc",
+      "sha256": "1f102a04838e30fb0d0dcb12593d2024a7b67e99d77e68404f19f35a675449f0"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+      "sha256": "a9149686b3aa1456603550dfa8eb93af1936606e498113286110a4f900274902"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/04_kept_read_admission.sqlinc",
+      "sha256": "cdcac4c2c2053194bc3bc68c28d701c5bbb334e82bda3e8e41b79ca59e53a9aa"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/05_kept_as_paid_facts.sqlinc",
+      "sha256": "c06e67b60dd71b2cc748a22da8b4089ac44a140f4014e181b0abb8d170ac2afa"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/06_kept_as_paid_context.sqlinc",
+      "sha256": "aee3cfccffcff7e81a98ac1e8dac212d0803310e91a810d8536c845b1cd84592"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/07_keep_as_paid_decide.sqlinc",
+      "sha256": "2532ae8f82630d66230712c966a7913c1011c3f8f4ae7f5e74e5f2aa9e4f1922"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/08_credited_targets_admit.sqlinc",
+      "sha256": "a4fae82f9b01a139923834d853310c175daebeef559874ed50c3c0436399f10c"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/09_complete_invoice_apply_edits.sqlinc",
+      "sha256": "b68439cb5928e008d4b315303a83e0b97ef867ea779b0ba1dabbc553974ed16b"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/10_complete_adjustments_apply.sqlinc",
+      "sha256": "a88d2dffcbcbe2aac4af67edd1a93c4de255f2525c859cd94796c602fe7a5e7b"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/11_complete_adjustment_line_valid.sqlinc",
+      "sha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/12_keep_ack_native_guard.sqlinc",
+      "sha256": "e6744c534740ddc5c15e860ba4b1eee501386ece84c2468ea10c0ac951f129c2"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+      "sha256": "fe1cbb0de3332a021d1459a2e46f5c201e58d4ded7ade5f9f58fae876b8547e4"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/99_exact_function_acl.sqlinc",
+      "sha256": "7c8c73f8eb949db888afdc566968c442433ab92ced5c45b571f9e1fc9081cb32"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+      "sha256": "ce822f2a1edbf4392bf77cf000ae1e2355dae479476b6c87f18c34d245b4f722"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc",
+      "sha256": "0f7c01eb27ba3842b90524e550a0c2bbbe3a5406664c8e4c4bf1f27d831386f5"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+      "sha256": "587a7bd81efa24d721b1632a4c1a5af902fdeb56a3d39c0736615df51024fd78"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0135_correction_entry_reader_v1.sql",
+      "sha256": "05aed1c5a2d5feb6971b5e9260ec8a2748e8d46a628bb62fd733de6ad9d57bb9"
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sha256": "049594c264df266777143bbf5789b52c4c2691cd163a74240ee2b90f027ffd36"
+    },
+    {
+      "file": "supabase/verification/17102026_0144_kept_pay_and_correction_entry_security.sql",
+      "sha256": "b6c2d32681a497c6694df4a02a4c2c8e4bf45d3d35ce5de073ac4e4e3355cf1b"
+    },
+    {
+      "file": "tests/healthroster-kept-entry-verifier.test.mjs",
+      "sha256": "bcffbc9eb49b5d3a0cfeb249455277414ab529144fd7a4d14e1028ae7dbd6cd9"
+    }
+  ],
+  "officeFiles": [
+    {
+      "file": "js/timesheet-correction-entry-v1.js",
+      "sha256": "43dd1f6fff00fde6bcff9cbd29bebfce6d321672072ddac15aac00ccf8241d4a"
+    },
+    {
+      "file": "js/main.js",
+      "sha256": "ec01905facc35f501c1f6ccf08161c6f897eb5e3612a17d79e49134aa627e716"
+    },
+    {
+      "file": "index.html",
+      "sha256": "1d5587fe3f64468961f1d38c9df21a29e60ec19bd592da51ebeabde441ad79b1"
+    }
+  ],
+  "native": "NOT_RUN"
+}

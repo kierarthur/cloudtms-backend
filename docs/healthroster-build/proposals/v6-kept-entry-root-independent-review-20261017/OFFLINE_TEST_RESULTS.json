@@ -1,0 +1,107 @@
+{
+  "passed": 121,
+  "failed": 0,
+  "groups": [
+    {
+      "root": "backend",
+      "files": [
+        "tests/healthroster-kept-entry-verifier.test.mjs",
+        "tests/healthroster-correction-entry-parent.test.mjs",
+        "tests/healthroster-manual-enquiry-parent-wiring.test.mjs",
+        "docs/healthroster-build/proposals/correction-entry-native-reader-20261017/correction-entry.test.mjs"
+      ],
+      "passed": 27,
+      "sourcePins": [
+        {
+          "file": "tests/healthroster-kept-entry-verifier.test.mjs",
+          "sha256": "bcffbc9eb49b5d3a0cfeb249455277414ab529144fd7a4d14e1028ae7dbd6cd9"
+        },
+        {
+          "file": "tests/healthroster-correction-entry-parent.test.mjs",
+          "sha256": "f6be76472aa0931bef974e8262ab196f2a3ef9d8bceb3a5efdb0f582fc5c5215"
+        },
+        {
+          "file": "tests/healthroster-manual-enquiry-parent-wiring.test.mjs",
+          "sha256": "f77c8eb6983f8d3f9f3e4ddab26207110cdcc7b8ba8301ab8305561e38ac4ea7"
+        },
+        {
+          "file": "docs/healthroster-build/proposals/correction-entry-native-reader-20261017/correction-entry.test.mjs",
+          "sha256": "e86e5266f15be1908efcb3bb674053f386621f6bc605f0cfc8db63523d494593"
+        }
+      ]
+    },
+    {
+      "root": "office",
+      "files": [
+        "tests/unit/correction-entry-native-host.test.mjs",
+        "tests/unit/health-correction-host-v3.test.mjs"
+      ],
+      "passed": 23,
+      "sourcePins": [
+        {
+          "file": "tests/unit/correction-entry-native-host.test.mjs",
+          "sha256": "979eb6188a0f7402fd60ee58e17e50fe9f2ace222c2ddd3a848e538a19095491"
+        },
+        {
+          "file": "tests/unit/health-correction-host-v3.test.mjs",
+          "sha256": "4dceffeea77997479ae63cb6687e85287c3cfdfe9d2ebd1293662a4f61a86e01"
+        }
+      ]
+    },
+    {
+      "root": "backend",
+      "files": [
+        "tests/healthroster-install2-native-gate.test.mjs",
+        "tests/managed-database-release.test.mjs"
+      ],
+      "passed": 42,
+      "temporaryRoot": "OWN_REPORT/temp-models",
+      "temporaryRootEmptyAndRemoved": true,
+      "sourcePins": [
+        {
+          "file": "tests/healthroster-install2-native-gate.test.mjs",
+          "sha256": "1ec37f7c1372bcb872e0036fe8e2d42c996daee8d0e8802676fb3ce6dbe5a573"
+        },
+        {
+          "file": "tests/managed-database-release.test.mjs",
+          "sha256": "ef624373d855acadcf4a1e632e8de078b1abb629e5c36c7bc44065f55d7ecf6b"
+        }
+      ]
+    },
+    {
+      "root": "backend",
+      "files": [
+        "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/test.mjs"
+      ],
+      "passed": 13,
+      "evidenceWriteAttempts": 2,
+      "byteIdenticalWritesSuppressed": 2,
+      "sourcePins": [
+        {
+          "file": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/test.mjs",
+          "sha256": "e3b113b5806669fc69ebce6ec33acf58b8b86f9493491f715c68897cc98953f1"
+        }
+      ]
+    },
+    {
+      "root": "backend",
+      "files": [
+        "tests/healthroster-prebody-dynamic-review.test.mjs"
+      ],
+      "passed": 16,
+      "temporaryRoot": "OWN_REPORT/temp-prebody",
+      "temporaryRootEmptyAndRemoved": true,
+      "sourcePins": [
+        {
+          "file": "tests/healthroster-prebody-dynamic-review.test.mjs",
+          "sha256": "9c23e63cfe88e14028b5c896190ae152c35c83d087beb4e8fa150069c26eb95d"
+        }
+      ]
+    }
+  ],
+  "native": "NOT_RUN",
+  "databaseCalls": 0,
+  "otherWorktreeWrites": 0,
+  "allTemporaryDirectoriesPhysicallyD": true,
+  "genuineAstEvidenceByteIdenticalWriteSuppressed": 1
+}

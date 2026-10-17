@@ -1,0 +1,60 @@
+{
+  "version": "KEPT_ENTRY_ROOT_INDEPENDENT_SOURCE_REVIEW_V1",
+  "backend": "4b17461436d418d8fe23acaf98b8f0f9e7e5137f",
+  "office": "6d3d7210ac02fa2d1741f20e52461eaa75158350",
+  "sourceFindings": 0,
+  "offlineTestsPassed": 121,
+  "native": "NOT_RUN",
+  "files": [
+    {
+      "file": "EXTENSION_EVIDENCE.json",
+      "bytes": 651,
+      "sha256": "dddb2b70591584b560a8240d97157b5dd6df60ca2a416fa6e87e937cdd9bd715"
+    },
+    {
+      "file": "FROZEN_SOURCE.json",
+      "bytes": 11164,
+      "sha256": "92e0821ae0b55b7a7152ffea586835a1c784ae391c529b7427d8441a982d1ded"
+    },
+    {
+      "file": "GRAMMAR_SECURITY_RESULTS.json",
+      "bytes": 6382,
+      "sha256": "e9c73a013d024f4c61ae7556abbd4cf80823273d6e518c41f48c7d143521b145"
+    },
+    {
+      "file": "INTEGRATION_EVIDENCE.json",
+      "bytes": 12346,
+      "sha256": "113fc162e93c1e6e54ba96edc9536edc5b1e8e939295613b7e10c820687ad310"
+    },
+    {
+      "file": "OFFLINE_TEST_RESULTS.json",
+      "bytes": 3704,
+      "sha256": "1e761edd012b25fb8476626570508e63340ef81d368d69b8ac6753f1c6c6eca2"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 7768,
+      "sha256": "0a40a7b65d08a43cfd1c7723e0f64705f55f6d0b5de545742fdf193af478250b"
+    },
+    {
+      "file": "run-f23-readonly.mjs",
+      "bytes": 1007,
+      "sha256": "1c599897b03d3efda173999674736c898005a4b8f4c87b4e8963bf65072c2479"
+    },
+    {
+      "file": "verify-extension.py",
+      "bytes": 3436,
+      "sha256": "2013c4c23b92ede12670e9cd611af86eef86ebbac31a3b0f676371afe0b1ba4a"
+    },
+    {
+      "file": "verify-integration.py",
+      "bytes": 7998,
+      "sha256": "4fefb5d5b916ef745ae6abfc956f2f7facae3e9d2244b450e7ec0b41c10c7303"
+    },
+    {
+      "file": "verify-native-source.py",
+      "bytes": 7135,
+      "sha256": "d921eac40a6fece657f3017cbcdc6bb06e6eb99d857b933895843a44107499a9"
+    }
+  ]
+}
