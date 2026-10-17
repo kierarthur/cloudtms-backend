@@ -1,0 +1,504 @@
+{
+  "version": "CONTROLLED_ACTUAL_HEALTH_SQL_AST_ONLY_V1",
+  "sourceSha256": "13e2850f6b58006f37fe7905c2e8d277db7dcee65dfa624cd034b654efca4b9b",
+  "parser": "v7.20",
+  "postgres": [
+    17,
+    7
+  ],
+  "cases": [
+    {
+      "case": "A_current",
+      "outcome": "CURRENT_HEALTH_PLACEMENT",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      },
+      "acceptedReceiptUnchanged": true
+    },
+    {
+      "case": "A_after_B",
+      "outcome": "CURRENT_HEALTH_PLACEMENT",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "11",
+        "receipt_id": "00000000-0000-0000-0000-000000000034"
+      },
+      "acceptedReceiptUnchanged": true
+    },
+    {
+      "case": "A_after_C",
+      "outcome": "CURRENT_HEALTH_PLACEMENT",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "12",
+        "receipt_id": "00000000-0000-0000-0000-000000000035"
+      },
+      "acceptedReceiptUnchanged": true
+    },
+    {
+      "case": "A_after_new_A",
+      "outcome": "CURRENT_HEALTH_PLACEMENT",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "13",
+        "receipt_id": "00000000-0000-0000-0000-000000000036"
+      },
+      "acceptedReceiptUnchanged": true
+    },
+    {
+      "case": "large_int63",
+      "outcome": "CURRENT_HEALTH_PLACEMENT",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "9007199254740993",
+        "receipt_id": "00000000-0000-0000-0000-000000000037"
+      },
+      "acceptedReceiptUnchanged": true
+    },
+    {
+      "case": "max_int63",
+      "outcome": "CURRENT_HEALTH_PLACEMENT",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "9223372036854775807",
+        "receipt_id": "00000000-0000-0000-0000-000000000038"
+      },
+      "acceptedReceiptUnchanged": true
+    },
+    {
+      "case": "historical_receipt_scalar_missing_or_obsolete_ignored",
+      "outcome": "CURRENT_NATIVE_ORDINAL"
+    },
+    {
+      "case": "refuse_w_current_revision_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_w_current_revision_no",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_w_booking_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_w_candidate_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_w_origin_kind",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_w_approval_state",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_v_work_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_v_financial_snapshot_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_v_revision_no",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_v_revision_no",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_v_approved_at_utc",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_v_sealed_at_utc",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_t_timesheet_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_t_contract_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_t_is_current",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_t_archived_at_utc",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_t_revoked_at",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_f_is_current",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_f_is_stale",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_f_candidate_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_f_client_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_f_timesheet_version",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_f_basis",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_f_authorised_at_utc",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "refuse_provenance_approval_purpose_ORDINARY",
+      "outcome": "SOURCE_GUARD_2"
+    },
+    {
+      "case": "refuse_provenance_correction_operation_id_None",
+      "outcome": "SOURCE_GUARD_2"
+    },
+    {
+      "case": "refuse_provenance_correction_operation_id_malformed",
+      "outcome": "SOURCE_GUARD_2"
+    },
+    {
+      "case": "refuse_provenance_accepted_review_id_00000000-0000-0000-0000-0000000003e7",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "refuse_provenance_approved_by_user_id_00000000-0000-0000-0000-0000000003e7",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "refuse_current_state",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "refuse_receipt_work_id",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "refuse_receipt_revision_id",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "refuse_receipt_current_financial_id",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "refuse_receipt_current_timesheet_id",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "refuse_receipt_receipt_id",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "refuse_member_to_financial_id",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "refuse_member_original_booking_id",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "refuse_member_to_version",
+      "outcome": "SOURCE_GUARD_4"
+    },
+    {
+      "case": "strict_cardinality_0",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "strict_cardinality_2",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_native_context_effective_timesheet_id",
+      "outcome": "SOURCE_GUARD_1"
+    },
+    {
+      "case": "F1_native_context_out_candidate",
+      "outcome": "SOURCE_GUARD_1"
+    },
+    {
+      "case": "F1_native_context_out_client_id",
+      "outcome": "SOURCE_GUARD_1"
+    },
+    {
+      "case": "F1_native_context_out_cur_fin",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_native_checked_effective_timesheet_id",
+      "outcome": "SOURCE_GUARD_6"
+    },
+    {
+      "case": "F1_native_checked_out_candidate",
+      "outcome": "SOURCE_GUARD_6"
+    },
+    {
+      "case": "F1_native_checked_out_client_id",
+      "outcome": "SOURCE_GUARD_6"
+    },
+    {
+      "case": "F1_native_checked_out_cur_fin",
+      "outcome": "SOURCE_GUARD_6"
+    },
+    {
+      "case": "F1_t_line_type",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_t_is_adjustment",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_t_parent_timesheet_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_t_correction_id",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_t_adjustment_origin",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_t_correction_kind",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_t_authorised_at_server",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_t_worked_start_iso",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_t_worked_end_iso",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_t_job_title_norm",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "F1_t_band",
+      "outcome": "STRICT_CARDINALITY_REFUSAL"
+    }
+  ],
+  "F1Counterexamples": [
+    {
+      "case": "native_context.effective_timesheet_id",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "SOURCE_GUARD_1"
+    },
+    {
+      "case": "native_context.out_candidate",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "SOURCE_GUARD_1"
+    },
+    {
+      "case": "native_context.out_client_id",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "SOURCE_GUARD_1"
+    },
+    {
+      "case": "native_context.out_cur_fin",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "native_checked.effective_timesheet_id",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "SOURCE_GUARD_6"
+    },
+    {
+      "case": "native_checked.out_candidate",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "SOURCE_GUARD_6"
+    },
+    {
+      "case": "native_checked.out_client_id",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "SOURCE_GUARD_6"
+    },
+    {
+      "case": "native_checked.out_cur_fin",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "SOURCE_GUARD_6"
+    },
+    {
+      "case": "t.line_type",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "t.is_adjustment",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "t.parent_timesheet_id",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "t.correction_id",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "t.adjustment_origin",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "t.correction_kind",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "t.authorised_at_server",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "t.worked_start_iso",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "t.worked_end_iso",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "t.job_title_norm",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "t.band",
+      "original040bb": "ACCEPTS_CONTROLLED_SOURCE_ROWS",
+      "forward": "REFUSED",
+      "reason": "STRICT_CARDINALITY_REFUSAL"
+    }
+  ],
+  "publicDecoderCases": [
+    {
+      "case": "A_current",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "A_after_B",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "11",
+        "receipt_id": "00000000-0000-0000-0000-000000000034"
+      }
+    },
+    {
+      "case": "A_after_C",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "12",
+        "receipt_id": "00000000-0000-0000-0000-000000000035"
+      }
+    },
+    {
+      "case": "A_after_new_A",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "13",
+        "receipt_id": "00000000-0000-0000-0000-000000000036"
+      }
+    },
+    {
+      "case": "large_int63",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "9007199254740993",
+        "receipt_id": "00000000-0000-0000-0000-000000000037"
+      }
+    },
+    {
+      "case": "max_int63",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "9223372036854775807",
+        "receipt_id": "00000000-0000-0000-0000-000000000038"
+      }
+    }
+  ],
+  "native": "NOT_RUN",
+  "BankingProducer": "NOT_PROVIDED",
+  "limit": "Controlled source inputs evaluate actual Health selector and five guards/projection. The existing native basis and final multi-snapshot recheck require separate native proof."
+}

@@ -1,0 +1,74 @@
+{
+  "status": "PASS",
+  "controlledFinalTupleCases": [
+    {
+      "case": "t.line_type",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "t.is_adjustment",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "t.parent_timesheet_id",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "t.correction_id",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "t.correction_kind",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "t.adjustment_origin",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "t.authorised_at_server",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "t.worked_start_iso",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "t.worked_end_iso",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "t.job_title_norm",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "t.band",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "f.is_stale",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "f.is_current",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "w.current_revision_no",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "w.current_revision_id",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    },
+    {
+      "case": "native_checked.out_cur_fin",
+      "actualFinalExists": "REFUSES_CONTROLLED_POST_READ_ROW"
+    }
+  ],
+  "strictNativeReads": 2,
+  "originalF1": "CLOSED_AT_SOURCE_ONLY",
+  "scope": "Actual final EXISTS and strict native-call source; native basis, nested resolver execution, full result/Bank joins and database races not executed.",
+  "native": "NOT_RUN",
+  "BankingProducer": "UNPROVIDED"
+}

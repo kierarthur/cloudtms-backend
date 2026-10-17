@@ -1,0 +1,21 @@
+{
+  "rootHead": "5b4f4e4c196871fa85722435deeee3ad418908f2",
+  "gateFile": "scripts/bpay-next-source-gates.mjs",
+  "gateSha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+  "savedHeadIndexEqual": true,
+  "inputs": [
+    {
+      "file": "health/20_current_placement.sqlinc",
+      "sha256": "13e2850f6b58006f37fe7905c2e8d277db7dcee65dfa624cd034b654efca4b9b",
+      "hazards": []
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "sha256": "0e038e8f593f3ba3500a3f423a91f8a60e74cd6030e16b60be1654c8075824ec",
+      "hazards": []
+    }
+  ],
+  "allowancesAdded": 0,
+  "qualification": "FINITE_RAW_CENSUS_ONLY_NOT_GLOBAL_JOINED_GATE",
+  "native": "NOT_RUN"
+}
