@@ -31,7 +31,7 @@ leaves['01_head_chain.sqlinc']=splice(leaves['01_head_chain.sqlinc'],"'canonical
 // never the older draft context that selected an ACK after filtering.
 const oldEdits=JSON.parse(selected(old,'COMPLETE_CURRENT_REVERSES.json'));
 const contextBefore=complete(selected(missing,'forward/01_target_publication_context.sqlinc'),'private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)');
-const contextHunks=oldEdits.proofs.find(p=>p.file==='08_complete_kept_context.sqlinc').hunks;
+const contextHunks=[...oldEdits.proofs.find(p=>p.file==='08_complete_kept_context.sqlinc').hunks,{before:"'decision_applies',v_applies,",after:"'decision_applies',v_applies and not v_accept_complete,",purpose:'A genuine later accepted removal supersedes the current Keep disposition; retain the genuine historical latest ACK separately.'}];
 amended('private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)','09_complete_current_context.sqlinc',contextBefore,contextHunks,{commit:missingCommit,virtualParent:missing+'/forward/01_target_publication_context.sqlinc',typedACKWriterAuditCounterUnchanged:true});
 const laterSignature='public.weekly_source_later_change_decide_atomic_v1(jsonb)',laterPath='supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql';
 amended(laterSignature,'10_complete_later_change_decide.sqlinc',current(laterSignature,laterPath),oldEdits.proofs.find(p=>p.file==='05_complete_later_change_decide.sqlinc').hunks,{commit:checkpoint,physical:laterPath});

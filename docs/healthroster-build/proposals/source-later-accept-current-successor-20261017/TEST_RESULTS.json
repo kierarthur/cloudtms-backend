@@ -1,5 +1,5 @@
 {
-  "passed": 36,
+  "passed": 37,
   "failed": 0,
   "checks": [
     "actual-prepare-bigint-over-2pow53-roundtrip",
@@ -26,6 +26,7 @@
     "no-old-0126-repeatable-or-classifier-after-new-helpers",
     "exact-four-parent-schema-migration-and-guard-order",
     "latest-genuine-ACK-before-reason-filter-still-present",
+    "genuine-later-removal-retires-current-Keep-not-historical-ACK",
     "genuine-accepted-removal-before-original-head-comparison",
     "proposal-keeps-full-before-after-unrelated-components-and-canonical-owner",
     "fresh-scope-before-both-exact-historical-proposal-replays",

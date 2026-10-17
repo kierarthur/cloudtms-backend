@@ -296,7 +296,7 @@ begin
     'decision_available',not v_accept_complete and not v_source_present and (v_invoiced or v_paid is true),
     'decision_needed',case when v_accept_complete then false when not v_source_present and not v_invoiced and v_paid is null then null
       else not v_source_present and (jsonb_array_length(v_credits)>0 or (not v_invoiced and v_paid is true)) and not v_applies end,
-    'facts_fingerprint',case when v_facts is null then null else encode(v_facts,'hex') end,'decision_applies',v_applies,
+    'facts_fingerprint',case when v_facts is null then null else encode(v_facts,'hex') end,'decision_applies',v_applies and not v_accept_complete,
     'latest_acknowledgement',case when v_ack.id is null then null else jsonb_build_object('audit_id',v_ack.id,
       'decision_id',v_decision.id,'actor_user_id',v_ack.actor_user_id,'actor_display',v_ack.actor_display,
       'acknowledged_at_utc',v_ack.after_json->>'acknowledged_at_utc','acknowledgement_sequence',v_ack.after_json->>'acknowledgement_sequence') end,

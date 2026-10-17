@@ -11,7 +11,7 @@
         "typedACKWriterAuditCounterUnchanged": true
       },
       "inputSha256": "fd89d560c5685874c8f9b5254d3bc63e808ff1849dd828b4e1cead3e68ebeb73",
-      "outputSha256": "b91cddf8152b40db438bdbb3181d3f9251b948080fa26e9744dcb2432823c93c",
+      "outputSha256": "3f14d5aac6e9d29d52f1f630089d6ac20a0229e2bde43daac1c6c10c40be534d",
       "hunks": [
         {
           "name": "current accepted removal locals",
@@ -52,6 +52,11 @@
           "name": "conditional real accepted proof preserves ordinary context domain",
           "before": "    'holds_invoice',case when v_accept_complete then false when not v_source_present and (v_invoiced or v_paid is true) then false else null end);\nend;",
           "after": "    'holds_invoice',case when v_accept_complete then false when not v_source_present and (v_invoiced or v_paid is true) then false else null end);\n  if v_accept_complete then\n    v_result:=v_result||jsonb_build_object('accepted_source_removed',true,'accepted_source_removal_proofs',v_accept_proofs);\n  end if;\n  return v_result;\nend;"
+        },
+        {
+          "before": "'decision_applies',v_applies,",
+          "after": "'decision_applies',v_applies and not v_accept_complete,",
+          "purpose": "A genuine later accepted removal supersedes the current Keep disposition; retain the genuine historical latest ACK separately."
         }
       ],
       "completeReverseByteEquality": true
