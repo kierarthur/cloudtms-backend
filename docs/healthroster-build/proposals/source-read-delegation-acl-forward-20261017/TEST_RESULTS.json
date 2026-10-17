@@ -1,0 +1,57 @@
+{
+  "passed": 30,
+  "failed": 0,
+  "checks": [
+    "root-mechanical77-minus75-is-exact-two-owner-only-events",
+    "all-complete-current-sources-equal-reviewed3f01-Git-payloads",
+    "historical75-remains-byte-structure-identical",
+    "current77-inverses-only-two-identical-original-source-statements",
+    "current-event-drift-refuses:missing-old-event",
+    "current-event-drift-refuses:changed-old-revoke",
+    "current-event-drift-refuses:missing-added-owner",
+    "current-event-drift-refuses:missing-added-revoke",
+    "current-event-drift-refuses:extra-duplicate-owner",
+    "current-event-drift-refuses:extra-broad-grant",
+    "current-event-drift-refuses:changed-role",
+    "current-event-drift-refuses:changed-source-path",
+    "current-event-drift-refuses:changed-root",
+    "current-event-drift-refuses:changed-order",
+    "current-event-drift-refuses:moved-new-pair",
+    "complete-source-or-review-drift-refuses:docs/healthroster-build/proposals/source-read-delegation-acl-forward-20261017/ACL_SOURCE_TRANSFER.json",
+    "missing-complete-source-refuses:docs/healthroster-build/proposals/source-read-delegation-acl-forward-20261017/ACL_SOURCE_TRANSFER.json",
+    "complete-source-or-review-drift-refuses:docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/CLASSIFICATION.json",
+    "missing-complete-source-refuses:docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/CLASSIFICATION.json",
+    "complete-source-or-review-drift-refuses:supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+    "missing-complete-source-refuses:supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+    "complete-source-or-review-drift-refuses:supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+    "missing-complete-source-refuses:supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+    "complete-source-or-review-drift-refuses:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+    "missing-complete-source-refuses:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+    "complete-source-or-review-drift-refuses:supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+    "missing-complete-source-refuses:supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+    "historical-argument-cannot-be-refreshed",
+    "complete-ACL-extra-unrelated-statement-cannot-hide-behind-two-events",
+    "complete-original-helper-parent-is-reconstructed-by-two-hunks"
+  ],
+  "completeSourcePins": [
+    {
+      "path": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "sha256": "4e220b43f3759f2f3644d85673a42c556debffd6a600b9d35483bbb96da9ac75"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "sha256": "d6ea8fd40e152bb9038a300274be39c63be1a451e300e9f4ad3eb1bb12f208e7"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+      "sha256": "42ca54a71e7dfb0165b22e3285c6173efc7b5494079ae1fd360ef9f849cd9cc5"
+    }
+  ],
+  "originalDefinitionEventsUnchanged": 17,
+  "originalRowsUnchanged": 13,
+  "historicalAclEvents": 75,
+  "currentAclEvents": 77,
+  "exactInverseEvents": 2,
+  "actualFullSnapshot": "ROOT_OWNED_R1_COMPACT_DIFF_ONLY_NO_BANK_BODY_REPLAY",
+  "native": "NOT_RUN"
+}

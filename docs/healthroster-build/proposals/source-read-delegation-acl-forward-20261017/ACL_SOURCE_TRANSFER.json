@@ -1,0 +1,62 @@
+{
+  "version": "HEALTH_SOURCE_READ_FIXED_ACL_EVENT_INVERSE_V1",
+  "historicalClassificationPath": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_CLASSIFIER_DELEGATION_20261016/CLASSIFICATION.json",
+  "historicalClassificationSha256": "abe64516babd46100709f45baaa815c7a6c1070f47fd5b9c655e87d09971c14a",
+  "historicalAclCount": 75,
+  "historicalAclEventsSha256": "f78766956a6bdd782e729bd206b372cbdd62d8aa14426d84dcd49e2bbfc3481c",
+  "currentAclCount": 77,
+  "completeCurrentSourcePins": [
+    {
+      "path": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "sha256": "4e220b43f3759f2f3644d85673a42c556debffd6a600b9d35483bbb96da9ac75"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "sha256": "d6ea8fd40e152bb9038a300274be39c63be1a451e300e9f4ad3eb1bb12f208e7"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+      "sha256": "42ca54a71e7dfb0165b22e3285c6173efc7b5494079ae1fd360ef9f849cd9cc5"
+    }
+  ],
+  "currentAclStatements": 197,
+  "unchangedOriginalSource": {
+    "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+    "sha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c"
+  },
+  "originalEvents": [
+    {
+      "root": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "physical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sha256": "53c09a59d4e92be3be7dbf95350be7663bbd984bb6b31d8fe39b659dda388891",
+      "statement": "alter function private._candidate_expense_source_family_v1(uuid) owner to postgres;"
+    },
+    {
+      "root": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "physical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sha256": "bbb2a760f5f17175d7c24e05f656c031f48b46f4314c0cc0b11b5f015e840270",
+      "statement": "revoke all on function private._candidate_expense_source_family_v1(uuid) from public,anon,authenticated,service_role;"
+    }
+  ],
+  "addedEvents": [
+    {
+      "root": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "physical": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+      "sha256": "53c09a59d4e92be3be7dbf95350be7663bbd984bb6b31d8fe39b659dda388891",
+      "statement": "alter function private._candidate_expense_source_family_v1(uuid) owner to postgres;"
+    },
+    {
+      "root": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "physical": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+      "sha256": "bbb2a760f5f17175d7c24e05f656c031f48b46f4314c0cc0b11b5f015e840270",
+      "statement": "revoke all on function private._candidate_expense_source_family_v1(uuid) from public,anon,authenticated,service_role;"
+    }
+  ],
+  "rootReceipt": {
+    "path": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_READ_R1_ACL_COMPACT_DIFF_20261017.json",
+    "sha256": "5daeff68bde1105ae105614ca268f20b8eef2609a9499789ffebb3dfe24f97c9"
+  },
+  "native": "NOT_RUN",
+  "baselineRefreshed": false,
+  "roleChange": false
+}

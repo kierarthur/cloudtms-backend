@@ -1,0 +1,18 @@
+{
+  "parentRuntime": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "requiredSourcePeer": "25388c26b6d0d849d3e022fd76aa2a0f4c95f70b",
+  "files": [
+    {
+      "target": "scripts/healthroster-source-classifier-delegation-review.mjs",
+      "sourcePath": "payload/scripts/healthroster-source-classifier-delegation-review.mjs",
+      "bytes": 11338,
+      "sha256": "198f5528f1ddc3c8511beb7e733cd5e2c6e14e94e72e7373ad0226695109add2",
+      "inputSha256": "df301590ae3f8e44b782e8e667c70ce6688d2717768ee59598e117493a0f4555",
+      "hunks": 2,
+      "fullRawReverse": true
+    }
+  ],
+  "historicalDelegationProofUnchanged": true,
+  "runtimeSqlChanges": 0,
+  "native": "NOT_RUN"
+}

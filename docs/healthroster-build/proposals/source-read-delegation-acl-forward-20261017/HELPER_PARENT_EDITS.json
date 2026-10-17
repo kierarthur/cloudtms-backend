@@ -1,0 +1,19 @@
+{
+  "target": "scripts/healthroster-source-classifier-delegation-review.mjs",
+  "parentCommit": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "inputSha256": "df301590ae3f8e44b782e8e667c70ce6688d2717768ee59598e117493a0f4555",
+  "outputSha256": "198f5528f1ddc3c8511beb7e733cd5e2c6e14e94e72e7373ad0226695109add2",
+  "hunks": [
+    {
+      "before": "// The injectable read/list boundary is for source-only drift tests.",
+      "after": "// Preserve the immutable75-event delegation proof. Only the two reasserted\n// owner-only Source ACL events may reverse to their exact original provenance.\nexport function sourceClassifierAclPredecessor(currentAcl,historicalAcl,readFile){\n const originalBytes=Buffer.from(readFile(classificationPath));\n if(hash(originalBytes)!==classificationSha256)fail('ACL_ORIGINAL_REVIEW_CHANGED');\n const original=JSON.parse(originalBytes);\n if(!equal(historicalAcl,original.aclEvents))fail('ACL_HISTORICAL_EVENTS_CHANGED');\n if(equal(currentAcl,historicalAcl))return currentAcl;\n const proofPath='docs/healthroster-build/proposals/source-read-delegation-acl-forward-20261017/ACL_SOURCE_TRANSFER.json';\n const proofBytes=Buffer.from(readFile(proofPath));\n if(hash(proofBytes)!=='63b811a96ad050d92cd200a1de23a9464ec7a95c4f9ae909861cc412c3ba7547')fail('ACL_SOURCE_TRANSFER_CHANGED');\n const proof=JSON.parse(proofBytes);\n if(proof.version!=='HEALTH_SOURCE_READ_FIXED_ACL_EVENT_INVERSE_V1'||proof.native!=='NOT_RUN'\n  ||proof.baselineRefreshed!==false||proof.roleChange!==false||proof.historicalAclCount!==75||proof.currentAclCount!==77\n  ||proof.addedEvents.length!==2||proof.originalEvents.length!==2\n  ||hash(JSON.stringify(historicalAcl))!==proof.historicalAclEventsSha256)fail('ACL_TRANSFER_SCOPE_CHANGED');\n const io={read:file=>Buffer.from(readFile(safe(file)))};\n for(const pin of [...proof.completeCurrentSourcePins,proof.unchangedOriginalSource])\n  if(hash(canonical(io.read(pin.path).toString('utf8')))!==pin.sha256)fail('ACL_COMPLETE_SOURCE_CHANGED');\n const source=scanManagedSql(io.read(proof.unchangedOriginalSource.path).toString('utf8'));\n const statements=source.statements.map(s=>source.source.slice(s.start,s.end).trim());\n for(const event of proof.originalEvents){\n  if(historicalAcl.filter(e=>equal(e,event)).length!==1||statements.filter(s=>s===event.statement).length!==1)fail('ACL_ORIGINAL_STATEMENT_CHANGED');\n }\n const names=new Set(original.rows.map(row=>row.signature.split('(')[0]));\n const rootPath=proof.addedEvents[0].root;\n const current=closure(rootPath,io).filter(row=>aclRelevant(row.sql,names))\n  .map(row=>({root:rootPath,physical:row.physical,sha256:hash(row.sql),statement:row.sql}));\n if(!equal(current,proof.addedEvents)||!equal(current.map(e=>e.statement),proof.originalEvents.map(e=>e.statement)))fail('ACL_CURRENT_STATEMENT_CHANGED');\n const acl=scanManagedSql(io.read(proof.addedEvents[0].physical).toString('utf8'));\n if(acl.statements.length!==proof.currentAclStatements)fail('ACL_COMPLETE_PROGRAM_CHANGED');\n if(!equal(currentAcl,[...historicalAcl,...current]))fail('ACTUAL_ACL_CHANGED');\n return historicalAcl;\n}\n\n// The injectable read/list boundary is for source-only drift tests."
+    },
+    {
+      "before": " if(!equal(current.acl,data.aclEvents))fail('ACTUAL_ACL_CHANGED');",
+      "after": " if(!equal(sourceClassifierAclPredecessor(current.acl,data.aclEvents,file=>io.read(file)),data.aclEvents))fail('ACTUAL_ACL_CHANGED');"
+    }
+  ],
+  "fullRawReverse": true,
+  "historicalClassificationUnchanged": true,
+  "runtimeSqlChanges": 0
+}
