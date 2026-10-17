@@ -1,0 +1,91 @@
+{
+  "version": "SAME_SEPARATE_F23_OFFLINE_TESTS_V1",
+  "classificationSha256": "f338e3eaf7f3ce2ff027cd2728cc5f16f0724ea4ce7eeea139f5217ee949766d",
+  "tests": [
+    {
+      "name": "All 78 selected Health SQL inputs and 458 occurrences compose actual prior classifiers",
+      "status": "PASS"
+    },
+    {
+      "name": "Original nineteen Kept/Entry and forty-four Later/Keep inputs retain their exact prior maps",
+      "status": "PASS"
+    },
+    {
+      "name": "Unknown filename receives no allowance",
+      "status": "PASS"
+    },
+    {
+      "name": "Literal reversal preserves SQL dollar anchor and replacement metacharacters with bounded multiplicity",
+      "status": "PASS"
+    },
+    {
+      "name": "Migration exact catalogue identifier and cardinality prove finite quoted DDL",
+      "status": "PASS"
+    },
+    {
+      "name": "Migration count/attribute/type/identifier/target drift refuses",
+      "status": "PASS"
+    },
+    {
+      "name": "Both expense overlays use actual Health JSONB object producer",
+      "status": "PASS"
+    },
+    {
+      "name": "Text extraction, guessed producer and wrong catalogue operand refuse JSON proof",
+      "status": "PASS"
+    },
+    {
+      "name": "Seven new scalar/cardinality occurrences use exact operand types and refusal or explicit incomplete state",
+      "status": "PASS"
+    },
+    {
+      "name": "Both invoice branches require HAVING singleton actual UUID with current companion binding",
+      "status": "PASS"
+    },
+    {
+      "name": "Ambiguous NHSP min is explicitly incomplete and never unique-current authority",
+      "status": "PASS"
+    },
+    {
+      "name": "Removing scalar count guards or UUID catalogue types refuses",
+      "status": "PASS"
+    },
+    {
+      "name": "Source and diagnostic census drift refuse",
+      "status": "PASS"
+    },
+    {
+      "name": "Whole-parent owner and actual catalogue drift refuse",
+      "status": "PASS"
+    },
+    {
+      "name": "Missing original inherited statement or classifier evidence refuses",
+      "status": "PASS"
+    },
+    {
+      "name": "Actual single-relation tuple proof refuses partial projection and relation mismatch",
+      "status": "PASS"
+    }
+  ],
+  "counts": {
+    "files": 78,
+    "rawOccurrences": 458,
+    "uniquePoints": 445,
+    "kinds": {
+      "DYNAMIC_SQL_UNCLASSIFIED": 18,
+      "ROWTYPE_SELECT": 409,
+      "UUID_CARDINALITY_UNCLASSIFIED": 13,
+      "AGGREGATE_TYPE_UNCLASSIFIED": 16,
+      "JSON_CONCAT": 2
+    }
+  },
+  "completeOwnerReversals": 37,
+  "distinctOwners": 62,
+  "actualRelationTypes": 41,
+  "inheritedStatementTransfers": 21,
+  "catalogueDependentBodies": "FOUR_UNIQUE_SIX_PHYSICAL_NOT_PROVED",
+  "bankingBodiesRead": 0,
+  "native": "NOT_RUN",
+  "dbConnections": 0,
+  "rootWrites": 0
+}

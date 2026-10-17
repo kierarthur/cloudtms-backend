@@ -1,0 +1,29 @@
+{
+  "version": "SAME_SEPARATE_FINITE_GATE_RECIPE_V1",
+  "target": "scripts/bpay-next-source-gates.mjs",
+  "inputSha256": "2798cc6178aca812b82194659a6618bd94f12fdb404621783b5822b53a6a965f",
+  "outputSha256": "0ae982224fda89dc77d6f6bd606acdaa6a37ccf126db01b87d5134f4612f2dda",
+  "hunks": [
+    {
+      "before": "import {createReviewedLaterKeepClassifier} from './healthroster-later-keep-type-review.mjs';",
+      "after": "import {createReviewedSameSeparateClassifier} from './healthroster-same-separate-type-review.mjs';\nimport {createReviewedLaterKeepClassifier} from './healthroster-later-keep-type-review.mjs';",
+      "purpose": "Add independent finite Same/Separate proof; original modules and pins unchanged."
+    },
+    {
+      "before": "export const FROZEN_BASE=",
+      "after": "const reviewedSameSeparateHazards=createReviewedSameSeparateClassifier(repoRoot,{\n  tupleProof:provesSingleTableTuple,hazardCensus:specialConstructViolations,statementScan:scanManagedSql,\n  classifyPrior:(source,file,initial=new Map())=>{\n    const violations=specialConstructViolations(source,file),parts=executableParts(source,file);\n    let result=sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,new Map(initial)));\n    for(const review of [reviewedContactFiniteHazards,reviewedHealthRowtypeHazards,reviewedHealthUuidHazards,reviewedHealthAggregateHazards,reviewedHealthDynamicHazards,reviewedJoinedNonDynamicHazards,reviewedPrebodyDynamicHazards,reviewedSource13Hazards])\n      result=review(source,file,result,violations,parts);\n    result=reviewedKeptEntryHazards(source,file,result,violations,parts);\n    return reviewedLaterKeepHazards(source,file,result,violations,parts);\n  }\n});\n\nexport const FROZEN_BASE=",
+      "purpose": "Transfer only exact full-parent statements through every actual prior classifier."
+    },
+    {
+      "before": "assertSpecialConstructs(source,file,reviewedLaterKeepHazards(source,file,reviewedKeptEntryHazards(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)))",
+      "after": "assertSpecialConstructs(source,file,reviewedSameSeparateHazards(source,file,reviewedLaterKeepHazards(source,file,reviewedKeptEntryHazards(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)))",
+      "purpose": "Compose on the entire unchanged existing allowance chain; retain every gate and frozen-authority check."
+    }
+  ],
+  "completeRawByteReverse": true,
+  "nodeSyntax": "PASS",
+  "rootWrites": 0,
+  "newModule": "scripts/healthroster-same-separate-type-review.mjs",
+  "newReview": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/CLASSIFICATION.json",
+  "native": "NOT_RUN"
+}

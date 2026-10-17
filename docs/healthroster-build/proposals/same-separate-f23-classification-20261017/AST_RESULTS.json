@@ -1,0 +1,3358 @@
+{
+  "version": "SAME_SEPARATE_PG17_SOURCE_AST_V1",
+  "parser": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "classificationSha256": "f338e3eaf7f3ce2ff027cd2728cc5f16f0724ea4ce7eeea139f5217ee949766d",
+  "tupleOccurrences": 409,
+  "tuplePoints": 396,
+  "relationSourceTypes": 41,
+  "tuples": [
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+      "signature": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+      "variable": "V_EVENT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+      "signature": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+      "signature": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+      "variable": "V_RESOLUTION",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_MOVEMENT",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "variable": "V_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "variable": "V_EVENT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_CORRECTION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 2
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_PRIOR",
+      "actualRelation": "private.weekly_source_office_rechecks",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_CHOICE",
+      "actualRelation": "private.weekly_source_office_row_choices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_RESOLUTION",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/007_private_weekly_source_paid_overlap_choice_current_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_OFFICE_CHOICE",
+      "actualRelation": "private.weekly_source_office_row_choices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_CORRECTION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_SOURCE_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_CONTRACT",
+      "actualRelation": "public.contracts",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_WORK_EVENT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_WORK_EVENT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "variable": "V_WORK_EVENT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 2
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 3
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CORRECTION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CORRECTION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_EXISTING_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_ECONOMIC",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 2
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PRIOR_SNAPSHOT",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CURRENT_SNAPSHOT",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_ECONOMIC",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_EXPENSE_POLICY",
+      "actualRelation": "public.weekly_source_row_expense_policy_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CURRENT_EXPENSE",
+      "actualRelation": "public.weekly_expense_authority_generations",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "variable": "REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "variable": "S",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "variable": "R",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "variable": "CHOICE",
+      "actualRelation": "private.weekly_source_office_row_choices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "variable": "CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "variable": "E",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "variable": "M",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "variable": "S",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "variable": "REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "variable": "R",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "variable": "E",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "variable": "ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "variable": "CHOICE",
+      "actualRelation": "private.weekly_source_office_row_choices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/016_private_weekly_source_invoice_movement_window_id_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "variable": "M",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "variable": "M",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "variable": "T",
+      "actualRelation": "public.weekly_source_state_transitions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "variable": "SN",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "variable": "RESOLUTION",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "variable": "SOURCE_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "variable": "UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "variable": "ECONOMIC",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "variable": "CHARGE",
+      "actualRelation": "public.weekly_source_charge_checks",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_MANIFEST",
+      "actualRelation": "public.weekly_source_client_manifests",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_MANIFEST",
+      "actualRelation": "public.weekly_source_client_manifests",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_REPORT_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_REPORT_HEADER",
+      "actualRelation": "public.weekly_source_self_bill_reports",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_INVOICE_WINDOW",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_CLIENT",
+      "actualRelation": "public.clients",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_DEFAULTS",
+      "actualRelation": "public.settings_defaults",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_MOVEMENT",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_CONTRACT",
+      "actualRelation": "public.contracts",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_CANDIDATE",
+      "actualRelation": "public.candidates",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_IDENTITY_MOVEMENT",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_SOURCE_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_SOURCE_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_SOURCE_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_MEMBER",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "EVENT_FACT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "C",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "SCOPE_FACT",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "C",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "R",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "S",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "U",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_FAMILY",
+      "actualRelation": "public.weekly_exceptional_pay_target_families",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_CONTRACT",
+      "actualRelation": "public.contracts",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_EVENT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_PROTECTED",
+      "actualRelation": "public.weekly_exceptional_pay_family_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_MAPPING",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_CHOICE",
+      "actualRelation": "private.weekly_source_office_row_choices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_TRANSITION",
+      "actualRelation": "public.weekly_source_state_transitions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_SNAPSHOT",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_FINAL",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_FINAL",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "variable": "V_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "variable": "V_RUN",
+      "actualRelation": "public.weekly_source_finalisation_pay_runs",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/023_private_weekly_source_invoice_allocation_assert_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+      "variable": "V_INVOICE",
+      "actualRelation": "public.invoices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "variable": "T",
+      "actualRelation": "public.weekly_source_state_transitions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "variable": "R",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "variable": "OLD_LINE",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "variable": "RESOLUTION",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "variable": "RAW_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "variable": "CHOICE",
+      "actualRelation": "private.weekly_source_office_row_choices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "variable": "M",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "variable": "JOURNAL",
+      "actualRelation": "private.weekly_source_office_rechecks",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "variable": "AUDIT",
+      "actualRelation": "public.audit_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "variable": "V_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "variable": "V_RESOLUTION",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/028_private_weekly_source_fixed_expense_invoice_values_v1.sqlinc",
+      "signature": "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+      "variable": "V_EXPENSE_POLICY",
+      "actualRelation": "public.weekly_source_row_expense_policy_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "variable": "V_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "variable": "V_CURRENT",
+      "actualRelation": "public.weekly_expense_authority_generations",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "variable": "V_PRIOR",
+      "actualRelation": "public.weekly_expense_authority_generations",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "variable": "V_PRIOR_MOVEMENT",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "variable": "V_EXPENSE_POLICY",
+      "actualRelation": "public.weekly_source_row_expense_policy_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "variable": "V_CONTRACT",
+      "actualRelation": "public.contracts",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "variable": "V_EVENT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "variable": "M",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "variable": "S",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "variable": "R",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "variable": "H",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "variable": "P",
+      "actualRelation": "public.weekly_source_row_expense_policy_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+      "variable": "H",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+      "variable": "S",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+      "variable": "R",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+      "variable": "P",
+      "actualRelation": "public.weekly_source_row_expense_policy_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "variable": "REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "variable": "SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "variable": "PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_MANIFEST",
+      "actualRelation": "public.weekly_source_client_manifests",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PREPARED_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_RECEIPT",
+      "actualRelation": "public.weekly_source_ordinary_pay_projection_receipts",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "variable": "V_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 2
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "variable": "V_PRIOR_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 2
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 2
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "variable": "V_PRIOR_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "signature": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "variable": "EVENT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "signature": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "variable": "CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "signature": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "variable": "SNAPSHOT",
+      "actualRelation": "public.pay_batch_timesheet_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "signature": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "variable": "HISTORY",
+      "actualRelation": "public.timesheet_pay_state_history",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "signature": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "variable": "ITEM",
+      "actualRelation": "public.pay_batch_items",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "variable": "EVENT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "variable": "CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "variable": "PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "variable": "LINE",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "variable": "TRANSITION",
+      "actualRelation": "public.weekly_source_state_transitions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "variable": "REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc",
+      "signature": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "variable": "DECISION_BUNDLE",
+      "actualRelation": "public.weekly_source_entitlement_decision_bundles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc",
+      "signature": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "variable": "MISSING_AUDIT",
+      "actualRelation": "public.audit_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "variable": "V_EVENT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "variable": "V_ROOT",
+      "actualRelation": "public.timesheets",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "variable": "V_CONTRACT",
+      "actualRelation": "public.contracts",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "variable": "V_MOVEMENT",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "variable": "V_RESOLUTION",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "variable": "V_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "variable": "U",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "variable": "C",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "variable": "W",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "variable": "SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "variable": "CORRECTION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "variable": "M",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "variable": "ORIGIN",
+      "actualRelation": "private.bpay_next_source_current_origins",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "variable": "P",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "variable": "RESOLUTION",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "variable": "E",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "variable": "V_RESOLUTION",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "variable": "V_SOURCE_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "variable": "V_ECONOMIC",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "variable": "V_ECONOMIC",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "variable": "V_CHARGE_CHECK",
+      "actualRelation": "public.weekly_source_charge_checks",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "variable": "V_CHARGE_ACCEPTANCE",
+      "actualRelation": "public.weekly_source_charge_acceptances",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+      "variable": "R",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+      "variable": "S",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+      "variable": "U",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+      "variable": "E",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+      "signature": "private.weekly_source_paid_choice_immutable_v1(uuid)",
+      "variable": "V_CHOICE",
+      "actualRelation": "private.weekly_source_office_row_choices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+      "signature": "private.weekly_source_paid_choice_immutable_v1(uuid)",
+      "variable": "V_JOURNAL",
+      "actualRelation": "private.weekly_source_office_rechecks",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+      "signature": "private.weekly_source_paid_choice_immutable_v1(uuid)",
+      "variable": "V_AUDIT",
+      "actualRelation": "public.audit_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "variable": "ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "variable": "UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "variable": "CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "variable": "SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "variable": "PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "variable": "CORRECTION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "R",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "U",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "CHOICE",
+      "actualRelation": "private.weekly_source_office_row_choices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "JOURNAL",
+      "actualRelation": "private.weekly_source_office_rechecks",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "TARGET",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "variable": "TARGET_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+      "variable": "M",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+      "variable": "R",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+      "variable": "ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+      "variable": "E",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+      "variable": "REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+      "variable": "U",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+      "variable": "SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+      "variable": "SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+      "variable": "NORMAL",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+      "variable": "INVOICE",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/071_private_weekly_source_known_source_key_v1.sqlinc",
+      "signature": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+      "variable": "V_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/071_private_weekly_source_known_source_key_v1.sqlinc",
+      "signature": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/071_private_weekly_source_known_source_key_v1.sqlinc",
+      "signature": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_CORRECTION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 2
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_PRIOR",
+      "actualRelation": "private.weekly_source_office_rechecks",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_CHOICE",
+      "actualRelation": "private.weekly_source_office_row_choices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "variable": "V_RESOLUTION",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "variable": "V_OFFICE_CHOICE",
+      "actualRelation": "private.weekly_source_office_row_choices",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 2
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 3
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CORRECTION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CORRECTION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_EXISTING_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_ECONOMIC",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 2
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PRIOR_SNAPSHOT",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CURRENT_SNAPSHOT",
+      "actualRelation": "public.weekly_source_final_snapshot_lines",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_ECONOMIC",
+      "actualRelation": "public.weekly_source_row_economic_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_EXPENSE_POLICY",
+      "actualRelation": "public.weekly_source_row_expense_policy_snapshots",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CURRENT_EXPENSE",
+      "actualRelation": "public.weekly_expense_authority_generations",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_MANIFEST",
+      "actualRelation": "public.weekly_source_client_manifests",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_MANIFEST",
+      "actualRelation": "public.weekly_source_client_manifests",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_REPORT_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_REPORT_HEADER",
+      "actualRelation": "public.weekly_source_self_bill_reports",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_INVOICE_WINDOW",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_CLIENT",
+      "actualRelation": "public.clients",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_DEFAULTS",
+      "actualRelation": "public.settings_defaults",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_MOVEMENT",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_CONTRACT",
+      "actualRelation": "public.contracts",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_CANDIDATE",
+      "actualRelation": "public.candidates",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_IDENTITY_MOVEMENT",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_SOURCE_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_SOURCE_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_SOURCE_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "variable": "V_MEMBER",
+      "actualRelation": "public.weekly_source_billing_movements",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "EVENT_FACT",
+      "actualRelation": "public.weekly_work_events",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "C",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "SCOPE_FACT",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "C",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "R",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "S",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "variable": "U",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "variable": "V_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "variable": "V_ROW",
+      "actualRelation": "public.weekly_source_upload_rows",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "variable": "V_RESOLUTION",
+      "actualRelation": "public.weekly_source_row_resolutions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PREPARED_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_RECEIPT",
+      "actualRelation": "public.weekly_source_ordinary_pay_projection_receipts",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "variable": "V_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "variable": "V_PRIOR_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "actualRelation": "public.weekly_source_cycles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_GROUP",
+      "actualRelation": "public.weekly_source_groups",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "actualRelation": "public.weekly_source_report_scopes",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "actualRelation": "public.weekly_final_source_correction_sessions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_REVISION",
+      "actualRelation": "public.weekly_source_final_revisions",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_UPLOAD",
+      "actualRelation": "public.weekly_source_uploads",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PUBLICATION",
+      "actualRelation": "public.weekly_source_projection_publications",
+      "count": 1
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PROFILE",
+      "actualRelation": "public.weekly_source_format_profiles",
+      "count": 1
+    }
+  ],
+  "newScalarPoints": [
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "aggregates": 2,
+      "operand": "TEXT_BEFORE_UUID_CAST",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/024_private_weekly_source_paid_overlap_current_snapshot_v1.sqlinc",
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+      "aggregates": 1,
+      "operand": "TEXT_BEFORE_UUID_CAST",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "aggregates": 1,
+      "operand": "TEXT_BEFORE_UUID_CAST",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "aggregates": 1,
+      "operand": "TEXT_BEFORE_UUID_CAST",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "aggregates": 1,
+      "operand": "TEXT_BEFORE_UUID_CAST",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/071_private_weekly_source_known_source_key_v1.sqlinc",
+      "signature": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+      "aggregates": 1,
+      "operand": "TEXT_BEFORE_UUID_CAST",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "aggregates": 2,
+      "operand": "TEXT_BEFORE_UUID_CAST",
+      "native": "NOT_RUN"
+    }
+  ],
+  "expenseOperator": "JSONB_EXTRACTION_THEN_JSONB_OBJECT_CONCAT",
+  "programs": [
+    {
+      "file": "supabase/migrations/17102026_0231_weekly_source_paid_same_separate_10_footprint.sql",
+      "topLevelStatements": 16,
+      "parsedBodies": 2,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql",
+      "topLevelStatements": 2,
+      "parsedBodies": 0,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/007_private_weekly_source_paid_overlap_choice_current_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/008_private_weekly_source_paid_overlap_projection_lock_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 0,
+      "bodyState": "NOT_PROVED_CATALOGUE_DEPENDENT_RECORD"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/012_private_weekly_source_paid_choice_revision_guard_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/015_private_weekly_source_billing_movement_hash_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/016_private_weekly_source_invoice_movement_window_id_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 0,
+      "bodyState": "NOT_PROVED_CATALOGUE_DEPENDENT_RECORD"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/020_private_weekly_source_ordinary_projection_source_units_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/023_private_weekly_source_invoice_allocation_assert_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/024_private_weekly_source_paid_overlap_current_snapshot_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/028_private_weekly_source_fixed_expense_invoice_values_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/036_private_weekly_source_ordinary_projection_current_expenses_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/040_private_weekly_source_roster_prior_states_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/043_private_weekly_source_off_rule_setup_shape_assert_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/046_private_weekly_source_rule_qualification_execute_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/047_private_weekly_source_rule_qualification_transport_status_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 0,
+      "bodyState": "NOT_PROVED_CATALOGUE_DEPENDENT_RECORD"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/052_private_weekly_source_native_line_vat_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 0,
+      "bodyState": "NOT_PROVED_CATALOGUE_DEPENDENT_RECORD"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/056_private_weekly_source_nhsp_negative_comparison_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/059_private_weekly_source_nhsp_projection_choice_recheck_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/060_private_weekly_source_nhsp_invoice_only_vector_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/064_public_weekly_source_workspace_scopes_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/070_private_weekly_source_ordinary_projection_active_movements_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/071_private_weekly_source_known_source_key_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/97_revision_guard_triggers.sqlinc",
+      "topLevelStatements": 3,
+      "parsedBodies": 0,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/98_complete_current_classification.sqlinc",
+      "topLevelStatements": 41,
+      "parsedBodies": 8,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/99_acl.sqlinc",
+      "topLevelStatements": 132,
+      "parsedBodies": 0,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt_v1.sql",
+      "topLevelStatements": 2,
+      "parsedBodies": 0,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 0,
+      "bodyState": "NOT_PROVED_CATALOGUE_DEPENDENT_RECORD"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 0,
+      "bodyState": "NOT_PROVED_CATALOGUE_DEPENDENT_RECORD"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/99_acl.sqlinc",
+      "topLevelStatements": 27,
+      "parsedBodies": 0,
+      "bodyState": "GRAMMAR_ONLY_NOT_NATIVE"
+    }
+  ],
+  "catalogueDependentBodies": [
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "error": "\"v_prior_movement.id\" is not a known variable",
+      "completePredecessorError": "\"v_prior_movement.id\" is not a known variable",
+      "bodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "error": "\"v_snapshot.work_date\" is not a known variable",
+      "completePredecessorError": "\"v_snapshot.work_date\" is not a known variable",
+      "bodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "error": "\"p.id\" is not a known variable",
+      "completePredecessorError": null,
+      "bodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "signature": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "error": "\"v_charge_acceptance.id\" is not a known variable",
+      "completePredecessorError": null,
+      "bodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "error": "\"v_prior_movement.id\" is not a known variable",
+      "completePredecessorError": "\"v_prior_movement.id\" is not a known variable",
+      "bodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "error": "\"v_snapshot.work_date\" is not a known variable",
+      "completePredecessorError": "\"v_snapshot.work_date\" is not a known variable",
+      "bodyCompilation": "NOT_PROVED"
+    }
+  ],
+  "uniqueCatalogueDependentSignatures": 4,
+  "nativeBodyCompilation": "NOT_PROVED",
+  "native": "NOT_RUN",
+  "dbConnections": 0,
+  "bankingBodiesRead": 0,
+  "substitutions": 0
+}
