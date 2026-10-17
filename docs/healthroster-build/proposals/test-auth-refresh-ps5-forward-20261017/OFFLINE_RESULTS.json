@@ -1,0 +1,17 @@
+{
+  "status": "PASS_SOURCE_ONLY",
+  "inheritedProtocolTests": 11,
+  "ps5SuccessorTests": 3,
+  "originalPackageFilesPreserved": 19,
+  "fullCompleteParentReversals": 3,
+  "actualWindowsSdkAndConfigImports": "PASS_NO_BROWSER_LAUNCH",
+  "powerShellAclSource": "UNCHANGED_PARSED_ONLY_NOT_EXECUTED",
+  "realPs5SecurityImport": "PASS_NATIVE_PS5_MODULE_AND_PUBLIC_DIRECTORY_GET_ACL_ONLY",
+  "setAcl": "NOT_RUN",
+  "privateContentsRead": false,
+  "auth": "NOT_RUN",
+  "browser": "NOT_RUN",
+  "network": "NOT_RUN",
+  "stateExport": "NOT_RUN",
+  "native": "NOT_RUN"
+}

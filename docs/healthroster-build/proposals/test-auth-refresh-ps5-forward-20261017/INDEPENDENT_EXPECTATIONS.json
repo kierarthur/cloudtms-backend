@@ -1,0 +1,21 @@
+{
+  "version": "TEST_AUTH_REFRESH_ROOT_EXPECTATIONS_V1",
+  "executionOwner": "root, outside every native interval",
+  "authorExecution": "NOT_RUN",
+  "fixedFrontend": "https://testmode.arthur-rai.co.uk",
+  "fixedBackend": "https://test-cloudtms-backend.kier-88a.workers.dev",
+  "allowedAuthWrites": ["POST /auth/login exactly once", "POST /auth/refresh at most once"],
+  "requiredActualReads": ["GET /readyz => 200", "GET /api/me => 200, actual UUID and admin role", "GET /api/weekly-source/v1/workspace?tab=queries => 200, WEEKLY_SOURCE_IMPORT_WORKSPACE_V1 and queries.rows array"],
+  "explicitReadRefreshPolicy": "existing authFetch, auth401Mode return",
+  "positiveResult": "AUTH_REFRESHED only after state export and confirmed browser close",
+  "freshState": "new random direct child of I2 .codex-tmp, private Windows ACL, ignored, never shared Frontend state",
+  "safe2faResult": "HOLD/AUTH_2FA_REQUIRED; no 2FA method is allowed",
+  "otherFailure": "closed HOLD code; no raw errors, user data, credential or storage contents",
+  "transport": "reject redirects, forbidden writes, other origins, TLS errors and excess requests; abort other reads",
+  "captures": "no runner, traces, videos, screenshots, page logs or credential-bearing child stdout/stderr",
+  "credentials": "load ignored approved env in child after browser launch; synchronously restore process environment",
+  "sharedFiles": "metadata only, never read/copy/hash credential or shared state contents",
+  "maximumParentWait": "90 seconds, abort then 10 seconds before own-tree termination and bounded close wait",
+  "meaning": "admin/query-workspace login admission only; no native WP-PP, fixture, Bank producer, public financial join or business-currentness claim",
+  "sourceProof": "two full raw parent inverses, actual public source/SDK/config import checks and synthetic actual-code vectors; no real browser proof"
+}

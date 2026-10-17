@@ -1,0 +1,123 @@
+{
+  "version": "TEST_AUTH_REFRESH_PS5_FINITE_FORWARD_FREEZE_V1",
+  "parentCommit": "ba01714404c0ff28adf02ceefb04bd6723206823",
+  "privateContentsIncluded": false,
+  "auth": "NOT_RUN",
+  "files": [
+    {
+      "file": "admission.mjs",
+      "bytes": 1255,
+      "sha256": "9530585f413b8c36807a7af8530f68f4f2afe87ca5f654a67cf23d7606b12447"
+    },
+    {
+      "file": "credentials-child.mjs",
+      "bytes": 771,
+      "sha256": "9a8be0bc76302102dafbb697b474c3ce61e7b48fd8baafc7e2e39045a6afc894"
+    },
+    {
+      "file": "forward/authenticate.mjs",
+      "bytes": 2476,
+      "sha256": "c6211563a69da5605684c308917dfe06d5ed61579a2a1afa0b08d45218e46370"
+    },
+    {
+      "file": "forward/config.mjs",
+      "bytes": 607,
+      "sha256": "698c3c746c6f63e642171a748cc270b53832f66ed77f59dd929afbe04ba59de6"
+    },
+    {
+      "file": "FULL_PARENT_TRANSFERS.json",
+      "bytes": 6802,
+      "sha256": "0212f4962a2a5b0f7ea675433a7e71e90ec875693d2b4eb3c34757beb534f3d2"
+    },
+    {
+      "file": "INDEPENDENT_EXPECTATIONS.json",
+      "bytes": 1890,
+      "sha256": "92460d46f4a850820a64754c80ac31d9c5736629692f94de9a4a090b5383cc4d"
+    },
+    {
+      "file": "LAUNCHER_FULL_PARENT_TRANSFER.json",
+      "bytes": 1876,
+      "sha256": "26e319354c782a3f23b12ab802cd8c2d14855477b75aa23cdd4caa91db841b50"
+    },
+    {
+      "file": "OFFLINE_RESULTS.json",
+      "bytes": 557,
+      "sha256": "f667895201a7b70060e3a6498359bd1347db8afc2472d40ada26fe524464902d"
+    },
+    {
+      "file": "policy.mjs",
+      "bytes": 4542,
+      "sha256": "d72eee8fc975a806a4d0cbbf9ecbbbca6d076897de5a5ef215a1b8cf8fe420e3"
+    },
+    {
+      "file": "ps5-module-preflight.ps1",
+      "bytes": 1304,
+      "sha256": "6df35791cfbe6b301a04228f606992deac082651e31926a2c418403c6053be95"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4128,
+      "sha256": "0c4775a90029dffa64871ce2e9c00516316dcd9c9911cf3d5fba5b06f8712517"
+    },
+    {
+      "file": "reference/auth.setup.ts",
+      "bytes": 1989,
+      "sha256": "ce6324a65869d6b4d58a3038b4f3b8e0204ff2dda49e80ef95c249817c1fe9ef"
+    },
+    {
+      "file": "reference/health-query-workspace-schema.js.txt",
+      "bytes": 6398,
+      "sha256": "77495c4ffb9b05ec0ec4ce3bf5cf96c5d9c9ea1a74911dcfa81460626b7dc1aa"
+    },
+    {
+      "file": "reference/playwright.config.ts",
+      "bytes": 790,
+      "sha256": "4648b57b4a5d78e86f96ee3f7472e9cdb99977bba3fbc22750ad363a8475036b"
+    },
+    {
+      "file": "reference/r1-run-auth-refresh.mjs.txt",
+      "bytes": 8354,
+      "sha256": "b6def16fa074a21d96014fbdab935145f00e49aa2484bab530ca87057db8d05a"
+    },
+    {
+      "file": "run-auth-refresh.mjs",
+      "bytes": 8962,
+      "sha256": "70ecec9bb7f4d2b5e39edeb66f8a7cfdf5c0da9a3272fe6f702282d3b4b29bbc"
+    },
+    {
+      "file": "secure-owned.ps1",
+      "bytes": 1349,
+      "sha256": "b9bbeabb5ea8cee109a08a866d8590cac8c22b2d2dc52d83562e257789daf211"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 2719,
+      "sha256": "d8dfd7d2e09197208a30a8d51c02310fbc5523c402b12c11de15d1a9727bb913"
+    },
+    {
+      "file": "test-ps5.mjs",
+      "bytes": 3776,
+      "sha256": "b0ace28b4afbb40adf2da91d8cf8f4ec67ffece52125e4e70865ef921dedae3f"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 10023,
+      "sha256": "e696f5188bfdf08da5af0ec75fa15896dbc5020cf82f088c0e8a8674387ee5ea"
+    },
+    {
+      "file": "verify-forward.py",
+      "bytes": 3172,
+      "sha256": "9e098b573e9a3c21a9b178f1ee109a1cb1583086cabb3e6d4315dd9ee40cadc7"
+    },
+    {
+      "file": "verify.py",
+      "bytes": 7037,
+      "sha256": "3ccd880b9a356e44b32fcb885077a17d4b9bf20237fe15070fd16e69270a687f"
+    },
+    {
+      "file": "worker.mjs",
+      "bytes": 5291,
+      "sha256": "40661ff677ab7387103f1a68d6da5352c7c9d0dfdb5a856bb169f4a0f97fbb7d"
+    }
+  ]
+}

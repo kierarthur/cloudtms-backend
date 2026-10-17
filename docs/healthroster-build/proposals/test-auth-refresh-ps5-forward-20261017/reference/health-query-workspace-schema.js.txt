@@ -1,0 +1,94 @@
+  function normalisePage(value) {
+    const raw = asObject(value);
+    return {
+      rows: asArray(raw.rows), total_count: integer(raw.total_count), next_cursor: asText(raw.next_cursor),
+      has_more: raw.has_more === true, record_version: asText(raw.record_version), stale: raw.stale === true
+    };
+  }
+
+
+  function normaliseWorkspace(payload) {
+    const source = asObject(payload?.workspace || payload);
+    const profile = asObject(source.profile);
+    const profileId = asText(profile.id || source.profile_id || source.source_profile_kind);
+    const context = asObject(source.context);
+    const counts = asObject(source.counts);
+    const cycleState = asText(context.cycle_state || source.cycle_state);
+    const finalise = asObject(source.finalise);
+    const queries = asObject(source.queries);
+    const imports = asObject(source.imports);
+    const journey = asObject(imports.journey);
+    const permissions = asObject(source.permissions);
+    const payView = permissions.contract === 'WEEKLY_SOURCE_PAYMENT_VIEW_V1' || permissions.view === 'PAY';
+    const payChecklist = permissions.checklist?.available === true
+      && permissions.checklist?.read_only === true && permissions.checklist?.pay_only === true
+      && permissions.checklist?.action_links === false && asArray(permissions.allowed_tabs).includes('checklist');
+    return {
+      contract: asText(source.contract) || CONTRACT,
+      permissions: payView ? {
+        contract: 'WEEKLY_SOURCE_PAYMENT_VIEW_V1', view: 'PAY', allowed_tabs: payChecklist ? ['queries', 'checklist'] : ['queries'], landing_tab: 'queries',
+        allowed_sections: asArray(permissions.allowed_sections).filter(section => ['questions', 'checks', 'protected'].includes(section)),
+        can_upload: false, can_finalise: false, can_manage_settings: false,
+        checklist: { available: payChecklist, read_only: true, pay_only: true, action_links: false }
+      } : null,
+      kept_as_paid_contexts: Array.isArray(source.kept_as_paid_contexts) ? source.kept_as_paid_contexts : [],
+      combined_source_workspace: source.combined_source_workspace === true,
+      workspace_version: asText(source.workspace_version || source.record_version),
+      recheck_payload: asObject(source.recheck_payload),
+      profile: {
+        id: profileId, label: asText(profile.label || source.source_label) || 'Weekly source',
+        finalise_label: asText(profile.finalise_label) || FINALISE_LABELS[profileId] || 'Finalise week'
+      },
+      context: {
+        subtitle: asText(context.subtitle || source.subtitle),
+        cycle_state: CYCLE_STATES.has(cycleState) ? cycleState : (cycleState || 'To check'),
+        cycle_tone: tone(context.cycle_tone, cycleState === 'Finalised' ? 'positive' : 'warning'),
+        controls: normaliseControls(context.controls)
+      },
+      selected: {
+        source_group_id: asText(source.selected?.source_group_id || context.source_group_id),
+        source_cycle_id: asText(source.selected?.source_cycle_id || context.source_cycle_id),
+        client_id: asText(source.selected?.client_id || context.client_id),
+        report_scope_id: asText(source.selected?.report_scope_id || context.report_scope_id),
+        projection_publication_id: asText(source.selected?.projection_publication_id || context.projection_publication_id)
+      },
+      counts: { queries: integer(counts.queries), blockers: integer(counts.blockers), paid_unresolved: integer(counts.paid_unresolved) },
+      imports: {
+        ...normalisePage(imports),
+        journey: {
+          authority_mode: asText(journey.authority_mode).toUpperCase(),
+          title: asText(journey.title), body: asText(journey.body),
+          waiting_count: integer(journey.waiting_count),
+          waiting_rows: asArray(journey.waiting_rows),
+          attention_count: integer(journey.attention_count),
+          attention_rows: asArray(journey.attention_rows),
+          ready_count: integer(journey.ready_count),
+          ready_rows: asArray(journey.ready_rows)
+        }
+      },
+      queries: { ...normalisePage(queries), protected_pay_enabled: queries.protected_pay_enabled === true, protected_shifts: normalisePage(queries.protected_shifts), bulk_actions: normaliseBulkActions(payView ? {} : queries.bulk_actions), office_checks: normalisePage(queries.office_checks) },
+      finalise: {
+        prepared: finalise.prepared !== false,
+        prepare_action: asObject(finalise.prepare_action),
+        exclusion_confirmation: asText(finalise.exclusion_confirmation),
+        excluded_rows: asArray(finalise.excluded_rows),
+        ...normalisePage(finalise), ready: normalisePage(finalise.ready), blocked: normalisePage(finalise.blocked), complete: normalisePage(finalise.complete),
+        active_list: ((journey.authority_mode === 'TIMESHEET_AUTHORITY' ? ['ready', 'blocked', 'complete'] : ['ready', 'blocked'])
+          .includes(asText(finalise.active_list).toLowerCase()) && finalise[asText(finalise.active_list).toLowerCase()]?.total_count)
+          ? asText(finalise.active_list).toLowerCase() : finalise.ready?.total_count ? 'ready'
+            : finalise.blocked?.total_count ? 'blocked'
+              : journey.authority_mode === 'TIMESHEET_AUTHORITY' && finalise.complete?.total_count ? 'complete' : 'blocked',
+        confirmation_text: asText(finalise.confirmation_text), confirmation_required: finalise.confirmation_required !== false,
+        finalise_enabled: finalise.finalise_enabled === true, finalise_payload: asObject(finalise.finalise_payload),
+        source_summary: asText(finalise.source_summary),
+        rate_warnings: normaliseRateWarnings(finalise.rate_warnings, profileId),
+        tracker: normaliseFinalisationTracker(finalise.tracker || source.finalisation_tracker),
+        approved_hours_follow_up: normaliseApprovedHoursFollowUp(finalise.approved_hours_follow_up)
+      },
+      history: {
+        ...normalisePage(source.history), cycle_filter: asText(source.history?.cycle_filter) || 'CURRENT_PAY_CYCLE',
+        cycle_options: asArray(source.history?.cycle_options).map((entry) => ({ value: asText(entry?.value), label: asText(entry?.label) })).filter((entry) => entry.value && entry.label)
+      },
+      notices: asArray(source.notices).map((entry) => ({ tone: tone(entry?.tone, 'warning'), title: asText(entry?.title), body: asText(entry?.body) })).filter((entry) => entry.title || entry.body)
+    };
+  }
