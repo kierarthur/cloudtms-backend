@@ -1,9 +1,9 @@
 [
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
-    "commit": "070d6522a32177f8e2b5a046db30e74e79c3fc27",
+    "commit": "6457ca6251dba3ea0687ee8a227f37f61e43cdb2",
     "bytes": 24285,
-    "sha256": "7357e7f14528317f2e268723d9d50bd6707179791b51bb07facb2e7e9631be11"
+    "sha256": "e973886a39a594ca8886286ac74aeb72039458bb9fe1a127bb05740d928bbdda"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/ADMISSION_FULL_PARENT_FORWARD.json",
@@ -49,9 +49,9 @@
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/contract.mjs",
-    "commit": "5bb2263acdd44ff757e219becfb6be6e11f298ba",
+    "commit": "6457ca6251dba3ea0687ee8a227f37f61e43cdb2",
     "bytes": 7643,
-    "sha256": "92da72cf00390a629e1cf959db6f2cae30e617c217a7ceca3611b71ce4960d9c"
+    "sha256": "7a9ee854c214ccbc3b8851ceae32dd0bb7ceb5e90aa6f41f44f585d858b2f4db"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/freeze.mjs",
@@ -703,9 +703,9 @@
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/SOURCE_PINS.json",
-    "commit": "5bb2263acdd44ff757e219becfb6be6e11f298ba",
+    "commit": "6457ca6251dba3ea0687ee8a227f37f61e43cdb2",
     "bytes": 4362,
-    "sha256": "a1e4ff63b5919b7ee2f447dbb952a73eb99adee4c6343cb11ccf8044da910c31"
+    "sha256": "95cd9f9f54ff0f548bf49dba26b4f3304d304bea97cde4de31a74f7ba175946a"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/source-image.test.mjs",
@@ -799,15 +799,15 @@
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/MANIFEST.json",
-    "commit": "59b2aa40e3b58c45bcbb6727c80b0e49f7e08961",
+    "commit": "38ee09826fcc6a8cadfc562b49d2ee40e374dc7f",
     "bytes": 2880,
-    "sha256": "81f626622c61046faa1da07f12a9088e13e6baef6a1e3f33c87e9c1df3148e06"
+    "sha256": "91549113312cc19b092b205b00f6ed1d049aa72cd948c2bb3326fb11ab00faab"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/EXTERNAL_SOURCE_PINS.json",
-    "commit": "59b2aa40e3b58c45bcbb6727c80b0e49f7e08961",
+    "commit": "38ee09826fcc6a8cadfc562b49d2ee40e374dc7f",
     "bytes": 2057,
-    "sha256": "fc5d8566dab287e2c2fef26c1b38ec16c7a9c46b75f1ae31165e203f26a7b9f9"
+    "sha256": "5cc37b170fabf96e31d187cd951533705b4eb7e9a3b7fa8767782582acf8db8c"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/FULL_PARENT_COMPOSITION.json",
