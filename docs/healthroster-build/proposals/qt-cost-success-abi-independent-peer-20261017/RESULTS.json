@@ -1,0 +1,20 @@
+{
+ "version":"QT_COST_OBSERVED_SUCCESS_ABI_INDEPENDENT_PEER_V1",
+ "verdict":"ACCEPT_BOUNDED_SOURCE_ONLY",
+ "authorManifestSha256":"51a83f93963bb22dac85af2c6d19679ed0af46868ed85d869a2ed7e1332b737b",
+ "authorForwardSha256":"1902951611c3b1789b06cf323be1b9c969a365b7602e59118933ead5a3d43bb6",
+ "authorTestsPass":124,
+ "independentTestsPass":5,
+ "files":60,
+ "completeRawInverses":6,
+ "unchangedParentRows":39,
+ "runtimeOwners":2,
+ "publicSourcePinsPass":8,
+ "pg17GrammarAst":"PASS_20_MAIN_5_FRESH_10_PROGRAMMES",
+ "actualReceipt":"SAVED_ONLY_HOLD_RETAINED",
+ "actualSourceAdmission":"NOT_RUN",
+ "native":"NOT_RUN",
+ "performanceRestorationQtAcceptance":"NOT_PROVED",
+ "trackedWrites":false,
+ "privateAccess":false
+}

@@ -1,0 +1,20 @@
+{
+  "version": "INSTALL2_MECHANICAL_FRESH_SELECTION_V1",
+  "rows": [
+    {
+      "target": "scripts/healthroster-install2-local-provider.mjs",
+      "parent": "scripts/healthroster-install1-local-provider.mjs",
+      "sha256": "d891d33aa0065d0dd4a05d0be37059899bbcbc66bebcf620a7611daf4a5aca64"
+    },
+    {
+      "target": "scripts/healthroster-install2-local-schema.mjs",
+      "parent": "scripts/healthroster-install1-local-schema.mjs",
+      "sha256": "11b289b5c795ec586e7b1de80d3c1b0ce65a78d116613fc673ca7b0fdce3e712"
+    },
+    {
+      "target": "scripts/healthroster-install2-local-seal-profile.mjs",
+      "parent": null,
+      "sha256": "8e125aa43fd01e04f5f82957a827145159cbd2b98c9d0834ffc278c7cb1b7215"
+    }
+  ]
+}

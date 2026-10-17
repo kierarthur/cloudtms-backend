@@ -1,0 +1,26 @@
+{
+  "version": "QT_COST_SUCCESS_ABI_PEER_MANIFEST_V1",
+  "sourceOnly": true,
+  "files": [
+    {
+      "file": "RESULTS.json",
+      "bytes": 712,
+      "sha256": "c08dc8369dc837760a2b44001da799d9ea415d89be7262d152617e7e6d356448"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 2341,
+      "sha256": "8e49d266866c1d933b963388513bf6dee8ad8a9a32ec10a7a819d239d6788d1c"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 3150,
+      "sha256": "d3ed382e951228a7d91ec95e768123dd34c89ff38c3405b6aaa12fc438b352f9"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 2495,
+      "sha256": "edc67e58bdb9f200c9a11a132261497ee511f1689c09a316b826c56fb22c3402"
+    }
+  ]
+}

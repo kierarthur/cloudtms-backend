@@ -1,0 +1,225 @@
+{
+  "version": "INSTALL2_MECHANICAL_FRESH_SOURCE_MANIFEST_V1",
+  "rows": [
+    {
+      "path": "build.py",
+      "bytes": 11449,
+      "sha256": "bb3d71b17fa4d87f0da3c6984841fa8d25977f4a820404b5155d91ebeaa56c69"
+    },
+    {
+      "path": "COMMANDS.ps1.txt",
+      "bytes": 5189,
+      "sha256": "2d31ba588d3efae2384feb1917021730db6939011a9062b785f3141da08eec9d"
+    },
+    {
+      "path": "FORWARD.json",
+      "bytes": 12490,
+      "sha256": "cc9be177cf9a6ee36e023162a5e85006d762a2540685646caf91d32563b88f89"
+    },
+    {
+      "path": "freeze.py",
+      "bytes": 643,
+      "sha256": "f5f867fcdf3c39426411e505d12e7a3aaa9d42183f4e0e3fd275a31139e045c6"
+    },
+    {
+      "path": "parents/.node-version",
+      "bytes": 3,
+      "sha256": "68ca3fba3b7e864770cb61aeb306d4bd4354b68ab4dd38450860c5d823e42a53"
+    },
+    {
+      "path": "parents/AGENTS.md",
+      "bytes": 57328,
+      "sha256": "ae1357fb0372932d1ae05cc15c7b02662c71d5e96f00cecb185fccc3f2be29e9"
+    },
+    {
+      "path": "parents/docs/AUTOMATIC_TEST_DEPLOYMENT.md",
+      "bytes": 9201,
+      "sha256": "9bcad58f6c0c1d7b015bcdc881770a45d16ad2ff6f69628d4ef3cc9c59f118fe"
+    },
+    {
+      "path": "parents/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1753835,
+      "sha256": "4e3cf52c02d0d9bc48f679056ab83ee9108c10cc722f97228fbdf1bf129ae155"
+    },
+    {
+      "path": "parents/docs/DATABASE_RELEASE_BIBLE.md",
+      "bytes": 18267,
+      "sha256": "968ab48d5b88181e6eb12f067309dd41162d3a2d816b47fb076e2bb4b87a7f5b"
+    },
+    {
+      "path": "parents/docs/healthroster-build/install1-source/LOCAL_PP_CONTRACT_DELTA_REVIEW.json",
+      "bytes": 28888,
+      "sha256": "234801f48ae4064759eaab9fd07f5c52f8f291a26cb26b6f1920de38c864b19e"
+    },
+    {
+      "path": "parents/docs/healthroster-build/install1-source/LOCAL_PP_FIRST_USE_SECURITY.json",
+      "bytes": 1793,
+      "sha256": "e7a0b773c4b6570aa99bd2e217f5ecb67527ff6dd5612a323284bc7cbb90cb34"
+    },
+    {
+      "path": "parents/docs/healthroster-build/install1-source/LOCAL_PROVIDER_SEAL_PREREQUISITES.json",
+      "bytes": 782,
+      "sha256": "8a34844c0d3fce0f513b836f50365626773ed75377c5ae8dd66eb78cbe836d4d"
+    },
+    {
+      "path": "parents/docs/healthroster-build/install1-source/LOCAL_SCHEMA_CHECKPOINT.json",
+      "bytes": 790147,
+      "sha256": "b6e49c61f9961f03e11f44fe9387d4c2ee3c16b58ad4d71772e727ceb248eeae"
+    },
+    {
+      "path": "parents/docs/healthroster-build/install1-source/LOCAL_SEAL_CLEANUP_DURING_PAUSE.json",
+      "bytes": 473,
+      "sha256": "f2e48c72afbdef411c1809f5314490444285d4fabe758f943676506ae9a57521"
+    },
+    {
+      "path": "parents/docs/healthroster-build/install1-source/OWNER_PAUSE_CHECKPOINT.md",
+      "bytes": 2904,
+      "sha256": "acb31e00585494dae3b83d31bab0a561382fe96b293d0565da89f91a13ab4796"
+    },
+    {
+      "path": "parents/package.json",
+      "bytes": 4861,
+      "sha256": "10368cfa19ee3c886e7063fa55b659e003da61b06afa08f8d3194eabf5d8c7f9"
+    },
+    {
+      "path": "parents/scripts/bpay-next-final-definers.mjs",
+      "bytes": 13639,
+      "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
+    },
+    {
+      "path": "parents/scripts/cloudtms-db-release-lib.mjs",
+      "bytes": 32174,
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "path": "parents/scripts/cloudtms-managed-psql.mjs",
+      "bytes": 5398,
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d"
+    },
+    {
+      "path": "parents/scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "path": "parents/scripts/cloudtms-managed-release.mjs",
+      "bytes": 48153,
+      "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8"
+    },
+    {
+      "path": "parents/scripts/healthroster-install1-local-provider.mjs",
+      "bytes": 4548,
+      "sha256": "e8925257c83f2a98c2980e1cd5e26ccc34f2bf03ea5dbf05bb3325b515154566"
+    },
+    {
+      "path": "parents/scripts/healthroster-install1-local-schema.mjs",
+      "bytes": 12720,
+      "sha256": "5d03eb668083e7c186bd9f52d2d63a4e38762e0c4c4d1747d1f4e460b559db55"
+    },
+    {
+      "path": "parents/scripts/seal-local-database-contract.mjs",
+      "bytes": 4601,
+      "sha256": "7549daf2187162b11e1ec1d04bf35bf23ef4d16f1e5b9b0961db1a42d4fd54cd"
+    },
+    {
+      "path": "parents/scripts/verify-healthroster-install1-local-seal.mjs",
+      "bytes": 3236,
+      "sha256": "3caf15fc116f285604e69372070ead820c3551cc3cd6f292622f2982b1ebf434"
+    },
+    {
+      "path": "parents/scripts/weekly-source-reader-release.mjs",
+      "bytes": 2834,
+      "sha256": "b35b0d8698fbddecfc2b98f9226d5ecc88a076643366533822c3e3178b72e313"
+    },
+    {
+      "path": "parents/supabase/baseline/22082026_1506_cloudtms_new_database_bootstrap.sql",
+      "bytes": 4978,
+      "sha256": "73dea8756a84a272a9ab53762c912c39594200fe596d39fc45764ecf300321fd"
+    },
+    {
+      "path": "parents/supabase/migrations/22082026_1507_cloudtms_database_release_control_plane.sql",
+      "bytes": 2301,
+      "sha256": "3d4542bebaa91a3636a61929749168b3cb0840dbbd06529af0c8d5a40a6c3ece"
+    },
+    {
+      "path": "parents/supabase/release/baseline-repeatable-lock.json",
+      "bytes": 56579,
+      "sha256": "c2779bc67cfbef0c10bbd7937f4fe571dce5daab4e8be3f93fa46bcc2cdcef5d"
+    },
+    {
+      "path": "parents/supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "path": "parents/supabase/release/current-release.json",
+      "bytes": 36808,
+      "sha256": "b9b045c6038c46238a8a47945bb201e336ffb8dc0afdee86f9524ece9d29cbe2"
+    },
+    {
+      "path": "parents/supabase/release/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    },
+    {
+      "path": "parents/supabase/release/migration-lock.json",
+      "bytes": 79674,
+      "sha256": "cc73db6af457e09cce092b70bc3cfcf21c1cb2c0bbf8868ede26f8d454d73c2e"
+    },
+    {
+      "path": "parents/supabase/release/protected-boundary-lock.json",
+      "bytes": 1144,
+      "sha256": "60d2d3d8a74535cf52c5213803d19b0654af48955b6096726e2b7a882545f30c"
+    },
+    {
+      "path": "PARENTS.json",
+      "bytes": 5639,
+      "sha256": "2662167d18104dd30ed2facd8a0fe250712b78527d2133a6deababb550c161a0"
+    },
+    {
+      "path": "payload/scripts/healthroster-install2-local-provider.mjs",
+      "bytes": 4473,
+      "sha256": "d891d33aa0065d0dd4a05d0be37059899bbcbc66bebcf620a7611daf4a5aca64"
+    },
+    {
+      "path": "payload/scripts/healthroster-install2-local-schema.mjs",
+      "bytes": 11574,
+      "sha256": "11b289b5c795ec586e7b1de80d3c1b0ce65a78d116613fc673ca7b0fdce3e712"
+    },
+    {
+      "path": "payload/scripts/healthroster-install2-local-seal-profile.mjs",
+      "bytes": 6320,
+      "sha256": "8e125aa43fd01e04f5f82957a827145159cbd2b98c9d0834ffc278c7cb1b7215"
+    },
+    {
+      "path": "profile-source.mjs",
+      "bytes": 6320,
+      "sha256": "8e125aa43fd01e04f5f82957a827145159cbd2b98c9d0834ffc278c7cb1b7215"
+    },
+    {
+      "path": "README.md",
+      "bytes": 8850,
+      "sha256": "857bea75db35ea806fd1d235bf8eae060af4f75d07c524dfd85cec964eccc1f0"
+    },
+    {
+      "path": "RESULTS.json",
+      "bytes": 1473,
+      "sha256": "0d0994f9a89e3e7b213dc48536f9902364a2c168690a72272bc6036ac99eaa62"
+    },
+    {
+      "path": "SELECTION.json",
+      "bytes": 724,
+      "sha256": "054a1c03fc522fe1d2ea9b28253a0cdf10a8c55cbcc7b49f0d3ec72404421a05"
+    },
+    {
+      "path": "test.mjs",
+      "bytes": 17549,
+      "sha256": "513749e8d15b4a4dc6dbcaf251f7321249f8c4e8cce94bbb07af0a0bad6a5b53"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 2660,
+      "sha256": "a3bf11087a1cfb689ab5b3f22fb6162bd506c23bd4c3b66c61f21c24f2b4a2de"
+    }
+  ]
+}

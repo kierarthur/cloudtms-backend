@@ -1,0 +1,124 @@
+{
+  "version": "INSTALL2_MECHANICAL_FRESH_FORWARD_V1",
+  "baseCommit": "1f91895a78dd213ae8088937e4839b4db33b7424",
+  "additiveOnly": true,
+  "rows": [
+    {
+      "target": "scripts/healthroster-install2-local-provider.mjs",
+      "parent": "scripts/healthroster-install1-local-provider.mjs",
+      "parentSha256": "e8925257c83f2a98c2980e1cd5e26ccc34f2bf03ea5dbf05bb3325b515154566",
+      "payloadSha256": "d891d33aa0065d0dd4a05d0be37059899bbcbc66bebcf620a7611daf4a5aca64",
+      "hunks": [
+        {
+          "start": 294,
+          "end": 1159,
+          "before": "const container='healthroster-install1-seal-pg17-20261014',owner='cloudtms_hr_install1_local_owner',database='banking_modal_v2_test';\nconst [mode,...extra]=process.argv.slice(2);\nif(extra.length||mode!==undefined&&mode!=='--record-existing-own-prerequisites')throw Error('OWN_LOCAL_PROVIDER_MODE_REFUSED');\nconst inspection=spawnSync('docker',['inspect',container],{encoding:'utf8',windowsHide:true});\nif(inspection.status!==0)throw Error('OWN_LOCAL_SEAL_CONTAINER_MISSING');\nconst row=JSON.parse(inspection.stdout)[0];\nif(row.Config.Labels['codex.task']!=='healthroster-install1-seal-20261014'\n ||row.Config.Image!=='postgres:17.11-bookworm'||row.Name!=='/'+container\n ||row.HostConfig.PortBindings['5432/tcp']?.[0]?.HostIp!=='127.0.0.1'\n ||row.HostConfig.PortBindings['5432/tcp']?.[0]?.HostPort!=='55447')throw Error('OWN_LOCAL_SEAL_CONTAINER_IDENTITY_REFUSED');\n",
+          "after": "import {profile,parseArguments,configureLocalProcess,assertProject,inspectOwnResources} from './healthroster-install2-local-seal-profile.mjs';\nconst candidate=parseArguments(process.argv.slice(2));\nconst sourceIdentity=assertProject(repoRoot,candidate);\nconfigureLocalProcess(process.env);\nconst {container,owner,database}=profile,resources=inspectOwnResources();\nconst output=path.join(repoRoot,profile.output);\nif(fs.existsSync(output))throw Error('I2_SEAL_FRESH_OUTPUT_REQUIRED');\n"
+        },
+        {
+          "start": 1200,
+          "end": 1309,
+          "before": " const result=spawnSync('docker',['exec','-i',container,'psql','-h','127.0.0.1','-U','postgres','-d',target,\n",
+          "after": " const result=spawnSync('docker',['exec','-i',container,'psql','-U','postgres','-d',target,\n"
+        },
+        {
+          "start": 1814,
+          "end": 1972,
+          "before": "if(mode===undefined){\n execute(`create role ${owner} login nosuperuser nobypassrls nocreatedb nocreaterole;\\ncreate database ${database} owner ${owner};\\n`);\n",
+          "after": "if(execute(`select (not exists(select 1 from pg_database where datname='${database}')\n and not exists(select 1 from pg_roles where rolname='${owner}'))::text;`)!=='true')\n throw Error('I2_SEAL_FRESH_DATABASE_AND_OWNER_REQUIRED');\n{\n const password=\"'\"+process.env.PGPASSWORD.replaceAll(\"'\",\"''\")+\"'\";\n execute(`create role ${owner} login nosuperuser nobypassrls nocreatedb nocreaterole password ${password};\\ncreate database ${database} owner ${owner};\\n`);\n"
+        },
+        {
+          "start": 3957,
+          "end": 4210,
+          "before": "fs.writeFileSync(path.join(repoRoot,'docs/healthroster-build/install1-source/LOCAL_PROVIDER_SEAL_PREREQUISITES.json'),JSON.stringify({\n status:'LOCAL_MECHANICAL_PROVIDER_ONLY',container,volume:'healthroster-install1-seal-pg17-data-20261014',port:55447,\n",
+          "after": "assertProject(repoRoot,candidate);\nfs.mkdirSync(output);\nfs.mkdirSync(path.join(output,'tmp'));\nfs.writeFileSync(path.join(output,'PROVIDER.json'),JSON.stringify({\n status:'LOCAL_MECHANICAL_FRESH_PROVIDER_ONLY',version:profile.version,sourceIdentity,resources,\n"
+        },
+        {
+          "start": 4307,
+          "end": 4548,
+          "before": " qualification:'Provider scaffolding exists only in this disposable mechanical seal; not business/API/native acceptance or hosted installation.'},null,2)+'\\n');\nconsole.log(JSON.stringify({status:'OWN_LOCAL_SEAL_PROVIDER_READY',identity}));\n",
+          "after": " qualification:'Fresh local provider scaffolding only; no local business test, native/API acceptance or hosted installation.'},null,2)+'\\n',{flag:'wx'});\nconsole.log(JSON.stringify({status:'I2_SEAL_FRESH_PROVIDER_READY',sourceCommit:candidate,identity}));\n"
+        }
+      ]
+    },
+    {
+      "target": "scripts/healthroster-install2-local-schema.mjs",
+      "parent": "scripts/healthroster-install1-local-schema.mjs",
+      "parentSha256": "5d03eb668083e7c186bd9f52d2d63a4e38762e0c4c4d1747d1f4e460b559db55",
+      "payloadSha256": "11b289b5c795ec586e7b1de80d3c1b0ce65a78d116613fc673ca7b0fdce3e712",
+      "hunks": [
+        {
+          "start": 20,
+          "end": 95,
+          "before": "// B2.23/F-23 schema compilation only. Never a protected release verifier.\n",
+          "after": "// Fresh-only Install2 mechanical schema compilation. No local test programme or protected release verdict.\n"
+        },
+        {
+          "start": 936,
+          "end": 2120,
+          "before": "const [mode, ...unexpected] = process.argv.slice(2);\nif (!['NEW', 'CHANGED'].includes(mode) || unexpected.length) {\n  throw Error('Use healthroster-install1-local-schema.mjs NEW or CHANGED; no other options are accepted');\n}\nconst target = new URL(databaseUrl());\nif (!['postgres:', 'postgresql:'].includes(target.protocol)\n    || target.search || target.hash || !['localhost', '127.0.0.1'].includes(target.hostname)\n    || target.port !== '55447' || decodeURIComponent(target.pathname) !== '/banking_modal_v2_test'\n    || target.username !== 'cloudtms_hr_install1_local_owner'\n    || process.env.CLOUDTMS_ALLOW_LOCAL !== '1'\n    || process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER !== 'CURRENT_USER') {\n  throw Error('BPAY_NEXT_LOCAL_SCHEMA_TARGET_INVALID');\n}\n// URI host validation is insufficient when libpq inherits hostaddr/service.\n// These are process-only overrides; no machine/user environment is changed.\ndelete process.env.PGSERVICE;\ndelete process.env.PGSERVICEFILE;\nprocess.env.PGHOSTADDR = '127.0.0.1';\nprocess.env.PGHOST = '127.0.0.1';\nprocess.env.PGPORT = '55447';\nprocess.env.PGDATABASE = 'banking_modal_v2_test';\nprocess.env.PGUSER = 'cloudtms_hr_install1_local_owner';\n",
+          "after": "import {profile,parseArguments,configureLocalProcess,assertProject,inspectOwnResources} from './healthroster-install2-local-seal-profile.mjs';\nconst candidate=parseArguments(process.argv.slice(2)),mode='NEW';\nconst sourceIdentity=assertProject(repoRoot,candidate);\nconfigureLocalProcess(process.env);\nconst resources=inspectOwnResources(),output=path.join(repoRoot,profile.output);\nconst provider=JSON.parse(fs.readFileSync(path.join(output,'PROVIDER.json'),'utf8'));\nif(provider.status!=='LOCAL_MECHANICAL_FRESH_PROVIDER_ONLY'||provider.version!==profile.version\n ||JSON.stringify(provider.sourceIdentity)!==JSON.stringify(sourceIdentity)\n ||JSON.stringify(provider.resources)!==JSON.stringify(resources)\n ||provider.applicationRowsCopied!==0||provider.hostedConnection!==false)\n throw Error('I2_SEAL_SAME_FRESH_PROVIDER_REQUIRED');\n"
+        },
+        {
+          "start": 2222,
+          "end": 2420,
+          "before": "const checkpointPath = 'docs/healthroster-build/install1-source/LOCAL_SCHEMA_CHECKPOINT.json';\nconst previous = fs.existsSync(path.join(repoRoot, checkpointPath)) ? readJson(checkpointPath) : null;\n",
+          "after": "const checkpointPath = profile.output+'/SCHEMA.json';\nif(fs.existsSync(path.join(repoRoot,checkpointPath)))throw Error('I2_SEAL_FRESH_SCHEMA_OUTPUT_REQUIRED');\n"
+        },
+        {
+          "start": 3686,
+          "end": 3785,
+          "before": "    'owner',current_user,'session',session_user,'superuser',r.rolsuper,'bypassrls',r.rolbypassrls)\n",
+          "after": "    'owner',current_user,'session',session_user,'superuser',r.rolsuper,'bypassrls',r.rolbypassrls,\n    'jit',current_setting('jit'),'collector',current_setting('pg_show_plans.is_enabled',true))\n"
+        },
+        {
+          "start": 3850,
+          "end": 4136,
+          "before": "  if (identity.database !== 'banking_modal_v2_test' || identity.major !== 17\n      || identity.owner !== 'cloudtms_hr_install1_local_owner' || identity.session !== identity.owner\n      || identity.superuser || identity.bypassrls) throw Error('BPAY_NEXT_LOCAL_SCHEMA_IDENTITY_INVALID');\n",
+          "after": "  if (identity.database !== 'healthroster_install2_seal' || identity.major !== 17\n      || identity.owner !== 'cloudtms_hr_install2_seal_owner' || identity.session !== identity.owner\n      || identity.superuser!==false || identity.bypassrls!==false\n      || identity.jit!=='off'||identity.collector!=='off') throw Error('BPAY_NEXT_LOCAL_SCHEMA_IDENTITY_INVALID');\n"
+        },
+        {
+          "start": 4381,
+          "end": 4381,
+          "before": "",
+          "after": "    const empty=(await execute(\"select (not exists(select 1 from pg_catalog.pg_class relation_row join pg_catalog.pg_namespace namespace_row on namespace_row.oid=relation_row.relnamespace where namespace_row.nspname in ('public','private') and relation_row.relkind in ('r','p','v','m','S','f')) and not exists(select 1 from auth.users) and not exists(select 1 from vault.secrets))::text;\")).trim();\n    if(empty!=='true')throw Error('I2_SEAL_FRESH_EMPTY_SCHEMAS_REQUIRED');\n"
+        },
+        {
+          "start": 4464,
+          "end": 4676,
+          "before": "      expectedDatabase: identity.database, releaseId: `healthroster-install1-local-schema-${shellGitHead()}`,\n      gitCommit: shellGitHead(), expectedHash: canonicalContractHash(readJson(release.contractPath)),\n",
+          "after": "      expectedDatabase: identity.database, releaseId: `healthroster-install2-mechanical-schema-${shellGitHead()}`,\n      gitCommit: candidate, expectedHash: canonicalContractHash(readJson(release.contractPath)),\n"
+        },
+        {
+          "start": 6218,
+          "end": 7455,
+          "before": "  } else {\n    if (!present || previous?.formatVersion !== 1 || !previous.context\n        || !['LOCAL_SCHEMA_PREPARED', 'LOCAL_SCHEMA_LOADING', 'LOCAL_SCHEMA_COMPILED'].includes(previous.status)\n        || previous.database !== identity.database || previous.owner !== identity.owner\n        || !/^healthroster-install1-local-schema-[0-9a-f]{40}$/.test(previous.context.releaseId)\n        || previous.context.releaseId !== `healthroster-install1-local-schema-${previous.context.gitCommit}`\n        || previous.context.mode !== 'NEW' || previous.context.environment !== 'TEST'\n        || previous.context.expectedDatabase !== identity.database || previous.context.customerKey !== '') {\n      throw Error('BPAY_NEXT_LOCAL_SCHEMA_CHECKPOINT_REQUIRED');\n    }\n    context = previous.context;\n    await execute(identitySql(context));\n    if ((await execute(resumeCheckSql(context))).trim() !== 'true') throw Error('BPAY_NEXT_LOCAL_SCHEMA_RESUME_MISMATCH');\n    const receipt = (await execute(`select exists(select 1 from private.cloudtms_database_releases\n      where release_id=${literal(context.releaseId)} and status='APPLYING')::text;`)).trim();\n    if (receipt !== 'true') throw Error('BPAY_NEXT_LOCAL_SCHEMA_BOOTSTRAP_RECEIPT_INVALID');\n",
+          "after": ""
+        },
+        {
+          "start": 7949,
+          "end": 8288,
+          "before": "  // Deleted repeatable authority cannot silently disappear from a checkpoint.\n  if (previous?.inventory) {\n    const roots = new Set(current.repeatables.map(row => row.path));\n    for (const row of previous.inventory.repeatables) {\n      if (!roots.has(row.path)) throw Error(`BPAY_NEXT_LOCAL_REPEATABLE_DELETED: ${row.path}`);\n    }\n  }\n",
+          "after": ""
+        },
+        {
+          "start": 12119,
+          "end": 12119,
+          "before": "",
+          "after": "  assertProject(repoRoot,candidate);\n"
+        },
+        {
+          "start": 12244,
+          "end": 12330,
+          "before": "    database: identity.database, owner: identity.owner, sourceCommit: shellGitHead(),\n",
+          "after": "    database: identity.database, owner: identity.owner, sourceCommit: candidate, sourceIdentity, resources,\n    applicationRowsCopied:0, localAcceptance:'NOT_RUN', hostedExecution:false,\n"
+        }
+      ]
+    }
+  ],
+  "newProfile": {
+    "target": "scripts/healthroster-install2-local-seal-profile.mjs",
+    "bytes": 6320,
+    "sha256": "8e125aa43fd01e04f5f82957a827145159cbd2b98c9d0834ffc278c7cb1b7215"
+  }
+}

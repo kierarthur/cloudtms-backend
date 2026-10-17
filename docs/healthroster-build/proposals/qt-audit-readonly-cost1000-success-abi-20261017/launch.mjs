@@ -1,0 +1,4 @@
+// Root's explicit entry only; importing has no connection or process side effect.
+import path from'node:path';import{fileURLToPath}from'node:url';import{check,MODES}from'./factory.mjs';import{hold}from'./hold.mjs';
+export async function launch(args){check(args.length===4&&args[0]==='--mode'&&MODES.includes(args[1])&&args[2]==='--source-commit'&&/^[a-f0-9]{40}$/.test(args[3]),'COST_FIXED_ROOT_ARGUMENTS_REQUIRED');const old=process.env.HR_QT_COST_SOURCE_COMMIT;process.env.HR_QT_COST_SOURCE_COMMIT=args[3];try{return await hold(args[1]);}finally{if(old===undefined)delete process.env.HR_QT_COST_SOURCE_COMMIT;else process.env.HR_QT_COST_SOURCE_COMMIT=old;}}
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))try{await launch(process.argv.slice(2));}catch{process.exitCode=1;}

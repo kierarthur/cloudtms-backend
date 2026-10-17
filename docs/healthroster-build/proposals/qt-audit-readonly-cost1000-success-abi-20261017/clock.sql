@@ -1,0 +1,6 @@
+select pg_catalog.jsonb_build_object('version','QT_AUDIT_COST_CLOCK_V1','mode',@MODE@,'phase',@PHASE@,'sampleLimit',1000,'database',current_database(),'databaseOid',(select oid::bigint from pg_catalog.pg_database where datname=current_database()),'backendPid',pg_backend_pid(),'holderPid',@PID@,'holderGranted',(@HELD@),'readOnly',current_setting('transaction_read_only')::boolean,'noRoleSwitch',current_user=session_user,'observedAt',clock_timestamp(),
+'closureAdmitted',(1/(case when (@CATALOGUE@) and current_database()='cloudtms_test_clone' and (select oid from pg_catalog.pg_database where datname=current_database())=@OID@
+ and current_user=session_user and current_user='dee50tht' and current_setting('transaction_read_only')='on' and current_setting('server_version_num')::integer=170011 and (@HELD@)
+ and exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST' and customer_key is null)
+ and exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1)
+ and not exists(select 1 from private.cloudtms_database_releases where status='APPLYING') then 1 else 0 end))=1) as cost_clock;

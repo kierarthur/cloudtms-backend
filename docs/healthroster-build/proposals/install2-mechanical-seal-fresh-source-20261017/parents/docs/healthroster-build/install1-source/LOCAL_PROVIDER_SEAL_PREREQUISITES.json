@@ -1,0 +1,19 @@
+{
+  "status": "LOCAL_MECHANICAL_PROVIDER_ONLY",
+  "container": "healthroster-install1-seal-pg17-20261014",
+  "volume": "healthroster-install1-seal-pg17-data-20261014",
+  "port": 55447,
+  "sourcePath": "tests/fixtures/28082026_1229_banking_modal_local_pg17_prerequisites.sql",
+  "sourceSha256": "2ad099729e74044959bb1084c0356869467a306934c9b5e29a128cecbb2e26b1",
+  "identity": {
+    "database": "banking_modal_v2_test",
+    "major": 17,
+    "owner": "cloudtms_hr_install1_local_owner",
+    "ownerSuperuser": false,
+    "ownerBypass": false,
+    "serviceBypass": false
+  },
+  "applicationRowsCopied": 0,
+  "hostedConnection": false,
+  "qualification": "Provider scaffolding exists only in this disposable mechanical seal; not business/API/native acceptance or hosted installation."
+}

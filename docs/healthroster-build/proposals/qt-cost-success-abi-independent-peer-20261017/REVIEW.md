@@ -1,0 +1,11 @@
+# Exact observed Cost success-ABI peer
+
+ACCEPT_BOUNDED_SOURCE_ONLY; no scoped source blocker found in Report's60-file MF51a83f93963bb22dac85af2c6d19679ed0af46868ed85d869a2ed7e1332b737b / forward1902951611c3b1789b06cf323be1b9c969a365b7602e59118933ead5a3d43bb6.
+
+Both complete runtime owners were read. The controller's pre-copy filter and full validator now require the exact observed ten-key success header, including accepted/rolledBack true, complete warnings and all existing bound frame/input/clock/consumption conditions. fatalError is absent from that closed shape; a supplied null, undefined, false, object or any other unknown field refuses. Error/failure envelopes remain refusals. All SQL, holder, source guards, stream control, own-session cleanup and budgets remain raw-equal. The six complete before/after files, four literal runtime deletions and39 unchanged parent rows were independently checked. Historical inverse tests use their captured complete parent; positive synthetic frames use the observed shape, with legacy fatalError added only for historical-body replay.
+
+Unamended124 tests, PG17 five-mode AST (20 main+five fresh statements/ten programmes), eight live public source pins and original18+1 holder/security inverses PASS. Five additional complete actual controller/validator memory tests PASS, proving normal fresh synthetic success and that fatal-null/fatal-nonnull/unknown-null/missing-warning refuse before result writing or RELEASE and ABORT only the supplied synthetic session. Full60 inventory and all six raw inverses PASS.
+
+The actual saved root receipt SHA843c6f38d289bc86617a29efa9bbc5d3442a8b34845d0b1bf217612fcdeac054 remains ACTUAL_COST_HOLD. Its duplicated text/structured header grounds the ABI; this peer does not requalify it. Provenance is explicitly saved-only/commit:null. Root must back the actual receipt and mount/commit the reviewed successor before native use; the separate immutable32d bridge must then receive an exact finite real-commit pin forward. No future commit, virtual source admission, historical receipt rewrite, native capture, performance, restoration or QT acceptance is claimed.
+
+Only this ignored Money public peer was written. No root/author/Office/tracked source, private metadata/state, native connection, auth, browser, IPC, Git mutation or deployment was touched.

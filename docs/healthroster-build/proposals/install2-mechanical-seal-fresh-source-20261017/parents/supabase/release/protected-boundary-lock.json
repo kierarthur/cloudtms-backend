@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "purpose": "Fail closed if the completed Candidate/MyTMS security boundary is removed, weakened, renamed, or rewritten.",
+  "files": [
+    {
+      "path": "supabase/migrations/22082026_0951_candidate_mytms_browser_isolation.sql",
+      "sha256": "98b2ed33447cf3c659a81f2772b5f097516158415d6fbcf95faa873ae601a9a4"
+    },
+    {
+      "path": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "sha256": "0feb5cdf864c893a9015e2955f5051673ca57d0eb1323b711dbac939a8d62d02"
+    },
+    {
+      "path": "supabase/migrations/22082026_1402_candidate_named_legacy_relation_isolation.sql",
+      "sha256": "c5bbd78e2a2b4880bd41df421ef7ed93aae4e8de818a493767c81fbd4bd98db0"
+    },
+    {
+      "path": "supabase/repeatable/22082026_1402_candidate_named_security_definer_browser_isolation.sql",
+      "sha256": "48a585617017a518316fea11e15e502aa603ffe98b872838ca9abfda0157b080"
+    },
+    {
+      "path": "supabase/verification/22082026_1402_candidate_named_legacy_security_verification.sql",
+      "sha256": "b013a4b81152d4461c6c8410e2466064ad200b3cf47ecb6279fa4ed7fe1e23ba"
+    }
+  ]
+}

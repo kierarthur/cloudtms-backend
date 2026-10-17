@@ -1,0 +1,945 @@
+{
+  "status": "EXACT_PP_CONTRACT_DELTA_REVIEWED",
+  "base": "07e66fb2b2742fbe634a41582f2ad3e004eed3b9",
+  "beforeHash": "1f5b6396215c1ccaec01e69c64beb5663ac905a37329f0d7278adca55dc62a26",
+  "afterHash": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+  "sourceCommit": "2d405edae701ba905afaa4b91a3abfcf8847106e",
+  "routineCounts": {
+    "before": 2425,
+    "after": 2426
+  },
+  "changes": [
+    {
+      "kind": "changed-routine",
+      "identity": "private._weekly_source_acl_service_rpc_contract_v1()",
+      "name": "private._weekly_source_acl_service_rpc_contract_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, pg_temp"
+        ],
+        "schema": "private",
+        "identity": "_weekly_source_acl_service_rpc_contract_v1()",
+        "parallel": "u",
+        "volatility": "i",
+        "security_definer": false,
+        "definition_sha256": "2f4cd9ee1d28b328e42793c29d3eaeaecc016fcda118c8eed8c282df1cfb3bd1"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, pg_temp"
+        ],
+        "schema": "private",
+        "identity": "_weekly_source_acl_service_rpc_contract_v1()",
+        "parallel": "u",
+        "volatility": "i",
+        "security_definer": false,
+        "definition_sha256": "3343161b49aa229bd198987a11b6adb8d405340a229535db6baf923ded821013"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "private.weekly_source_office_authority_v1(p_actor_user_id uuid, p_operation text, p_source_group_id uuid, p_client_id uuid, p_scope_date date)",
+      "name": "private.weekly_source_office_authority_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "private",
+        "identity": "weekly_source_office_authority_v1(p_actor_user_id uuid, p_operation text, p_source_group_id uuid, p_client_id uuid, p_scope_date date)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "45a92cf8164246a458b3c8841bc48a5d717fc09af817a97c52ed4a4e6e835d78"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "private",
+        "identity": "weekly_source_office_authority_v1(p_actor_user_id uuid, p_operation text, p_source_group_id uuid, p_client_id uuid, p_scope_date date)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "a602a793b2a7438233d5ffbe3eb211a0db0fc072930ad4e029b2c10647863935"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_exceptional_pay_action_publication_status_v1(p_request jsonb)",
+      "name": "public.weekly_exceptional_pay_action_publication_status_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_action_publication_status_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "d9ea50c68e1704b3022a08e2979917aa7ff09e7f4dd369cc9e545d6564606500"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_action_publication_status_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "0730e47ecc341a592d035ab1f11a281d19a04fe09213b29d8eea7582f9db367b"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_exceptional_pay_complete_c1_publication_v1(p_request jsonb)",
+      "name": "public.weekly_exceptional_pay_complete_c1_publication_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_complete_c1_publication_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "f3e292eae877b444e21ef3422d043488b3b6bc9bf8eee9461efba53e0a2c0ca6"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_complete_c1_publication_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "65d09ed1c17751a64fad748674a93411cbfd7bc452fec8eb30b6eb19a0c84fd1"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_exceptional_pay_complete_local_v1(p_request jsonb)",
+      "name": "public.weekly_exceptional_pay_complete_local_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "lock_timeout=2500ms",
+          "search_path=public, private, pg_catalog, pg_temp",
+          "statement_timeout=30s"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_complete_local_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "fd63972b0835f2a568ac5aa8cfd4fe2343bbec1ecb5a739408d2dec2ebe97544"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "lock_timeout=2500ms",
+          "search_path=public, private, pg_catalog, pg_temp",
+          "statement_timeout=30s"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_complete_local_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "5d2f04cddc9fc2a5c233e7af3a304a61aea7871f1f2af9988d4c1840c85341f8"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_exceptional_pay_read_c1_request_v1(p_request jsonb)",
+      "name": "public.weekly_exceptional_pay_read_c1_request_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_read_c1_request_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "eebff01ec3f5a6c9cdce0c5c25068e2a3c96347d5db561fb869fb5866b9d66c2"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_read_c1_request_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "13c7c73b5c5b17152020afac441639325be1129a3e9dcbd97275cd94c597a47b"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_exceptional_pay_record_c1_checkpoint_v1(p_request jsonb)",
+      "name": "public.weekly_exceptional_pay_record_c1_checkpoint_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_record_c1_checkpoint_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "ea79cd9e6f996ed84be65dea50630d469bc2e0b92e6374b0bfdd291b7b20154b"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_record_c1_checkpoint_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "3c4819ae2a2b141f4c8caf674c431508140680453b80b0207e922e0191db3e7e"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_exceptional_pay_record_c1_recovery_v1(p_request jsonb)",
+      "name": "public.weekly_exceptional_pay_record_c1_recovery_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_record_c1_recovery_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "9f487bd882d3245aa068df116e1fd743a527394e09667f2799c4bc0d8709904d"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_record_c1_recovery_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "80fdb1bf83ea8d8d00b3c6970ebccb5f57f3cc09f95cee5687c3ad4e38061fbb"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_exceptional_pay_record_c1_unknown_v1(p_request jsonb)",
+      "name": "public.weekly_exceptional_pay_record_c1_unknown_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_record_c1_unknown_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "2e6bc300254739014ddd68c5d8b8da3af11c200f58849667db7046f9cf6117c7"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_exceptional_pay_record_c1_unknown_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "d2f6e10683ea3bf2f965d389ada2d13c0fb5f19470424d37568f5787843506e0"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_source_combined_review_workspace_v1(p_request jsonb)",
+      "name": "public.weekly_source_combined_review_workspace_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_combined_review_workspace_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "1235d0e8b7a161f7483b53382436e28d5b22773383578a6f620d4c4277168ed4"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_combined_review_workspace_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "145b86f5cebcbd9f9c2a60fbb4ee9f0696ec0503f7f6f99cb101c440a370f2c9"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_source_manual_review_open_v1(p_request jsonb)",
+      "name": "public.weekly_source_manual_review_open_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_manual_review_open_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "e4d44fcc67aea97917b07db7c0cd09fc0a14da129156eb745bfd14f2fc28f696"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_manual_review_open_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "0153db68f37414f730a1daeaf5e812a8f17f7f8e0304d170aa6e1b0f034369ec"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_source_office_authorise_scope_v1(p_request jsonb)",
+      "name": "public.weekly_source_office_authorise_scope_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_office_authorise_scope_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "8c2f11cc5d104905f4d745446b346b6894059fe784df8f4cc360d38a5bc95954"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_office_authorise_scope_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "f9be62a2a939e56edfd75e28530af4745fa35cca026a86c53b978c82a79ccb76"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_source_office_notifications_list_v1(p_request jsonb)",
+      "name": "public.weekly_source_office_notifications_list_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_office_notifications_list_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "0ae094fb98b44442979cb2743710b2f9a6601de8cafec62e1a3ba5fe1113179d"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_office_notifications_list_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "d1d6218cf8b774b304baa8c3b00d2d8135d4d44aae2b4c9514abf0d44742996f"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_source_office_timesheet_presentation_v1(p_request jsonb)",
+      "name": "public.weekly_source_office_timesheet_presentation_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_office_timesheet_presentation_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "bf8e8df2b7f4af2b608a434484d2016390db0d177d7b8a3066625fc0d3708e38"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_office_timesheet_presentation_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "ccc992f2a5377dea317c01baeba1680e96e4c146aeb173fea55ec6041bbec62f"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_source_office_workspace_v1(p_request jsonb)",
+      "name": "public.weekly_source_office_workspace_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_office_workspace_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "fe4c2158c8d8c2f923841d955dacbeb3f9b9b42035bf760691e528d88e7978bf"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, private, pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_office_workspace_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "712b619fc0397d287274fce3db031df56d934f79cbee6e840583b5e6b762181a"
+      }
+    },
+    {
+      "kind": "changed-routine",
+      "identity": "public.weekly_source_workspace_scopes_v1(p_request jsonb)",
+      "name": "public.weekly_source_workspace_scopes_v1",
+      "fields": [
+        "definition_sha256"
+      ],
+      "before": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_workspace_scopes_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "17ff0765b85920f1ed6994fac1066d8a11dc8b630d903e4c65ebe7fa99903a0e"
+      },
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "weekly_source_workspace_scopes_v1(p_request jsonb)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "29ff44a256cc5a8a46cdcd0958d71baeb28a38703f1a2822741dcb6784a27d04"
+      }
+    },
+    {
+      "kind": "added-routine",
+      "identity": "private.weekly_source_pay_actor_allowed_v1(p_actor_user_id uuid)",
+      "name": "private.weekly_source_pay_actor_allowed_v1",
+      "after": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, pg_temp"
+        ],
+        "schema": "private",
+        "identity": "weekly_source_pay_actor_allowed_v1(p_actor_user_id uuid)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "736fa960e78a591c8f1dbc3b3750dffa03cb504f87c8c46a0b2d0bf913042289"
+      }
+    }
+  ],
+  "unexpected": [],
+  "exactExpected": true,
+  "unchangedSections": [
+    "enums",
+    "schemas",
+    "policies",
+    "triggers",
+    "relations",
+    "extensions",
+    "default_acls",
+    "contract_version"
+  ],
+  "qualification": "Data-free clean local PostgreSQL17 schema contract only; no hosted release, full verifier/native financial/API claim."
+}

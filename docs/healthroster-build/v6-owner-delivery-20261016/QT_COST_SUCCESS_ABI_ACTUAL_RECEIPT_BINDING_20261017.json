@@ -1,0 +1,9 @@
+{
+  "version": "ACTUAL_COST_SUCCESS_ABI_RECEIPT_BINDING_V1",
+  "receiptCommit": "18b0fc1679314576840030217512483e402a0a62",
+  "receiptFile": "docs/healthroster-build/v6-owner-delivery-20261016/QT_COST1000_ACTUAL_SCAN_PROJECT_HEADER_HOLD_20261017.json",
+  "receiptSha256": "843c6f38d289bc86617a29efa9bbc5d3442a8b34845d0b1bf217612fcdeac054",
+  "sourceManifestSha256": "51a83f93963bb22dac85af2c6d19679ed0af46868ed85d869a2ed7e1332b737b",
+  "review": "124 root plus5 independent tests,6 complete inverses,39 unchanged rows,PG17 grammar and8 actual source pins PASS",
+  "disposition": "Source only; original controller HOLD unchanged. Fresh real caller pins and source admission required before native use."
+}

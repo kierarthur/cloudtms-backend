@@ -1,0 +1,40 @@
+{
+  "version": "QT_COST1000_COMPLETE_BUFFERED_STREAM_FORWARD_V1",
+  "parentManifestSha256": "ed10acad577a90a40ea5aa31749933ad725755e09ae4efb864198a1e9b8f53eb",
+  "runtimeFile": "root-tools.mjs",
+  "parentSha256": "2b41516b63dd6b994612b6b290e77f75def3393eeca812b40e1b7f49a9a4137b",
+  "afterSha256": "33ba6d0dab85ca8eeb6d3413e543ab55800a9bc87b136ee6fe776ac6033cc4e4",
+  "runtimeEdits": [
+    {
+      "before": "let normal=false,buffer='',nativeCalls=0,closed=false;",
+      "after": "let normal=false,buffer='',nativeCalls=0,closed=false,pendingSeen=false,summarySeen=false;"
+    },
+    {
+      "before": " const wait=async()=>{while(true){active();const lines=buffer.split(/\\r?\\n/);buffer=lines.pop();for(const raw of lines){const line=raw.replace(/\\x1b\\[[0-?]*[ -/]*[@-~]/g,'');if(!line)continue;const r=parse(line);check(r?.status==='COST_CAPTURED_PENDING_RELEASE','COST_ACTUAL_HOLDER_HOLD_OR_UNKNOWN_OUTPUT');readyCheck({...r,status:'COST_INPUT_READY'},mode);check(r.ownedDirectory===ready.ownedDirectory,'COST_OWN_OUTPUT_PATH_CHANGED');return r;}const r=await tools.write_stdin({session_id:sessionId,chars:'',yield_time_ms:1000,max_output_tokens:1500});collect(r);check(r.exit_code===undefined,'COST_HOLDER_EXITED_BEFORE_READY');}};",
+      "after": " const drain=phase=>{\n  const lines=buffer.split(/\\r?\\n/);buffer=lines.pop();\n  for(const raw of lines){\n   const line=raw.replace(/\\x1b\\[[0-?]*[ -/]*[@-~]/g,'');if(!line)continue;const r=parse(line);\n   if(phase==='pending'){\n    check(!pendingSeen&&r?.status==='COST_CAPTURED_PENDING_RELEASE','COST_ACTUAL_HOLDER_HOLD_UNKNOWN_OR_DUPLICATE_OUTPUT');\n    readyCheck({...r,status:'COST_INPUT_READY'},mode);check(r.ownedDirectory===ready.ownedDirectory,'COST_OWN_OUTPUT_PATH_CHANGED');pendingSeen=true;\n   }else{\n    check(!summarySeen&&exact(r,['status','ownedDirectory','businessScope','compatibility'])&&r.status==='COST_CAPTURED_OWN_TURN_RELEASED'&&r.ownedDirectory===ready.ownedDirectory&&r.businessScope==='NOT_RUN'&&r.compatibility==='ROOT_REVIEW_REQUIRED_NOT_QUALIFIED','COST_EXACT_FINAL_HOLDER_SUMMARY_REQUIRED');summarySeen=true;\n   }\n  }\n };\n const wait=async()=>{while(true){\n  active();drain('pending');\n  if(pendingSeen){check(buffer.length===0,'COST_PARTIAL_TRAILER_BEFORE_RELEASE');return;}\n  const r=await tools.write_stdin({session_id:sessionId,chars:'',yield_time_ms:1000,max_output_tokens:1500});collect(r);check(r.exit_code===undefined,'COST_HOLDER_EXITED_BEFORE_READY');\n }};"
+    },
+    {
+      "before": "  const end=await tools.write_stdin({session_id:sessionId,chars:'RELEASE\\n',yield_time_ms:0,max_output_tokens:1500});collect(end);if(end.exit_code!==undefined){check(end.exit_code===0,'COST_OWN_RELEASE_NOT_CONFIRMED');closed=true;}\n  while(!closed){check(Date.now()<whole,'COST_ROOT_CLEANUP_BUDGET_HELD');const r=await tools.write_stdin({session_id:sessionId,chars:'',yield_time_ms:1000,max_output_tokens:1500});collect(r);if(r.exit_code!==undefined){check(r.exit_code===0,'COST_OWN_RELEASE_NOT_CONFIRMED');closed=true;}}\n  // Only after normal own terminal exit0 and original explicit unlock/close summary.\n  const summary=await io('summary');normal=summary.status==='COST_CAPTURED_OWN_TURN_RELEASED';check(normal&&nativeCalls===1,'COST_OWN_RELEASE_NOT_CONFIRMED');return{status:'BOUNDED_COST_CAPTURE_OWN_TURN_RELEASED',mode,capture,nativeCalls,ownSessionClosed:true,scope:'DIAGNOSTIC_ONLY_NOT_QT_ACCEPTANCE'};",
+      "after": "  const end=await tools.write_stdin({session_id:sessionId,chars:'RELEASE\\n',yield_time_ms:0,max_output_tokens:1500});collect(end);if(end.exit_code!==undefined){check(end.exit_code===0,'COST_OWN_RELEASE_NOT_CONFIRMED');closed=true;}drain('summary');\n  while(!closed){check(Date.now()<whole,'COST_ROOT_CLEANUP_BUDGET_HELD');const r=await tools.write_stdin({session_id:sessionId,chars:'',yield_time_ms:1000,max_output_tokens:1500});collect(r);if(r.exit_code!==undefined){check(r.exit_code===0,'COST_OWN_RELEASE_NOT_CONFIRMED');closed=true;}drain('summary');}\n  check(summarySeen&&buffer.length===0,'COST_FINAL_SUMMARY_OR_COMPLETE_OUTPUT_REQUIRED');\n  // Only after all stdout records and normal exit0, then original explicit unlock/close SUMMARY.\n  const summary=await io('summary');normal=exact(summary,['status','originalSharedTurnCompleted'])&&summary.status==='COST_CAPTURED_OWN_TURN_RELEASED'&&summary.originalSharedTurnCompleted===true;check(normal&&nativeCalls===1,'COST_OWN_RELEASE_NOT_CONFIRMED');return{status:'BOUNDED_COST_CAPTURE_OWN_TURN_RELEASED',mode,capture,nativeCalls,ownSessionClosed:true,scope:'DIAGNOSTIC_ONLY_NOT_QT_ACCEPTANCE'};"
+    }
+  ],
+  "testFixture": {
+    "file": "root-tools.test.mjs",
+    "parentSha256": "36efc03a95c31aee1a56a27a62abdda0bb49254a15006a0463de187375e8fabc",
+    "afterSha256": "a4192d82025b404e39b4f0a1cb7fdaa1581cd3bdec94608d18563896a416a0da",
+    "before": "JSON.stringify({status:'COST_CAPTURED_OWN_TURN_RELEASED',ownedDirectory:out})",
+    "after": "JSON.stringify({status:'COST_CAPTURED_OWN_TURN_RELEASED',ownedDirectory:out,businessScope:'NOT_RUN',compatibility:'ROOT_REVIEW_REQUIRED_NOT_QUALIFIED'})",
+    "reason": "Retain all77 assertions; positive facade now emits the exact unchanged actual four-field holder summary instead of its old two-field placeholder."
+  },
+  "unchanged": [
+    "allSQL",
+    "factory",
+    "validator",
+    "holder",
+    "source gates",
+    "Controls",
+    "native tool/input",
+    "budgets"
+  ],
+  "native": "NOT_RUN"
+}

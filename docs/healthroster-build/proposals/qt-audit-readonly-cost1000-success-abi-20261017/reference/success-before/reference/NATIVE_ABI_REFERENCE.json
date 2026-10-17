@@ -1,0 +1,40 @@
+{
+  "version": "PRIOR_ACTUAL_NATIVE_HEADER_ONLY_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "file": "docs/healthroster-build/v6-owner-delivery-20261016/QT_ADMIN_NATIVE_R6_KEYED_ROW_COMPARISON_HOLD_20261017/NATIVE_RESULT.json",
+  "commit": "4731af938c3c4832a0ae3a6ed186bf5ea4b3ebc7",
+  "bytes": 13879,
+  "sha256": "1ca24bce6acedc585f3bbcdaca197898698880963ae6880b57f14239f5790c3b",
+  "topKeys": [
+    "accepted",
+    "databaseTarget",
+    "database",
+    "label",
+    "sqlSha256",
+    "statementCount",
+    "statements",
+    "rolledBack",
+    "rollbackVerification",
+    "warnings",
+    "fatalError"
+  ],
+  "freshKeys": [
+    "connectedFresh",
+    "database",
+    "statements"
+  ],
+  "statementKeys": [
+    "statement",
+    "command",
+    "rowCount",
+    "fields",
+    "rows",
+    "rowsTruncated"
+  ],
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+  ],
+  "scope": "PrioractualR6HOLD protocol shape only; no row values copied and no successful diagnostic ABI claim."
+}
