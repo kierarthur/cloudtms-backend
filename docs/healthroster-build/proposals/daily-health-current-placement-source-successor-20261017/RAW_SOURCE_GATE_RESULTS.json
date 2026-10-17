@@ -1,0 +1,66 @@
+{
+  "gateFile": "scripts/bpay-next-source-gates.mjs",
+  "gateSha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+  "gateSavedHeadIndexEqual": true,
+  "rootHeadAtGate": "e553bf71dab900839301bd90fdbbfad69933fee7",
+  "inputs": [
+    {
+      "file": "health/00_presentation.sqlinc",
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0",
+      "hazards": []
+    },
+    {
+      "file": "health/05_review_enrollment.sqlinc",
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6",
+      "hazards": []
+    },
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "sha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d",
+      "hazards": []
+    },
+    {
+      "file": "health/20_current_placement.sqlinc",
+      "sha256": "9e0551951deab1f161ca682e963cb1e0b7352bf64ac333a5ae657f507c883a55",
+      "hazards": []
+    },
+    {
+      "file": "templates/01_review.sql.tmpl",
+      "sha256": "ea6ee0ffd4b25e7c2843c18b2e6f94fb48a1abf28da6463274ad75c52ed858ef",
+      "hazards": []
+    },
+    {
+      "file": "templates/02_accept.sql.tmpl",
+      "sha256": "7bae24fa58c854f4e8df0b16e17cef8a04aff52fa88792f316f2daa7f42f21d3",
+      "hazards": []
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "sha256": "0e038e8f593f3ba3500a3f423a91f8a60e74cd6030e16b60be1654c8075824ec",
+      "hazards": []
+    },
+    {
+      "file": "health/99_acl.sqlinc",
+      "sha256": "af8b211e20e96d3ca85910b1f0884d8cbcb19294e4e10460e02501b3cf6ea088",
+      "hazards": []
+    },
+    {
+      "file": "admission/ONE_TIME_ADMISSION.sqlinc",
+      "sha256": "809b8998ab30629ca062d564d042d6d747a88a32b752c702d1a196ad75d1a132",
+      "hazards": []
+    },
+    {
+      "file": "verification/mandatory_security.sql",
+      "sha256": "9676b9e489e77380562ce03a2a4bf5549e8d145ba469bb5118067a4c92be516b",
+      "hazards": []
+    },
+    {
+      "file": "ADDITIVE_REVERSE.sqlinc",
+      "sha256": "fa1fc28cfb2a173217d7d5a07bd26ce2a874f9a502c6e91f352e00614e0327a3",
+      "hazards": []
+    }
+  ],
+  "allowancesAdded": 0,
+  "classification": "FINITE_RAW_CENSUS_ONLY_NOT_JOINED_GLOBAL_GATE",
+  "native": "NOT_RUN"
+}

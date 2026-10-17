@@ -1,0 +1,39 @@
+{
+  "version": "ROOT_DAILY_CURRENT_PLACEMENT_SOURCE_REVIEW_HOLD_V1",
+  "authorCommit": "040bb062b9b0fdf3fa6bb45e400494d65929f40a",
+  "rawGitExactFiles": 53,
+  "manifestSha256": "5bcf1333bbce9830dccb6206c8e4d3efc6703e0c772f1b270b3b3fd35a67fcc8",
+  "rootReplay": {
+    "NodeTests": 16,
+    "actualSelectorGuardASTCases": 47,
+    "publicDecoderCases": 6,
+    "PG17Inputs": 5,
+    "sourceRelationTypes": 6,
+    "referencedColumns": 53,
+    "actualRawGateInputs": 11,
+    "hazards": 0,
+    "allowancesAdded": 0
+  },
+  "scope": "Complete nine-owner Health selection, new private current-placement helper, five whole-parent forwards; three genuine Bank slots held",
+  "verdict": "HOLD_F1_CURRENT_CANONICAL_PHYSICAL_GUARD_MISSING",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "P1_SOURCE",
+      "description": "Saved Work/current financial Candidate+Client associations do not prove fresh native physical Candidate/Client/HOURS/non-adjustment/authorisation. Actual canonical context resolution and native point guards are required without Admin mutation admission.",
+      "sourceTrace": "Actual0910/context loader and Candidate wake path; protected/paid snapshot wake is not evidence of current physical identity.",
+      "authorAccepted": true,
+      "fixApplied": false,
+      "nativeReproduction": "NOT_RUN",
+      "independentPeer": "Report freeze pending; actual source finding dispatched and acknowledged"
+    }
+  ],
+  "findingFixesAppliedAtThisCheckpoint": 0,
+  "findingFixesRejected": 0,
+  "ownerBusinessDecisionRequired": false,
+  "original040bbPreserved": true,
+  "runtimeMounted": false,
+  "native": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalCriticSignoff": false
+}

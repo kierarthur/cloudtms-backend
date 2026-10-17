@@ -1,0 +1,35 @@
+{
+  "version": "ROOT_ACTUAL_TEST_AUTH_R2_NETWORK_HOLD_V1",
+  "authorCommit": "da869d45d2ff88a0d7ae096838e060ea118dedee",
+  "rootExecutionCommit": "a8dc643b193d531509f3fb926d34aee6d3718b30",
+  "actualClosedChildResult": {
+    "version": "TEST_AUTH_REFRESH_PRIVATE_RESULT_V1",
+    "status": "HOLD",
+    "code": "AUTH_NETWORK_BOUNDARY_HELD",
+    "browserClosed": true,
+    "loginRequests": 1,
+    "refreshRequests": 0,
+    "blockedReadRequests": 6,
+    "forbiddenWriteRequests": 1,
+    "refusedRequests": 0
+  },
+  "actualParentResult": {
+    "status": "HOLD",
+    "code": "AUTH_NETWORK_BOUNDARY_HELD",
+    "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/test-auth-refresh-20261017-d5dbe52d4bc69ae087ed553e093a4645",
+    "browserClosure": "SEE_CLOSED_CHILD_RESULT"
+  },
+  "browserClosureConfirmedFromActualResult": true,
+  "privateStateExported": false,
+  "sharedStateChanged": false,
+  "forbiddenRequestForwarded": false,
+  "forbiddenRequestPath": "NOT_RECORDED_DO_NOT_GUESS",
+  "credentialsOrStateContentsInspected": false,
+  "authenticationAdmission": "NOT_QUALIFIED",
+  "diagnosis": "One additional POST aborted by exact route policy; identify legitimate source path before any finite correction. No generic write allowance or success inference.",
+  "nativeIntervalActive": false,
+  "retainedOwnDirectory": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\test-auth-refresh-20261017-d5dbe52d4bc69ae087ed553e093a4645",
+  "retainedPrivateState": false,
+  "deletionAttempted": false,
+  "originalR1AndScopedPS5FixPreserved": true
+}

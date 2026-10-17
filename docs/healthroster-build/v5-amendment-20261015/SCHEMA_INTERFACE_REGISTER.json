@@ -7387,5 +7387,15 @@
     "ownTurnUnlockedAndClosed": true,
     "publicFinancialSuccess": "NOT_PROVIDED",
     "install2": "NOT_INSTALLED"
+  },
+  "daily_current_placement_source_review_20261017": {
+    "authorCommit": "040bb062b9b0fdf3fa6bb45e400494d65929f40a",
+    "newProposedPrivateSignature": "private.daily_rate_correction_health_current_placement_v1(uuid,uuid)",
+    "status": "HOLD_F1_CURRENT_CANONICAL_PHYSICAL_GUARD_MISSING",
+    "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_CURRENT_PLACEMENT_ROOT_HOLD_20261017.json",
+    "finding": "F1_ACCEPTED_CORRECTION_IN_PROGRESS",
+    "runtimeMounted": false,
+    "native": "NOT_RUN",
+    "ownerDecisionRequired": false
   }
 }
