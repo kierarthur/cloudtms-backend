@@ -1,0 +1,19 @@
+{
+  "stage": "COMPLETE_HEALTH_SOURCE_WITH_UNPROVIDED_GENUINE_JOINS",
+  "completeHealthPrivateDefinitions": 8,
+  "closedCompleteHelperDefinitions": 5,
+  "heldComposerTemplates": 3,
+  "genuineBankOwnerJoinsUnprovided": 3,
+  "runtimeSqlMayBeEmitted": false,
+  "managedRootAllocation": "HELD_UNTIL_ACTUAL_COMPLETE_JOINED_BODY",
+  "registryIntegration": "HELD_UNTIL_ACTUAL_COMPLETE_JOINED_BODY",
+  "privatePlacementRevisionRootApproval": "REQUIRED_NOT_RECORDED",
+  "nativeHistoricalReceiptPopulationAndPermittedRead": "NOT_PROVED",
+  "fullRuntimeAssembly": "HELD",
+  "native": "NOT_RUN",
+  "current0910SourceBinding": "COMMITTED_SOURCE_ONLY_NATIVE_NOT_PROVED",
+  "currentSourceParent": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+  "sharedPlacementTechnicalDisposition": "INVALID_BILLING_REVISION_MAPPING_REQUIRES_SOURCE_CORRECTION",
+  "newBusinessPermissionRequired": false,
+  "legacyApprovalFieldMeaning": "TECHNICAL_ROOT_SOURCE_REVIEW; not a new owner policy decision"
+}
