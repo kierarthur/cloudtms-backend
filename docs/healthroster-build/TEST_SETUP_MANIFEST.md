@@ -421,3 +421,53 @@ null
 Expected scope: S1 one genuine Client plus native initial settings effective1900-01-01, current policy resolution/audit; S1a one exact native mapping f717d043-0000-4000-8000-000000000020 through the existing Hospital POST, one lower-case alias and ward_hint null, zero global current/history alias Timesheets and wakeup targets; S2 one non-login/non-bank Candidate and zero auto-assigned/financial targets; S3 one genuine dated native rate with empty prior rate/override/Client-TSFIN scope; S4 one native DAILY/HOURS/MANUAL/contract-null/current-version1 Timesheet and genuine unprocessed SELF_REPORTED TSFIN through the exact-ID canonical owner, with native outbox completion. S4 requires the genuinely qualified S1a association. No invented financial output.
 
 Before and fresh after native aggregates contain the entire reserved Client/settings/Candidate/join/rate/override/booking/current+historical Timesheet/TSFIN/outbox scope, exact native metadata and fingerprints. Preserve every prior qualified fixture row; only the stage's approved native changes may occur. A 200 response is insufficient without full readback. Any timeout, malformed response, refusal or non-200 permanently retains the attempt as unresolved. S4 HTTP500 may follow committed INSERT/recalculation and failed DELETE: reconcile booking/current+history/financial/outbox before any separately reviewed retry. This operator never retries, repairs, deletes, authorises or advances an uncertain attempt. Full native/API/financial proof remains NOT_RUN before genuine observation.
+
+
+### DAILY-GENUINE-S1-20261017 — one bounded staged operator call
+
+SEND_5 D9; agency_test/cloudtms_test_clone only. Operator source 6b5ebedecf95c8a1adfda5141bbf3eccf5294d23. Client f717d043-0000-4000-8000-000000000010; Candidate f717d043-0000-4000-8000-000000000030; booking bk_9364434070884e36. No role changes, direct seeds, authorisation, email/provider/payment/Banking action, cleanup or retry. S0 is read-only. Stages S1–S4 each permit exactly one genuine normalTEST POST after this exact entry is committed.
+
+Fresh native main SQL SHA256 c6b7f7c80f90f6b9bb6b58bf559c143394688290842a0257d6c69ae344c04089; fresh verification SQL SHA256 189bf1a15f1dc35f5152da41667e6ba289f665921501ea12af1eeb468709ba74; actual before envelope SHA256 d36d92b4fa0e617c3175282ce325c5f6fb9daeea463a59160ee1ba6922680dcf; separately reviewed installed Worker/native/schema/ACL/trigger/default/effect admission SHA256 ed9bf357fb567cbd9f9dff8966141e931101bfd7435339a28fd572227bd6edf8. The actual original shared-turn A remains owned through the readback; fresh current active Admin/WP-PP, TEST/customer-null/LEGACY:1/no APPLYING and vacancy are mandatory. Metadata or an old source pin alone is not effect admission.
+
+Exact request: POST https://test-cloudtms-backend.kier-88a.workers.dev/api/clients
+
+```json
+{
+  "id": "f717d043-0000-4000-8000-000000000010",
+  "name": "DAILY_HEALTH_BASIS_20261017_CLIENT",
+  "vat_chargeable": false,
+  "payment_terms_days": 30,
+  "mileage_charge_rate": 0,
+  "primary_invoice_email": null,
+  "ts_queries_email": null,
+  "contact_email": null,
+  "client_settings": {
+    "effective_from": "2026-10-01",
+    "timezone_id": "Europe/London",
+    "default_submission_mode": "MANUAL",
+    "no_timesheet_required": true,
+    "requires_hr": false,
+    "hr_validation_required": false,
+    "autoprocess_hr": false,
+    "is_nhsp": false,
+    "self_bill_no_invoices_sent": true,
+    "daily_calc_of_invoices": false,
+    "auto_invoice_default": false,
+    "hr_attach_to_invoice": false,
+    "ts_attach_to_invoice": false,
+    "ts_reference_required": false,
+    "pay_reference_required": false,
+    "invoice_reference_required": false,
+    "reference_number_required_to_issue_invoice": false,
+    "opt_in_email": false,
+    "opt_in_sms": false,
+    "opt_in_whatsapp": false,
+    "healthroster_import_auto_authorise": false,
+    "nhsp_import_auto_authorise": false
+  }
+}
+```
+
+Expected scope: S1 one genuine Client plus native initial settings effective1900-01-01, current policy resolution/audit; S1a one exact native mapping f717d043-0000-4000-8000-000000000020 through the existing Hospital POST, one lower-case alias and ward_hint null, zero global current/history alias Timesheets and wakeup targets; S2 one non-login/non-bank Candidate and zero auto-assigned/financial targets; S3 one genuine dated native rate with empty prior rate/override/Client-TSFIN scope; S4 one native DAILY/HOURS/MANUAL/contract-null/current-version1 Timesheet and genuine unprocessed SELF_REPORTED TSFIN through the exact-ID canonical owner, with native outbox completion. S4 requires the genuinely qualified S1a association. No invented financial output.
+
+Before and fresh after native aggregates contain the entire reserved Client/settings/Candidate/join/rate/override/booking/current+historical Timesheet/TSFIN/outbox scope, exact native metadata and fingerprints. Preserve every prior qualified fixture row; only the stage's approved native changes may occur. A 200 response is insufficient without full readback. Any timeout, malformed response, refusal or non-200 permanently retains the attempt as unresolved. S4 HTTP500 may follow committed INSERT/recalculation and failed DELETE: reconcile booking/current+history/financial/outbox before any separately reviewed retry. This operator never retries, repairs, deletes, authorises or advances an uncertain attempt. Full native/API/financial proof remains NOT_RUN before genuine observation.
