@@ -1,0 +1,130 @@
+{
+  "version": "QT_ADMIN_NATIVE_R1_ACTUAL_AUDIT_TIMEOUT_HOLD_V1",
+  "executionCommit": "10e534362a6e1fb220d389cf6bb431aa44c07dd2",
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/contact-qt-positive-native-20261017-qt-admin-background-cse-r1",
+  "caseId": "QT_ADMIN_CONTROLS_V1",
+  "programmeSha256": "6e8feb37c2177f674b0ff372264dca1c8572b24e83e03f4cdf3e35acac114e93",
+  "sqlSha256": "c1528b53e9dfedb345a916ad3804174a1a8c98cbd63f5aee1de3cae7b3ffe539",
+  "nativeResultSha256": "c376982d3f62db2b0816908004eb6f345959a8abd201c0d2b75bdc53b33de0c2",
+  "accepted": false,
+  "rolledBack": true,
+  "plannedStatements": 64,
+  "actualStatementResponses": 59,
+  "firstFailedStatement": 59,
+  "sqlstate": "57014",
+  "nativeContext": "qt-assertions.sql inline DO line23 audits_before full audit_events MD5 baseline assignment",
+  "nativePermissionAndPolicyAssertions": "NOT_QUALIFIED",
+  "first58StatementResponses": "NO_ERROR",
+  "actualFreshVerification": {
+    "connectedFresh": true,
+    "identity": {
+      "module": "LEGACY:1",
+      "identityTest": true,
+      "markerAbsent": true,
+      "applyingCount": 0,
+      "latestRelease": {
+        "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+        "status": "VERIFIED",
+        "releaseId": "20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537",
+        "completedAt": "2026-10-14T15:47:03.075975+00:00",
+        "installedContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+        "repositoryContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6"
+      },
+      "customerKeyNull": true,
+      "physicalDatabase": "cloudtms_test_clone"
+    },
+    "fixtures": {
+      "readOnly": true,
+      "backendPid": 283370,
+      "qtObjectsAbsent": true,
+      "userFixtureRowsRemaining": 0
+    }
+  },
+  "hold": {
+    "status": "HOLD",
+    "caseId": "QT_ADMIN_CONTROLS_V1",
+    "code": "CONTACT_QT_MCP_ROLLBACK_ENVELOPE_REFUSED",
+    "observedErrorCode": "CONTACT_QT_MCP_ROLLBACK_ENVELOPE_REFUSED",
+    "deadlineObserved": false,
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T13:10:56.826Z",
+      "workDeadlineAt": "2026-10-17T13:12:56.826Z",
+      "readyAt": "2026-10-17T13:11:50.380Z",
+      "resultReadAt": "2026-10-17T13:12:26.254Z"
+    },
+    "rootCallTiming": {
+      "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+      "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+      "sqlSha256": "c1528b53e9dfedb345a916ad3804174a1a8c98cbd63f5aee1de3cae7b3ffe539",
+      "callStartedAt": "2026-10-17T13:11:52.906Z",
+      "callReturnedAt": "2026-10-17T13:12:24.996Z",
+      "rootObservedCallMilliseconds": 32090,
+      "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+    },
+    "nativeClockFrames": [
+      {
+        "phase": "B_GUARD_BEFORE",
+        "readOnly": false,
+        "holderPid": 283922,
+        "backendPid": 283371,
+        "observedAt": "2026-10-17T13:11:54.555003+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T13:11:54.542254+00:00",
+        "transactionStartedAt": "2026-10-17T13:11:54.326033+00:00"
+      },
+      {
+        "phase": "B_GUARD_AFTER",
+        "readOnly": false,
+        "holderPid": 283922,
+        "backendPid": 283371,
+        "observedAt": "2026-10-17T13:11:54.618519+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T13:11:54.617578+00:00",
+        "transactionStartedAt": "2026-10-17T13:11:54.326033+00:00"
+      }
+    ],
+    "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+    "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+    "elapsedMilliseconds": 89484,
+    "completeMapsPersisted": false
+  },
+  "sharedTurn": [
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_POSITIVE_QT_ADMIN_CONTROLS_V1",
+      "status": "TAKEN",
+      "takenAt": "2026-10-17T13:10:55.836Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_POSITIVE_QT_ADMIN_CONTROLS_V1",
+      "status": "RELEASED",
+      "takenAt": "2026-10-17T13:10:55.836Z",
+      "releasedAt": "2026-10-17T13:12:26.304Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": false,
+      "key": [
+        20261013,
+        1
+      ]
+    }
+  ],
+  "processExitCode": 1,
+  "cAfter": "NOT_RUN",
+  "canonicalRestoration": "HOLD",
+  "noUnchangedRetry": true,
+  "sourceDiagnosisAssigned": "Exact full-audit evaluation/performance with all assertions and original budgets retained",
+  "timeoutsRaised": false,
+  "completeMapsPersisted": false,
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

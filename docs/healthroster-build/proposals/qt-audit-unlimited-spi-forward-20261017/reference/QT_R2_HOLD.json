@@ -1,0 +1,105 @@
+{
+  "version": "QT_ADMIN_NATIVE_R2_AUDIT_BINDING_TIMEOUT_HOLD_V1",
+  "recordedAt": "2026-10-17T13:35:02.125411+00:00",
+  "executionRootCommit": "7422e59b7d559373ccbe81aa8838fb0a3f758cad",
+  "actualOutputDirectory": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-qt-admin-audit-binding-r2",
+  "nativeResultSha256": "aca5109db9121a971a283fc8981d0069a35fe5cdb6f8e164e34b992b62cf4e33",
+  "sqlSha256": "ca4400ff8a6ae07b5ebf122452a9d1532e85448926317f77ba7b698eed3eb4c1",
+  "plannedStatements": 64,
+  "completedStatementsBeforeFailure": 58,
+  "firstFailedStatement": 59,
+  "sqlstate": "57014",
+  "actualFailure": "First complete audit SELECT INTO audits_before, inline DO line23, at SQL statement. The reviewed binding removed one planning eligibility prohibition but actual whole first scan still did not fit the original30s statement limit. No actual parallel plan or exact bottleneck is inferred.",
+  "accepted": false,
+  "rolledBack": true,
+  "actualFreshVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "identity": {
+      "module": "LEGACY:1",
+      "identityTest": true,
+      "markerAbsent": true,
+      "applyingCount": 0,
+      "latestRelease": {
+        "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+        "status": "VERIFIED",
+        "releaseId": "20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537",
+        "completedAt": "2026-10-14T15:47:03.075975+00:00",
+        "installedContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+        "repositoryContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6"
+      },
+      "customerKeyNull": true,
+      "physicalDatabase": "cloudtms_test_clone"
+    },
+    "fixtureAbsence": {
+      "readOnly": true,
+      "backendPid": 285155,
+      "qtObjectsAbsent": true,
+      "userFixtureRowsRemaining": 0
+    }
+  },
+  "localTiming": {
+    "sequenceStartedAt": "2026-10-17T13:32:32.263Z",
+    "workDeadlineAt": "2026-10-17T13:34:32.263Z",
+    "readyAt": "2026-10-17T13:33:35.095Z",
+    "resultReadAt": "2026-10-17T13:34:11.772Z"
+  },
+  "rootCallTiming": {
+    "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "sqlSha256": "ca4400ff8a6ae07b5ebf122452a9d1532e85448926317f77ba7b698eed3eb4c1",
+    "callStartedAt": "2026-10-17T13:33:37.905Z",
+    "callReturnedAt": "2026-10-17T13:34:10.394Z",
+    "rootObservedCallMilliseconds": 32489,
+    "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+  },
+  "nativeClockFrames": [
+    {
+      "phase": "B_GUARD_BEFORE",
+      "readOnly": false,
+      "holderPid": 285088,
+      "backendPid": 285141,
+      "observedAt": "2026-10-17T13:33:39.618291+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T13:33:39.612744+00:00",
+      "transactionStartedAt": "2026-10-17T13:33:39.374809+00:00"
+    },
+    {
+      "phase": "B_GUARD_AFTER",
+      "readOnly": false,
+      "holderPid": 285088,
+      "backendPid": 285141,
+      "observedAt": "2026-10-17T13:33:39.684999+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T13:33:39.683752+00:00",
+      "transactionStartedAt": "2026-10-17T13:33:39.374809+00:00"
+    }
+  ],
+  "sharedTurnRelease": {
+    "chat": "HealthRoster",
+    "task": "CONTACT_QT_POSITIVE_QT_ADMIN_CONTROLS_V1",
+    "status": "RELEASED",
+    "takenAt": "2026-10-17T13:32:31.237Z",
+    "releasedAt": "2026-10-17T13:34:11.816Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "cAfter": "NOT_RUN",
+  "canonicalRestoration": "HOLD",
+  "weakMapQualification": "NOT_PROVED",
+  "capsChanged": false,
+  "jobsPaused": false,
+  "unchangedRetry": "NOT_AUTHORISED_BY_THIS_RECORD",
+  "next": "Separate finite source/plan correction; continue independent genuine fixture/source implementation. No owner answer required.",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

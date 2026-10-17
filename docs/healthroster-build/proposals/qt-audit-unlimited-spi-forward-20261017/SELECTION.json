@@ -1,0 +1,102 @@
+{
+  "version": "QT_EXACT_UNLIMITED_SPI_FORWARD_V1",
+  "sourceParent": "01d930d49f18c88841165876b7344131e4c31618",
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+      "payload": "payload/qt-assertions.sql",
+      "parent": "reference/adapter/qt-assertions.sql",
+      "beforeBytes": 12048,
+      "beforeSha256": "e39b2cbcab6d8baab8a9d7287a1869984def0e6aa1c4137088d3eafcbeb7b209",
+      "bytes": 12100,
+      "sha256": "11f720baf63f49a6f6e309d5ad4c42c67c63ebed691a216171ef12364c4adfe3"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/PROGRAMMES.json",
+      "payload": "payload/PROGRAMMES.json",
+      "parent": "reference/adapter/PROGRAMMES.json",
+      "beforeBytes": 58958,
+      "beforeSha256": "775163889bac34792c74207019127f2f59d020a23186452d21d2a01f5dc898bf",
+      "bytes": 59010,
+      "sha256": "c404d285214cc634f1e2c6441442faf992a2e709b229a72225ccc62b69ea9c23"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/OFFLINE_INPUTS.json",
+      "payload": "payload/OFFLINE_INPUTS.json",
+      "parent": "reference/adapter/OFFLINE_INPUTS.json",
+      "beforeBytes": 113701,
+      "beforeSha256": "c716b2484f54be5f757ec7dc21d7dcc87e3d16c00c85b063892391581fce137e",
+      "bytes": 113753,
+      "sha256": "b9329b866e3c1af1d1fffd54602b6978ab6ef9993dfa942fbecf3446096387aa"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "payload": "payload/MANIFEST.json",
+      "parent": "reference/adapter/MANIFEST.json",
+      "beforeBytes": 8530,
+      "beforeSha256": "53c41e6077a995b3712ba55f67e5f00f605743c6629cdae886c56d9c8005b351",
+      "bytes": 8530,
+      "sha256": "67b15a656f213dc13c7e4e21456bb3665c17829e6243f0fe1ca6274ba871d8f4"
+    }
+  ],
+  "codeEdits": [
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+      "before": " select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by md5(to_jsonb(a)::text)),'')) into audits_before from public.audit_events a;",
+      "after": " execute $qt_full_audit_digest$select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by md5(to_jsonb(a)::text)),'')) from public.audit_events a$qt_full_audit_digest$ into audits_before;"
+    }
+  ],
+  "unchangedAdapterFiles": [
+    "batch-source.mjs",
+    "build-program.mjs",
+    "capture.mjs",
+    "component-source.mjs",
+    "control.mjs",
+    "diagnose-component.mjs",
+    "diagnose-metadata.mjs",
+    "fixed-metadata-reader.mjs",
+    "freeze.mjs",
+    "GRAMMAR_RECORD_BINDING.json",
+    "GRAMMAR_RUN.txt",
+    "grammar-and-bindings.py",
+    "hold-case.mjs",
+    "input-builder.mjs",
+    "metadata-diagnostic.mjs",
+    "metadata-progress-diagnostic.mjs",
+    "native-boundary.mjs",
+    "PLAN_SOURCE_SCOPES.json",
+    "prepare-adapter.mjs",
+    "prepare-offline.mjs",
+    "PROGRAMME_PARENT_REVERSES.json",
+    "READER_PARENT_REVERSE.json",
+    "README.md",
+    "reference/actor/build-program.mjs",
+    "reference/actor/NATIVE_DEPENDENCY_DIAG_R1.json",
+    "reference/actor/SOURCE_PINS.json",
+    "reference/adapter/control.mjs",
+    "reference/adapter/fixed-metadata-reader.mjs",
+    "reference/adapter/timing.mjs",
+    "reference/contact20.sql",
+    "reference/contact30.sql",
+    "reference/helpers/_weekly_source_settings_require_admin_v1.sqlinc",
+    "reference/helpers/weekly_source_sha256_jsonb_v1.sqlinc",
+    "reference/helpers/weekly_source_sha256_text_v1.sqlinc",
+    "reference/original-qt-trial.sql",
+    "reference/original-six-case-receipt.json",
+    "reference/qt-authority.sql",
+    "reference/qt-schema.sql",
+    "reference/source-store-metadata.json",
+    "result-validator.mjs",
+    "ROOT_SOURCE_BINDING.json",
+    "SETUP_ENTRY.md",
+    "SOURCE_PINS.json",
+    "SOURCE_REVIEW.json",
+    "source.mjs",
+    "TEST_RESULTS.txt",
+    "test.mjs",
+    "timing.mjs"
+  ],
+  "native": "NOT_RUN",
+  "plan": "NOT_RUN",
+  "performance": "NOT_PROVED"
+}
