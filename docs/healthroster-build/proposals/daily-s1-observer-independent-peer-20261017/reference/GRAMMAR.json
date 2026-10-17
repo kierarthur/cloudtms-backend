@@ -1,0 +1,47 @@
+{
+  "version": "S1_OBSERVER_OFFLINE_GRAMMAR_V1",
+  "parser": "pglast7.20/PG17",
+  "inputs": [
+    {
+      "mode": "METADATA",
+      "sqlSha256": "62f3b8c1b4751c65e1d89fe42d01bfe0b959b68ebc9811734889b5380c4cfc05",
+      "statements": 2,
+      "freshStatements": 1
+    },
+    {
+      "mode": "EFFECTS",
+      "sqlSha256": "22dc5fb5f3a303eae67a48beb72b5cdef0e70ffcff11e613a65ab12941cb6018",
+      "statements": 2,
+      "freshStatements": 1
+    }
+  ],
+  "scopeRelationSets": {
+    "client": [
+      "public.clients"
+    ],
+    "settings": [
+      "public.client_settings"
+    ],
+    "audit": [
+      "public.audit_events"
+    ],
+    "contracts": [
+      "public.contracts"
+    ],
+    "plannedWeeks": [
+      "public.contract_weeks",
+      "public.contracts"
+    ],
+    "clientsCounter": [
+      "public.app_change_counters"
+    ],
+    "counterTransaction": [
+      "public.app_change_counters",
+      "public.banking_pay_scope_change_transactions"
+    ]
+  },
+  "completeSourceStatementsParsed": 15,
+  "readonlyAstNegatives": 6,
+  "sqlExecution": "NOT_RUN",
+  "nativeBodyCompilation": "NOT_PROVED"
+}

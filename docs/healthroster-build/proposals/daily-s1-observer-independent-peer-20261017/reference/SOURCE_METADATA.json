@@ -1,0 +1,3589 @@
+{
+  "version": "SOURCE_CATALOGUE_ONLY_NOT_NATIVE",
+  "contractSha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+  "relations": [
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "USAGE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "USAGE"
+        }
+      ],
+      "rls": false,
+      "kind": "S",
+      "name": "invoice_generate_candidate_change_seq",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "is_called",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_value",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "log_cnt",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [],
+      "options": [],
+      "force_rls": false,
+      "constraints": [],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "USAGE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "USAGE"
+        }
+      ],
+      "rls": false,
+      "kind": "S",
+      "name": "invoice_issue_candidate_change_seq",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "is_called",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_value",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "log_cnt",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [],
+      "options": [],
+      "force_rls": false,
+      "constraints": [],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "USAGE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "USAGE"
+        }
+      ],
+      "rls": false,
+      "kind": "S",
+      "name": "client_cliref_seq",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "is_called",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_value",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "log_cnt",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [],
+      "options": [],
+      "force_rls": false,
+      "constraints": [],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "USAGE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "USAGE"
+        }
+      ],
+      "rls": false,
+      "kind": "S",
+      "name": "global_rev_seq",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "is_called",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_value",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "log_cnt",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [],
+      "options": [],
+      "force_rls": false,
+      "constraints": [],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "app_change_counters",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "entity_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "scope_change_generation",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "scope_change_tx_token",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "seq",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "app_change_counters_pkey",
+          "definition": "CREATE UNIQUE INDEX app_change_counters_pkey ON public.app_change_counters USING btree (entity_key)"
+        },
+        {
+          "name": "idx_app_change_counters_pay_candidate_scope_generation",
+          "definition": "CREATE INDEX idx_app_change_counters_pay_candidate_scope_generation ON public.app_change_counters USING btree (scope_change_generation, entity_key) WHERE ((scope_change_generation IS NOT NULL) AND (entity_key ~~ 'pay_candidate:%'::text))"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "app_change_counters_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (entity_key)"
+        },
+        {
+          "name": "app_change_counters_scope_change_tx_token_fkey",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (scope_change_tx_token) REFERENCES banking_pay_scope_change_transactions(tx_token) DEFERRABLE INITIALLY DEFERRED"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "audit_events",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "action",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actor_display",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "actor_role_at_time",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "after_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "before_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "correlation_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "event_sequence",
+          "type": "bigint",
+          "default": null,
+          "identity": "a",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "event_sequence_is_authoritative",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "ip",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "object_id_text",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "object_type",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "ts_utc",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "user_agent",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "audit_events_event_sequence_uq",
+          "definition": "CREATE UNIQUE INDEX audit_events_event_sequence_uq ON public.audit_events USING btree (event_sequence)"
+        },
+        {
+          "name": "audit_events_object_sequence_idx",
+          "definition": "CREATE INDEX audit_events_object_sequence_idx ON public.audit_events USING btree (object_type, object_id_text, event_sequence)"
+        },
+        {
+          "name": "audit_events_pkey",
+          "definition": "CREATE UNIQUE INDEX audit_events_pkey ON public.audit_events USING btree (id)"
+        },
+        {
+          "name": "idx_audit_actor",
+          "definition": "CREATE INDEX idx_audit_actor ON public.audit_events USING btree (actor_user_id, ts_utc DESC)"
+        },
+        {
+          "name": "idx_audit_candidate_auth_mutation_receipt_v1",
+          "definition": "CREATE INDEX idx_audit_candidate_auth_mutation_receipt_v1 ON public.audit_events USING btree (object_type, object_id_text, correlation_id, ts_utc DESC, id DESC) WHERE (object_type = 'candidate_auth_mutation_receipt'::text)"
+        },
+        {
+          "name": "idx_audit_candidate_workflow_mutation_receipt_v1",
+          "definition": "CREATE INDEX idx_audit_candidate_workflow_mutation_receipt_v1 ON public.audit_events USING btree (object_type, object_id_text, correlation_id, ts_utc DESC, id DESC) WHERE (object_type = 'candidate_workflow_mutation_receipt'::text)"
+        },
+        {
+          "name": "idx_audit_candidate_workflow_mutation_request_v1",
+          "definition": "CREATE INDEX idx_audit_candidate_workflow_mutation_request_v1 ON public.audit_events USING btree (correlation_id, ts_utc DESC, id DESC) WHERE (object_type = 'candidate_workflow_mutation_receipt'::text)"
+        },
+        {
+          "name": "idx_audit_import_correction_source_v1",
+          "definition": "CREATE INDEX idx_audit_import_correction_source_v1 ON public.audit_events USING btree (((after_json ->> 'shift_id'::text)), ((after_json ->> 'external_row_key'::text)), ((after_json ->> 'correction_id'::text)), action, ts_utc DESC, id) WHERE ((object_type = ANY (ARRAY['timesheets'::text, 'invoices'::text, 'contract_weeks'::text])) AND (action = ANY (ARRAY['NHSP_IMPORT_CORRECTION_APPLIED'::text, 'HR_IMPORT_CORRECTION_APPLIED'::text])))"
+        },
+        {
+          "name": "idx_audit_lookup",
+          "definition": "CREATE INDEX idx_audit_lookup ON public.audit_events USING btree (object_type, object_id_text, ts_utc DESC)"
+        },
+        {
+          "name": "idx_weekly_source_later_change_receipt_v1",
+          "definition": "CREATE INDEX idx_weekly_source_later_change_receipt_v1 ON public.audit_events USING btree (((after_json ->> 'idempotency_key'::text)), ts_utc, id) WHERE (action = 'WEEKLY_SOURCE_LATER_CHANGE_DECIDED'::text)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "audit_events_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "audit_events_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "banking_pay_scope_change_transactions",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "allocated_generation",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "finalized_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "default": "'PENDING'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "tx_token",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "banking_pay_scope_change_transactions_pkey",
+          "definition": "CREATE UNIQUE INDEX banking_pay_scope_change_transactions_pkey ON public.banking_pay_scope_change_transactions USING btree (tx_token)"
+        },
+        {
+          "name": "idx_bpay_scope_change_transactions_cleanup",
+          "definition": "CREATE INDEX idx_bpay_scope_change_transactions_cleanup ON public.banking_pay_scope_change_transactions USING btree (state, finalized_at_utc, tx_token) WHERE (state = ANY (ARRAY['FINALIZED'::text, 'NOOP'::text]))"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "banking_pay_scope_change_transactions_finalized_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state = 'PENDING'::text AND allocated_generation IS NULL AND finalized_at_utc IS NULL OR state = 'NOOP'::text AND allocated_generation IS NULL AND finalized_at_utc IS NOT NULL OR state = 'FINALIZED'::text AND allocated_generation IS NOT NULL AND finalized_at_utc IS NOT NULL)"
+        },
+        {
+          "name": "banking_pay_scope_change_transactions_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (tx_token)"
+        },
+        {
+          "name": "banking_pay_scope_change_transactions_state_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state = ANY (ARRAY['PENDING'::text, 'FINALIZED'::text, 'NOOP'::text]))"
+        },
+        {
+          "name": "trg_pay_workbench_scope_change_finalize_v1",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "client_settings",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "allow_daily_manager_authorise_by_email",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "allow_daily_manager_authorise_on_phone",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "apply_erni_to",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "apply_holiday_to",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "auto_invoice_default",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "autoprocess_hr",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "bh_end",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bh_feed_url",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bh_list",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bh_source",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bh_start",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_electronic_auto_authorise",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_expense_invoice_email",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_expenses_require_separate_timesheet",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_manager_approval_policy_json",
+          "type": "jsonb",
+          "default": "'{\"approved_emails\": [], \"approved_domains\": [], \"allow_free_business_email\": false}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_paper_submission_enabled",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "daily_calc_of_invoices",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "day_end",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "day_start",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "default_submission_mode",
+          "type": "submission_mode_enum",
+          "default": "'ELECTRONIC'::submission_mode_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "effective_from",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "erni_pct",
+          "type": "numeric(5,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "group_nightsat_sunbh",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "healthroster_import_auto_authorise",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "holiday_pay_pct",
+          "type": "numeric(5,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "hr_attach_to_invoice",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hr_validation_required",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "invoice_consolidation_mode",
+          "type": "invoice_consolidation_mode_enum",
+          "default": "'NONE'::invoice_consolidation_mode_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "invoice_reference_required",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_nhsp",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "manual_invoices_alt_email_address",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "margin_includes",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "nhsp_import_auto_authorise",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "night_end",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "night_start",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "no_timesheet_required",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "opt_in_email",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "opt_in_sms",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "opt_in_whatsapp",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_reference_required",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reference_number_required_to_issue_invoice",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "requires_hr",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reversal_complete_financials_date",
+          "type": "correction_financials_date_basis_enum",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "reversal_replacement_financials_date",
+          "type": "correction_financials_date_basis_enum",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "sat_end",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "sat_start",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "self_bill_no_invoices_sent",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "send_manual_invoices_to_different_email",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "sun_end",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "sun_start",
+          "type": "time without time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_break_entry_mode",
+          "type": "timesheet_break_entry_mode_enum",
+          "default": "'START_END_TIMES'::timesheet_break_entry_mode_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timezone_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "ts_attach_to_invoice",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "ts_reference_required",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "vat_rate_pct",
+          "type": "numeric(5,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "week_ending_weekday",
+          "type": "smallint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "client_settings_pkey",
+          "definition": "CREATE UNIQUE INDEX client_settings_pkey ON public.client_settings USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "chk_client_settings_wew",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (week_ending_weekday IS NULL OR week_ending_weekday >= 0 AND week_ending_weekday <= 6)"
+        },
+        {
+          "name": "client_settings_apply_erni_to_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (apply_erni_to = ANY (ARRAY['PAYE_ONLY'::text, 'ALL'::text, 'NONE'::text]))"
+        },
+        {
+          "name": "client_settings_apply_holiday_to_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (apply_holiday_to = ANY (ARRAY['PAYE_ONLY'::text, 'ALL'::text, 'NONE'::text]))"
+        },
+        {
+          "name": "client_settings_bh_source_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (bh_source = ANY (ARRAY['MANUAL'::text, 'FEED'::text]))"
+        },
+        {
+          "name": "client_settings_candidate_daily_method_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (allow_daily_manager_authorise_on_phone OR allow_daily_manager_authorise_by_email)"
+        },
+        {
+          "name": "client_settings_candidate_expense_email_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_expense_invoice_email IS NULL OR btrim(candidate_expense_invoice_email) = ''::text OR candidate_expense_invoice_email ~* '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$'::text)"
+        },
+        {
+          "name": "client_settings_candidate_manager_policy_object_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(candidate_manager_approval_policy_json) = 'object'::text)"
+        },
+        {
+          "name": "client_settings_client_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "client_settings_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "clients",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "ap_phone",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cli_ref",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "client_address",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contact_email",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contact_forename",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contact_job_title",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contact_known_as",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contact_mobile",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contact_surname",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contact_tel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contact_title",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "invoice_address",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "mileage_charge_rate",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "payment_terms_days",
+          "type": "integer",
+          "default": "30",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "primary_invoice_email",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "rev",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "ts_queries_email",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "vat_chargeable",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "website",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "clients_cli_ref_key",
+          "definition": "CREATE UNIQUE INDEX clients_cli_ref_key ON public.clients USING btree (cli_ref)"
+        },
+        {
+          "name": "clients_pkey",
+          "definition": "CREATE UNIQUE INDEX clients_pkey ON public.clients USING btree (id)"
+        },
+        {
+          "name": "idx_clients_email_trgm",
+          "definition": "CREATE INDEX idx_clients_email_trgm ON public.clients USING gin (primary_invoice_email gin_trgm_ops)"
+        },
+        {
+          "name": "idx_clients_name_btree",
+          "definition": "CREATE INDEX idx_clients_name_btree ON public.clients USING btree (name)"
+        },
+        {
+          "name": "idx_clients_name_trgm",
+          "definition": "CREATE INDEX idx_clients_name_trgm ON public.clients USING gin (name gin_trgm_ops)"
+        },
+        {
+          "name": "idx_clients_rev",
+          "definition": "CREATE INDEX idx_clients_rev ON public.clients USING btree (rev)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "chk_clients_cli_ref_format",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cli_ref IS NULL OR cli_ref ~ '^CLI-[0-9]{5,}$'::text)"
+        },
+        {
+          "name": "clients_cli_ref_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (cli_ref)"
+        },
+        {
+          "name": "clients_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "contract_weeks",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "additional_seq",
+          "type": "integer",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "allowed_days_mask",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contract_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "day_entries_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "enforce_day_partition",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_adjustment",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "planned_schedule_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_fingerprint",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_resolved_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_version",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "split_boundary_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "split_group_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "status",
+          "type": "contract_week_status_enum",
+          "default": "'OPEN'::contract_week_status_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "submission_mode_snapshot",
+          "type": "submission_mode_enum",
+          "default": "'ELECTRONIC'::submission_mode_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "totals_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "uploaded_pdf_r2_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "week_ending_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "worker_note",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "contract_weeks_pkey",
+          "definition": "CREATE UNIQUE INDEX contract_weeks_pkey ON public.contract_weeks USING btree (id)"
+        },
+        {
+          "name": "idx_contract_weeks_adjustment",
+          "definition": "CREATE INDEX idx_contract_weeks_adjustment ON public.contract_weeks USING btree (contract_id, week_ending_date, is_adjustment)"
+        },
+        {
+          "name": "idx_contract_weeks_contract",
+          "definition": "CREATE INDEX idx_contract_weeks_contract ON public.contract_weeks USING btree (contract_id)"
+        },
+        {
+          "name": "idx_contract_weeks_planned_settings_authority_v1",
+          "definition": "CREATE INDEX idx_contract_weeks_planned_settings_authority_v1 ON public.contract_weeks USING btree (contract_id, week_ending_date, id) WHERE (timesheet_id IS NULL)"
+        },
+        {
+          "name": "idx_cw_contract_we",
+          "definition": "CREATE INDEX idx_cw_contract_we ON public.contract_weeks USING btree (contract_id, week_ending_date)"
+        },
+        {
+          "name": "idx_cw_status",
+          "definition": "CREATE INDEX idx_cw_status ON public.contract_weeks USING btree (status)"
+        },
+        {
+          "name": "idx_cw_timesheet",
+          "definition": "CREATE INDEX idx_cw_timesheet ON public.contract_weeks USING btree (timesheet_id)"
+        },
+        {
+          "name": "uq_contract_week",
+          "definition": "CREATE UNIQUE INDEX uq_contract_week ON public.contract_weeks USING btree (contract_id, week_ending_date, additional_seq)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "contract_weeks_additional_seq_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (additional_seq >= 0)"
+        },
+        {
+          "name": "contract_weeks_contract_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "contract_weeks_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "contract_weeks_settings_authority_identity_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (settings_authority_json = '{}'::jsonb AND settings_authority_version IS NULL AND settings_authority_fingerprint IS NULL AND settings_authority_resolved_at IS NULL OR settings_authority_json <> '{}'::jsonb AND settings_authority_version = 'CONTRACT_SETTINGS_AUTHORITY_V1'::text AND settings_authority_fingerprint ~ '^[0-9a-f]{64}$'::text AND settings_authority_resolved_at IS NOT NULL)"
+        },
+        {
+          "name": "contract_weeks_settings_authority_object_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(settings_authority_json) = 'object'::text)"
+        },
+        {
+          "name": "contract_weeks_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE SET NULL"
+        },
+        {
+          "name": "uq_contract_week",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (contract_id, week_ending_date, additional_seq)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "contracts",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "additional_rates_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "auto_invoice",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "autoprocess_hr",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "band",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bucket_labels_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_electronic_auto_authorise_override",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_expense_invoice_email_override",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_expenses_require_separate_timesheet_override",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_manager_approval_policy_json",
+          "type": "jsonb",
+          "default": "'{\"mode\": \"INHERIT\"}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_paper_submission_enabled_override",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "daily_calc_of_invoices",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "default_submission_mode",
+          "type": "submission_mode_enum",
+          "default": "'ELECTRONIC'::submission_mode_enum",
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "display_site",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "end_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "group_nightsat_sunbh",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "healthroster_import_auto_authorise_override",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "hr_attach_to_invoice",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_ad_hoc",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_nhsp",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "manual_invoices_alt_email_address",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "mileage_charge_rate",
+          "type": "numeric(10,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "mileage_pay_rate",
+          "type": "numeric(10,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "nhsp_import_auto_authorise_override",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "no_timesheet_required",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "overrideclientsettings",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_method_snapshot",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "rates_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reference_number_required_to_issue_invoice",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "require_reference_to_invoice",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "require_reference_to_pay",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "requires_hr",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "self_bill",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "send_manual_invoices_to_different_email",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "send_ts_queries_to_different_email",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "std_hours_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "std_schedule_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_break_entry_mode",
+          "type": "timesheet_break_entry_mode_enum",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "ts_attach_to_invoice",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "ts_queries_alt_email_address",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "ward_hint",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "week_ending_weekday_snapshot",
+          "type": "smallint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "weekly_timesheet_source",
+          "type": "weekly_timesheet_source_enum",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "contracts_pkey",
+          "definition": "CREATE UNIQUE INDEX contracts_pkey ON public.contracts USING btree (id)"
+        },
+        {
+          "name": "idx_contracts_cand_client",
+          "definition": "CREATE INDEX idx_contracts_cand_client ON public.contracts USING btree (candidate_id, client_id)"
+        },
+        {
+          "name": "idx_contracts_candidate_dates",
+          "definition": "CREATE INDEX idx_contracts_candidate_dates ON public.contracts USING btree (candidate_id, start_date, end_date)"
+        },
+        {
+          "name": "idx_contracts_dates",
+          "definition": "CREATE INDEX idx_contracts_dates ON public.contracts USING btree (start_date, end_date)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "contracts_bucket_labels_json_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (bucket_labels_json IS NULL OR jsonb_typeof(bucket_labels_json) = 'object'::text AND (bucket_labels_json - ARRAY['day'::text, 'night'::text, 'sat'::text, 'sun'::text, 'bh'::text]) = '{}'::jsonb AND bucket_labels_json ? 'day'::text AND bucket_labels_json ? 'night'::text AND bucket_labels_json ? 'sat'::text AND bucket_labels_json ? 'sun'::text AND bucket_labels_json ? 'bh'::text AND NULLIF(btrim(bucket_labels_json ->> 'day'::text), ''::text) IS NOT NULL AND NULLIF(btrim(bucket_labels_json ->> 'night'::text), ''::text) IS NOT NULL AND NULLIF(btrim(bucket_labels_json ->> 'sat'::text), ''::text) IS NOT NULL AND NULLIF(btrim(bucket_labels_json ->> 'sun'::text), ''::text) IS NOT NULL AND NULLIF(btrim(bucket_labels_json ->> 'bh'::text), ''::text) IS NOT NULL)"
+        },
+        {
+          "name": "contracts_candidate_expense_email_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_expense_invoice_email_override IS NULL OR btrim(candidate_expense_invoice_email_override) = ''::text OR candidate_expense_invoice_email_override ~* '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$'::text)"
+        },
+        {
+          "name": "contracts_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "contracts_candidate_manager_policy_object_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(candidate_manager_approval_policy_json) = 'object'::text)"
+        },
+        {
+          "name": "contracts_client_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "contracts_mileage_nonneg_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((mileage_pay_rate IS NULL OR mileage_pay_rate >= 0::numeric) AND (mileage_charge_rate IS NULL OR mileage_charge_rate >= 0::numeric))"
+        },
+        {
+          "name": "contracts_no_ts_requires_hr_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (COALESCE(no_timesheet_required, false) = false OR COALESCE(autoprocess_hr, false) = true)"
+        },
+        {
+          "name": "contracts_pay_method_snapshot_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (pay_method_snapshot = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "contracts_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "contracts_route_one_source_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((\nCASE\n    WHEN COALESCE(is_nhsp, false) THEN 1\n    ELSE 0\nEND +\nCASE\n    WHEN COALESCE(autoprocess_hr, false) THEN 1\n    ELSE 0\nEND) <= 1)"
+        },
+        {
+          "name": "contracts_ts_query_email_override_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT send_ts_queries_to_different_email OR NULLIF(btrim(ts_queries_alt_email_address), ''::text) IS NOT NULL AND length(btrim(ts_queries_alt_email_address)) <= 320)"
+        },
+        {
+          "name": "contracts_week_ending_weekday_snapshot_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (week_ending_weekday_snapshot >= 0 AND week_ending_weekday_snapshot <= 6)"
+        },
+        {
+          "name": "contracts_weekly_source_no_ts_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (weekly_timesheet_source IS NULL OR weekly_timesheet_source = 'HEALTHROSTER'::weekly_timesheet_source_enum OR COALESCE(no_timesheet_required, false) = false)"
+        }
+      ],
+      "view_definition_sha256": null
+    }
+  ],
+  "triggers": [
+    {
+      "name": "trg_pay_workbench_scope_counter_stage_v1",
+      "table": "app_change_counters",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_pay_workbench_scope_counter_stage_v1 BEFORE INSERT OR UPDATE ON app_change_counters FOR EACH ROW EXECUTE FUNCTION pay_workbench_scope_counter_stage_trg_v1()"
+    },
+    {
+      "name": "trg_pay_workbench_scope_change_finalize_v1",
+      "table": "banking_pay_scope_change_transactions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER trg_pay_workbench_scope_change_finalize_v1 AFTER INSERT ON banking_pay_scope_change_transactions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION pay_workbench_scope_change_finalize_trg_v1()"
+    },
+    {
+      "name": "ws_operation_effect_capture_v1",
+      "table": "banking_pay_scope_change_transactions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_operation_effect_capture_v1 AFTER INSERT OR DELETE OR UPDATE ON banking_pay_scope_change_transactions FOR EACH ROW EXECUTE FUNCTION private.weekly_source_observe_effect_v1()"
+    },
+    {
+      "name": "contract_settings_authority_after_client_v1",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_client_v1 AFTER INSERT OR DELETE OR UPDATE ON client_settings FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_client_v1()"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_client_settings_d",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_d AFTER DELETE ON client_settings REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_client_settings_i",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_i AFTER INSERT ON client_settings REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_client_settings_u",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_u AFTER UPDATE ON client_settings REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
+    },
+    {
+      "name": "trg_pay_workbench_mark_contract_client_dirty__client_settings",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_pay_workbench_mark_contract_client_dirty__client_settings AFTER INSERT OR DELETE OR UPDATE ON client_settings FOR EACH ROW EXECUTE FUNCTION pay_workbench_mark_contract_client_dirty()"
+    },
+    {
+      "name": "trg_touch_client_from_client_settings",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_touch_client_from_client_settings AFTER INSERT OR DELETE OR UPDATE ON client_settings FOR EACH ROW EXECUTE FUNCTION _trg_touch_client_from_client_settings()"
+    },
+    {
+      "name": "candidate_expense_client_identity_summary_refresh",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_client_identity_summary_refresh AFTER UPDATE OF name, cli_ref ON clients FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
+    },
+    {
+      "name": "set_cli_ref",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER set_cli_ref BEFORE INSERT OR UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION trg_set_cli_ref()"
+    },
+    {
+      "name": "trg_cc_clients",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_cc_clients AFTER INSERT OR DELETE OR UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('clients')"
+    },
+    {
+      "name": "trg_clients_set_rev",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_clients_set_rev BEFORE INSERT OR UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION trg_set_rev()"
+    },
+    {
+      "name": "trg_clients_set_updated_at",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_clients_set_updated_at BEFORE UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_clients_tombstone_ad",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_clients_tombstone_ad AFTER DELETE ON clients FOR EACH ROW EXECUTE FUNCTION trg_clients_tombstone()"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_d",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_d AFTER DELETE ON clients REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_i",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_i AFTER INSERT ON clients REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_clients_u",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_u AFTER UPDATE ON clients REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+    },
+    {
+      "name": "bpay_expense_classification_week_after_v1",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_week_after_v1 AFTER INSERT OR UPDATE OF timesheet_id, contract_id, week_ending_date, additional_seq, is_adjustment ON contract_weeks FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_week_v1()"
+    },
+    {
+      "name": "bpay_expense_classification_week_before_v1",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_week_before_v1 BEFORE INSERT OR DELETE OR UPDATE OF timesheet_id, contract_id, week_ending_date, additional_seq, is_adjustment ON contract_weeks FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_week_v1()"
+    },
+    {
+      "name": "contract_week_settings_authority_before_v1",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_week_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, timesheet_id, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON contract_weeks FOR EACH ROW EXECUTE FUNCTION private._contract_week_settings_authority_before_v1()"
+    },
+    {
+      "name": "trg_cc_contract_weeks",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_cc_contract_weeks AFTER INSERT OR DELETE OR UPDATE ON contract_weeks FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('contracts')"
+    },
+    {
+      "name": "trg_contract_weeks_set_updated_at",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_contract_weeks_set_updated_at BEFORE UPDATE ON contract_weeks FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contract_weeks_d",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_d AFTER DELETE ON contract_weeks REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contract_weeks_i",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_i AFTER INSERT ON contract_weeks REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contract_weeks_u",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_u AFTER UPDATE ON contract_weeks REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
+    },
+    {
+      "name": "candidate_expense_contract_identity_summary_refresh",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_contract_identity_summary_refresh AFTER UPDATE OF role, display_site ON contracts FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
+    },
+    {
+      "name": "contract_settings_authority_after_contract_insert_v1",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_contract_insert_v1 AFTER INSERT ON contracts FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_contract_v1()"
+    },
+    {
+      "name": "contract_settings_authority_after_contract_update_v1",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_contract_update_v1 AFTER UPDATE OF client_id, start_date, overrideclientsettings, no_timesheet_required, daily_calc_of_invoices, group_nightsat_sunbh, is_nhsp, autoprocess_hr, requires_hr, hr_attach_to_invoice, ts_attach_to_invoice, reference_number_required_to_issue_invoice, send_manual_invoices_to_different_email, manual_invoices_alt_email_address, default_submission_mode, timesheet_break_entry_mode, auto_invoice, require_reference_to_pay, require_reference_to_invoice, self_bill, healthroster_import_auto_authorise_override, nhsp_import_auto_authorise_override, candidate_electronic_auto_authorise_override, candidate_expenses_require_separate_timesheet_override, candidate_paper_submission_enabled_override, candidate_expense_invoice_email_override, candidate_manager_approval_policy_json, rates_json, additional_rates_json, mileage_pay_rate, mileage_charge_rate ON contracts FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_contract_v1()"
+    },
+    {
+      "name": "trg_cc_contracts",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_cc_contracts AFTER INSERT OR DELETE OR UPDATE ON contracts FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('contracts')"
+    },
+    {
+      "name": "trg_contracts_enforce_overrideclientsettings",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_contracts_enforce_overrideclientsettings BEFORE INSERT OR UPDATE ON contracts FOR EACH ROW EXECUTE FUNCTION contracts_enforce_overrideclientsettings()"
+    },
+    {
+      "name": "trg_contracts_set_updated_at",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_contracts_set_updated_at BEFORE UPDATE ON contracts FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contracts_d",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_d AFTER DELETE ON contracts REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contracts_i",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_i AFTER INSERT ON contracts REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+    },
+    {
+      "name": "trg_invoice_candidate_revision_v2_contracts_u",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_u AFTER UPDATE ON contracts REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+    },
+    {
+      "name": "trg_pay_workbench_mark_contract_client_dirty__contracts",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_pay_workbench_mark_contract_client_dirty__contracts AFTER INSERT OR DELETE OR UPDATE ON contracts FOR EACH ROW EXECUTE FUNCTION pay_workbench_mark_contract_client_dirty()"
+    }
+  ],
+  "routines": [
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_feature_enabled_current_v1(p_feature_key text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "06d3fc5a330beaa37a65e7397920f75aaf1cf3632067418c188a20857fb40a19"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "_candidate_manager_authoriser_policy_normalize_v2(p_policy jsonb, p_scope text)",
+      "parallel": "s",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "8cccd93fc8999d4943f7463121b45b07bfd1f09fdc9ee60de82216c2cef448d1"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "_candidate_normalize_manager_policy_v1(p_policy jsonb)",
+      "parallel": "s",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "826cbfe81ec0f0cb9c203ff401e0700a2dc15452a7f0d15217f42f284a65247f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "PUBLIC",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_after_client_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7edc130233b81e93a5906adb453a6b8514e1aa53929171c29f9f6406b4b99408"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_effective_core_v1(p_client_id uuid, p_contract_id uuid, p_relevant_date date, p_workflow text, p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "1b5f00278813f219d8b01eb6457e9b27bf34b39d16ddc988d672728572f71a23"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_refresh_planned_for_client_v1(p_client_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "db842706e7c61e4610254d2c20e4215579666c2d96ebebc23097d82bec5a095a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_invoice_candidate_revision_trigger_v2()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "bfd729a5eb25bc5fef8c6ed100d0b54f99af4e3e27ece84c1c1680acd55ec8b9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_invoice_candidate_snapshot_bump_v2(p_generate boolean, p_issue boolean, p_reason text, p_source text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "5d51a9ef2b527ab40232b475f446d9f82c89fabc55a6b11a8bb31705e2a1bae1"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_invoice_jsonb_pick_v2(p_value jsonb, p_keys text[])",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "c51b4d70db794053ddccc94ad9cc827d88ccef1d74e273f1eeed243ec81062c4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "_change_bump(p_entity_key text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "356a2001278b73434ca58eb4dc8627bd7c0393dd776b5e5d0c5be58eff0bf3db"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "_ctms_assert_import_correction_settings_write_v1(p_is_nhsp boolean, p_autoprocess_hr boolean, p_no_timesheet_required boolean, p_reversal_complete_financials_date correction_financials_date_basis_enum, p_reversal_replacement_financials_date correction_financials_date_basis_enum)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": true,
+      "definition_sha256": "e9696b95a3a6ee4e5f9ad61f1210b9191cc4c088743081bcccdd2634714d7081"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "identity": "_inv_write_audit(p_actor_user_id uuid, p_action text, p_after_json jsonb, p_entity text, p_subject_id text, p_before_json jsonb, p_reason text, p_ip text, p_user_agent text, p_correlation_id text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "d4e3a1d0d92e05cf077cb5ad97f4760a72f7ca4a92b458deb81f72e100066086"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "_trg_change_bump()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "ef70ba42e5e47163bdfed335646c9b38fb904612c6674204770a0589d7612234"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "_trg_touch_client_from_client_settings()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "2e8f9e4c91aacc30e4a8c9ede8e5c048d478a20c3537ebbf882e5adb7ebec947"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "client_create_with_settings_v1(p_client_id uuid, p_client_json jsonb, p_actor_user_id uuid, p_settings_json jsonb, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "1a132a38423d477d6ecd424579ccad3af75d26f7f4d49e851259a41934080be8"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "import_auto_authorise_policy_resolve_v1(p_source_system hr_source_enum, p_client_id uuid, p_contract_id uuid, p_validation_context boolean)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "d72289969d0ad2b8f83544a893ffd331389b01841e540b709a9ba8bc591a6b2b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "identity": "pay_workbench_mark_contract_client_dirty()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "cac606de99cb9b9c2ba2e5ad4078374b650a1bd193dd06eedb731e013b85c379"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, pg_catalog"
+      ],
+      "schema": "public",
+      "identity": "pay_workbench_scope_change_finalize_trg_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4917c497a04856cba8911874b810f95c3fd2a902a52a7981c625deadec9abc0b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, pg_catalog"
+      ],
+      "schema": "public",
+      "identity": "pay_workbench_scope_counter_stage_trg_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "9218e631f96964c895d51228abc89dad73bd6bf40b79152ffa54057cc6ee1089"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "set_updated_at()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "280159edf08e0ff07327f18ef3e1e6ee55d4feb74272e98a2699a76ac54c7e6e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "trg_set_cli_ref()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "ff9234141e74244462b919e4c25c01f9e469ad9b9dc10167791ae47c7250f3e1"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "trg_set_rev()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "8a96983d80a5ade6479a08ba1c9d256a3ac9b041f94ec18b298d6c2fa3d11559"
+    }
+  ]
+}
