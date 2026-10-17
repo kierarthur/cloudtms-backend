@@ -1,0 +1,88 @@
+{
+  "version": "CONTACT_POSTIMAGE_SOURCE_ADMISSION_OFFLINE_MEASUREMENTS_V1",
+  "measuredAt": "2026-10-17T11:51:18.620Z",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "head": "e5b113e4a985f08574e558844e3e81579faf49e1",
+  "sourceSha256": "6512932d124af8fb109e1840822af512820c52d10b8c7bdb225637050a00c886",
+  "executedSourcePostimageSha256": "33bfe952c5d8c32eafbbd75709587e5da573cfac735ddc3b467644c52d8d4056",
+  "actualPostimageAdmission": "NOT_RUN_UNMOUNTED_OFFLINE_MODULE_OVERLAY_ONLY",
+  "caseId": "CONTACT_CONSTRUCTORS_V1",
+  "identity": "SYNTHETIC_SOURCE_ONLY_NO_NATIVE",
+  "phases": [
+    {
+      "name": "assertCommittedAdapter",
+      "elapsedMilliseconds": 234.9592,
+      "gitCalls": 3,
+      "gitMilliseconds": 219.3582,
+      "gitCommands": {
+        "rev-parse": 2,
+        "cat-file": 1
+      }
+    },
+    {
+      "name": "assertManifestedFixtureEntry",
+      "elapsedMilliseconds": 235.81260000000003,
+      "gitCalls": 5,
+      "gitMilliseconds": 232.96290000000005,
+      "gitCommands": {
+        "rev-parse": 3,
+        "show": 2
+      }
+    },
+    {
+      "name": "sourceCold",
+      "elapsedMilliseconds": 771.6428,
+      "gitCalls": 8,
+      "gitMilliseconds": 566.1210000000002,
+      "gitCommands": {
+        "rev-parse": 4,
+        "merge-base": 1,
+        "diff": 1,
+        "cat-file": 2
+      }
+    },
+    {
+      "name": "sourceWarm",
+      "elapsedMilliseconds": 638.5,
+      "gitCalls": 8,
+      "gitMilliseconds": 571.5292000000002,
+      "gitCommands": {
+        "rev-parse": 4,
+        "merge-base": 1,
+        "diff": 1,
+        "cat-file": 2
+      }
+    },
+    {
+      "name": "actualBeforePhaseWarm",
+      "elapsedMilliseconds": 867.3522,
+      "gitCalls": 11,
+      "gitMilliseconds": 797.2079999999999,
+      "gitCommands": {
+        "rev-parse": 6,
+        "cat-file": 3,
+        "merge-base": 1,
+        "diff": 1
+      }
+    },
+    {
+      "name": "buildInputWarm",
+      "elapsedMilliseconds": 663.6936999999998,
+      "gitCalls": 8,
+      "gitMilliseconds": 558.8435000000004,
+      "gitCommands": {
+        "rev-parse": 4,
+        "merge-base": 1,
+        "diff": 1,
+        "cat-file": 2
+      }
+    }
+  ],
+  "wallTimesAreLocalMeasurementsNotNativeCause": true,
+  "native": "NOT_RUN",
+  "queriesExecuted": 0,
+  "credentialsLoaded": false,
+  "rawGitOutputRecorded": false,
+  "turnsOpened": 0,
+  "statementOrWorkBudgetsChanged": false
+}
