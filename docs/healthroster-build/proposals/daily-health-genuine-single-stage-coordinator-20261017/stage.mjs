@@ -14,6 +14,6 @@ export function phaseFlags(phase,stage,out){
  const plan=stagePlan(stage);check(['prepare','entry','submit','qualify'].includes(phase),'GENUINE_STAGE_FIXED_PHASE_REQUIRED');
  return ['--authorised-root-staged-fixture','--outside-other-native-interval','--phase',phase,'--stage',stage,'--owned',out,...phase==='entry'?['--effect-file',plan.effect]:phase==='qualify'?['--effect-file',plan.afterEffect]:[]];
 }
-export async function runPhase({phase,stage,out,controlEnvironment,signal,assertHeld,runOwnedTurnChild,treeFactory}){
- return runStaged(phaseFlags(phase,stage,out),{controlEnvironment,signal,assertHeld,runOwnedTurnChild,treeFactory});
+export async function runPhase({phase,stage,out,controlEnvironment,signal,assertHeld,runOwnedTurnChild,treeFactory,currentNative}){
+ return runStaged(phaseFlags(phase,stage,out),{controlEnvironment,signal,assertHeld,runOwnedTurnChild,treeFactory,currentNative});
 }

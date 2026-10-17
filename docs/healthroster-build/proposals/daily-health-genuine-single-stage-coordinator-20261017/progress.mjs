@@ -1,6 +1,7 @@
 // Exact selected-stage closed stdout reader. No control write, journal/state, auth, browser, IPC or native.
+import {assertCurrentReady} from '../daily-health-genuine-staged-operator-20261017/current-read.mjs';
 import fs from 'node:fs';import path from 'node:path';import {setTimeout as delay} from 'node:timers/promises';import {fileURLToPath} from 'node:url';
-const ROOT='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026',stages=new Set(['S1','S1a','S2','S3','S4']),ready=new Set(['BEFORE_READY','SETUP_ENTRY_READY','AFTER_READY','STAGE_QUALIFIED_PENDING_RELEASE']);
+const ROOT='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026',stages=new Set(['S1','S1a','S2','S3','S4']),ready=new Set(['BEFORE_READY','SETUP_ENTRY_READY','CURRENT_NATIVE_READY','AFTER_READY','STAGE_QUALIFIED_PENDING_RELEASE']);
 const fail=code=>{throw Error(code);},check=(v,c)=>{if(!v)fail(c);};
 const uuidPath=p=>typeof p==='string'&&p.startsWith(ROOT+'/.codex-tmp/daily-genuine-stages-20261017-')&&/\/daily-genuine-stages-20261017-[a-f0-9]{32}$/.test(p);
 export function scan(bytes,{stage,expected,sourceCommit,ownedDirectory}){
@@ -8,13 +9,14 @@ export function scan(bytes,{stage,expected,sourceCommit,ownedDirectory}){
  const text=new TextDecoder('utf-8',{fatal:true}).decode(bytes),lines=text.split('\n');lines.pop();let found=null;
  for(let line of lines){line=line.replace(/\r$/,'');check(line.length>0,'PROGRESS_UNKNOWN_RECORD');const r=JSON.parse(line);check(r&&typeof r==='object'&&!Array.isArray(r),'PROGRESS_UNKNOWN_RECORD');
   if(r.status==='HOLD'||r.status==='STAGE_HELD_RECONCILIATION_REQUIRED')fail('PROGRESS_ACTUAL_HOLD');
-  check(ready.has(r.status)&&Object.keys(r).sort().join(',')==='afterEffectFile,afterInput,afterResult,beforeInput,beforeResult,businessRequests,effectFile,operatorSourceCommit,ownedDirectory,remainingWorkMs,setupEntry,stage,status'
+  if(r.status==='CURRENT_NATIVE_READY'){assertCurrentReady(r.current,{stage,source:sourceCommit});}
+  check(ready.has(r.status)&&Object.keys(r).filter(k=>r.status==='CURRENT_NATIVE_READY'?k!=='current':true).sort().join(',')==='afterEffectFile,afterInput,afterResult,beforeInput,beforeResult,businessRequests,effectFile,operatorSourceCommit,ownedDirectory,remainingWorkMs,setupEntry,stage,status'
    &&r.stage===stage&&r.operatorSourceCommit===sourceCommit&&r.ownedDirectory===ownedDirectory&&Number.isSafeInteger(r.remainingWorkMs)&&r.remainingWorkMs>0&&r.remainingWorkMs<=120000&&r.businessRequests===(['AFTER_READY','STAGE_QUALIFIED_PENDING_RELEASE'].includes(r.status)?1:0)
    &&r.beforeInput===stage+'_BEFORE_INPUT.json'&&r.beforeResult===stage+'_BEFORE_NATIVE.json'&&r.afterInput===stage+'_AFTER_INPUT.json'&&r.afterResult===stage+'_AFTER_NATIVE.json'&&r.setupEntry===stage+'_SETUP_ENTRY.md'
    &&r.effectFile==='docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_'+stage+'_EFFECT_ADMISSION_20261017.json'&&r.afterEffectFile==='docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_'+stage+'_AFTER_EFFECT_QUALIFICATION_20261017.json','PROGRESS_UNKNOWN_OR_WRONG_SOURCE_RECORD');
   if(r.status===expected){check(!found,'PROGRESS_COLLISION');found=r;}
  }
- return found?{status:'ACTUAL_READY_OBSERVED',stage,ready:found.status,ownedDirectory:found.ownedDirectory,operatorSourceCommit:found.operatorSourceCommit,remainingWorkMs:found.remainingWorkMs}:null;
+ return found?{status:'ACTUAL_READY_OBSERVED',stage,ready:found.status,ownedDirectory:found.ownedDirectory,operatorSourceCommit:found.operatorSourceCommit,remainingWorkMs:found.remainingWorkMs,...found.status==='CURRENT_NATIVE_READY'?{current:found.current}:{}}:null;
 }
 export async function waitProgress(file,options,{timeoutMs=30000,read=()=>{const s=fs.lstatSync(file);check(s.isFile()&&!s.isSymbolicLink()&&s.size<=16384,'PROGRESS_FILE_REQUIRED');return {bytes:fs.readFileSync(file),identity:[s.dev,s.ino,s.birthtimeMs].join(':'),born:s.birthtimeMs};},now=Date.now,pause=delay}={}){
  const start=now();let identity,previous=Buffer.alloc(0);

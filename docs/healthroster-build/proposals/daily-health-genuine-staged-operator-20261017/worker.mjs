@@ -1,5 +1,8 @@
 // The only process permitted to load the approved private browser state.
 // No dotenv, credentials, auth login/refresh, screenshots, tracing, videos or raw logs.
+import crypto from 'node:crypto';
+import {buildCurrent,currentFiles,validateCurrentEvidence,currentAttempt,makeConsumption,validateCurrentAfter} from './current-read.mjs';
+import {waitCurrentResume} from './current-ipc.mjs';
 import fs from 'node:fs';import path from 'node:path';import {pathToFileURL,fileURLToPath} from 'node:url';
 import {ROOT,FRONT,BACK,PRIVATE_STATE,PW,STAGES,route,request,check,sha,qualifyResponse,entryText} from './contract.mjs';
 import {here,sourcePreflight,assertReviewedExecutionSource,ownedDirectory,physical,committedRootFile,git} from './source.mjs';
@@ -15,7 +18,7 @@ export async function perform(options,{browserFactory=null}={}){
  const control=await import(pathToFileURL(ROOT+'/scripts/healthroster-turn-control.mjs').href);
  const turn=await control.connectTurnControl();let release;
  try{await turn.assertHeld('daily-genuine-'+stage+'-'+phase+'-begin');release=acquireSession(out);}catch(error){turn.close();throw error;}
- let browser,closed=true,status='HOLD',code='FIXTURE_PHASE_HELD',activeNetwork,expectedWrites=0;
+ let browser,closed=true,status='HOLD',code='FIXTURE_PHASE_HELD',activeNetwork,expectedWrites=0,current,currentResumeDispose,attemptBinding;
  const abort=new AbortController(),deadline=Date.now()+110000;let timer;
  const assertActive=()=>check(!abort.signal.aborted&&Date.now()<deadline,'FIXTURE_BUDGET_HELD');
  const onAbort=()=>{abort.abort();void browser?.close().catch(()=>{});};
@@ -23,7 +26,7 @@ export async function perform(options,{browserFactory=null}={}){
  timer=setTimeout(onAbort,110000);turn.signal.addEventListener('abort',onAbort,{once:true});
  const bindingFile=out+'/PRIVATE_BINDING.json',nativeFile=p=>out+'/'+stage+'_'+p+'_NATIVE.json',preparedFile=p=>out+'/'+stage+'_'+p+'_INPUT.json';
  const prepared=p=>JSON.parse(read(preparedFile(p)));
- const load=p=>{const built=prepared(p),bytes=read(nativeFile(p));check(JSON.stringify(built.receipt.identity)===JSON.stringify(turn.identity),'FIXTURE_CURRENT_ORIGINAL_TURN_REQUIRED');return {built,bytes,frame:readEnvelope(JSON.parse(bytes),built.receipt,{maxAgeMs:p==='BEFORE'&&phase==='qualify'?180000:30000})};};
+ const load=p=>{const built=prepared(p),bytes=read(nativeFile(p));check(JSON.stringify(built.receipt.identity)===JSON.stringify(turn.identity),'FIXTURE_CURRENT_ORIGINAL_TURN_REQUIRED');return {built,bytes,frame:readEnvelope(JSON.parse(bytes),built.receipt,{maxAgeMs:p==='BEFORE'&&(phase==='qualify'||phase==='submit'&&stage!=='S0')?180000:30000})};};
  let beforeState;
  const privateBinding=()=>JSON.parse(read(bindingFile));
  const generate=(p,binding,generated=beforeState.generated)=>{
@@ -31,7 +34,13 @@ export async function perform(options,{browserFactory=null}={}){
    settingsId:generated.settingsId??null,rateId:generated.rateId??null,timesheetId:generated.timesheetId??null});
   writeClosed(out,stage+'_'+p+'_INPUT.json',b);return b;
  };
- const openBrowser=async()=>{
+ const readCurrent=()=>{
+   check(current,'FIXTURE_CURRENT_READ_REQUIRED');const bytes=committedRootFile(current.evidenceFile);
+   check(!current.evidenceSha256||current.evidenceSha256===sha(bytes),'FIXTURE_CURRENT_COMMITTED_EVIDENCE_CHANGED');
+   const v=validateCurrentEvidence(JSON.parse(bytes),{...current.baseline,expectedBinding:current.binding,now:Date.now(),currentMaxAgeMs:30000});
+   check(v.inputSha256===current.inputSha256,'FIXTURE_CURRENT_READY_INPUT_BYTES_CHANGED');current.evidenceSha256=sha(bytes);return {bytes,v};
+  };
+  const openBrowser=async()=>{
   assertActive();closed=false;
   const {chromium}=browserFactory??await import(PW),executable=physical(chromium.executablePath());
   check(executable.startsWith('D:/Development/Caches/ms-playwright/'),'FIXTURE_EXISTING_D_BROWSER_REQUIRED');
@@ -42,7 +51,13 @@ export async function perform(options,{browserFactory=null}={}){
   await context.route('**/*',async r=>{
    // Original live A control is rechecked immediately before the single business POST can be forwarded.
    if(r.request().method()==='POST'&&r.request().url()===BACK+route[stage]){
-    try{assertActive();await turn.assertHeld('daily-genuine-'+stage+'-before-post-forward');assertActive();}catch{network.refuseTransport();return r.abort();}
+    try{
+      assertActive();await turn.assertHeld('daily-genuine-'+stage+'-before-post-forward');assertActive();
+      check(attemptBinding&&current,'FIXTURE_CURRENT_PERSISTED_ATTEMPT_REQUIRED');readCurrent();
+      // Durable eligibility evidence, never a claim that fetch forwarded or succeeded.
+      writeClosed(out,currentFiles(stage).consumption,makeConsumption(current.binding,current.evidenceSha256,Date.now()));
+      readCurrent();assertActive(); // Recheck both native clocks AFTER fsync and every awaited held/source callback.
+     }catch{network.refuseTransport();return r.abort();}
    }
    return guardedRoute(r,network);
   });await context.routeWebSocket('**/*',s=>s.close());
@@ -85,9 +100,15 @@ export async function perform(options,{browserFactory=null}={}){
     generate('AFTER',privateBinding());code='FIXTURE_READ_ONLY_S0_AWAITING_NATIVE_AFTER';status='PASS';
    }else{
     const b=privateBinding(),{page,network}=await openBrowser();await currentAdmission(page,b.actorId);network.assertClean(0);
-    // Recheck native freshness and exact committed entry AFTER real current actor admission.
-    load('BEFORE');await turn.assertHeld('daily-genuine-'+stage+'-before-attempt');assertActive();
-    persistAttempt(out,stage,{entrySha256:entrySha,beforeEnvelopeSha256:sha(before.bytes)});network.arm();expectedWrites=1;
+     const admittedAt=new Date().toISOString();
+     await turn.assertHeld('daily-genuine-'+stage+'-before-current-input');assertActive();
+     const baseline={beforeBuilt:before.built,beforeInputBytes:read(preparedFile('BEFORE')),beforeBytes:before.bytes,entry,entrySha256:entrySha};
+     const pending=buildCurrent({stage,identity:turn.identity,actorId:b.actorId,generated:beforeState.generated,...baseline,admittedAt,readyAt:new Date().toISOString(),nonce:crypto.randomBytes(16).toString('hex')});
+     writeClosed(out,currentFiles(stage).input,pending.built);writeClosed(out,currentFiles(stage).binding,pending.binding);
+     const resumed=await waitCurrentResume(process,pending.ready,{signal:AbortSignal.any([turn.signal,abort.signal]),onViolation:onAbort});currentResumeDispose=resumed.dispose;
+     current={binding:pending.binding,baseline,evidenceFile:resumed.evidenceFile,inputSha256:pending.ready.inputSha256};readCurrent();network.assertClean(0);
+     await turn.assertHeld('daily-genuine-'+stage+'-before-attempt');assertActive();readCurrent();
+     attemptBinding=currentAttempt(current.binding,current.evidenceSha256);persistAttempt(out,stage,attemptBinding);network.arm();expectedWrites=1;
     let responseStatus=null,projection=null,responseCode='FIXTURE_RESPONSE_RECONCILIATION_REQUIRED';
     try{
      const result=await page.evaluate(async({url,body})=>{
@@ -115,7 +136,15 @@ export async function perform(options,{browserFactory=null}={}){
     &&afterEffect.beforeEnvelopeSha256===sha(before.bytes)&&afterEffect.afterEnvelopeSha256===sha(after.bytes)
     &&afterEffect.responseProjectionSha256===sha(JSON.stringify(response.projection)),'FIXTURE_ROOT_COMPLETE_AFTER_EFFECT_REQUIRED');
    for(const k of ['canonicalAfterEvidence','exactApprovedChangesEvidence','backgroundAttributionEvidence'])committedRootFile(afterEffect[k]);
-   assertActive();saveQualification(out,stage,before.frame,after.frame,response.projection,beforeState);status='PASS';code='FIXTURE_STAGE_NATIVE_QUALIFIED';
+   let currentBefore=null;
+    if(stage!=='S0'){
+     const {entry,effectFile}=JSON.parse(read(out+'/'+stage+'_ENTRY_BINDING.json')),effectBytes=committedRootFile(effectFile);
+     const entrySha256=assertSetupEntry(committedRootFile('docs/healthroster-build/TEST_SETUP_MANIFEST.md').toString(),entry,stage,before.bytes,before.built.receipt,effectBytes);
+     const f=currentFiles(stage),currentEvidenceBytes=committedRootFile(f.evidence),consumptionBytes=committedRootFile(f.consumptionEvidence);
+     currentBefore=validateCurrentAfter({currentEvidenceBytes,consumptionBytes,beforeBuilt:before.built,beforeInputBytes:read(preparedFile('BEFORE')),beforeBytes:before.bytes,entry,entrySha256,response});
+     check(afterEffect.currentReadEvidence===f.evidence&&afterEffect.currentConsumptionEvidence===f.consumptionEvidence&&afterEffect.currentEvidenceSha256===sha(currentEvidenceBytes)&&afterEffect.currentConsumptionSha256===sha(consumptionBytes),'FIXTURE_CURRENT_AFTER_EFFECT_BINDING_REQUIRED');
+    }
+    assertActive();saveQualification(out,stage,before.frame,after.frame,response.projection,beforeState,currentBefore);status='PASS';code='FIXTURE_STAGE_NATIVE_QUALIFIED';
   }else if(phase==='reconcile'){
    check(fs.existsSync(out+'/'+stage+'_ATTEMPT.json')&&!fs.existsSync(out+'/'+stage+'_QUALIFIED.json'),'FIXTURE_UNRESOLVED_ATTEMPT_REQUIRED');
    if(!fs.existsSync(preparedFile('RECONCILE'))){generate('RECONCILE',privateBinding());code='FIXTURE_RECONCILIATION_INPUT_PREPARED_STILL_HELD';}
@@ -123,7 +152,7 @@ export async function perform(options,{browserFactory=null}={}){
   }else throw Error('FIXTURE_PHASE_REQUIRED');
  }catch(error){code=/^FIXTURE_[A-Z0-9_]+$/.test(error?.message??'')?error.message:'FIXTURE_PHASE_HELD';}
  finally{
-  clearTimeout(timer);process.removeListener('message',onMessage);
+  clearTimeout(timer);currentResumeDispose?.();process.removeListener('message',onMessage);
   if(browser){let closeTimer;try{await Promise.race([browser.close(),new Promise((_,reject)=>{closeTimer=setTimeout(()=>reject(Error('CLOSE')),8000);})]);closed=true;}catch{closed=false;status='HOLD';code='FIXTURE_BROWSER_CLOSE_HELD';}finally{clearTimeout(closeTimer);}}
   if(activeNetwork){try{activeNetwork.assertClean(expectedWrites);}catch{status='HOLD';code='FIXTURE_NETWORK_BOUNDARY_HELD';}}
   try{await turn.assertHeld('daily-genuine-'+stage+'-'+phase+'-end');}catch{status='HOLD';code='FIXTURE_ORIGINAL_TURN_LOST';}
