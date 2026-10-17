@@ -1,0 +1,41 @@
+{
+  "version": "DAILY_HEALTH_PURE_728A_INDEPENDENT_SOURCE_PEER_V1",
+  "modelAuthority": "Owner explicit GPT-6.1-sol / extra-high, SEND_5 D9",
+  "reviewedCommit": "728a2c32e624fed2db577b7deba70600d27885b1",
+  "programmeSha256": "779aff554ca8bce78a7e21520a41574beba211503ab1c79d492eccb6b5ad8ab6",
+  "programmeBytes": 8029,
+  "exactDefinitions": 5,
+  "positiveUnicodeVectors": 6,
+  "malformedStoredReasonRefusals": 8,
+  "sourceFinding": "No semantic blocker found in this exact pure component; exact source composition accepted for the separately reviewed root rollback adapter only",
+  "reviewedDependencySemantics": [
+    "row_hash: canonical JSON text to extensions.digest(text,text)",
+    "reason: exact shared ECMAScript trim character set, at most1969 native Unicode characters, purpose-specific canonical prefix",
+    "request_assert: exact PREVIEW/ACCEPT/READ_RESULT key sets, shared full lowercase hex UUID groups, exact reason normalization and revision bounds",
+    "request_hash: request assertion, canonical reason and removal of only PREVIEW context/calculation/provenance fields",
+    "health_reason_note: inverse of canonical Daily reason, one exact prefix, native roundtrip equality, canonical invalidity mapped to23514"
+  ],
+  "businessRelationsReadOrWrittenByProgramme": [],
+  "dynamicSql": false,
+  "networkOrExternalEffects": false,
+  "bankingBodyIncluded": false,
+  "originalInputsRewritten": false,
+  "originalPrivateQualifier": "Unchanged shared runtime module instance; WeakMap brand remains mandatory",
+  "snapshotScope": "Whole original canonical catalogue and full ledger; both complete background relations under explicit pure-no-business-DML scope",
+  "unwaivedNativeRequirements": [
+    "Actual five declarations and original6positive/8negative native assertions must execute in server-owned B",
+    "Physical TEST database, customer_key null, LEGACY:1, no APPLYING release and retained exact SEND_7 holder",
+    "Real B marker created; original genuine observation unit0, not an invented empty array",
+    "MCP rollback and fresh verification; separate actual C-after backend with real B XID aborted, marker and observed keys absent",
+    "Original full canonical ledger/catalogue equality and original complete-map row fingerprint checks",
+    "Original epoch-zero/Xmax/Xip bounds, four native writer records and unchanged native claim/retry attribution predicates",
+    "Original same-object private WeakMap qualification and final restoration assertion",
+    "Owned children closed, original turn unlocked/closed and total bounded elapsed time"
+  ],
+  "grammarNativeBoundary": "PG17 grammar PASS without substitutions; native body compilation NOT_PROVED",
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "publicDailyComposers": "NOT_RUN",
+  "fullInstall": "NOT_RUN",
+  "dbConnections": 0
+}

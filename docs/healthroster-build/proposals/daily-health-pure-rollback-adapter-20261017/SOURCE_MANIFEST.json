@@ -1,0 +1,31 @@
+{
+  "version": "DAILY_HEALTH_PURE_ADAPTER_EXECUTABLE_V1",
+  "sourcePinsSha256": "54c00b846ca0e0b5ddf9b57eacd3f43deb6f9d59aecc3a0f2e874288920f96e2",
+  "files": [
+    {
+      "file": "source.mjs",
+      "sha256": "26884004baae754df196c8efd34fd19f3234ec82909f184362a34c7a31d84e13"
+    },
+    {
+      "file": "input-builder.mjs",
+      "sha256": "2c69b632f8651530925fa080a179eb8a1b606126ff333a78c4e408a1a300dd76"
+    },
+    {
+      "file": "fixed-metadata-reader.mjs",
+      "sha256": "ed641533595b6a04b82f027183b82d2fc9b9a03c674bb2db6c294f52ff4f4173"
+    },
+    {
+      "file": "control.mjs",
+      "sha256": "42d86828a85fcb22606c9e691571424f126e8beafea2af1df4e5e38e108bf548"
+    },
+    {
+      "file": "result-validator.mjs",
+      "sha256": "dcd020a5ec6022a58d03d03b40fdf60031576b1f24fa26cf6da4dfa9acb51a4d"
+    },
+    {
+      "file": "hold-pure.mjs",
+      "sha256": "bb6f6cbd746295463c550084b2f9eb171a5f44fc7cb205ba9fac8ebe67ea147c"
+    }
+  ],
+  "native": "NOT_RUN"
+}

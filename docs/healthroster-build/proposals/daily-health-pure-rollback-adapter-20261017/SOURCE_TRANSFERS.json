@@ -1,0 +1,61 @@
+[
+  {
+    "file": "control.mjs",
+    "ownerCommit": "bf11b6f2c4dbdcba4d381f02a302922ea510b755",
+    "ownerFile": "docs/healthroster-build/proposals/v6-contact-local-metadata-mcp-adapter-20261016/control.mjs",
+    "beforeSha256": "42d86828a85fcb22606c9e691571424f126e8beafea2af1df4e5e38e108bf548",
+    "afterSha256": "42d86828a85fcb22606c9e691571424f126e8beafea2af1df4e5e38e108bf548",
+    "hunks": [],
+    "wholeParentReverse": true
+  },
+  {
+    "file": "fixed-metadata-reader.mjs",
+    "ownerCommit": "826e8d7d47a1b9961668bc523e86a898eae7742a",
+    "ownerFile": "docs/healthroster-build/proposals/v6-contact-independent-c-after-20261017/fixed-metadata-reader.mjs",
+    "beforeSha256": "cb5747ec996844949e1d4b41dca7ebfe1149ab360a580d540c94efd97d6d776c",
+    "afterSha256": "ed641533595b6a04b82f027183b82d2fc9b9a03c674bb2db6c294f52ff4f4173",
+    "hunks": [
+      {
+        "before": "import {source} from './input-builder.mjs';",
+        "after": "import {source,SCOPE,markerFor} from './input-builder.mjs';"
+      },
+      {
+        "before": "createFixedMetadataReader({root,turn,caseId})",
+        "after": "createFixedMetadataReader({root,turn})"
+      },
+      {
+        "before": " const {plan,rehearsal,live}=await source(root);\n check(plan.cases.some(v=>v.id===caseId),'LOCAL_METADATA_EXACT_CASE_REQUIRED');",
+        "after": " const {rehearsal,live}=await source(root);\n const marker=markerFor(turn.identity);"
+      },
+      {
+        "before": " // Exact existing finite Contact scope: the six witnesses plus both complete\n // background maps. No filter, digest substitute or narrower quiet dialect.\n const relations=[...plan.relationNames,...live.backgroundRelations].map",
+        "after": " // Exact pure closure: no business relation reads or DML in the programme.\n // Both complete background relations remain observed with the unchanged full\n // canonical catalogue/ledger exporter and original live attribution qualifier.\n const relations=live.backgroundRelations.map"
+      },
+      {
+        "before": "restorationSnapshotSql({identity:turn.identity,marker:plan.marker,relations,",
+        "after": "restorationSnapshotSql({identity:turn.identity,marker,relations,"
+      },
+      {
+        "before": "literal('private.'+plan.marker)",
+        "after": "literal('private.'+marker)"
+      },
+      {
+        "before": "agencyChildEnvironment('healthroster_contact_fixed_metadata')",
+        "after": "agencyChildEnvironment('healthroster_daily_pure_fixed_metadata')"
+      },
+      {
+        "before": "snapshot:{...s,marker:plan.marker",
+        "after": "snapshot:{...s,marker"
+      },
+      {
+        "before": "provenance:{phase:wanted,caseId,",
+        "after": "provenance:{phase:wanted,scope:SCOPE,"
+      },
+      {
+        "before": "inputSha256:sha(input),caseId,limits:LIMITS",
+        "after": "inputSha256:sha(input),scope:SCOPE,limits:LIMITS"
+      }
+    ],
+    "wholeParentReverse": true
+  }
+]

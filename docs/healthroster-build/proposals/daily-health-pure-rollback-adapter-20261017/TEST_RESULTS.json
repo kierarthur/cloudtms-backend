@@ -1,0 +1,34 @@
+{
+  "status": "OFFLINE_SOURCE_TESTS_PASS",
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "nativeShapedFixtures": "SYNTHETIC_ONLY",
+  "dbConnections": 0,
+  "adapter": {
+    "tests": 11,
+    "passed": 11,
+    "failed": 0,
+    "outputSha256": "b2524d9ad2f67a8d6b9cc689aa31c0509cfbea84c1abba3461f161e50830ff78"
+  },
+  "unchangedOriginals": {
+    "tests": 44,
+    "passed": 44,
+    "failed": 0,
+    "outputSha256": "d935f80ab86e771f3cba1c4a02c45988c53810db23f2f555328b080ce467d266",
+    "files": [
+      {
+        "file": "tests/healthroster-live-test-restoration.test.mjs",
+        "sha256": "701dd1d9b0bba0b18c451446089268a48eb722f3455c0718bc26b12912a356bc"
+      },
+      {
+        "file": "tests/healthroster-rehearsal-turn.test.mjs",
+        "sha256": "bb065d939561693588f5e68096a41295979f3650cc81dc880450f8004c858fb7"
+      }
+    ]
+  },
+  "operationalPathCheck": "All executed source launchers use approved D development paths; retained C programme binary paths intentional",
+  "preservedUntracked": [
+    "checklist-v5-physical-identity-capability-foundation-20261015",
+    "correction-entry-native-scope-census-20261016"
+  ]
+}
