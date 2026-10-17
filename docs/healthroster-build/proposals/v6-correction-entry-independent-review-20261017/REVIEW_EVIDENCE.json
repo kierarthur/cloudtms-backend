@@ -1,0 +1,133 @@
+{
+  "scope": "INDEPENDENT_READ_ONLY_CORRECTION_ENTRY_SOURCE_REVIEW",
+  "reviewedCommit": "4a954fb172ad86baec58ffd7c1a4622687b99749",
+  "reviewedWorktree": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+  "reviewedProposal": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\docs\\healthroster-build\\proposals\\correction-entry-native-reader-20261017",
+  "files": [
+    {
+      "file": "17102026_0109_correction_entry_native_tests.sql",
+      "bytes": 6088,
+      "sha256": "37a4ab0e0452cac2fd7cf0ddec2e8f57847d4ecd0d4b63be58a834aada3a9d37"
+    },
+    {
+      "file": "17102026_0109_correction_entry_one_time_admission.sql",
+      "bytes": 593,
+      "sha256": "f2945b6a920fd13fb4b66b589fb48d9fe908244c4931b0cabdc0ac13d3a6a219"
+    },
+    {
+      "file": "17102026_0109_correction_entry_reader.sql",
+      "bytes": 11967,
+      "sha256": "0f7c01eb27ba3842b90524e550a0c2bbbe3a5406664c8e4c4bf1f27d831386f5"
+    },
+    {
+      "file": "17102026_0109_correction_entry_reverse.sql",
+      "bytes": 308,
+      "sha256": "7fbf2cbdf14ae5fe75cd85610c095503b958ab902a88cb2f004a9fe7a9489a26"
+    },
+    {
+      "file": "correction-entry.mjs",
+      "bytes": 3347,
+      "sha256": "f7b04091b1246f09e5408177f8ae26f67686277d7dd8b946bd503eb3eabcf0cd"
+    },
+    {
+      "file": "correction-entry.test.mjs",
+      "bytes": 8262,
+      "sha256": "e86e5266f15be1908efcb3bb674053f386621f6bc605f0cfc8db63523d494593"
+    },
+    {
+      "file": "ENTRY_RESPONSE_PROPOSAL.json",
+      "bytes": 2331,
+      "sha256": "a29442f654db14e5e4c0b8b06e74021ee0c063d7694adde72f2b12d88cf8f37c"
+    },
+    {
+      "file": "office-entry.mjs",
+      "bytes": 1175,
+      "sha256": "b352f204c6f86b162ba384dfe1f7bb9f96037d619f2dd1ae4a887cadaed4426b"
+    },
+    {
+      "file": "office-parent-contribution.jsinc",
+      "bytes": 924,
+      "sha256": "38fc3a9dd6eee46bb333322175691ae8adf4c96ec2fd1b7fa89d775952642e3b"
+    },
+    {
+      "file": "README.md",
+      "bytes": 7879,
+      "sha256": "428224a526d651d8ce872e5e09fb2c2d456d997e4f90042d9a4386a57cc1476a"
+    },
+    {
+      "file": "SOURCE_GUARDS.json",
+      "bytes": 4078,
+      "sha256": "60922940c282aab43ba1d45e8459d852b6a90653ccefd2fcb7fb9b2914b1a113"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 4067,
+      "sha256": "d4900e0f7e2b2eddb3337cafc227784d7cc61e1be50dd44126d07b6e68d64033"
+    },
+    {
+      "file": "worker-parent-contribution.jsinc",
+      "bytes": 1090,
+      "sha256": "e8b2aa769f1a2e02d9b98d0daa8193c4719646299dd1f0d0219d0aa2b301ec1b"
+    }
+  ],
+  "all13SavedFilesEqualReviewedCommittedBytes": true,
+  "policyFiles": [
+    {
+      "file": "D:\\Development\\Legacy-Work\\C-tmp\\healthroster-handover\\HealthRoster_Builder_Pack_16102026\\NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6\\WORKING_PREPARATION\\MODULE_AND_CLOSURE_TARGETS.json",
+      "sha256": "213c4ff9afc09b9fbf3be54b75b4d3629342647ba6f32119a9b13d269eec7c8f"
+    },
+    {
+      "file": "D:\\Development\\Legacy-Work\\C-tmp\\healthroster-handover\\HealthRoster_Builder_Pack_16102026\\NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6\\FINAL_REVIEW_RECORD.md",
+      "sha256": "f294c37445b6736d88421e3c83c050d73ec4774f53cac1e796c702ea9787f668"
+    }
+  ],
+  "integrationHeadReviewed": "5ecc4c73113660edf48a5bca2f3a478453a81c2b",
+  "verdict": "NO_ACTIONABLE_SOURCE_DEFECTS_FOUND_WITHIN_REVIEWED_SCOPE",
+  "actionableFindings": [],
+  "checked": [
+    "active_WP_PP_plus_native_subject_admission",
+    "final1003_placement_and_immutable_evidence",
+    "accepted_archived_A_and_history_B_aliases",
+    "certified_nullable_pending",
+    "same_Candidate_Client_Contract_scope",
+    "genuine_workflow_component_week_association",
+    "actual_native_date_parsing",
+    "actual_verified_requireUser_tenant_id",
+    "exact_seven_field_projection",
+    "false_review_capability",
+    "closed_errors_and_no_store",
+    "single_fixed_service_RPC",
+    "private_owner_only_public_service_ACL",
+    "one_time_collision_admission_separate_from_repeatable",
+    "actual_Worker_dispatch_seam",
+    "actual_Office_parent_binding_and_closed_overlay_seam",
+    "no_Banking_or_Daily_component_ownership_change"
+  ],
+  "validation": {
+    "offlineTests": 15,
+    "pass": 15,
+    "fail": 0,
+    "sourceGuard": "PASS",
+    "postgresqlParser": [
+      17,
+      7
+    ],
+    "sqlStatements": 8,
+    "plpgsqlBodies": 3,
+    "nativeCompilation": "NOT_RUN"
+  },
+  "openNativeGates": [
+    "root_reviewed_16_case_real_fixture_manifest",
+    "exact_Git_blob_PG17_rollback_compile_and_native_test",
+    "fresh_connection_rollback_restoration",
+    "generated_contract_and_security_inventory",
+    "service_PostgREST_API_and_browser",
+    "actual_complete_Preview_and_reviewed_CM17_before_any_enabling_change"
+  ],
+  "databaseCalls": 0,
+  "native": "NOT_RUN",
+  "PartB": "NOT_RUN",
+  "otherWorktreesEdited": false,
+  "bankingMessagesSent": false,
+  "secretsReadOrPrinted": false
+}

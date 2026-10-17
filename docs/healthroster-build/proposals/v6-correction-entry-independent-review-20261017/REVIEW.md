@@ -1,0 +1,13 @@
+Independent source review: no actionable defect found in correction-entry proposal commit `4a954fb172ad86baec58ffd7c1a4622687b99749`.
+
+I reviewed all thirteen packet files against their exact committed bytes, the final V6 permission policy and matching final review record, the actual I2 WP-PP/final1003 source, the verified tenant returned by the actual `requireUser`, and the saved Worker/Office integration seams. The other worktrees were read-only.
+
+The native subject helper rechecks the active WP-PP actor and real Contract/Candidate/Client associations. Currentness, archived original A/history B aliases and genuine nullable pending remain delegated to final1003. Its immutable evidence owner, exact workflow/component/week bindings, native date parsing, current financial identity and closed refusals are retained. Ordinary/legacy/expense-only Contract records are not narrowed to Weekly Source membership. Daily ownership is unchanged.
+
+The actual Worker derives tenant authority from configuration and compares the verified token's tenant through `requireUser`; browser actor/agency fields are refused. Only one fixed service RPC runs. The decoder admits exactly seven fields, int63 revision text, and a permanently false review capability. No source row, financial detail, event capability, operation or Ready state crosses this boundary. Error mapping and no-store responses are consistent with the real RPC envelope.
+
+The private functions remain owner-only, the public wrapper is service-only, and the one-time collision guard is correctly separate from the rerunnable function/ACL body. The parent contribution enters at the post-preflight normalised Timesheet seam. The Office contribution rechecks its actual actor/frame binding around both awaits, refuses Daily and a stale/changed parent, and keeps the overlay opening closed. It is a Health host/read contribution; it does not implement or replace Banking's CM16/CM17 bodies.
+
+Validation: all 15 existing offline tests passed; `verify.mjs` passed its actual source-owner, caller, schema and packaging checks. PostgreSQL 17.7's parser accepted all eight statements and three PL/pgSQL bodies. `REVIEW_EVIDENCE.json` pins every reviewed file and policy input.
+
+This is a source review. Native compile and the root-reviewed sixteen real fixtures, fresh rollback restoration, contract/security sealing, PostgREST API and browser proof remain required. The proposal truthfully keeps those gates open. Complete Preview and separately reviewed CM17 remain prerequisites before any future enabling change. No database, connector, Docker, release, deployment or credential operation was performed for this review; no other worktree was edited or Banking chat messaged.
