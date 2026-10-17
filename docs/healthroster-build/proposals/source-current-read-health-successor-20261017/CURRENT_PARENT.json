@@ -1,0 +1,92 @@
+{
+  "checkpoint": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "functionalInputs": [
+    {
+      "target": "native/03_complete_native_gate.sqlinc",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "wholeSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "selectedInputSha256": "cd33b1dd1177b4a96256281b5599fa93d0db65d16a10b27920c47559ec7d393c",
+      "matchesCompleteAuthoredParent": true
+    },
+    {
+      "target": "native/04_complete_internal_source_read.sqlinc",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "wholeSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "selectedInputSha256": "8b4ce285782595b7f1d111bb498eb44157991af69badaf3306275551f1fedc45",
+      "matchesCompleteAuthoredParent": true
+    },
+    {
+      "target": "native/05_complete_internal_service_read.sqlinc",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "wholeSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "selectedInputSha256": "2bcd4443c44da324b3501f7329d6275b27e1c92ae0b2ff05086a804c130c616f",
+      "matchesCompleteAuthoredParent": true
+    },
+    {
+      "target": "native/06_complete_public_source_accept_read.sqlinc",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "wholeSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "selectedInputSha256": "6ce4e6f1b8ae8a63e18e40455662fcb3659a651289fe83b6548ea03962fcd683",
+      "matchesCompleteAuthoredParent": true
+    },
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-worker.mjs",
+      "physical": "broker/src/weekly-source/source-pay-decision-worker.mjs",
+      "wholeSha256": "a24113b69ce4d05889a2742b0d91ed615e96981e7781d7c79f9eb2fdc7bc22b2",
+      "selectedInputSha256": "a24113b69ce4d05889a2742b0d91ed615e96981e7781d7c79f9eb2fdc7bc22b2",
+      "matchesCompleteAuthoredParent": true
+    },
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-http.mjs",
+      "physical": "broker/src/weekly-source/source-pay-decision-http.mjs",
+      "wholeSha256": "4e6e5f84839bce46b71fce26389a2a988e5ac073ca0b4bb29bb22345dd9a042d",
+      "selectedInputSha256": "4e6e5f84839bce46b71fce26389a2a988e5ac073ca0b4bb29bb22345dd9a042d",
+      "matchesCompleteAuthoredParent": true
+    },
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "physical": "broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "wholeSha256": "93bddf11b81dbb36ba42b05a7073981b36b1814d44e0665bd0d8b3b1450a1380",
+      "selectedInputSha256": "93bddf11b81dbb36ba42b05a7073981b36b1814d44e0665bd0d8b3b1450a1380",
+      "matchesCompleteAuthoredParent": true
+    },
+    {
+      "target": "broker/src/weekly-source/routes.js",
+      "physical": "broker/src/weekly-source/routes.js",
+      "wholeSha256": "67a369464490aafe4035c06adb1c06d7e4e367d12dd93f05567a03b7bcf61786",
+      "selectedInputSha256": "67a369464490aafe4035c06adb1c06d7e4e367d12dd93f05567a03b7bcf61786",
+      "matchesCompleteAuthoredParent": true
+    },
+    {
+      "target": "broker/src/index.js",
+      "physical": "broker/src/index.js",
+      "wholeSha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a",
+      "selectedInputSha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a",
+      "matchesCompleteAuthoredParent": true
+    },
+    {
+      "target": "native/98_complete_current_classification.sqlinc",
+      "physical": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/98_complete_current_classification.sqlinc",
+      "wholeSha256": "22df3a8119af2f398bf5273a758d4643ec18a4883432ba3c6cda1ebfb43025f6",
+      "selectedInputSha256": "22df3a8119af2f398bf5273a758d4643ec18a4883432ba3c6cda1ebfb43025f6",
+      "matchesCompleteAuthoredParent": true
+    }
+  ],
+  "registrySha256": "9c89151b35ac193d94c69fbd4b63527d3df78e1d37c8b0734934a562f361bd92",
+  "mandatoryArraySha256": "472d6fd233cc73a0d692d2ef83151f9a3f697573d0379f06bc56a8e1f1892607",
+  "releaseSha256": "cf68ab7b56dd2bfe5a865892cd8364845851ac6fb6fb56fd884e4f16ef2359f8",
+  "schemaContract": {
+    "path": "supabase/release/current-contract.json",
+    "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+    "changed": false
+  },
+  "immutableMigrationLock": {
+    "path": "supabase/release/migration-lock.json",
+    "sha256": "655bbb55095a64a586fc448e1e654fd843564b55ca584f9f79967cb5c1a8eb14",
+    "changed": false
+  },
+  "allPriorSourceAndSameDailyKeepEntryMetadataRetained": true,
+  "newRoutineSignatures": 2,
+  "sourceOnly": true,
+  "native": "NOT_RUN"
+}

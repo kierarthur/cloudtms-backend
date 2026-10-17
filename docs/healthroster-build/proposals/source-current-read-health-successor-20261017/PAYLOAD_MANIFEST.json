@@ -1,0 +1,117 @@
+{
+  "parent": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "files": [
+    {
+      "target": "broker/src/weekly-source/routes.js",
+      "sourcePath": "payload/broker/src/weekly-source/routes.js",
+      "bytes": 73121,
+      "sha256": "196fefff89b45583c46ddea1cae5d4d22ea4f02d2f5089899a95e39e2601d9fe"
+    },
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "sourcePath": "payload/broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "bytes": 19219,
+      "sha256": "19b64546a74f1838cdb21b9caa2ccc56468e6e97ed1ffeec94497e5025cce9ec"
+    },
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-http.mjs",
+      "sourcePath": "payload/broker/src/weekly-source/source-pay-decision-http.mjs",
+      "bytes": 8327,
+      "sha256": "4f671072a398b6e8e64640b75c29dcc7c0b6339f55ac2ee85ef394fbdd78086f"
+    },
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-worker.mjs",
+      "sourcePath": "payload/broker/src/weekly-source/source-pay-decision-worker.mjs",
+      "bytes": 6546,
+      "sha256": "21a6ea07e67d7d1cdb76c55e3fdf3d02fe7601252d22047ef771d16ff8bb02c4"
+    },
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "sourcePath": "payload/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1743162,
+      "sha256": "4d297e6f9036bc13c08763eee658cb0ba3801477c651c436c8c794347cd49e8f"
+    },
+    {
+      "target": "supabase/release/current-release.json",
+      "sourcePath": "payload/supabase/release/current-release.json",
+      "bytes": 36340,
+      "sha256": "13912890465d5fa7b1c5910559ed374d2febb93aa2b87924569e2bc06179137d"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+      "sourcePath": "payload/supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+      "bytes": 726,
+      "sha256": "3ff3155a3a77ca502e2d5679709d2b9fea842f4a1ecf0bb54695f2399c1ec6d1"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/01_native_status_child.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0722_weekly_source_current_read_health/01_native_status_child.sqlinc",
+      "bytes": 12616,
+      "sha256": "5d916ede66cc997c8d65e267f12fa3cac0f23751af1790cd002437dab2f463cb"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/02_current_read_access.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0722_weekly_source_current_read_health/02_current_read_access.sqlinc",
+      "bytes": 7258,
+      "sha256": "c50e973ec9a1125088a211e0a13a6230b061e691a5daefac0da67c418c7362e8"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/03_complete_native_gate.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0722_weekly_source_current_read_health/03_complete_native_gate.sqlinc",
+      "bytes": 4681,
+      "sha256": "cc35fb07a93c6139c0ab1a36f9d4f761c899de06d62146c2775bfc3c6cf46628"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/04_complete_internal_source_read.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0722_weekly_source_current_read_health/04_complete_internal_source_read.sqlinc",
+      "bytes": 9103,
+      "sha256": "ca20e394d6c5bbc4067cdf1e76e09b5c691bb2c62c3e14a7bb6bc7d3acd99d96"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/05_complete_internal_service_read.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0722_weekly_source_current_read_health/05_complete_internal_service_read.sqlinc",
+      "bytes": 1371,
+      "sha256": "cb1f689948af82d39e798e95060e3810729c09c2009636659b2135f1c75c67c5"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/06_complete_public_source_accept_read.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0722_weekly_source_current_read_health/06_complete_public_source_accept_read.sqlinc",
+      "bytes": 23930,
+      "sha256": "7e3cf0899c3876f26f9b4354fb3423704427a87b8163a4b47334963475cd313f"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "bytes": 90188,
+      "sha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/99_acl.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0722_weekly_source_current_read_health/99_acl.sqlinc",
+      "bytes": 2879,
+      "sha256": "3813bb061b80e8154c3f3c92f113fc7578a3cb4fc094eacb737ba472a44a97ab"
+    },
+    {
+      "target": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sourcePath": "payload/supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 98063,
+      "sha256": "cafad1e069b9dd4f579998c3ee5be9f8c2205813117ce26efa02cdec6f07c4d3"
+    },
+    {
+      "target": "supabase/verification/17102026_0722_source_current_read_security.sql",
+      "sourcePath": "payload/supabase/verification/17102026_0722_source_current_read_security.sql",
+      "bytes": 2232,
+      "sha256": "4ac7a58b9010712ecb942da0ce278d7e9676e3a9563b148fd43e2ae02ab8e0c4"
+    }
+  ],
+  "indexHunks": "INDEX_PARENT_EDITS.json",
+  "managedRoot": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+  "completeNativeDefinitions": 12,
+  "newPrivateSignatures": 2,
+  "newPublicSignatures": 0,
+  "newStores": 0,
+  "schemaIdentitiesChanged": 0,
+  "allOtherManagedChainsPreserved": true,
+  "sourceOnly": true,
+  "native": "NOT_RUN"
+}

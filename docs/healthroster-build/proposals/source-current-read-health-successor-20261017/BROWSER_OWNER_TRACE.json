@@ -1,0 +1,77 @@
+{
+  "parent": "0840c9b0cf53d4f0152c83f0a34bca96ad3345da",
+  "office": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-office-13102026",
+  "files": [
+    {
+      "file": "js/contract-correction-v3.mjs",
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087",
+      "bytes": 12418,
+      "sourceReadOccurrences": [
+        {
+          "line": 39,
+          "text": "  closed(v,['version','action','operation_id','request_id','actor_user_id']);if(v.version!==(daily?DAILY:CONTRACT)||v.action!=='READ_RESULT')invalid('$.action');"
+        },
+        {
+          "line": 43,
+          "text": " ['READ_RESULT','CONTRACT_MOVE_OPERATION','Check saved result',[]],['READ_RESULT','SOURCE_PAY_DECISION','Check saved result',[]],"
+        },
+        {
+          "line": 44,
+          "text": " ['READ_RESULT','NATIVE_UNPROTECT_RUN','Check saved Unprotect result',['decision_id','member_key']],"
+        },
+        {
+          "line": 47,
+          "text": " ['REVIEW_EARLIER_PAYMENT','CONTRACT_MOVE_HISTORY','Review earlier payment',[]],['REVIEW_EARLIER_PAYMENT','SOURCE_PAY_DECISION_HISTORY','Review earlier payment',[]],"
+        },
+        {
+          "line": 49,
+          "text": " ['RESUME_FINANCIAL','CONTRACT_MOVE_OPERATION','Update pay result',[]],['RESUME_FINANCIAL','SOURCE_PAY_DECISION','Update pay result',[]],"
+        }
+      ]
+    },
+    {
+      "file": "js/correction-contract-v3.js",
+      "sha256": "19cd7b652b1c58c310f011dfbfb5af8eec96130fa2aa7a4ea4ad847561b5ee27",
+      "bytes": 12803,
+      "sourceReadOccurrences": [
+        {
+          "line": 41,
+          "text": "  closed(v,['version','action','operation_id','request_id','actor_user_id']);if(v.version!==(daily?DAILY:CONTRACT)||v.action!=='READ_RESULT')invalid('$.action');"
+        },
+        {
+          "line": 45,
+          "text": " ['READ_RESULT','CONTRACT_MOVE_OPERATION','Check saved result',[]],['READ_RESULT','SOURCE_PAY_DECISION','Check saved result',[]],"
+        },
+        {
+          "line": 46,
+          "text": " ['READ_RESULT','NATIVE_UNPROTECT_RUN','Check saved Unprotect result',['decision_id','member_key']],"
+        },
+        {
+          "line": 49,
+          "text": " ['REVIEW_EARLIER_PAYMENT','CONTRACT_MOVE_HISTORY','Review earlier payment',[]],['REVIEW_EARLIER_PAYMENT','SOURCE_PAY_DECISION_HISTORY','Review earlier payment',[]],"
+        },
+        {
+          "line": 51,
+          "text": " ['RESUME_FINANCIAL','CONTRACT_MOVE_OPERATION','Update pay result',[]],['RESUME_FINANCIAL','SOURCE_PAY_DECISION','Update pay result',[]],"
+        }
+      ]
+    },
+    {
+      "file": "js/daily-rate-correction.js",
+      "sha256": "29854552d2c41dbddd7cf61bfb54eeb3902089d73a2966f32d936aa31d59df21",
+      "bytes": 10925,
+      "sourceReadOccurrences": []
+    },
+    {
+      "file": "js/weekly-source/combined-finalise.js",
+      "sha256": "106cdb4b8ba5c852d76e42f305f36c442c1ccba6eaa8950522c53f1883ccf838",
+      "bytes": 9296,
+      "sourceReadOccurrences": []
+    }
+  ],
+  "dedicatedSourceCurrentResultConsumer": "NOT_FOUND_IN_NAMED_CURRENT_HEALTH_SOURCE_BOUNDARIES",
+  "newBrowserModuleAuthored": false,
+  "OfficeWrites": 0,
+  "held": "No exact public result envelope/B051 financial child supplied; no new browser success DTO or alternate action host invented.",
+  "BankBodyReads": 0
+}

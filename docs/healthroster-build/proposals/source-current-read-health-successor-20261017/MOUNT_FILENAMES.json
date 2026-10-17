@@ -1,0 +1,7 @@
+{
+  "repeatable": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+  "verification": "supabase/verification/17102026_0722_source_current_read_security.sql",
+  "createdAtUtc": "2026-10-17T06:22:23.095Z",
+  "command": "node scripts/cloudtms-db-release.mjs new --kind=repeatable --name=weekly_source_current_read_health_v1",
+  "scaffoldSha256": "34eeab4dda22f4a941c94b477661f7489cd305c6b4bd7d3538e0ceb8ec0b149f"
+}

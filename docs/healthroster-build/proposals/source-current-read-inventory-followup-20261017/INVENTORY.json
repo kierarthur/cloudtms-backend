@@ -1,0 +1,3009 @@
+{
+  "checkpoint": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "purpose": "Separate implementation obligation: current exact Source 1100/1110/1120 declaration/ACL coverage; not a waiver or runtime-derived verifier expected set.",
+  "physical": [
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "sha256": "3f645a99ccdf35b69475f65c33dee019767392aafd754c55b80521dc86e9c80c",
+      "bytes": 491,
+      "includes": [
+        "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc"
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "sha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+      "bytes": 636634,
+      "definitionCount": 76,
+      "unresolvedDDL": []
+    },
+    {
+      "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/02_exact_health_trigger_effects.sqlinc",
+      "sha256": "121631f2f6c0fa1fa2b45c857a683df64838bbbffa5e23e87d6ec755460b627f",
+      "bytes": 19818,
+      "definitionCount": 0,
+      "unresolvedDDL": []
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "sha256": "04f985ed70f921803e74aac1394cd5d11deb8aac1ba6a48af50d5f66c4ebdc7f",
+      "bytes": 397,
+      "includes": [
+        "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc"
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "sha256": "a2292641d24d66c5140c653370b4edc62f973282bc1ad2bb33ff399bec42bf9c",
+      "bytes": 55454,
+      "definitionCount": 6,
+      "unresolvedDDL": []
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "sha256": "0d9156c674e4725d6198fc68783d8c6999daad3b6b557ff38c34deda27f64aaa",
+      "bytes": 382,
+      "includes": [
+        "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc"
+      ]
+    },
+    {
+      "path": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "sha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c",
+      "bytes": 36006,
+      "definitionCount": 1,
+      "unresolvedDDL": []
+    }
+  ],
+  "currentSixClassifier": {
+    "path": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/98_complete_current_classification.sqlinc",
+    "sha256": "22df3a8119af2f398bf5273a758d4643ec18a4883432ba3c6cda1ebfb43025f6",
+    "definitions": [
+      {
+        "signature": "private._weekly_source_acl_table_contract_v1()",
+        "sha256": "dd9d58c9a213ea87bac71c6e8e1da62e0592fbfb34747498fd4f2eb1f3fbd555"
+      },
+      {
+        "signature": "private._weekly_source_acl_lifecycle_column_contract_v1()",
+        "sha256": "933830f8560a73e4b0595c6dcccda0511d081bf440ab09d855267f971d56ec3b"
+      },
+      {
+        "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+        "sha256": "c2ef55331d7bf764be2b31d1384dba3712eeefb476c773b789299f87e5848a85"
+      },
+      {
+        "signature": "private._weekly_source_acl_service_rpc_contract_v1()",
+        "sha256": "4c6b8b8ddc71601e22f774849465886992c1e20b8d8ccc69aab033994034edef"
+      },
+      {
+        "signature": "private._weekly_source_immutable_record_guard_v1()",
+        "sha256": "e51a6afc4cc8575f081bb43bbb094d64d3c07e63cfc77b104586b18f8fc12a8d"
+      },
+      {
+        "signature": "private._weekly_source_immutable_fact_guard_v1()",
+        "sha256": "97687ab76f9a52479ead928207ccb7b4969c23dc058043998ad434fa3fc2b198"
+      }
+    ]
+  },
+  "independentMandatory": {
+    "path": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+    "sha256": "472d6fd233cc73a0d692d2ef83151f9a3f697573d0379f06bc56a8e1f1892607"
+  },
+  "counts": {
+    "physicalDeclarations": 83,
+    "definitions": 81,
+    "private": 60,
+    "service": 21,
+    "unregistered": 0,
+    "classifierMissing": 65,
+    "independentExpectedMissing": 65,
+    "existingReadClosureOnly": 4,
+    "newPrivateOutsideInventory": 2
+  },
+  "rows": [
+    {
+      "signature": "private.weekly_source_pay_decision_metadata_guard_v1()",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7,
+      "header": "private.weekly_source_pay_decision_metadata_guard_v1() returns trigger language plpgsql security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "cab215b700639784d9f6a0eeda238cd5dd69bdac416a5d8d36093133af946053",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_metadata_guard_v1()",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_metadata_guard_v1() from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_application_commit_guard_v1()",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 99,
+      "header": "private.weekly_source_pay_decision_application_commit_guard_v1() returns trigger language plpgsql security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "0b3479f328b8e2a331e48501d24b125e564f08e5b02ee69277a643df81d8bcc3",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_application_commit_guard_v1()",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_application_commit_guard_v1() from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_assembly_commit_guard_v1()",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 130,
+      "header": "private.weekly_source_pay_decision_assembly_commit_guard_v1() returns trigger language plpgsql security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "506f57485aeb9ae83adabf07bb54366a5cadcdb95f88dccf596b11156c0cae57",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_assembly_commit_guard_v1()",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_assembly_commit_guard_v1()\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 158,
+      "header": "public.weekly_source_pay_decision_unprotect_run_prepare_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "146d2f84fd7337da4be3c608203b5d4f5e82685616709c172fb08108ec7353c2",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 365,
+      "header": "private.weekly_source_pay_decision_native_normal_gate_v1( p_family_id uuid,p_run_id uuid,p_actor_user_id uuid,p_native_entry text ) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "12ca9b51486b4aa1e42b8c1c4b118d8e3e7e6f3dfac77a94e2f2e6e129cedfd1",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": true,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_publication_adoption_guard_v1()",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 448,
+      "header": "private.weekly_source_pay_decision_publication_adoption_guard_v1() returns trigger language plpgsql security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "bbf767aa1ea94155b16c75e66cc0483908da99fecf2773e4bf4e3713d243416b",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_publication_adoption_guard_v1()",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_publication_adoption_guard_v1()\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_publication_adoptions_assert_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 486,
+      "header": "private.weekly_source_pay_decision_publication_adoptions_assert_v1(p_application_id uuid) returns void language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "96c0ab9446ef600013eb9a132e167a9b7f8986a3884866033d707c75322c78cc",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_publication_adoptions_assert_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_publication_adoptions_assert_v1(uuid)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_application_finish_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 536,
+      "header": "private.weekly_source_pay_decision_application_finish_v1(p_application_id uuid) returns bytea language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "b01711b58c85f5c4e6c7153efed818331bd742fda6ee4bb5aa56f86c1f3d4b2f",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_application_finish_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_application_finish_v1(uuid)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_confirmation_context_v1(jsonb,text)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 659,
+      "header": "private.weekly_source_pay_decision_confirmation_context_v1(p_request jsonb,p_version text) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "47bd00318d7855aeb49bc83cf4bfe0b2b4dc67371287196def6243c7ddb24827",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_confirmation_context_v1(jsonb,text)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_confirmation_context_v1(jsonb,text)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_confirmation_context_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 816,
+      "header": "public.weekly_source_pay_decision_confirmation_context_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "691651ea2aafe9c5e35984b053e4cf6db6b824d6516ffbbaadf12221c293aceb",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_confirmation_context_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_confirmation_context_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_confirmation_context_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_confirmation_context_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_confirmation_prepare_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 826,
+      "header": "public.weekly_source_pay_decision_confirmation_prepare_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "ca0a9ef10ad6523d8a0995403a972f9ec976c1705fa3879a64fbd6462852bb53",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_confirmation_prepare_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_confirmation_prepare_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_confirmation_prepare_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_confirmation_prepare_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_unprotect_application_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 878,
+      "header": "private.weekly_source_pay_decision_unprotect_application_v1(p_preparation_id uuid) returns uuid language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "60ac52fa3fc7a79d8699dbd37fdb41090acae9a8e5a8a252c3d7f72a72a97fb6",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_unprotect_application_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_unprotect_application_v1(uuid)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_protected_current_placement_v1(uuid,uuid,boolean)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 938,
+      "header": "private.weekly_source_protected_current_placement_v1( p_family_id uuid,p_work_event_id uuid,p_lock boolean ) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "7039eb66c27c69c681778213a09768a2ab7b7885364bdf9a9b4e3a990234a67a",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_protected_current_placement_v1(uuid,uuid,boolean)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_protected_current_placement_v1(uuid,uuid,boolean)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_protected_signed_evidence_v1(uuid,uuid,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 1166,
+      "header": "private.weekly_source_protected_signed_evidence_v1( p_timesheet_id uuid,p_family_id uuid,p_work_event_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','extensions','pg_temp'",
+      "definitionSha256": "e5d3eeb18241635da7c37eca88c0908f352bcc5b08eaf65d2303c8a215e53f56",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_protected_signed_evidence_v1(uuid,uuid,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_protected_signed_evidence_v1(uuid,uuid,uuid)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_protected_action_facts_v1(jsonb,text)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 1294,
+      "header": "private.weekly_source_protected_action_facts_v1( p_request jsonb,p_request_kind text ) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','extensions','pg_catalog','pg_temp'",
+      "definitionSha256": "41edba293899edfb9df6d7916f3c021f60b4341a10155643d508b7a45e23982d",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_protected_action_facts_v1(jsonb,text)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_protected_action_facts_v1(jsonb,text)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 1753,
+      "header": "public.weekly_exceptional_pay_action_context_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "09bb7ef02737f7d5e6f94ba7aaadd4e0226a33dc9072664dba4e6739561b6f43",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_exceptional_pay_action_context_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_exceptional_pay_action_context_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "SERVICE_RPC"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "SERVICE_RPC"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_unprotect_source_observation_v1(uuid,uuid,uuid,jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 1801,
+      "header": "private.weekly_source_unprotect_source_observation_v1( p_family_id uuid,p_source_cycle_id uuid,p_work_event_id uuid,p_context jsonb ) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "6139614b41badc1d63ff61c2080e05cba28d724244734a375a0bd5d3b25cbfeb",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_unprotect_source_observation_v1(uuid,uuid,uuid,jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_unprotect_source_observation_v1(uuid,uuid,uuid,jsonb)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 1856,
+      "header": "public.weekly_source_pay_decision_unprotect_review_context_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "4d0f407fb2cafdc6bb738b62885f25fc0ac624dc290fc252931750a4c7fe065f",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_quote_context_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 1935,
+      "header": "public.weekly_source_pay_decision_preview_quote_context_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "d6c6dc8f0e0c4ae3214d521517eaff4fe0275e66f75cb595a5081febfe2d9d8d",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_preview_quote_context_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_preview_quote_context_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_preview_quote_context_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_preview_quote_context_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_request_scope_v1(uuid,jsonb,text,boolean)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 1979,
+      "header": "private.weekly_source_pay_decision_native_request_scope_v1( p_preparation_id uuid,p_request jsonb,p_kind text,p_effect boolean ) returns uuid language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "b8e5406141afd310a52277b782fce4648e4adba379471afe394992905d0a8e3a",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_native_request_scope_v1(uuid,jsonb,text,boolean)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_native_request_scope_v1(uuid,jsonb,text,boolean)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_record_native_adoption_v1(uuid,uuid,jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 2039,
+      "header": "private.weekly_source_pay_decision_record_native_adoption_v1( p_preparation_id uuid,p_application_id uuid,p_control jsonb ) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "179dfc73971382d770d932ec10c2bac26ab9da70f76aef20c00720a406f051f6",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_record_native_adoption_v1(uuid,uuid,jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_record_native_adoption_v1(uuid,uuid,jsonb)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 2239,
+      "header": "private.weekly_source_protected_next_engine_v1(p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "9686f62baf8c9b4866e27455e9a183f30809c1163ea21321d8657ccb5cb8b274",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_next_payload_validate_v1(jsonb,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 2805,
+      "header": "private.weekly_source_pay_decision_native_next_payload_validate_v1(p_request jsonb,p_preparation_id uuid) returns jsonb language sql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "9c0a0fa03ae5b6730646ede4287d77fc1f9a06f262cd78c86a5fddbb907dd655",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_native_next_payload_validate_v1(jsonb,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_native_next_payload_validate_v1(jsonb,uuid)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_exceptional_pay_publish_next_impl_v1(jsonb,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 2812,
+      "header": "private.weekly_exceptional_pay_publish_next_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid) returns jsonb language sql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "3c18fa99216b362750b4f4e03a449d93e0730c9fce71d6fe16194d5b83bc9202",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_exceptional_pay_publish_next_impl_v1(jsonb,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_exceptional_pay_publish_next_impl_v1(jsonb,uuid)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 2819,
+      "header": "public.weekly_exceptional_pay_publish_next_v1(p_request jsonb) returns jsonb language sql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "3cc1199595d56a4db9d337586552ecb54f9da0d2a919fead9d42bf0af1fb3126",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_exceptional_pay_publish_next_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_exceptional_pay_publish_next_v1(jsonb) to service_role;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_exceptional_pay_publish_next_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_exceptional_pay_publish_next_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "SERVICE_RPC"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "SERVICE_RPC"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_family_native_route_v1(uuid,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 2833,
+      "header": "private.weekly_source_pay_decision_family_native_route_v1(p_family_id uuid,p_generation_id uuid) returns text language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "6b0ffcf2117d8564d64bf9c8a4b01c7157aeb78d89779128ce2df2f04c543edc",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_family_native_route_v1(uuid,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_family_native_route_v1(uuid,uuid)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_local_head_owned_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 2907,
+      "header": "private.weekly_source_pay_decision_local_head_owned_v1(p_receipt_id uuid) returns boolean language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "89566ed2bb9ae507c6a8795062fa71c257407961a15b7a65d149fc8d08fb8fed",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_local_head_owned_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_local_head_owned_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 3055,
+      "header": "private.weekly_source_protected_local_stage_engine_v1( p_request jsonb,p_source_decision_preparation_id uuid,p_validate_only boolean ) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','extensions','pg_temp'",
+      "definitionSha256": "93d54d17348e7ef33a595525cd13a712e8b88e97044ccd0d08dcbafd56bb5d96",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_local_payload_validate_v1(jsonb,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 4166,
+      "header": "private.weekly_source_pay_decision_native_local_payload_validate_v1(p_request jsonb,p_preparation_id uuid) returns jsonb language sql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "3c4a151852e003f1bd6cefc976bb40a797bfc885bc2f16092e38b810d6fc424a",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_native_local_payload_validate_v1(jsonb,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_native_local_payload_validate_v1(jsonb,uuid)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_exceptional_pay_stage_c1_request_impl_v1(jsonb,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 4173,
+      "header": "private.weekly_exceptional_pay_stage_c1_request_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "042f1e2cdf67db8497d1c634373ff12a3e42887b7abb969ba614c522ae4d1a0a",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_exceptional_pay_stage_c1_request_impl_v1(jsonb,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_exceptional_pay_stage_c1_request_impl_v1(jsonb,uuid)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 4192,
+      "header": "public.weekly_exceptional_pay_stage_c1_request_v1(p_request jsonb) returns jsonb language sql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "db184ade9abfc61f0a9b2714e632f893298bbdc9100163d7c84ce7880ef2ffbe",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_exceptional_pay_stage_c1_request_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_exceptional_pay_stage_c1_request_v1(jsonb) to service_role;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_exceptional_pay_stage_c1_request_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_exceptional_pay_stage_c1_request_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "SERVICE_RPC"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "SERVICE_RPC"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 4203,
+      "header": "private.weekly_exceptional_pay_complete_local_impl_v1(p_request jsonb,p_source_decision_preparation_id uuid) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp' set lock_timeout to '2500ms' set statement_timeout to '30s'",
+      "definitionSha256": "5d9831914eb7f075a2a182b693a1d517197788d13989dbb753457703abd36f21",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 4708,
+      "header": "public.weekly_exceptional_pay_complete_local_v1(p_request jsonb) returns jsonb language sql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "6f3e0f10892d8a9ad217d42ede1d65e6a7f37ae3d3994473aee56d3a19cbd260",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_exceptional_pay_complete_local_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_exceptional_pay_complete_local_v1(jsonb) to service_role;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_exceptional_pay_complete_local_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_exceptional_pay_complete_local_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "SERVICE_RPC"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "SERVICE_RPC"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 4719,
+      "header": "public.weekly_source_pay_decision_unprotect_prepare_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "c76bdb4048b1f748d90ef64df6749b7a01de2e4ab9acabd95f677d2c37c6d262",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_unprotect_apply_v1(uuid,uuid,text,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 4870,
+      "header": "private.weekly_source_pay_decision_unprotect_apply_v1( p_preparation_id uuid,p_decision_id uuid,p_member_key text,p_request_id uuid ) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "ae8262de4cc765c4a6c611094399f96bffc3cbed42d4042d1c3638c672a19f7e",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_unprotect_apply_v1(uuid,uuid,text,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_unprotect_apply_v1(uuid,uuid,text,uuid)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_local_release_proof_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 4939,
+      "header": "private.weekly_source_pay_decision_local_release_proof_v1(p_preparation_id uuid) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "9f3d3df6094bea15457ee62c60e677cde3daa70be60613441e24dd1e8a01f310",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_local_release_proof_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_local_release_proof_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_local_protected_pending_released_v1()",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 5046,
+      "header": "private.weekly_source_local_protected_pending_released_v1() returns trigger language plpgsql security definer set search_path to 'pg_catalog','pg_temp'",
+      "definitionSha256": "358a7ce6409d7f56350e7c75d584808f979421250a14f524069c7859f3eba885",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_local_protected_pending_released_v1()",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_local_protected_pending_released_v1() from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_local_saved_status_native_v1(uuid,uuid,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 5147,
+      "header": "private.weekly_source_local_saved_status_native_v1( p_family_id uuid,p_orchestration_run_id uuid,p_actor_user_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "definitionSha256": "2c01d931eb3d98448d8b7f54ae48a14b0a39c380b137f9e96679292f0d10eec3",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_local_saved_status_native_v1(uuid,uuid,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_local_saved_status_native_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_local_saved_status_v1(uuid,uuid,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 5612,
+      "header": "private.weekly_source_local_saved_status_v1(p_family_id uuid,p_orchestration_run_id uuid,p_actor_user_id uuid) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "3cce1fc5e1b89f108ebf44a5285addc2234e2c1853ad496a20915d845f60ca49",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_local_saved_status_v1(uuid,uuid,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_local_saved_status_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 5637,
+      "header": "public.weekly_source_pay_decision_unprotect_quote_context_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "075dcced41d315978ed0dc671254176be35e41bda86ec90a18efaa8e1a416a64",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_target_family_for_root_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 5693,
+      "header": "private.weekly_source_target_family_for_root_v1( p_root_timesheet_id uuid ) returns public.weekly_exceptional_pay_target_families language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "definitionSha256": "e22b8af1498ac692a58a1771aedcd44114711425af0880adf53582483c628943",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_target_family_for_root_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_target_family_for_root_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_query_scope_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 5756,
+      "header": "private.weekly_source_pay_query_scope_v1( p_root_timesheet_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "definitionSha256": "a7a12795ff163aaf2201b08f7050373a0bb4065854d7c267c9ead380301ac38b",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_query_scope_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_query_scope_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+        "sourceInputIsCurrentFinal": false
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_protected_entitlement_projection_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 5860,
+      "header": "private.weekly_source_protected_entitlement_projection_v1(p_context jsonb) returns jsonb language plpgsql immutable set search_path=pg_catalog",
+      "definitionSha256": "50b182b24b65136677d3545adc2e00d9acd32e124041fd2786e17d053eb0a657",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_protected_entitlement_projection_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_protected_entitlement_projection_v1(jsonb) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 5884,
+      "header": "private.weekly_source_local_preauthorisation_write_allowed_v1( p_root_timesheet_id uuid, p_snapshot jsonb ) returns boolean language sql volatile security definer set search_path to 'pg_catalog','pg_temp'",
+      "definitionSha256": "05581e26b34f70a1f2fa8a7bb67cd8f2c28d8b6ad0bc81e7183cbac0d16bb2e0",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb) from public,anon,authenticated,service_role;"
+        },
+        {
+          "signature": "private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "SERVICE_RPC"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "SERVICE_RPC"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_local_publication_context_v2(uuid,uuid,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 5921,
+      "header": "private.weekly_source_local_publication_context_v2( p_publication_request_id uuid,p_generation_id uuid,p_root_timesheet_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "definitionSha256": "34020c0d1669dc00998ec4007e0d3bb15beba92cc66d13baaaf32518f86a9384",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_local_publication_context_v2(uuid,uuid,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_local_publication_context_v2(uuid,uuid,uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_protected_saved_placement_v1(uuid,uuid,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6160,
+      "header": "private.weekly_source_protected_saved_placement_v1(p_generation_id uuid,p_root_timesheet_id uuid,p_contract_id uuid) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "06dde2a024b457c441c81b5c0aa6d3d4b1ba6e8c236637fcc128c0e2af32f1bf",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_protected_saved_placement_v1(uuid,uuid,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_protected_saved_placement_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_protected_root_financial_fact_v1(jsonb,integer)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6210,
+      "header": "private.weekly_source_protected_root_financial_fact_v1(p_financial jsonb,p_root_version integer) returns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "b175ce6002ade780e5f3c15456f36538c3dc23af6d43c542e7ee3bfd76efcf59",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_protected_root_financial_fact_v1(jsonb,integer)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_protected_root_financial_fact_v1(jsonb,integer) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_protected_current_financial_source_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6226,
+      "header": "public.weekly_source_protected_current_financial_source_v1(p_request jsonb) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "3a925f6d2124477375574003f573c44d0133531198cacaf28de716360f398192",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_protected_current_financial_source_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_protected_current_financial_source_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_protected_current_financial_source_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_protected_current_financial_source_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_request_v1(jsonb,text)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6275,
+      "header": "private.weekly_source_pay_decision_request_v1(p_body jsonb,p_kind text) returns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "d207b8bc9ed9f12daa2b12f9b1b33033f9776ea12be7be30e4731ec3d1876ce7",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_request_v1(jsonb,text)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_request_v1(jsonb,text) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_scope_access_v1(uuid,uuid,uuid,date)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6404,
+      "header": "private.weekly_source_pay_decision_scope_access_v1(p_actor uuid,p_group uuid,p_client uuid,p_date date) returns void language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "5d1d33999bbd9898b242542c7759711c5c4bb41d3f0dd511593f1058918c5d97",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_scope_access_v1(uuid,uuid,uuid,date)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_scope_access_v1(uuid,uuid,uuid,date) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_source_subject_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6422,
+      "header": "private.weekly_source_pay_decision_source_subject_v1(p_row uuid) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "2f29b699ebc00feeaaa8ff63956ce3f7d07ba356071a6aa935b823ab732cb42a",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_source_subject_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_source_subject_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_selection_identity_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6491,
+      "header": "private.weekly_source_pay_decision_selection_identity_v1(p_selection jsonb) returns jsonb language sql immutable set search_path=pg_catalog",
+      "definitionSha256": "18665120d17cfc6722a5c3eb2a2d0e5293e8da920b6f45ccc0d3b2c0e53bc7e7",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_selection_identity_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_selection_identity_v1(jsonb) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6500,
+      "header": "private.weekly_source_pay_decision_resolved_scope_v1(p_browser jsonb,p_actor uuid,p_lock boolean) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "07a779a53542b534fb4fcdac29dd76b9db54f2a950baaba1295e0d87993b9e70",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+        "sourceInputIsCurrentFinal": false
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_assembly_assert_v1(uuid,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6668,
+      "header": "private.weekly_source_pay_decision_assembly_assert_v1(p_assembly uuid,p_actor uuid) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "a768a4f91b1fca2617baf60f69324b97d1efe406cf478f57ebecb4daf69e92ec",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_assembly_assert_v1(uuid,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_assembly_assert_v1(uuid,uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_begin_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6721,
+      "header": "public.weekly_source_pay_decision_preview_begin_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "bd58756cf2b99f8d292f203817a01c1982e390fe0d5b1ffe5e72c8dbd34060b1",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_preview_begin_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_preview_begin_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_preview_begin_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_preview_begin_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_ready_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6794,
+      "header": "public.weekly_source_pay_decision_preview_ready_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "a02e2c87090c25ffca992911775129527065116f14739f38654a4c1c364c77db",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_preview_ready_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_preview_ready_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_preview_ready_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_preview_ready_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_abandon_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6825,
+      "header": "public.weekly_source_pay_decision_preview_abandon_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "b3c64850a3a02b3259cb6eb415a1a375c69c385aea41c09ed88548c6fed93d21",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_preview_abandon_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_preview_abandon_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_preview_abandon_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_preview_abandon_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_quote_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6860,
+      "header": "public.weekly_source_pay_decision_preview_quote_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "721936f04cbef633f7d2d418a79d20a077006b9e06f8bd12fad212df80c52852",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_preview_quote_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_preview_quote_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_preview_quote_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_preview_quote_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_quantity_union_v1(jsonb,text)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6954,
+      "header": "private.weekly_source_pay_decision_quantity_union_v1(p_values jsonb,p_mode text) returns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "910372a53fd44b6380bd7e131b157c555b45d40ffd740bf0ad87520a2dd91149",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_quantity_union_v1(jsonb,text)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_quantity_union_v1(jsonb,text) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_public_actions_v1(uuid,jsonb,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 6986,
+      "header": "private.weekly_source_pay_decision_public_actions_v1(p_decision uuid,p_member jsonb,p_cut uuid) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "956ce41169932465682479527895ec82ed88eb28b04d4cc07ef3052859747f02",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_public_actions_v1(uuid,jsonb,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_public_actions_v1(uuid,jsonb,uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_review_projection_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7026,
+      "header": "private.weekly_source_pay_decision_review_projection_v1(p_review uuid) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "5c4feec6b99726eb63da301a53db4ba4f04ce09665f67024addee3483a204a14",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_review_projection_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_review_projection_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7068,
+      "header": "public.weekly_source_pay_decision_preview_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "f9773873848d275df7cdeceb9bc3bdae71722e9c20df1c4513bf2c6e711d6432",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_preview_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_preview_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_preview_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_preview_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_incident_guard_v1()",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7135,
+      "header": "private.weekly_source_pay_decision_incident_guard_v1() returns trigger language plpgsql security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "26795aa0a43c99b588012d9b6f7fcd0c48fc8a7f84831c7b7a78eaa3a632521b",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_incident_guard_v1()",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_incident_guard_v1() from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_contact_retire_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7167,
+      "header": "private.weekly_source_pay_decision_contact_retire_v1(p_application uuid) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "bad148e0cbc05ad665d81081dafcbbf14456d09842ff29aca9d89e4681edd755",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_contact_retire_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_contact_retire_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_contact_suppressed_v1(uuid,uuid,jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7228,
+      "header": "private.weekly_source_pay_decision_contact_suppressed_v1(p_group uuid,p_event uuid,p_issue jsonb) returns boolean language sql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "1d1a69b429bccf8326531f3b9e85eec487ed222e93dc71f1970ddd7d68848f50",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_contact_suppressed_v1(uuid,uuid,jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_contact_suppressed_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7251,
+      "header": "private.weekly_source_pay_decision_read_source_v1(p_decision uuid,p_request uuid,p_actor uuid) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "2cc9a649951826b913168fd8883592b5a8dd2d0903e0a1631fc018761e4e40c1",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": true,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_read_source_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7298,
+      "header": "public.weekly_source_pay_decision_read_source_v1(p_request jsonb) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "3b473a1c2c1aea57704302bfbd0f12cf5b45407deef6fdef473703aba734d3bf",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_read_source_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_read_source_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_read_source_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_read_source_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": true,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_rollback_witness_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7317,
+      "header": "private.weekly_source_pay_decision_native_rollback_witness_v1(p_preparation uuid) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "53fbea9cb74437274af77af1edb251334cff7720f77eadc17ba5b0e998d11160",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_native_rollback_witness_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_native_rollback_witness_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_dependency_v1(uuid,jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7339,
+      "header": "private.weekly_source_pay_decision_native_dependency_v1(p_preparation uuid,p_before jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "f7ee0becffa1dc8027ea370016059395ca4559258febb1ae1101d34030175ee8",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_native_dependency_v1(uuid,jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_native_dependency_v1(uuid,jsonb) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_bind_publication_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7372,
+      "header": "private.weekly_source_pay_decision_bind_publication_v1(p_application uuid) returns void language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "fd6098aa742e4d057cdddf8ac7d29665474323ffb3ce44097bca61eb30f67021",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_bind_publication_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_bind_publication_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7438,
+      "header": "public.weekly_source_pay_decision_accept_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'",
+      "definitionSha256": "cad02a71a6f4a4a4a08bb161ac0a976ab2690f155f2b4f95cb56e01719ce0ead",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_source_pay_decision_accept_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_source_pay_decision_accept_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": true,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7663,
+      "header": "private.weekly_source_query_resolved_decision_matches_v1( p_source_group_id uuid,p_work_event_id uuid,p_issue jsonb ) returns boolean language sql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "definitionSha256": "57f624b28fb76c47daf840a23f38b29158358f782d7343fdb325cc68993d641d",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7694,
+      "header": "public.weekly_exceptional_pay_prepare_action_v1( p_request jsonb ) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','extensions','pg_catalog','pg_temp'",
+      "definitionSha256": "3697717955ef6bc979e0ba976f0ae1bcc075a103ffc50996a5ecb96542b0fba9",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_exceptional_pay_prepare_action_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_exceptional_pay_prepare_action_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "SERVICE_RPC"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "SERVICE_RPC"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_protected_action_placement_assert_v1(jsonb,jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 7977,
+      "header": "private.weekly_source_protected_action_placement_assert_v1(p_request jsonb,p_placement jsonb) returns void language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "c79bad2ede73c3e35b264d01f5f901843cb523cd9529140612998d5f563d1480",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_protected_action_placement_assert_v1(jsonb,jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_protected_action_placement_assert_v1(jsonb,jsonb)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_snapshot_assert_v1(jsonb,jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 8018,
+      "header": "private.weekly_source_pay_decision_native_snapshot_assert_v1(p_snapshot jsonb,p_facts jsonb) returns void language plpgsql immutable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "ce239226d0e44e62e890d343d6d6160fb468f9ba258a19afbd1c5f60571a63dd",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_native_snapshot_assert_v1(jsonb,jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_native_snapshot_assert_v1(jsonb,jsonb)\n from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "public.weekly_exceptional_pay_next_publication_status_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "physical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+      "line": 8145,
+      "header": "public.weekly_exceptional_pay_next_publication_status_v1( p_request jsonb ) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "585cccc84e6717ae05ed401d210106b7fdabc03c0d297358ac742d622353f9e2",
+      "schemaPlacement": "PUBLIC_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "public.weekly_exceptional_pay_next_publication_status_v1(jsonb)",
+          "action": "revoke",
+          "sql": "revoke all on function public.weekly_exceptional_pay_next_publication_status_v1(jsonb) from public,anon,authenticated;"
+        },
+        {
+          "signature": "public.weekly_exceptional_pay_next_publication_status_v1(jsonb)",
+          "action": "grant",
+          "sql": "grant execute on function public.weekly_exceptional_pay_next_publication_status_v1(jsonb) to service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": true,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "SERVICE_RPC"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "SERVICE_RPC"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private._candidate_expense_source_family_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "physical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "line": 4,
+      "header": "private._candidate_expense_source_family_v1(p_timesheet_id uuid) RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO 'pg_catalog', 'public', 'private', 'pg_temp'",
+      "definitionSha256": "fd6730649d8ac7d81408f646ebd64b782eff068e910d323aeff0afa1e0524bd9",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private._candidate_expense_source_family_v1(uuid)",
+          "action": "alter",
+          "sql": "alter function private._candidate_expense_source_family_v1(uuid) owner to postgres;"
+        },
+        {
+          "signature": "private._candidate_expense_source_family_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private._candidate_expense_source_family_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_resolve_root_identity_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "physical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "line": 90,
+      "header": "private.weekly_source_resolve_root_identity_v1( p_timesheet_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "definitionSha256": "c980511b6e84312e8b246d9a210e7032818fcc2ffd4a545bb875f783baa87dbb",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_resolve_root_identity_v1(uuid)",
+          "action": "alter",
+          "sql": "alter function private.weekly_source_resolve_root_identity_v1(uuid) owner to postgres;"
+        },
+        {
+          "signature": "private.weekly_source_resolve_root_identity_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_resolve_root_identity_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+      "root": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "physical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "line": 235,
+      "header": "private.weekly_source_lock_family_rows_v1( p_requested_timesheet_ids uuid[], p_candidate_id uuid default null ) returns jsonb language plpgsql volatile security definer set search_path to 'public','private','pg_catalog','pg_temp'",
+      "definitionSha256": "603122d55df8be43e2aac94634baba034740d1e01feedbf58abc17e32dd25908",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+          "action": "alter",
+          "sql": "alter function private.weekly_source_lock_family_rows_v1(uuid[],uuid) owner to postgres;"
+        },
+        {
+          "signature": "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_lock_family_rows_v1(uuid[],uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_query_scope_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "physical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "line": 561,
+      "header": "private.weekly_source_pay_query_scope_v1( p_root_timesheet_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "definitionSha256": "50aefc118b6e1c58fbbf115b374558e8d7e69cebe7ab3bf1b143f8200269e5fa",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_query_scope_v1(uuid)",
+          "action": "alter",
+          "sql": "alter function private.weekly_source_pay_query_scope_v1(uuid) owner to postgres;"
+        },
+        {
+          "signature": "private.weekly_source_pay_query_scope_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_query_scope_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+      "root": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "physical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "line": 664,
+      "header": "private.weekly_source_pay_decision_resolved_scope_v1(p_browser jsonb,p_actor uuid,p_lock boolean) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public",
+      "definitionSha256": "1d2449c5f3e5d6aa0eed0158605a3ecda00e561bd9febb8fbd166f7429f3225d",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+          "action": "alter",
+          "sql": "alter function private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean) owner to postgres;"
+        },
+        {
+          "signature": "private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_invoice_duty_scope_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+      "physical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+      "line": 840,
+      "header": "private.weekly_source_invoice_duty_scope_v1(p_timesheet_id uuid) returns jsonb language plpgsql stable security definer set search_path='pg_catalog','pg_temp'",
+      "definitionSha256": "3fea772b0e486332c572a10f17d9dac477e026c5ac2e0158cb4ba45f1016376f",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [
+        {
+          "signature": "private.weekly_source_invoice_duty_scope_v1(uuid)",
+          "action": "alter",
+          "sql": "alter function private.weekly_source_invoice_duty_scope_v1(uuid) owner to postgres;"
+        },
+        {
+          "signature": "private.weekly_source_invoice_duty_scope_v1(uuid)",
+          "action": "revoke",
+          "sql": "revoke all on function private.weekly_source_invoice_duty_scope_v1(uuid) from public,anon,authenticated,service_role;"
+        }
+      ],
+      "sourceRevokeAllBrowserRoles": true,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current_v1.sql",
+        "finalPhysical": "supabase/repeatable/16102026_1110_nhsp_v6_source_pending_current/01_complete_pending_current.sqlinc",
+        "sourceInputIsCurrentFinal": true
+      },
+      "currentClassifierListed": false,
+      "currentClassifierRoles": [],
+      "currentIndependentExpectedListed": false,
+      "currentIndependentExpectedRoles": [],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    },
+    {
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "root": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty_v1.sql",
+      "physical": "supabase/repeatable/16102026_1120_nhsp_v6_source_invoice_duty/01_complete_invoice_duty.sqlinc",
+      "line": 1,
+      "header": "private.weekly_source_invoice_duty_v1(p_root_timesheet_id uuid) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "definitionSha256": "b9587301ec7a944a6ce2ef688651b9974c8bb1cc98b6348c7d2d360b7b519324",
+      "schemaPlacement": "PRIVATE_SCHEMA",
+      "declaredAcl": [],
+      "sourceRevokeAllBrowserRoles": false,
+      "explicitServiceGrant": false,
+      "managedChain": {
+        "finalRoot": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
+        "finalPhysical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+        "sourceInputIsCurrentFinal": false
+      },
+      "currentClassifierListed": true,
+      "currentClassifierRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "currentIndependentExpectedListed": true,
+      "currentIndependentExpectedRoles": [
+        "PRIVATE_HELPER"
+      ],
+      "readClosureDelta": false,
+      "existingRoutine": true,
+      "newRoutine": false,
+      "bodySemanticReview": "NOT_PERFORMED_BY_THIS_INVENTORY"
+    }
+  ],
+  "effectiveSignatures": [
+    "private.weekly_source_pay_decision_metadata_guard_v1()",
+    "private.weekly_source_pay_decision_application_commit_guard_v1()",
+    "private.weekly_source_pay_decision_assembly_commit_guard_v1()",
+    "public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+    "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+    "private.weekly_source_pay_decision_publication_adoption_guard_v1()",
+    "private.weekly_source_pay_decision_publication_adoptions_assert_v1(uuid)",
+    "private.weekly_source_pay_decision_application_finish_v1(uuid)",
+    "private.weekly_source_pay_decision_confirmation_context_v1(jsonb,text)",
+    "public.weekly_source_pay_decision_confirmation_context_v1(jsonb)",
+    "public.weekly_source_pay_decision_confirmation_prepare_v1(jsonb)",
+    "private.weekly_source_pay_decision_unprotect_application_v1(uuid)",
+    "private.weekly_source_protected_current_placement_v1(uuid,uuid,boolean)",
+    "private.weekly_source_protected_signed_evidence_v1(uuid,uuid,uuid)",
+    "private.weekly_source_protected_action_facts_v1(jsonb,text)",
+    "public.weekly_exceptional_pay_action_context_v1(jsonb)",
+    "private.weekly_source_unprotect_source_observation_v1(uuid,uuid,uuid,jsonb)",
+    "public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb)",
+    "public.weekly_source_pay_decision_preview_quote_context_v1(jsonb)",
+    "private.weekly_source_pay_decision_native_request_scope_v1(uuid,jsonb,text,boolean)",
+    "private.weekly_source_pay_decision_record_native_adoption_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_protected_next_engine_v1(jsonb,uuid,boolean)",
+    "private.weekly_source_pay_decision_native_next_payload_validate_v1(jsonb,uuid)",
+    "private.weekly_exceptional_pay_publish_next_impl_v1(jsonb,uuid)",
+    "public.weekly_exceptional_pay_publish_next_v1(jsonb)",
+    "private.weekly_source_pay_decision_family_native_route_v1(uuid,uuid)",
+    "private.weekly_source_pay_decision_local_head_owned_v1(uuid)",
+    "private.weekly_source_protected_local_stage_engine_v1(jsonb,uuid,boolean)",
+    "private.weekly_source_pay_decision_native_local_payload_validate_v1(jsonb,uuid)",
+    "private.weekly_exceptional_pay_stage_c1_request_impl_v1(jsonb,uuid)",
+    "public.weekly_exceptional_pay_stage_c1_request_v1(jsonb)",
+    "private.weekly_exceptional_pay_complete_local_impl_v1(jsonb,uuid)",
+    "public.weekly_exceptional_pay_complete_local_v1(jsonb)",
+    "public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb)",
+    "private.weekly_source_pay_decision_unprotect_apply_v1(uuid,uuid,text,uuid)",
+    "private.weekly_source_pay_decision_local_release_proof_v1(uuid)",
+    "private.weekly_source_local_protected_pending_released_v1()",
+    "private.weekly_source_local_saved_status_native_v1(uuid,uuid,uuid)",
+    "private.weekly_source_local_saved_status_v1(uuid,uuid,uuid)",
+    "public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb)",
+    "private.weekly_source_target_family_for_root_v1(uuid)",
+    "private.weekly_source_pay_query_scope_v1(uuid)",
+    "private.weekly_source_protected_entitlement_projection_v1(jsonb)",
+    "private.weekly_source_local_preauthorisation_write_allowed_v1(uuid,jsonb)",
+    "private.weekly_source_local_publication_context_v2(uuid,uuid,uuid)",
+    "private.weekly_source_protected_saved_placement_v1(uuid,uuid,uuid)",
+    "private.weekly_source_protected_root_financial_fact_v1(jsonb,integer)",
+    "public.weekly_source_protected_current_financial_source_v1(jsonb)",
+    "private.weekly_source_pay_decision_request_v1(jsonb,text)",
+    "private.weekly_source_pay_decision_scope_access_v1(uuid,uuid,uuid,date)",
+    "private.weekly_source_pay_decision_source_subject_v1(uuid)",
+    "private.weekly_source_pay_decision_selection_identity_v1(jsonb)",
+    "private.weekly_source_pay_decision_resolved_scope_v1(jsonb,uuid,boolean)",
+    "private.weekly_source_pay_decision_assembly_assert_v1(uuid,uuid)",
+    "public.weekly_source_pay_decision_preview_begin_v1(jsonb)",
+    "public.weekly_source_pay_decision_preview_ready_v1(jsonb)",
+    "public.weekly_source_pay_decision_preview_abandon_v1(jsonb)",
+    "public.weekly_source_pay_decision_preview_quote_v1(jsonb)",
+    "private.weekly_source_pay_decision_quantity_union_v1(jsonb,text)",
+    "private.weekly_source_pay_decision_public_actions_v1(uuid,jsonb,uuid)",
+    "private.weekly_source_pay_decision_review_projection_v1(uuid)",
+    "public.weekly_source_pay_decision_preview_v1(jsonb)",
+    "private.weekly_source_pay_decision_incident_guard_v1()",
+    "private.weekly_source_pay_decision_contact_retire_v1(uuid)",
+    "private.weekly_source_pay_decision_contact_suppressed_v1(uuid,uuid,jsonb)",
+    "private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)",
+    "public.weekly_source_pay_decision_read_source_v1(jsonb)",
+    "private.weekly_source_pay_decision_native_rollback_witness_v1(uuid)",
+    "private.weekly_source_pay_decision_native_dependency_v1(uuid,jsonb)",
+    "private.weekly_source_pay_decision_bind_publication_v1(uuid)",
+    "public.weekly_source_pay_decision_accept_v1(jsonb)",
+    "private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)",
+    "public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+    "private.weekly_source_protected_action_placement_assert_v1(jsonb,jsonb)",
+    "private.weekly_source_pay_decision_native_snapshot_assert_v1(jsonb,jsonb)",
+    "public.weekly_exceptional_pay_next_publication_status_v1(jsonb)",
+    "private._candidate_expense_source_family_v1(uuid)",
+    "private.weekly_source_resolve_root_identity_v1(uuid)",
+    "private.weekly_source_lock_family_rows_v1(uuid[],uuid)",
+    "private.weekly_source_invoice_duty_scope_v1(uuid)",
+    "private.weekly_source_invoice_duty_v1(uuid)"
+  ],
+  "newReadRoutines": [
+    {
+      "signature": "private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)",
+      "existsInCurrentParent": false
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid)",
+      "existsInCurrentParent": false
+    }
+  ],
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "dbConnections": 0,
+  "runtimeOrClassifierWrites": 0,
+  "bankBodySemanticReads": 0
+}

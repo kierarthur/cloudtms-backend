@@ -1,0 +1,82 @@
+{
+  "routines": [
+    {
+      "signature": "private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/01_native_status_child.sqlinc",
+      "definitionSha256": "ffae1fc04874e0b3590c89609f592b4ca33c6b95654a4272e0dd1cc8b6ffb30b",
+      "header": "private.weekly_source_pay_decision_native_status_child_v1( p_source jsonb,p_family uuid,p_run uuid,p_decision uuid,p_request uuid ) returns jsonb language plpgsql immutable security definer set search_path=pg_catalog,private,public"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid)",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/02_current_read_access.sqlinc",
+      "definitionSha256": "c47a73e2f9c06175593d486d07e7e01b5986cf41c11238d9587ff23f484b5dfd",
+      "header": "private.weekly_source_pay_decision_read_access_v1(p_decision uuid,p_request uuid,p_actor uuid) returns void language plpgsql stable security definer set search_path=pg_catalog,private,public"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/03_complete_native_gate.sqlinc",
+      "definitionSha256": "c9a5ddba3972f3eccb6900cbb07582d50d0640f3afa05932ed942c333490b058",
+      "header": "private.weekly_source_pay_decision_native_normal_gate_v1( p_family_id uuid,p_run_id uuid,p_actor_user_id uuid,p_native_entry text ) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/04_complete_internal_source_read.sqlinc",
+      "definitionSha256": "17101b4a353e2f831b3f3a7063cdd48bc253f4bfe349d87f95d9597c5f6983b7",
+      "header": "private.weekly_source_pay_decision_read_source_v1(p_decision uuid,p_request uuid,p_actor uuid) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_read_source_v1(jsonb)",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/05_complete_internal_service_read.sqlinc",
+      "definitionSha256": "4152c9045715975531960a9f5011dc69c03d83d9ca7ada2a6f0a03da040e1d97",
+      "header": "public.weekly_source_pay_decision_read_source_v1(p_request jsonb) returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/06_complete_public_source_accept_read.sqlinc",
+      "definitionSha256": "cbd316fbbf1dd62c70214586dddced6eb0e9aeb483a384a64754114f1590da38",
+      "header": "public.weekly_source_pay_decision_accept_v1(p_request jsonb) returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,private,public set lock_timeout='2500ms'"
+    },
+    {
+      "signature": "private._weekly_source_acl_table_contract_v1()",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "definitionSha256": "dd9d58c9a213ea87bac71c6e8e1da62e0592fbfb34747498fd4f2eb1f3fbd555",
+      "header": "private._weekly_source_acl_table_contract_v1() returns table(table_name text, record_class text) language sql immutable set search_path to 'pg_catalog','pg_temp'"
+    },
+    {
+      "signature": "private._weekly_source_acl_lifecycle_column_contract_v1()",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "definitionSha256": "933830f8560a73e4b0595c6dcccda0511d081bf440ab09d855267f971d56ec3b",
+      "header": "private._weekly_source_acl_lifecycle_column_contract_v1() returns table(table_name text, column_name text, column_ordinal integer) language sql immutable set search_path to 'pg_catalog','pg_temp'"
+    },
+    {
+      "signature": "private._weekly_source_acl_private_helper_contract_v1()",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "definitionSha256": "0858c7c26a4c231c690a457c68f0d3539274b93e01aa39583aa7be8cb66fab0b",
+      "header": "private._weekly_source_acl_private_helper_contract_v1() returns table(function_signature text) language sql immutable set search_path to 'pg_catalog','pg_temp'"
+    },
+    {
+      "signature": "private._weekly_source_acl_service_rpc_contract_v1()",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "definitionSha256": "5e7e1f3bf185e030d73525955f6965622ab2a55547fed7b9e71ca64625532a99",
+      "header": "private._weekly_source_acl_service_rpc_contract_v1() returns table(function_signature text) language sql immutable set search_path to 'pg_catalog','pg_temp'"
+    },
+    {
+      "signature": "private._weekly_source_immutable_record_guard_v1()",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "definitionSha256": "e51a6afc4cc8575f081bb43bbb094d64d3c07e63cfc77b104586b18f8fc12a8d",
+      "header": "private._weekly_source_immutable_record_guard_v1() returns trigger language plpgsql security definer set search_path to 'pg_catalog','pg_temp'"
+    },
+    {
+      "signature": "private._weekly_source_immutable_fact_guard_v1()",
+      "physical": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "definitionSha256": "97687ab76f9a52479ead928207ccb7b4969c23dc058043998ad434fa3fc2b198",
+      "header": "private._weekly_source_immutable_fact_guard_v1() returns trigger language plpgsql security definer set search_path to 'pg_catalog','pg_temp'"
+    }
+  ],
+  "newPrivate": 2,
+  "newService": 0,
+  "classificationPrivateDelta": 4,
+  "classificationServiceDelta": 2,
+  "ACL": "NATIVE_NOT_RUN",
+  "relationsChanged": 0
+}

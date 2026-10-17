@@ -1,0 +1,26 @@
+{
+  "target": "broker/src/index.js",
+  "signature": null,
+  "input": {
+    "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+    "path": "broker/src/index.js",
+    "wholePhysicalSha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a",
+    "sha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a",
+    "bytes": 8936781,
+    "definitionOnly": false
+  },
+  "outputSha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db",
+  "outputBytes": 8936784,
+  "hunks": [
+    {
+      "before": "previewSourcePayDecision,confirmSourcePayDecision,readSourcePayDecisionSource",
+      "after": "previewSourcePayDecision,confirmSourcePayDecision,readCurrentSourcePayDecision"
+    },
+    {
+      "before": "        readSourcePayDecisionSource: ({ request, actorUserId }) => readSourcePayDecisionSource({",
+      "after": "        readCurrentSourcePayDecision: ({ request, actorUserId }) => readCurrentSourcePayDecision({"
+    }
+  ],
+  "fullRawReverse": true,
+  "savedWholeOutput": false
+}
