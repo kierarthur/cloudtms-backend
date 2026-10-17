@@ -1,0 +1,1433 @@
+{
+  "version": "LATER_KEEP_RAW_SOURCE_CENSUS_V1",
+  "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/LATER_KEEP_ROOT_MOUNT_20261017.json",
+  "receiptSha256": "315dccd8266ac5352964b24943b6eaf617b457e01cb986a66386e9d91dde2f47",
+  "baseCommit": "4b17461436d418d8fe23acaf98b8f0f9e7e5137f",
+  "files": [
+    {
+      "file": "supabase/migrations/17102026_0126_weekly_source_missing_10_existing_footprint.sql",
+      "sha256": "40c78d36d2dde48d69814cc93649cb158332956ae3e61dd8a78cb2c72dff5638",
+      "rawSha256": "40c78d36d2dde48d69814cc93649cb158332956ae3e61dd8a78cb2c72dff5638",
+      "points": []
+    },
+    {
+      "file": "supabase/migrations/17102026_0126_weekly_source_missing_20_native_guard.sql",
+      "sha256": "5bcdcb19851d14689292a14924140ee4d3a92d4fc1849e148644b544cbd3bb9f",
+      "rawSha256": "5bcdcb19851d14689292a14924140ee4d3a92d4fc1849e148644b544cbd3bb9f",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"private.weekly_source_missing_cancel_native_insert_guard_v1()\",\"ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_revision from public.weekly_source_final_revisions where id=new.final_revision_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/migrations/17102026_0141_weekly_source_later_accept_native_proof.sql",
+      "sha256": "3b113d6277fa88e2417aa311d7fa28d6f6999c391f01f41ccf2c5a4fe1c1f69e",
+      "rawSha256": "3b113d6277fa88e2417aa311d7fa28d6f6999c391f01f41ccf2c5a4fe1c1f69e",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
+      "sha256": "92e2df484839fb1e3e5665ea3611b1cd322686852bf814197465f03bf3ca26b9",
+      "rawSha256": "92e2df484839fb1e3e5665ea3611b1cd322686852bf814197465f03bf3ca26b9",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/00_admission.sqlinc",
+      "sha256": "a33b1bf069af24cfb1555b14e2f7267375e37b220abae848c335a65e5ee54f15",
+      "rawSha256": "a33b1bf069af24cfb1555b14e2f7267375e37b220abae848c335a65e5ee54f15",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"private.weekly_source_missing_accept_admission_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle from public.weekly_source_cycles where id=p_cycle_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"private.weekly_source_missing_accept_admission_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into strict v_group from public.weekly_source_groups where id=v_cycle.source_group_id and active;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/01_head_chain.sqlinc",
+      "sha256": "0853d60767641411c0559d6ac26eaa1263e6266d145129ff127932d9c9ed590b",
+      "rawSha256": "0853d60767641411c0559d6ac26eaa1263e6266d145129ff127932d9c9ed590b",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CURRENT:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_HEADS",
+          "key": "[\"private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_CURRENT:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_HEADS\",\"select * into strict v_current from public.weekly_source_entitlement_heads where id=p_current_head_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_HEAD:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_HEADS",
+          "key": "[\"private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_HEAD:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_HEADS\",\"select * into strict v_head from public.weekly_source_entitlement_heads where id=v_cursor;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS",
+          "key": "[\"private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS\",\"select * into strict v_root from public.timesheets where timesheet_id=v_head.root_timesheet_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS",
+          "key": "[\"private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS\",\"select * into strict v_contract from public.contracts where id=v_root.contract_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_BUNDLE:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_DECISION_BUNDLES",
+          "key": "[\"private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_BUNDLE:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_DECISION_BUNDLES\",\"select * into strict v_bundle from public.weekly_source_entitlement_decision_bundles bundle\\n      where bundle.decision_bundle_id=v_head.decision_bundle_id and bundle.bundle_revision=v_head.bundle_revision;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RECEIPT:PRIVATE . WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION_RECEIPTS",
+          "key": "[\"private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_RECEIPT:PRIVATE . WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION_RECEIPTS\",\"select * into strict v_receipt from private.weekly_source_entitlement_publication_receipts receipt\\n      where receipt.decision_bundle_id=v_head.decision_bundle_id and receipt.bundle_revision=v_head.bundle_revision\\n        and receipt.request_digest=v_head.publication_receipt_digest;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PENDING:PUBLIC . WEEKLY_SOURCE_PENDING_ENTITLEMENT_BUNDLES",
+          "key": "[\"private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_PENDING:PUBLIC . WEEKLY_SOURCE_PENDING_ENTITLEMENT_BUNDLES\",\"select * into strict v_pending from public.weekly_source_pending_entitlement_bundles where id=v_receipt.pending_bundle_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "sha256": "533f3371b90eeb46fa78385c87e9d0661fe07cdf061c1c986d7ae270ed898a34",
+      "rawSha256": "533f3371b90eeb46fa78385c87e9d0661fe07cdf061c1c986d7ae270ed898a34",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS\",\"select * into strict v_root from public.timesheets where timesheet_id=p_root_timesheet_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS\",\"select * into strict v_contract from public.contracts where id=v_root.contract_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_publication from public.weekly_source_projection_publications where id=p_projection_publication_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_HEAD:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_HEADS",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_HEAD:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_HEADS\",\"select * into strict v_head from public.weekly_source_entitlement_heads where id=(v_inventory->>'head_id')::uuid;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_HEAD:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_HEADS",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_HEAD:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_HEADS\",\"select * into strict v_head from public.weekly_source_entitlement_heads where id=(v_chain->>'anchor_head_id')::uuid;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_ACTION:PRIVATE . WEEKLY_SOURCE_ACCEPTED_PUBLICATION_ACTIONS_V1",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_ACTION:PRIVATE . WEEKLY_SOURCE_ACCEPTED_PUBLICATION_ACTIONS_V1\",\"select * into strict v_action from private.weekly_source_accepted_publication_actions_v1 where planned_head_id=v_head.id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_AUDIT:PUBLIC . AUDIT_EVENTS",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_AUDIT:PUBLIC . AUDIT_EVENTS\",\"select * into strict v_audit from public.audit_events audit\\n    where audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and audit.object_type='weekly_source_entitlement_decision_bundles'\\n      and audit.object_id_text=v_action.decision_bundle_id::text\\n      and audit.after_json->>'bundle_revision'=(v_action.bundle_revision-1)::text\\n      and audit.after_json->>'work_event_id'=v_event.id::text;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_BUNDLE:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_DECISION_BUNDLES",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_BUNDLE:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_DECISION_BUNDLES\",\"select * into strict v_bundle from public.weekly_source_entitlement_decision_bundles bundle\\n    where bundle.decision_bundle_id=v_head.decision_bundle_id and bundle.bundle_revision=v_head.bundle_revision;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RECEIPT:PRIVATE . WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION_RECEIPTS",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_RECEIPT:PRIVATE . WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION_RECEIPTS\",\"select * into strict v_receipt from private.weekly_source_entitlement_publication_receipts receipt\\n    where receipt.decision_bundle_id=v_head.decision_bundle_id and receipt.bundle_revision=v_head.bundle_revision\\n      and receipt.request_digest=v_head.publication_receipt_digest;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PENDING:PUBLIC . WEEKLY_SOURCE_PENDING_ENTITLEMENT_BUNDLES",
+          "key": "[\"private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_PENDING:PUBLIC . WEEKLY_SOURCE_PENDING_ENTITLEMENT_BUNDLES\",\"select * into strict v_pending from public.weekly_source_pending_entitlement_bundles where id=v_receipt.pending_bundle_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/03_inventory_inputs.sqlinc",
+      "sha256": "e1b9fbad59ca6a781e4bf42fe06a32e30f7da88eb75d999f3c4510cb2a34184c",
+      "rawSha256": "e1b9fbad59ca6a781e4bf42fe06a32e30f7da88eb75d999f3c4510cb2a34184c",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_WORK:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_WORK:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_work from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS",
+          "key": "[\"private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS\",\"select * into strict v_root from public.timesheets where timesheet_id=p_root_timesheet_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS",
+          "key": "[\"private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS\",\"select * into strict v_contract from public.contracts where id=v_root.contract_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle from public.weekly_source_cycles where id=(v_context->>'source_cycle_id')::uuid;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/04_proposal_read.sqlinc",
+      "sha256": "a722bbd76346b8649bfbb3c299da61604db46556f2fcc99e38359806b227af03",
+      "rawSha256": "a722bbd76346b8649bfbb3c299da61604db46556f2fcc99e38359806b227af03",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_AUDIT:PUBLIC . AUDIT_EVENTS",
+          "key": "[\"private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid)\",\"ROWTYPE_SELECT:V_AUDIT:PUBLIC . AUDIT_EVENTS\",\"select * into strict v_audit from public.audit_events audit\\n    where audit.object_type='weekly_source_entitlement_decision_bundles'\\n      and audit.object_id_text=p_decision_bundle_id::text and audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED'\\n      and audit.after_json->>'bundle_revision'=p_bundle_revision::text;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_BUNDLE:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_DECISION_BUNDLES",
+          "key": "[\"private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid)\",\"ROWTYPE_SELECT:V_BUNDLE:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_DECISION_BUNDLES\",\"select * into strict v_bundle from public.weekly_source_entitlement_decision_bundles bundle\\n    where bundle.decision_bundle_id=p_decision_bundle_id and bundle.bundle_revision=p_bundle_revision;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/05_prepare.sqlinc",
+      "sha256": "ef34b837d4bc7d15b2a4e19e3d181d6cac610e07d571bc711295b0d8066ab96b",
+      "rawSha256": "ef34b837d4bc7d15b2a4e19e3d181d6cac610e07d571bc711295b0d8066ab96b",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_missing_accept_prepare_v1(jsonb)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=v_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"private.weekly_source_missing_accept_prepare_v1(jsonb)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_publication from public.weekly_source_projection_publications where id=v_publication_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"private.weekly_source_missing_accept_prepare_v1(jsonb)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SAVED:PUBLIC . AUDIT_EVENTS",
+          "key": "[\"private.weekly_source_missing_accept_prepare_v1(jsonb)\",\"ROWTYPE_SELECT:V_SAVED:PUBLIC . AUDIT_EVENTS\",\"select * into strict v_saved from public.audit_events audit where audit.object_type='weekly_source_entitlement_decision_bundles'\\n      and audit.action='WEEKLY_SOURCE_MISSING_ACCEPT_PROPOSED' and audit.after_json->>'idempotency_key'=v_key;\"]",
+          "count": 2
+        },
+        {
+          "hazard": "JSON_CONCAT",
+          "key": "[\"private.weekly_source_missing_accept_prepare_v1(jsonb)\",\"JSON_CONCAT\",\"return v_saved.after_json->'result'||jsonb_build_object('idempotent_replay',true,'historical_proposal',true);\"]",
+          "count": 2
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS",
+          "key": "[\"private.weekly_source_missing_accept_prepare_v1(jsonb)\",\"ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS\",\"select * into strict v_root from public.timesheets where timesheet_id=v_root_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS",
+          "key": "[\"private.weekly_source_missing_accept_prepare_v1(jsonb)\",\"ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS\",\"select * into strict v_contract from public.contracts where id=v_root.contract_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"private.weekly_source_missing_accept_prepare_v1(jsonb)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into strict v_group from public.weekly_source_groups where id=v_cycle.source_group_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/06_proof_guard.sqlinc",
+      "sha256": "2b770059439e818d904a579e59f536c38a5b53c718f7e541e550da55239d3f40",
+      "rawSha256": "2b770059439e818d904a579e59f536c38a5b53c718f7e541e550da55239d3f40",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/07_prepare_entry.sqlinc",
+      "sha256": "095e3467c28304e86b2dd52123a533a8e79b0678069383215f01e694da94ebd2",
+      "rawSha256": "095e3467c28304e86b2dd52123a533a8e79b0678069383215f01e694da94ebd2",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/08_context_entry.sqlinc",
+      "sha256": "94007a04a43d762aab6c42fe2759795075132fb5314bde0db4266865c59c018f",
+      "rawSha256": "94007a04a43d762aab6c42fe2759795075132fb5314bde0db4266865c59c018f",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/09_complete_current_context.sqlinc",
+      "sha256": "a040179a16b1c274d47251f4ef908d353e7c23cda9b2b22912c6f6f7d5f4b6a4",
+      "rawSha256": "a040179a16b1c274d47251f4ef908d353e7c23cda9b2b22912c6f6f7d5f4b6a4",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS\",\"select * into strict v_resolution from public.weekly_source_row_resolutions\\n    where work_event_id=v_event.id and mapping_state='RESOLVED'\\n    order by created_at_utc desc,id desc limit 1;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS\",\"select * into strict v_decision from public.weekly_source_kept_as_paid_decisions\\n      where id=(v_ack.after_json->>'decision_id')::uuid and work_event_id=v_event.id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "sha256": "46d1a546f9ec985e6eec27d032f52f04a6518e2ce7bdc15005621042c1bda7d1",
+      "rawSha256": "46d1a546f9ec985e6eec27d032f52f04a6518e2ce7bdc15005621042c1bda7d1",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_TIMESHEET:PUBLIC . TIMESHEETS",
+          "key": "[\"public.weekly_source_later_change_decide_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_TIMESHEET:PUBLIC . TIMESHEETS\",\"select * into strict v_timesheet from public.timesheets\\n  where timesheet_id=v_root_timesheet_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS",
+          "key": "[\"public.weekly_source_later_change_decide_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS\",\"select * into strict v_contract from public.contracts\\n  where id=v_timesheet.contract_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"public.weekly_source_later_change_decide_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_revision from public.weekly_source_final_revisions\\n  where id=v_final_revision_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"public.weekly_source_later_change_decide_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle from public.weekly_source_cycles\\n  where id=v_revision.source_cycle_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"public.weekly_source_later_change_decide_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into strict v_group from public.weekly_source_groups\\n  where id=v_cycle.source_group_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_TIMESHEET:PUBLIC . TIMESHEETS",
+          "key": "[\"public.weekly_source_later_change_decide_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_TIMESHEET:PUBLIC . TIMESHEETS\",\"select * into strict v_timesheet from public.timesheets where timesheet_id=v_root_timesheet_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS",
+          "key": "[\"public.weekly_source_later_change_decide_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS\",\"select * into strict v_contract from public.contracts where id=v_timesheet.contract_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_BUNDLE:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_DECISION_BUNDLES",
+          "key": "[\"public.weekly_source_later_change_decide_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_BUNDLE:PUBLIC . WEEKLY_SOURCE_ENTITLEMENT_DECISION_BUNDLES\",\"select * into v_bundle\\n  from public.weekly_source_entitlement_decision_bundles bundle_row\\n  where bundle_row.decision_bundle_id=v_bundle_id\\n    and bundle_row.bundle_revision=v_bundle_revision\\n  for update;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/11_complete_cancel_basis.sqlinc",
+      "sha256": "a60e796f75b6016ab3afee09be8a6bbc3796f7b0c37a1929e56634a35aff73aa",
+      "rawSha256": "a60e796f75b6016ab3afee09be8a6bbc3796f7b0c37a1929e56634a35aff73aa",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES",
+          "key": "[\"private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES\",\"select * into strict v_snapshot from public.weekly_source_final_snapshot_lines where id=p_previous_snapshot_line_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_publication from public.weekly_source_projection_publications where id=p_projection_publication_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/12_complete_prepared_census.sqlinc",
+      "sha256": "e627cf6190445c258b9e3980243d5698f7a0e104fe466643c8a2afd79caa508e",
+      "rawSha256": "e627cf6190445c258b9e3980243d5698f7a0e104fe466643c8a2afd79caa508e",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_revision from public.weekly_source_final_revisions where id=p_final_revision_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_TRANSITION:PUBLIC . WEEKLY_SOURCE_STATE_TRANSITIONS",
+          "key": "[\"private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_TRANSITION:PUBLIC . WEEKLY_SOURCE_STATE_TRANSITIONS\",\"select * into strict v_transition from public.weekly_source_state_transitions where id=v_ids[1];\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_01_private_weekly_source_kept_as_paid_facts_for_publication_v1.sqlinc",
+      "sha256": "6f3c37338bc22d0777273019568d631e5917e0befd21b722ac208d7095baa936",
+      "rawSha256": "6f3c37338bc22d0777273019568d631e5917e0befd21b722ac208d7095baa936",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_02_private_weekly_source_kept_as_paid_facts_v1.sqlinc",
+      "sha256": "295c2f6d19a11175d16c50fdf4489d04d685f3246ae4c2f981501c35b1c2bbe3",
+      "rawSha256": "295c2f6d19a11175d16c50fdf4489d04d685f3246ae4c2f981501c35b1c2bbe3",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_kept_as_paid_facts_v1(uuid,text)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_03_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+      "sha256": "a211cfda94ac1068b3139a3f2088780a8e72edd777423c7c9d6395a27c6938ed",
+      "rawSha256": "a211cfda94ac1068b3139a3f2088780a8e72edd777423c7c9d6395a27c6938ed",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS\",\"select * into strict v_resolution from public.weekly_source_row_resolutions\\n    where work_event_id=v_event.id and mapping_state='RESOLVED'\\n    order by created_at_utc desc,id desc limit 1;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "sha256": "bab27d1e54e2b94a4bf93dd7e762418beb75d8f1339ceee22855a63c1bc99923",
+      "rawSha256": "bab27d1e54e2b94a4bf93dd7e762418beb75d8f1339ceee22855a63c1bc99923",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_REQUESTED:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES",
+          "key": "[\"private.weekly_source_missing_snapshot_movement_v1(uuid)\",\"ROWTYPE_SELECT:V_REQUESTED:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES\",\"select * into strict v_requested from public.weekly_source_final_snapshot_lines where id=p_snapshot_line_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_REQUESTED_LINEAGE:PUBLIC . WEEKLY_SOURCE_ROW_TIMESHEET_LINEAGES",
+          "key": "[\"private.weekly_source_missing_snapshot_movement_v1(uuid)\",\"ROWTYPE_SELECT:V_REQUESTED_LINEAGE:PUBLIC . WEEKLY_SOURCE_ROW_TIMESHEET_LINEAGES\",\"select * into strict v_requested_lineage from public.weekly_source_row_timesheet_lineages where row_resolution_id=v_requested.row_resolution_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_LINE:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES",
+          "key": "[\"private.weekly_source_missing_snapshot_movement_v1(uuid)\",\"ROWTYPE_SELECT:V_LINE:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES\",\"select * into strict v_line from public.weekly_source_final_snapshot_lines where id=v_cursor;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_T:PUBLIC . WEEKLY_SOURCE_STATE_TRANSITIONS",
+          "key": "[\"private.weekly_source_missing_snapshot_movement_v1(uuid)\",\"ROWTYPE_SELECT:V_T:PUBLIC . WEEKLY_SOURCE_STATE_TRANSITIONS\",\"select * into strict v_t from public.weekly_source_state_transitions where id=v_ids[1];\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_M:PUBLIC . WEEKLY_SOURCE_BILLING_MOVEMENTS",
+          "key": "[\"private.weekly_source_missing_snapshot_movement_v1(uuid)\",\"ROWTYPE_SELECT:V_M:PUBLIC . WEEKLY_SOURCE_BILLING_MOVEMENTS\",\"select * into strict v_m from public.weekly_source_billing_movements where id=v_ids[1];\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PREVIOUS:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES",
+          "key": "[\"private.weekly_source_missing_snapshot_movement_v1(uuid)\",\"ROWTYPE_SELECT:V_PREVIOUS:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES\",\"select * into strict v_previous from public.weekly_source_final_snapshot_lines where id=v_t.previous_snapshot_line_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS",
+          "key": "[\"private.weekly_source_missing_snapshot_movement_v1(uuid)\",\"ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS\",\"select * into strict v_resolution from public.weekly_source_row_resolutions where id=v_line.row_resolution_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_LINEAGE:PUBLIC . WEEKLY_SOURCE_ROW_TIMESHEET_LINEAGES",
+          "key": "[\"private.weekly_source_missing_snapshot_movement_v1(uuid)\",\"ROWTYPE_SELECT:V_LINEAGE:PUBLIC . WEEKLY_SOURCE_ROW_TIMESHEET_LINEAGES\",\"select * into strict v_lineage from public.weekly_source_row_timesheet_lineages where row_resolution_id=v_resolution.id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_ECONOMIC:PUBLIC . WEEKLY_SOURCE_ROW_ECONOMIC_SNAPSHOTS",
+          "key": "[\"private.weekly_source_missing_snapshot_movement_v1(uuid)\",\"ROWTYPE_SELECT:V_ECONOMIC:PUBLIC . WEEKLY_SOURCE_ROW_ECONOMIC_SNAPSHOTS\",\"select * into strict v_economic from public.weekly_source_row_economic_snapshots where row_resolution_id=v_resolution.id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_05_private_weekly_source_kept_as_paid_read_for_publication_v1.sqlinc",
+      "sha256": "be29c61af68e1539c43a75db00616a961abb9facb96594a13f096ed5fdfc9d06",
+      "rawSha256": "be29c61af68e1539c43a75db00616a961abb9facb96594a13f096ed5fdfc9d06",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_kept_as_paid_read_for_publication_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS",
+          "key": "[\"private.weekly_source_kept_as_paid_read_for_publication_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS\",\"select * into strict v_resolution from public.weekly_source_row_resolutions\\n    where work_event_id=v_event.id and mapping_state='RESOLVED'\\n    order by created_at_utc desc,id desc limit 1;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_06_private_weekly_source_kept_as_paid_read_admit_v1.sqlinc",
+      "sha256": "9c274f07ca4e8fb3c2672a9d2bb2c047fd47dc6659b079b298c03b559a1ae2b7",
+      "rawSha256": "9c274f07ca4e8fb3c2672a9d2bb2c047fd47dc6659b079b298c03b559a1ae2b7",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS",
+          "key": "[\"private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS\",\"select * into strict v_resolution from public.weekly_source_row_resolutions\\n    where work_event_id=v_event.id and mapping_state='RESOLVED'\\n    order by created_at_utc desc,id desc limit 1;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_07_private_weekly_source_missing_finalisation_roots_v1.sqlinc",
+      "sha256": "d55ed58036d740fa837e47944a650215be44ab762a6e30ae14473da3625bf7da",
+      "rawSha256": "d55ed58036d740fa837e47944a650215be44ab762a6e30ae14473da3625bf7da",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "sha256": "f99a6448dc8e3534768fa8742ca6b1a0b71a79507bee30f09e39e33afe71e9b5",
+      "rawSha256": "f99a6448dc8e3534768fa8742ca6b1a0b71a79507bee30f09e39e33afe71e9b5",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES\",\"select * into v_scope from public.weekly_source_report_scopes where id=v_report_scope_id;\"]",
+          "count": 2
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into v_cycle from public.weekly_source_cycles where id=v_cycle_id;\"]",
+          "count": 3
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into v_group from public.weekly_source_groups\\n    where id=(v_lock_discovery#>>'{group,id}')::uuid for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into strict v_group\\n  from public.weekly_source_groups where id=v_cycle.source_group_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES\",\"select * into v_scope from public.weekly_source_report_scopes where id=v_report_scope_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into v_upload from public.weekly_source_uploads where id=v_upload_id for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into v_upload from public.weekly_source_uploads where id=v_upload_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into v_publication from public.weekly_source_projection_publications where id=v_publication_id for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_publication from public.weekly_source_projection_publications where id=v_publication_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_profile\\n  from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CORRECTION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_CORRECTION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS\",\"select * into v_correction from public.weekly_final_source_correction_sessions where id=p_correction_session_id for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CORRECTION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_CORRECTION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS\",\"select * into v_correction from public.weekly_final_source_correction_sessions where id=p_correction_session_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "UUID_CARDINALITY_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"if v_scope_kind='CYCLE' then\\n    select pg_catalog.count(distinct resolution.client_id)::integer,\\n           pg_catalog.min(resolution.client_id::text)::uuid\\n    into v_resolved_client_count,v_resolved_client_id\\n    from public.weekly_source_row_resolutions resolution\\n    join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\\n    where source_row.upload_id=v_upload.id and resolution.generation=v_generation;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_EXISTING_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_EXISTING_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_existing_revision\\n    from public.weekly_source_final_revisions\\n    where id=coalesce(v_scope.current_final_revision_id,v_cycle.current_final_revision_id);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(revision.revision_number),0)+1 into v_revision_number\\n  from public.weekly_source_final_revisions revision\\n  where revision.source_cycle_id=v_cycle.id\\n    and revision.authority_scope_kind=v_scope_kind\\n    and revision.report_scope_id is not distinct from v_report_scope_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_ECONOMIC:PUBLIC . WEEKLY_SOURCE_ROW_ECONOMIC_SNAPSHOTS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_ECONOMIC:PUBLIC . WEEKLY_SOURCE_ROW_ECONOMIC_SNAPSHOTS\",\"select * into strict v_economic\\n      from public.weekly_source_row_economic_snapshots where id=v_economic_id;\"]",
+          "count": 2
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_PRIOR_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES\",\"select distinct on (prior_transition.work_event_id)\\n               prior_transition.work_event_id,\\n               coalesce(prior_transition.new_snapshot_line_id,\\n                 case when prior_transition.exclude_cancel then prior_transition.previous_snapshot_line_id end)\\n                 as new_snapshot_line_id\\n        from public.weekly_source_state_transitions prior_transition\\n        join public.weekly_source_final_revisions prior_revision\\n          on prior_revision.id=prior_transition.final_revision_id\\n         and prior_revision.state='CURRENT'\\n        join public.weekly_source_cycles prior_cycle\\n          on prior_cycle.id=prior_transition.finalisation_cycle_id\\n        join public.weekly_source_client_manifests prior_manifest\\n          on coalesce(prior_manifest.invoice_window_cycle_id,prior_manifest.source_cycle_id)=prior_manifest.source_cycle_id and prior_manifest.final_revision_id=prior_revision.id\\n         and prior_manifest.client_id=v_client_id\\n        where prior_transition.source_profile_kind=v_source_profile_kind\\n          and prior_cycle.source_group_id=v_group.id\\n          and prior_cycle.finalisation_week_ending<v_cycle.finalisation_week_ending\\n        order by prior_transition.work_event_id,\\n                 prior_cycle.finalisation_week_ending desc,\\n                 prior_revision.finalised_at_utc desc,\\n                 prior_revision.revision_number desc,\\n                 prior_transition.created_at_utc desc,\\n                 prior_transition.id desc\\n      ), prior_lines as (\\n        select prior_line.id,prior_state.work_event_id\\n        from prior_states prior_state\\n        join public.weekly_source_final_snapshot_lines prior_line\\n          on prior_line.id=prior_state.new_snapshot_line_id\\n        where prior_line.client_id=v_client_id\\n          and not (v_rule_values is not null and v_rule_values->>'invoice_sender'='CLIENT_SELF_BILL' and v_rule_values->>'self_bill_source'='SAME_FILE'\\n            and coalesce((private.weekly_source_shift_on_self_bill_v1(prior_line.work_event_id,v_cycle.id)->>'bound_to_finalised_export')::boolean,false)\\n            and not coalesce((private.weekly_source_shift_on_self_bill_v1(prior_line.work_event_id,v_cycle.id)->>'s25_pay_selected')::boolean,false))\\n          and (\\n            prior_line.work_date between v_coverage_start and v_coverage_end\\n            or exists(\\n              select 1\\n              from public.weekly_source_row_resolutions current_resolution\\n              join public.weekly_source_upload_rows current_row\\n                on current_row.id=current_resolution.upload_row_id\\n              where current_row.upload_id=v_upload.id\\n                and current_resolution.generation=v_generation\\n                and current_resolution.work_event_id=prior_line.work_event_id\\n            )\\n          )\\n      ), current_lines as (\\n        select current_line.id,current_line.work_event_id\\n        from public.weekly_source_final_snapshot_lines current_line\\n        where current_line.final_revision_id=v_revision_id\\n      )\\n      select coalesce(prior_lines.work_event_id,current_lines.work_event_id) as work_event_id,\\n             prior_lines.id as prior_snapshot_id,current_lines.id as current_snapshot_id\\n      from prior_lines full join current_lines using(work_event_id)\\n      order by coalesce(prior_lines.work_event_id,current_lines.work_event_id)\\n    loop\\n      select * into v_prior_snapshot\\n      from public.weekly_source_final_snapshot_lines\\n      where id=v_transition.prior_snapshot_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CURRENT_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_CURRENT_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES\",\"select * into v_current_snapshot\\n      from public.weekly_source_final_snapshot_lines\\n      where id=v_transition.current_snapshot_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_ECONOMIC:PUBLIC . WEEKLY_SOURCE_ROW_ECONOMIC_SNAPSHOTS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_ECONOMIC:PUBLIC . WEEKLY_SOURCE_ROW_ECONOMIC_SNAPSHOTS\",\"select * into strict v_economic\\n          from public.weekly_source_row_economic_snapshots where id=v_economic_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_EXPENSE_POLICY:PUBLIC . WEEKLY_SOURCE_ROW_EXPENSE_POLICY_SNAPSHOTS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_EXPENSE_POLICY:PUBLIC . WEEKLY_SOURCE_ROW_EXPENSE_POLICY_SNAPSHOTS\",\"select * into strict v_expense_policy\\n          from public.weekly_source_row_expense_policy_snapshots\\n          where id=v_expense_policy_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CURRENT_EXPENSE:PUBLIC . WEEKLY_EXPENSE_AUTHORITY_GENERATIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_CURRENT_EXPENSE:PUBLIC . WEEKLY_EXPENSE_AUTHORITY_GENERATIONS\",\"select * into strict v_current_expense\\n          from public.weekly_expense_authority_generations expense\\n          where expense.id=v_prior_expense_authority_id\\n            and expense.state in ('CURRENT','SUPERSEDED')\\n            and expense.work_event_id=v_expense_observation.work_event_id\\n          for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(expense.generation),0)+1 into v_expense_generation\\n          from public.weekly_expense_authority_generations expense\\n          where expense.work_event_id=v_expense_observation.work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CHARGE_CHECK:PUBLIC . WEEKLY_SOURCE_CHARGE_CHECKS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_CHARGE_CHECK:PUBLIC . WEEKLY_SOURCE_CHARGE_CHECKS\",\"select * into v_charge_check\\n      from public.weekly_source_charge_checks charge_check\\n      where charge_check.upload_row_id=v_row.id\\n        and charge_check.row_resolution_id=v_row.resolution_id\\n        and charge_check.generation=v_generation;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CHARGE_ACCEPTANCE:PUBLIC . WEEKLY_SOURCE_CHARGE_ACCEPTANCES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"ROWTYPE_SELECT:V_CHARGE_ACCEPTANCE:PUBLIC . WEEKLY_SOURCE_CHARGE_ACCEPTANCES\",\"select * into v_charge_acceptance\\n        from public.weekly_source_charge_acceptances acceptance\\n        where acceptance.charge_check_id=v_charge_check.id\\n          and acceptance.upload_row_id=v_row.id\\n          and acceptance.row_resolution_id=v_row.resolution_id\\n          and acceptance.source_upload_id=v_upload.id\\n          and acceptance.contract_id=v_row.contract_id\\n          and acceptance.acceptance_kind=case v_charge_check.comparison_result\\n            when 'ZERO_SOURCE_CHARGE' then 'ACCEPTED_ZERO' else 'ACCEPTED_DISPARITY' end\\n          and acceptance.source_upload_hash=v_upload.content_sha256\\n          and acceptance.source_row_fingerprint=(select resolution.source_row_fingerprint\\n            from public.weekly_source_row_resolutions resolution where resolution.id=v_row.resolution_id)\\n          and acceptance.contract_and_rate_fingerprint=v_economic.contract_and_rate_fingerprint\\n          and acceptance.effective_policy_fingerprint=v_economic.effective_policy_fingerprint\\n          and acceptance.charge_calculation_fingerprint=v_economic.calculation_fingerprint\\n          and acceptance.acceptance_policy_fingerprint=\\n            private.weekly_source_charge_acceptance_policy_fingerprint_v1();\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(completion.completion_generation),0)+1\\n  into v_completion_generation\\n  from public.weekly_source_client_cycle_completions completion\\n  where completion.source_cycle_id=v_cycle.id and completion.client_id=v_client_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_09_private_weekly_source_missing_cancel_transition_assert_v1.sqlinc",
+      "sha256": "f9371484cef7730881262fd1bdbf994756d879c9397c9f48595cd4f3bf124638",
+      "rawSha256": "f9371484cef7730881262fd1bdbf994756d879c9397c9f48595cd4f3bf124638",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_T:PUBLIC . WEEKLY_SOURCE_STATE_TRANSITIONS",
+          "key": "[\"private.weekly_source_missing_cancel_transition_assert_v1(uuid)\",\"ROWTYPE_SELECT:V_T:PUBLIC . WEEKLY_SOURCE_STATE_TRANSITIONS\",\"select * into strict v_t from public.weekly_source_state_transitions where id=p_transition_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"private.weekly_source_missing_cancel_transition_assert_v1(uuid)\",\"ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_revision from public.weekly_source_final_revisions where id=v_t.final_revision_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES",
+          "key": "[\"private.weekly_source_missing_cancel_transition_assert_v1(uuid)\",\"ROWTYPE_SELECT:V_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES\",\"select * into strict v_snapshot from public.weekly_source_final_snapshot_lines where id=v_t.previous_snapshot_line_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_missing_cancel_transition_assert_v1(uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=v_t.work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"private.weekly_source_missing_cancel_transition_assert_v1(uuid)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_publication from public.weekly_source_projection_publications\\n    where id=(v_basis->>'projection_publication_id')::uuid;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_10_private_weekly_source_missing_cancel_native_insert_guard_v1.sqlinc",
+      "sha256": "249eafd05cd1c65da79d84040c05eb3cda42b6009f21d30f0c0e1135a427e155",
+      "rawSha256": "249eafd05cd1c65da79d84040c05eb3cda42b6009f21d30f0c0e1135a427e155",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"private.weekly_source_missing_cancel_native_insert_guard_v1()\",\"ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_revision from public.weekly_source_final_revisions where id=new.final_revision_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_11_private_weekly_source_missing_current_selection_v1.sqlinc",
+      "sha256": "b8c9d9c4f1a197f0272715dc6ebab55b71a379190f040c9e607fa719edc48ae9",
+      "rawSha256": "b8c9d9c4f1a197f0272715dc6ebab55b71a379190f040c9e607fa719edc48ae9",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_TRANSITION:PUBLIC . WEEKLY_SOURCE_STATE_TRANSITIONS",
+          "key": "[\"private.weekly_source_missing_current_selection_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_TRANSITION:PUBLIC . WEEKLY_SOURCE_STATE_TRANSITIONS\",\"select * into strict v_transition from public.weekly_source_state_transitions where id=(v_native->>'transition_id')::uuid;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "sha256": "9b1ab89428f98f4ae193bd9ce4bcd7587d3974b95f9a7d00f849e87f0cc8bc75",
+      "rawSha256": "9b1ab89428f98f4ae193bd9ce4bcd7587d3974b95f9a7d00f849e87f0cc8bc75",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES\",\"select * into v_scope from public.weekly_source_report_scopes where id=v_report_scope_id;\"]",
+          "count": 2
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into v_cycle from public.weekly_source_cycles where id=v_cycle_id;\"]",
+          "count": 3
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into v_group from public.weekly_source_groups\\n    where id=(v_lock_discovery#>>'{group,id}')::uuid for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into strict v_group\\n  from public.weekly_source_groups where id=v_cycle.source_group_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES\",\"select * into v_scope from public.weekly_source_report_scopes where id=v_report_scope_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into v_upload from public.weekly_source_uploads where id=v_upload_id for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into v_upload from public.weekly_source_uploads where id=v_upload_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into v_publication from public.weekly_source_projection_publications where id=v_publication_id for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_publication from public.weekly_source_projection_publications where id=v_publication_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_profile\\n  from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CORRECTION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_CORRECTION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS\",\"select * into v_correction from public.weekly_final_source_correction_sessions where id=p_correction_session_id for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CORRECTION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_CORRECTION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS\",\"select * into v_correction from public.weekly_final_source_correction_sessions where id=p_correction_session_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "UUID_CARDINALITY_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"if v_scope_kind='CYCLE' then\\n    select pg_catalog.count(distinct resolution.client_id)::integer,\\n           pg_catalog.min(resolution.client_id::text)::uuid\\n    into v_resolved_client_count,v_resolved_client_id\\n    from public.weekly_source_row_resolutions resolution\\n    join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\\n    where source_row.upload_id=v_upload.id and resolution.generation=v_generation;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_EXISTING_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_EXISTING_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_existing_revision\\n    from public.weekly_source_final_revisions\\n    where id=coalesce(v_scope.current_final_revision_id,v_cycle.current_final_revision_id);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(revision.revision_number),0)+1 into v_revision_number\\n  from public.weekly_source_final_revisions revision\\n  where revision.source_cycle_id=v_cycle.id\\n    and revision.authority_scope_kind=v_scope_kind\\n    and revision.report_scope_id is not distinct from v_report_scope_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_ECONOMIC:PUBLIC . WEEKLY_SOURCE_ROW_ECONOMIC_SNAPSHOTS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_ECONOMIC:PUBLIC . WEEKLY_SOURCE_ROW_ECONOMIC_SNAPSHOTS\",\"select * into strict v_economic\\n      from public.weekly_source_row_economic_snapshots where id=v_economic_id;\"]",
+          "count": 2
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_PRIOR_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES\",\"select distinct on (prior_transition.work_event_id)\\n               prior_transition.work_event_id,\\n               prior_transition.new_snapshot_line_id\\n        from public.weekly_source_state_transitions prior_transition\\n        join public.weekly_source_final_revisions prior_revision\\n          on prior_revision.id=prior_transition.final_revision_id\\n         and prior_revision.state='CURRENT'\\n        join public.weekly_source_cycles prior_cycle\\n          on prior_cycle.id=prior_transition.finalisation_cycle_id\\n        join public.weekly_source_client_manifests prior_manifest\\n          on coalesce(prior_manifest.invoice_window_cycle_id,prior_manifest.source_cycle_id)=prior_manifest.source_cycle_id and prior_manifest.final_revision_id=prior_revision.id\\n         and prior_manifest.client_id=v_client_id\\n        where prior_transition.source_profile_kind=v_source_profile_kind\\n          and prior_cycle.source_group_id=v_group.id\\n          and prior_cycle.finalisation_week_ending<v_cycle.finalisation_week_ending\\n        order by prior_transition.work_event_id,\\n                 prior_cycle.finalisation_week_ending desc,\\n                 prior_revision.finalised_at_utc desc,\\n                 prior_revision.revision_number desc,\\n                 prior_transition.created_at_utc desc,\\n                 prior_transition.id desc\\n      ), prior_lines as (\\n        select prior_line.id,prior_state.work_event_id\\n        from prior_states prior_state\\n        join public.weekly_source_final_snapshot_lines prior_line\\n          on prior_line.id=prior_state.new_snapshot_line_id\\n        where prior_line.client_id=v_client_id\\n          and not (v_rule_values is not null and v_rule_values->>'invoice_sender'='CLIENT_SELF_BILL' and v_rule_values->>'self_bill_source'='SAME_FILE'\\n            and coalesce((private.weekly_source_shift_on_self_bill_v1(prior_line.work_event_id,v_cycle.id)->>'bound_to_finalised_export')::boolean,false)\\n            and not coalesce((private.weekly_source_shift_on_self_bill_v1(prior_line.work_event_id,v_cycle.id)->>'s25_pay_selected')::boolean,false))\\n          and (\\n            prior_line.work_date between v_coverage_start and v_coverage_end\\n            or exists(\\n              select 1\\n              from public.weekly_source_row_resolutions current_resolution\\n              join public.weekly_source_upload_rows current_row\\n                on current_row.id=current_resolution.upload_row_id\\n              where current_row.upload_id=v_upload.id\\n                and current_resolution.generation=v_generation\\n                and current_resolution.work_event_id=prior_line.work_event_id\\n            )\\n          )\\n      ), current_lines as (\\n        select current_line.id,current_line.work_event_id\\n        from public.weekly_source_final_snapshot_lines current_line\\n        where current_line.final_revision_id=v_revision_id\\n      )\\n      select coalesce(prior_lines.work_event_id,current_lines.work_event_id) as work_event_id,\\n             prior_lines.id as prior_snapshot_id,current_lines.id as current_snapshot_id\\n      from prior_lines full join current_lines using(work_event_id)\\n      order by coalesce(prior_lines.work_event_id,current_lines.work_event_id)\\n    loop\\n      select * into v_prior_snapshot\\n      from public.weekly_source_final_snapshot_lines\\n      where id=v_transition.prior_snapshot_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CURRENT_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_CURRENT_SNAPSHOT:PUBLIC . WEEKLY_SOURCE_FINAL_SNAPSHOT_LINES\",\"select * into v_current_snapshot\\n      from public.weekly_source_final_snapshot_lines\\n      where id=v_transition.current_snapshot_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_ECONOMIC:PUBLIC . WEEKLY_SOURCE_ROW_ECONOMIC_SNAPSHOTS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_ECONOMIC:PUBLIC . WEEKLY_SOURCE_ROW_ECONOMIC_SNAPSHOTS\",\"select * into strict v_economic\\n          from public.weekly_source_row_economic_snapshots where id=v_economic_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_EXPENSE_POLICY:PUBLIC . WEEKLY_SOURCE_ROW_EXPENSE_POLICY_SNAPSHOTS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_EXPENSE_POLICY:PUBLIC . WEEKLY_SOURCE_ROW_EXPENSE_POLICY_SNAPSHOTS\",\"select * into strict v_expense_policy\\n          from public.weekly_source_row_expense_policy_snapshots\\n          where id=v_expense_policy_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CURRENT_EXPENSE:PUBLIC . WEEKLY_EXPENSE_AUTHORITY_GENERATIONS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_CURRENT_EXPENSE:PUBLIC . WEEKLY_EXPENSE_AUTHORITY_GENERATIONS\",\"select * into strict v_current_expense\\n          from public.weekly_expense_authority_generations expense\\n          where expense.id=v_prior_expense_authority_id\\n            and expense.state in ('CURRENT','SUPERSEDED')\\n            and expense.work_event_id=v_expense_observation.work_event_id\\n          for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(expense.generation),0)+1 into v_expense_generation\\n          from public.weekly_expense_authority_generations expense\\n          where expense.work_event_id=v_expense_observation.work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CHARGE_CHECK:PUBLIC . WEEKLY_SOURCE_CHARGE_CHECKS",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_CHARGE_CHECK:PUBLIC . WEEKLY_SOURCE_CHARGE_CHECKS\",\"select * into v_charge_check\\n      from public.weekly_source_charge_checks charge_check\\n      where charge_check.upload_row_id=v_row.id\\n        and charge_check.row_resolution_id=v_row.resolution_id\\n        and charge_check.generation=v_generation;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CHARGE_ACCEPTANCE:PUBLIC . WEEKLY_SOURCE_CHARGE_ACCEPTANCES",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"ROWTYPE_SELECT:V_CHARGE_ACCEPTANCE:PUBLIC . WEEKLY_SOURCE_CHARGE_ACCEPTANCES\",\"select * into v_charge_acceptance\\n        from public.weekly_source_charge_acceptances acceptance\\n        where acceptance.charge_check_id=v_charge_check.id\\n          and acceptance.upload_row_id=v_row.id\\n          and acceptance.row_resolution_id=v_row.resolution_id\\n          and acceptance.source_upload_id=v_upload.id\\n          and acceptance.contract_id=v_row.contract_id\\n          and acceptance.acceptance_kind=case v_charge_check.comparison_result\\n            when 'ZERO_SOURCE_CHARGE' then 'ACCEPTED_ZERO' else 'ACCEPTED_DISPARITY' end\\n          and acceptance.source_upload_hash=v_upload.content_sha256\\n          and acceptance.source_row_fingerprint=(select resolution.source_row_fingerprint\\n            from public.weekly_source_row_resolutions resolution where resolution.id=v_row.resolution_id)\\n          and acceptance.contract_and_rate_fingerprint=v_economic.contract_and_rate_fingerprint\\n          and acceptance.effective_policy_fingerprint=v_economic.effective_policy_fingerprint\\n          and acceptance.charge_calculation_fingerprint=v_economic.calculation_fingerprint\\n          and acceptance.acceptance_policy_fingerprint=\\n            private.weekly_source_charge_acceptance_policy_fingerprint_v1();\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(completion.completion_generation),0)+1\\n  into v_completion_generation\\n  from public.weekly_source_client_cycle_completions completion\\n  where completion.source_cycle_id=v_cycle.id and completion.client_id=v_client_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+      "sha256": "7b5fc79cd832be5057ab838df3a0fb65ac11b758d6a0a594a1b3bcf2fadf7636",
+      "rawSha256": "7b5fc79cd832be5057ab838df3a0fb65ac11b758d6a0a594a1b3bcf2fadf7636",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS",
+          "key": "[\"private.weekly_source_invoice_duty_v1(uuid)\",\"ROWTYPE_SELECT:V_ROOT:PUBLIC . TIMESHEETS\",\"select * into v_root from public.timesheets where timesheet_id=p_root_timesheet_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS",
+          "key": "[\"private.weekly_source_invoice_duty_v1(uuid)\",\"ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS\",\"select * into strict v_contract from public.contracts where id=v_root.contract_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"private.weekly_source_invoice_duty_v1(uuid)\",\"ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_profile from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"private.weekly_source_invoice_duty_v1(uuid)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_publication from public.weekly_source_projection_publications p\\n      where p.upload_id=v_upload.id and p.source_cycle_id=v_upload.source_cycle_id\\n        and p.report_scope_id is not distinct from v_upload.report_scope_id and p.state='CURRENT';\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS",
+          "key": "[\"private.weekly_source_invoice_duty_v1(uuid)\",\"ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS\",\"select * into v_resolution from public.weekly_source_row_resolutions\\n        where upload_row_id=v_row.id and generation=v_generation;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_OPERATION:PUBLIC . INVOICE_OPERATIONS",
+          "key": "[\"private.weekly_source_invoice_duty_v1(uuid)\",\"ROWTYPE_SELECT:V_OPERATION:PUBLIC . INVOICE_OPERATIONS\",\"select c.* from public.invoice_operation_chunks c\\n    join public.invoice_operations o on o.id=c.operation_id\\n    where o.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')\\n      and c.status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')\\n      and (not c.is_manifest_member or c.manifest_committed)\\n      and coalesce(c.payload_json->>'is_selection_expander','false')<>'true'\\n      and (not c.is_manifest_member or coalesce(c.entity_type,'')<>'OPERATION') order by c.id\\n  loop\\n    select * into strict v_operation from public.invoice_operations where id=v_chunk.operation_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "sha256": "23a0681163e4942f71fac7c9ff3eb275719cf1dafb39c2b817f0c3dba8d6a711",
+      "rawSha256": "23a0681163e4942f71fac7c9ff3eb275719cf1dafb39c2b817f0c3dba8d6a711",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_SESSION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS",
+          "key": "[\"private.weekly_source_correct_final_prepared_context_v1(uuid)\",\"ROWTYPE_SELECT:V_SESSION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS\",\"select * into v_session\\n  from public.weekly_final_source_correction_sessions\\n  where id=p_correction_session_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"private.weekly_source_correct_final_prepared_context_v1(uuid)\",\"ROWTYPE_SELECT:V_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_revision\\n  from public.weekly_source_final_revisions\\n  where id=v_session.prepared_final_revision_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"private.weekly_source_correct_final_prepared_context_v1(uuid)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle\\n  from public.weekly_source_cycles where id=v_revision.source_cycle_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"private.weekly_source_correct_final_prepared_context_v1(uuid)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_upload\\n  from public.weekly_source_uploads where id=v_revision.upload_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"private.weekly_source_correct_final_prepared_context_v1(uuid)\",\"ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_profile\\n  from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_MANIFEST:PUBLIC . WEEKLY_SOURCE_CLIENT_MANIFESTS",
+          "key": "[\"private.weekly_source_correct_final_prepared_context_v1(uuid)\",\"ROWTYPE_SELECT:V_MANIFEST:PUBLIC . WEEKLY_SOURCE_CLIENT_MANIFESTS\",\"select * into v_manifest\\n  from public.weekly_source_client_manifests\\n  where coalesce(invoice_window_cycle_id,source_cycle_id)=source_cycle_id and final_revision_id=v_revision.id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "sha256": "264922d32b47818ae8ad289d9b822bb4e9514803d35e409c977dfec8cac38125",
+      "rawSha256": "264922d32b47818ae8ad289d9b822bb4e9514803d35e409c977dfec8cac38125",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_SESSION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_SESSION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS\",\"select * into v_session\\n  from public.weekly_final_source_correction_sessions where id=v_session_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle from public.weekly_source_cycles\\n  where id=v_session.source_cycle_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into strict v_group from public.weekly_source_groups\\n  where id=v_cycle.source_group_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES\",\"select * into strict v_scope from public.weekly_source_report_scopes\\n    where id=v_session.report_scope_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SESSION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_SESSION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS\",\"select * into strict v_session from public.weekly_final_source_correction_sessions\\n  where id=v_session_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_PRIOR_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_prior_revision from public.weekly_source_final_revisions\\n  where id=v_session.expected_current_final_revision_id for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_PRIOR_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_prior_upload from public.weekly_source_uploads\\n  where id=v_prior_revision.upload_id for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_PRIOR_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_prior_publication\\n  from public.weekly_source_projection_publications\\n  where id=coalesce(v_scope.current_projection_publication_id,\\n                    v_cycle.current_projection_publication_id)\\n  for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_PRIOR_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_prior_profile from public.weekly_source_format_profiles\\n  where id=v_prior_upload.source_format_profile_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_REPLACEMENT_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_REPLACEMENT_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_replacement_upload from public.weekly_source_uploads\\n  where id=v_upload_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_REPLACEMENT_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_REPLACEMENT_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_replacement_publication\\n  from public.weekly_source_projection_publications where id=v_publication_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_REPLACEMENT_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"public.weekly_source_correct_final_prepare_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_REPLACEMENT_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_replacement_profile from public.weekly_source_format_profiles\\n  where id=v_replacement_upload.source_format_profile_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "sha256": "cca64fd3d0f21814b5c7fa57f9c8958486b2d20740a4170d5e75c4be4d92925d",
+      "rawSha256": "cca64fd3d0f21814b5c7fa57f9c8958486b2d20740a4170d5e75c4be4d92925d",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_SESSION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_SESSION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS\",\"select * into v_session from public.weekly_final_source_correction_sessions\\n  where id=v_session_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle from public.weekly_source_cycles\\n  where id=v_session.source_cycle_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into strict v_group from public.weekly_source_groups\\n  where id=v_cycle.source_group_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES\",\"select * into strict v_scope from public.weekly_source_report_scopes\\n    where id=v_session.report_scope_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SESSION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_SESSION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS\",\"select * into strict v_session from public.weekly_final_source_correction_sessions\\n  where id=v_session_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_PRIOR_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_prior_revision from public.weekly_source_final_revisions\\n  where id=v_session.expected_current_final_revision_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PREPARED_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_PREPARED_REVISION:PUBLIC . WEEKLY_SOURCE_FINAL_REVISIONS\",\"select * into strict v_prepared_revision from public.weekly_source_final_revisions\\n  where id=v_session.prepared_final_revision_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_PRIOR_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_prior_upload from public.weekly_source_uploads\\n  where id=v_prior_revision.upload_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_PRIOR_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_prior_profile from public.weekly_source_format_profiles\\n  where id=v_prior_upload.source_format_profile_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_PRIOR_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_prior_publication\\n  from public.weekly_source_projection_publications\\n  where id=coalesce(v_scope.current_projection_publication_id,v_cycle.current_projection_publication_id)\\n  for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_REPLACEMENT_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_REPLACEMENT_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_replacement_upload from public.weekly_source_uploads\\n  where id=v_upload_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_REPLACEMENT_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_REPLACEMENT_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_replacement_publication\\n  from public.weekly_source_projection_publications where id=v_publication_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_REPLACEMENT_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_REPLACEMENT_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_replacement_profile from public.weekly_source_format_profiles\\n  where id=v_replacement_upload.source_format_profile_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(completion.completion_generation),0)+1\\n  into v_completion_generation\\n  from public.weekly_source_client_cycle_completions completion\\n  where completion.source_cycle_id=v_cycle.id and completion.client_id=v_client_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PRIOR_RECEIPT:PUBLIC . WEEKLY_SOURCE_ORDINARY_PAY_PROJECTION_RECEIPTS",
+          "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_PRIOR_RECEIPT:PUBLIC . WEEKLY_SOURCE_ORDINARY_PAY_PROJECTION_RECEIPTS\",\"select * into strict v_prior_receipt\\n      from public.weekly_source_ordinary_pay_projection_receipts\\n      where id=v_root.prior_receipt_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc",
+      "sha256": "92d416ec6f886522be4f823b2086579c7c1018d9cd0d2378d4c117894bbd5301",
+      "rawSha256": "92d416ec6f886522be4f823b2086579c7c1018d9cd0d2378d4c117894bbd5301",
+      "points": [
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    left join pg_catalog.pg_attribute a\\n      on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))\\n     and a.attname=allowed.column_name\\n     and a.attnum>0\\n     and not a.attisdropped\\n    where a.attrelid is null\\n  )\\n  or exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    group by allowed.table_name\\n    having pg_catalog.min(allowed.column_ordinal)<>1\\n       or pg_catalog.max(allowed.column_ordinal)<>count(*)\\n       or count(distinct allowed.column_ordinal)<>count(*)\\n  ) then\\n    raise exception 'WEEKLY_SOURCE_ACL_LIFECYCLE_COLUMN_INVALID' using errcode='55000';\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_table in\\n    select c.table_name,c.record_class\\n    from private._weekly_source_acl_table_contract_v1() c\\n    order by c.table_name\\n  loop\\n    execute pg_catalog.format('alter table public.%I enable row level security',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format('alter table public.%I force row level security',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'revoke all on table public.%I from public,anon,authenticated,service_role',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format('revoke all on table public.%I from authenticator',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format('revoke all on table public.%I from supabase_admin',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop policy if exists cloudtms_miget_service_owner_all on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'create policy cloudtms_miget_service_owner_all on public.%I for all to %I, service_role using (true) with check (true)',\\n      v_table.table_name,current_user\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_record_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_fact_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_truncate_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class='IMMUTABLE_APPEND_ONLY' then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_record_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_fact_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_fact_guard_v1(%s)',\\n        v_table.table_name,v_lifecycle_columns\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class in ('IMMUTABLE_APPEND_ONLY','IMMUTABLE_FACTS_WITH_LIFECYCLE') then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_truncate_guard before truncate on public.%I for each statement execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  for v_function in\\n    select p.oid,p.proowner,n.nspname,p.proname,\\n           pg_catalog.pg_get_function_identity_arguments(p.oid) as identity_arguments\\n    from pg_catalog.pg_proc p\\n    join pg_catalog.pg_namespace n on n.oid=p.pronamespace\\n    where n.nspname in ('public','private')\\n      and (\\n        p.proname like 'weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_ctms\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like 'weekly\\\\_exceptional\\\\_%' escape '\\\\'\\n      )\\n  loop\\n    execute pg_catalog.format(\\n      'revoke all on function %I.%I(%s) from public,anon,authenticated,service_role',\\n      v_function.nspname,v_function.proname,v_function.identity_arguments\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from authenticator',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from supabase_admin',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_signature in\\n    select function_signature\\n    from private._weekly_source_acl_service_rpc_contract_v1()\\n  loop\\n    if pg_catalog.to_regprocedure(v_signature) is not null then\\n      execute 'grant execute on function '||v_signature||' to service_role';\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/99_acl.sqlinc",
+      "sha256": "cadf699aecd2f1aa2af93f37c22cede7c3af55ddadf87e624570d501d519f247",
+      "rawSha256": "cadf699aecd2f1aa2af93f37c22cede7c3af55ddadf87e624570d501d519f247",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read_v1.sql",
+      "sha256": "44dda7baba95ce2efc99766e0f74803f05c498718e702f6690458a6e25217f65",
+      "rawSha256": "44dda7baba95ce2efc99766e0f74803f05c498718e702f6690458a6e25217f65",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/01_public_context.sqlinc",
+      "sha256": "5c668dd81b347b2c1a6a6dc806844b80024730f6ff73a4d1aadff100bb36ac6e",
+      "rawSha256": "5c668dd81b347b2c1a6a6dc806844b80024730f6ff73a4d1aadff100bb36ac6e",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/02_scope_rows.sqlinc",
+      "sha256": "ffc55c43d87fa3702c49ade87ab724d2727b4250d92053efb0664ccc161c9a96",
+      "rawSha256": "ffc55c43d87fa3702c49ade87ab724d2727b4250d92053efb0664ccc161c9a96",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"private.weekly_source_keep_as_paid_scope_rows_v1(uuid,uuid,uuid,uuid,uuid,date)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle from public.weekly_source_cycles where id=p_source_cycle_id\\n      and source_group_id=p_source_group_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+      "sha256": "ea10aeb0cd3ba623399dd05f07c7a3e68e1a13c3c1a2e1f7324a367319027e70",
+      "rawSha256": "ea10aeb0cd3ba623399dd05f07c7a3e68e1a13c3c1a2e1f7324a367319027e70",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS\",\"select * into strict v_resolution from public.weekly_source_row_resolutions\\n    where work_event_id=v_event.id and mapping_state='RESOLVED'\\n    order by created_at_utc desc,id desc limit 1;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)\",\"ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS\",\"select * into strict v_decision from public.weekly_source_kept_as_paid_decisions\\n      where id=(v_ack.after_json->>'decision_id')::uuid and work_event_id=v_event.id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "sha256": "97df46e0db21c7a232c0368ad6da2a7cbc6f16f4743328757fa37a433c1ea9c3",
+      "rawSha256": "97df46e0db21c7a232c0368ad6da2a7cbc6f16f4743328757fa37a433c1ea9c3",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"public.weekly_source_office_workspace_v1(jsonb)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into v_group from public.weekly_source_groups where id=v_group_id and active;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"public.weekly_source_office_workspace_v1(jsonb)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into v_cycle from public.weekly_source_cycles\\n  where id=v_cycle_id and source_group_id=v_group.id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"public.weekly_source_office_workspace_v1(jsonb)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_publication from public.weekly_source_projection_publications\\n    where id=v_publication_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"public.weekly_source_office_workspace_v1(jsonb)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"public.weekly_source_office_workspace_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(\\n      'row_key','authority-ready-'||ready.timesheet_id::text,\\n      'candidate',ready.candidate_name,\\n      'day_date',to_char(ready.work_date,'Dy FMDD Mon YYYY'),\\n      'attention','Source reference added',\\n      'reference',ready.source_reference_number,\\n      'status',pg_catalog.jsonb_build_object('text','Ready for Office authorisation','tone','positive'),\\n      'actions',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(\\n        'label','View Timesheet','enabled',true,\\n        'payload',pg_catalog.jsonb_build_object('timesheet_id',ready.timesheet_id)))\\n    ) order by private.weekly_source_query_ascii_fold_v1(\\n        ready.candidate_name) collate C,ready.work_date,ready.timesheet_id),'[]'::jsonb)\\n      into v_import_ready_rows\\n    from (\\n      select timesheet_row.timesheet_id,\\n        coalesce(candidate.display_name,candidate.tms_ref,'Candidate') as candidate_name,\\n        pg_catalog.min(comparison.work_date) as work_date,\\n        pg_catalog.min(comparison.source_reference_number) as source_reference_number\\n      from public.weekly_timesheet_source_comparisons comparison\\n      join public.timesheets timesheet_row on timesheet_row.timesheet_id=comparison.timesheet_id\\n        and timesheet_row.is_current and timesheet_row.authorised_at_server is null\\n      join public.contracts contract on contract.id=timesheet_row.contract_id\\n      left join public.candidates candidate on candidate.id=contract.candidate_id\\n      where comparison.projection_publication_id=v_publication_id\\n        and comparison.comparison_state='EXACT_MATCH'\\n        and not exists(select 1 from pg_catalog.jsonb_array_elements(v_import_waiting_rows) waiting\\n          where waiting->>'timesheet_id'=comparison.timesheet_id::text)\\n        and not exists (\\n          select 1 from public.weekly_timesheet_source_comparisons other\\n          where other.projection_publication_id=v_publication_id\\n            and other.timesheet_id=comparison.timesheet_id\\n            and other.comparison_state<>'EXACT_MATCH'\\n        )\\n        and exists (\\n          select 1 from public.weekly_timesheet_reference_apply_operations operation\\n          where operation.projection_publication_id=v_publication_id\\n            and operation.timesheet_id=comparison.timesheet_id\\n            and operation.state='APPLIED'\\n        )\\n      group by timesheet_row.timesheet_id,candidate.display_name,candidate.tms_ref\\n    ) ready;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "sha256": "b2db739c8606a27cb309c62a5cefb9c135762c1cd2d8233d344f1d6ddd1f345e",
+      "rawSha256": "b2db739c8606a27cb309c62a5cefb9c135762c1cd2d8233d344f1d6ddd1f345e",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_TIMESHEET:PUBLIC . TIMESHEETS",
+          "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"ROWTYPE_SELECT:V_TIMESHEET:PUBLIC . TIMESHEETS\",\"select * into v_timesheet from public.timesheets\\n  where timesheet_id=v_timesheet_id and is_current and revoked_at is null\\n    and archived_at_utc is null;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS",
+          "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS\",\"select * into strict v_contract from public.contracts where id=v_timesheet.contract_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CLIENT:PUBLIC . CLIENTS",
+          "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"ROWTYPE_SELECT:V_CLIENT:PUBLIC . CLIENTS\",\"select * into strict v_client from public.clients where id=v_contract.client_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(\\n      'item_id',event.id,'work_event_id',event.durable_work_event_id,'state',event.state,\\n      'primary_action','AMEND_PROTECTED_HOURS',\\n      'available_actions',pg_catalog.jsonb_build_array('AMEND_PROTECTED_HOURS','WITHDRAW_PROTECTED_HOURS','WAIT_FOR_SOURCE','ACCEPT_SOURCE_AND_RECONCILE','RECORD_NOT_WORKED'),\\n      'command_payload',pg_catalog.jsonb_build_object(\\n        'source_cycle_id',approval.source_cycle_id,'candidate_id',approval.candidate_id,\\n        'client_id',approval.client_id,'contract_id',approval.contract_id,\\n        'week_ending_date',approval.week_ending,'family_id',v_family.id,\\n        'work_event_id',event.durable_work_event_id,'evidence_timesheet_id',approval.evidence_timesheet_id,\\n        'work_date',event.work_date,'start_at_local',to_char(event.start_at_local,'HH24:MI'),\\n        'end_at_local',to_char(event.end_at_local,'HH24:MI'),'break_minutes',event.break_minutes),\\n      'schedule',pg_catalog.jsonb_build_object('work_date',event.work_date,\\n        'start_at_local',to_char(event.start_at_local,'HH24:MI'),\\n        'end_at_local',to_char(event.end_at_local,'HH24:MI'),'break_minutes',event.break_minutes)\\n    ) order by event.work_date,event.start_at_local,event.id),'[]'::jsonb)\\n    into v_manage_items\\n    from public.weekly_exceptional_pay_family_events event\\n    join lateral (select max(latest.event_sequence) sequence from public.weekly_exceptional_pay_family_events latest\\n      where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id) latest\\n      on latest.sequence=event.event_sequence\\n    join public.weekly_exceptional_payment_approvals approval on approval.id=event.evidence_approval_id\\n    where event.family_id=v_family.id and event.state='WAIT';\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select pg_catalog.count(*)::integer into v_unprotected_issue_count\\n    from public.weekly_discrepancy_incidents incident\\n    join public.weekly_issue_comparison_revisions comparison\\n      on comparison.id=incident.current_comparison_revision_id\\n    join public.weekly_work_events issue_event on issue_event.id=incident.work_event_id\\n    where incident.candidate_id=v_contract.candidate_id\\n      and incident.client_id=v_contract.client_id\\n      and incident.state='OPEN'\\n      and comparison.contract_id=v_timesheet.contract_id\\n      and issue_event.work_date between v_timesheet.week_ending_date-6\\n        and v_timesheet.week_ending_date\\n      and not exists(\\n        select 1\\n        from public.weekly_exceptional_pay_family_events protected_event\\n        where protected_event.family_id=v_family.id\\n          and protected_event.durable_work_event_id=incident.work_event_id\\n          and protected_event.state='WAIT'\\n          and protected_event.event_sequence=(\\n            select pg_catalog.max(latest.event_sequence)\\n            from public.weekly_exceptional_pay_family_events latest\\n            where latest.family_id=protected_event.family_id\\n              and latest.durable_work_event_id=protected_event.durable_work_event_id\\n          )\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if v_policy->>'authority_mode'='SOURCE_AUTHORITY' then\\n    select coalesce(pg_catalog.jsonb_agg(row_value order by work_date,start_at_local,row_key),'[]'::jsonb)\\n    into v_approved_rows\\n    from (\\n      select source_row.work_date,source_row.start_at_local,'approved-'||source_row.id::text row_key,\\n        pg_catalog.jsonb_build_object('row_key','approved-'||source_row.id::text,\\n          'day_date',to_char(source_row.work_date,'Dy FMDD Mon YYYY'),\\n          'hours',to_char(source_row.start_at_local,'HH24:MI')||'-'||to_char(source_row.end_at_local,'HH24:MI'),\\n          'reference_number',source_row.bounded_raw_columns_json->>'reference_number',\\n          'break_text',coalesce(source_row.break_minutes,0)||' min','state',case when incident.id is null then 'READY' else 'MISMATCH' end,\\n          'status_text',case when incident.id is null then 'Ready' else 'Needs attention' end) row_value\\n      from public.weekly_source_upload_rows source_row\\n      join public.weekly_source_final_revisions final_revision\\n        on final_revision.upload_id=source_row.upload_id\\n       and final_revision.source_cycle_id=v_cycle.id\\n       and final_revision.state='CURRENT'\\n      join public.weekly_source_billing_movements movement\\n        on movement.nhsp_upload_row_id=source_row.id\\n       and movement.final_revision_id=final_revision.id\\n       and movement.movement_role='POSITIVE'\\n       and movement.invoice_timesheet_id=any(v_root_family)\\n      left join public.weekly_discrepancy_incidents incident\\n        on incident.source_cycle_id=final_revision.source_cycle_id\\n       and incident.work_event_id=movement.work_event_id and incident.state='OPEN'\\n      where movement.candidate_id=v_contract.candidate_id and movement.actual_client_id=v_contract.client_id\\n        and movement.contract_id=v_contract.id\\n        and (date_trunc('week',source_row.work_date)::date+6)=v_timesheet.week_ending_date\\n        and source_row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED')\\n        and not exists(select 1 from public.weekly_exceptional_pay_family_events event\\n          where event.family_id=v_family.id and event.durable_work_event_id=movement.work_event_id and event.state='WAIT'\\n            and event.event_sequence=(select max(latest.event_sequence) from public.weekly_exceptional_pay_family_events latest\\n              where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id))\\n      union all\\n      select snapshot.work_date,snapshot.start_at_local,'approved-'||snapshot.id::text,\\n        pg_catalog.jsonb_build_object('row_key','approved-'||snapshot.id::text,\\n          'day_date',to_char(snapshot.work_date,'Dy FMDD Mon YYYY'),\\n          'hours',to_char(snapshot.start_at_local,'HH24:MI')||'-'||to_char(snapshot.end_at_local,'HH24:MI'),\\n          'reference_number',coalesce(source_row.bounded_raw_columns_json->>'reference_number',\\n            source_row.bounded_raw_columns_json->>'booking_reference'),\\n          'break_text',snapshot.break_minutes||' min',\\n          'state',case when incident.id is null then 'READY' else 'MISMATCH' end,\\n          'status_text',case when incident.id is null then 'Ready' else 'Needs attention' end)\\n      from public.weekly_source_final_snapshot_lines snapshot\\n      join public.weekly_source_final_revisions final_revision\\n        on final_revision.id=snapshot.final_revision_id\\n       and final_revision.source_cycle_id=v_cycle.id\\n       and final_revision.state='CURRENT'\\n      join public.weekly_source_upload_rows source_row on source_row.id=snapshot.upload_row_id\\n      left join public.weekly_discrepancy_incidents incident\\n        on incident.source_cycle_id=final_revision.source_cycle_id\\n       and incident.work_event_id=snapshot.work_event_id and incident.state='OPEN'\\n      where snapshot.candidate_id=v_contract.candidate_id and snapshot.client_id=v_contract.client_id\\n        and snapshot.contract_id=v_contract.id\\n        and (date_trunc('week',snapshot.work_date)::date+6)=v_timesheet.week_ending_date\\n        and exists(select 1 from public.weekly_source_row_timesheet_lineages lineage\\n          where lineage.row_resolution_id=snapshot.row_resolution_id\\n            and lineage.timesheet_id=any(v_root_family))\\n        and not exists(select 1 from public.weekly_exceptional_pay_family_events event\\n          where event.family_id=v_family.id and event.durable_work_event_id=snapshot.work_event_id and event.state='WAIT'\\n            and event.event_sequence=(select max(latest.event_sequence) from public.weekly_exceptional_pay_family_events latest\\n              where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id))\\n      union all\\n      select event.work_date,event.start_at_local,'protected-'||event.id::text,\\n        pg_catalog.jsonb_build_object('row_key','protected-'||event.id::text,\\n          'day_date',to_char(event.work_date,'Dy FMDD Mon YYYY'),\\n          'hours',to_char(event.start_at_local,'HH24:MI')||'-'||to_char(event.end_at_local,'HH24:MI'),\\n          'break_text',event.break_minutes||' min','state','PROTECTED','status_text','Office-approved hours',\\n          'context_text','Client system hours are still being checked.')\\n      from public.weekly_exceptional_pay_family_events event\\n      where event.family_id=v_family.id and event.state='WAIT'\\n        and event.event_sequence=(select max(latest.event_sequence) from public.weekly_exceptional_pay_family_events latest\\n          where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id)\\n    ) approved;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_TSFIN:PUBLIC . TIMESHEETS_FINANCIALS",
+          "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"ROWTYPE_SELECT:V_TSFIN:PUBLIC . TIMESHEETS_FINANCIALS\",\"select * into v_tsfin from public.timesheets_financials financial\\n  where financial.timesheet_id=v_timesheet.timesheet_id and financial.is_current and not financial.is_stale\\n  order by financial.timesheet_version desc,financial.computed_at_utc desc,financial.id desc limit 1;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/06_complete_source_checklist_leaf.sqlinc",
+      "sha256": "31142909f36359ad1e3867e5843bd24f2a01c3363e1c7bac7d2708a5ae2ba54a",
+      "rawSha256": "31142909f36359ad1e3867e5843bd24f2a01c3363e1c7bac7d2708a5ae2ba54a",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:C:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"private.weekly_source_healthroster_checklist_leaf_v1(jsonb)\",\"ROWTYPE_SELECT:C:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into c from public.weekly_source_cycles where id=(p_request->>'source_cycle_id')::uuid;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:G:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"private.weekly_source_healthroster_checklist_leaf_v1(jsonb)\",\"ROWTYPE_SELECT:G:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into g from public.weekly_source_groups where id=c.source_group_id and active;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_healthroster_checklist_leaf_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"with scoped as materialized (\\n    select t.*,s.witness,rctx.route_read,tv.status::text validation_status,tv.last_source validation_import_id,tf.processing_status::text processing_status,\\n      exists(select 1 from private.timesheet_correction_requests r where r.state='WAITING'\\n        and r.reversed_timesheet_id=t.timesheet_id) correction_waiting\\n    from public.timesheets t left join public.contracts con on con.id=t.contract_id\\n    left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current and tf.timesheet_version=t.version\\n    cross join lateral(select case when v_route='SIGNED_TIMESHEETS'\\n      then private.weekly_source_signed_submission_read_context_v1(t.timesheet_id,g.id)\\n      else jsonb_build_object('eligible',true,'submission_witness',private.weekly_source_actual_timesheet_submission_v1(t.timesheet_id)) end route_read) rctx\\n    cross join lateral(select rctx.route_read->'submission_witness' witness) s\\n    left join lateral(select * from public.timesheet_validations v where v.timesheet_id=t.timesheet_id\\n      order by v.updated_at desc,v.created_at desc,v.id desc limit 1) tv on true\\n    where t.is_current and t.archived_at_utc is null and t.revoked_at is null\\n      and coalesce(con.client_id,case when t.contract_id is null and t.sheet_scope::text='DAILY' then tf.client_id end)=v_client\\n      and t.week_ending_date<v_today\\n      and exists(select 1 from public.weekly_source_group_clients m where m.source_group_id=g.id and m.client_id=v_client\\n        and t.week_ending_date between m.valid_from and coalesce(m.valid_to,'infinity'::date))\\n  ), counted as (\\n    select *,authorised_at_server is null or validation_status is distinct from 'VALIDATION_OK'\\n      or processing_status='READY_FOR_HR' or correction_waiting\\n      or exists(select 1 from public.import_review_decisions d join public.import_review_states st on st.import_id=d.import_id\\n          and st.preview_generation=d.preview_generation and st.superseded_at_utc is null and st.abandoned_at_utc is null\\n        join public.hr_imports hi on hi.id=d.import_id and hi.pruned_at is null\\n        where d.timesheet_id=scoped.timesheet_id and d.client_id=v_client and d.is_current\\n          and d.action_kind in('EMAIL_WEEKLY_ISSUES','EMAIL_DAILY_ISSUES','EMAIL_MISSING_FROM_IMPORT')\\n          and hi.id=(select current_import.id from public.hr_imports current_import\\n            where current_import.pruned_at is null and (current_import.id=scoped.validation_import_id\\n              or exists(select 1 from public.import_review_decisions current_decision\\n              join public.import_review_states current_state on current_state.import_id=current_decision.import_id\\n                and current_state.preview_generation=current_decision.preview_generation\\n                and current_state.superseded_at_utc is null and current_state.abandoned_at_utc is null\\n              where current_decision.import_id=current_import.id and current_decision.timesheet_id=scoped.timesheet_id\\n                and current_decision.client_id=v_client and current_decision.is_current))\\n            order by current_import.uploaded_at_utc desc,current_import.id desc limit 1)) open_read_item\\n    from scoped where (witness->>'actual_submitted')::boolean is true and (route_read->>'eligible')::boolean is true\\n  ) select max(week_ending_date),count(*) filter(where week_ending_date=v_week)::integer,\\n    count(*) filter(where week_ending_date=v_week and open_read_item)::integer,\\n    coalesce(jsonb_agg(jsonb_build_object('timesheet_id',timesheet_id,'witness',witness,'submission_read_context',route_read,\\n      'ordinary_authorised',authorised_at_server is not null,'validation_status',validation_status,\\n      'processing_status',processing_status,'correction_waiting',correction_waiting,'open_read_item',open_read_item)\\n      order by timesheet_id) filter(where week_ending_date=v_week),'[]'::jsonb),\\n    count(distinct week_ending_date) filter(where open_read_item and week_ending_date<v_latest_week)::integer,\\n    coalesce((select jsonb_agg(jsonb_build_object('code',reason,'unproved_timesheet_count',number) order by reason)\\n      from(select witness->>'reason' reason,count(distinct timesheet_id) number from scoped\\n        where week_ending_date=v_week and witness->>'support_state'='UNPROVED'\\n        group by witness->>'reason') unproved),'[]'::jsonb)\\n    into v_latest_timesheet_week,v_count,v_open,v_actual,v_earlier_open,v_unproved from counted;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_healthroster_checklist_leaf_v1(jsonb)\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"else\\n    for v_event in select e.id from public.weekly_work_events e where e.client_id=v_client\\n      and e.first_source_group_id=g.id and e.work_date between v_week-6 and v_week order by e.id loop\\n      begin\\n        execute 'select private.weekly_source_protected_wait_witness_v1($1,$2)' into v_wait_fact using v_event.id,c.id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc",
+      "sha256": "0ccc3bce3002fb844c88017ed66d45ecf2bbb70f92c78039d3105539c564ca79",
+      "rawSha256": "0ccc3bce3002fb844c88017ed66d45ecf2bbb70f92c78039d3105539c564ca79",
+      "points": [
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    left join pg_catalog.pg_attribute a\\n      on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))\\n     and a.attname=allowed.column_name\\n     and a.attnum>0\\n     and not a.attisdropped\\n    where a.attrelid is null\\n  )\\n  or exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    group by allowed.table_name\\n    having pg_catalog.min(allowed.column_ordinal)<>1\\n       or pg_catalog.max(allowed.column_ordinal)<>count(*)\\n       or count(distinct allowed.column_ordinal)<>count(*)\\n  ) then\\n    raise exception 'WEEKLY_SOURCE_ACL_LIFECYCLE_COLUMN_INVALID' using errcode='55000';\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_table in\\n    select c.table_name,c.record_class\\n    from private._weekly_source_acl_table_contract_v1() c\\n    order by c.table_name\\n  loop\\n    execute pg_catalog.format('alter table public.%I enable row level security',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format('alter table public.%I force row level security',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'revoke all on table public.%I from public,anon,authenticated,service_role',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format('revoke all on table public.%I from authenticator',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format('revoke all on table public.%I from supabase_admin',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop policy if exists cloudtms_miget_service_owner_all on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'create policy cloudtms_miget_service_owner_all on public.%I for all to %I, service_role using (true) with check (true)',\\n      v_table.table_name,current_user\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_record_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_fact_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_truncate_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class='IMMUTABLE_APPEND_ONLY' then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_record_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_fact_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_fact_guard_v1(%s)',\\n        v_table.table_name,v_lifecycle_columns\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class in ('IMMUTABLE_APPEND_ONLY','IMMUTABLE_FACTS_WITH_LIFECYCLE') then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_truncate_guard before truncate on public.%I for each statement execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  for v_function in\\n    select p.oid,p.proowner,n.nspname,p.proname,\\n           pg_catalog.pg_get_function_identity_arguments(p.oid) as identity_arguments\\n    from pg_catalog.pg_proc p\\n    join pg_catalog.pg_namespace n on n.oid=p.pronamespace\\n    where n.nspname in ('public','private')\\n      and (\\n        p.proname like 'weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_ctms\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like 'weekly\\\\_exceptional\\\\_%' escape '\\\\'\\n      )\\n  loop\\n    execute pg_catalog.format(\\n      'revoke all on function %I.%I(%s) from public,anon,authenticated,service_role',\\n      v_function.nspname,v_function.proname,v_function.identity_arguments\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from authenticator',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from supabase_admin',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_signature in\\n    select function_signature\\n    from private._weekly_source_acl_service_rpc_contract_v1()\\n  loop\\n    if pg_catalog.to_regprocedure(v_signature) is not null then\\n      execute 'grant execute on function '||v_signature||' to service_role';\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/99_acl.sqlinc",
+      "sha256": "dfb970deb66fc3ebc2e0999f8b11a03609a1331cb1fe03d8c1e71fbff5ca1555",
+      "rawSha256": "dfb970deb66fc3ebc2e0999f8b11a03609a1331cb1fe03d8c1e71fbff5ca1555",
+      "points": []
+    }
+  ],
+  "counts": {
+    "files": 44,
+    "rawOccurrences": 233,
+    "uniquePoints": 223,
+    "kinds": {
+      "ROWTYPE_SELECT": 180,
+      "JSON_CONCAT": 2,
+      "UUID_CARDINALITY_UNCLASSIFIED": 2,
+      "AGGREGATE_TYPE_UNCLASSIFIED": 14,
+      "DYNAMIC_SQL_UNCLASSIFIED": 35
+    }
+  },
+  "native": "NOT_RUN"
+}

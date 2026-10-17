@@ -1,0 +1,29 @@
+{
+  "version": "FINITE_LATER_KEEP_GATE_RECIPE_V1",
+  "target": "scripts/bpay-next-source-gates.mjs",
+  "inputSha256": "4f3f73b57b51ece357091ca612c4ca4abe9c33b6f69cf290f81552238580acb1",
+  "outputSha256": "2798cc6178aca812b82194659a6618bd94f12fdb404621783b5822b53a6a965f",
+  "hunks": [
+    {
+      "before": "import {createReviewedKeptEntryClassifier} from './healthroster-kept-entry-type-review.mjs';",
+      "after": "import {createReviewedLaterKeepClassifier} from './healthroster-later-keep-type-review.mjs';\nimport {createReviewedKeptEntryClassifier} from './healthroster-kept-entry-type-review.mjs';",
+      "purpose": "Add separate finite Later/Keep review without changing original nineteen-file proof."
+    },
+    {
+      "before": "export const FROZEN_BASE=",
+      "after": "const reviewedLaterKeepHazards=createReviewedLaterKeepClassifier(repoRoot,{\n  tupleProof:provesSingleTableTuple,hazardCensus:specialConstructViolations,\n  classifyPrior:(source,file,initial=new Map())=>{\n    const violations=specialConstructViolations(source,file),parts=executableParts(source,file);\n    let result=new Map(initial);\n    for(const review of [reviewedContactFiniteHazards,reviewedHealthRowtypeHazards,reviewedHealthUuidHazards,reviewedHealthAggregateHazards,reviewedHealthDynamicHazards,reviewedJoinedNonDynamicHazards,reviewedPrebodyDynamicHazards,reviewedSource13Hazards])\n      result=review(source,file,result,violations,parts);\n    return result;\n  }\n});\n\nexport const FROZEN_BASE=",
+      "purpose": "Invoke existing original statement/type classifiers only after complete current-parent reversal."
+    },
+    {
+      "before": "assertSpecialConstructs(source,file,reviewedKeptEntryHazards(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)))",
+      "after": "assertSpecialConstructs(source,file,reviewedLaterKeepHazards(source,file,reviewedKeptEntryHazards(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)))",
+      "purpose": "Compose on the unchanged Kept/Entry allowance map, preserving every existing gate."
+    }
+  ],
+  "fullReverseByteEquality": true,
+  "syntax": "PASS_NODE_CHECK_ONLY",
+  "newModule": "scripts/healthroster-later-keep-type-review.mjs",
+  "newReview": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/CLASSIFICATION.json",
+  "native": "NOT_RUN",
+  "rootWrites": 0
+}
