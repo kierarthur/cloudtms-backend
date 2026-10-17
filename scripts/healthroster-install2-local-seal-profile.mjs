@@ -9,7 +9,7 @@ export const profile = Object.freeze({
  branch:'codex/healthroster-install2-14102026',
  task:'hr-i2-seal-20261017', container:'hr-i2-seal-pg17-20261017',
  volume:'hr-i2-seal-data-20261017', image:'postgres:17.11-bookworm',
- port:'55448', database:'healthroster_install2_seal', owner:'cloudtms_hr_install2_seal_owner',
+ port:'55448', database:'banking_modal_v2_test', owner:'cloudtms_hr_install2_seal_owner',
  output:'.codex-tmp/healthroster-install2-mechanical-seal-20261017'
 });
 const requireThat=(ok,code)=>{if(!ok)throw Error(code);};

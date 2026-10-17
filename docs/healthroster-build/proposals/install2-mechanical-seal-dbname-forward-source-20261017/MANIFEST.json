@@ -1,0 +1,104 @@
+{
+  "rows": [
+    {
+      "path": "build.py",
+      "bytes": 2876,
+      "sha256": "f6c2b2b7cf54efb6edf3e4b59f6359d4d7aaaccddd2f89b5da5d5be0b4d487e9"
+    },
+    {
+      "path": "COMMANDS.ps1.txt",
+      "bytes": 5184,
+      "sha256": "50937fe789dd21c02fea2a4406b5d45f66487a7884580ec40c26e33e487127c2"
+    },
+    {
+      "path": "db-name.test.mjs",
+      "bytes": 1800,
+      "sha256": "38f36edabec4117e242680c70e3cec7c47380ccd7804e08b72c04d3f74b98c77"
+    },
+    {
+      "path": "FORWARD.json",
+      "bytes": 1272,
+      "sha256": "045210961a2f59b383dd04f309650a04a152d06a5c2e8e9d896835a369a4f1a7"
+    },
+    {
+      "path": "freeze.py",
+      "bytes": 516,
+      "sha256": "74b5a8a2db521d11fbb7742e8137ed9fe75cc470f69839109cf675f4d33dd78e"
+    },
+    {
+      "path": "ORIGINAL45_MANIFEST.json",
+      "bytes": 7933,
+      "sha256": "a63d340c08a936c447ea83eaf5bda94751d3a9c2a1afd45809f496447061d87c"
+    },
+    {
+      "path": "parents/AGENTS.md",
+      "bytes": 57328,
+      "sha256": "ae1357fb0372932d1ae05cc15c7b02662c71d5e96f00cecb185fccc3f2be29e9"
+    },
+    {
+      "path": "parents/scripts/healthroster-install1-local-provider.mjs",
+      "bytes": 4548,
+      "sha256": "e8925257c83f2a98c2980e1cd5e26ccc34f2bf03ea5dbf05bb3325b515154566"
+    },
+    {
+      "path": "parents/scripts/healthroster-install1-local-schema.mjs",
+      "bytes": 12720,
+      "sha256": "5d03eb668083e7c186bd9f52d2d63a4e38762e0c4c4d1747d1f4e460b559db55"
+    },
+    {
+      "path": "parents/scripts/healthroster-install2-local-provider.mjs",
+      "bytes": 4473,
+      "sha256": "d891d33aa0065d0dd4a05d0be37059899bbcbc66bebcf620a7611daf4a5aca64"
+    },
+    {
+      "path": "parents/scripts/healthroster-install2-local-schema.mjs",
+      "bytes": 11574,
+      "sha256": "11b289b5c795ec586e7b1de80d3c1b0ce65a78d116613fc673ca7b0fdce3e712"
+    },
+    {
+      "path": "parents/scripts/healthroster-install2-local-seal-profile.mjs",
+      "bytes": 6320,
+      "sha256": "8e125aa43fd01e04f5f82957a827145159cbd2b98c9d0834ffc278c7cb1b7215"
+    },
+    {
+      "path": "PARENTS.json",
+      "bytes": 1100,
+      "sha256": "17478c932551cb21b92a38370abd7d34aaff1da4af92e3f2e249638fabc53c98"
+    },
+    {
+      "path": "payload/scripts/healthroster-install2-local-provider.mjs",
+      "bytes": 4473,
+      "sha256": "d891d33aa0065d0dd4a05d0be37059899bbcbc66bebcf620a7611daf4a5aca64"
+    },
+    {
+      "path": "payload/scripts/healthroster-install2-local-schema.mjs",
+      "bytes": 11569,
+      "sha256": "372dd18d33cd976379c82350b4dd386e02b45844aab31f7cd2765c0720346dbe"
+    },
+    {
+      "path": "payload/scripts/healthroster-install2-local-seal-profile.mjs",
+      "bytes": 6315,
+      "sha256": "16d33a3d5803610f2c17adbdb1bf207f61c7c48c217daac782d2a96d4867b5f8"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2840,
+      "sha256": "6df3cd8c0570be92a68687c100657d3cea6544724dc724b6fae731f445d95a52"
+    },
+    {
+      "path": "SELECTION.json",
+      "bytes": 853,
+      "sha256": "291409abf241ad786029730f05c9652de8969b46ab8e00732f4f0eff855678c8"
+    },
+    {
+      "path": "test.mjs",
+      "bytes": 17549,
+      "sha256": "513749e8d15b4a4dc6dbcaf251f7321249f8c4e8cce94bbb07af0a0bad6a5b53"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 2218,
+      "sha256": "0d32e9adec2309e29159e87228fddb519482e80e6c4130582807619136f11d4d"
+    }
+  ]
+}

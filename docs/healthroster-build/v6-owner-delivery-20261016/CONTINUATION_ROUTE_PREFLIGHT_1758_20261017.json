@@ -1,0 +1,123 @@
+{
+  "version": "HEALTHROSTER_DIRECT_KIER_FRESH_ROUTE_V1",
+  "checkedAt": "2026-10-17 17:55:32 UTC",
+  "account": "kier@arthur-rai.co.uk",
+  "parity": {
+    "accepted": true,
+    "authenticated": true,
+    "read_only": false,
+    "rollback_only_transaction_tool": true,
+    "durable_database_writes_allowed": false,
+    "route": "Codex -> authenticated MCP -> Miget TEST read tools plus rollback-only transaction rehearsal",
+    "resource_count": 1,
+    "secrets_returned": false
+  },
+  "services": [
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "agency_test",
+      "service": {
+        "uuid": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+        "name": "postgres-service-p0qoe",
+        "label": "cloudtms-codex-poc-pg17",
+        "service_type": "postgres",
+        "state": "healthy",
+        "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+        "created_at": "2026-08-23T16:00:33.774Z",
+        "updated_at": "2026-09-30T19:16:42.824Z"
+      }
+    },
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "mytms_test",
+      "service": {
+        "uuid": "01a03045-5d5a-7892-b555-704ba6edc733",
+        "name": "postgres-service-kpqwi",
+        "label": "mytms-control-plane-pg17",
+        "service_type": "postgres",
+        "state": "healthy",
+        "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+        "created_at": "2026-08-23T20:17:27.386Z",
+        "updated_at": "2026-08-24T20:44:30.793Z"
+      }
+    }
+  ],
+  "catalogues": [
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "agency_test",
+      "summary": {
+        "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+        "function_count": 2694,
+        "trigger_count": 862,
+        "policy_count": 353,
+        "relation_count": 595,
+        "extension_count": 5
+      }
+    },
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "mytms_test",
+      "summary": {
+        "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+        "function_count": 753,
+        "trigger_count": 1,
+        "policy_count": 44,
+        "relation_count": 44,
+        "extension_count": 11
+      }
+    }
+  ],
+  "performance": [
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "agency_test",
+      "performance": {
+        "database_name": "cloudtms_test_clone",
+        "database_bytes": "4203681459",
+        "database_connections": 14,
+        "transactions_committed": "320900",
+        "transactions_rolled_back": "1140",
+        "temp_files": "629",
+        "temp_bytes": "38222167088",
+        "deadlocks": "0",
+        "cache_hit_percent": "93.68",
+        "sessions": 14,
+        "active_sessions": 1,
+        "lock_waiters": 0,
+        "ungranted_locks": 0,
+        "oldest_transaction_seconds": "0",
+        "pg_stat_statements_installed": false
+      }
+    },
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "mytms_test",
+      "performance": {
+        "database_name": "uofvkfi5",
+        "database_bytes": "34830003",
+        "database_connections": 4,
+        "transactions_committed": "1847447",
+        "transactions_rolled_back": "248",
+        "temp_files": "25",
+        "temp_bytes": "5443288",
+        "deadlocks": "0",
+        "cache_hit_percent": "100.00",
+        "sessions": 4,
+        "active_sessions": 1,
+        "lock_waiters": 0,
+        "ungranted_locks": 0,
+        "oldest_transaction_seconds": "0",
+        "pg_stat_statements_installed": false
+      }
+    }
+  ],
+  "anonymousMcpStatus": 401,
+  "scope": "Read-only fixed route verification only; cumulative counters do not establish diagnostic cause; no pool, service, schedule or credential mutation."
+}

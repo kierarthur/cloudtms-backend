@@ -56,7 +56,7 @@ try {
     'owner',current_user,'session',session_user,'superuser',r.rolsuper,'bypassrls',r.rolbypassrls,
     'jit',current_setting('jit'),'collector',current_setting('pg_show_plans.is_enabled',true))
     from pg_catalog.pg_roles r where r.rolname=current_user;`));
-  if (identity.database !== 'healthroster_install2_seal' || identity.major !== 17
+  if (identity.database !== 'banking_modal_v2_test' || identity.major !== 17
       || identity.owner !== 'cloudtms_hr_install2_seal_owner' || identity.session !== identity.owner
       || identity.superuser!==false || identity.bypassrls!==false
       || identity.jit!=='off'||identity.collector!=='off') throw Error('BPAY_NEXT_LOCAL_SCHEMA_IDENTITY_INVALID');

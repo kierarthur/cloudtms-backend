@@ -1,0 +1,29 @@
+{
+  "root": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "commit": "8cb53d49c7bf7a5bce2fe411deaa5fa3cdbbf83f",
+  "rows": [
+    {
+      "path": "scripts/healthroster-install2-local-seal-profile.mjs",
+      "bytes": 6320,
+      "sha256": "8e125aa43fd01e04f5f82957a827145159cbd2b98c9d0834ffc278c7cb1b7215"
+    },
+    {
+      "path": "scripts/healthroster-install2-local-schema.mjs",
+      "bytes": 11574,
+      "sha256": "11b289b5c795ec586e7b1de80d3c1b0ce65a78d116613fc673ca7b0fdce3e712"
+    },
+    {
+      "path": "scripts/healthroster-install2-local-provider.mjs",
+      "bytes": 4473,
+      "sha256": "d891d33aa0065d0dd4a05d0be37059899bbcbc66bebcf620a7611daf4a5aca64"
+    },
+    {
+      "path": "AGENTS.md",
+      "bytes": 57328,
+      "sha256": "ae1357fb0372932d1ae05cc15c7b02662c71d5e96f00cecb185fccc3f2be29e9"
+    }
+  ],
+  "originalPrefix": "docs/healthroster-build/proposals/install2-mechanical-seal-fresh-source-20261017/",
+  "originalManifestSha256": "a63d340c08a936c447ea83eaf5bda94751d3a9c2a1afd45809f496447061d87c",
+  "originalFilesIncludingManifest": 45
+}

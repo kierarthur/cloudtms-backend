@@ -1,0 +1,22 @@
+{
+  "rows": [
+    {
+      "target": "scripts/healthroster-install2-local-seal-profile.mjs",
+      "changed": true,
+      "beforeSha256": "8e125aa43fd01e04f5f82957a827145159cbd2b98c9d0834ffc278c7cb1b7215",
+      "sha256": "16d33a3d5803610f2c17adbdb1bf207f61c7c48c217daac782d2a96d4867b5f8"
+    },
+    {
+      "target": "scripts/healthroster-install2-local-schema.mjs",
+      "changed": true,
+      "beforeSha256": "11b289b5c795ec586e7b1de80d3c1b0ce65a78d116613fc673ca7b0fdce3e712",
+      "sha256": "372dd18d33cd976379c82350b4dd386e02b45844aab31f7cd2765c0720346dbe"
+    },
+    {
+      "target": "scripts/healthroster-install2-local-provider.mjs",
+      "changed": false,
+      "beforeSha256": "d891d33aa0065d0dd4a05d0be37059899bbcbc66bebcf620a7611daf4a5aca64",
+      "sha256": "d891d33aa0065d0dd4a05d0be37059899bbcbc66bebcf620a7611daf4a5aca64"
+    }
+  ]
+}
