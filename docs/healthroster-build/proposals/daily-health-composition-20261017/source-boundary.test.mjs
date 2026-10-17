@@ -3,7 +3,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {validateHealthSource} from './verify.mjs';
 const source=fs.readFileSync(new URL('./17102026_0120_daily_health_composition.sql',import.meta.url),'utf8');
 test('complete Health support implements actual bounded metadata with no public success or business writes',()=>{
- assert.deepEqual(validateHealthSource(source),{functions:5,publicComposers:0,businessWrites:0});
+ assert.deepEqual(validateHealthSource(source),{functions:6,publicComposers:0,businessWrites:0});
 });
 test('source guard rejects removing the post-wait actor recheck',()=>{
  assert.throws(()=>validateHealthSource(source.replace('perform private.daily_rate_correction_health_actor_require_v1(actor,p_lock);','')),/actor rechecked/);
@@ -23,4 +23,14 @@ test('source guard rejects a fake public finish or early financial write',()=>{
 test('source guard rejects a partial sealed-review substitute',()=>{
  const unsafe=source.replace('insert into private.timesheet_contract_move_members(','insert into private.timesheet_contract_move_reviews(');
  assert.throws(()=>validateHealthSource(unsafe));
+});
+test('source guard rejects feeding the canonical stored reason back as raw Details',()=>{
+ assert.throws(()=>validateHealthSource(source.replace('private.daily_rate_correction_health_reason_note_v1(o.reason)','o.reason')),/canonical stored reason/);
+});
+test('source guard rejects adding mutation Admin admission to current active GET reader',()=>{
+ const marker='-- Daily GET/public1342 admits';
+ assert.throws(()=>validateHealthSource(source.replace(marker,'perform private.daily_rate_correction_health_actor_require_v1(p_actor_user_id,false);\n '+marker)),/mutation Admin gate/);
+});
+test('source guard rejects leaking raw native financial receipt or identifiers before Bank join',()=>{
+ assert.throws(()=>validateHealthSource(source.replace("'financial_command_id',null,'current_financial_cut_id',null","'financial_command_id',o.financial_command_id,'current_financial_cut_id',o.current_financial_cut_id")),/raw financial receipt/);
 });

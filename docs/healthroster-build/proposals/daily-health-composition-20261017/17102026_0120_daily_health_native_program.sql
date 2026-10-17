@@ -42,7 +42,7 @@ begin
  if not rejected or exists(select 1 from private.timesheet_contract_move_operations o where o.id=operation)
   or exists(select 1 from private.timesheet_contract_move_members m where m.operation_id=operation) then
   raise exception 'PARTIAL_REVIEW_COMMIT_OR_SUBTRANSACTION_ESCAPE';end if;
- foreach signature in array array['private.daily_rate_correction_health_actor_require_v1(uuid,boolean)',
+ foreach signature in array array['private.daily_rate_correction_health_reason_note_v1(text)','private.daily_rate_correction_health_actor_require_v1(uuid,boolean)',
   'private.daily_rate_correction_health_basis_v1(jsonb,boolean)','private.daily_rate_correction_health_review_prepare_v1(jsonb)',
   'private.daily_rate_correction_health_accept_basis_v1(jsonb)','private.daily_rate_correction_health_result_basis_v1(uuid,uuid)'] loop
   if has_function_privilege('anon',signature,'EXECUTE') or has_function_privilege('authenticated',signature,'EXECUTE')

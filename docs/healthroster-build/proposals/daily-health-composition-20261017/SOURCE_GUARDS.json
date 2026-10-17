@@ -1,7 +1,7 @@
 {
   "version": "DAILY_HEALTH_COMPOSITION_SOURCE_GUARDS_V1",
   "status": "SOURCE_ONLY_ROOT_REVIEW_REQUIRED",
-  "integrationHeadObserved": "5ecc4c73113660edf48a5bca2f3a478453a81c2b",
+  "integrationHeadObserved": "418e65d517661686dcffd18d99363bb3176b217f",
   "files": [
     {
       "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
@@ -30,6 +30,18 @@
     {
       "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
       "canonicalSha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "canonicalSha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8"
+    },
+    {
+      "file": "broker/src/daily-rate-correction.js",
+      "canonicalSha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84"
+    },
+    {
+      "file": "broker/src/contract-correction-v3.mjs",
+      "canonicalSha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
     }
   ],
   "finalOwners": [
@@ -77,6 +89,11 @@
       "signature": "private.timesheet_contract_move_commit_guard_v1()",
       "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
       "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_move_reason_v1(text,text)",
+      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc"
     }
   ],
   "dailyExistingInvoiceInputKeys": [
@@ -90,5 +107,43 @@
     "private.daily_rate_correction_accept_v1(jsonb)",
     "private.daily_rate_correction_result_v1(uuid,uuid)"
   ],
-  "native": "NOT_RUN"
+  "native": "NOT_RUN",
+  "policyFiles": [
+    {
+      "file": "WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "canonicalSha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1"
+    },
+    {
+      "file": "MOVE_STAGE_CONTRACT.md",
+      "canonicalSha256": "e8fd1cbff0165343b7460d52a4c73d41d6ee1fc7b4cb6b624f5df3eedf55262f"
+    },
+    {
+      "file": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json",
+      "canonicalSha256": "213c4ff9afc09b9fbf3be54b75b4d3629342647ba6f32119a9b13d269eec7c8f"
+    }
+  ],
+  "readerPolicyBasis": [
+    {
+      "file": "WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "line": 22,
+      "exact": "Browser preview is exactly {version:DAILY_RATE_CORRECTION_V1,request_id,timesheet_id,reason?}. No prospective payment-basis choice or automatic intent appears in this Health DTO. No channel override, Contract, actor, quantities or computed money. Accept exactly {version,request_id,operation_id,review_id,review_digest,expected_state_revision}. Optional reason is a Details note≤1969 trimmed characters; same existing mandatory reason stores `Applying updated rates` or `Applying updated rates — `+note≤2000. No new public cause/note field. Reject unknown keys, duplicate/ill-typed IDs, non-Daily and any Contract-bearing target. Worker derives genuine authenticated active Office administrator from existing session and verifies current preparation/pay capabilities; no Issue permission assumed. An actor who cannot apply the pay revision or register required invoice drafts is not Ready. GET returns the same role-safe result union in MOVE_STAGE_CONTRACT§8 with purpose DAILY_RATE_CORRECTION, original=current physical ID, no Contract IDs and financial/billing independent states."
+    },
+    {
+      "file": "MOVE_STAGE_CONTRACT.md",
+      "line": 154,
+      "exact": "Accept/GET result closed keys are {version,purpose,operation_id,state,state_revision,placement,financial,billing,next_actions,links}, with the exact closed Result/Placement/Financial/Billing/Effect definitions in §8.1; all keys required, explicit NULL only as stated. This preserves the already-defined operation, placement, financial and billing enum values with correlated Contract/Daily purpose/version. COMPLETE requires actual committed placement; financial REGISTERED/PROCESSING may continue asynchronously. Role projection is deny-by-shape: REDACTED contains only its visibility discriminator, with hidden monetary IDs NULL and invisible actions omitted; no raw private snapshot or unauthorised economic string/URL."
+    },
+    {
+      "file": "MOVE_STAGE_CONTRACT.md",
+      "line": 156,
+      "exact": "GET /api/timesheets/contract-move/operations/:operation_id?request_id=:saved_request_id is the read-only current V3 result transport: exactly one request_id UUID query key, no body/extra query/action/actor/money keys. CM16 authenticates the actual current Office reader and constructs the service-only closed {version:TIMESHEET_CONTRACT_CORRECTION_V3,action:READ_RESULT,operation_id,request_id,actor_user_id}. The retained Health public.timesheet_contract_move_accept_v1(jsonb) READ_RESULT dispatch validates the original request-to-operation association and current reader permission, then directly calls private.timesheet_contract_move_read_v1(operation_id,actor_user_id); it does not execute the fresh ACCEPT mutation branch. Project exact §8 current result with current-role redaction while preserving original immutable receipt/request/actor separately. READ_RESULT is adapter-generated for GET, never an additional browser Accept field. Legacy V1 decoding is restricted to genuine saved pre-existing legacy operation/request recovery under its exact retained contract; never construct a legacy envelope for a fresh V3 operation or rewrite a saved receipt into a new acceptance. GET allocates no request/mutation journal, command, review or job and never changes accepted terms. Existing qualified financial-history/reconcile actions and Source pay-decision pending semantics remain separate; no fresh completed-Move repair wizard, second confirmation or generic Continue physical staging. Preparation retry is an exact native job action, not a second Move accept."
+    },
+    {
+      "file": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json",
+      "pointer": "/currentV3PresentationContract/invariants/4",
+      "exact": "Financial NOT_REQUIRED has NULL command_id/cut_id; all published IDs genuine native only. Denied financial/billing identifiers are NULL and any non-NULL denied summary exactly REDACTED. Billing NOT_REQUIRED has NULL group_id/visible_summary."
+    }
+  ],
+  "reasonFix": "Recover exact rawDetails from validated canonical storedreason, then native normalization+original immutable request hash equality",
+  "readerFix": "GET currentactiveOffice with existing0955billingroleprojection; rawreceipt omitted, financialIDs NULL pendingactualBankvisibilityjoin"
 }

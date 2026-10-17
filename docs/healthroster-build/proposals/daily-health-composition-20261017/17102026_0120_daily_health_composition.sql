@@ -1,5 +1,26 @@
 -- Health-only internal composition proposal. No public success composer or
 -- Banking return ABI is declared here. Root owns native mounts and contracts.
+create or replace function private.daily_rate_correction_health_reason_note_v1(p_stored_reason text)
+returns text language plpgsql immutable security definer
+set search_path=pg_catalog,private,pg_temp
+as $function$
+declare prefix text:='Applying updated rates'; note text;
+begin
+ if p_stored_reason=prefix then note:='';
+ elsif left(p_stored_reason,char_length(prefix)+3)=prefix||' — ' then
+  note:=substr(p_stored_reason,char_length(prefix)+4);
+ else raise exception 'DAILY_RATE_STORED_REASON_INVALID' using errcode='23514';end if;
+ -- The stored reason is canonical, not a raw Details note. Recover exactly
+ -- one prefix then prove the actual native Unicode normalizer round-trips it.
+ -- This admits the full1969-character note even when the stored reason is longer.
+ if private.timesheet_contract_move_reason_v1(note,'DAILY_RATE_CORRECTION') is distinct from p_stored_reason then
+  raise exception 'DAILY_RATE_STORED_REASON_INVALID' using errcode='23514';end if;
+ return note;
+exception when sqlstate '22023' then
+ raise exception 'DAILY_RATE_STORED_REASON_INVALID' using errcode='23514';
+end;
+$function$;
+
 create or replace function private.daily_rate_correction_health_actor_require_v1(p_actor_user_id uuid,p_lock boolean)
 returns void language plpgsql volatile security definer
 set search_path=pg_catalog,public,private,pg_temp
@@ -111,10 +132,13 @@ begin
   or o.before_invoice_hash is distinct from review.invoice_hash then
   raise exception 'REVIEW_STALE' using errcode='40001';end if;
  preview_args:=jsonb_build_object('version','DAILY_RATE_CORRECTION_V1','request_id',review.preview_request_id,
-  'actor_user_id',actor,'timesheet_id',o.from_timesheet_id,'reason',o.reason,
+  'actor_user_id',actor,'timesheet_id',o.from_timesheet_id,
+  'reason',private.daily_rate_correction_health_reason_note_v1(o.reason),
   'context_digest',review.manifest_json#>>'{daily,context,context_digest}',
   'calculation_snapshot',review.manifest_json#>'{daily,calculation_snapshot}',
   'rate_provenance',review.manifest_json#>'{daily,rate_provenance}');
+ if private.daily_rate_correction_request_hash_v1(preview_args,'PREVIEW') is distinct from review.preview_request_hash then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
  daily:=private.daily_rate_correction_health_basis_v1(preview_args,true);
  if daily is distinct from review.manifest_json->'daily' then raise exception 'REVIEW_STALE' using errcode='40001';end if;
  physical:=private.daily_rate_correction_scope_v1(o.id,false);
@@ -144,8 +168,11 @@ set search_path=pg_catalog,public,private,pg_temp
 as $function$
 declare o private.timesheet_contract_move_operations%rowtype; member private.timesheet_contract_move_members%rowtype; billing jsonb;
 begin
- -- Reading is independent of original creator, with current Daily Admin role.
- perform private.daily_rate_correction_health_actor_require_v1(p_actor_user_id,false);
+ -- Daily GET/public1342 admits the current active Office reader independently
+ -- of the creator. Admin/pay qualification belongs to mutation and projection,
+ -- not a newly invented blanket read gate. Native0955 owns billing redaction.
+ if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active) then
+  raise exception 'CORRECTION_RESULT_NOT_VISIBLE' using errcode='42501';end if;
  select x.* into o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
  if o.id is null or o.purpose is distinct from 'DAILY_RATE_CORRECTION' or o.from_contract_id is not null or o.to_contract_id is not null
   or not exists(select 1 from public.timesheets t where t.timesheet_id=o.from_timesheet_id and t.sheet_scope::text='DAILY' and t.contract_id is null)
@@ -169,15 +196,19 @@ begin
      and f.authorised_at_utc is not null and f.authorised_by_user_id=o.created_by_user_id))) then
   raise exception 'CORRECTION_RESULT_NOT_VISIBLE' using errcode='42501';end if;
  billing:=private.invoice_contract_move_billing_read_v1(o.id,p_actor_user_id);
- perform private.daily_rate_correction_health_actor_require_v1(p_actor_user_id,false);
+ if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active) then
+  raise exception 'CORRECTION_RESULT_NOT_VISIBLE' using errcode='42501';end if;
  return jsonb_build_object('version','DAILY_RATE_HEALTH_RESULT_BASIS_V1','operation_id',o.id,'state',o.state,
   'state_revision',o.state_revision::text,'physical_timesheet_id',o.from_timesheet_id,
-  'placement_receipt',o.placement_receipt_json,'accepted_review_id',o.accepted_review_id,
-  'financial_command_id',o.financial_command_id,'current_financial_cut_id',o.current_financial_cut_id,'billing',billing);
- -- Private internal facts, never the public Result union or a Bank summary.
+  'placement_receipt_id',case when o.placement_receipt_json is not null then o.placement_receipt_json->'receipt_id' else 'null'::jsonb end,
+  'accepted_review_id',o.accepted_review_id,'financial_command_id',null,'current_financial_cut_id',null,'billing',billing);
+ -- No raw native receipt or financial IDs cross this reader. Genuine Bank
+ -- current-reader visibility/semantic join remains separately required even
+ -- for an Admin; this Health basis grants no guessed financial projection.
 end;
 $function$;
 
+revoke all on function private.daily_rate_correction_health_reason_note_v1(text) from public,anon,authenticated,service_role;
 revoke all on function private.daily_rate_correction_health_actor_require_v1(uuid,boolean) from public,anon,authenticated,service_role;
 revoke all on function private.daily_rate_correction_health_basis_v1(jsonb,boolean) from public,anon,authenticated,service_role;
 revoke all on function private.daily_rate_correction_health_review_prepare_v1(jsonb) from public,anon,authenticated,service_role;
