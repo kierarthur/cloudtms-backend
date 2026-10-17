@@ -1,0 +1,47 @@
+{
+  "version": "REVIEWED_RPC_RELOAD_EXECUTION_PIN_SUCCESSOR_V1",
+  "root": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+  "reviewReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/INVOICE_RPC_RELOAD_CONTINUATION_20261016.json",
+  "reviewReceiptSha256": "2ef8a9fc76b9d0f3a0c2e016759b9f3b37f9b6bc41dbd099e5c798768c1b598a",
+  "peerCommit": "fb3aac4d163c1b7a4520e0ff42120fc484cf4f46",
+  "policy": "scripts/cloudtms-managed-execution-policy.mjs",
+  "inputPolicySha256": "069e6d1d2361c6c8026b193116db565d40503b9a2e338ddb75c4b1dadb15d415",
+  "outputPolicySha256": "ba1ed5d23cdd639e814c7e009bfa07502dd633511e9e0be265d2a8486fa495d1",
+  "before": "['repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql','4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53','SOURCE_REASSERT']",
+  "after": "['repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql','3b276d4fe9cdd614aa10d5779c299f233ffae59e792b47e155a89a831e8d923c','SOURCE_REASSERT']",
+  "exactTail": "notify pgrst, 'reload schema';\n",
+  "beforeClosureSha256": "4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53",
+  "afterClosureSha256": "3b276d4fe9cdd614aa10d5779c299f233ffae59e792b47e155a89a831e8d923c",
+  "rawSourceSha256": "b7b5dc446ee62b11818362ce5880667acef4f1e4b02b1d3c32962ae637a10b3c",
+  "orderedFiles": [
+    {
+      "path": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "sha256": "b7b5dc446ee62b11818362ce5880667acef4f1e4b02b1d3c32962ae637a10b3c"
+    },
+    {
+      "path": "supabase/repeatable/08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1.sql",
+      "sha256": "fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e"
+    },
+    {
+      "path": "supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql",
+      "sha256": "7a158d0e3628c95becdbc13c1b8e46022be13c691fb95e9b6a791238e381d2e7"
+    },
+    {
+      "path": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "sha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff"
+    },
+    {
+      "path": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21"
+    },
+    {
+      "path": "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
+      "sha256": "7a9e74ccfa75be919b21aa5126864b239197b7f466816264140f1e19f02bd93d"
+    }
+  ],
+  "allIncludedBytesUnchanged": true,
+  "exceptionCount": 39,
+  "reasonUnchanged": "SOURCE_REASSERT",
+  "native": "NOT_RUN",
+  "otherPolicyChanges": 0
+}

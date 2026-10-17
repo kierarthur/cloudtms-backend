@@ -42,6 +42,7 @@ declare
     'weekly_final_source_correction_root_impacts',
     'weekly_issue_comparison_revisions',
     'weekly_source_charge_acceptances',
+    'weekly_source_kept_as_paid_decisions',
     'weekly_source_charge_checks',
     'weekly_source_contract_qualification_observations',
     'weekly_source_entitlement_head_components',
@@ -424,6 +425,14 @@ declare
     'private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)',
     'private.weekly_source_invoice_adjustment_payload_admit_v1(uuid,jsonb)',
     'private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)',
+    'private.weekly_source_identical_rekey_prior_v1(uuid)',
+    'private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)',
+    'private.weekly_source_kept_as_paid_facts_v1(uuid,text)',
+    'private.weekly_source_kept_as_paid_context_v1(uuid,uuid)',
+    'private.weekly_source_invoice_credited_targets_admit_v1(uuid,jsonb,uuid)',
+    'private.weekly_source_keep_ack_native_guard_v1()',
+    'private.timesheet_correction_entry_subject_v1(uuid,uuid)',
+    'private.timesheet_correction_entry_v1(uuid,uuid)',
     'private.weekly_source_invoice_admission_receipt_map_v1(uuid)',
     'private.weekly_source_invoice_admitted_member_money_v1(uuid,uuid)',
     'private.weekly_source_invoice_allocation_assert_v1(uuid)',
@@ -884,6 +893,8 @@ declare
     'public.weekly_source_upload_abort_atomic_v1(jsonb)',
     'public.weekly_source_upload_attempt_record_atomic_v1(jsonb)',
     'public.weekly_source_upload_context_v1(jsonb)',
+    'public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)',
+    'public.timesheet_correction_entry_v1(jsonb)',
     'public.weekly_source_upload_detail_v1(jsonb)',
     'public.weekly_source_upload_seal_atomic_v1(jsonb)',
     'public.weekly_source_upload_stage_begin_atomic_v1(jsonb)',
@@ -938,9 +949,10 @@ begin
   -- movement, then +2 for the head supersession reason and predecessor link of
   -- HANDOVER 2 round-5 ruling A3 step 3 (package WP-07c), with the completed-
   -- pack pair already represented in the sealed set.
-  if v_contract_count<>105
-     or v_distinct_contract_count<>105
-     or v_immutable_count<>39
+  --17Oct reviewed Keep decision adds one immutable relation; all other sets remain exact.
+  if v_contract_count<>106
+     or v_distinct_contract_count<>106
+     or v_immutable_count<>40
      or v_lifecycle_count<>19
      or v_stateful_count<>47 then
     raise exception 'weekly source table contract count mismatch: total %, distinct %, immutable %, lifecycle %, stateful %',

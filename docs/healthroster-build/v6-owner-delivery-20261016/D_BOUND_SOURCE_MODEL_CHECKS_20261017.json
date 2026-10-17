@@ -1,0 +1,31 @@
+{
+  "version": "D_BOUND_SOURCE_MODEL_CHECKS_20261017",
+  "tests": {
+    "passed": 42,
+    "failed": 0,
+    "files": [
+      "tests/healthroster-install2-native-gate.test.mjs",
+      "tests/managed-database-release.test.mjs"
+    ]
+  },
+  "temporaryRoot": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/source-models-20261017",
+  "tempAndTmp": "CHILD_PROCESS_SCOPED_ONLY",
+  "physicalTemporaryRoot": "D_CONFIRMED_BEFORE_LAUNCH",
+  "testCaches": "AUTOMATIC_PROCESS_EXIT_CLEANUP",
+  "outerFolder": "PROVED_EMPTY_AND_REMOVED_NONRECURSIVELY",
+  "previousDefaultWindowsTempRuns": "RETAINED_HISTORICAL_RESULTS_NOT_D_BOUND_QUALIFICATION",
+  "unattributedPreexistingWindowsTempFolder": {
+    "path": "C:/Users/KierArthur/AppData/Local/Temp/cloudtms-managed-owner-7RwpSV",
+    "createdUtc": "2026-10-16T05:38:34Z",
+    "ownership": "UNRESOLVED_PREEXISTING_PRESERVED",
+    "deletionAttempted": false
+  },
+  "nativeDBCalls": 0,
+  "deployment": false,
+  "initialFailure": {
+    "tests": 2,
+    "cause": "REVIEWED_RPC_RELOAD_TAIL_NOT_REFLECTED_IN_ONE_MANAGED_EXECUTION_PIN",
+    "fixReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/RPC_RELOAD_EXECUTION_PIN_SUCCESSOR_20261017.json"
+  },
+  "initialFailureResolved": true
+}

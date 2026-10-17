@@ -1,0 +1,43 @@
+{
+  "version": "KEPT_ENTRY_SECURITY_VERIFIER_REGISTRATION_V1",
+  "native": "NOT_RUN",
+  "target": "supabase/verification/17102026_0144_kept_pay_and_correction_entry_security.sql",
+  "inputReleaseSha256": "9eb294e6417d9a30671f3cf5cdad01d58c0e3734947ae63f603e11dd5f92a9cb",
+  "inventory": {
+    "verificationFiles": {
+      "before": 176,
+      "after": 177,
+      "existingPrefixUnchanged": true
+    },
+    "newVerificationFiles": {
+      "before": 177,
+      "after": 178,
+      "existingPrefixUnchanged": true
+    }
+  },
+  "outputReleaseSha256": "578860fe5d1586cb1c265a3a782d8ce674973a2a68d492e7a6427bf3d1f894c5",
+  "grammar": {
+    "parser": "pglast v7.20",
+    "postgresGrammar": "17.7",
+    "files": [
+      {
+        "path": "supabase/verification/17102026_0144_kept_pay_and_correction_entry_security.sql",
+        "sha256": "b6c2d32681a497c6694df4a02a4c2c8e4bf45d3d35ce5de073ac4e4e3355cf1b",
+        "statements": 3,
+        "plpgsqlBodies": 1
+      },
+      {
+        "path": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+        "sha256": "049594c264df266777143bbf5789b52c4c2691cd163a74240ee2b90f027ffd36",
+        "statements": 13,
+        "plpgsqlBodies": 3
+      }
+    ],
+    "catalogue": "NOT_RUN"
+  },
+  "sourceBoundaryTests": {
+    "passed": 2,
+    "failed": 0,
+    "scope": "COMPLETE_NATIVE_OWNER_HEADERS_AND_INDEPENDENT_OLD_VERIFIER_REVERSE"
+  }
+}
