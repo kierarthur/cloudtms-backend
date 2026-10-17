@@ -1,0 +1,35 @@
+{
+  "version": "DAILY_R11_ACTUAL_SOURCE_PHASE_COMMIT_V1",
+  "phase": "operator",
+  "reportParent": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "commit": "cb9113b7354b967cd7b13ee78bdb1937f0a2e1aa",
+  "remoteEqual": true,
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/contract.mjs",
+      "file": "contract.mjs",
+      "beforeSha256": "66160e665fb71bb81ee994e7108fb1539c4fff8ae0189abd3d91ebd6f43eabdb",
+      "afterSha256": "fe06ef2621c44decd5aaaea644655993b90fa8c841d3561360250b93a6da7abf",
+      "bytes": 7643
+    },
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/SOURCE_PINS.json",
+      "file": "SOURCE_PINS.json",
+      "beforeSha256": "20ea68c6e1204a40e2c5cb4f51a44dfd2c22331d93ae9113b18af5b7df272739",
+      "afterSha256": "f916f42c93c62dcb30760ec759f996d7f30563e0d4e22b101c484a37febd89a9",
+      "bytes": 4363
+    },
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
+      "file": "MANIFEST.json",
+      "beforeSha256": "73d5aacf329803e1de6a92cdc4f60298a548715af777a83d436c2c67bd8ae115",
+      "afterSha256": "751455b0db59a899491ee3276f8430205a923545de486b51ec27e5e4068546d1",
+      "bytes": 24587
+    }
+  ],
+  "proposalCommit": "125915e9f5f43aaa7e4eb54cd8b8355d134bb81a",
+  "publicReceiptCommit": "3afab9f2adcef7bc6c630dfb4278f6b8771acce0",
+  "sourceOutput": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r11-source-3e75ce7c04e58c20e634638d9004c9f3",
+  "native": "NOT_RUN",
+  "privateStateTargetAccess": "NONE"
+}

@@ -1,0 +1,28 @@
+{
+  "version": "DAILY_R11_ACTUAL_SOURCE_PHASE_COMMIT_V1",
+  "phase": "coordinator",
+  "reportParent": "899250c0380d7518ae73029270207f6577c1eea3",
+  "commit": "35ced391f628c8a305fecda9105d79f170008271",
+  "remoteEqual": true,
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/SOURCE_PINS.json",
+      "file": "SOURCE_PINS.json",
+      "beforeSha256": "1b21bb40f9f7a614bfae761d938a7525d1de27a8664ea3108e62394a863f2d17",
+      "afterSha256": "9629024f1c85dfee64ef52ee12efed2f085ffbb2618f41b61d72f49851ed6520",
+      "bytes": 45858
+    },
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json",
+      "file": "MANIFEST.json",
+      "beforeSha256": "86a2858cdafdf9bb801a9c626c78e8c75423d4f86627b40d285084be642d2026",
+      "afterSha256": "bffa97a8550efe2702b775a66be5fec654134cbadda3d2100a692cc0739bfe32",
+      "bytes": 2417
+    }
+  ],
+  "proposalCommit": "125915e9f5f43aaa7e4eb54cd8b8355d134bb81a",
+  "publicReceiptCommit": "3afab9f2adcef7bc6c630dfb4278f6b8771acce0",
+  "sourceOutput": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r11-source-18336ef95238044cadbe9642b155314c",
+  "native": "NOT_RUN",
+  "privateStateTargetAccess": "NONE"
+}
