@@ -1,0 +1,574 @@
+{
+  "version": "CONTACT_FIXED_COMPONENTS_R1_ACTUAL_V1",
+  "executionCommit": "30d865e19f07bd2d4957178539c426633791c379",
+  "components": [
+    {
+      "mode": "AUDIT",
+      "artifactPath": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-component-audit-r1\\COMPONENT_RESULT.json",
+      "artifactSha256": "faedf03f3a6a4e982ebfca0cf2df5d8959472be8a66156857690f96d090fb473",
+      "actualClosedResult": {
+        "status": "FIXED_COMPONENT_COMPLETED_NO_RESTORATION_VERDICT",
+        "component": {
+          "version": "CONTACT_CANONICAL_COMPONENT_V1",
+          "component": "AUDIT",
+          "counts": [
+            "1139776"
+          ],
+          "digest": "005eb858461d3ba50d74bc3bf634ed1671e008d0311f16a62eff9f70746f9003"
+        },
+        "peer": {
+          "database": "cloudtms_test_clone",
+          "readOnly": true,
+          "holderPid": 277356,
+          "isolation": "repeatable read",
+          "readerPid": 277362,
+          "databaseOid": 324139,
+          "noRoleSwitch": true
+        },
+        "progress": {
+          "version": "CONTACT_CBEFORE_PREFIX_COMPLETION_V1",
+          "mode": "AUDIT",
+          "childClosed": true,
+          "completed": [
+            {
+              "ordinal": 1,
+              "originalOrdinal": 1,
+              "completion": "BEGIN_COMPLETE",
+              "receivedAt": "2026-10-17T11:07:54.710Z"
+            },
+            {
+              "ordinal": 2,
+              "originalOrdinal": 2,
+              "completion": "GUARD_COMPLETE",
+              "receivedAt": "2026-10-17T11:07:54.754Z"
+            },
+            {
+              "ordinal": 3,
+              "originalOrdinal": 3,
+              "completion": "PEER_COMPLETE",
+              "receivedAt": "2026-10-17T11:07:54.776Z"
+            },
+            {
+              "ordinal": 4,
+              "originalOrdinal": 4,
+              "completion": "SEARCH_PATH_COMPLETE",
+              "receivedAt": "2026-10-17T11:07:54.800Z"
+            },
+            {
+              "ordinal": 5,
+              "originalOrdinal": 5,
+              "completion": "AUDIT_COMPLETE",
+              "receivedAt": "2026-10-17T11:08:28.295Z"
+            },
+            {
+              "ordinal": 6,
+              "originalOrdinal": 6,
+              "completion": "ROLLBACK_COMPLETE",
+              "receivedAt": "2026-10-17T11:08:28.322Z"
+            }
+          ],
+          "nextUnconfirmedOrdinal": null,
+          "failedStatementOrdinal": "UNKNOWN_COMPLETION_MARKERS_ARE_A_LOWER_BOUND",
+          "canonicalRowsRead": false,
+          "componentOnly": true,
+          "fullCanonicalSnapshotRead": false,
+          "restorationQualified": false
+        },
+        "source": {
+          "version": "CONTACT_FIXED_COMPONENT_SOURCE_V1",
+          "canonicalSqlSha256": "b38327513e860b002452452cd1d4b3773a614309e6594c9dfbc04cf5e50aec72",
+          "originalInputSha256": "4e29a41e9d59e5b7777e9fe5d7300738eab4e2dff8e5dbd8d9e1337309763d7f",
+          "componentQuerySha256": {
+            "AUDIT": "b81e7dcf5d7d67390ec4c3df1f49205f3e6c26cc5b1e980a9e8ff1dfdde922fd",
+            "CATALOGUE": "b8e2879e440d787e1359fab95e6ce8f55c8f73c9bb7349f119fda39f43038fea",
+            "BACKGROUND": "64ac4537fa0fd343f9a6084621c3d7d6dbc293ba4b480c2750d055c994d9f5d2"
+          },
+          "componentInputSha256": {
+            "AUDIT": "fbe31639a23369ca9d22a533c90fd4d1a7baec00a4b4f211e207e40d256e1902",
+            "CATALOGUE": "f2c41e2e46a97074504188e7b5a85144970aa47c00a45e1475991765480d5d64",
+            "BACKGROUND": "7dc5d01fa78ebcc83f90af59967c7e190ce3b35e04185509e2deba7794a8182a"
+          },
+          "statementsPerComponent": 6,
+          "fullCanonicalSnapshotRead": false,
+          "componentOnly": true,
+          "restorationQualified": false,
+          "limits": {
+            "stdoutBytes": 67108864,
+            "stderrBytes": 16384,
+            "connectSeconds": 10,
+            "statementMilliseconds": 45000,
+            "lockMilliseconds": 2000,
+            "childMilliseconds": 70000,
+            "terminateGraceMilliseconds": 2000,
+            "closeGraceMilliseconds": 3000
+          }
+        },
+        "childClosed": true,
+        "fullCanonicalSnapshotRead": false,
+        "restorationQualified": false,
+        "timing": {
+          "sequenceStartedAt": "2026-10-17T11:07:49.934Z",
+          "sourceBuildStartedAt": "2026-10-17T11:07:49.934Z",
+          "sourceBuildFinishedAt": "2026-10-17T11:07:50.137Z",
+          "componentStartedAt": "2026-10-17T11:07:50.137Z",
+          "componentReturnedAt": "2026-10-17T11:08:32.273Z"
+        }
+      },
+      "actualSummary": {
+        "status": "FIXED_COMPONENT_COMPLETED_NO_RESTORATION_VERDICT",
+        "caseId": "CONTACT_CONSTRUCTORS_V1",
+        "component": "AUDIT",
+        "source": {
+          "version": "CONTACT_FIXED_COMPONENT_SOURCE_V1",
+          "canonicalSqlSha256": "b38327513e860b002452452cd1d4b3773a614309e6594c9dfbc04cf5e50aec72",
+          "originalInputSha256": "4e29a41e9d59e5b7777e9fe5d7300738eab4e2dff8e5dbd8d9e1337309763d7f",
+          "componentQuerySha256": {
+            "AUDIT": "b81e7dcf5d7d67390ec4c3df1f49205f3e6c26cc5b1e980a9e8ff1dfdde922fd",
+            "CATALOGUE": "b8e2879e440d787e1359fab95e6ce8f55c8f73c9bb7349f119fda39f43038fea",
+            "BACKGROUND": "64ac4537fa0fd343f9a6084621c3d7d6dbc293ba4b480c2750d055c994d9f5d2"
+          },
+          "componentInputSha256": {
+            "AUDIT": "fbe31639a23369ca9d22a533c90fd4d1a7baec00a4b4f211e207e40d256e1902",
+            "CATALOGUE": "f2c41e2e46a97074504188e7b5a85144970aa47c00a45e1475991765480d5d64",
+            "BACKGROUND": "7dc5d01fa78ebcc83f90af59967c7e190ce3b35e04185509e2deba7794a8182a"
+          },
+          "statementsPerComponent": 6,
+          "fullCanonicalSnapshotRead": false,
+          "componentOnly": true,
+          "restorationQualified": false,
+          "limits": {
+            "stdoutBytes": 67108864,
+            "stderrBytes": 16384,
+            "connectSeconds": 10,
+            "statementMilliseconds": 45000,
+            "lockMilliseconds": 2000,
+            "childMilliseconds": 70000,
+            "terminateGraceMilliseconds": 2000,
+            "closeGraceMilliseconds": 3000
+          }
+        },
+        "timing": {
+          "sequenceStartedAt": "2026-10-17T11:07:49.934Z",
+          "sourceBuildStartedAt": "2026-10-17T11:07:49.934Z",
+          "sourceBuildFinishedAt": "2026-10-17T11:07:50.137Z",
+          "componentStartedAt": "2026-10-17T11:07:50.137Z",
+          "componentReturnedAt": "2026-10-17T11:08:32.273Z"
+        },
+        "fullCanonicalSnapshotInvoked": false,
+        "mcpDispatched": false,
+        "fixturesAttempted": false,
+        "restorationQualified": false
+      },
+      "clientMarkerIntervalMilliseconds": 33495,
+      "timingMeaning": "Client receipt interval only, not PostgreSQL execution timing; observations are from distinct turns."
+    },
+    {
+      "mode": "CATALOGUE",
+      "artifactPath": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-component-catalogue-r1\\COMPONENT_RESULT.json",
+      "artifactSha256": "4d6f0dd440acd4116bc7f645b58576cb02b72769d3378e8d154e3c0db4e1e830",
+      "actualClosedResult": {
+        "status": "FIXED_COMPONENT_COMPLETED_NO_RESTORATION_VERDICT",
+        "component": {
+          "version": "CONTACT_CANONICAL_COMPONENT_V1",
+          "component": "CATALOGUE",
+          "counts": [
+            "1"
+          ],
+          "digest": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a"
+        },
+        "peer": {
+          "database": "cloudtms_test_clone",
+          "readOnly": true,
+          "holderPid": 277457,
+          "isolation": "repeatable read",
+          "readerPid": 277461,
+          "databaseOid": 324139,
+          "noRoleSwitch": true
+        },
+        "progress": {
+          "version": "CONTACT_CBEFORE_PREFIX_COMPLETION_V1",
+          "mode": "CATALOGUE",
+          "childClosed": true,
+          "completed": [
+            {
+              "ordinal": 1,
+              "originalOrdinal": 1,
+              "completion": "BEGIN_COMPLETE",
+              "receivedAt": "2026-10-17T11:09:45.539Z"
+            },
+            {
+              "ordinal": 2,
+              "originalOrdinal": 2,
+              "completion": "GUARD_COMPLETE",
+              "receivedAt": "2026-10-17T11:09:45.594Z"
+            },
+            {
+              "ordinal": 3,
+              "originalOrdinal": 3,
+              "completion": "PEER_COMPLETE",
+              "receivedAt": "2026-10-17T11:09:45.629Z"
+            },
+            {
+              "ordinal": 4,
+              "originalOrdinal": 4,
+              "completion": "SEARCH_PATH_COMPLETE",
+              "receivedAt": "2026-10-17T11:09:45.657Z"
+            },
+            {
+              "ordinal": 5,
+              "originalOrdinal": 5,
+              "completion": "CATALOGUE_COMPLETE",
+              "receivedAt": "2026-10-17T11:09:47.936Z"
+            },
+            {
+              "ordinal": 6,
+              "originalOrdinal": 6,
+              "completion": "ROLLBACK_COMPLETE",
+              "receivedAt": "2026-10-17T11:09:47.965Z"
+            }
+          ],
+          "nextUnconfirmedOrdinal": null,
+          "failedStatementOrdinal": "UNKNOWN_COMPLETION_MARKERS_ARE_A_LOWER_BOUND",
+          "canonicalRowsRead": false,
+          "componentOnly": true,
+          "fullCanonicalSnapshotRead": false,
+          "restorationQualified": false
+        },
+        "source": {
+          "version": "CONTACT_FIXED_COMPONENT_SOURCE_V1",
+          "canonicalSqlSha256": "e9a81fb38edc297ed9920eb8e58da5bac7d31a6adc67561a3d9b5ee16938516b",
+          "originalInputSha256": "3396426d363948bfb661ea7bfc0dd691e4259ed22819af5df306b92eed3780ae",
+          "componentQuerySha256": {
+            "AUDIT": "b81e7dcf5d7d67390ec4c3df1f49205f3e6c26cc5b1e980a9e8ff1dfdde922fd",
+            "CATALOGUE": "b8e2879e440d787e1359fab95e6ce8f55c8f73c9bb7349f119fda39f43038fea",
+            "BACKGROUND": "64ac4537fa0fd343f9a6084621c3d7d6dbc293ba4b480c2750d055c994d9f5d2"
+          },
+          "componentInputSha256": {
+            "AUDIT": "2b7f3e0aeec7c4a53d1830124f5a800c474d965728ebd2a1892f786f7eec1290",
+            "CATALOGUE": "945a2b855468d43c926cdc74271a6e4b75ab4a7ca46d22aa80a0188b262314dd",
+            "BACKGROUND": "2a0126f03967bf110fd55c36250089eba27013af7c0516696663074639f00edb"
+          },
+          "statementsPerComponent": 6,
+          "fullCanonicalSnapshotRead": false,
+          "componentOnly": true,
+          "restorationQualified": false,
+          "limits": {
+            "stdoutBytes": 67108864,
+            "stderrBytes": 16384,
+            "connectSeconds": 10,
+            "statementMilliseconds": 45000,
+            "lockMilliseconds": 2000,
+            "childMilliseconds": 70000,
+            "terminateGraceMilliseconds": 2000,
+            "closeGraceMilliseconds": 3000
+          }
+        },
+        "childClosed": true,
+        "fullCanonicalSnapshotRead": false,
+        "restorationQualified": false,
+        "timing": {
+          "sequenceStartedAt": "2026-10-17T11:09:40.776Z",
+          "sourceBuildStartedAt": "2026-10-17T11:09:40.776Z",
+          "sourceBuildFinishedAt": "2026-10-17T11:09:41.029Z",
+          "componentStartedAt": "2026-10-17T11:09:41.029Z",
+          "componentReturnedAt": "2026-10-17T11:09:51.669Z"
+        }
+      },
+      "actualSummary": {
+        "status": "FIXED_COMPONENT_COMPLETED_NO_RESTORATION_VERDICT",
+        "caseId": "CONTACT_CONSTRUCTORS_V1",
+        "component": "CATALOGUE",
+        "source": {
+          "version": "CONTACT_FIXED_COMPONENT_SOURCE_V1",
+          "canonicalSqlSha256": "e9a81fb38edc297ed9920eb8e58da5bac7d31a6adc67561a3d9b5ee16938516b",
+          "originalInputSha256": "3396426d363948bfb661ea7bfc0dd691e4259ed22819af5df306b92eed3780ae",
+          "componentQuerySha256": {
+            "AUDIT": "b81e7dcf5d7d67390ec4c3df1f49205f3e6c26cc5b1e980a9e8ff1dfdde922fd",
+            "CATALOGUE": "b8e2879e440d787e1359fab95e6ce8f55c8f73c9bb7349f119fda39f43038fea",
+            "BACKGROUND": "64ac4537fa0fd343f9a6084621c3d7d6dbc293ba4b480c2750d055c994d9f5d2"
+          },
+          "componentInputSha256": {
+            "AUDIT": "2b7f3e0aeec7c4a53d1830124f5a800c474d965728ebd2a1892f786f7eec1290",
+            "CATALOGUE": "945a2b855468d43c926cdc74271a6e4b75ab4a7ca46d22aa80a0188b262314dd",
+            "BACKGROUND": "2a0126f03967bf110fd55c36250089eba27013af7c0516696663074639f00edb"
+          },
+          "statementsPerComponent": 6,
+          "fullCanonicalSnapshotRead": false,
+          "componentOnly": true,
+          "restorationQualified": false,
+          "limits": {
+            "stdoutBytes": 67108864,
+            "stderrBytes": 16384,
+            "connectSeconds": 10,
+            "statementMilliseconds": 45000,
+            "lockMilliseconds": 2000,
+            "childMilliseconds": 70000,
+            "terminateGraceMilliseconds": 2000,
+            "closeGraceMilliseconds": 3000
+          }
+        },
+        "timing": {
+          "sequenceStartedAt": "2026-10-17T11:09:40.776Z",
+          "sourceBuildStartedAt": "2026-10-17T11:09:40.776Z",
+          "sourceBuildFinishedAt": "2026-10-17T11:09:41.029Z",
+          "componentStartedAt": "2026-10-17T11:09:41.029Z",
+          "componentReturnedAt": "2026-10-17T11:09:51.669Z"
+        },
+        "fullCanonicalSnapshotInvoked": false,
+        "mcpDispatched": false,
+        "fixturesAttempted": false,
+        "restorationQualified": false
+      },
+      "clientMarkerIntervalMilliseconds": 2279,
+      "timingMeaning": "Client receipt interval only, not PostgreSQL execution timing; observations are from distinct turns."
+    },
+    {
+      "mode": "BACKGROUND",
+      "artifactPath": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-component-background-r1\\COMPONENT_RESULT.json",
+      "artifactSha256": "e1f162ffa0d676e52136c07a5fd3019166c00e5d0cf1a9ebdad480d1e931419f",
+      "actualClosedResult": {
+        "status": "FIXED_COMPONENT_COMPLETED_NO_RESTORATION_VERDICT",
+        "component": {
+          "version": "CONTACT_CANONICAL_COMPONENT_V1",
+          "component": "BACKGROUND",
+          "counts": [
+            "74599",
+            "20"
+          ],
+          "digest": "687fb45060760d304bd5a057eb9cf3a4318997e472804d87d9bacf1e8634219d"
+        },
+        "peer": {
+          "database": "cloudtms_test_clone",
+          "readOnly": true,
+          "holderPid": 277483,
+          "isolation": "repeatable read",
+          "readerPid": 277487,
+          "databaseOid": 324139,
+          "noRoleSwitch": true
+        },
+        "progress": {
+          "version": "CONTACT_CBEFORE_PREFIX_COMPLETION_V1",
+          "mode": "BACKGROUND",
+          "childClosed": true,
+          "completed": [
+            {
+              "ordinal": 1,
+              "originalOrdinal": 1,
+              "completion": "BEGIN_COMPLETE",
+              "receivedAt": "2026-10-17T11:10:26.858Z"
+            },
+            {
+              "ordinal": 2,
+              "originalOrdinal": 2,
+              "completion": "GUARD_COMPLETE",
+              "receivedAt": "2026-10-17T11:10:26.923Z"
+            },
+            {
+              "ordinal": 3,
+              "originalOrdinal": 3,
+              "completion": "PEER_COMPLETE",
+              "receivedAt": "2026-10-17T11:10:26.954Z"
+            },
+            {
+              "ordinal": 4,
+              "originalOrdinal": 4,
+              "completion": "SEARCH_PATH_COMPLETE",
+              "receivedAt": "2026-10-17T11:10:26.998Z"
+            },
+            {
+              "ordinal": 5,
+              "originalOrdinal": 5,
+              "completion": "BACKGROUND_COMPLETE",
+              "receivedAt": "2026-10-17T11:10:36.701Z"
+            },
+            {
+              "ordinal": 6,
+              "originalOrdinal": 6,
+              "completion": "ROLLBACK_COMPLETE",
+              "receivedAt": "2026-10-17T11:10:36.733Z"
+            }
+          ],
+          "nextUnconfirmedOrdinal": null,
+          "failedStatementOrdinal": "UNKNOWN_COMPLETION_MARKERS_ARE_A_LOWER_BOUND",
+          "canonicalRowsRead": false,
+          "componentOnly": true,
+          "fullCanonicalSnapshotRead": false,
+          "restorationQualified": false
+        },
+        "source": {
+          "version": "CONTACT_FIXED_COMPONENT_SOURCE_V1",
+          "canonicalSqlSha256": "03167375529f7d9ac6a566c8c6800b6fa64005b4b5f5140b9eca7d4ba60a3575",
+          "originalInputSha256": "c60f50b45e3f07c818bdb76d652c161ab0fb5a72709a9e63930156717a2d3206",
+          "componentQuerySha256": {
+            "AUDIT": "b81e7dcf5d7d67390ec4c3df1f49205f3e6c26cc5b1e980a9e8ff1dfdde922fd",
+            "CATALOGUE": "b8e2879e440d787e1359fab95e6ce8f55c8f73c9bb7349f119fda39f43038fea",
+            "BACKGROUND": "64ac4537fa0fd343f9a6084621c3d7d6dbc293ba4b480c2750d055c994d9f5d2"
+          },
+          "componentInputSha256": {
+            "AUDIT": "c9c914a31b2d05c30baee4c5f419f28676b624a21d481153762b2ef75e999e06",
+            "CATALOGUE": "3f6ed311fe79287383510b59682ed07d04bf9f9b75db71b571187b0c7c6e92f9",
+            "BACKGROUND": "f23c7c4c5a4a89e05b4a2d5eb2a7b9f724b6ef24a6d84d19812e2c71e2ab7d01"
+          },
+          "statementsPerComponent": 6,
+          "fullCanonicalSnapshotRead": false,
+          "componentOnly": true,
+          "restorationQualified": false,
+          "limits": {
+            "stdoutBytes": 67108864,
+            "stderrBytes": 16384,
+            "connectSeconds": 10,
+            "statementMilliseconds": 45000,
+            "lockMilliseconds": 2000,
+            "childMilliseconds": 70000,
+            "terminateGraceMilliseconds": 2000,
+            "closeGraceMilliseconds": 3000
+          }
+        },
+        "childClosed": true,
+        "fullCanonicalSnapshotRead": false,
+        "restorationQualified": false,
+        "timing": {
+          "sequenceStartedAt": "2026-10-17T11:10:21.643Z",
+          "sourceBuildStartedAt": "2026-10-17T11:10:21.644Z",
+          "sourceBuildFinishedAt": "2026-10-17T11:10:21.869Z",
+          "componentStartedAt": "2026-10-17T11:10:21.869Z",
+          "componentReturnedAt": "2026-10-17T11:10:40.599Z"
+        }
+      },
+      "actualSummary": {
+        "status": "FIXED_COMPONENT_COMPLETED_NO_RESTORATION_VERDICT",
+        "caseId": "CONTACT_CONSTRUCTORS_V1",
+        "component": "BACKGROUND",
+        "source": {
+          "version": "CONTACT_FIXED_COMPONENT_SOURCE_V1",
+          "canonicalSqlSha256": "03167375529f7d9ac6a566c8c6800b6fa64005b4b5f5140b9eca7d4ba60a3575",
+          "originalInputSha256": "c60f50b45e3f07c818bdb76d652c161ab0fb5a72709a9e63930156717a2d3206",
+          "componentQuerySha256": {
+            "AUDIT": "b81e7dcf5d7d67390ec4c3df1f49205f3e6c26cc5b1e980a9e8ff1dfdde922fd",
+            "CATALOGUE": "b8e2879e440d787e1359fab95e6ce8f55c8f73c9bb7349f119fda39f43038fea",
+            "BACKGROUND": "64ac4537fa0fd343f9a6084621c3d7d6dbc293ba4b480c2750d055c994d9f5d2"
+          },
+          "componentInputSha256": {
+            "AUDIT": "c9c914a31b2d05c30baee4c5f419f28676b624a21d481153762b2ef75e999e06",
+            "CATALOGUE": "3f6ed311fe79287383510b59682ed07d04bf9f9b75db71b571187b0c7c6e92f9",
+            "BACKGROUND": "f23c7c4c5a4a89e05b4a2d5eb2a7b9f724b6ef24a6d84d19812e2c71e2ab7d01"
+          },
+          "statementsPerComponent": 6,
+          "fullCanonicalSnapshotRead": false,
+          "componentOnly": true,
+          "restorationQualified": false,
+          "limits": {
+            "stdoutBytes": 67108864,
+            "stderrBytes": 16384,
+            "connectSeconds": 10,
+            "statementMilliseconds": 45000,
+            "lockMilliseconds": 2000,
+            "childMilliseconds": 70000,
+            "terminateGraceMilliseconds": 2000,
+            "closeGraceMilliseconds": 3000
+          }
+        },
+        "timing": {
+          "sequenceStartedAt": "2026-10-17T11:10:21.643Z",
+          "sourceBuildStartedAt": "2026-10-17T11:10:21.644Z",
+          "sourceBuildFinishedAt": "2026-10-17T11:10:21.869Z",
+          "componentStartedAt": "2026-10-17T11:10:21.869Z",
+          "componentReturnedAt": "2026-10-17T11:10:40.599Z"
+        },
+        "fullCanonicalSnapshotInvoked": false,
+        "mcpDispatched": false,
+        "fixturesAttempted": false,
+        "restorationQualified": false
+      },
+      "clientMarkerIntervalMilliseconds": 9703,
+      "timingMeaning": "Client receipt interval only, not PostgreSQL execution timing; observations are from distinct turns."
+    }
+  ],
+  "actualSharedTurns": [
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_CANONICAL_COMPONENT_COST_V1",
+      "status": "TAKEN",
+      "takenAt": "2026-10-17T11:07:45.805Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_CANONICAL_COMPONENT_COST_V1",
+      "status": "RELEASED",
+      "takenAt": "2026-10-17T11:07:45.805Z",
+      "releasedAt": "2026-10-17T11:08:36.387Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_CANONICAL_COMPONENT_COST_V1",
+      "status": "TAKEN",
+      "takenAt": "2026-10-17T11:09:37.029Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_CANONICAL_COMPONENT_COST_V1",
+      "status": "RELEASED",
+      "takenAt": "2026-10-17T11:09:37.029Z",
+      "releasedAt": "2026-10-17T11:09:55.882Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_CANONICAL_COMPONENT_COST_V1",
+      "status": "TAKEN",
+      "takenAt": "2026-10-17T11:10:17.519Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_CANONICAL_COMPONENT_COST_V1",
+      "status": "RELEASED",
+      "takenAt": "2026-10-17T11:10:17.519Z",
+      "releasedAt": "2026-10-17T11:10:44.680Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    }
+  ],
+  "afterCapacity": {
+    "observedAt": "2026-10-17T11:12:53.689Z",
+    "physicalDatabase": "cloudtms_test_clone",
+    "state": "healthy",
+    "postmasterStartedAt": "2026-10-14T09:07:33.240Z"
+  },
+  "interpretation": "All three exact components independently complete under unchanged caps. Audit observed1139776 rows, distinct from earlier plan estimate1207404. Client marker intervals33495/2279/9703ms are not additive server timings. Their substantial separate costs support cumulative whole-query cost as a plausible explanation for observed full57014, not a proved exact execution cause. No additional full retry; review same-transaction native typed staging while preserving full checks and70s child/120s work/180s whole.",
+  "mcpDispatched": false,
+  "fixturesAttempted": false,
+  "fullCanonicalSnapshotRead": false,
+  "restorationQualified": false,
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

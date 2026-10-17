@@ -1,0 +1,21 @@
+{
+  "version": "TEST_AUTH_REFRESH_R6_ACTUAL_SUCCESS_V1",
+  "executionRootCommit": "1b38c8db8ab7e851a315aa4f51a9452e61e9083a",
+  "executableReportCommit": "e9cc374c066ff13494ff17fb8436dd8d0e54017c",
+  "authorSource": "462c196c503c39731fe331f4b6899f3e72b35b9c",
+  "actualClosedResult": {"version":"TEST_AUTH_REFRESH_PRIVATE_RESULT_V3","status":"AUTH_REFRESHED","code":"AUTH_REFRESHED","browserClosed":true,"loginRequests":1,"refreshRequests":0,"blockedReadRequests":6,"forbiddenWriteRequests":0,"refusedRequests":0,"suppressedStartupRequests":1,"diagnostic":{"phase":"EXPLICIT_ADMISSION_RETURNED","admission":{"meStatus":200,"actorUuid":true,"admin":true,"workspaceStatus":200,"contract":true,"queries":true},"blockedWriteLabel":"NONE","blockedWriteMethod":"NONE"}},
+  "privateStatePath": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/test-auth-refresh-20261017-377aa5037a2784af27b46a901256cd99/storage-state.json",
+  "privateContentsReadOrHashedByParent": false,
+  "sharedFrontendStateUntouched": true,
+  "browserAndChildClosed": true,
+  "processExitCode": 0,
+  "nativeIntervalActive": false,
+  "startupPingForwarded": false,
+  "startupResponseFabricated": false,
+  "businessFixturesCreated": false,
+  "qualification": "ME_ADMIN_AND_QUERY_WORKSPACE_ONLY_NOT_NATIVE_WPPP_OR_BUSINESS_CURRENTNESS",
+  "retention": "Fresh protected owned state and browser scratch retained for finite reviewed public path/receipt successor; no cleanup attempted. Old R4 state remains unchanged and unread by parent.",
+  "originalHolds": "S0R1 actor admission HOLD and authR5 readiness HOLD retained; neither cause is inferred from this success",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

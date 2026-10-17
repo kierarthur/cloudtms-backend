@@ -1,0 +1,94 @@
+TAP version 13
+# Subtest: genuine publicR6 receipt is exact and proves only current ME/Admin/query-workspace
+ok 1 - genuine publicR6 receipt is exact and proves only current ME/Admin/query-workspace
+  ---
+  duration_ms: 1.4821
+  type: 'test'
+  ...
+# Subtest: operator3 changes one public path and only authObservation; all130 other manifest rows remain raw-equivalent
+ok 2 - operator3 changes one public path and only authObservation; all130 other manifest rows remain raw-equivalent
+  ---
+  duration_ms: 2.4203
+  type: 'test'
+  ...
+# Subtest: holder2 uses supplied historical operator mount only in one row, retaining6 pins/16 manifest rows
+ok 3 - holder2 uses supplied historical operator mount only in one row, retaining6 pins/16 manifest rows
+  ---
+  duration_ms: 1.7415
+  type: 'test'
+  ...
+# Subtest: coordinator2 updates exactly3 operator+2 holder pins, preserving146 pins/14 manifest rows and P1 source
+ok 4 - coordinator2 updates exactly3 operator+2 holder pins, preserving146 pins/14 manifest rows and P1 source
+  ---
+  duration_ms: 4.1647
+  type: 'test'
+  ...
+# Subtest: valid-length synthetic hashes are pure recipe parameters, never accepted as mount authority by parsing alone
+ok 5 - valid-length synthetic hashes are pure recipe parameters, never accepted as mount authority by parsing alone
+  ---
+  duration_ms: 0.2857
+  type: 'test'
+  ...
+# Subtest: actual-mount verifier requires saved/index/HEAD/historical equality and ancestry, not only declared hash
+ok 6 - actual-mount verifier requires saved/index/HEAD/historical equality and ancestry, not only declared hash
+  ---
+  duration_ms: 1.4406
+  type: 'test'
+  ...
+# Subtest: actual-mount verifier refuses missing
+ok 7 - actual-mount verifier refuses missing
+  ---
+  duration_ms: 1.1972
+  type: 'test'
+  ...
+# Subtest: actual-mount verifier refuses dirty
+ok 8 - actual-mount verifier refuses dirty
+  ---
+  duration_ms: 1.1353
+  type: 'test'
+  ...
+# Subtest: actual-mount verifier refuses index
+ok 9 - actual-mount verifier refuses index
+  ---
+  duration_ms: 1.2677
+  type: 'test'
+  ...
+# Subtest: actual-mount verifier refuses historical
+ok 10 - actual-mount verifier refuses historical
+  ---
+  duration_ms: 1.5166
+  type: 'test'
+  ...
+# Subtest: actual-mount verifier refuses headMoved
+ok 11 - actual-mount verifier refuses headMoved
+  ---
+  duration_ms: 1.1572
+  type: 'test'
+  ...
+# Subtest: actual-mount verifier refuses ancestry
+ok 12 - actual-mount verifier refuses ancestry
+  ---
+  duration_ms: 1.0258
+  type: 'test'
+  ...
+# Subtest: actual current unmounted e9cc/operator image cannot be declared as the R6 mount
+ok 13 - actual current unmounted e9cc/operator image cannot be declared as the R6 mount
+  ---
+  duration_ms: 111.6307
+  type: 'test'
+  ...
+# Subtest: new literal state path equals only the genuine public R6 receipt path
+ok 14 - new literal state path equals only the genuine public R6 receipt path
+  ---
+  duration_ms: 1.418
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 233.332

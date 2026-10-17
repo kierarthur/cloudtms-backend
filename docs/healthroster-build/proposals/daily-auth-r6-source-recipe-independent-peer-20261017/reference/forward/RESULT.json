@@ -1,0 +1,19 @@
+{
+  "version": "DAILY_GENUINE_R6_PUBLIC_SOURCE_FORWARD_CHECKS_V1",
+  "passed": 14,
+  "failed": 0,
+  "operatorTargets": 3,
+  "holderTargets": 2,
+  "coordinatorTargets": 2,
+  "operatorManifestRetainedRows": 130,
+  "holderPinsRetainedRows": 6,
+  "holderManifestRetainedRows": 16,
+  "coordinatorPinsRetainedRows": 146,
+  "coordinatorManifestRetainedRows": 14,
+  "rootHistoricalMountCommits": "REQUIRED_ACTUAL_NOT_FABRICATED",
+  "native": "NOT_RUN",
+  "browser": "NOT_RUN",
+  "sourcePreflight": "NOT_RUN",
+  "runtimeMount": "NOT_RUN",
+  "privateStateFileReadHashCopyOrStat": "NONE"
+}
