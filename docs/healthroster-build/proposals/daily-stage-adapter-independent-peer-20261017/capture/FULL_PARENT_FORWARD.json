@@ -1,0 +1,75 @@
+{
+  "version": "ORIGINAL_STAGES_ROOT_ADAPTER_FULL_PARENT_FORWARD_V1",
+  "parentCommit": "ea17085c96ec78bb0e72646b2f6ef90a422cdcda",
+  "parentFile": "docs/healthroster-build/proposals/daily-s1-root-actual-effect-adapter-20261017/run.mjs",
+  "completeParent": "reference/parent-run.mjs",
+  "beforeBytes": 8279,
+  "beforeSha256": "7d5ef4fda04d9a4ef6f8d84ed378e320f809244dc21c55276d3896dab0417541",
+  "afterBytes": 8876,
+  "afterSha256": "e7e51ad09ec7f619fbddb3c8385d8251309eb275419222e1ae6900cdef05f413",
+  "edits": [
+    {
+      "before": "// Root-only S1 public evidence adoption. No transport, auth, SQL, browser or IPC.",
+      "after": "// Root-only original-stage public evidence adoption. No transport, auth, SQL, browser or IPC."
+    },
+    {
+      "before": "import {prepareS1After,validateCommittedS1After} from '../daily-s1-actual-effect-recorder-20261017/recorder.mjs';",
+      "after": "import {prepareOriginalStageAfter} from 'file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/recorder.mjs';\nimport {validateCommittedOriginalStageAfter} from './validate.mjs';"
+    },
+    {
+      "before": "const OWN=P+'daily-s1-root-actual-effect-adapter-20261017/';",
+      "after": "const OWN=P+'daily-original-stages-root-effect-adapter-20261017/';"
+    },
+    {
+      "before": "const REC=P+'daily-s1-actual-effect-recorder-20261017/';",
+      "after": "const REC=P+'daily-original-stages-after-response-clock-forward-20261017/';"
+    },
+    {
+      "before": "Error('S1_ADAPTER_'+c)",
+      "after": "Error('STAGE_ADAPTER_'+c)"
+    },
+    {
+      "before": " const a={source:e.HR_OPERATOR_COMMIT,ownCommit:e.HR_S1_ADAPTER_COMMIT,recorderCommit:e.HR_S1_RECORDER_COMMIT,out:e.HR_ROOT_OUT,planFile:e.HR_ROOT_PLAN};",
+      "after": " const a={stage:e.HR_ROOT_STAGE,source:e.HR_OPERATOR_COMMIT,ownCommit:e.HR_STAGE_ADAPTER_COMMIT,recorderCommit:e.HR_STAGE_RECORDER_COMMIT,out:e.HR_ROOT_OUT,planFile:e.HR_ROOT_PLAN};\n must(['S1a','S2','S3','S4'].includes(a.stage),'EXACT_ORIGINAL_STAGE_REQUIRED');"
+    },
+    {
+      "before": " must(/^docs\\/healthroster-build\\/v6-owner-delivery-20261016\\/DAILY_GENUINE_S1_[A-Z0-9_]+\\.json$/.test(a.planFile??''),'EXACT_PUBLIC_S1_PLAN_REQUIRED');return a;",
+      "after": " must(new RegExp('^docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_'+a.stage+'_[A-Z0-9_]+\\\\.json$').test(a.planFile??''),'EXACT_PUBLIC_STAGE_PLAN_REQUIRED');return a;"
+    },
+    {
+      "before": " const names=new Set(['S1_BEFORE_INPUT.json','S1_BEFORE_NATIVE.json','S1_AFTER_INPUT.json','S1_AFTER_NATIVE.json','S1_RESPONSE.json','S1_AUX_BEFORE_INPUT.json','S1_AUX_BEFORE_NATIVE.json','S1_AUX_AFTER_INPUT.json','S1_AUX_AFTER_NATIVE.json']);",
+      "after": " const auxiliary=['S2','S3'].includes(a.stage),names=new Set([a.stage+'_BEFORE_INPUT.json',a.stage+'_BEFORE_NATIVE.json',a.stage+'_AFTER_INPUT.json',a.stage+'_AFTER_NATIVE.json',a.stage+'_RESPONSE.json',...auxiliary?[a.stage+'_AUX_BEFORE_INPUT.json',a.stage+'_AUX_BEFORE_NATIVE.json',a.stage+'_AUX_AFTER_INPUT.json',a.stage+'_AUX_AFTER_NATIVE.json']:[]]);"
+    },
+    {
+      "before": " const args={source:a.source,planFile:a.planFile,readPublic,beforeBuilt:JSON.parse(read('S1_BEFORE_INPUT.json')),beforeBytes:read('S1_BEFORE_NATIVE.json'),afterBuilt:JSON.parse(read('S1_AFTER_INPUT.json')),afterBytes:read('S1_AFTER_NATIVE.json'),responseBytes:read('S1_RESPONSE.json'),auxBeforeBuilt:JSON.parse(read('S1_AUX_BEFORE_INPUT.json')),auxBeforeBytes:read('S1_AUX_BEFORE_NATIVE.json'),auxAfterBuilt:JSON.parse(read('S1_AUX_AFTER_INPUT.json')),auxAfterBytes:read('S1_AUX_AFTER_NATIVE.json'),now:Date.now()};",
+      "after": " const args={stage:a.stage,source:a.source,planFile:a.planFile,readPublic,beforeBuilt:JSON.parse(read(a.stage+'_BEFORE_INPUT.json')),beforeBytes:read(a.stage+'_BEFORE_NATIVE.json'),afterBuilt:JSON.parse(read(a.stage+'_AFTER_INPUT.json')),afterBytes:read(a.stage+'_AFTER_NATIVE.json'),responseBytes:read(a.stage+'_RESPONSE.json'),...auxiliary?{auxBeforeBuilt:JSON.parse(read(a.stage+'_AUX_BEFORE_INPUT.json')),auxBeforeBytes:read(a.stage+'_AUX_BEFORE_NATIVE.json'),auxAfterBuilt:JSON.parse(read(a.stage+'_AUX_AFTER_INPUT.json')),auxAfterBytes:read(a.stage+'_AUX_AFTER_NATIVE.json')}:{},now:Date.now()};"
+    },
+    {
+      "before": " const result=prepareS1After(args),beforePlan=readPublic(a.planFile),files=result.records.map(r=>r.file);",
+      "after": " const result=prepareOriginalStageAfter(args),beforePlan=readPublic(a.planFile),files=result.records.map(r=>r.file);"
+    },
+    {
+      "before": "git(ROOT,'commit','-m','Record actual ordinary S1 source effects','--only','--',...files);",
+      "after": "git(ROOT,'commit','-m','Record actual ordinary '+a.stage+' source effects','--only','--',...files);"
+    },
+    {
+      "before": " validateCommittedS1After({...args,readPublic:reader(),now:Date.now()});",
+      "after": " validateCommittedOriginalStageAfter({...args,readPublic:reader(),now:Date.now()});"
+    },
+    {
+      "before": "status:'ACTUAL_S1_EFFECT_RECORDS_COMMITTED_ORIGINAL_AFTER_STILL_REQUIRED'",
+      "after": "status:'ACTUAL_'+a.stage+'_EFFECT_RECORDS_COMMITTED_ORIGINAL_AFTER_STILL_REQUIRED'"
+    },
+    {
+      "before": "/^S1_ADAPTER_[A-Z0-9_]+$/.test(e?.message??'')?e.message:'S1_ADAPTER_HELD'",
+      "after": "/^STAGE_ADAPTER_[A-Z0-9_]+$/.test(e?.message??'')?e.message:'STAGE_ADAPTER_HELD'"
+    }
+  ],
+  "wholeRawInverse": true,
+  "originalReaderUnchanged": true,
+  "originalRuntimeTouched": false,
+  "lineEndingsPreserved": {
+    "parentCRLF": 0,
+    "postCRLF": 0
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "version": "DAILY_FIVE_STAGE_SOURCE_PREDECISION_REVIEW_V1",
+  "verdict": "ACCEPT_BOUNDED_UNBOUND_SOURCE_REVIEW",
+  "draft": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_FIVE_STAGE_ROOT_EFFECT_REVIEW_DRAFT_20261017.json",
+  "draftSha256": "f753f1eeb4f32de4e1ffe03c645a912f3050702fa1a0ef55be5de95e2951d95e",
+  "independentReviewer": "Report /root/resume_contact_restoration; GPT-6.1 Extra High",
+  "distinctCommittedReferences": 17,
+  "rootReferenceOccurrencesSavedHeadIndexEqual": 26,
+  "actualProducerHashesMatched": 5,
+  "correctionsApplied": 2,
+  "corrections": [
+    "Hospital mapping UUID is supplied by the original approved request and inserted/returned by the native owner.",
+    "Candidate request has RN roles/PAYE facts and no band; Band6 belongs to rate/Timesheet."
+  ],
+  "scope": "Existing D9 ordinary setup and current original native/one-shot/response/effect gates. S4 reuses genuine normal financial owners, seven ACL observations and current catalogue with explicit definition/transitive-effects limits; no Bank body or new F17 gate.",
+  "actualK4": null,
+  "actualPredecisionsCreated": 0,
+  "actualPlansCreated": 0,
+  "auth": "NOT_RUN",
+  "native": "NOT_RUN"
+}

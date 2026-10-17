@@ -1,0 +1,11 @@
+{
+  "parentCommit": "267f4e2c5fe30b02cbe69ca143f17d50dd89e960",
+  "parentFile": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/test.mjs",
+  "completeParent": "reference/composer-test.mjs",
+  "beforeBytes": 12125,
+  "beforeSha256": "2cebee3053b7564837b80081bd1846bca770d6652cff69822aada63e53d2858e",
+  "afterBytes": 12150,
+  "afterSha256": "adfafc907544eb93d96f04aa0c6601346da07f0395dec4bf7777ec5665b68111",
+  "append": "\nexport {vector,change};\n",
+  "testOnly": true
+}
