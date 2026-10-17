@@ -1,0 +1,177 @@
+{
+  "version": "DAILY_GENUINE_EXACT_REGISTRY_PARENT_CAPTURE_V1",
+  "reportCommit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+  "approvedRootCommit": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+  "rows": [
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/git-image-batch.mjs",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 9138,
+      "sha256": "4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20",
+      "captured": "reference/operator/git-image-batch.mjs"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 24284,
+      "sha256": "e90b98a9314f719681e99c47aeb44260e395eff3e8720fe99a4b8931820069aa",
+      "captured": "reference/operator/MANIFEST.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/source.mjs",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 1950,
+      "sha256": "01d4acb9309eb71a315f4cc5fbe315b90bf29f69d62742f0152c6ee28ad937b2",
+      "captured": "reference/operator/source.mjs"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/contract.mjs",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 7643,
+      "sha256": "92da72cf00390a629e1cf959db6f2cae30e617c217a7ceca3611b71ce4960d9c",
+      "captured": "reference/operator/contract.mjs"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/SOURCE_PINS.json",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 4362,
+      "sha256": "a1e4ff63b5919b7ee2f447dbb952a73eb99adee4c6343cb11ccf8044da910c31",
+      "captured": "reference/operator/SOURCE_PINS.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/audit/CURRENT_SOURCE_CENSUS.json",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 17945,
+      "sha256": "ea394b58e75dfdc19d704a685b07ea05ac6dba028c10f1a040ec55c1aa9f96b4",
+      "captured": "reference/operator/reference/audit/CURRENT_SOURCE_CENSUS.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/source.mjs",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 4069,
+      "sha256": "9bcf873383794c3195ba51cf07b8246ca966b83b8a3a7e8b70106035f0dd4c88",
+      "captured": "reference/holder/source.mjs"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/EXTERNAL_SOURCE_PINS.json",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 2057,
+      "sha256": "fc5d8566dab287e2c2fef26c1b38ec16c7a9c46b75f1ae31165e203f26a7b9f9",
+      "captured": "reference/holder/EXTERNAL_SOURCE_PINS.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/MANIFEST.json",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 2880,
+      "sha256": "81f626622c61046faa1da07f12a9088e13e6baef6a1e3f33c87e9c1df3148e06",
+      "captured": "reference/holder/MANIFEST.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/SOURCE_PINS.json",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 45299,
+      "sha256": "e96b61c18863929635c2c3059793a7acbbee5da7b75e2b943fb7aa069ea1ea9c",
+      "captured": "reference/coordinator/SOURCE_PINS.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 2417,
+      "sha256": "eea1ef950e95e33254ceacf3a496f338d885bd6de418416d9c5b9a1fc1b0a219",
+      "captured": "reference/coordinator/MANIFEST.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/source.mjs",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 2056,
+      "sha256": "fc7de33f9e40ab9429692127b466444195f6894fc03aef700a0fc255a773363d",
+      "captured": "reference/coordinator/source.mjs"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/SOURCE_PINS.json",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 4429,
+      "sha256": "59dff9007a32d7a048ee484b4e5028b1b71ac0cdb49cc5bc51f490a9e10d01b3",
+      "captured": "reference/continuation/SOURCE_PINS.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/MANIFEST.json",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 3559,
+      "sha256": "2988ad111ea61804ea442b84c064994b1050b1f2e19a62e34b6f3f968beaf498",
+      "captured": "reference/continuation/MANIFEST.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/source.mjs",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 2362,
+      "sha256": "ae5269fca44137189e5f813d9a4159be65dbb235711a5523d80a0281a39123f6",
+      "captured": "reference/continuation/source.mjs"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-preflight-batch-forward-20261017/git-image-batch.mjs",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 9138,
+      "sha256": "4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20",
+      "captured": "reference/originalBatch/git-image-batch.mjs"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/HEALTH_CLOSED_PRIVATE_HELPERS_ROOT_REVIEW_20261017.json",
+      "commit": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+      "bytes": 6781,
+      "sha256": "0658771b97e9ba5c50340980969bb3b02e3a36a655d9f0b6884e23a8bafe58f9",
+      "captured": "reference/ROOT_HELPER_REVIEW.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/FULL_METADATA_EDITS.json",
+      "commit": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+      "bytes": 44524,
+      "sha256": "1962b70f40a65c3beb20ea70e234da2d8a60846f1f6b6f734f4ef3e187e06cb5",
+      "captured": "reference/HELPER_FULL_METADATA_EDITS.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/SOURCE_PINS.json",
+      "commit": "b1b3274a9b32e453030cd1a40f4e21b5c48a5e92",
+      "bytes": 6541,
+      "sha256": "233c9bf7140bdd0b1bb14a8b60da98335042d7be87afa20792dc90b98e9a555c",
+      "captured": "reference/operator/reference/mapping/SOURCE_PINS.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/SHARED_FINAL_DEFINER_GIT_BUFFER_ROOT_REVIEW_20261017.json",
+      "commit": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+      "bytes": 1356,
+      "sha256": "fc7a0a9492fd101f894520b0f97c91a59fc2b3ce1bbe05a7cfc1d4843761ea40",
+      "captured": "reference/ROOT_BUFFER_REVIEW.json"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/proposals/shared-final-definer-git-buffer-forward-20261017/FULL_PARENT_FORWARD.json",
+      "commit": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+      "bytes": 759,
+      "sha256": "48aa1a207637aa27846ea22a146fa57991af585a821bad3e754c89d6da847fcb",
+      "captured": "reference/BUFFER_FULL_PARENT_FORWARD.json"
+    }
+  ],
+  "privateStateAccess": "NONE",
+  "native": "NOT_RUN"
+}
