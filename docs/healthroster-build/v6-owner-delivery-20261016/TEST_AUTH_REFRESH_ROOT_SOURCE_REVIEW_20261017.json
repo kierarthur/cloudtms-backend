@@ -1,0 +1,37 @@
+{
+  "version": "ROOT_APPROVED_TEST_AUTH_SOURCE_REVIEW_V1",
+  "authorCommit": "ba01714404c0ff28adf02ceefb04bd6723206823",
+  "authorAbsoluteFolder": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\docs\\healthroster-build\\proposals\\test-auth-refresh-harness-20261017",
+  "sourceFilesRawSavedIndexAuthorGitEqual": 19,
+  "manifestSha256": "497d468ebdd6c8c193b83cb103572d884b0c1cce1759af3d1382f6894c9ee4ed",
+  "rootSourceChecks": 80,
+  "rootActualCodeOfflineProtocolTests": 11,
+  "wholeParentInverses": 2,
+  "rootFindings": 0,
+  "reviewedControls": [
+    "Child-only approved env loader after browser launch; synchronous full env restoration",
+    "Fresh empty browser, one login and at most one refresh, exact TEST/read routes, redirect refusal",
+    "No captures/reporter/raw child output; 2FA refusal",
+    "Current-user-only fresh ignored I2 directory, private export after real ME/admin and query contract",
+    "Bounded own-child abort/kill/close; shared state unchanged"
+  ],
+  "outsideOwnNativeInterval": true,
+  "lastOwnTurnExplicitlyClosed": {
+    "chat": "HealthRoster",
+    "task": "SOURCE_STATUS_CHILD_EXACT_PURE_NATIVE_PROOF",
+    "status": "RELEASED",
+    "takenAt": "2026-10-17T08:15:56.765Z",
+    "releasedAt": "2026-10-17T08:17:03.884Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": true,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "actualAuth": "NOT_RUN_AT_REVIEW",
+  "businessFixtureMutation": "NONE",
+  "credentialsOrStateContentsInspected": false,
+  "qualificationIfSuccess": "AUTHENTICATED_ADMIN_QUERY_ADMISSION_ONLY_NOT_NATIVE_WPPP_OR_BUSINESS_ACCEPTANCE"
+}
