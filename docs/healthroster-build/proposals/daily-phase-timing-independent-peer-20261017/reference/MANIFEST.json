@@ -1,0 +1,57 @@
+{
+  "version": "DAILY_GENUINE_S0_PHASE_TIMING_STDIO_FREEZE_V1",
+  "reportRuntimeParent": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+  "runtimeChanges": 0,
+  "files": [
+    {
+      "file": "OBSERVATIONS.json",
+      "bytes": 3114,
+      "sha256": "8d921ea344e6489fd1c2dc19e4630159033027bcfa3b74007c185c0da398183f"
+    },
+    {
+      "file": "README.md",
+      "bytes": 7176,
+      "sha256": "a39fe2d8234e3423e1009c477d163b834002d81ba7111049192f2d5586dd4088"
+    },
+    {
+      "file": "TOOL_OBSERVATIONS.json",
+      "bytes": 1535,
+      "sha256": "47ab840a61089a8b8f19525a55a380a411ed188ae5c54225e9959165888e3db5"
+    },
+    {
+      "file": "measure.mjs",
+      "bytes": 1985,
+      "sha256": "19cd52687c0948acdd704e8a230f60addabf34d0121ced35a6c505a77912dbe8"
+    },
+    {
+      "file": "progress.mjs",
+      "bytes": 4416,
+      "sha256": "e625a92bd036564224792c51dff6358f7b65124105f953df12b220a9900fb089"
+    },
+    {
+      "file": "progress.test.mjs",
+      "bytes": 2944,
+      "sha256": "d2de8a2dd2e0ded7d0e4877bb698caccb90ebb48785915457bc2a6d6494fd08c"
+    },
+    {
+      "file": "real-stdio.test.mjs",
+      "bytes": 1727,
+      "sha256": "30923d20e0ddbafa31f74a85229119274c2ecb84b7934c570acc409444e00e5c"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 697,
+      "sha256": "5e80620005c9029b21db372cdd199603e2c577d58d0d5f9251be1a4c94d5cd32"
+    },
+    {
+      "file": "timing.test.mjs",
+      "bytes": 1004,
+      "sha256": "7d0765a4d754cfa2e89658b4813f08ffe808b8bd66af77c21c2a886b931c489c"
+    },
+    {
+      "file": "tool-probe-child.mjs",
+      "bytes": 868,
+      "sha256": "14afabc1a42965f077fe66d4c3c34502a15b7078399a3605fca45b447257d033"
+    }
+  ]
+}

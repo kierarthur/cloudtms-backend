@@ -1,0 +1,16 @@
+{
+  "status": "HOLD_SOURCE_P2_PROGRESS_READER_TIMEOUT",
+  "authorCommit": "53e5f4008a0dc575d7da59521ec65909462a0337",
+  "savedIndexHistoricalExactFiles": 11,
+  "originalControlledTests": {
+    "tests": 14,
+    "pass": 14,
+    "fail": 0
+  },
+  "independentCounterexample": "delayed-ready.mjs: exact actual export times out at5000ms before controlled READY at6000ms",
+  "rootFindingIndependentlyConfirmed": true,
+  "sourceOrRuntimeTargetsModified": 0,
+  "ReportWrites": 0,
+  "privateStateAccess": false,
+  "native": "NOT_RUN"
+}

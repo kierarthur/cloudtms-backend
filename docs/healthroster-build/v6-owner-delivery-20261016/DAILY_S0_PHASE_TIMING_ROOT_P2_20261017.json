@@ -1,0 +1,30 @@
+{
+  "version": "DAILY_S0_PHASE_TIMING_ROOT_P2_V1",
+  "authorCommit": "53e5f4008a0dc575d7da59521ec65909462a0337",
+  "authorManifestSha256": "e306354196c52aee8675d122b05821df071ced962c3345de0b5e97c86b40e4ac",
+  "peerCommit": "e52d355dfabb7f233b4381e6e02573dbe169f3fa",
+  "peerManifestSha256": "ffa16d31a199780a820d5fd6eb1af5317b4e909bb3801b419375abc8aaa88c69",
+  "exactCopiedFiles": 34,
+  "rootReplay": {
+    "controlledTests": 14,
+    "status": "PASS"
+  },
+  "factualTiming": "Accepted with explicit multiplied per-assertHeld source callbacks: six through entry, four before submit freshness; no callback or original guard may be omitted. Standalone measurement is not actual phase or server timing.",
+  "closedStdoutTransport": "Controlled native cmd handle redirection/subsecond reader/control/normal0 and EOF/HOLD1 only; actual S0 use NOT_RUN. Empty0 polls actually5s; PowerShell route HOLD retained.",
+  "verdict": "HOLD_SOURCE_P2_PROGRESS_READER_TIMEOUT",
+  "finding": {
+    "id": "S0_PROGRESS_R4_POLL_P2",
+    "priority": "P2",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-phase-latency-forward-20261017/progress.mjs",
+    "line": 19,
+    "actualDefaultMilliseconds": 5000,
+    "reason": "CLI cannot override5s; genuine existing bind/entry can require more than5s, so immediate output-driven handoff would prematurely hold. Root will neither prewait by guessed time nor replay a HOLD as readiness.",
+    "required": "Finite reviewed public-reader30s successor; original native freshness30s/runtimework120/whole180 and all source/shape/run/closure checks unchanged. Add delayed actual READY beyond5s proof and full parent inverse."
+  },
+  "runtimeChanged": false,
+  "nativeExecuted": false,
+  "privateStateOrBindingContentsAccess": false,
+  "ownerDecisionRequired": false,
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

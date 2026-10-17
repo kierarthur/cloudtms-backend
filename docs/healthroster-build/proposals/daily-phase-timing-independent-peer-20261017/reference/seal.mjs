@@ -1,0 +1,3 @@
+import fs from 'node:fs';import crypto from 'node:crypto';
+const here=new URL('./',import.meta.url),hash=b=>crypto.createHash('sha256').update(b).digest('hex'),files=fs.readdirSync(here).filter(f=>f!=='MANIFEST.json').sort().map(file=>{const b=fs.readFileSync(new URL(file,here));return {file,bytes:b.length,sha256:hash(b)};});
+fs.writeFileSync(new URL('MANIFEST.json',here),JSON.stringify({version:'DAILY_GENUINE_S0_PHASE_TIMING_STDIO_FREEZE_V1',reportRuntimeParent:'4d5873f820b764681d5fc36ec689cde6e5882ee8',runtimeChanges:0,files},null,2)+'\n');console.log(JSON.stringify({status:'SEALED_SOURCE_ONLY',files:files.length+1,manifestSha256:hash(fs.readFileSync(new URL('MANIFEST.json',here)))}));

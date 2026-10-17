@@ -1,0 +1,115 @@
+{
+  "version": "S0_PHASE_TIMING_INDEPENDENT_PEER_V1",
+  "files": [
+    {
+      "file": "delayed-ready.mjs",
+      "bytes": 1421,
+      "sha256": "eab6b1a9a8eac3da0a5cb2ce2850fd2afa4837db7176d5d2452edc82cb3e1719"
+    },
+    {
+      "file": "FREEZE_CORRECTION.json",
+      "bytes": 358,
+      "sha256": "0391889cb3533be029427976bb13a2194404a78e9a48417a46dbb9a62a5256c2"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2215,
+      "sha256": "c7ab3d7d5e91be849e0c8aeb420fcf67cdd991d66d459fb71d9960fa8c065575"
+    },
+    {
+      "file": "reference/MANIFEST.json",
+      "bytes": 1672,
+      "sha256": "e306354196c52aee8675d122b05821df071ced962c3345de0b5e97c86b40e4ac"
+    },
+    {
+      "file": "reference/measure.mjs",
+      "bytes": 1985,
+      "sha256": "19cd52687c0948acdd704e8a230f60addabf34d0121ced35a6c505a77912dbe8"
+    },
+    {
+      "file": "reference/OBSERVATIONS.json",
+      "bytes": 3114,
+      "sha256": "8d921ea344e6489fd1c2dc19e4630159033027bcfa3b74007c185c0da398183f"
+    },
+    {
+      "file": "reference/progress.mjs",
+      "bytes": 4416,
+      "sha256": "e625a92bd036564224792c51dff6358f7b65124105f953df12b220a9900fb089"
+    },
+    {
+      "file": "reference/progress.test.mjs",
+      "bytes": 2944,
+      "sha256": "d2de8a2dd2e0ded7d0e4877bb698caccb90ebb48785915457bc2a6d6494fd08c"
+    },
+    {
+      "file": "reference/README.md",
+      "bytes": 7176,
+      "sha256": "a39fe2d8234e3423e1009c477d163b834002d81ba7111049192f2d5586dd4088"
+    },
+    {
+      "file": "reference/real-stdio.test.mjs",
+      "bytes": 1727,
+      "sha256": "30923d20e0ddbafa31f74a85229119274c2ecb84b7934c570acc409444e00e5c"
+    },
+    {
+      "file": "reference/seal.mjs",
+      "bytes": 697,
+      "sha256": "5e80620005c9029b21db372cdd199603e2c577d58d0d5f9251be1a4c94d5cd32"
+    },
+    {
+      "file": "reference/timing.test.mjs",
+      "bytes": 1004,
+      "sha256": "7d0765a4d754cfa2e89658b4813f08ffe808b8bd66af77c21c2a886b931c489c"
+    },
+    {
+      "file": "reference/tool-probe-child.mjs",
+      "bytes": 868,
+      "sha256": "14afabc1a42965f077fe66d4c3c34502a15b7078399a3605fca45b447257d033"
+    },
+    {
+      "file": "reference/TOOL_OBSERVATIONS.json",
+      "bytes": 1535,
+      "sha256": "47ab840a61089a8b8f19525a55a380a411ed188ae5c54225e9959165888e3db5"
+    },
+    {
+      "file": "replay/OBSERVATIONS.json",
+      "bytes": 3114,
+      "sha256": "8d921ea344e6489fd1c2dc19e4630159033027bcfa3b74007c185c0da398183f"
+    },
+    {
+      "file": "replay/progress.mjs",
+      "bytes": 4416,
+      "sha256": "e625a92bd036564224792c51dff6358f7b65124105f953df12b220a9900fb089"
+    },
+    {
+      "file": "replay/progress.test.mjs",
+      "bytes": 2944,
+      "sha256": "d2de8a2dd2e0ded7d0e4877bb698caccb90ebb48785915457bc2a6d6494fd08c"
+    },
+    {
+      "file": "replay/real-stdio.test.mjs",
+      "bytes": 1726,
+      "sha256": "e25b23533261e3c7dc3dec39082606e07558eb2d6bc555825fa91594be478a44"
+    },
+    {
+      "file": "replay/timing.test.mjs",
+      "bytes": 1004,
+      "sha256": "7d0765a4d754cfa2e89658b4813f08ffe808b8bd66af77c21c2a886b931c489c"
+    },
+    {
+      "file": "replay/tool-probe-child.mjs",
+      "bytes": 868,
+      "sha256": "14afabc1a42965f077fe66d4c3c34502a15b7078399a3605fca45b447257d033"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 542,
+      "sha256": "1472926963e9a8b1ea33a5a3dafb8a11d2ccc3769d7010ce77e01777593df766"
+    },
+    {
+      "file": "SOURCE_PROOF.json",
+      "bytes": 2410,
+      "sha256": "da4cd919a62e43873b0ef95105354c236cdad102a3fc82a06aced6fd4674c8ad"
+    }
+  ]
+}
