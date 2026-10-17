@@ -55,8 +55,8 @@
     },
     {
       "file": "protocol.mjs",
-      "bytes": 6432,
-      "sha256": "b5f9bd91aa1e47a4f291163bb4be73ffa2a5af924b2f988911af9bcd491178a1"
+      "bytes": 6451,
+      "sha256": "6474897d63080657c43ca14160364057b950580feea22de6871bdd92dfdb4e1a"
     },
     {
       "file": "reference/healthroster-rehearsal-turn.mjs",

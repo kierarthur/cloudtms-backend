@@ -7,7 +7,7 @@ export class Controls{
  fail(code){this.failure??=Error(code);this.pending?.reject(this.failure);this.pending=null;}
  assertActive(){if(this.failure)throw this.failure;}
  wait(expected){if(this.failure)return Promise.reject(this.failure);if(this.pending)throw Error('S0_CONTROL_ALREADY_WAITING');return new Promise((resolve,reject)=>{this.pending={expected,resolve,reject};});}
- dispose(){this.input.removeListener('data',this.onData);this.input.removeListener('end',this.onEnd);this.signal.removeEventListener('abort',this.onAbort);}
+ dispose(){this.input.removeListener('data',this.onData);this.input.removeListener('end',this.onEnd);this.signal.removeEventListener('abort',this.onAbort);this.input.pause();}
 }
 const stable=v=>Array.isArray(v)?v.map(stable):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,stable(v[k])])):v;
 export function captureEnvelope(result,receipt,{now=Date.now()}={}){
