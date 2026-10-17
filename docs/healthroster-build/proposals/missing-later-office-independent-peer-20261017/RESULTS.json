@@ -1,0 +1,17 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "originalCommit": "cad4fd975dbe2e9d3bfecdd90b81c32408fb28ec",
+  "correctedCommit": "353d402f7d44efb8693775f8922f26fabd8c31dd",
+  "originalFinding": "KEEP successor result arm introduced refusal; corrected by353",
+  "findingsRemaining": 0,
+  "originalTestsPassed": 104,
+  "composedTestsPassed": 107,
+  "independentTestsPassed": 5,
+  "validCounterMatrixCases": 48,
+  "nativeCalls": 0,
+  "API": "NOT_RUN",
+  "browser": "NOT_RUN",
+  "rootWrites": 0,
+  "BankSemanticBodyReads": 0,
+  "privateAccess": false
+}

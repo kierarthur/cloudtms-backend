@@ -1,0 +1,43 @@
+{
+  "version": "ROOT_OFFICE_MISSING_LATER_CURRENT_CONSUMER_REVIEW_V1",
+  "status": "ACCEPTED_CURRENT_SOURCE_ONLY",
+  "officeRoot": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-office-13102026",
+  "officeBranch": "codex/healthroster-v2-office-13102026",
+  "originalParentCommit": "ac112422e529aefbcba0fc0147d2b28123751823",
+  "firstImplementationCommit": "cad4fd975dbe2e9d3bfecdd90b81c32408fb28ec",
+  "correctedImplementationCommit": "353d402f7d44efb8693775f8922f26fabd8c31dd",
+  "remoteFreshEqual": true,
+  "worktreeClean": true,
+  "peerCommit": "4c4ff252e9e013edb27e96a5cef6ba4284968892",
+  "peerForwardManifestSha256": "3159d8f1fd7e14d724ebd33be5071b3fee25f787c793f991f05e8c4882a85088",
+  "genuineMissingContextPrepareAndFreshTimesheetReview": true,
+  "newCommandsLosslessInt63": true,
+  "oldRequestBytesAndTypesPreserved": true,
+  "originalTwoKeepOutcomesRetained": true,
+  "introducedPeerFinding": {
+    "commit": "cad4fd975dbe2e9d3bfecdd90b81c32408fb28ec",
+    "finding": "Protected KEEP publishes genuine successor with retained:false; initial lossless comparator incorrectly refused it",
+    "forwardFixCommit": "353d402f7d44efb8693775f8922f26fabd8c31dd",
+    "status": "SOURCE_CLOSED_ACTUAL_INSTALLED_ACCEPTANCE_NOT_RUN"
+  },
+  "backendDependency": {
+    "commit": "3e728640408e3bd7e62edeac0715fb5da9c115f5",
+    "rootManagedSourceCommit": "91b0614a47cb734190b4dbd015b3a9141de52fb6",
+    "installed": false
+  },
+  "verification": {
+    "rootCommittedVerifier": "PASS_SOURCE_ONLY",
+    "rootOriginalPlusNewTests": 107,
+    "rootTestFailures": 0,
+    "rootTestExitCode": 0,
+    "rootProofFolder": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-office-13102026/.codex-tmp/missing-later-root-check-20261017-3ed47532524a4536beff40391acde2e0",
+    "independentTests": 5,
+    "wholeReversals": 13,
+    "literalHunks": 30,
+    "rawForms": 52
+  },
+  "deployment": "NOT_RUN",
+  "nativeAndHostedAcceptance": "NOT_RUN",
+  "oldHistoryRewritten": false,
+  "bankingSemanticBodiesRead": false
+}

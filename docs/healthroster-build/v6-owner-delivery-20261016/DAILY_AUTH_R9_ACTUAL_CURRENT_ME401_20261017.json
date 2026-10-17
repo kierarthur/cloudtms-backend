@@ -1,0 +1,26 @@
+{
+  "version": "DAILY_AUTH_R9_ACTUAL_CURRENT_ADMISSION_HOLD_V1",
+  "operatorSourceCommit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "actualClosedResult": {
+    "status": "HOLD",
+    "code": "FIXTURE_CURRENT_ME401",
+    "phase": "bind",
+    "stage": "S0",
+    "browserClosed": true
+  },
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-fd8c24abdfcc10aeb20c5074ac175ae4",
+  "actualClosedResultFilename": "CLOSED_bind_S0_6743462a1bbc90d8.json",
+  "processExitCode": 1,
+  "businessRequests": 0,
+  "nativeBCalls": 0,
+  "attemptCreated": false,
+  "ownTurn": {
+    "takenAt": "2026-10-17T14:24:13.236Z",
+    "releasedAt": "2026-10-17T14:24:26.505Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true
+  },
+  "priorActualS0R7ProofUnchanged": true,
+  "authRefresh": "REQUIRED_AFTER_PREPARATION_NOT_YET_RUN",
+  "privateStateOrJournalContentsReadByParent": false
+}

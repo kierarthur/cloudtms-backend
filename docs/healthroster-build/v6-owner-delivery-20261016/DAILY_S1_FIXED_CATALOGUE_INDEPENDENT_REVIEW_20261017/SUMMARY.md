@@ -1,0 +1,5 @@
+S1 fixed catalogue comparison: no scoped source/metadata mismatch.
+
+182 exact column/default/type/nullability records, 40 selected-table constraints, 36 complete application-trigger definitions and 234 genuine internal RI triggers checked. Seven service/owner literal-true policies, zero rules, four sequence identities/ACLs and fifteen Health plus three named callback ACLs match source under the approved logical-owner mapping. Report's fifteen complete native Health body bindings are independently associated with the exact frozen/current source statements (7 raw, 8 explicitly newline-only).
+
+The app_change_counters token FK is validated, DEFERRABLE INITIALLY DEFERRED. No new owner/financial gate follows from this review. The original D9 producer, root's genuine actor/vacancy/metadata/strict before-and-after observation and reconciliation requirements remain. No business rows, auth/private state, Bank semantic body, API/DB/native/SQL invocation or source edit occurred. Root may back this ignored public evidence.

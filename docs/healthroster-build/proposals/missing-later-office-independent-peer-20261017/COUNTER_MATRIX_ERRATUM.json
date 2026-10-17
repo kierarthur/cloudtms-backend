@@ -1,0 +1,10 @@
+{
+  "version": "OFFICE_PEER_COVERAGE_COUNT_ERRATUM_V1",
+  "originalPeerCommit": "b517a8bae9d83ac3fea199f50100802bcab48bfc",
+  "originalManifestSha256": "99a926ae13e29b3f35d204d4598c4e8de934419bce8fc20d72708697fd60bc9a",
+  "correction": "The valid successor matrix contains 24 cases, not 48: two decisions x three revision pairs x two replay flags x two published flags.",
+  "validCounterMatrixCases": 24,
+  "independentTestsPassed": 5,
+  "testOutputAndVerdictChanged": false,
+  "reason": "Coverage prose/count arithmetic only; original frozen six files remain byte-exact."
+}
