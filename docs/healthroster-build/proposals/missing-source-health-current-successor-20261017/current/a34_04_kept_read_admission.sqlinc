@@ -1,0 +1,45 @@
+create or replace function private.weekly_source_kept_as_paid_read_admit_v1(p_work_event_id uuid,p_actor_user_id uuid)
+returns void language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_event public.weekly_work_events%rowtype; v_resolution public.weekly_source_row_resolutions%rowtype;
+  v_publication uuid; v_upload uuid; v_cycle uuid; v_week date;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if private.weekly_source_pay_actor_allowed_v1(p_actor_user_id) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501'; end if;
+  select * into strict v_event from public.weekly_work_events where id=p_work_event_id;
+  select * into strict v_resolution from public.weekly_source_row_resolutions
+    where work_event_id=v_event.id and mapping_state='RESOLVED'
+    order by created_at_utc desc,id desc limit 1;
+  if v_resolution.candidate_id is distinct from v_event.candidate_id or v_resolution.client_id is distinct from v_event.client_id
+    or not exists(select 1 from public.contracts c where c.id=v_resolution.contract_id
+      and c.candidate_id=v_event.candidate_id and c.client_id=v_event.client_id) then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_LINEAGE_UNBOUND' using errcode='55000'; end if;
+  select publication.id,upload.id,cycle.id,cycle.finalisation_week_ending into v_publication,v_upload,v_cycle,v_week
+  from public.weekly_source_projection_publications publication
+  join public.weekly_source_uploads upload on upload.id=publication.upload_id
+  join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id
+  join public.weekly_source_format_profiles profile on profile.id=upload.source_format_profile_id
+  where cycle.source_group_id=v_event.first_source_group_id
+    and (cycle.scope_client_id is null or cycle.scope_client_id=v_event.client_id)
+    and publication.state='CURRENT' and upload.state='CURRENT' and upload.purpose='ORDINARY'
+    and publication.authority_scope_kind='CYCLE' and upload.report_scope_id is null
+    and profile.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',
+      'HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1')
+    and upload.row_manifest_hash is not null and upload.coverage_state='COMPLETE' and upload.coverage_timezone='Europe/London'
+    and v_event.work_date between upload.confirmed_coverage_start_local_date and upload.confirmed_coverage_end_local_date
+    and (upload.file_metadata_json->>'client_id'=v_event.client_id::text or
+      (nullif(upload.file_metadata_json->>'client_id','') is null and
+        (select count(*) from public.weekly_source_group_clients gc where gc.source_group_id=cycle.source_group_id
+          and cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))=1
+        and exists(select 1 from public.weekly_source_group_clients gc where gc.source_group_id=cycle.source_group_id
+          and gc.client_id=v_event.client_id and cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))))
+  order by publication.published_at_utc desc,publication.created_at_utc desc,publication.id desc limit 1;
+  if v_publication is null then raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_EXPORT_UNAVAILABLE' using errcode='55000'; end if;
+  if p_actor_user_id is not null then
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+      v_event.first_source_group_id,v_event.client_id,v_week); end if;
+end;
+$function$;

@@ -1,0 +1,70 @@
+{
+  "source": "Preserved Health-only untracked draft; selected full source and literal hunks retained here as published build inputs. Shared09/12 excluded.",
+  "files": [
+    {
+      "path": "inputs/00_target_publication_facts.sqlinc",
+      "sha256": "e79af6361f8f97a2452716b9adbc956cdd14d9430e4c912707fa3f5700dd18eb",
+      "bytes": 17455,
+      "originalSourceSha256": "3bb894d44140dc63f43947f5744ab9eeea55efba20ad62e3c728e2bf501c972e",
+      "normalization": "Trailing empty EOF lines only; routine body bytes unchanged."
+    },
+    {
+      "path": "inputs/01_target_publication_context.sqlinc",
+      "sha256": "e86aa2fbd500cc0670a514854c5fb1befb350e24b1b4ad885ae4785a0cafc3be",
+      "bytes": 29128,
+      "originalSourceSha256": "992549e737e745e76d9f0fb61f7a38aa8b8f569e7d9a1239bd168d8f32fc0d11",
+      "normalization": "Trailing empty EOF lines only; routine body bytes unchanged."
+    },
+    {
+      "path": "inputs/02_missing_snapshot_movement.sqlinc",
+      "sha256": "fc2c59f744c650dba64998b1c4130beea73716cac9e1cbd76b941b04b1e18d12",
+      "bytes": 12888
+    },
+    {
+      "path": "inputs/03_missing_cancel_basis.sqlinc",
+      "sha256": "e05e9222c63380c739749a78ffb96651aec24cff369cd7b288a0796556e216a5",
+      "bytes": 6891
+    },
+    {
+      "path": "inputs/04_cancel_exclusion_schema.sqlinc",
+      "sha256": "13522f75664a98c885419a016efe33da40435c088f7cea341cb485299853ccc0",
+      "bytes": 1870
+    },
+    {
+      "path": "inputs/05_missing_finalisation_root_inventory.sqlinc",
+      "sha256": "57644729f257a17a363cccd1e6bcb0273d6d7dfbf53c926353ef34819db7d1cb",
+      "bytes": 9601
+    },
+    {
+      "path": "inputs/07_missing_cancel_transition_assert.sqlinc",
+      "sha256": "efd68aac8729c17eff6b074a692d2b0c39f01e4ee99d850e5ec79c0c1598518e",
+      "bytes": 6779
+    },
+    {
+      "path": "inputs/08_missing_cancel_native_insert_guard.sqlinc",
+      "sha256": "858354c170afd5a96419ba2a9d699b10315a595857569e012891e215204d5356",
+      "bytes": 3719
+    },
+    {
+      "path": "inputs/10_missing_current_selection.sqlinc",
+      "sha256": "4855aa15517151ee719ae4f6ae07d56d25dccaaa66dc5cc9b16c4c948dd3ac1b",
+      "bytes": 3710
+    },
+    {
+      "path": "inputs/14_missing_prepared_census_recheck.sqlinc",
+      "sha256": "04b7d8627bc9fa05548c685ac89b20ab2dea0aa263307418900356cd76791fe3",
+      "bytes": 4198
+    },
+    {
+      "path": "inputs/FIN4_HUNKS.json",
+      "sha256": "595bc68edc2d6d60bb0947a6c50e3844fe0f7681419bb1c0b2b959a1873a1a94",
+      "bytes": 18490
+    },
+    {
+      "path": "inputs/COUPLED_HEALTH_HUNKS.json",
+      "sha256": "efa8a4ff14b1f725b9905e7e4ef48436b14cb675be6c7b00a8868ddeec1fcfca",
+      "bytes": 4492
+    }
+  ],
+  "native": "NOT_RUN"
+}

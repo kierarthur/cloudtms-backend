@@ -1,0 +1,465 @@
+{
+  "commit": "a34cd60f2c75580a9e37aabfaf26f7dab680cb37",
+  "files": [
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/BUILD_RESULT.json",
+      "bytes": 2943,
+      "sha256": "d06ef55d3ba2902e6254bdf910e17e2b0b0d89f2123f92f945827da3e480b0cb",
+      "absolutePathCharacters": 174,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/CLASSIFICATION_DELTA.json",
+      "bytes": 8158,
+      "sha256": "82466b919d55c7c3a00c9acbca4cb744c0ec6c9a7bd54e699a7fba1d3999d590",
+      "absolutePathCharacters": 182,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/CLASSIFIER_EDITS.json",
+      "bytes": 2576,
+      "sha256": "d93da1185f9cfb3183d1a6d9823283edeebc1357e526776ddb24c39652a208f7",
+      "absolutePathCharacters": 178,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/CURRENT_CENSUS.json",
+      "bytes": 13011,
+      "sha256": "3730fa40f6ae381e1c9cb200e4ff20d2de6f8726c14c1ef0c90b0c336b92e09d",
+      "absolutePathCharacters": 176,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/CURRENT_OWNER_EDITS.json",
+      "bytes": 33294,
+      "sha256": "b0a13807e15c822d73c3591eda8ea89628b18a6bfb12f4d30f1ec14f51804a40",
+      "absolutePathCharacters": 181,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/GRAMMAR_RESULTS.json",
+      "bytes": 7722,
+      "sha256": "e3bda77c2bcd2e337785b788d32cbdc8975b6df1a4751f26f949b5c7280fbf80",
+      "absolutePathCharacters": 177,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/IMMUTABLE_GUARD_PREDECESSOR.json",
+      "bytes": 1713,
+      "sha256": "e7379742cf5eab2d69a1725143439889472bfda8520aab44df9f8487980e3e42",
+      "absolutePathCharacters": 189,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/INTEGRATION.md",
+      "bytes": 11793,
+      "sha256": "043f275880c251b831e6df738d0774c0eb1896d486214ec43938771f362984d0",
+      "absolutePathCharacters": 171,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/MOUNT_FILENAMES.json",
+      "bytes": 271,
+      "sha256": "4391708efe5d3dd9bb197d2b825768d58f06da7ca2da1bd93aa449c9b5fb1eea",
+      "absolutePathCharacters": 177,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/PACKAGE_TEST_RESULTS.json",
+      "bytes": 891,
+      "sha256": "677d7e9d305146aaf9cc470ba604016f2deabfaf27b038b1f735b2f32e4862ab",
+      "absolutePathCharacters": 182,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/PARENT_EDITS.json",
+      "bytes": 3539,
+      "sha256": "b82c3b0ab1a9e1282c5963e4db3b1eaa66948bc5383efa4d4a8821f65d2b2a7a",
+      "absolutePathCharacters": 174,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/PAYLOAD_MANIFEST.json",
+      "bytes": 5124,
+      "sha256": "117761ba126a02a94fb671efc5226770cd21ca5531c25007f9e6015f7c0e7918",
+      "absolutePathCharacters": 178,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/PROPOSED_ROUTES.js",
+      "bytes": 70242,
+      "sha256": "e735ba9cc5b52323e72229f6ff2569dfee22268041b8ccf2cafbc1b11da9c279",
+      "absolutePathCharacters": 175,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/REGISTRY_EDITS.json",
+      "bytes": 42826,
+      "sha256": "94e879b92f699eb6d0735ef9468b6ea8a66af57041567f1913c5c6733dcabe4e",
+      "absolutePathCharacters": 176,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/STORAGE_VALIDATION.json",
+      "bytes": 1678,
+      "sha256": "0a8d179418884951986eb1fc83b83da2b29b9c2d484dd3c48b4e449ab5163ed8",
+      "absolutePathCharacters": 180,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/TEST_RESULTS.json",
+      "bytes": 3328,
+      "sha256": "eeac393169734e48e0d47b3be64175d01e0ea8b0b7dbea341c3f9746d916cd6f",
+      "absolutePathCharacters": 174,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/build-package.mjs",
+      "bytes": 8755,
+      "sha256": "938e7ddb95d0f058cbf5cea19ddbb045ef82f470a5d214a4e382b5b412992043",
+      "absolutePathCharacters": 174,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/build-runtime.mjs",
+      "bytes": 3755,
+      "sha256": "9f8ea5caf4ddc002b683c23a643117e210579b6ef2a0e36a9af1fc58a2ed0ced",
+      "absolutePathCharacters": 174,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/build.mjs",
+      "bytes": 25239,
+      "sha256": "c15e2a138882a9e9c50fca153a1e9226dc6ea37b628c06533976c6e4f88bbf8d",
+      "absolutePathCharacters": 166,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/02_complete_upload_context.sqlinc",
+      "bytes": 27405,
+      "sha256": "ad1af6d303a0dff773f53d5aee17300e8ae45be66617a03fe90c1f134270078a",
+      "absolutePathCharacters": 198,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/03_complete_projection_rows.sqlinc",
+      "bytes": 67447,
+      "sha256": "a03883d889e614ea7c72cdd2cdd13cf6a2b39cf8f8259e49dfd8160eeb88b689",
+      "absolutePathCharacters": 199,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/09_complete_invoice_apply_edits.sqlinc",
+      "bytes": 148321,
+      "sha256": "04135f211f90e991a6c2976e3ad77ced587c3dae374285a2ecb277464e86ae5b",
+      "absolutePathCharacters": 203,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/10_complete_adjustments_apply.sqlinc",
+      "bytes": 6441,
+      "sha256": "2f60a2eea19cf4f5fb1b22c22f892b21508ac124a7e75465d4881078c3cb0b86",
+      "absolutePathCharacters": 201,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/11_complete_adjustment_line_valid.sqlinc",
+      "bytes": 3067,
+      "sha256": "50f848ccd573221b5b7e2eacc59fc5449f64da4a3fcbe405e9cac2e9dfca1140",
+      "absolutePathCharacters": 205,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/00_original_decision_schema.sqlinc",
+      "bytes": 4968,
+      "sha256": "8162e3e8cb4b520252ade615cb3a6ec131842e6ee7df791aa592ca2d9e1b6cf0",
+      "absolutePathCharacters": 199,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/01_identical_rekey_prior.sqlinc",
+      "bytes": 9377,
+      "sha256": "1f102a04838e30fb0d0dcb12593d2024a7b67e99d77e68404f19f35a675449f0",
+      "absolutePathCharacters": 196,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/02_complete_upload_context.sqlinc",
+      "bytes": 28499,
+      "sha256": "a9149686b3aa1456603550dfa8eb93af1936606e498113286110a4f900274902",
+      "absolutePathCharacters": 198,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/03_complete_projection_rows.sqlinc",
+      "bytes": 68884,
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35",
+      "absolutePathCharacters": 199,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/04_kept_read_admission.sqlinc",
+      "bytes": 3881,
+      "sha256": "cdcac4c2c2053194bc3bc68c28d701c5bbb334e82bda3e8e41b79ca59e53a9aa",
+      "absolutePathCharacters": 194,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/05_kept_as_paid_facts.sqlinc",
+      "bytes": 9220,
+      "sha256": "c06e67b60dd71b2cc748a22da8b4089ac44a140f4014e181b0abb8d170ac2afa",
+      "absolutePathCharacters": 193,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/06_kept_as_paid_context.sqlinc",
+      "bytes": 20648,
+      "sha256": "aee3cfccffcff7e81a98ac1e8dac212d0803310e91a810d8536c845b1cd84592",
+      "absolutePathCharacters": 195,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/07_keep_as_paid_decide.sqlinc",
+      "bytes": 10767,
+      "sha256": "2532ae8f82630d66230712c966a7913c1011c3f8f4ae7f5e74e5f2aa9e4f1922",
+      "absolutePathCharacters": 194,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/08_credited_targets_admit.sqlinc",
+      "bytes": 9084,
+      "sha256": "a4fae82f9b01a139923834d853310c175daebeef559874ed50c3c0436399f10c",
+      "absolutePathCharacters": 197,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/09_complete_invoice_apply_edits.sqlinc",
+      "bytes": 149546,
+      "sha256": "b68439cb5928e008d4b315303a83e0b97ef867ea779b0ba1dabbc553974ed16b",
+      "absolutePathCharacters": 203,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/10_complete_adjustments_apply.sqlinc",
+      "bytes": 9652,
+      "sha256": "a88d2dffcbcbe2aac4af67edd1a93c4de255f2525c859cd94796c602fe7a5e7b",
+      "absolutePathCharacters": 201,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/11_complete_adjustment_line_valid.sqlinc",
+      "bytes": 4213,
+      "sha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc",
+      "absolutePathCharacters": 205,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/12_keep_ack_native_guard.sqlinc",
+      "bytes": 7182,
+      "sha256": "e6744c534740ddc5c15e860ba4b1eee501386ece84c2468ea10c0ac951f129c2",
+      "absolutePathCharacters": 196,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/13_one_time_audit_guards.sqlinc",
+      "bytes": 8348,
+      "sha256": "70de74c875ea2a731030cef16e39b4d10885bd97dc2340eceded1719cb4435ae",
+      "absolutePathCharacters": 196,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/forward/99_exact_function_acl.sqlinc",
+      "bytes": 3418,
+      "sha256": "7c8c73f8eb949db888afdc566968c442433ab92ced5c45b571f9e1fc9081cb32",
+      "absolutePathCharacters": 193,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/parse-source.py",
+      "bytes": 1482,
+      "sha256": "99e736af61c912ab8bf43d8498fa7c8634ae3e6b06f9a48c3be7cec86bcf69f6",
+      "absolutePathCharacters": 172,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/broker/src/weekly-source/kept-pay-command.mjs",
+      "bytes": 4713,
+      "sha256": "0460915380ef38aeff9437164ae93562b924712af996d89c8d880456c4d8c273",
+      "absolutePathCharacters": 210,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/broker/src/weekly-source/routes.js",
+      "bytes": 70242,
+      "sha256": "e735ba9cc5b52323e72229f6ff2569dfee22268041b8ccf2cafbc1b11da9c279",
+      "absolutePathCharacters": 199,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1637387,
+      "sha256": "08f1e4b2ce26471523a9f814658a52b5dbe2b076b524e6c9c86d3fdbb6e9b998",
+      "absolutePathCharacters": 207,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/migrations/17102026_0113_weekly_source_kept_10_decision_schema.sql",
+      "bytes": 5006,
+      "sha256": "726853c33c9ace512c96a225db448504443c723020e43eebd889b8903c356c15",
+      "absolutePathCharacters": 240,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/migrations/17102026_0113_weekly_source_kept_20_audit_guards.sql",
+      "bytes": 8386,
+      "sha256": "1c71853bbf810eb8270b1f0ec63477ef97a534bfd11a1d7140d16de639fbdf00",
+      "absolutePathCharacters": 237,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/01_identical_rekey_prior.sqlinc",
+      "bytes": 9377,
+      "sha256": "1f102a04838e30fb0d0dcb12593d2024a7b67e99d77e68404f19f35a675449f0",
+      "absolutePathCharacters": 259,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+      "bytes": 28499,
+      "sha256": "a9149686b3aa1456603550dfa8eb93af1936606e498113286110a4f900274902",
+      "absolutePathCharacters": 261,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+      "bytes": 68884,
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35",
+      "absolutePathCharacters": 262,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/04_kept_read_admission.sqlinc",
+      "bytes": 3881,
+      "sha256": "cdcac4c2c2053194bc3bc68c28d701c5bbb334e82bda3e8e41b79ca59e53a9aa",
+      "absolutePathCharacters": 257,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/05_kept_as_paid_facts.sqlinc",
+      "bytes": 9220,
+      "sha256": "c06e67b60dd71b2cc748a22da8b4089ac44a140f4014e181b0abb8d170ac2afa",
+      "absolutePathCharacters": 256,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/06_kept_as_paid_context.sqlinc",
+      "bytes": 20648,
+      "sha256": "aee3cfccffcff7e81a98ac1e8dac212d0803310e91a810d8536c845b1cd84592",
+      "absolutePathCharacters": 258,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/07_keep_as_paid_decide.sqlinc",
+      "bytes": 10767,
+      "sha256": "2532ae8f82630d66230712c966a7913c1011c3f8f4ae7f5e74e5f2aa9e4f1922",
+      "absolutePathCharacters": 257,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/08_credited_targets_admit.sqlinc",
+      "bytes": 9084,
+      "sha256": "a4fae82f9b01a139923834d853310c175daebeef559874ed50c3c0436399f10c",
+      "absolutePathCharacters": 260,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/09_complete_invoice_apply_edits.sqlinc",
+      "bytes": 149546,
+      "sha256": "b68439cb5928e008d4b315303a83e0b97ef867ea779b0ba1dabbc553974ed16b",
+      "absolutePathCharacters": 266,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/10_complete_adjustments_apply.sqlinc",
+      "bytes": 9652,
+      "sha256": "a88d2dffcbcbe2aac4af67edd1a93c4de255f2525c859cd94796c602fe7a5e7b",
+      "absolutePathCharacters": 264,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/11_complete_adjustment_line_valid.sqlinc",
+      "bytes": 4213,
+      "sha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc",
+      "absolutePathCharacters": 268,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/12_keep_ack_native_guard.sqlinc",
+      "bytes": 7182,
+      "sha256": "e6744c534740ddc5c15e860ba4b1eee501386ece84c2468ea10c0ac951f129c2",
+      "absolutePathCharacters": 259,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+      "bytes": 85371,
+      "sha256": "fe1cbb0de3332a021d1459a2e46f5c201e58d4ded7ade5f9f58fae876b8547e4",
+      "absolutePathCharacters": 269,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/99_exact_function_acl.sqlinc",
+      "bytes": 3418,
+      "sha256": "7c8c73f8eb949db888afdc566968c442433ab92ced5c45b571f9e1fc9081cb32",
+      "absolutePathCharacters": 256,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/payload/supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey_v1.sql",
+      "bytes": 1169,
+      "sha256": "ce822f2a1edbf4392bf77cf000ae1e2355dae479476b6c87f18c34d245b4f722",
+      "absolutePathCharacters": 234,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/prepare-current-census.mjs",
+      "bytes": 6202,
+      "sha256": "4aab5b1ad257ef07f12b5dc0c9ded8ad5714e9aa3e141139d441c8148014179c",
+      "absolutePathCharacters": 183,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/runtime/kept-pay-command.mjs",
+      "bytes": 4713,
+      "sha256": "0460915380ef38aeff9437164ae93562b924712af996d89c8d880456c4d8c273",
+      "absolutePathCharacters": 185,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/test-package.mjs",
+      "bytes": 6725,
+      "sha256": "e21df42f6b11c9ebb2920559adf3cc87096c8dc6cac6de41aed848f795e5c38b",
+      "absolutePathCharacters": 173,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/test.mjs",
+      "bytes": 15194,
+      "sha256": "2beef1b693f645524e9fed4864fe64740828b84fc50898e92d0c766113f10556",
+      "absolutePathCharacters": 165,
+      "byteEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/validate-source.mjs",
+      "bytes": 3338,
+      "sha256": "28cb82cab785c6c1fa572453a016b19ffd4014cee1226fb2080150a0b9efba1f",
+      "absolutePathCharacters": 176,
+      "byteEqual": true
+    }
+  ],
+  "all65ByteEqual": true,
+  "longPathFiles": 7,
+  "restoredOrRebuilt": false,
+  "causeOfFalseMissing": "Windows Python normal-path MAX_PATH limitation; inspected exact D files using extended paths.",
+  "Cfallback": false
+}

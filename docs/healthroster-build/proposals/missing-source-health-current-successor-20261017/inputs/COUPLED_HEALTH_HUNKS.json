@@ -1,0 +1,62 @@
+[
+  {
+    "owner": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+    "forward_file": "forward/11_complete_fin3_current_fin4_dispatch.sqlinc",
+    "hunks": [
+      {
+        "name": "ordinary current owner delegation after unchanged Report arm",
+        "before": "    return private.weekly_source_report_fin_dispatch_v1(p_request);\n  end if;\n\n  -- G1 plain scope discovery -> native complete I-1 -> group -> cycle.",
+        "after": "    return private.weekly_source_report_fin_dispatch_v1(p_request);\n  end if;\n\n  -- All genuine ordinary callers share the one corrected complete FIN4 owner.\n  -- The validated Report early arm and native payload/actor/error prefix above\n  -- remain unchanged; rounding variant NULL is unused for ordinary scopes.\n  return private.weekly_source_finalise_engine_v1(p_request,p_correction_session_id,p_prepare_only,null::text);\n\n  -- G1 plain scope discovery -> native complete I-1 -> group -> cycle."
+      }
+    ]
+  },
+  {
+    "owner": "private.weekly_source_invoice_duty_v1(uuid)",
+    "forward_file": "forward/13_complete_invoice_duty_manifest_coupling.sqlinc",
+    "hunks": [
+      {
+        "name": "exact stored Source census and immutable rule-version manifest fields",
+        "before": "               'policy_fingerprint',encode(f.policy_fingerprint,'hex')))) then",
+        "after": "               'policy_fingerprint',encode(f.policy_fingerprint,'hex'))\n               ||case when f.missing_cancel_basis_census='{}'::jsonb then '{}'::jsonb else jsonb_build_object(\n                 'missing_cancel_basis_census',f.missing_cancel_basis_census) end\n               ||case when f.rule_set_version_id is null then '{}'::jsonb else jsonb_build_object(\n                 'rule_set_version_id',f.rule_set_version_id,'rule_set_values_sha256',(\n                   select version.values_sha256 from public.weekly_source_rule_set_versions version\n                   where version.id=f.rule_set_version_id)) end)) then"
+      },
+      {
+        "name": "invoice duty preserves full prepared-result census CAS",
+        "before": "      or v_context->'root_contexts' is distinct from v_session.prepare_result_json->'root_contexts'",
+        "after": "      or v_context->'root_contexts' is distinct from v_session.prepare_result_json->'root_contexts'\n      or coalesce(v_context->'missing_cancel_basis_census','{}'::jsonb)\n        is distinct from coalesce(v_session.prepare_result_json->'missing_cancel_basis_census','{}'::jsonb)"
+      }
+    ]
+  },
+  {
+    "owner": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+    "forward_file": "forward/15_complete_prepared_context_missing_census.sqlinc",
+    "hunks": [
+      {
+        "name": "actual prepared missing census separate from existing projection root contexts",
+        "before": "    'root_contexts',v_contexts\n  );",
+        "after": "    'root_contexts',v_contexts\n  )||case when v_revision.missing_cancel_basis_census='{}'::jsonb then '{}'::jsonb else jsonb_build_object(\n    'missing_cancel_basis_census',private.weekly_source_missing_prepared_census_recheck_v1(v_revision.id,v_session.actor_user_id)) end;"
+      }
+    ]
+  },
+  {
+    "owner": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+    "forward_file": "forward/16_complete_prepare_result_missing_census.sqlinc",
+    "hunks": [
+      {
+        "name": "prepared result hash binds the actual separately rechecked census",
+        "before": "    'idempotent_replay',false\n  );\n  v_result_hash:=",
+        "after": "    'idempotent_replay',false\n  )||case when v_context ? 'missing_cancel_basis_census' then jsonb_build_object(\n    'missing_cancel_basis_census',v_context->'missing_cancel_basis_census') else '{}'::jsonb end;\n  v_result_hash:="
+      }
+    ]
+  },
+  {
+    "owner": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+    "forward_file": "forward/17_complete_apply_missing_census_recheck.sqlinc",
+    "hunks": [
+      {
+        "name": "existing under-lock context CAS includes full actual prepared missing census",
+        "before": "  if v_server_roots is distinct from v_session.prepare_result_json->'root_contexts' then",
+        "after": "  if v_server_roots is distinct from v_session.prepare_result_json->'root_contexts'\n    or coalesce(v_prepared_context->'missing_cancel_basis_census','{}'::jsonb)\n      is distinct from coalesce(v_session.prepare_result_json->'missing_cancel_basis_census','{}'::jsonb) then"
+      }
+    ]
+  }
+]

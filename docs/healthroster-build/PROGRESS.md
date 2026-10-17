@@ -1,5 +1,13 @@
 # HealthRoster v2 TEST build progress
 
+## Health retained-basis current-source construction and Contact peer review — 17 October 2026
+
+`proposals/missing-source-health-current-successor-20261017/INTEGRATION.md` supplies22 finite target files: six complete current Health owner successors,19functions, three existing-table fields and native trigger dependency, exact classifier/ACL and25-entry registry composition. Every overlap explicitly composes from immutable ACK payload `a34cd60f` with full reversals. FIN4 records genuine raw absence separately from retained original snapshot/movement/economic/VAT basis; repeated omission/expense skip, complete Legacy root discovery/rechecks, actual FIN3 dispatch and CorrectFinal census/CAS are authored. The latest genuine typed ACK and CURRENT/APPLIED read-only replay scope are preserved; new generation counters use decimal strings. Shared Banking capture/inventory/selector/paid-kernel bodies are excluded. Selected Health draft build inputs are preserved in the published package; the original untracked draft is unchanged.
+
+24 focused source/assembly checks PASS; offline PG17.7 SQL grammar40files/235statements and44PLpgSQL bodies parsed. FIN3/FIN4 each retain the same catalogue-dependent row-field grammar limitation as the pinned current source, explicitly unproved. Native/API/races/financial/contract/mount/install NOT_RUN; **installable=false** pending actual paired joins and remaining Health later-Accept/SameSeparate/raw-unfinalised/Office consumers. Baseline db:check's unrelated unrecorded13102026_1430 failure remains. No DB/lab/Docker/root/Bank body/Physical Daily-entry/deployment/secret/payment/provider/email work occurred.
+
+Independent focused Contact restoration peer review of Report `826e8d7d`, manifest `b7742cf7f5826bbc09ce60e55687102cbd4788b671df860d571815fd44415506`, is **PASS_SOURCE_ONLY**, no actionable findings;56/56 offline tests independently passed. Full canonical maps/WeakMap attribution, exact C-after PID exclusion, one-MCP-B source, cleanup and120+60/180 budgets were read and checked. Saved under `proposals/contact-independent-c-after-peer-review-20261017`; native Contact/PartB evidence remains root-owned and NOT_RUN by this reviewer.
+
 ## Kept-as-paid recurring-facts and identical-rekey source successor — 17 October 2026
 
 Authoritative worktree `D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026`, branch `codex/healthroster-v2-money-build-13102026`; starting source `aa51acc6cb5f0d831099fb676b55ce9da5c69878`. D physical repo/Git/common storage, 12,241 migration-manifest file hashes, logical staging baseline and tiny write/read/remove passed. The unrelated untracked retained-basis draft is preserved.

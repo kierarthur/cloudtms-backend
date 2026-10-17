@@ -1,0 +1,53 @@
+-- Reserve excluded CANCEL genesis to the actual FIN4 pre-write native census.
+-- Existing normal transition writes and immutable lifecycle guards remain.
+create or replace function private.weekly_source_missing_cancel_native_insert_guard_v1()
+returns trigger language plpgsql security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_frame jsonb; v_stack text; v_basis jsonb;
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_keys constant text[]:=array['schema_version','owner_transaction_id','owner_backend_pid',
+    'actor_user_id','projection_publication_id','upload_id','source_cycle_id','source_group_id',
+    'client_id','census','census_sha256'];
+begin
+  if not new.exclude_cancel then return new; end if;
+  perform private.weekly_source_query_require_service_v1();
+  get diagnostics v_stack=pg_context;
+  if tg_op is distinct from 'INSERT' or tg_when is distinct from 'AFTER'
+    or tg_table_schema is distinct from 'public' or tg_table_name is distinct from 'weekly_source_state_transitions'
+    or v_stack !~* 'PL/pgSQL function (private[.])?weekly_source_finalise_engine_v1[(]jsonb,uuid,boolean,text[)]' then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_NATIVE_OWNER_REQUIRED' using errcode='42501';
+  end if;
+  begin v_frame:=coalesce(nullif(current_setting('cloudtms.weekly_source_missing_cancel_frame',true),''),'null')::jsonb;
+  exception when invalid_text_representation then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_NATIVE_FRAME_INVALID' using errcode='40001';
+  end;
+  select * into strict v_revision from public.weekly_source_final_revisions where id=new.final_revision_id;
+  v_basis:=private.weekly_source_missing_cancel_transition_assert_v1(new.id);
+  if jsonb_typeof(v_frame) is distinct from 'object' or not v_frame ?& v_keys or v_frame-v_keys<>'{}'::jsonb
+    or v_frame->>'schema_version' is distinct from 'WEEKLY_SOURCE_MISSING_CANCEL_OWNER_FRAME_V1'
+    or v_frame->>'owner_transaction_id' is distinct from pg_current_xact_id()::text
+    or v_frame->>'owner_backend_pid' is distinct from pg_backend_pid()::text
+    or v_basis->>'owner_transaction_id' is distinct from pg_current_xact_id()::text
+    or v_basis->>'owner_backend_pid' is distinct from pg_backend_pid()::text
+    or v_frame->>'actor_user_id' is distinct from v_revision.finalised_by_user_id::text
+    or v_frame->>'actor_user_id' is distinct from v_basis->>'actor_user_id'
+    or v_frame->>'upload_id' is distinct from v_revision.upload_id::text
+    or v_frame->>'source_cycle_id' is distinct from v_revision.source_cycle_id::text
+    or v_frame->>'projection_publication_id' is distinct from v_basis->>'projection_publication_id'
+    or v_frame->>'source_group_id' is distinct from v_basis#>>'{target_native_context,source_group_id}'
+    or v_frame->>'client_id' is distinct from v_basis->>'client_id'
+    or v_frame->'census' is distinct from v_revision.missing_cancel_basis_census
+    or v_frame->>'census_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_MISSING_CANCEL_CENSUS_V1',v_revision.missing_cancel_basis_census),'hex') then
+    raise exception 'WEEKLY_SOURCE_MISSING_CANCEL_NATIVE_FRAME_CHANGED' using errcode='40001';
+  end if;
+  return new;
+end;
+$function$;
+alter function private.weekly_source_missing_cancel_native_insert_guard_v1() owner to postgres;
+revoke all on function private.weekly_source_missing_cancel_native_insert_guard_v1() from public,anon,authenticated,service_role;
+create or replace trigger zzzz_weekly_source_missing_cancel_native_insert_guard
+  after insert on public.weekly_source_state_transitions for each row
+  execute function private.weekly_source_missing_cancel_native_insert_guard_v1();

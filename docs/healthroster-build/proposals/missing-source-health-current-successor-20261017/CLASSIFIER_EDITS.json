@@ -1,0 +1,15 @@
+{
+  "dependencyCommit": "a34cd60f2c75580a9e37aabfaf26f7dab680cb37",
+  "inputTarget": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+  "inputSha256": "fe1cbb0de3332a021d1459a2e46f5c201e58d4ded7ade5f9f58fae876b8547e4",
+  "target": "supabase/repeatable/17102026_0126_weekly_source_missing_health_authority/98_complete_current_classification.sqlinc",
+  "outputSha256": "f194d216e6c045047ac7d5ee5b61528360d2a47de7ea5e9550dece744dc9d03b",
+  "hunks": [
+    {
+      "before": "    ('private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])'),",
+      "after": "    ('private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)'),\n    ('private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)'),\n    ('private.weekly_source_kept_as_paid_read_for_publication_v1(uuid,uuid,uuid)'),\n    ('private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)'),\n    ('private.weekly_source_missing_cancel_native_insert_guard_v1()'),\n    ('private.weekly_source_missing_cancel_transition_assert_v1(uuid)'),\n    ('private.weekly_source_missing_current_selection_v1(uuid,uuid,uuid)'),\n    ('private.weekly_source_missing_finalisation_roots_v1(uuid,integer,uuid,uuid,uuid,date,date)'),\n    ('private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)'),\n    ('private.weekly_source_missing_snapshot_movement_v1(uuid)'),\n    ('private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])'),",
+      "purpose": "Ten exact new private Health helpers, no new table/public/service surface."
+    }
+  ],
+  "completeReverseByteEquality": true
+}

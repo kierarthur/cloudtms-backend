@@ -1,0 +1,137 @@
+-- Draft exact current/prior/retained Source root inventory. Requires the
+-- separately proposed transition footprint and complete FIN4 wiring/recheck.
+-- It returns identities, not entitlement, invoice or payment classifications.
+create or replace function private.weekly_source_missing_finalisation_roots_v1(
+  p_upload_id uuid,p_generation integer,p_old_revision_id uuid,
+  p_source_group_id uuid,p_client_id uuid,p_start date,p_end date
+) returns table(root_timesheet_id uuid)
+language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  with target as materialized (
+    select upload.id,cycle.finalisation_week_ending,profile.final_authority_kind
+    from public.weekly_source_uploads upload
+    join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id
+    join public.weekly_source_format_profiles profile on profile.id=upload.source_format_profile_id
+    join public.weekly_source_projection_publications publication on publication.upload_id=upload.id
+      and publication.authority_scope_kind='CYCLE' and publication.report_scope_id is null
+      and publication.source_cycle_id=cycle.id
+      and coalesce(publication.projection_generation,publication.authority_scope_version::integer)=p_generation
+      and publication.state in ('CURRENT','CORRECTION_READY')
+    where upload.id=p_upload_id and upload.report_scope_id is null
+      and cycle.source_group_id=p_source_group_id
+      and (cycle.scope_client_id is null or cycle.scope_client_id=p_client_id)
+      and profile.final_authority_kind in ('GENERIC_COMPLETE_SNAPSHOT','HEALTHROSTER_ACTUAL_ROWS')
+      and ((publication.state='CURRENT' and upload.state='CURRENT' and p_old_revision_id is null
+          and cycle.current_projection_publication_id=publication.id)
+        or (publication.state='CORRECTION_READY' and upload.state='CORRECTION_READY'
+          and upload.purpose='FINAL_SOURCE_CORRECTION' and exists(
+            select 1 from public.weekly_final_source_correction_sessions correction
+            where correction.id=upload.correction_session_id
+              and correction.id=publication.correction_session_id
+              and correction.source_cycle_id=cycle.id and correction.authority_scope_kind='CYCLE'
+              and correction.report_scope_id is null
+              and correction.expected_current_final_revision_id=p_old_revision_id
+              and correction.replacement_correction_upload_id=upload.id
+              and correction.replacement_projection_publication_id=publication.id
+              and correction.state in ('REVIEWED','PREPARING','PREPARED','COMMITTING'))))
+      and upload.confirmed_coverage_start_local_date is not distinct from p_start
+      and upload.confirmed_coverage_end_local_date is not distinct from p_end
+  ), current_roots as (
+    -- Same complete current Contract-Week discovery as the native FIN4 owner.
+    select contract_week.timesheet_id
+    from target
+    join public.weekly_source_upload_rows source_row on source_row.upload_id=target.id
+    join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+      and resolution.generation=p_generation
+    join public.contracts contract on contract.id=resolution.contract_id
+      and contract.client_id=p_client_id and contract.candidate_id=resolution.candidate_id
+    join public.contract_weeks contract_week on contract_week.contract_id=contract.id
+      and contract_week.additional_seq=0
+      and contract_week.week_ending_date=source_row.work_date+
+        ((coalesce(contract.week_ending_weekday_snapshot,0)-extract(dow from source_row.work_date)::integer+7)%7)
+    where contract_week.timesheet_id is not null
+  ), prior_states as (
+    -- Mirror FIN4's real revision/transition chronology for membership only.
+    -- Never use this order to choose the retained financial movement.
+    select distinct on (transition.work_event_id) transition.work_event_id,
+      coalesce(transition.new_snapshot_line_id,
+        case when transition.exclude_cancel then transition.previous_snapshot_line_id end) as snapshot_line_id
+    from public.weekly_source_state_transitions transition
+    join public.weekly_source_final_revisions revision on revision.id=transition.final_revision_id
+      and revision.state='CURRENT' and revision.authority_scope_kind='CYCLE' and revision.report_scope_id is null
+    join public.weekly_source_cycles cycle on cycle.id=transition.finalisation_cycle_id
+      and cycle.source_group_id=p_source_group_id
+    join public.weekly_source_client_manifests manifest on manifest.final_revision_id=revision.id
+      and coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id)=manifest.source_cycle_id
+      and manifest.client_id=p_client_id
+    cross join target
+    where transition.source_profile_kind=target.final_authority_kind
+      and (cycle.finalisation_week_ending<target.finalisation_week_ending or revision.id=p_old_revision_id)
+    order by transition.work_event_id,cycle.finalisation_week_ending desc,
+      revision.finalised_at_utc desc,revision.revision_number desc,transition.created_at_utc desc,transition.id desc
+  ), prior_roots as (
+    select lineage.timesheet_id
+    from prior_states prior
+    join public.weekly_source_final_snapshot_lines snapshot on snapshot.id=prior.snapshot_line_id
+      and snapshot.work_event_id=prior.work_event_id and snapshot.client_id=p_client_id
+    join public.weekly_source_row_timesheet_lineages lineage on lineage.row_resolution_id=snapshot.row_resolution_id
+      and lineage.work_event_id=snapshot.work_event_id and lineage.client_id=snapshot.client_id
+      and lineage.candidate_id=snapshot.candidate_id and lineage.contract_id=snapshot.contract_id
+    where snapshot.work_date between p_start and p_end or exists(
+      select 1 from public.weekly_source_upload_rows source_row
+      join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+        and resolution.generation=p_generation
+      where source_row.upload_id=p_upload_id and resolution.work_event_id=prior.work_event_id)
+  ), expense_roots as (
+    -- Source-fixed expense-only omissions require the same pre-lock union.
+    select lineage.timesheet_id
+    from public.weekly_expense_authority_generations authority
+    cross join target
+    join public.weekly_work_events event on event.id=authority.work_event_id
+      and event.first_source_group_id=p_source_group_id and event.client_id=p_client_id
+      and (event.work_date between p_start and p_end or exists(
+        select 1 from public.weekly_source_upload_rows source_row
+        join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+          and resolution.generation=p_generation
+        where source_row.upload_id=p_upload_id and resolution.work_event_id=event.id))
+    join public.weekly_source_row_expense_policy_snapshots policy on policy.id=authority.row_expense_policy_snapshot_id
+    join public.weekly_source_row_timesheet_lineages lineage on lineage.row_resolution_id=policy.row_resolution_id
+      and lineage.work_event_id=event.id and lineage.client_id=event.client_id
+      and lineage.candidate_id=event.candidate_id and lineage.contract_id=authority.contract_id
+    where authority.state='CURRENT' and authority.source_expense_pence>0
+    union
+    -- CorrectFinal can restore the actual pre-mistake positive baseline even
+    -- when the current mistaken authority is an omitted zero with no policy.
+    select lineage.timesheet_id
+    from public.weekly_expense_authority_generations authority
+    cross join target
+    join public.weekly_expense_authority_generations baseline
+      on baseline.id=authority.prior_expense_authority_generation_id
+      and baseline.work_event_id=authority.work_event_id
+      and baseline.state in ('CURRENT','SUPERSEDED') and baseline.source_expense_pence>0
+    join public.weekly_work_events event on event.id=authority.work_event_id
+      and event.first_source_group_id=p_source_group_id and event.client_id=p_client_id
+      and (event.work_date between p_start and p_end or exists(
+        select 1 from public.weekly_source_upload_rows source_row
+        join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+          and resolution.generation=p_generation
+        where source_row.upload_id=p_upload_id and resolution.work_event_id=event.id))
+    join public.weekly_source_row_expense_policy_snapshots policy on policy.id=baseline.row_expense_policy_snapshot_id
+    join public.weekly_source_row_timesheet_lineages lineage on lineage.row_resolution_id=policy.row_resolution_id
+      and lineage.work_event_id=event.id and lineage.client_id=event.client_id
+      and lineage.candidate_id=event.candidate_id and lineage.contract_id=baseline.contract_id
+    where authority.state='CURRENT' and authority.final_revision_id=p_old_revision_id
+  ), all_members as (
+    select timesheet_id from current_roots
+    union select timesheet_id from prior_roots
+    union select timesheet_id from expense_roots
+  )
+  select distinct rotation.canonical_timesheet_id
+  from all_members member
+  cross join lateral public._pay_timesheet_rotation_scope(array[member.timesheet_id]) rotation
+  where rotation.canonical_timesheet_id is not null;
+$function$;
+alter function private.weekly_source_missing_finalisation_roots_v1(uuid,integer,uuid,uuid,uuid,date,date) owner to postgres;
+revoke all on function private.weekly_source_missing_finalisation_roots_v1(uuid,integer,uuid,uuid,uuid,date,date)
+  from public,anon,authenticated,service_role;
