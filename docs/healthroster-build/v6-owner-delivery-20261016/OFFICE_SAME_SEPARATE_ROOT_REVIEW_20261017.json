@@ -1,0 +1,47 @@
+{
+  "version": "OFFICE_SAME_SEPARATE_ROOT_INDEPENDENT_REVIEW_V1",
+  "officeCommit": "ac112422e529aefbcba0fc0147d2b28123751823",
+  "backendCommit": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "manifestSha256": "3e91bf36b1475b39d7488fa7646d21fe297b30d285ee1036527300e954e9652a",
+  "completeParents": 4,
+  "finiteHunks": 18,
+  "protectedOwnersUnchanged": 9,
+  "selectedBackendConsumersVerified": 9,
+  "rootUnitTests": 192,
+  "originalTestsUnchanged": 170,
+  "newProtocolHostTests": 22,
+  "rootControlledBrowserCases": 6,
+  "externalRequests": 0,
+  "pageErrors": 0,
+  "actualModuleDomScope": true,
+  "actualInstalledHost": "NOT_RUN",
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "release": "NOT_RUN",
+  "bothFinalCritics": "NOT_RUN",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "rootFindingsApplied": 0,
+  "rootFindingsRejected": 0,
+  "wholeFrozenResultWritesSuppressed": 2,
+  "screenshots": [
+    {
+      "frozenPath": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-office-13102026\\docs\\healthroster-build\\proposals\\paid-overlap-office-20261017\\screenshots\\NONE-1366.png",
+      "sha256": "9cc327f12b772fcc0587196ad2fd94f289aee2a2aa6a77f2588a3d81358af5ac",
+      "rootCaptureByteEqual": true,
+      "rootVisualInspection": "PASS_CONTROLLED_LAYOUT"
+    },
+    {
+      "frozenPath": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-office-13102026\\docs\\healthroster-build\\proposals\\paid-overlap-office-20261017\\screenshots\\NORMAL-390.png",
+      "sha256": "4f13867e730cc8cd281c17674ee71a92d188d737498c315bc2a15ae582096c1c",
+      "rootCaptureByteEqual": true,
+      "rootVisualInspection": "PASS_CONTROLLED_LAYOUT"
+    }
+  ],
+  "temporaryCleanup": {
+    "ownedDirectory": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\office-paid-root-review-81L60r",
+    "filesRemoved": 3,
+    "nonrecursiveDirectoryRemoved": true,
+    "deletionRefused": false
+  },
+  "bankingBodiesRead": 0
+}

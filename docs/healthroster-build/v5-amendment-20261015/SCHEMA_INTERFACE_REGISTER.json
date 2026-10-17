@@ -7235,5 +7235,19 @@
     "contract": "NOT_SEALED",
     "install2": "NOT_INSTALLED",
     "final_critics": "NOT_RUN"
+  },
+  "office_same_separate_source_continuation_20261017": {
+    "office_commit": "ac112422e529aefbcba0fc0147d2b28123751823",
+    "backend_commit": "84738fe4057d9d693ccd723eb1835106f1091f57",
+    "root_review": "docs/healthroster-build/v6-owner-delivery-20261016/OFFICE_SAME_SEPARATE_ROOT_REVIEW_20261017.json",
+    "status": "ACCEPT_BOUNDED_SOURCE_ONLY",
+    "unit_tests": 192,
+    "controlled_browser_cases": 6,
+    "external_requests": 0,
+    "native": "NOT_RUN",
+    "API": "NOT_RUN",
+    "in_app": "NOT_RUN",
+    "release": "NOT_RUN",
+    "final_critics": "NOT_RUN"
   }
 }

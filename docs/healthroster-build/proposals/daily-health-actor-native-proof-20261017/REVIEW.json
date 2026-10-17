@@ -1,0 +1,36 @@
+{
+  "version": "DAILY_HEALTH_ACTOR_SOURCE_REVIEW_V1",
+  "decision": "SOURCE_PROPOSAL_READY_FOR_ROOT_PEER_NOT_NATIVE_EXECUTED",
+  "rootCommit": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "programme": "PROGRAMME.json",
+  "manifestAppendProposal": "SETUP_ENTRY.md",
+  "beforeAnyConnection": "Root must review the whole packet, mount exact source, append/commit the exact setup entry and preserve saved/index/HEAD equality. Holder refuses otherwise.",
+  "businessEffects": "Only six new native tms_users rows and four updates within server-owned B rollback. Three successful updates affect only fixture001; one fixture003 Golden-Key constraint violation is caught and must leave both flags true. No existing user, login, session, email, Daily, rates or financial row is mutated.",
+  "storeClosure": "Full native users columns/defaults/constraints, owner/RLS/no inheritance/no rules, sole enabled native self-touch trigger and exact definition; genuine installed WP-PP definition/owner. Private actor body is the exact complete current source. Owner-only effective ACL and real SET ROLE admission are checked.",
+  "actualInstalledWPPPReceipt": {
+    "file": "docs/healthroster-build/PUBLISHED_HELPERS.md",
+    "section": "WP-PP v2 — installed and read back, 14 October 2026",
+    "sourceCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "definitionSha256": "736fa960e78a591c8f1dbc3b3750dffa03cb504f87c8c46a0b2d0bf913042289",
+    "trialRequirement": "Actual native definition and owner must match before fixture insertion; this old publication record is not a new native observation."
+  },
+  "restoration": "Whole unchanged canonical catalogue/ledger plus complete users and both complete background relations; genuine B marker and observation, actual rollback, fresh MCP zero fixture users, independent distinct C-after aborted B XID/marker/background absence, original live WeakMap qualifier and unchanged full restoration gate. No background pause or waiver.",
+  "failedNativeEnvelope": "Inherited holder emits HOLD before C-after qualification when the complete genuine stage is absent. It claims no independent full restoration in that path and cannot fabricate an unreached B observation/WeakMap proof. Root must reconcile actual failed rollback and required fresh restoration before a further trial.",
+  "transport": "Exact 20-statement B/four-statement fresh MCP verification. Root-owned named Kier server-owned rollback only. C fixed read-only complete canonical SQL, bounded transport, original shared turn/120+60/180-second budgets. No arbitrary SQL API.",
+  "sourceOnlyProof": "17 source/synthetic boundary tests +76 original restoration/turn tests; PG17 grammar five exact source examples, no substitutions. Grammar/native body compilation remains NOT_PROVED.",
+  "unqualified": [
+    "This actor programme native execution/restoration",
+    "Positive locked Daily basis, waiting existing Banking F17 NEXT readiness and a genuine Daily fixture",
+    "Unlocked real Worker context/snapshot and review preparation/incomplete-transaction guard",
+    "RR/serializable refusal before first-query snapshot and real RC post-wait actor/selector races",
+    "Real accepted operation/Result role/history redaction and all Invoice branches",
+    "Three private public-facing composers/full assembly and three unprovided genuine Bank joins"
+  ],
+  "bankingBodiesRead": 0,
+  "databaseConnections": 0,
+  "nativeCalls": 0,
+  "rootWrites": 0,
+  "docker": "NOT_RUN",
+  "originalSchemaHistory": "UNCHANGED",
+  "native": "NOT_RUN"
+}
