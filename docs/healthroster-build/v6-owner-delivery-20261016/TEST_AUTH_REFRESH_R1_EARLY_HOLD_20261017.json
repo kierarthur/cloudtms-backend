@@ -1,0 +1,43 @@
+{
+  "version": "ROOT_ACTUAL_APPROVED_AUTH_R1_EARLY_LAUNCH_HOLD_V1",
+  "reviewedAuthorCommit": "ba01714404c0ff28adf02ceefb04bd6723206823",
+  "rootExecutionCommit": "28d21f8d8c3ba253fc6f528b5ec6c8bc8c50c68e",
+  "unchangedRootProcessResult": {
+    "exitCode": 1,
+    "output": {
+      "status": "HOLD",
+      "code": "AUTH_ROOT_INVOCATION_HELD"
+    }
+  },
+  "publicSourcePreflight": "ACTUAL_PASS_AFTER_HOLD",
+  "failedPhase": "WINDOWS_PS5_OWNED_DIRECTORY_ACL_MODULE_IMPORT",
+  "actualPublicErrorCategory": "CouldNotAutoloadMatchingModule,secure-owned.ps1; read-only Import-Module probe FormatXmlUpdateException,Microsoft.PowerShell.Commands.ImportModuleCommand",
+  "readOnlyDiagnosis": {
+    "inheritedPSModulePath": {
+      "exit": 1,
+      "moduleLoaded": false
+    },
+    "exactPS5ChildScopedNativeModulesPath": {
+      "exit": 0,
+      "moduleLoaded": true
+    },
+    "ACLChangedByProbe": false,
+    "globalSettingsChanged": false
+  },
+  "browserLaunchReached": false,
+  "credentialLoaderReached": false,
+  "loginRequestsSent": 0,
+  "sharedStateChanged": false,
+  "ownedDirectory": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\test-auth-refresh-20261017-baac8008ac2425224d6c667b1f0dda73",
+  "ownedDirectoryFiles": 0,
+  "privateDataCreated": false,
+  "directoryACLAtObservation": {
+    "protected": false,
+    "ruleCount": 3,
+    "defaultInheritedRulesRetained": true
+  },
+  "cleanup": "RETAINED_EMPTY_PENDING_SCOPED_FINAL_HANDLING",
+  "deletionRefused": false,
+  "next": "Finite exact ACL-child PSModulePath successor; no credential diagnosis or execution-policy bypass",
+  "nativeIntervalActive": false
+}
