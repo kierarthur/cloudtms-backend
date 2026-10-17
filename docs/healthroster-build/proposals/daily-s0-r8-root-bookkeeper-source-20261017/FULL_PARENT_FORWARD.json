@@ -1,0 +1,67 @@
+{
+  "version": "S0_R8_EXACT_R7_HELPER_SOURCE_FORWARD_V1",
+  "parentFile": "docs/healthroster-build/proposals/daily-genuine-root-s0-r7-bookkeeper-20261017.mjs",
+  "parentCommit": "64c53db082ad2c3c055c224c08cfb5dd91842dc0",
+  "parentSha256": "3110c1442d58e7d5bd8fedfde9633fba43a70efd96a32dac692599232c0bcc3d",
+  "afterSha256": "906108c459b7aa4ed50a9e3f82baec67b2c2b82284cdc5775f46316239b47b5f",
+  "changes": [
+    {
+      "before": "DAILY_GENUINE_S0_R7_",
+      "after": "DAILY_GENUINE_S0_R8_",
+      "occurrences": 2,
+      "why": "New proof/plan filenames only; preserve R7 evidence."
+    },
+    {
+      "before": "b273951f2a3719e72b193fab4e3e82bd81b1ffbf91bac03aba9322dd272a452e",
+      "after": "ded3b26a98221e5b2941a226dab6caf6c1de0b16c10f365d2d5ec82ef225b34d",
+      "occurrences": 1,
+      "why": "Exact actual central R7 before-effect parent."
+    },
+    {
+      "before": "24805aff1cf148b0cb3eefc47cbf04e2b67cac29",
+      "after": "db015cac83e3fdcc4ebcb1888b841b345899dbdd",
+      "occurrences": 1,
+      "why": "Genuine historical db015 parent, no refreshed baseline."
+    },
+    {
+      "before": "EXACT_R4_EFFECT_PARENT",
+      "after": "EXACT_R7_EFFECT_PARENT",
+      "occurrences": 1,
+      "why": "Truthful current protected parent label."
+    },
+    {
+      "before": "DAILY_AUTH_R9_SOURCE_RECIPE_ROOT_REVIEW_20261017.json",
+      "after": "DAILY_AUTH_R10_SOURCE_RECIPE_ROOT_REVIEW_20261017.json",
+      "occurrences": 1,
+      "why": "Fixed genuine R10 review path."
+    },
+    {
+      "before": " }else fs.writeFileSync(i+'/'+f,JSON.stringify(v,null,2)+'\\n',{flag:'wx'});",
+      "after": " }else if(f===p+'DAILY_GENUINE_S0_AFTER_EFFECT_QUALIFICATION_20261017.json'){\n  const old=fs.readFileSync(i+'/'+f);\n  if(sha(old)!=='00323f57272f687183fc0a2c8b74bafabc7f569cdc2f39b3b17e421661ace9b4'||![g(i,'show','HEAD:'+f),g(i,'show',':'+f),g(i,'show','2d5496c6bea7ce559ca1575e357b2147fd474090:'+f)].every(b=>b.equals(old)))throw Error('EXACT_R7_AFTER_EFFECT_PARENT');\n  fs.writeFileSync(i+'/'+f,JSON.stringify(v,null,2)+'\\n');\n }else fs.writeFileSync(i+'/'+f,JSON.stringify(v,null,2)+'\\n',{flag:'wx'});",
+      "occurrences": 1,
+      "why": "Existing central AFTER descriptor needs same exact-parent protection; new R8 proof files stay wx."
+    },
+    {
+      "before": "if(g(i,'diff','--cached','--name-only','-z').length!==0)throw Error('UNRELATED_STAGED_PATHS');",
+      "after": "if(g(i,'diff','--cached','--name-only','-z').length!==0)throw Error('UNRELATED_STAGED_PATHS');\n// Genuine public R10 source/review binding only; no state target access or guessed future hash.\nconst rootHead=g(i,'rev-parse','HEAD').toString().trim(),reviewCommit=process.env.HR_R10_REVIEW_COMMIT,reviewFile=p+'DAILY_AUTH_R10_SOURCE_RECIPE_ROOT_REVIEW_20261017.json';\nif(!/^[a-f0-9]{40}$/.test(reviewCommit??''))throw Error('ACTUAL_R10_REVIEW_COMMIT_REQUIRED');\nconst committedPublic=(file,historical)=>{const b=fs.readFileSync(i+'/'+file);if(![rootHead,'',historical].every(ref=>b.equals(g(i,'show',ref+':'+file))))throw Error('ACTUAL_COMMITTED_R10_PUBLIC_EVIDENCE_REQUIRED');return b;};\ng(i,'merge-base','--is-ancestor',reviewCommit,rootHead);committedPublic(reviewFile,reviewCommit);committedPublic(p+'DAILY_GENUINE_S0_R8_ROOT_EXECUTION_PLAN_20261017.json',rootHead);\nconst pinFile=s+'SOURCE_PINS.json',pinBytes=fs.readFileSync(r+'/'+pinFile);if(![source,''].every(ref=>pinBytes.equals(g(r,'show',ref+':'+pinFile))))throw Error('CURRENT_R10_SOURCE_PINS_REQUIRED');\nconst observed=JSON.parse(pinBytes).authObservation;if(observed?.file!==p+'TEST_AUTH_REFRESH_R10_SUCCESS_20261017.json'||!/^[a-f0-9]{40}$/.test(observed.commit??'')||!/^[a-f0-9]{64}$/.test(observed.sha256??''))throw Error('ACTUAL_R10_SOURCE_OBSERVATION_REQUIRED');\nif(sha(committedPublic(observed.file,observed.commit))!==observed.sha256)throw Error('ACTUAL_R10_PUBLIC_RECEIPT_HASH_REQUIRED');",
+      "occurrences": 1,
+      "why": "Bind actual current admitted source to the real committed R10 observation/review; only public files."
+    }
+  ],
+  "wholeRawInverse": true,
+  "protectedBefore": {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_EFFECT_ADMISSION_20261017.json",
+    "commit": "db015cac83e3fdcc4ebcb1888b841b345899dbdd",
+    "bytes": 869,
+    "sha256": "ded3b26a98221e5b2941a226dab6caf6c1de0b16c10f365d2d5ec82ef225b34d"
+  },
+  "protectedAfter": {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_AFTER_EFFECT_QUALIFICATION_20261017.json",
+    "commit": "2d5496c6bea7ce559ca1575e357b2147fd474090",
+    "bytes": 812,
+    "sha256": "00323f57272f687183fc0a2c8b74bafabc7f569cdc2f39b3b17e421661ace9b4"
+  },
+  "realR10ReviewCommit": "REQUIRED_AT_RUNTIME",
+  "actualR10SourceCommit": "HR_OPERATOR_COMMIT_EXACT_CURRENT_HEAD",
+  "actualAuthStatePathRead": false
+}

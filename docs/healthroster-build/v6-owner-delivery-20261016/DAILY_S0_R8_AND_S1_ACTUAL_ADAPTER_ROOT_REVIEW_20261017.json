@@ -1,0 +1,31 @@
+{
+  "version": "DAILY_S0_R8_AND_S1_ACTUAL_ADAPTER_ROOT_REVIEW_V1",
+  "S0R8": {
+    "helperSha256": "906108c459b7aa4ed50a9e3f82baec67b2c2b82284cdc5775f46316239b47b5f",
+    "wholeR7RawInverse": true,
+    "literalChanges": 7,
+    "rootTests": 32,
+    "bothCentralR7Descriptors": "Exact saved/index/HEAD/historical parents; R7 proofs/prefix retained.",
+    "futureR10Binding": "Actual runtime committed R10 receipt/review and actual admitted source, no invented commit or private path."
+  },
+  "S1Adapter": {
+    "manifestSha256": "00b1a7f880c0844b9ac6b92b37d4e2b0df073adcc4c54f0c315bd502acd622c7",
+    "peerVerdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+    "rootTests": 8,
+    "peerAdditionalTests": 5,
+    "reader": "Original bookkeeper physical D/bounded saved/currentHEAD/index equivalence proved.",
+    "actualRecords": "NOT_CREATED"
+  },
+  "sourceOnly": true,
+  "authNativeBusiness": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "frozenSourceWhitespaceExceptions": {
+    "paths": [
+      "docs/healthroster-build/proposals/daily-s0-r8-root-bookkeeper-source-20261017/README.md",
+      "docs/healthroster-build/proposals/daily-s0-r8-root-bookkeeper-source-20261017/test.mjs",
+      "docs/healthroster-build/proposals/daily-s1-root-adapter-independent-peer-20261017/test.mjs"
+    ],
+    "diagnostic": "new blank line at EOF only",
+    "review": "Preserve exact frozen author/peer manifest images; no executable change or trailing whitespace. All other selected files pass diff --check."
+  }
+}

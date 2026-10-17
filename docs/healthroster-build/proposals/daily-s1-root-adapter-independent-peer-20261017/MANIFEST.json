@@ -1,0 +1,45 @@
+{
+  "version": "S1_ROOT_ADAPTER_INDEPENDENT_PEER_MANIFEST_V1",
+  "files": [
+    {
+      "file": "capture/README.md",
+      "bytes": 1969,
+      "sha256": "0261d747c825f752b93aa1aa0631fbabe6e69dd7626ff2e40871dddfdc644ed8"
+    },
+    {
+      "file": "capture/run.mjs",
+      "bytes": 8279,
+      "sha256": "7d5ef4fda04d9a4ef6f8d84ed378e320f809244dc21c55276d3896dab0417541"
+    },
+    {
+      "file": "capture/test.mjs",
+      "bytes": 3354,
+      "sha256": "9b3c72855f3b98683b1d3b7da14a728e88f8ce3b31cbdca4c247b2bc88894b78"
+    },
+    {
+      "file": "original-bookkeeper.mjs",
+      "bytes": 10331,
+      "sha256": "5121f9d3ac3e087d7153937a64d5d4e0cfef51e1868f681e1cdd5e432fd1943f"
+    },
+    {
+      "file": "README.md",
+      "bytes": 872,
+      "sha256": "eee30c250e2b988bd3cc15db5ec550ba0f987adff9bf5ecda5f137c9c1857cdc"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 534,
+      "sha256": "7b49936d993b43acaf9a863bde744adefb6c5c3d795bcf9663dd9e0650c7a368"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 3202,
+      "sha256": "cca1e20dcaa75e2dd695c8a5ea35f840acafad4a784f84df8c0b254e3509b30d"
+    },
+    {
+      "file": "capture/MANIFEST.json",
+      "bytes": 514,
+      "sha256": "00b1a7f880c0844b9ac6b92b37d4e2b0df073adcc4c54f0c315bd502acd622c7"
+    }
+  ]
+}

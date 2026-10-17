@@ -1,0 +1,15 @@
+{
+  "version": "S1_ACTUAL_READER_ADAPTER_INDEPENDENT_SOURCE_REVIEW_V1",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "findings": [],
+  "authorManifestSha256": "00b1a7f880c0844b9ac6b92b37d4e2b0df073adcc4c54f0c315bd502acd622c7",
+  "capturedSourceFiles": 4,
+  "authorTests": 8,
+  "independentTests": 5,
+  "syntax": "PASS",
+  "readerLiteralEquivalence": "PASS",
+  "fourSourceImagesUnchangedAfterReplay": true,
+  "actualRun": "NOT_RUN",
+  "privateLookup": false,
+  "reportHead": "62226fa587bf5ad977043d6abd9d103002212b65"
+}

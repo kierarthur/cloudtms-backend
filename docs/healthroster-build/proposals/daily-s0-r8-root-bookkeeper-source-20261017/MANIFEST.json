@@ -1,0 +1,50 @@
+{
+  "version": "S0_R8_BOOKKEEPER_SOURCE_MANIFEST_V1",
+  "files": [
+    {
+      "file": "bookkeeper.mjs",
+      "bytes": 8231,
+      "sha256": "906108c459b7aa4ed50a9e3f82baec67b2c2b82284cdc5775f46316239b47b5f"
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 4875,
+      "sha256": "d6a3286ad3eef0d95a719a1446dc52215d2755d893811f891cac04d801cb05ac"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2523,
+      "sha256": "b9d33c0a807c77eaae547f0d6dd127a416b64a8f3a7ce7fa1113b923e74258e8"
+    },
+    {
+      "file": "reference/r7-bookkeeper.mjs",
+      "bytes": 6436,
+      "sha256": "3110c1442d58e7d5bd8fedfde9633fba43a70efd96a32dac692599232c0bcc3d"
+    },
+    {
+      "file": "reference/r7-effect-after.json",
+      "bytes": 812,
+      "sha256": "00323f57272f687183fc0a2c8b74bafabc7f569cdc2f39b3b17e421661ace9b4"
+    },
+    {
+      "file": "reference/r7-effect-before.json",
+      "bytes": 869,
+      "sha256": "ded3b26a98221e5b2941a226dab6caf6c1de0b16c10f365d2d5ec82ef225b34d"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 506,
+      "sha256": "ac4a9e39b1c2d2ba8a61d9d01ef18f9a94e55c953ebbf48dddeca4ee5eb66307"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 1399,
+      "sha256": "0d89fb4f0a9cc9a13df4bbb075fc24e662e7ba080660f65f54c3e8e76a34839c"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 7611,
+      "sha256": "d9b7e47070b7525507ee739e9abda0cee4a68b97489c04f4debb2ac0a421059c"
+    }
+  ]
+}

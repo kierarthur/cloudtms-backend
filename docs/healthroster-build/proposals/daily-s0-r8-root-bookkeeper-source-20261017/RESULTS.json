@@ -1,0 +1,13 @@
+{
+  "version": "S0_R8_SOURCE_CHECKS_V1",
+  "nodeCheck": "PASS",
+  "controlledSourceTests": 32,
+  "fullRawInverse": "PASS",
+  "originalHelperSha256": "3110c1442d58e7d5bd8fedfde9633fba43a70efd96a32dac692599232c0bcc3d",
+  "successorHelperSha256": "906108c459b7aa4ed50a9e3f82baec67b2c2b82284cdc5775f46316239b47b5f",
+  "actualPublicParentChecks": 3,
+  "helperExecuted": false,
+  "nativeAuthBrowserApi": "NOT_RUN",
+  "reportHeadChanged": false,
+  "syntheticTestRecordsAreExecutionEvidence": false
+}

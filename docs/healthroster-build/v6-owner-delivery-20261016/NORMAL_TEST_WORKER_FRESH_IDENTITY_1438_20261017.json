@@ -1,0 +1,29 @@
+{
+  "version": "NORMAL_TEST_WORKER_FRESH_IDENTITY_READONLY_V1",
+  "capturedAt": "2026-10-17T14:38:10.449Z",
+  "route": "Existing authenticated Wrangler4.125.0 OAuth verified kier@arthur-rai.co.uk; Cloudflare API connector UNAUTHORIZED retained/no reconnect",
+  "worker": "test-cloudtms-backend",
+  "activeDeployment": {
+    "id": "79c61c45-9ec5-48be-bfdd-6e837262cb07",
+    "createdOn": "2026-10-14T15:52:08.252999Z",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "versions": [
+      {
+        "version_id": "5501aaa3-3302-456d-8805-d5e7e82ec86a",
+        "percentage": 100
+      }
+    ]
+  },
+  "activeVersion": {
+    "id": "5501aaa3-3302-456d-8805-d5e7e82ec86a",
+    "number": 3462,
+    "createdOn": "2026-10-14T15:52:04.970075Z",
+    "source": "wrangler"
+  },
+  "equalsPriorInstall1Version": true,
+  "priorSourceCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "sourceComparison": "Compare exact existing Install1 publication receipt; no deployed script body or binding value returned",
+  "changedSecrets": false,
+  "changedDeployment": false
+}

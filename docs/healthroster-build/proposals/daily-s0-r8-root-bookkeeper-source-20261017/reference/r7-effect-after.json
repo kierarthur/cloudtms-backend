@@ -1,0 +1,10 @@
+{
+  "version": "DAILY_GENUINE_ROOT_AFTER_EFFECT_QUALIFICATION_V1",
+  "stage": "S0",
+  "beforeEnvelopeSha256": "546425402e76a8ac859e8bd522d93f126a5d5392b84e975cfd49afa40de65c58",
+  "afterEnvelopeSha256": "3bbd4441dcdbd8b8f6cb60fa8be61739d11de11b3990858b691e6e996a990207",
+  "responseProjectionSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "canonicalAfterEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_R7_AFTER_NATIVE_QUALIFICATION_20261017.json",
+  "exactApprovedChangesEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_R7_AFTER_NATIVE_QUALIFICATION_20261017.json",
+  "backgroundAttributionEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_R7_AFTER_NATIVE_QUALIFICATION_20261017.json"
+}

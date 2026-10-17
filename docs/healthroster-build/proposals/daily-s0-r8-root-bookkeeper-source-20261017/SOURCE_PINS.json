@@ -1,0 +1,32 @@
+{
+  "version": "S0_R8_GENUINE_PUBLIC_PARENTS_V1",
+  "reportHead": "62226fa587bf5ad977043d6abd9d103002212b65",
+  "rootHeadObserved": "9d92eaffbb0dab36374615aa7cc5fe6f8084b46d",
+  "rows": [
+    {
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-s0-r7-bookkeeper-20261017.mjs",
+      "historicalCommit": "64c53db082ad2c3c055c224c08cfb5dd91842dc0",
+      "bytes": 6436,
+      "sha256": "3110c1442d58e7d5bd8fedfde9633fba43a70efd96a32dac692599232c0bcc3d",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_EFFECT_ADMISSION_20261017.json",
+      "historicalCommit": "db015cac83e3fdcc4ebcb1888b841b345899dbdd",
+      "bytes": 869,
+      "sha256": "ded3b26a98221e5b2941a226dab6caf6c1de0b16c10f365d2d5ec82ef225b34d",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_AFTER_EFFECT_QUALIFICATION_20261017.json",
+      "historicalCommit": "2d5496c6bea7ce559ca1575e357b2147fd474090",
+      "bytes": 812,
+      "sha256": "00323f57272f687183fc0a2c8b74bafabc7f569cdc2f39b3b17e421661ace9b4",
+      "savedIndexHeadHistoricalEqual": true
+    }
+  ],
+  "actualR10Receipt": "NOT_PROVIDED",
+  "actualR10ReviewCommit": "NOT_PROVIDED",
+  "helperExecuted": false,
+  "privatePathLookup": false
+}

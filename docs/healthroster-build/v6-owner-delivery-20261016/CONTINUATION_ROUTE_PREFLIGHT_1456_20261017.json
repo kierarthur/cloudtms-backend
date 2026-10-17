@@ -1,0 +1,59 @@
+{
+  "version": "CONTINUATION_KIER_TEST_ROUTE_PREFLIGHT_V1",
+  "account": "kier@arthur-rai.co.uk",
+  "server": "cloudtms-miget-operations-kier-codex",
+  "parity": {
+    "accepted": true,
+    "authenticated": true,
+    "read_only": false,
+    "rollback_only_transaction_tool": true,
+    "durable_database_writes_allowed": false,
+    "route": "Codex -> authenticated MCP -> Miget TEST read tools plus rollback-only transaction rehearsal",
+    "resource_count": 1,
+    "secrets_returned": false
+  },
+  "databases": [
+    {
+      "observedAt": "2026-10-17T14:56:51.439Z",
+      "database": "agency_test",
+      "serviceState": "healthy",
+      "physical": {
+        "database_name": "cloudtms_test_clone",
+        "connection_role": "dee50tht",
+        "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+        "server_version_num": 170011,
+        "in_recovery": false,
+        "postmaster_started_at": "2026-10-14T09:07:33.240Z",
+        "database_bytes": "4203517619",
+        "connected_replica_count": 0,
+        "active_replication_slot_count": 0,
+        "prepared_transaction_count": 0
+      }
+    },
+    {
+      "observedAt": "2026-10-17T14:56:51.461Z",
+      "database": "mytms_test",
+      "serviceState": "healthy",
+      "physical": {
+        "database_name": "uofvkfi5",
+        "connection_role": "3eoatknm",
+        "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+        "server_version_num": 170011,
+        "in_recovery": false,
+        "postmaster_started_at": "2026-09-17T23:40:44.934Z",
+        "database_bytes": "34830003",
+        "connected_replica_count": 0,
+        "active_replication_slot_count": 0,
+        "prepared_transaction_count": 0
+      }
+    }
+  ],
+  "anonymous": {
+    "observedAt": "2026-10-17T14:59:30.391Z",
+    "httpStatus": 401,
+    "bodyRead": false
+  },
+  "sqlSubmitted": false,
+  "businessRowsReturned": 0,
+  "installed2": false
+}
