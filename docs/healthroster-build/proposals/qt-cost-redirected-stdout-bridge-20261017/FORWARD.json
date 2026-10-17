@@ -1,0 +1,16 @@
+{
+  "version": "QT_COST_REDIRECTED_STDOUT_COMPANION_FORWARD_V1",
+  "kind": "NEW_COMPANION_NO_EXISTING_FILE_EDIT",
+  "parentCommit": "736dc59f1644c04e7315950d59bb4687b6b0d3e1",
+  "acceptedCostManifestSha256": "3177911190336340676bb1fbd6756bc2b193850f8722ece225a9d9865c8e8344",
+  "acceptedCostControllerSha256": "33ba6d0dab85ca8eeb6d3413e543ab55800a9bc87b136ee6fe776ac6033cc4e4",
+  "existingFileEdits": [],
+  "newRuntimeFiles": ["reader.mjs", "progress-file.mjs", "bridge.mjs"],
+  "newInstallRelativeDirectory": "docs/healthroster-build/proposals/qt-cost-redirected-stdout-bridge-20261017",
+  "completePacketRequiredByReaderManifest": true,
+  "transportOnlyChange": "write_stdin.output becomes exact checked redirected-child-stdout delta; actual original response object retained separately and every other returned field preserved",
+  "initialPrefix": "exactly one complete fully validated actual READY from same file; original holderStartedAt retained",
+  "unchanged": ["Cost317 full source", "native SQL/input", "source and result validation", "holder", "controls", "statement and lock limits", "120/60/180 budgets", "actual exit/session metadata", "original summary/unlock/close proof"],
+  "rootMustSupply": "genuine reviewed mount commit, fresh physical own transport directory/absent progress file, actual original PTY/session, retained raw launch response and original own-session cleanup",
+  "actualTransportAndNativeQualification": "ROOT_OWNED_NOT_RUN"
+}

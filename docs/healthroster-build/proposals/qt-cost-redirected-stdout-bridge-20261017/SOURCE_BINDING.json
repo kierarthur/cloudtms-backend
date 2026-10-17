@@ -1,0 +1,12 @@
+{
+  "version": "QT_COST_REDIRECTED_STDOUT_BRIDGE_SOURCE_BINDING_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "acceptedCostRootCommit": "736dc59f1644c04e7315950d59bb4687b6b0d3e1",
+  "acceptedCostManifestSha256": "3177911190336340676bb1fbd6756bc2b193850f8722ece225a9d9865c8e8344",
+  "acceptedCostControllerSha256": "33ba6d0dab85ca8eeb6d3413e543ab55800a9bc87b136ee6fe776ac6033cc4e4",
+  "acceptedCostControllerChanged": false,
+  "newInstallRelativePath": "docs/healthroster-build/proposals/qt-cost-redirected-stdout-bridge-20261017",
+  "runtimeSourceCommit": "REQUIRES_GENUINE_FUTURE_ROOT_COMMIT_CONTAINING_THIS_NEW_COMPLETE_PACKET",
+  "native": "NOT_RUN",
+  "actualRedirectedLocalProbe": "ROOT_OWNED_NOT_RUN_BY_AUTHOR"
+}

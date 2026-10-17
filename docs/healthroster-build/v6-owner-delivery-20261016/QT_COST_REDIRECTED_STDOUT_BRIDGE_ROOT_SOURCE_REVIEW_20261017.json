@@ -1,0 +1,17 @@
+{
+  "version": "QT_COST_REDIRECTED_STDOUT_BRIDGE_ROOT_SOURCE_REVIEW_V1",
+  "recordedAt": "2026-10-17T17:36:59.377940+00:00",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "manifest": "32d405bf4bbd6982175408d34a60d2f8fca1666948992ad45ba3ee384d67c6b7",
+  "sourceFiles": 12,
+  "rootTestsPassed": 20,
+  "rootTestsSkipped": 1,
+  "skippedReason": "Windows file-symlink creation not permitted; real directory junction and hard-link refusals passed",
+  "sourceVerify": "PASS",
+  "acceptedCostSource": "736dc59f1644c04e7315950d59bb4687b6b0d3e1",
+  "acceptedCostManifest": "3177911190336340676bb1fbd6756bc2b193850f8722ece225a9d9865c8e8344",
+  "review": "Complete bridge/reader/filesystem primitive read. Actual tool exit/session metadata preserved; raw PTY retained separately, only checked append-only redirected stdout becomes controller data. Fixed physical D file,16KiB,stable identity/fullprefix hash/fatal UTF8; original unknown/HOLD/duplicate/partial/summary controls remain.",
+  "actualLocalPty": "NOT_RUN_WITH_NEW_BRIDGE",
+  "actualNative": "NOT_RUN",
+  "qtAcceptance": "NOT_RUN"
+}
