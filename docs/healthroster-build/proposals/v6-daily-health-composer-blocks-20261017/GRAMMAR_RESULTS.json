@@ -1,0 +1,68 @@
+{
+  "parserVersion": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "programs": [
+    {
+      "file": "health/00_presentation.sqlinc",
+      "statements": 6,
+      "plpgsqlBodies": 3,
+      "parse": "PASS",
+      "bankOwnerBlocksExpanded": 0,
+      "unboundSlotsReplacedWithRefusalForGrammarOnly": false,
+      "nativeExecuted": false
+    },
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "parse": "PASS",
+      "bankOwnerBlocksExpanded": 0,
+      "unboundSlotsReplacedWithRefusalForGrammarOnly": false,
+      "nativeExecuted": false
+    },
+    {
+      "file": "templates/01_review.sql.tmpl",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "parse": "PASS",
+      "bankOwnerBlocksExpanded": 0,
+      "unboundSlotsReplacedWithRefusalForGrammarOnly": true,
+      "nativeExecuted": false
+    },
+    {
+      "file": "templates/02_accept.sql.tmpl",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "parse": "PASS",
+      "bankOwnerBlocksExpanded": 0,
+      "unboundSlotsReplacedWithRefusalForGrammarOnly": true,
+      "nativeExecuted": false
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "parse": "PASS",
+      "bankOwnerBlocksExpanded": 0,
+      "unboundSlotsReplacedWithRefusalForGrammarOnly": true,
+      "nativeExecuted": false
+    },
+    {
+      "file": "reverse/complete_additive_reverse.sqlinc",
+      "statements": 7,
+      "plpgsqlBodies": 0,
+      "parse": "PASS",
+      "bankOwnerBlocksExpanded": 0,
+      "unboundSlotsReplacedWithRefusalForGrammarOnly": false,
+      "nativeExecuted": false
+    }
+  ],
+  "exactAdditiveForwardReverseNamesMatch": true,
+  "newPrivateDefiners": 7,
+  "boundBankingOwners": 0,
+  "completeRuntimeComposersEmitted": 0,
+  "nativeExecuted": false
+}

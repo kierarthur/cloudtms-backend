@@ -1,0 +1,8 @@
+-- Only new proposal routines. Never replace/drop an original native owner.
+drop function private.daily_rate_correction_review_v1(jsonb);
+drop function private.daily_rate_correction_accept_v1(jsonb);
+drop function private.daily_rate_correction_result_v1(uuid,uuid);
+drop function private.daily_rate_correction_health_revision_apply_v1(jsonb);
+drop function private.daily_rate_correction_health_actions_assert_v1(jsonb);
+drop function private.daily_rate_correction_health_invoice_effect_v1(jsonb);
+drop function private.daily_rate_correction_health_financial_projection_assert_v1(jsonb,boolean);

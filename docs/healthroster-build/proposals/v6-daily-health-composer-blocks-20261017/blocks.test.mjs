@@ -1,0 +1,85 @@
+// Offline source/admission/closed-contract tests. No Bank/native mocks claim
+// SQL execution, financial qualification, publication or rollback proof.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {check,sources,validateHealthBlocks,requireOwnerBindings,here} from './assemble.mjs';
+import {validatePreview,validateResult,VERSIONS} from '../../../../../healthroster-install2-14102026/broker/src/contract-correction-v3.mjs';
+const clone=()=>structuredClone(sources());
+const change=(file,from,to)=>{const all=clone();assert(all[file].includes(from));all[file]=all[file].replace(from,to);return all;};
+const [presentation,apply,review,accept,result]=['health/00_presentation.sqlinc','health/10_revision_apply.sqlinc','templates/01_review.sql.tmpl','templates/02_accept.sql.tmpl','templates/03_result.sql.tmpl'];
+test('exact current complete owners and full independent Health blocks verify with assembly held',()=>{
+ const actual=check();assert.equal(actual.fullSourceFiles,20);assert.equal(actual.finalOwnerSignatures,14);
+ assert.equal(actual.privateHelpers,4);assert.equal(actual.heldComposerBodies,3);assert.equal(actual.runtimeSqlEmitted,false);assert.equal(actual.native,'NOT_RUN');
+});
+test('unprovided real Bank interfaces cannot emit runtime composer symbols or files',()=>{
+ const manifest=JSON.parse(fs.readFileSync(path.join(here,'OWNER_BLOCKS.json'),'utf8'));
+ assert.throws(()=>requireOwnerBindings(manifest),/OWNER_BLOCKS_UNPROVIDED/);
+ const target=path.join(here,'MUST_NOT_EXIST_RUNTIME.sql');assert(!fs.existsSync(target));
+ const child=spawnSync(process.execPath,[path.join(here,'assemble.mjs'),'--emit',target],{encoding:'utf8'});
+ assert.equal(child.status,2);assert.match(child.stderr,/OWNER_BLOCKS_UNPROVIDED/);assert(!fs.existsSync(target));
+});
+test('changing an availability flag alone never supplies a published native join',()=>{
+ const manifest=JSON.parse(fs.readFileSync(path.join(here,'OWNER_BLOCKS.json'),'utf8'));
+ manifest.status='PUBLISHED_REVIEWED_OWNER_BLOCKS';manifest.runtimeComposerSymbolsMayBeInstalled=true;
+ assert.throws(()=>requireOwnerBindings(manifest),/OWNER_BINDING_PIN_REQUIRED/);
+});
+test('review cannot normalize stored reason as raw Details, default Bank Ready or replace Health manifest',()=>{
+ assert.throws(()=>validateHealthBlocks(change(review,'ready:=bank_ready','bank_ready:=true;ready:=bank_ready')),/successful Bank/);
+ assert.throws(()=>validateHealthBlocks(change(review,"bank_manifest_extension ?| array['daily','physical','invoice','reason']",'false')),/overwrite Health/);
+ assert.throws(()=>validateHealthBlocks(change(accept,'private.daily_rate_correction_health_reason_note_v1(o.reason)','o.reason')),/reason_note/);
+ assert.throws(()=>validateHealthBlocks(change(accept,'is distinct from r.preview_request_hash','is distinct from null')),/preview_request_hash/);
+});
+test('concurrent identical replay precedes comparing the old preview after native waits',()=>{
+ const all=clone();const sql=all[accept];
+ const contextAt=sql.indexOf('context:=private.daily_rate_correction_context_v1(');
+ const replayAt=sql.indexOf('if q.request_id is not null then',contextAt);
+ const reviewedAt=sql.indexOf('o.state is distinct from \'REVIEWED\'',contextAt);
+ assert(contextAt>=0&&replayAt>contextAt&&reviewedAt>replayAt);
+ assert.throws(()=>validateHealthBlocks(change(accept,'return private.daily_rate_correction_result_v1(operation,actor);','return q.receipt_json;')),/current reader|replay/);
+});
+test('Bank acceptance gate and frozen actual Invoice/metadata admission precede native DML',()=>{
+ assert.throws(()=>validateHealthBlocks(change(accept,'@@BANK_ACCEPT@@','')),/unbound owner slot/);
+ assert.throws(()=>validateHealthBlocks(change(accept,'bank_accept_qualified is distinct from true','bank_accept_qualified:=true;bank_accept_qualified is distinct from true')),/successful Bank/);
+ assert.throws(()=>validateHealthBlocks(change(apply,'basis:=private.daily_rate_correction_health_accept_basis_v1(p_args);','')),/Health|native|basis/);
+});
+test('same-ID native stage keeps exact backend/xid/120second context and real owner publication/proof',()=>{
+ assert.throws(()=>validateHealthBlocks(change(apply,"now_utc+interval '120 seconds'","now_utc+interval '1 day'")),/expiry context/);
+ assert.throws(()=>validateHealthBlocks(change(apply,'publication:=private.bpay_next_daily_rate_correction_publish_v1(o.id,financial);','publication:=null;')),/publication/);
+ assert.throws(()=>validateHealthBlocks(change(apply,'perform private.daily_rate_correction_assert_v1(o.id,r.id);','')),/daily_rate_correction_assert/);
+ assert.throws(()=>validateHealthBlocks(change(apply,'perform private.timesheet_contract_move_capability_cleanup_v1();','')),/cleanup|Invoice|prepare/);
+});
+test('no exception handler, ordinary writer shortcut or Contract financial API can mask a native failure',()=>{
+ const all=clone();all[apply]+='\nexception when others then return null;';assert.throws(()=>validateHealthBlocks(all),/exception/);
+ const writer=clone();writer[apply]+='\nupdate public.timesheets set is_current=true;';assert.throws(()=>validateHealthBlocks(writer),/business rows/);
+ const contract=clone();contract[apply]+='\nperform private.bpay_next_contract_move_cut_v1(o.id,true);';assert.throws(()=>validateHealthBlocks(contract),/Contract-only/);
+});
+test('result uses current reader, exact native0955 billing and deny-by-shape financial projection',()=>{
+ assert.throws(()=>validateHealthBlocks(change(result,'basis:=private.daily_rate_correction_health_result_basis_v1(p_operation_id,p_actor_user_id);','')),/current-role result/);
+ assert.throws(()=>validateHealthBlocks(change(presentation,"p_financial->'command_id' is distinct from 'null'::jsonb",'false')),/identifiers NULL/);
+ assert.throws(()=>validateHealthBlocks(change(result,"'financial',financial,'billing',basis->'billing'","'financial',o.receipt_json,'billing',basis->'billing'")),/projection|receipt/);
+ assert.throws(()=>validateHealthBlocks(change(result,'is distinct from reader_before','is distinct from null')),/current reader row/);
+});
+const id=n=>`00000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
+const publicResult=()=>({version:VERSIONS.DAILY,purpose:'DAILY_RATE_CORRECTION',operation_id:id(1),state:'COMPLETE',state_revision:'8',placement:{status:'COMMITTED',original_timesheet_id:id(2),current_timesheet_id:id(2),placement_revision:'1',receipt_id:id(3)},financial:{status:'REGISTERED',command_id:null,cut_id:null,summary:{visibility:'REDACTED'}},billing:{status:'NOT_REQUIRED',revision:'1',group_id:null,visible_summary:null},next_actions:[],links:[]});
+test('real shared V3 decoder accepts complete registered same-physical role-safe result without APPLIED/PDF gate',()=>{
+ const value=publicResult();assert.equal(validateResult(value,{financialVisible:false,billingVisible:false}),value);
+ for(const key of ['command_id','cut_id']){const bad=structuredClone(value);bad.financial[key]=id(9);assert.throws(()=>validateResult(bad,{financialVisible:false}));}
+ for(const hidden of [{visibility:'REDACTED',text:'private'}, {visibility:'FULL',text:'private'}])assert.throws(()=>validateResult({...value,financial:{...value.financial,summary:hidden}},{financialVisible:false}));
+ assert.throws(()=>validateResult({...value,placement:{...value.placement,current_timesheet_id:id(8)}}));
+ assert.throws(()=>validateResult({...value,placement_receipt:{command_id:id(9)}}));
+});
+test('real shared V3 preview decoder requires a real matching review before one Confirm',()=>{
+ const value={version:VERSIONS.DAILY,operation_id:id(1),review_id:id(4),review_digest:'a'.repeat(64),state_revision:'2',ready_to_confirm:false,current_timesheet_id:id(2),summary:{worked_facts_preserved:true,pay_effect:{visibility:'REDACTED'},invoice_effect:{visibility:'FULL',text:'No invoice change is required.'}},known_blockers:[{code:'GENUINE_NATIVE_BLOCKER',native_owner:'HEALTH',field_key:null,permitted_action:null}],confirm:null,links:[]};
+ assert.equal(validatePreview(value,{daily:true}),value);
+ assert.throws(()=>validatePreview({...value,ready_to_confirm:true},{daily:true}));
+ const ready={...value,ready_to_confirm:true,known_blockers:[],confirm:{request_version:VERSIONS.DAILY,review_id:id(4),review_digest:'a'.repeat(64),expected_state_revision:'2'}};
+ assert.equal(validatePreview(ready,{daily:true}),ready);
+ assert.throws(()=>validatePreview({...ready,confirm:{...ready.confirm,review_id:id(9)}},{daily:true}));
+});
+test('actual shared action decoder rejects duplicate native targets across actions and links',()=>{
+ const value=publicResult(),action={kind:'OPEN_TIMESHEET',target_type:'TIMESHEET',target_id:id(2),url:'/unit-fixture-only',caption:'Open Timesheet',enabled:true,disabled_reason:null};
+ assert.throws(()=>validateResult({...value,next_actions:[action],links:[{...action,url:'/different-fixture-url'}]}));
+});

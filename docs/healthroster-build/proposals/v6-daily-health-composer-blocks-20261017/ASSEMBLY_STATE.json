@@ -1,0 +1,12 @@
+{
+  "command": [
+    "node",
+    "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\docs\\healthroster-build\\proposals\\v6-daily-health-composer-blocks-20261017\\assemble.mjs",
+    "--check"
+  ],
+  "cwd": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026",
+  "exitCode": 0,
+  "stdout": "{\n  \"fullSourceFiles\": 20,\n  \"finalOwnerSignatures\": 14,\n  \"currentOwnerEdits\": 0,\n  \"privateHelpers\": 4,\n  \"heldComposerBodies\": 3,\n  \"unboundOwnerBlocks\": 3,\n  \"businessWritersImplemented\": 0,\n  \"assembly\": \"HELD_UNPROVIDED_GENUINE_BANK_INTERFACES\",\n  \"native\": \"NOT_RUN\",\n  \"runtimeSqlEmitted\": false\n}\n",
+  "stderr": "",
+  "nativeDatabaseExecuted": false
+}
