@@ -1,0 +1,11 @@
+{
+  "status": "ACTUAL_PUBLIC_SOURCE_ONLY_PASS",
+  "rootHead": "30996c62c50e7b8b4582aebe9b0565305221edaf",
+  "reportHead": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "completeAdapterRecorderPackets": 4,
+  "effectImages": 7,
+  "runtimeRows": 12,
+  "historicalCaptureRows": 15,
+  "native": "NOT_RUN",
+  "privateStateRead": false
+}

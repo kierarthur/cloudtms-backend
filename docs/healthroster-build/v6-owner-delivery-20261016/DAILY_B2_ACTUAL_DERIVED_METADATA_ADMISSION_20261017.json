@@ -1,0 +1,127 @@
+{
+  "status": "ACTUAL_DERIVED_METADATA_IMAGES_PASS",
+  "metadataRows": [
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
+      "bytes": 24587,
+      "sha256": "73d5aacf329803e1de6a92cdc4f60298a548715af777a83d436c2c67bd8ae115",
+      "commit": "486e7c953b6a97446649ad460fc1cf378927c666"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/EXTERNAL_SOURCE_PINS.json",
+      "bytes": 2057,
+      "sha256": "474d76922c63e01c41f26010f5db9a0c42553a26b90623696bdc182488bc5272",
+      "commit": "486e7c953b6a97446649ad460fc1cf378927c666"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/MANIFEST.json",
+      "bytes": 2880,
+      "sha256": "d3d6226da5fece2b741c13c795c470ab9de1a85c91a2902361e56841a1df1abb",
+      "commit": "486e7c953b6a97446649ad460fc1cf378927c666"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/SOURCE_PINS.json",
+      "bytes": 45858,
+      "sha256": "1b21bb40f9f7a614bfae761d938a7525d1de27a8664ea3108e62394a863f2d17",
+      "commit": "68ffc220082033e18ff5d672df568fe0160ec952"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json",
+      "bytes": 2417,
+      "sha256": "86a2858cdafdf9bb801a9c626c78e8c75423d4f86627b40d285084be642d2026",
+      "commit": "68ffc220082033e18ff5d672df568fe0160ec952"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/SOURCE_PINS.json",
+      "bytes": 4429,
+      "sha256": "da542b6a2f9ba1c8bdb393a27ca32ebf0e81bae7f5fd1872d125021682be6936",
+      "commit": "e79b2317c0712b4f1b369e76a2efcd82dbd0c3b8"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/MANIFEST.json",
+      "bytes": 3559,
+      "sha256": "de7cad11b65bbe571a62c509ec6dccb46efa9626bf258883b5577c240fd524df",
+      "commit": "e79b2317c0712b4f1b369e76a2efcd82dbd0c3b8"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/PARENTS.json",
+      "bytes": 10293,
+      "sha256": "15620e366b4eda512c8a5b66cfec804c9a57c2163354eb9f63068ba7825648ae",
+      "commit": "b7694b8b727084fb749c8b015285ae3c74e76f09"
+    },
+    {
+      "owner": "report",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/MANIFEST.json",
+      "bytes": 4219,
+      "sha256": "a7ab0d6618e6469a27d48528f9a6a15f24e5291cdf4795383ed1fb82ba92dd34",
+      "commit": "b7694b8b727084fb749c8b015285ae3c74e76f09"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/MANIFEST.json",
+      "bytes": 1020,
+      "sha256": "166453cfae1ae581d50ef7166f31197166690b83d01698fdc9a3fbd36b2838c2",
+      "commit": "30996c62c50e7b8b4582aebe9b0565305221edaf"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/MANIFEST.json",
+      "bytes": 1280,
+      "sha256": "dba04f53466db5358a82dd5985853eea1e42869ecb0ceebb80c8ee7f81f5e08c",
+      "commit": "30996c62c50e7b8b4582aebe9b0565305221edaf"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-response-clock-forward-20261017/MANIFEST.json",
+      "bytes": 1780,
+      "sha256": "21402905b390f7fe0393dbc5b7aa8b2300c17fa8f95df3ed3ce297d8b739e9d7",
+      "commit": "30996c62c50e7b8b4582aebe9b0565305221edaf"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/MANIFEST.json",
+      "bytes": 2493,
+      "sha256": "618c421e60dac070a9c92630deaaa79038546277e64db9475f81d46304269e3f",
+      "commit": "30996c62c50e7b8b4582aebe9b0565305221edaf"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/MANIFEST.json",
+      "bytes": 1770,
+      "sha256": "38af7db7cc74690bcfeeaed956509fa6f3c41ecf4c699273b81adcad43285f51",
+      "commit": "30996c62c50e7b8b4582aebe9b0565305221edaf"
+    }
+  ],
+  "rootHead": "30996c62c50e7b8b4582aebe9b0565305221edaf",
+  "reportHead": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "publicAdmissionConfig": {
+    "rootHead": "30996c62c50e7b8b4582aebe9b0565305221edaf",
+    "operatorCommit": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+    "helperCommit": "30996c62c50e7b8b4582aebe9b0565305221edaf",
+    "s1AdapterCommit": "30996c62c50e7b8b4582aebe9b0565305221edaf",
+    "s1RecorderCommit": "30996c62c50e7b8b4582aebe9b0565305221edaf",
+    "stageAdapterCommit": "30996c62c50e7b8b4582aebe9b0565305221edaf",
+    "stageRecorderCommit": "30996c62c50e7b8b4582aebe9b0565305221edaf",
+    "composerCommit": "30996c62c50e7b8b4582aebe9b0565305221edaf",
+    "aclComposed": false
+  },
+  "next": "MANDATORY_ADMIT_PUBLIC_MJS_SAME_HEADS",
+  "native": "NOT_RUN",
+  "actualCommits": {
+    "functionalReport": "506cd695ab0cb38182a0c1076b0685803151f307",
+    "functionalRoot": "d6af1981b74b2ff1ae3b02891bdb5c1b2266d71a",
+    "operatorMetadata": "486e7c953b6a97446649ad460fc1cf378927c666",
+    "coordinatorMetadata": "68ffc220082033e18ff5d672df568fe0160ec952",
+    "oneMetadata": "e79b2317c0712b4f1b369e76a2efcd82dbd0c3b8",
+    "bookkeeperMetadata": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+    "rootMetadata": "30996c62c50e7b8b4582aebe9b0565305221edaf"
+  }
+}
