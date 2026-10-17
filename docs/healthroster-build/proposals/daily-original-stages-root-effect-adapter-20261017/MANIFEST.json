@@ -50,8 +50,8 @@
     },
     {
       "file": "run.mjs",
-      "bytes": 8876,
-      "sha256": "e7e51ad09ec7f619fbddb3c8385d8251309eb275419222e1ae6900cdef05f413"
+      "bytes": 9023,
+      "sha256": "3667d63e081e3ad64d0dae7966c7b781f9fce85927d8f6bb4a7b7939f5332a86"
     },
     {
       "file": "SOURCE_PINS.json",
@@ -70,8 +70,8 @@
     },
     {
       "file": "validate.mjs",
-      "bytes": 1832,
-      "sha256": "339fc7372a0c86ccff6fae9f0203d40b7f7f539c4575600f48aad8f535c7d786"
+      "bytes": 2120,
+      "sha256": "643575524db3492d37e678168b5c706a11b4fe7552efff6caec4aaa189003267"
     },
     {
       "file": "verify.mjs",

@@ -3,8 +3,8 @@
   "files": [
     {
       "file": "recorder.mjs",
-      "bytes": 14975,
-      "sha256": "a247aca92d5be78878766b12793c7399089574446633a6fd0b6dcc656a1f46a1"
+      "bytes": 15425,
+      "sha256": "ce73b2b44c0d45b224471260b7e8bff4e380776d5a66dc10dc3a9dfe0c304fae"
     },
     {
       "file": "test.mjs",

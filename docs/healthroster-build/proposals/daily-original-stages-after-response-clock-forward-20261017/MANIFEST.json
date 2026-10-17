@@ -18,8 +18,8 @@
     },
     {
       "file": "recorder.mjs",
-      "bytes": 8472,
-      "sha256": "028cefd464b1ece2349b1c2eb6f53c49721f7e57be68debade208a9eccefa5f9"
+      "bytes": 8803,
+      "sha256": "c540e73a9f4e2904e7e3eba1554c0effff743dc720b589f530f7bebda30319cf"
     },
     {
       "file": "reference/parent-recorder.mjs",

@@ -3,8 +3,8 @@
   "files": [
     {
       "file": "compose.mjs",
-      "bytes": 8015,
-      "sha256": "6a22ef0bb4089d50325084ee96259b73637052f9e09808cad421febdfabf16cc"
+      "bytes": 8336,
+      "sha256": "6566ad887bdfcd61f68819650954321adcca6eb110879500a309180aa8288cc7"
     },
     {
       "file": "FULL_PARENT_FORWARD.json",
