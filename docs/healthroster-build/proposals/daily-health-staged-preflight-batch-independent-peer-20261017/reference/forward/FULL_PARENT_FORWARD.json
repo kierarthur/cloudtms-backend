@@ -1,0 +1,71 @@
+{
+  "version": "DAILY_GENUINE_BATCH_FULL_PARENT_FORWARD_V1",
+  "records": [
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/source.mjs",
+      "beforeFile": "reference/source.mjs",
+      "afterFile": "payload/source.mjs",
+      "beforeSha256": "79d1f181cf21d270352382cdc16f20e36569d68857a7bbbb35b2053b76aa79f8",
+      "afterSha256": "01d4acb9309eb71a315f4cc5fbe315b90bf29f69d62742f0152c6ee28ad937b2",
+      "edits": [
+        {
+          "beforeOffset": 0,
+          "afterOffset": 0,
+          "before": "import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';\n",
+          "after": "import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';\n"
+        },
+        {
+          "beforeOffset": 203,
+          "afterOffset": 155,
+          "before": "",
+          "after": "import {git,physical,reviewedImage,preflight} from './git-image-batch.mjs';\nexport {git,physical};\n"
+        },
+        {
+          "beforeOffset": 267,
+          "afterOffset": 318,
+          "before": "export const physical=p=>fs.realpathSync.native(p).replaceAll('\\\\','/');\nexport const git=(root,...args)=>execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','-C',root,...args],{windowsHide:true,stdio:['ignore','pipe','ignore'],maxBuffer:32e6});\n",
+          "after": ""
+        },
+        {
+          "beforeOffset": 742,
+          "afterOffset": 532,
+          "before": "export function assertReviewedImage(root,reviewedCommit,files){\n check(/^[0-9a-f]{40}$/.test(reviewedCommit)&&Array.isArray(files)&&files.length>0&&new Set(files).size===files.length,'FIXTURE_REVIEWED_SOURCE_IMAGE_REQUIRED');\n const head=git(root,'rev-parse','HEAD').toString().trim();\n try{git(root,'merge-base','--is-ancestor',reviewedCommit,head);}catch{throw Error('FIXTURE_REVIEWED_SOURCE_ANCESTRY_REQUIRED');}\n for(const file of files){\n  check(typeof file==='string'&&/^[A-Za-z0-9_./-]+$/.test(file)&&!file.split('/').includes('..')&&!file.startsWith('/'),'FIXTURE_REVIEWED_SOURCE_PATH_REQUIRED');\n  check(same(root,file,head).equals(git(root,'show',reviewedCommit+':'+file)),'FIXTURE_REVIEWED_SOURCE_IMAGE_CHANGED');\n }\n return {reviewedCommit,executionCommit:head,selectedImagesUnchanged:true};\n}\n",
+          "after": "export function assertReviewedImage(root,reviewedCommit,files){return reviewedImage(root,reviewedCommit,files);}\n"
+        },
+        {
+          "beforeOffset": 2051,
+          "afterOffset": 1148,
+          "before": "export function sourcePreflight(){\n check(process.versions.node==='24.15.0'&&physical(process.cwd()).startsWith('D:/Development/GitHub'),'FIXTURE_ACTUAL_D_RUNTIME_REQUIRED');\n for(const root of [ROOT,path.resolve(here,'../../../..').replaceAll('\\\\','/')]){\n  check(physical(root)===root&&physical(git(root,'rev-parse','--show-toplevel').toString().trim())===root,'FIXTURE_PHYSICAL_ROOT_REQUIRED');\n  check(physical(path.resolve(root,git(root,'rev-parse','--git-common-dir').toString().trim()))==='D:/Development/GitHub/cloudtms-backend/.git','FIXTURE_COMMON_GIT_REQUIRED');\n  const dir=git(root,'rev-parse','--absolute-git-dir').toString().trim();\n  check(physical(dir)==='D:/Development/GitHub/cloudtms-backend/.git/worktrees/'+path.basename(root),'FIXTURE_PHYSICAL_GIT_REQUIRED');\n }\n const top=git(here,'rev-parse','--show-toplevel').toString().trim(),head=git(here,'rev-parse','HEAD').toString().trim();\n const relative=path.relative(top,here).replaceAll('\\\\','/');check(relative==='docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017','FIXTURE_SOURCE_LOCATION_REQUIRED');\n const manifest=JSON.parse(same(top,relative+'/MANIFEST.json',head));\n for(const r of manifest.files){const b=same(top,relative+'/'+r.file,head);check(b.length===r.bytes&&sha(b)===r.sha256,'FIXTURE_FROZEN_SOURCE_CHANGED');}\n const census=JSON.parse(fs.readFileSync(here+'/reference/audit/CURRENT_SOURCE_CENSUS.json'));\n const rootHead=git(ROOT,'rev-parse','HEAD').toString().trim();\n for(const r of [...census.inputs,...census.rootDefinitionReceipts]){\n  const b=same(ROOT,r.file,rootHead);check(b.length===r.bytes&&sha(b)===r.sha256&&b.equals(git(ROOT,'show',census.commit+':'+r.file)),'FIXTURE_SELECTED_CURRENT_SOURCE_CHANGED');\n }\n const mappingPins=JSON.parse(fs.readFileSync(here+'/reference/mapping/SOURCE_PINS.json'));\n for(const r of mappingPins.inputs){const b=same(ROOT,r.file,rootHead);check(b.length===r.bytes&&sha(b)===r.sha256\n  &&b.equals(git(ROOT,'show',mappingPins.commit+':'+r.file)),'FIXTURE_MAPPING_OWNER_CURRENT_SOURCE_CHANGED');}\n const pins=JSON.parse(fs.readFileSync(here+'/SOURCE_PINS.json'));\n const front=pins.frontend;check(physical(front.root)===front.root,'FIXTURE_FRONTEND_D_REQUIRED');\n const frontBytes=fs.readFileSync(front.root+'/'+front.file);check(frontBytes.length===front.bytes&&sha(frontBytes)===front.sha256\n  &&git(front.root,'rev-parse',front.commit+':'+front.file).toString().trim()===git(front.root,'rev-parse','HEAD:'+front.file).toString().trim()\n  &&git(front.root,'rev-parse',':'+front.file).toString().trim()===git(front.root,'rev-parse','HEAD:'+front.file).toString().trim(),'FIXTURE_EXISTING_FRONTEND_SOURCE_CHANGED');\n for(const r of pins.localRuntime){check(physical(r.file)===r.file,'FIXTURE_D_RUNTIME_REQUIRED');const b=fs.readFileSync(r.file);check(b.length===r.bytes&&sha(b)===r.sha256,'FIXTURE_EXISTING_RUNTIME_CHANGED');}\n const observed=pins.authObservation;check(sha(same(ROOT,observed.file,rootHead))===observed.sha256\n  &&sha(git(ROOT,'show',observed.commit+':'+observed.file))===observed.sha256,'FIXTURE_ACTUAL_AUTH_OBSERVATION_CHANGED');\n for(const r of [...pins.rootRuntimeObservations,pins.turnControl])check(sha(same(ROOT,r.file,rootHead))===r.sha256\n  &&sha(git(ROOT,'show',r.commit+':'+r.file))===r.sha256,'FIXTURE_ACTUAL_RUNTIME_OR_TURN_SOURCE_CHANGED');\n for(const r of pins.authReusableParents)check(sha(same(r.root,r.file,git(r.root,'rev-parse','HEAD').toString().trim()))===r.sha256\n  &&sha(git(r.root,'show',r.commit+':'+r.file))===r.sha256\n  &&sha(same(top,r.file,head))===r.sha256,'FIXTURE_ORIGINAL_AUTH_COMPONENT_CHANGED');\n // Metadata only. The browser library loads this exact state inside the isolated child.\n const s=fs.lstatSync(PRIVATE_STATE);check(s.isFile()&&!s.isSymbolicLink(),'FIXTURE_APPROVED_STATE_REQUIRED');\n check(physical(path.dirname(PRIVATE_STATE))===path.dirname(PRIVATE_STATE),'FIXTURE_APPROVED_STATE_PHYSICAL_REQUIRED');\n git(ROOT,'check-ignore','--quiet','--',path.relative(ROOT,PRIVATE_STATE));\n return {operatorCommit:head,rootCommit:rootHead};\n}\n",
+          "after": "export function sourcePreflight(){return preflight({here,ROOT,PRIVATE_STATE,check,sha});}\n"
+        }
+      ]
+    },
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
+      "beforeFile": "reference/MANIFEST.json",
+      "afterFile": "payload/MANIFEST.json",
+      "beforeSha256": "0a908ee36e34c41457b797a7609676c46373c89d924f66846100c87a2dc47f0d",
+      "afterSha256": "31670977b5ee45ba146015c16bd6264b8eaea35612d56a370447ca29b8b9c6f6",
+      "edits": [
+        {
+          "beforeOffset": 21315,
+          "afterOffset": 21315,
+          "before": "      \"bytes\": 6821,\n      \"sha256\": \"79d1f181cf21d270352382cdc16f20e36569d68857a7bbbb35b2053b76aa79f8\"\n",
+          "after": "      \"bytes\": 1950,\n      \"sha256\": \"01d4acb9309eb71a315f4cc5fbe315b90bf29f69d62742f0152c6ee28ad937b2\"\n"
+        },
+        {
+          "beforeOffset": 23249,
+          "afterOffset": 23249,
+          "before": "",
+          "after": "    },\n    {\n      \"file\": \"git-image-batch.mjs\",\n      \"bytes\": 9138,\n      \"sha256\": \"4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20\"\n"
+        },
+        {
+          "beforeOffset": 23617,
+          "afterOffset": 23771,
+          "before": "  \"coordinator\": \"Existing root-owned original shared-turn/protected-run/caps. Actual CSE/rehearsal composition must be reviewed fresh; no dispatcher, native holder or copied restoration verdict is supplied.\"\n",
+          "after": "  \"coordinator\": \"Existing root-owned original shared-turn/protected-run/caps. Actual CSE/rehearsal composition must be reviewed fresh; no dispatcher, native holder or copied restoration verdict is supplied.\",\n  \"successor\": {\n    \"version\": \"DAILY_GENUINE_BATCH_IMAGE_FORWARD_V1\",\n    \"parentCommit\": \"163646cb752fc64d4221ac70b685ecd952afe7b0\",\n    \"parentManifestSha256\": \"0a908ee36e34c41457b797a7609676c46373c89d924f66846100c87a2dc47f0d\",\n    \"unchangedBusinessNativeFreshnessJournalActorControls\": true\n  }\n"
+        }
+      ]
+    }
+  ]
+}

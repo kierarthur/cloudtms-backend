@@ -1,0 +1,31 @@
+{
+  "version": "DAILY_GENUINE_BATCH_F4_AND_S0_SCOPE_RESULT_V1",
+  "settings": "GPT-6.1-sol/xhigh",
+  "status": "SOURCE_ONLY_PENDING_PEER_ROOT_REVIEW_AND_PROPOSED_REPORT_MOUNT",
+  "targets": 3,
+  "executionContext": "Registered Report code; separate I2 effect/setup/native data. Copied I2 entrypoint refuses.",
+  "originalEntryPreflightMs": 37263,
+  "finalEntryPreflightMs": 2435,
+  "finalSubmitSourceAndHistoricalMs": 3950,
+  "freshnessMs": 30000,
+  "remainingMeasuredWindowMs": 23615,
+  "timingQualification": "Only real source/Git/path-metadata functions timed. Remaining real process/ACL/tool/commit/browser/current-actor overhead is unmeasured and still fails closed if stale. No guarantee of whole-stage success.",
+  "checks": {
+    "realGitProtocolTests": 3,
+    "wholeRawParents": 2,
+    "finiteEdits": 8,
+    "oldGuardCodesTransferred": 25,
+    "otherOriginalManifestImagesUnchanged": 130,
+    "actualOriginalScopeHeaps": 15,
+    "catalogueOnlyPg17Statements": 3,
+    "businessHeapRangeVarsInProbe": 0,
+    "businessRowsEvaluated": 0
+  },
+  "original132Files": "UNCHANGED",
+  "old38And54And2034Plus9Checks": "ORIGINAL_FROZEN_EVIDENCE_NOT_NATIVE_PROOF",
+  "rootSafeMetadata": "783d97c8 actual15 heaps/424 columns/121 indexes captured raw; does not establish inheritance/FDW/domain or extension membership",
+  "privateStateContentsReadHashedCopied": false,
+  "browserApiAuthIpcNative": "NOT_RUN",
+  "bankBodiesRead": 0,
+  "runtimeMount": "NOT_RUN"
+}

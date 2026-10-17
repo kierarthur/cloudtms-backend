@@ -1,0 +1,25 @@
+{
+  "version": "DAILY_GENUINE_ORIGINAL_PREFLIGHT_TIMING_V1",
+  "calls": [
+    {
+      "invocation": "entry-parent-sourcePreflight",
+      "elapsedMs": 18499,
+      "operatorCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+      "rootCommit": "4d0392c7d7f542de5e0efe3599e3e390e8a044f0"
+    },
+    {
+      "invocation": "entry-child-sourcePreflight",
+      "elapsedMs": 18764,
+      "operatorCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+      "rootCommit": "4d0392c7d7f542de5e0efe3599e3e390e8a044f0"
+    }
+  ],
+  "combinedMs": 37263,
+  "beforeFreshnessMs": 30000,
+  "measuredScope": "Two unchanged safe preflight invocations required before entry reads BEFORE. Excludes process startup/ACL/current actor/native tool/commit/browser time.",
+  "privateContentsRead": false,
+  "browser": false,
+  "ipc": false,
+  "network": false,
+  "native": false
+}

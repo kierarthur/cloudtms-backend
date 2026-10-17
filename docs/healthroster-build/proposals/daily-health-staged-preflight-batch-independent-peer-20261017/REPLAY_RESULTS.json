@@ -1,0 +1,24 @@
+{
+  "version":"DAILY_STAGED_PREFLIGHT_BATCH_INDEPENDENT_REPLAY_V1",
+  "reviewedCommit":"8d13d7035db66a125b9b78cf4f96fc70b80b3ecc",
+  "manifestSha256":"f50ee8f459ee92fbdb2de08fe05dbe0b7b6f75ff746eb284d504f92205ed4888",
+  "frozenPublicFilesSavedIndexHeadEqual":30,
+  "targetPayloads":3,
+  "realLocalGitTests":{"tests":3,"pass":3,"fail":0},
+  "extraActualParserCases":{"cases":10,"pass":10},
+  "fullParentProof":{"wholeParents":2,"finiteEdits":8,"oldGuardCodesRetained":25,"otherManifestImagesUnchanged":130,"newHelpers":1,"result":"PASS"},
+  "original132":{"savedIndexHeadHistoryUnchanged":true,"result":"PASS"},
+  "s0MetadataGrammar":{"actualOriginalHeapSet":15,"catalogueProbeStatements":3,"businessHeapRangeVarsInProbe":0,"result":"PASS","native":"NOT_RUN"},
+  "commands":[
+    "node --import ./test-imports.mjs --test --test-reporter=tap reference/forward/batch-image.test.mjs reference/forward/batch-transport.test.mjs",
+    "Python3.12 captured verify-forward.py without --freeze",
+    "Python3.12 original immutable Report verify-s0.py, invoked from Money cwd; read-only public source/parser only",
+    "node parser-cases.mjs",
+    "node verify-targets.mjs"
+  ],
+  "testImportDelta":"Only two copied test module locators redirect to the exact163646 contract/stages already captured by independent0459 peer. No production body changes.",
+  "performance":"Author/root timings retained as their observations; no independent real entry/preflight timing executed",
+  "privateActualStateInspectedHashedCopied":false,
+  "sourcePreflightMeasureOperatorBrowserApiConnectorNative":"NOT_RUN",
+  "broadPrior38Tests":"NOT_REPEATED; original frozen0459/163646 evidence remains unchanged"
+}

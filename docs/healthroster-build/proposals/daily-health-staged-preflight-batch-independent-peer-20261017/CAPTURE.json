@@ -1,0 +1,190 @@
+{
+  "version": "DAILY_STAGED_BATCH_EXACT_PEER_CAPTURE_V1",
+  "commit": "8d13d7035db66a125b9b78cf4f96fc70b80b3ecc",
+  "manifestSha256": "f50ee8f459ee92fbdb2de08fe05dbe0b7b6f75ff746eb284d504f92205ed4888",
+  "files": [
+    {
+      "file": "BATCH_TIMING_FINAL.json",
+      "bytes": 1326,
+      "sha256": "34f9dcbb02bebf79431afabe84452ebbbda594906832a881af640fabdab278ba",
+      "captured": "reference/forward/BATCH_TIMING_FINAL.json"
+    },
+    {
+      "file": "BATCH_TIMING.json",
+      "bytes": 1326,
+      "sha256": "60242eeb96852721dc5cae7a56b7cac489bf557b85ca22782a91d05aebe97da0",
+      "captured": "reference/forward/BATCH_TIMING.json"
+    },
+    {
+      "file": "batch-image.test.mjs",
+      "bytes": 4027,
+      "sha256": "57bada20b6ac7129c89fcc3e2dd77f3059e66d4d7faa7a5c197c0f766e936029",
+      "captured": "reference/forward/batch-image.test.mjs"
+    },
+    {
+      "file": "batch-transport.test.mjs",
+      "bytes": 3696,
+      "sha256": "62b1f5f3ac0e6adf11659ef205dbc81d6c1bdbbab0edf361b295a03c2bfe4d37",
+      "captured": "reference/forward/batch-transport.test.mjs"
+    },
+    {
+      "file": "capture-root-metadata.mjs",
+      "bytes": 1276,
+      "sha256": "40ebd192cf7eef97ca7db356f9282542c3591bd2a486a28154f9cde06c31cdd1",
+      "captured": "reference/forward/capture-root-metadata.mjs"
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 8817,
+      "sha256": "29178c0cb919e36d381d4a15161cc2b5c372db6cc8d21c47034b1dfbcee3749f",
+      "captured": "reference/forward/FULL_PARENT_FORWARD.json"
+    },
+    {
+      "file": "git-image-batch.mjs",
+      "bytes": 9138,
+      "sha256": "4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20",
+      "captured": "reference/forward/git-image-batch.mjs"
+    },
+    {
+      "file": "measure-batch.mjs",
+      "bytes": 1878,
+      "sha256": "c0409596d354d77fa882df18c9e481999357e32a041e573cd502450866e26cba",
+      "captured": "reference/forward/measure-batch.mjs"
+    },
+    {
+      "file": "measure-existing.mjs",
+      "bytes": 1134,
+      "sha256": "59d49a904f26af96bf52f22a86bdb803316019723cad35039d575cac1fc1ad2f",
+      "captured": "reference/forward/measure-existing.mjs"
+    },
+    {
+      "file": "ORIGINAL_TIMING.json",
+      "bytes": 857,
+      "sha256": "1ee167007202b907f51a5ddb5c0d490072c9f8488248f1d122420133a2b89bd9",
+      "captured": "reference/forward/ORIGINAL_TIMING.json"
+    },
+    {
+      "file": "payload/git-image-batch.mjs",
+      "bytes": 9138,
+      "sha256": "4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20",
+      "captured": "reference/forward/payload/git-image-batch.mjs"
+    },
+    {
+      "file": "payload/MANIFEST.json",
+      "bytes": 24284,
+      "sha256": "31670977b5ee45ba146015c16bd6264b8eaea35612d56a370447ca29b8b9c6f6",
+      "captured": "reference/forward/payload/MANIFEST.json"
+    },
+    {
+      "file": "payload/source.mjs",
+      "bytes": 1950,
+      "sha256": "01d4acb9309eb71a315f4cc5fbe315b90bf29f69d62742f0152c6ee28ad937b2",
+      "captured": "reference/forward/payload/source.mjs"
+    },
+    {
+      "file": "PAYLOAD_MANIFEST.json",
+      "bytes": 1467,
+      "sha256": "dd7b08211a1a6dc982e1c0dbd17c4ccae21b00def2bd33447311a205ac8748fe",
+      "captured": "reference/forward/PAYLOAD_MANIFEST.json"
+    },
+    {
+      "file": "prepare-s0.mjs",
+      "bytes": 3876,
+      "sha256": "f4960e1cd162592a4f59da73c937582e851374920eca5d0453402b09d25e8d26",
+      "captured": "reference/forward/prepare-s0.mjs"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 3619,
+      "sha256": "a13fa7109eb48cdebfbe47f50d7d7a4aa54de45031927c20331d547b12cc4d22",
+      "captured": "reference/forward/prepare.mjs"
+    },
+    {
+      "file": "README.md",
+      "bytes": 6873,
+      "sha256": "20ee5c6ef28cae5155b416ff242b6fa86000c96307ba18f64e3d7d5d2b3d2af0",
+      "captured": "reference/forward/README.md"
+    },
+    {
+      "file": "reference/MANIFEST.json",
+      "bytes": 23828,
+      "sha256": "0a908ee36e34c41457b797a7609676c46373c89d924f66846100c87a2dc47f0d",
+      "captured": "reference/forward/reference/MANIFEST.json"
+    },
+    {
+      "file": "reference/ROOT_FIXED_METADATA.json",
+      "bytes": 119766,
+      "sha256": "c1e91c6507d3624dd69e92707f6f7fd0e8614479b3f5a75c3b4fd9268f152f8c",
+      "captured": "reference/forward/reference/ROOT_FIXED_METADATA.json"
+    },
+    {
+      "file": "reference/source-image.test.mjs",
+      "bytes": 3907,
+      "sha256": "3537af46324e41bfe34792bbab46e5af3ff1a67dd468532d1ba81d9dc49b8087",
+      "captured": "reference/forward/reference/source-image.test.mjs"
+    },
+    {
+      "file": "reference/source.mjs",
+      "bytes": 6821,
+      "sha256": "79d1f181cf21d270352382cdc16f20e36569d68857a7bbbb35b2053b76aa79f8",
+      "captured": "reference/forward/reference/source.mjs"
+    },
+    {
+      "file": "RESULT.json",
+      "bytes": 1456,
+      "sha256": "966d0a52bd166b7d5ba29f5f14620b4d9c36a67602bce1d79744fc0838c0c008",
+      "captured": "reference/forward/RESULT.json"
+    },
+    {
+      "file": "ROOT_METADATA_PIN.json",
+      "bytes": 510,
+      "sha256": "1426cea21c65fc2166195f6a806d64e93a07cc9602530a3604e527912c340276",
+      "captured": "reference/forward/ROOT_METADATA_PIN.json"
+    },
+    {
+      "file": "S0_CATALOGUE_SYNTHETIC_GRAMMAR_INPUT.json",
+      "bytes": 16030,
+      "sha256": "697dcfe111aad2e383e66964d842a74fa01c0301b65f07ac39bfbbdff4e306fc",
+      "captured": "reference/forward/S0_CATALOGUE_SYNTHETIC_GRAMMAR_INPUT.json"
+    },
+    {
+      "file": "S0_SCOPE_DOSSIER.json",
+      "bytes": 170276,
+      "sha256": "8eafd68210990a46aa1ed18aa00f63cf256fdab1bc6c720d2dc8ca4a875035d6",
+      "captured": "reference/forward/S0_SCOPE_DOSSIER.json"
+    },
+    {
+      "file": "s0-scope.mjs",
+      "bytes": 8599,
+      "sha256": "e2c5c97ed5d909ca8b507ed3453b90e0506d5d865a1a66524221349a6418c389",
+      "captured": "reference/forward/s0-scope.mjs"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 2080,
+      "sha256": "a130f6048261dd9a9aff01807d8d8ee5e92e257d5e7ccece68f53cba42115eec",
+      "captured": "reference/forward/seal.mjs"
+    },
+    {
+      "file": "verify-forward.py",
+      "bytes": 2694,
+      "sha256": "ccc8dae6c087cfb08bafce7f826f073e4cf246dc13e23298a104d8caa743f4b9",
+      "captured": "reference/forward/verify-forward.py"
+    },
+    {
+      "file": "verify-s0.py",
+      "bytes": 2506,
+      "sha256": "e087ff7f003f7e11d45b67f3c86ee751f77288c26561e1f74afbe4a704666f7f",
+      "captured": "reference/forward/verify-s0.py"
+    },
+    {
+      "file": "MANIFEST.json",
+      "bytes": 4777,
+      "sha256": "f50ee8f459ee92fbdb2de08fe05dbe0b7b6f75ff746eb284d504f92205ed4888",
+      "captured": "reference/forward/MANIFEST.json"
+    }
+  ],
+  "savedIndexHeadEqual": true,
+  "privateActualStateReads": 0,
+  "native": "NOT_RUN"
+}

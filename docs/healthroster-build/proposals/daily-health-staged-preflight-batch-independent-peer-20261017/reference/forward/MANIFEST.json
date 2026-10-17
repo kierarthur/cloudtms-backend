@@ -1,0 +1,152 @@
+{
+  "version": "DAILY_GENUINE_BATCH_FORWARD_FREEZE_V1",
+  "reviewerSettings": "GPT-6.1-sol/xhigh",
+  "files": [
+    {
+      "file": "BATCH_TIMING_FINAL.json",
+      "bytes": 1326,
+      "sha256": "34f9dcbb02bebf79431afabe84452ebbbda594906832a881af640fabdab278ba"
+    },
+    {
+      "file": "BATCH_TIMING.json",
+      "bytes": 1326,
+      "sha256": "60242eeb96852721dc5cae7a56b7cac489bf557b85ca22782a91d05aebe97da0"
+    },
+    {
+      "file": "batch-image.test.mjs",
+      "bytes": 4027,
+      "sha256": "57bada20b6ac7129c89fcc3e2dd77f3059e66d4d7faa7a5c197c0f766e936029"
+    },
+    {
+      "file": "batch-transport.test.mjs",
+      "bytes": 3696,
+      "sha256": "62b1f5f3ac0e6adf11659ef205dbc81d6c1bdbbab0edf361b295a03c2bfe4d37"
+    },
+    {
+      "file": "capture-root-metadata.mjs",
+      "bytes": 1276,
+      "sha256": "40ebd192cf7eef97ca7db356f9282542c3591bd2a486a28154f9cde06c31cdd1"
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 8817,
+      "sha256": "29178c0cb919e36d381d4a15161cc2b5c372db6cc8d21c47034b1dfbcee3749f"
+    },
+    {
+      "file": "git-image-batch.mjs",
+      "bytes": 9138,
+      "sha256": "4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20"
+    },
+    {
+      "file": "measure-batch.mjs",
+      "bytes": 1878,
+      "sha256": "c0409596d354d77fa882df18c9e481999357e32a041e573cd502450866e26cba"
+    },
+    {
+      "file": "measure-existing.mjs",
+      "bytes": 1134,
+      "sha256": "59d49a904f26af96bf52f22a86bdb803316019723cad35039d575cac1fc1ad2f"
+    },
+    {
+      "file": "ORIGINAL_TIMING.json",
+      "bytes": 857,
+      "sha256": "1ee167007202b907f51a5ddb5c0d490072c9f8488248f1d122420133a2b89bd9"
+    },
+    {
+      "file": "payload/git-image-batch.mjs",
+      "bytes": 9138,
+      "sha256": "4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20"
+    },
+    {
+      "file": "payload/MANIFEST.json",
+      "bytes": 24284,
+      "sha256": "31670977b5ee45ba146015c16bd6264b8eaea35612d56a370447ca29b8b9c6f6"
+    },
+    {
+      "file": "payload/source.mjs",
+      "bytes": 1950,
+      "sha256": "01d4acb9309eb71a315f4cc5fbe315b90bf29f69d62742f0152c6ee28ad937b2"
+    },
+    {
+      "file": "PAYLOAD_MANIFEST.json",
+      "bytes": 1467,
+      "sha256": "dd7b08211a1a6dc982e1c0dbd17c4ccae21b00def2bd33447311a205ac8748fe"
+    },
+    {
+      "file": "prepare-s0.mjs",
+      "bytes": 3876,
+      "sha256": "f4960e1cd162592a4f59da73c937582e851374920eca5d0453402b09d25e8d26"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 3619,
+      "sha256": "a13fa7109eb48cdebfbe47f50d7d7a4aa54de45031927c20331d547b12cc4d22"
+    },
+    {
+      "file": "README.md",
+      "bytes": 6873,
+      "sha256": "20ee5c6ef28cae5155b416ff242b6fa86000c96307ba18f64e3d7d5d2b3d2af0"
+    },
+    {
+      "file": "reference/MANIFEST.json",
+      "bytes": 23828,
+      "sha256": "0a908ee36e34c41457b797a7609676c46373c89d924f66846100c87a2dc47f0d"
+    },
+    {
+      "file": "reference/ROOT_FIXED_METADATA.json",
+      "bytes": 119766,
+      "sha256": "c1e91c6507d3624dd69e92707f6f7fd0e8614479b3f5a75c3b4fd9268f152f8c"
+    },
+    {
+      "file": "reference/source-image.test.mjs",
+      "bytes": 3907,
+      "sha256": "3537af46324e41bfe34792bbab46e5af3ff1a67dd468532d1ba81d9dc49b8087"
+    },
+    {
+      "file": "reference/source.mjs",
+      "bytes": 6821,
+      "sha256": "79d1f181cf21d270352382cdc16f20e36569d68857a7bbbb35b2053b76aa79f8"
+    },
+    {
+      "file": "RESULT.json",
+      "bytes": 1456,
+      "sha256": "966d0a52bd166b7d5ba29f5f14620b4d9c36a67602bce1d79744fc0838c0c008"
+    },
+    {
+      "file": "ROOT_METADATA_PIN.json",
+      "bytes": 510,
+      "sha256": "1426cea21c65fc2166195f6a806d64e93a07cc9602530a3604e527912c340276"
+    },
+    {
+      "file": "S0_CATALOGUE_SYNTHETIC_GRAMMAR_INPUT.json",
+      "bytes": 16030,
+      "sha256": "697dcfe111aad2e383e66964d842a74fa01c0301b65f07ac39bfbbdff4e306fc"
+    },
+    {
+      "file": "S0_SCOPE_DOSSIER.json",
+      "bytes": 170276,
+      "sha256": "8eafd68210990a46aa1ed18aa00f63cf256fdab1bc6c720d2dc8ca4a875035d6"
+    },
+    {
+      "file": "s0-scope.mjs",
+      "bytes": 8599,
+      "sha256": "e2c5c97ed5d909ca8b507ed3453b90e0506d5d865a1a66524221349a6418c389"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 2080,
+      "sha256": "a130f6048261dd9a9aff01807d8d8ee5e92e257d5e7ccece68f53cba42115eec"
+    },
+    {
+      "file": "verify-forward.py",
+      "bytes": 2694,
+      "sha256": "ccc8dae6c087cfb08bafce7f826f073e4cf246dc13e23298a104d8caa743f4b9"
+    },
+    {
+      "file": "verify-s0.py",
+      "bytes": 2506,
+      "sha256": "e087ff7f003f7e11d45b67f3c86ee751f77288c26561e1f74afbe4a704666f7f"
+    }
+  ],
+  "qualification": "Finite three-target Report-only source forward plus catalogue-only S0 metadata proposal. No execution/mount or private contents access."
+}
