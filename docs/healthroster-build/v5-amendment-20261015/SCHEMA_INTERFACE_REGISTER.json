@@ -7284,5 +7284,25 @@
     "publicB051Success": "NOT_PROVIDED",
     "native": "NOT_RUN",
     "install2": "NOT_INSTALLED"
+  },
+  "source_current_read_full_source_gate_20261017": {
+    "status": "PASS_SOURCE_ONLY",
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_READ_FULL_SOURCE_GATE_R2_20261017.json",
+    "supersedesSourceGateHoldOnly": "source_current_read_source_continuation_20261017",
+    "frozenFiles": 7,
+    "frozenTriggers": 18,
+    "frozenTables": 45,
+    "protectedSignatures": 24,
+    "sqlSources": 2246,
+    "rpcRoots": 79,
+    "sourceInventory": {
+      "migrations": 426,
+      "repeatables": 1095,
+      "signatures": 3037,
+      "registered": 1650
+    },
+    "native": "NOT_RUN",
+    "publicB051Success": "NOT_PROVIDED",
+    "install2": "NOT_INSTALLED"
   }
 }

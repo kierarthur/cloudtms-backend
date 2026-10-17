@@ -209,19 +209,20 @@
     "sourceAndACL": 229
   },
   "sourceGate": {
-    "status": "HOLD",
-    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_READ_FULL_SOURCE_GATE_R1_20261017.json",
-    "error": "HEALTHROSTER_SOURCE_CLASSIFIER_DELEGATION_ACTUAL_ACL_CHANGED",
-    "compactDifferenceReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_READ_R1_ACL_COMPACT_DIFF_20261017.json",
-    "historicalAclEvents": 75,
-    "currentAclEvents": 77,
-    "addedOwnerAssertions": 1,
-    "addedExecutionRevokes": 1,
-    "removedHistoricalEvents": 0,
-    "addedGrants": 0,
-    "finiteSuccessor": "IN_REVIEW",
-    "unchangedHistoricalOwners": 13,
-    "unchangedDefinitionEvents": 17
+    "status": "PASS_SOURCE_ONLY",
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_READ_FULL_SOURCE_GATE_R2_20261017.json",
+    "result": {
+      "frozenFiles": 7,
+      "frozenTriggers": 18,
+      "frozenTables": 45,
+      "protectedSignatures": 24,
+      "sqlSources": 2246,
+      "rpcRoots": 79,
+      "routineWorkSignatures": 183,
+      "typedTransportSignatures": 41
+    },
+    "elapsedMilliseconds": 194704,
+    "preservedR1Hold": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_READ_FULL_SOURCE_GATE_R1_20261017.json"
   },
   "native": "NOT_RUN",
   "publicB051Success": "NOT_PROVIDED",

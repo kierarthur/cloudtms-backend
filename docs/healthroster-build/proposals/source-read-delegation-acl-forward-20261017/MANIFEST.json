@@ -1,0 +1,59 @@
+{
+  "version": "HEALTH_SOURCE_READ_FIXED_ACL_DELEGATION_FORWARD_V1",
+  "files": [
+    {
+      "path": "ACL_SOURCE_TRANSFER.json",
+      "bytes": 3447,
+      "sha256": "63b811a96ad050d92cd200a1de23a9464ec7a95c4f9ae909861cc412c3ba7547"
+    },
+    {
+      "path": "checks/test.mjs",
+      "bytes": 6333,
+      "sha256": "e56c0c86c2f0e71413d4a1a2b2dd00878fe0c9e4605bc64ee2a6875497242516"
+    },
+    {
+      "path": "checks/verify-freeze.py",
+      "bytes": 993,
+      "sha256": "bf1459ef7156c5a681118a7ecea899f6fb226ea5aa25a4c79b59fcc1a9d34a6d"
+    },
+    {
+      "path": "HELPER_PARENT_EDITS.json",
+      "bytes": 3549,
+      "sha256": "4e4731282995413715e46a9663a98df6548df1646ed64b280750a0307a3675fc"
+    },
+    {
+      "path": "payload/scripts/healthroster-source-classifier-delegation-review.mjs",
+      "bytes": 11338,
+      "sha256": "198f5528f1ddc3c8511beb7e733cd5e2c6e14e94e72e7373ad0226695109add2"
+    },
+    {
+      "path": "PAYLOAD_MANIFEST.json",
+      "bytes": 673,
+      "sha256": "ba50053ff449f328872d735c9ce18fc52e1796a58edf35570332a16d8682e207"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3023,
+      "sha256": "1ee2dd727077150fcd07ee43a571a2ee2e642d1e972530667e6a9a5d431c557c"
+    },
+    {
+      "path": "reference/healthroster-source-classifier-delegation-review.mjs",
+      "bytes": 8620,
+      "sha256": "df301590ae3f8e44b782e8e667c70ce6688d2717768ee59598e117493a0f4555"
+    },
+    {
+      "path": "reference/ROOT_R1_ACL_COMPACT_DIFF.json",
+      "bytes": 1259,
+      "sha256": "5daeff68bde1105ae105614ca268f20b8eef2609a9499789ffebb3dfe24f97c9"
+    },
+    {
+      "path": "TEST_RESULTS.json",
+      "bytes": 3701,
+      "sha256": "a36c003d00900dcbe6bebf0bb0c50f9ad1efe9ced27fa82f49c305b12e60d8ff"
+    }
+  ],
+  "verdict": "FINITE_SOURCE_INVERSE_ONLY",
+  "runtimeFiles": 1,
+  "runtimeSqlChanges": 0,
+  "native": "NOT_RUN"
+}

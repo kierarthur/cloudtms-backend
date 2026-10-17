@@ -80,6 +80,41 @@ function load(root,io){
  }
  return data;
 }
+// Preserve the immutable75-event delegation proof. Only the two reasserted
+// owner-only Source ACL events may reverse to their exact original provenance.
+export function sourceClassifierAclPredecessor(currentAcl,historicalAcl,readFile){
+ const originalBytes=Buffer.from(readFile(classificationPath));
+ if(hash(originalBytes)!==classificationSha256)fail('ACL_ORIGINAL_REVIEW_CHANGED');
+ const original=JSON.parse(originalBytes);
+ if(!equal(historicalAcl,original.aclEvents))fail('ACL_HISTORICAL_EVENTS_CHANGED');
+ if(equal(currentAcl,historicalAcl))return currentAcl;
+ const proofPath='docs/healthroster-build/proposals/source-read-delegation-acl-forward-20261017/ACL_SOURCE_TRANSFER.json';
+ const proofBytes=Buffer.from(readFile(proofPath));
+ if(hash(proofBytes)!=='63b811a96ad050d92cd200a1de23a9464ec7a95c4f9ae909861cc412c3ba7547')fail('ACL_SOURCE_TRANSFER_CHANGED');
+ const proof=JSON.parse(proofBytes);
+ if(proof.version!=='HEALTH_SOURCE_READ_FIXED_ACL_EVENT_INVERSE_V1'||proof.native!=='NOT_RUN'
+  ||proof.baselineRefreshed!==false||proof.roleChange!==false||proof.historicalAclCount!==75||proof.currentAclCount!==77
+  ||proof.addedEvents.length!==2||proof.originalEvents.length!==2
+  ||hash(JSON.stringify(historicalAcl))!==proof.historicalAclEventsSha256)fail('ACL_TRANSFER_SCOPE_CHANGED');
+ const io={read:file=>Buffer.from(readFile(safe(file)))};
+ for(const pin of [...proof.completeCurrentSourcePins,proof.unchangedOriginalSource])
+  if(hash(canonical(io.read(pin.path).toString('utf8')))!==pin.sha256)fail('ACL_COMPLETE_SOURCE_CHANGED');
+ const source=scanManagedSql(io.read(proof.unchangedOriginalSource.path).toString('utf8'));
+ const statements=source.statements.map(s=>source.source.slice(s.start,s.end).trim());
+ for(const event of proof.originalEvents){
+  if(historicalAcl.filter(e=>equal(e,event)).length!==1||statements.filter(s=>s===event.statement).length!==1)fail('ACL_ORIGINAL_STATEMENT_CHANGED');
+ }
+ const names=new Set(original.rows.map(row=>row.signature.split('(')[0]));
+ const rootPath=proof.addedEvents[0].root;
+ const current=closure(rootPath,io).filter(row=>aclRelevant(row.sql,names))
+  .map(row=>({root:rootPath,physical:row.physical,sha256:hash(row.sql),statement:row.sql}));
+ if(!equal(current,proof.addedEvents)||!equal(current.map(e=>e.statement),proof.originalEvents.map(e=>e.statement)))fail('ACL_CURRENT_STATEMENT_CHANGED');
+ const acl=scanManagedSql(io.read(proof.addedEvents[0].physical).toString('utf8'));
+ if(acl.statements.length!==proof.currentAclStatements)fail('ACL_COMPLETE_PROGRAM_CHANGED');
+ if(!equal(currentAcl,[...historicalAcl,...current]))fail('ACTUAL_ACL_CHANGED');
+ return historicalAcl;
+}
+
 // The injectable read/list boundary is for source-only drift tests. It cannot
 // change the fixed review hashes, caller, path, signatures or returned four names.
 export function createReviewedSourceClassifierDelegation(root=repoRoot,overrides={}){
@@ -90,7 +125,7 @@ export function createReviewedSourceClassifierDelegation(root=repoRoot,overrides
   if(whole.length!==1||hash(parsed.source.slice(whole[0].start,whole[0].end).trim())!==pin.completeStatementSha256||!part||part.signature!==caller||part.unclassified||hash(part.text.trim())!==pin.bodySha256)fail('COMPLETE_CALLER_CHANGED');
   const current=sourceClassifierEvidenceSnapshot(root,data.rows,overrides);
   if(!equal(current.definitions,data.definitionEvents))fail('ACTUAL_DEFINITION_OWNER_CHANGED');
-  if(!equal(current.acl,data.aclEvents))fail('ACTUAL_ACL_CHANGED');
+  if(!equal(sourceClassifierAclPredecessor(current.acl,data.aclEvents,file=>io.read(file)),data.aclEvents))fail('ACTUAL_ACL_CHANGED');
   for(const row of data.rows){const final=current.definitions.filter(d=>d.signature===row.signature&&d.root.startsWith('supabase/repeatable/')).at(-1);if(!final||final.root!==row.root||final.physical!==row.physical||final.sha256!==row.completeStatementSha256)fail('ACTUAL_FINAL_OWNER_CHANGED');}
   return [...delegates];
  };
