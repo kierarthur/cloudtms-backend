@@ -7,7 +7,7 @@ export const reviewSha256='6309ea0cadd0d2cd3e98537c145cd8bb49aef984d74bbfe0f1107
 const hash=x=>createHash('sha256').update(x).digest('hex'),canon=x=>x.toString().replaceAll('\r\n','\n'),fail=code=>{throw Error('HEALTH_KEPT_ENTRY_TYPE_'+code);};
 const signature=sql=>{const m=/^create\s+or\s+replace\s+function\s+([\w.]+)\s*\(([^)]*)\)/i.exec(sql);return m?m[1]+'('+m[2].split(',').map(p=>p.trim()).filter(Boolean).map(p=>p.split(/\s+/)[1]).join(',')+')':null;};
 const statements=source=>{const p=scanManagedSql(source);return p.statements.map(x=>p.source.slice(x.start,x.end).trim());};
-function reverse(source,hunks){for(const h of [...hunks].reverse()){const after=canon(h.after),before=canon(h.before);if(source.split(after).length!==2)fail('REVERSE_ANCHOR');source=source.replace(after,before);}return source;}
+export function reverseLiteralHunks(source,hunks){for(const h of [...hunks].reverse()){const after=canon(h.after),before=canon(h.before);if(source.split(after).length!==2)fail('REVERSE_ANCHOR');source=source.replace(after,()=>before);}return source;}
 const column=(relations,table,name,type)=>relations[table]?.columns.some(x=>x.name===name&&x.type===type)===true;
 
 // COUNT and MIN consume the very same native UUID rows. The UUID cannot escape
@@ -50,8 +50,8 @@ export function createReviewedKeptEntryClassifier(root=repoRoot,{tupleProof,clas
    if(proof.ddl){if(!statements(read(proof.ddlPath)).includes(proof.ddl))fail('NATIVE_DDL_CHANGED');for(const c of proof.columns)if(!new RegExp('\\b'+c.name+' '+c.type+'\\b').test(proof.ddl))fail('NATIVE_COLUMN_CHANGED');}
    else{const actual=schema.relations.find(x=>x.schema+'.'+x.name===relation);if(!actual||actual.kind!==proof.kind||JSON.stringify(actual.columns)!==JSON.stringify(proof.columns))fail('CATALOGUE_TYPE_CHANGED');}
   }
-  for(const recipe of data.ownerReverses){const whole=statements(read(recipe.file)).filter(s=>signature(s)===recipe.signature);if(whole.length!==1||hash(whole[0])!==recipe.successorStatementSha256)fail('COMPLETE_OWNER_CHANGED');const current=read(recipe.currentFile).trimEnd();if(hash(current)!==recipe.currentStatementSha256||reverse(whole[0],recipe.hunks)!==current||!read(recipe.priorFile).includes(current))fail('FULL_OWNER_REVERSE_CHANGED');}
-  const c=data.classifier;if(reverse(read(c.kept),c.keptHunks)!==read(c.prior)||reverse(read(c.entry),c.entryHunks)!==read(c.kept))fail('CLASSIFIER_REVERSE_CHANGED');
+  for(const recipe of data.ownerReverses){const whole=statements(read(recipe.file)).filter(s=>signature(s)===recipe.signature);if(whole.length!==1||hash(whole[0])!==recipe.successorStatementSha256)fail('COMPLETE_OWNER_CHANGED');const current=read(recipe.currentFile).trimEnd();if(hash(current)!==recipe.currentStatementSha256||reverseLiteralHunks(whole[0],recipe.hunks)!==current||!read(recipe.priorFile).includes(current))fail('FULL_OWNER_REVERSE_CHANGED');}
+  const c=data.classifier;if(reverseLiteralHunks(read(c.kept),c.keptHunks)!==read(c.prior)||reverseLiteralHunks(read(c.entry),c.entryHunks)!==read(c.kept))fail('CLASSIFIER_REVERSE_CHANGED');
   return data;
  }
  return function reviewedKeptEntryHazards(source,file,baseline,violations,parts){

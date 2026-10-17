@@ -9,7 +9,7 @@ const read=p=>fs.readFileSync(p,'utf8'),json=p=>JSON.parse(read(p)),sha=b=>creat
 const {scanManagedSql}=await import(pathToFileURL(path.join(own,'scripts/cloudtms-managed-release-sql.mjs')));
 function signature(statement){const m=/^create\s+or\s+replace\s+function\s+([\w.]+)\s*\(([^)]*)\)/i.exec(statement);if(!m)return null;return m[1]+'('+m[2].split(',').map(p=>p.trim()).filter(Boolean).map(p=>p.split(/\s+/)[1]).join(',')+')';}
 function definitions(source){const p=scanManagedSql(source);return p.statements.map(s=>p.source.slice(s.start,s.end).trim()).map(sql=>({signature:signature(sql),sql})).filter(x=>x.signature);}
-function reverse(source,hunks){for(const h of [...hunks].reverse()){assert.equal(source.split(h.after).length-1,1,'unique full reverse');source=source.replace(h.after,h.before);}return source;}
+function reverse(source,hunks){for(const h of [...hunks].reverse()){assert.equal(source.split(h.after).length-1,1,'unique full reverse');source=source.replace(h.after,()=>h.before);}return source;}
 const checks=[],check=(name,fn)=>{fn();checks.push(name);};
 let frozenFiles=0,mountMatches=0,mountChanged=[];
 check('frozen package saved bytes equal exact01ec Git blobs',()=>{

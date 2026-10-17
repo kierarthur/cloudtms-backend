@@ -1,5 +1,5 @@
 import fs from'node:fs';import path from'node:path';import assert from'node:assert/strict';import{execFileSync}from'node:child_process';import{pathToFileURL,fileURLToPath}from'node:url';import{createHash}from'node:crypto';
-import{createReviewedKeptEntryClassifier,provesRekeyCardinality,provesKeptReplay,provesKeptOwnerPolicy,reviewPath}from'../../../../scripts/healthroster-kept-entry-type-review.mjs';
+import{createReviewedKeptEntryClassifier,provesRekeyCardinality,provesKeptReplay,provesKeptOwnerPolicy,reverseLiteralHunks,reviewPath}from'../../../../scripts/healthroster-kept-entry-type-review.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url)),root='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026',read=p=>fs.readFileSync(root+'/'+p,'utf8').replaceAll('\r\n','\n');
 const {specialConstructViolations,executableParts,assertSpecialConstructs}=await import(pathToFileURL(root+'/scripts/bpay-next-source-gates.mjs'));
 const {provesSingleTableTuple,reviewedHealthRowtypeHazards}=await import(pathToFileURL(root+'/scripts/healthroster-rowtype-type-review.mjs'));
@@ -14,6 +14,7 @@ for(const file of baselineFiles){const s=execFileSync('git',['-c','gc.auto=0','-
 const classifyPrior=(source,file,initial=new Map())=>{const v=specialConstructViolations(source,file),p=executableParts(source,file);let m=new Map(initial);for(const fn of[reviewedHealthRowtypeHazards,reviewedHealthUuidHazards,reviewedHealthAggregateHazards,reviewedJoinedNonDynamicHazards,reviewedHealthDynamicHazards])m=fn(source,file,m,v,p);return m;};
 const classifier=createReviewedKeptEntryClassifier(root,{tupleProof:provesSingleTableTuple,hazardCensus:specialConstructViolations,classifyPrior,readFile:overlay});
 let passed=0;const cases=[],test=(name,fn)=>{fn();passed++;cases.push(name);};
+test('literal SQL end anchors and JavaScript replacement tokens reverse byte-for-byte',()=>{const before="select '^[0-9]+$'::text, '$&'::text, '$`'::text, '$'''::text;",after="select 'UPDATED'::text;",source='begin;\n'+after+'\ncommit;',expected='begin;\n'+before+'\ncommit;';assert.equal(reverseLiteralHunks(source,[{before,after}]),expected);assert.notEqual(source.replace(after,before),expected);});
 test('all19 current files and94 actual hazard occurrences pass only the finite proofs plus existing prior classifications',()=>{for(const f of data.files){const s=read(f.file),v=specialConstructViolations(s,f.file),p=executableParts(s,f.file),m=classifier(s,f.file,baseline,v,p);assertSpecialConstructs(s,f.file,m);}});
 const rekey=data.files.find(x=>x.file.includes('01_identical')),rekeySource=read(rekey.file),rekeyBody=executableParts(rekeySource,rekey.file)[0].text,uuid=rekey.points.filter(x=>x.hazard==='UUID_CARDINALITY_UNCLASSIFIED').map(x=>JSON.parse(x.key)[2]);
 test('both new UUID aggregates prove real UUID columns and singleton gates',()=>{for(const s of uuid)assert(provesRekeyCardinality(rekeyBody,s,data.schema.relations));});

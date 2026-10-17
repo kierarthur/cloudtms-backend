@@ -1,8 +1,9 @@
 {
   "version": "KEPT_ENTRY_FINITE_TYPE_OFFLINE_TESTS_V1",
-  "passed": 12,
+  "passed": 13,
   "failed": 0,
   "cases": [
+    "literal SQL end anchors and JavaScript replacement tokens reverse byte-for-byte",
     "all19 current files and94 actual hazard occurrences pass only the finite proofs plus existing prior classifications",
     "both new UUID aggregates prove real UUID columns and singleton gates",
     "UUID row ambiguity or zero refusal cannot be weakened",
