@@ -10,9 +10,9 @@
     "captured": "reference/published/daily-canonical-authority.js"
   },
   "authObservation": {
-    "commit": "00569d496affacd962a30d80ec045c535306b075",
-    "file": "docs/healthroster-build/v6-owner-delivery-20261016/TEST_AUTH_REFRESH_R6_SUCCESS_20261017.json",
-    "sha256": "d07faa6df70f4296578255865756cc9347ec80d4c761a70a535f9a58ab715f2d"
+    "commit": "15a449f25526d1d5ad3cc4cc615d6e975a74eae3",
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/TEST_AUTH_REFRESH_R7_SUCCESS_20261017.json",
+    "sha256": "338e23c9e81be3b8a820f798ba2a57d009fa08779e5ecb4c06fbb792d4f6c073"
   },
   "frontend": {
     "root": "D:/Development/GitHub/TEST-Frontend",

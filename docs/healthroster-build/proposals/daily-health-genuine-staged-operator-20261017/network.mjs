@@ -63,7 +63,13 @@ export async function currentAdmission(page,expectedActor=null){
   return {meStatus:r.status,actorId:id,admin,actorMatches:expected===null||id===expected,workspaceStatus:w.status,
    contract:b?.contract==='WEEKLY_SOURCE_IMPORT_WORKSPACE_V1',queries:!!b?.queries&&typeof b.queries==='object'&&!Array.isArray(b.queries)&&Array.isArray(b.queries.rows)};
  },expectedActor);
- check(value?.meStatus===200&&value.admin===true&&value.actorMatches===true&&value.workspaceStatus===200&&value.contract===true&&value.queries===true
-  &&typeof value.actorId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value.actorId),'FIXTURE_CURRENT_ACTOR_ADMISSION_HELD');
+ check(value?.meStatus!==401,'FIXTURE_CURRENT_ME401');
+ check(value?.meStatus===200,'FIXTURE_CURRENT_ME_UNAVAILABLE');
+ check(value.admin===true,'FIXTURE_CURRENT_ADMIN_REQUIRED');
+ check(typeof value.actorId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value.actorId),'FIXTURE_CURRENT_ACTOR_UUID_REQUIRED');
+ check(value.actorMatches===true,'FIXTURE_CURRENT_ACTOR_MISMATCH');
+ check(value.workspaceStatus===200,'FIXTURE_CURRENT_WORKSPACE_UNAVAILABLE');
+ check(value.contract===true,'FIXTURE_CURRENT_WORKSPACE_CONTRACT_REQUIRED');
+ check(value.queries===true,'FIXTURE_CURRENT_WORKSPACE_QUERIES_REQUIRED');
  return value; // Private child memory only; parent receives booleans, never actorId.
 }

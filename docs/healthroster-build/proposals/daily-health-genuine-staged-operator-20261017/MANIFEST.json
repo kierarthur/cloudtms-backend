@@ -41,7 +41,7 @@
     {
       "file": "contract.mjs",
       "bytes": 7643,
-      "sha256": "28ba627c497817f4524bda0fb99a39875e84c9d71a7b8ecc10bff093aae2c923"
+      "sha256": "a02f4e8c6e9f26c0b780490bcc09f9c860ffbb534095b0f10857fb149e297801"
     },
     {
       "file": "freeze.mjs",
@@ -70,8 +70,8 @@
     },
     {
       "file": "network.mjs",
-      "bytes": 4812,
-      "sha256": "95b508cd91e5d4865b1c13be2f94739e8b551e444eb1cd96da812ecfe063ba75"
+      "bytes": 5141,
+      "sha256": "595c1a8aae1d13f42a14d0651f28749e0ca46e0ea81ad301079b0e3c4b349928"
     },
     {
       "file": "OFFLINE_NATIVE_INPUTS.json",
@@ -586,7 +586,7 @@
     {
       "file": "SOURCE_PINS.json",
       "bytes": 4362,
-      "sha256": "2c529f67f85902c8714266bf1eebadb8faecf64099cfecba914ec9c89138b749"
+      "sha256": "65f08a57af9a807225bff0e17bd0fb27b831cb88987ad08957c7c7741462d980"
     },
     {
       "file": "source-image.test.mjs",
