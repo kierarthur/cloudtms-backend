@@ -1,0 +1,258 @@
+{
+  "version": "CONTACT_SAME_RR_NATIVE_BATCH_FINITE_SOURCE_PROOF_V1",
+  "parent": "62a0630df15a93816ce8be583089541dc9a1830d",
+  "targets": 54,
+  "changedExisting": 5,
+  "newFiles": 1,
+  "unchangedParentReferences": 48,
+  "actualPayloadFiles": 6,
+  "wholeParentReverses": 5,
+  "literalHunks": 20,
+  "all63SourcePinsRawUnchanged": true,
+  "complete12ScopesAndOriginalWeakMapRawUnchanged": true,
+  "privateChildControlRawUnchangedExceptCaptureSelection": true,
+  "legacyReaderOriginWholeReverse": true,
+  "referenceCanonicalSqlSha256": "5044b4d3821709aecc48d4d955aa6d8109bdf67d447067030e0dad444715e811",
+  "executedBatchInputSha256": "bc5c863a4591218a1b009c08d520f7f6571cf3d50c098ce075b10763e5da476d",
+  "canonicalStatementExecuted": false,
+  "sourceOrderProof": {
+    "postgresqlSourceVersion": "REL_17_11",
+    "objectKeyComparator": "lengthCompareJsonbString/lengthCompareJsonbPair/uniqueifyJsonbObject",
+    "orderSource": "https://raw.githubusercontent.com/postgres/postgres/REL_17_11/src/backend/utils/adt/jsonb_util.c",
+    "orderLines": [
+      1766,
+      1844
+    ],
+    "textRenderer": "JsonbToCString/JsonbToCStringWorker",
+    "formatSource": "https://raw.githubusercontent.com/postgres/postgres/REL_17_11/src/backend/utils/adt/jsonb.c",
+    "formatLines": [
+      446,
+      567
+    ],
+    "memberSeparator": ", ",
+    "keyValueSeparator": ": ",
+    "keys": [
+      {
+        "ordinal": 1,
+        "key": "module",
+        "utf8Bytes": 6,
+        "asciiHex": "6d6f64756c65"
+      },
+      {
+        "ordinal": 2,
+        "key": "identityTest",
+        "utf8Bytes": 12,
+        "asciiHex": "6964656e7469747954657374"
+      },
+      {
+        "ordinal": 3,
+        "key": "markerAbsent",
+        "utf8Bytes": 12,
+        "asciiHex": "6d61726b6572416273656e74"
+      },
+      {
+        "ordinal": 4,
+        "key": "applyingCount",
+        "utf8Bytes": 13,
+        "asciiHex": "6170706c79696e67436f756e74"
+      },
+      {
+        "ordinal": 5,
+        "key": "latestRelease",
+        "utf8Bytes": 13,
+        "asciiHex": "6c617465737452656c65617365"
+      },
+      {
+        "ordinal": 6,
+        "key": "backgroundRows",
+        "utf8Bytes": 14,
+        "asciiHex": "6261636b67726f756e64526f7773"
+      },
+      {
+        "ordinal": 7,
+        "key": "relationCensus",
+        "utf8Bytes": 14,
+        "asciiHex": "72656c6174696f6e43656e737573"
+      },
+      {
+        "ordinal": 8,
+        "key": "customerKeyNull",
+        "utf8Bytes": 15,
+        "asciiHex": "637573746f6d65724b65794e756c6c"
+      },
+      {
+        "ordinal": 9,
+        "key": "physicalDatabase",
+        "utf8Bytes": 16,
+        "asciiHex": "706879736963616c4461746162617365"
+      },
+      {
+        "ordinal": 10,
+        "key": "businessRelations",
+        "utf8Bytes": 17,
+        "asciiHex": "627573696e65737352656c6174696f6e73"
+      },
+      {
+        "ordinal": 11,
+        "key": "ledgerFingerprint",
+        "utf8Bytes": 17,
+        "asciiHex": "6c656467657246696e6765727072696e74"
+      },
+      {
+        "ordinal": 12,
+        "key": "otherActivityCount",
+        "utf8Bytes": 18,
+        "asciiHex": "6f746865724163746976697479436f756e74"
+      },
+      {
+        "ordinal": 13,
+        "key": "backgroundObservedAt",
+        "utf8Bytes": 20,
+        "asciiHex": "6261636b67726f756e644f627365727665644174"
+      },
+      {
+        "ordinal": 14,
+        "key": "catalogueFingerprint",
+        "utf8Bytes": 20,
+        "asciiHex": "636174616c6f67756546696e6765727072696e74"
+      },
+      {
+        "ordinal": 15,
+        "key": "backgroundSnapshotXip",
+        "utf8Bytes": 21,
+        "asciiHex": "6261636b67726f756e64536e617073686f74586970"
+      },
+      {
+        "ordinal": 16,
+        "key": "backgroundSnapshotXmax",
+        "utf8Bytes": 22,
+        "asciiHex": "6261636b67726f756e64536e617073686f74586d6178"
+      },
+      {
+        "ordinal": 17,
+        "key": "businessRowsFingerprint",
+        "utf8Bytes": 23,
+        "asciiHex": "627573696e657373526f777346696e6765727072696e74"
+      },
+      {
+        "ordinal": 18,
+        "key": "backgroundWriterRoutines",
+        "utf8Bytes": 24,
+        "asciiHex": "6261636b67726f756e64577269746572526f7574696e6573"
+      },
+      {
+        "ordinal": 19,
+        "key": "businessCountsFingerprint",
+        "utf8Bytes": 25,
+        "asciiHex": "627573696e657373436f756e747346696e6765727072696e74"
+      },
+      {
+        "ordinal": 20,
+        "key": "backgroundSnapshotEpochZero",
+        "utf8Bytes": 27,
+        "asciiHex": "6261636b67726f756e64536e617073686f7445706f63685a65726f"
+      },
+      {
+        "ordinal": 21,
+        "key": "backgroundSnapshotStartedAt",
+        "utf8Bytes": 27,
+        "asciiHex": "6261636b67726f756e64536e617073686f74537461727465644174"
+      }
+    ],
+    "hypotheticalSameNativeMemberValuesByteEquality": true,
+    "oldIndependentlyTimedFullFrameByteEqualityClaimed": false,
+    "jsValueReserialization": false
+  },
+  "tests": 37,
+  "originalContactTestSha256": "b644b59f663b37cf859137166fbd0dd6dc145887bb1ba0263dc52bab52f8dafd",
+  "ast": {
+    "parser": "v7.20",
+    "postgresql": [
+      17,
+      7
+    ],
+    "cases": [
+      {
+        "case": "CONTACT_CONSTRUCTORS_V1",
+        "statements": 9,
+        "originalPrefixRollbackAstEqual": true,
+        "allTwelveBranchesAstEqual": true,
+        "bags": [
+          1,
+          11
+        ],
+        "bagControlBytes": 16384,
+        "typedBagRoundtrip": [
+          "text",
+          "int8",
+          "text"
+        ],
+        "baseWholeAstInverse": true,
+        "catalogueTextAndHashUnchanged": true,
+        "backgroundSixFieldsAndSnapshotAstEqual": true,
+        "rawCanonicalInverse": true,
+        "partition": [
+          15,
+          6
+        ],
+        "snapshot": "ONE_ORIGINAL_READ_ONLY_RR_CHILD",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "QT_ADMIN_CONTROLS_V1",
+        "statements": 9,
+        "originalPrefixRollbackAstEqual": true,
+        "allTwelveBranchesAstEqual": true,
+        "bags": [
+          1,
+          11
+        ],
+        "bagControlBytes": 16384,
+        "typedBagRoundtrip": [
+          "text",
+          "int8",
+          "text"
+        ],
+        "baseWholeAstInverse": true,
+        "catalogueTextAndHashUnchanged": true,
+        "backgroundSixFieldsAndSnapshotAstEqual": true,
+        "rawCanonicalInverse": true,
+        "partition": [
+          15,
+          6
+        ],
+        "snapshot": "ONE_ORIGINAL_READ_ONLY_RR_CHILD",
+        "native": "NOT_RUN"
+      }
+    ],
+    "counterexamples": [
+      "audit filters rows",
+      "audit skips row",
+      "loses duplicate row hash",
+      "hash delimiter",
+      "hash order",
+      "bag count retyped",
+      "bag bound removed",
+      "gset reexecutes prior query",
+      "gset unknown mode",
+      "bag unquoted interpolation",
+      "catalogue hash changes",
+      "background map filter",
+      "background false clock",
+      "background snapshot refreshed",
+      "isolation changed",
+      "rollback changed",
+      "raw map extra BASE member"
+    ],
+    "actualGuardBodiesParsed": 2,
+    "native": "NOT_RUN",
+    "queriesExecuted": 0
+  },
+  "native": "NOT_RUN",
+  "queriesExecuted": 0,
+  "psqlOrExplainExecuted": false,
+  "actualPostimageSourceAdmission": "NOT_RUN_UNMOUNTED",
+  "restorationQualified": false,
+  "cancellationCause": "UNKNOWN",
+  "observations": "Genuine future PG clock/status/stats observations; never stitch diagnostic turns or compare to independently timed historical values"
+}

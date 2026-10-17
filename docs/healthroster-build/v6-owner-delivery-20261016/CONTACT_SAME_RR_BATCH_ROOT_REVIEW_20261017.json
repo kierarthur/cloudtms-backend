@@ -1,0 +1,28 @@
+{
+  "version": "CONTACT_SAME_RR_BATCH_ROOT_REVIEW_V1",
+  "status": "ACCEPT_EXACT_SIX_POSTIMAGES_FOR_BOUNDED_TRIAL",
+  "authorCommit": "20709382805ce8e873abcb0f1d7f3e439c6c1c51",
+  "authorFiles": 25,
+  "authorManifestSha256": "7b550e1eedee0be81e73ae8988021bdf073c7dc11f28e7ab9165d55aa1089b15",
+  "peerCommit": "2291fae2c6991ef2ae734d6c2389f4b2641e2c28",
+  "peerFiles": 34,
+  "peerManifestSha256": "f8e128ab98a0dd11d21182938502949550c679658d2790bb182ae376c30f91b6",
+  "peerReviewSha256": "2206e699aa06f70f9ef325809ab68b2f20c4c4d9ceeb9a3e7eb59ed75d373ceb",
+  "rootReplay": {
+    "tests": 37,
+    "wholeStagePg17Cases": 2,
+    "negativeAstCases": 17,
+    "status": "PASS"
+  },
+  "rootReview": "Complete compiler/raw-member assembler/fixed reader/holder and README reviewed. Exact source53 actual saved/index/HEAD/historical parents plus1 vacancy,6 payloads and5 full inverses20hunks;48 references unchanged. Same original read-only RR backend/guard/peer/searchpath/rollback and source63/validator/WeakMap retain bytes. Two bounded fixed quoted-gset bags retain original12 count/fullsortedSHA/nativebigint records. BASE15 keeps original catalogue TEXT exporter/hash; BG6 retains both complete maps/native statuses/one snapshot/realclocks in one query. Twenty-one ASCII raw member slices preserve PG17.11 order/large numeric tokens/UTF8, original single snapshot JSON.parse. No rawmap SQLliteral/file, JS hashing/value reconstruction or interturn stitching. ExecutedbatchSHA separate from reference canonical, original canonicalStatementExecuted false. Genuine new clocks/status/stats points explicitly remain; qualifier/caps unchanged.",
+  "copiedExactFiles": 59,
+  "selectionTargets": 54,
+  "payloadFiles": 6,
+  "fixesApplied": 1,
+  "fixesRejected": 0,
+  "prior57014Holds": "Retained; cumulativecost plausible/exact cancellation cause unproved",
+  "native": "NOT_RUN",
+  "restorationQualified": false,
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

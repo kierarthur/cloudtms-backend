@@ -4,7 +4,7 @@ import fs from'node:fs';import path from'node:path';import {fileURLToPath,pathTo
 import {source,buildInput,requireThat,ROUTE}from'./input-builder.mjs';
 import {assertCommittedAdapter,assertManifestedFixtureEntry,CASES}from'./source.mjs';
 import {readStage,validateRestoration,nativeClockFrames}from'./result-validator.mjs';
-import {rootCallTiming,WORK_DEADLINE_CODE}from'./timing.mjs';import {createFixedMetadataReader}from'./fixed-metadata-reader.mjs';
+import {rootCallTiming,WORK_DEADLINE_CODE}from'./timing.mjs';import {createFixedBatchMetadataReader}from'./fixed-metadata-reader.mjs';
 import {BUDGET,FiniteControls,assertElapsed,assertNoMaps}from'./control.mjs';
 import {metadataDiagnosticFor}from'./metadata-diagnostic.mjs';
 const closed=e=>/^[A-Z0-9_]+$/.test(e?.message??'')?e.message:'CONTACT_QT_CLOSED_FAILURE';
@@ -25,7 +25,7 @@ export async function holdCase({root,out,caseId,authorisedRootHolder=false}){
     const within=()=>{if(owned.signal.aborted)throw owned.signal.reason;try{assertElapsed(sequenceStart,performance.now(),BUDGET.workMilliseconds);}catch{localTiming.workElapsedDeadlineObservedAt=new Date().toISOString();throw Error(WORK_DEADLINE_CODE);}};
     let beforePacket,afterPacket,nativeResult;
     try{
-     within();const reader=await createFixedMetadataReader({root,turn:owned,caseId});beforePacket=await reader.before();within();requireThat(beforePacket.childClosed===true,'CONTACT_QT_C_BEFORE_CLOSED_REQUIRED');
+     within();const reader=await createFixedBatchMetadataReader({root,turn:owned,caseId});beforePacket=await reader.before();within();requireThat(beforePacket.childClosed===true,'CONTACT_QT_C_BEFORE_CLOSED_REQUIRED');
      const built=await buildInput({root,identity:turn.identity,caseId});requireThat(built.receipt.canonicalSqlSha256===reader.sourceDescriptor.canonicalSqlSha256,'CONTACT_QT_CANONICAL_QUERY_EQUALITY_REQUIRED');
      await turn.assertHeld('before-contact-qt-mcp-ready');within();saveSmall(out,'TURN_IDENTITY.json',turn.identity);saveSmall(out,'INPUT.json',built.input);saveSmall(out,'INPUT_RECEIPT.json',built.receipt);
      localTiming.readyAt=new Date().toISOString();saveSmall(out,'READY_TIMING.json',{...localTiming,sqlSha256:built.receipt.sqlSha256});const ready=controls.wait('PREPARE');

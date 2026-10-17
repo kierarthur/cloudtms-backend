@@ -7,6 +7,11 @@
   "runtimeTargets": [],
   "files": [
     {
+      "file": "batch-source.mjs",
+      "bytes": 7811,
+      "sha256": "5c1b0b7d2050daa4009903a361d2e98a4e7d0073b5161b960a70f825f142ae7c"
+    },
+    {
       "file": "build-program.mjs",
       "bytes": 7043,
       "sha256": "d4c1c806fa3b5884ace7e7671335cd8956edf1cbf727e264b46d99b10689baee"
@@ -38,8 +43,8 @@
     },
     {
       "file": "fixed-metadata-reader.mjs",
-      "bytes": 19180,
-      "sha256": "38b07e4581edde41359164f31ee39a0ce690484c513ab111e22bddfd2676b6e7"
+      "bytes": 20601,
+      "sha256": "2a8c0085016a18243e94c8a940e95d21ffca946e09d4cfcc18543b9a217f1564"
     },
     {
       "file": "freeze.mjs",
@@ -63,8 +68,8 @@
     },
     {
       "file": "hold-case.mjs",
-      "bytes": 8170,
-      "sha256": "b19cf397047e895ddfa2c92bd6f91d433557e50907e48ea1df1f95cfac902b73"
+      "bytes": 8180,
+      "sha256": "01522035ba4a2fc3bc505ddd6a58c9418ce684ab296b0ff6eeab780af2c37501"
     },
     {
       "file": "input-builder.mjs",
@@ -123,13 +128,13 @@
     },
     {
       "file": "READER_PARENT_REVERSE.json",
-      "bytes": 44886,
-      "sha256": "a4f58dda2d9a98d67260e35c7e57626d45c69282fc5677ff1511a16696c67117"
+      "bytes": 50757,
+      "sha256": "198025464b1df4db8bf5c4b63c37458a65be94b5959a63f0a592b195f409fb44"
     },
     {
       "file": "README.md",
-      "bytes": 8799,
-      "sha256": "d494aa1df8825bbc40f6a69221b9f4f5f561156f95796685560870b2e69e6766"
+      "bytes": 9652,
+      "sha256": "c0c1df6afda90e2574dbc698753243262e7f038cb32291aadb20939099fe693d"
     },
     {
       "file": "reference/actor/build-program.mjs",
