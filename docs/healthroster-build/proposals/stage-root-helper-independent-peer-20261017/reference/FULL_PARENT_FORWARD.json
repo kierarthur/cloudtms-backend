@@ -1,0 +1,34 @@
+{
+  "version": "STAGE_ROOT_BOOKKEEPER_FULL_RAW_FORWARD_V1",
+  "parentFile": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+  "parentCommit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "parentBytes": 10331,
+  "parentSha256": "5121f9d3ac3e087d7153937a64d5d4e0cfef51e1868f681e1cdd5e432fd1943f",
+  "postimageSha256": "f1f77eb5222ddea37357f14fe6eb2b44ea1c0079fd6c5e42d3286d945dcd5e08",
+  "postimageBytes": 11251,
+  "edits": [
+    {
+      "before": "from './core.mjs';",
+      "after": "from 'file:///D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs';",
+      "reason": "Import the unchanged committed Report core."
+    },
+    {
+      "before": "here=path.dirname(fileURLToPath(import.meta.url));",
+      "after": "here=report+'/'+\"docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017\",helperFile=fileURLToPath(import.meta.url),helperRelative=\"docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs\";",
+      "reason": "Keep original complete bookkeeper manifest/source guard; separate exact root helper image."
+    },
+    {
+      "before": "const rootHead=git(root,'rev-parse','HEAD').toString().trim();",
+      "after": "const rootHead=git(root,'rev-parse','HEAD').toString().trim();\n const helperCommit=env.HR_ROOT_HELPER_COMMIT;\n must(/^[0-9a-f]{40}$/.test(helperCommit??'')&&physical(helperFile)===root+'/'+helperRelative,'BOOKKEEPER_COMMITTED_ROOT_HELPER_REQUIRED');\n const helperBytes=fs.readFileSync(helperFile);\n must([rootHead,'',helperCommit].every(ref=>helperBytes.equals(git(root,'show',ref+':'+helperRelative))),'BOOKKEEPER_EXACT_ROOT_HELPER_IMAGES_REQUIRED');\n git(root,'merge-base','--is-ancestor',helperCommit,rootHead);",
+      "reason": "Closed until root commits this exact helper; saved/index/HEAD/historical equality and genuine ancestry."
+    },
+    {
+      "before": "git(root,'push','origin','HEAD:refs/heads/codex/healthroster-install2-14102026');\n const commit=git(root,'rev-parse','HEAD').toString().trim();must(git(root,'ls-remote','origin','refs/heads/codex/healthroster-install2-14102026').toString().split(/\\s/)[0]===commit,'BOOKKEEPER_REMOTE_REQUIRED');",
+      "after": "const commit=git(root,'rev-parse','HEAD').toString().trim();\n // Accepted S0R7 timing: BEFORE local commit; SETUP publishes both before any submit.\n if(phase!=='BEFORE'){\n  git(root,'push','origin','HEAD:refs/heads/codex/healthroster-install2-14102026');\n  must(git(root,'ls-remote','origin','refs/heads/codex/healthroster-install2-14102026').toString().split(/\\s/)[0]===commit,'BOOKKEEPER_REMOTE_REQUIRED');\n }",
+      "reason": "Omit only BEFORE network publication; SETUP/AFTER/PUBLISH retain normal publication."
+    }
+  ],
+  "wholeRawInverseEqual": true,
+  "selectedReportRuntimeChanges": 0,
+  "rootHelperDestination": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs"
+}

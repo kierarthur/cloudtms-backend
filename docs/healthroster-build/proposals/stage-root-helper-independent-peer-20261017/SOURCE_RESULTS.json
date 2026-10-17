@@ -1,0 +1,12 @@
+{
+  "verdict": "PASS",
+  "authorManifest": "e635cf32745d5d06a1310d74c08aaa66a508116722eee05cb4f1b1f97f56efac",
+  "publicIgnoredSourceFiles": 8,
+  "actualPublicPinsSavedIndexHeadHistorical": 10,
+  "wholeInverse": true,
+  "literalEdits": 4,
+  "parentCommit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "helperModuleImportedOrRun": false,
+  "privateAccess": false,
+  "nativeCalls": 0
+}
