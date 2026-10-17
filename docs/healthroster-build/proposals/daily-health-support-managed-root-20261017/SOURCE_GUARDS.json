@@ -1,0 +1,144 @@
+{
+  "version": "DAILY_HEALTH_SUPPORT_CURRENT_SOURCE_GUARDS_V1",
+  "checkpoint": "acee28f5b4d862bdf7e4425a65566dd2d060be35",
+  "e938": "e938e54f81bb2416d4a281fa025fc8e714c8eb35",
+  "helperSource": {
+    "file": "docs/healthroster-build/proposals/daily-health-composition-20261017/17102026_0120_daily_health_composition.sql",
+    "rawSha256": "4bffb6f0c4493abfd159149dd671ec4e72450a214ca4b224a9f4509d82cdf55a"
+  },
+  "files": [
+    {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "canonicalSha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+      "rawSha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "canonicalSha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "rawSha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "canonicalSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "rawSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "canonicalSha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "rawSha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "canonicalSha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+      "rawSha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "canonicalSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "rawSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "canonicalSha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346",
+      "rawSha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "canonicalSha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8",
+      "rawSha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8"
+    },
+    {
+      "file": "broker/src/daily-rate-correction.js",
+      "canonicalSha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84",
+      "rawSha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84"
+    },
+    {
+      "file": "broker/src/contract-correction-v3.mjs",
+      "canonicalSha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087",
+      "rawSha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
+    }
+  ],
+  "finalOwners": [
+    {
+      "signature": "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc"
+    },
+    {
+      "signature": "private.daily_rate_correction_scope_v1(uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+    },
+    {
+      "signature": "private.daily_rate_correction_snapshot_assert_v1(jsonb,jsonb,jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+    },
+    {
+      "signature": "private.daily_rate_correction_normalized_snapshot_v1(jsonb,jsonb,jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+    },
+    {
+      "signature": "private.daily_rate_correction_request_assert_v1(jsonb,text)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_inspect_v1(jsonb,jsonb,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_preflight_v1(uuid,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_billing_read_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_move_commit_guard_v1()",
+      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_move_reason_v1(text,text)",
+      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc"
+    }
+  ],
+  "policyRoot": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6",
+  "policyFiles": [
+    {
+      "file": "WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "canonicalSha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1"
+    },
+    {
+      "file": "MOVE_STAGE_CONTRACT.md",
+      "canonicalSha256": "e8fd1cbff0165343b7460d52a4c73d41d6ee1fc7b4cb6b624f5df3eedf55262f"
+    },
+    {
+      "file": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json",
+      "canonicalSha256": "213c4ff9afc09b9fbf3be54b75b4d3629342647ba6f32119a9b13d269eec7c8f"
+    }
+  ],
+  "metadataParents": [
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "rawSha256": "b5be24d089aa3db2d79a1866a8aacee6b21f7696b1b262b2d1fe5b938d1b8dd8"
+    },
+    {
+      "file": "supabase/release/current-release.json",
+      "rawSha256": "d5b07ed55e339a3997c4f6766962622961d2a8acfd9ea88f0974cde531721906"
+    }
+  ],
+  "gateSource": {
+    "file": "scripts/bpay-next-source-gates.mjs",
+    "rawSha256": "2798cc6178aca812b82194659a6618bd94f12fdb404621783b5822b53a6a965f"
+  },
+  "originalE938ReasonAndGetPolicy": "UNCHANGED",
+  "native": "NOT_RUN"
+}

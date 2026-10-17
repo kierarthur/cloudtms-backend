@@ -1,0 +1,44 @@
+{
+  "version": "DAILY_HEALTH_SUPPORT_MANAGED_SOURCE_TESTS_V1",
+  "passed": 11,
+  "failed": 0,
+  "cases": [
+    "all seven saved payloads match manifest without existing SQL edits",
+    "all six complete helper bodies remain exact e938 and match independent manual expectations",
+    "public composers and new Banking body placeholders are absent",
+    "owner-only ACL covers exact six with no execution grant",
+    "one-time collision admission is separate from fully rerunnable repeatable",
+    "both metadata images fully reverse to exact current committed and saved parents",
+    "all ten original native sources/final owners and exact reason/read policy pins remain current",
+    "six registry additions preserve every prior chain and two verifier arrays preserve all old entries",
+    "independent mandatory verifier checks exact signatures result volatility path ownership ACL without running helpers",
+    "actual current F23 special-construct census needs no new allowance",
+    "complete additive reverse drops exactly these six and no original owner"
+  ],
+  "census": [
+    {
+      "file": "supabase/migrations/17102026_0248_daily_health_support_admission.sql",
+      "rawOccurrences": 0
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "rawOccurrences": 0
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "rawOccurrences": 0
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "rawOccurrences": 0
+    },
+    {
+      "file": "supabase/verification/17102026_0248_daily_health_support_security.sql",
+      "rawOccurrences": 0
+    }
+  ],
+  "newF23Allowances": 0,
+  "native": "NOT_RUN",
+  "rootWrites": 0,
+  "dbConnections": 0
+}

@@ -1,0 +1,63 @@
+{
+  "version": "DAILY_HEALTH_SUPPORT_MANAGED_PROPOSAL_V1",
+  "checkpoint": "acee28f5b4d862bdf7e4425a65566dd2d060be35",
+  "e938": "e938e54f81bb2416d4a281fa025fc8e714c8eb35",
+  "files": [
+    {
+      "target": "supabase/migrations/17102026_0248_daily_health_support_admission.sql",
+      "source": "payload/supabase/migrations/17102026_0248_daily_health_support_admission.sql",
+      "sha256": "6dcb719b0e62eec72cd547e59e9726dec7b7ccc513edba463ada003046b8842d",
+      "bytes": 835
+    },
+    {
+      "target": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "source": "payload/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "sha256": "e4e70d06e78dce2d8ea19f033cf5ef9fadc2de753106cc5677dad7b982dcd1d8",
+      "bytes": 172
+    },
+    {
+      "target": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "source": "payload/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "bytes": 15886
+    },
+    {
+      "target": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "source": "payload/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "sha256": "ec1dae1cab0e44a1713ace86ceaf4d6ae916e5550ba4f204e407450ce73e117a",
+      "bytes": 1358
+    },
+    {
+      "target": "supabase/verification/17102026_0248_daily_health_support_security.sql",
+      "source": "payload/supabase/verification/17102026_0248_daily_health_support_security.sql",
+      "sha256": "d2a1bc26c9c5b5650f78235e46e505037e4e59fbd74f095859fd3fc62817a847",
+      "bytes": 2400
+    },
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "source": "payload/docs/bpay-next/final-definer-closures.json",
+      "sha256": "37eb7b44bf997287bb0684edc1873bbd0a38ee2111234e3aa23a18b8ab141bd6",
+      "bytes": 1681882
+    },
+    {
+      "target": "supabase/release/current-release.json",
+      "source": "payload/supabase/release/current-release.json",
+      "sha256": "cf68ab7b56dd2bfe5a865892cd8364845851ac6fb6fb56fd884e4f16ef2359f8",
+      "bytes": 36188
+    }
+  ],
+  "managedRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+  "oneTimeAdmission": "supabase/migrations/17102026_0248_daily_health_support_admission.sql",
+  "independentVerification": "supabase/verification/17102026_0248_daily_health_support_security.sql",
+  "signatures": [
+    "private.daily_rate_correction_health_reason_note_v1(text)",
+    "private.daily_rate_correction_health_actor_require_v1(uuid,boolean)",
+    "private.daily_rate_correction_health_basis_v1(jsonb,boolean)",
+    "private.daily_rate_correction_health_review_prepare_v1(jsonb)",
+    "private.daily_rate_correction_health_accept_basis_v1(jsonb)",
+    "private.daily_rate_correction_health_result_basis_v1(uuid,uuid)"
+  ],
+  "newPublicComposers": 0,
+  "newBankBodies": 0,
+  "native": "NOT_RUN"
+}
