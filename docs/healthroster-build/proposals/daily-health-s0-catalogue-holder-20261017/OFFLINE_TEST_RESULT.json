@@ -1,0 +1,16 @@
+{
+  "version": "DAILY_S0_CATALOGUE_HOLDER_SOURCE_TESTS_V1",
+  "node": "24.15.0",
+  "passed": 46,
+  "failed": 0,
+  "actualOriginalSharedTurnControlledConnection": true,
+  "originalTurnBusyAndCooldown": true,
+  "strictEnvelopeAndScope": true,
+  "controlOrderAndAbort": true,
+  "ownedLeafClosure": true,
+  "endReportHeadSourceCheck": true,
+  "native": "NOT_RUN",
+  "browser": "NOT_RUN",
+  "privateState": "NOT_ACCESSED",
+  "compatibility": "NOT_QUALIFIED"
+}

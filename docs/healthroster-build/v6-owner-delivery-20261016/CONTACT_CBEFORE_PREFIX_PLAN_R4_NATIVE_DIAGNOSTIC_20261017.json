@@ -1,0 +1,803 @@
+{
+  "version": "CONTACT_CBEFORE_PREFIX_PLAN_R4_ACTUAL_DIAGNOSTIC_V1",
+  "executionCommit": "a0e8ef17c45d34b86da43da4adb79804dd1863a2",
+  "status": "FIXED_PREFIX_AND_ESTIMATED_PLAN_COMPLETED",
+  "sourceFiles": [
+    {
+      "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-prefix-plan-r4\\PREFIX_COMPLETION.json",
+      "bytes": 2479,
+      "sha256": "d405383939de66b7fcd26b7c0d405b185cd803e314a126c241f73f6bc850187b"
+    },
+    {
+      "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-prefix-plan-r4\\ESTIMATED_PLAN.json",
+      "bytes": 14502,
+      "sha256": "e1b1e6e10f9550f6515ad883105a485d7522e2dbfa9147f0d7fd6cfcdb827e50"
+    },
+    {
+      "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-prefix-plan-r4\\DIAGNOSTIC_SUMMARY.json",
+      "bytes": 1457,
+      "sha256": "2a3df2ee03a34ffc94a7b71bdbb1c96435c9888a8990334c13d587f85f995c58"
+    }
+  ],
+  "actualPrefix": {
+    "status": "EXACT_PREFIX_COMPLETED_NO_SNAPSHOT",
+    "mode": "PREFIX",
+    "peer": {
+      "database": "cloudtms_test_clone",
+      "readOnly": true,
+      "holderPid": 274971,
+      "isolation": "repeatable read",
+      "readerPid": 274985,
+      "databaseOid": 324139,
+      "noRoleSwitch": true
+    },
+    "progress": {
+      "version": "CONTACT_CBEFORE_PREFIX_COMPLETION_V1",
+      "mode": "PREFIX",
+      "childClosed": true,
+      "completed": [
+        {
+          "ordinal": 1,
+          "originalOrdinal": 1,
+          "completion": "BEGIN_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:17.161Z"
+        },
+        {
+          "ordinal": 2,
+          "originalOrdinal": 2,
+          "completion": "GUARD_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:17.217Z"
+        },
+        {
+          "ordinal": 3,
+          "originalOrdinal": 3,
+          "completion": "PEER_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:17.245Z"
+        },
+        {
+          "ordinal": 4,
+          "originalOrdinal": 4,
+          "completion": "SEARCH_PATH_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:17.268Z"
+        },
+        {
+          "ordinal": 5,
+          "originalOrdinal": 6,
+          "completion": "ROLLBACK_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:17.293Z"
+        }
+      ],
+      "nextUnconfirmedOrdinal": null,
+      "failedStatementOrdinal": "UNKNOWN_COMPLETION_MARKERS_ARE_A_LOWER_BOUND",
+      "canonicalRowsRead": false,
+      "restorationQualified": false
+    },
+    "source": {
+      "version": "CONTACT_CBEFORE_FIXED_DIAGNOSTIC_SOURCE_V1",
+      "scope": "CONTACT_QT_POSITIVE_TWELVE_COMPLETE_RELATIONS_V1",
+      "canonicalSqlSha256": "bc124c5637b0fdc3b7dea39ff0fbe4e878842dace14191a7ecd18eb2d0bd5c8a",
+      "wholeQuerySha256": "f270d318483715e59138650a2e18c5b263009321fecef4597305bd3c92aa6587",
+      "originalInputSha256": "ec59b435733d647cab049a667d4fae5901a1db28024c938f07bab9ad63e506fd",
+      "prefixInputSha256": "5e0bfabd9a38d2f29fe99738533ac57cc82287a5e1638c8b8d9b7763063f1b86",
+      "planInputSha256": "ee5f672857bf2e312341a324320d4dbf3f3dc2ce7c05adaa7eac4bc7c4fb7533",
+      "prefixStatements": 5,
+      "planStatements": 6,
+      "canonicalRowsRead": false,
+      "analyze": false,
+      "limits": {
+        "stdoutBytes": 67108864,
+        "stderrBytes": 16384,
+        "connectSeconds": 10,
+        "statementMilliseconds": 45000,
+        "lockMilliseconds": 2000,
+        "childMilliseconds": 70000,
+        "terminateGraceMilliseconds": 2000,
+        "closeGraceMilliseconds": 3000
+      }
+    },
+    "childClosed": true,
+    "restorationQualified": false
+  },
+  "actualEstimatedPlan": {
+    "status": "EXACT_ESTIMATED_PLAN_COMPLETED_NO_SNAPSHOT",
+    "mode": "PLAN",
+    "peer": {
+      "database": "cloudtms_test_clone",
+      "readOnly": true,
+      "holderPid": 274971,
+      "isolation": "repeatable read",
+      "readerPid": 274989,
+      "databaseOid": 324139,
+      "noRoleSwitch": true
+    },
+    "progress": {
+      "version": "CONTACT_CBEFORE_PREFIX_COMPLETION_V1",
+      "mode": "PLAN",
+      "childClosed": true,
+      "completed": [
+        {
+          "ordinal": 1,
+          "originalOrdinal": 1,
+          "completion": "BEGIN_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:26.319Z"
+        },
+        {
+          "ordinal": 2,
+          "originalOrdinal": 2,
+          "completion": "GUARD_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:26.372Z"
+        },
+        {
+          "ordinal": 3,
+          "originalOrdinal": 3,
+          "completion": "PEER_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:26.396Z"
+        },
+        {
+          "ordinal": 4,
+          "originalOrdinal": 4,
+          "completion": "SEARCH_PATH_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:26.420Z"
+        },
+        {
+          "ordinal": 5,
+          "originalOrdinal": 5,
+          "completion": "EXPLAIN_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:26.638Z"
+        },
+        {
+          "ordinal": 6,
+          "originalOrdinal": 6,
+          "completion": "ROLLBACK_COMPLETE",
+          "receivedAt": "2026-10-17T10:23:26.668Z"
+        }
+      ],
+      "nextUnconfirmedOrdinal": null,
+      "failedStatementOrdinal": "UNKNOWN_COMPLETION_MARKERS_ARE_A_LOWER_BOUND",
+      "canonicalRowsRead": false,
+      "restorationQualified": false
+    },
+    "plan": {
+      "version": "CONTACT_CBEFORE_NO_ANALYZE_ESTIMATED_PLAN_V2",
+      "sourceScopeMapSha256": "0426985ea599c726934b2a10eca00f1642d6fe99537a2a3441a723c00c395caf",
+      "nodeCount": 201,
+      "topEstimatedCostNodes": [
+        {
+          "ordinal": 1,
+          "parent": null,
+          "nodeType": "Result",
+          "startupCost": 1028784.05,
+          "totalCost": 1028784.17,
+          "estimatedRows": 1,
+          "estimatedWidth": 32,
+          "sourceRelationOrdinals": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            22,
+            23,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37
+          ],
+          "sourceCteOrdinals": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "ordinal": 2,
+          "parent": 1,
+          "nodeType": "Append",
+          "startupCost": 32455.98,
+          "totalCost": 929538.73,
+          "estimatedRows": 12,
+          "estimatedWidth": 72,
+          "cteProducerOrdinal": 3,
+          "sourceRelationOrdinals": [
+            1,
+            3,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37
+          ],
+          "sourceCteOrdinals": [
+            3
+          ]
+        },
+        {
+          "ordinal": 6,
+          "parent": 2,
+          "nodeType": "Aggregate",
+          "startupCost": 896994.73,
+          "totalCost": 896994.75,
+          "estimatedRows": 1,
+          "estimatedWidth": 72,
+          "sourceRelationOrdinals": [
+            1
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 7,
+          "parent": 6,
+          "nodeType": "Sort",
+          "startupCost": 869828.14,
+          "totalCost": 872846.65,
+          "estimatedRows": 1207404,
+          "estimatedWidth": 1022,
+          "sourceRelationOrdinals": [
+            1
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 8,
+          "parent": 7,
+          "nodeType": "Seq Scan",
+          "startupCost": 0,
+          "totalCost": 114561.04,
+          "estimatedRows": 1207404,
+          "estimatedWidth": 1022,
+          "relationOrdinal": 1,
+          "sourceRelationOrdinals": [
+            1
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 185,
+          "parent": 1,
+          "nodeType": "Aggregate",
+          "startupCost": 63417.94,
+          "totalCost": 63417.95,
+          "estimatedRows": 1,
+          "estimatedWidth": 32,
+          "sourceRelationOrdinals": [
+            3
+          ],
+          "sourceCteOrdinals": [
+            2
+          ]
+        },
+        {
+          "ordinal": 39,
+          "parent": 1,
+          "nodeType": "Result",
+          "startupCost": 35557.22,
+          "totalCost": 35557.24,
+          "estimatedRows": 1,
+          "estimatedWidth": 32,
+          "cteProducerOrdinal": 4,
+          "sourceRelationOrdinals": [
+            8,
+            9,
+            10,
+            11,
+            12,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            22,
+            23,
+            26,
+            27
+          ],
+          "sourceCteOrdinals": [
+            1,
+            4,
+            5
+          ]
+        },
+        {
+          "ordinal": 3,
+          "parent": 2,
+          "nodeType": "Aggregate",
+          "startupCost": 32455.98,
+          "totalCost": 32455.99,
+          "estimatedRows": 1,
+          "estimatedWidth": 72,
+          "sourceRelationOrdinals": [
+            3
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 4,
+          "parent": 3,
+          "nodeType": "Sort",
+          "startupCost": 30799.41,
+          "totalCost": 30983.47,
+          "estimatedRows": 73625,
+          "estimatedWidth": 716,
+          "sourceRelationOrdinals": [
+            3
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 94,
+          "parent": 39,
+          "nodeType": "Aggregate",
+          "startupCost": 18786.23,
+          "totalCost": 18786.24,
+          "estimatedRows": 1,
+          "estimatedWidth": 32,
+          "sourceRelationOrdinals": [
+            16,
+            23
+          ],
+          "sourceCteOrdinals": [
+            1,
+            5
+          ]
+        },
+        {
+          "ordinal": 67,
+          "parent": 39,
+          "nodeType": "Aggregate",
+          "startupCost": 15619.31,
+          "totalCost": 15619.32,
+          "estimatedRows": 1,
+          "estimatedWidth": 32,
+          "sourceRelationOrdinals": [
+            8,
+            9,
+            11,
+            12,
+            19
+          ],
+          "sourceCteOrdinals": [
+            1,
+            5
+          ]
+        },
+        {
+          "ordinal": 187,
+          "parent": 185,
+          "nodeType": "Index Scan",
+          "startupCost": 0.42,
+          "totalCost": 12984.79,
+          "estimatedRows": 73625,
+          "estimatedWidth": 1294,
+          "relationOrdinal": 3,
+          "sourceRelationOrdinals": [
+            3
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 5,
+          "parent": 4,
+          "nodeType": "Seq Scan",
+          "startupCost": 0,
+          "totalCost": 11139.25,
+          "estimatedRows": 73625,
+          "estimatedWidth": 716,
+          "relationOrdinal": 3,
+          "sourceRelationOrdinals": [
+            3
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 95,
+          "parent": 94,
+          "nodeType": "Sort",
+          "startupCost": 1472.23,
+          "totalCost": 1475.77,
+          "estimatedRows": 1414,
+          "estimatedWidth": 237,
+          "sourceRelationOrdinals": [
+            16,
+            23
+          ],
+          "sourceCteOrdinals": [
+            1
+          ]
+        },
+        {
+          "ordinal": 96,
+          "parent": 95,
+          "nodeType": "Hash Join",
+          "startupCost": 669.72,
+          "totalCost": 1398.24,
+          "estimatedRows": 1414,
+          "estimatedWidth": 237,
+          "sourceRelationOrdinals": [
+            16,
+            23
+          ],
+          "sourceCteOrdinals": [
+            1
+          ]
+        },
+        {
+          "ordinal": 97,
+          "parent": 96,
+          "nodeType": "Hash Join",
+          "startupCost": 0.07,
+          "totalCost": 710.63,
+          "estimatedRows": 1416,
+          "estimatedWidth": 237,
+          "sourceRelationOrdinals": [
+            23
+          ],
+          "sourceCteOrdinals": [
+            1
+          ]
+        },
+        {
+          "ordinal": 98,
+          "parent": 97,
+          "nodeType": "Seq Scan",
+          "startupCost": 0,
+          "totalCost": 680.48,
+          "estimatedRows": 4248,
+          "estimatedWidth": 177,
+          "relationOrdinal": 23,
+          "sourceRelationOrdinals": [
+            23
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 101,
+          "parent": 96,
+          "nodeType": "Hash",
+          "startupCost": 669.2,
+          "totalCost": 669.2,
+          "estimatedRows": 37,
+          "estimatedWidth": 4,
+          "sourceRelationOrdinals": [
+            16
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 102,
+          "parent": 101,
+          "nodeType": "Index Scan",
+          "startupCost": 0.41,
+          "totalCost": 669.2,
+          "estimatedRows": 37,
+          "estimatedWidth": 4,
+          "relationOrdinal": 16,
+          "sourceRelationOrdinals": [
+            16
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 114,
+          "parent": 39,
+          "nodeType": "Aggregate",
+          "startupCost": 577.12,
+          "totalCost": 577.13,
+          "estimatedRows": 1,
+          "estimatedWidth": 32,
+          "sourceRelationOrdinals": [
+            11,
+            26
+          ],
+          "sourceCteOrdinals": [
+            1
+          ]
+        },
+        {
+          "ordinal": 115,
+          "parent": 114,
+          "nodeType": "Sort",
+          "startupCost": 575.77,
+          "totalCost": 576.1,
+          "estimatedRows": 135,
+          "estimatedWidth": 197,
+          "sourceRelationOrdinals": [
+            11,
+            26
+          ],
+          "sourceCteOrdinals": [
+            1
+          ]
+        },
+        {
+          "ordinal": 116,
+          "parent": 115,
+          "nodeType": "Hash Join",
+          "startupCost": 294.52,
+          "totalCost": 570.99,
+          "estimatedRows": 135,
+          "estimatedWidth": 197,
+          "sourceRelationOrdinals": [
+            11,
+            26
+          ],
+          "sourceCteOrdinals": [
+            1
+          ]
+        },
+        {
+          "ordinal": 68,
+          "parent": 67,
+          "nodeType": "Sort",
+          "startupCost": 290.36,
+          "totalCost": 290.94,
+          "estimatedRows": 230,
+          "estimatedWidth": 232,
+          "sourceRelationOrdinals": [
+            11
+          ],
+          "sourceCteOrdinals": [
+            1
+          ]
+        },
+        {
+          "ordinal": 123,
+          "parent": 39,
+          "nodeType": "Aggregate",
+          "startupCost": 287.19,
+          "totalCost": 287.2,
+          "estimatedRows": 1,
+          "estimatedWidth": 32,
+          "sourceRelationOrdinals": [
+            10,
+            11,
+            20,
+            22
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 69,
+          "parent": 68,
+          "nodeType": "Hash Join",
+          "startupCost": 0.07,
+          "totalCost": 281.34,
+          "estimatedRows": 230,
+          "estimatedWidth": 232,
+          "sourceRelationOrdinals": [
+            11
+          ],
+          "sourceCteOrdinals": [
+            1
+          ]
+        },
+        {
+          "ordinal": 124,
+          "parent": 123,
+          "nodeType": "Sort",
+          "startupCost": 280.54,
+          "totalCost": 280.55,
+          "estimatedRows": 3,
+          "estimatedWidth": 528,
+          "sourceRelationOrdinals": [
+            11,
+            20,
+            22
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 125,
+          "parent": 124,
+          "nodeType": "Nested Loop",
+          "startupCost": 3.62,
+          "totalCost": 280.52,
+          "estimatedRows": 3,
+          "estimatedWidth": 528,
+          "sourceRelationOrdinals": [
+            11,
+            20,
+            22
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 118,
+          "parent": 116,
+          "nodeType": "Hash",
+          "startupCost": 278.89,
+          "totalCost": 278.89,
+          "estimatedRows": 1250,
+          "estimatedWidth": 132,
+          "sourceRelationOrdinals": [
+            11
+          ],
+          "sourceCteOrdinals": [
+            1
+          ]
+        },
+        {
+          "ordinal": 119,
+          "parent": 118,
+          "nodeType": "Hash Join",
+          "startupCost": 0.07,
+          "totalCost": 278.89,
+          "estimatedRows": 1250,
+          "estimatedWidth": 132,
+          "sourceRelationOrdinals": [
+            11
+          ],
+          "sourceCteOrdinals": [
+            1
+          ]
+        },
+        {
+          "ordinal": 70,
+          "parent": 69,
+          "nodeType": "Seq Scan",
+          "startupCost": 0,
+          "totalCost": 273.36,
+          "estimatedRows": 1037,
+          "estimatedWidth": 172,
+          "relationOrdinal": 11,
+          "sourceRelationOrdinals": [
+            11
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 117,
+          "parent": 116,
+          "nodeType": "Seq Scan",
+          "startupCost": 0,
+          "totalCost": 272.84,
+          "estimatedRows": 608,
+          "estimatedWidth": 73,
+          "relationOrdinal": 26,
+          "sourceRelationOrdinals": [
+            26
+          ],
+          "sourceCteOrdinals": []
+        },
+        {
+          "ordinal": 126,
+          "parent": 125,
+          "nodeType": "Hash Join",
+          "startupCost": 3.35,
+          "totalCost": 263.66,
+          "estimatedRows": 55,
+          "estimatedWidth": 132,
+          "sourceRelationOrdinals": [
+            11,
+            20
+          ],
+          "sourceCteOrdinals": []
+        }
+      ],
+      "actualRowsOrTimings": false,
+      "rawPlanPersisted": false
+    },
+    "source": {
+      "version": "CONTACT_CBEFORE_FIXED_DIAGNOSTIC_SOURCE_V1",
+      "scope": "CONTACT_QT_POSITIVE_TWELVE_COMPLETE_RELATIONS_V1",
+      "canonicalSqlSha256": "bc124c5637b0fdc3b7dea39ff0fbe4e878842dace14191a7ecd18eb2d0bd5c8a",
+      "wholeQuerySha256": "f270d318483715e59138650a2e18c5b263009321fecef4597305bd3c92aa6587",
+      "originalInputSha256": "ec59b435733d647cab049a667d4fae5901a1db28024c938f07bab9ad63e506fd",
+      "prefixInputSha256": "5e0bfabd9a38d2f29fe99738533ac57cc82287a5e1638c8b8d9b7763063f1b86",
+      "planInputSha256": "ee5f672857bf2e312341a324320d4dbf3f3dc2ce7c05adaa7eac4bc7c4fb7533",
+      "prefixStatements": 5,
+      "planStatements": 6,
+      "canonicalRowsRead": false,
+      "analyze": false,
+      "limits": {
+        "stdoutBytes": 67108864,
+        "stderrBytes": 16384,
+        "connectSeconds": 10,
+        "statementMilliseconds": 45000,
+        "lockMilliseconds": 2000,
+        "childMilliseconds": 70000,
+        "terminateGraceMilliseconds": 2000,
+        "closeGraceMilliseconds": 3000
+      }
+    },
+    "childClosed": true,
+    "restorationQualified": false
+  },
+  "actualSummary": {
+    "status": "PREFIX_AND_ESTIMATED_PLAN_COMPLETED_NO_RESTORATION_VERDICT",
+    "caseId": "CONTACT_CONSTRUCTORS_V1",
+    "includePlan": true,
+    "source": {
+      "version": "CONTACT_CBEFORE_FIXED_DIAGNOSTIC_SOURCE_V1",
+      "scope": "CONTACT_QT_POSITIVE_TWELVE_COMPLETE_RELATIONS_V1",
+      "canonicalSqlSha256": "bc124c5637b0fdc3b7dea39ff0fbe4e878842dace14191a7ecd18eb2d0bd5c8a",
+      "wholeQuerySha256": "f270d318483715e59138650a2e18c5b263009321fecef4597305bd3c92aa6587",
+      "originalInputSha256": "ec59b435733d647cab049a667d4fae5901a1db28024c938f07bab9ad63e506fd",
+      "prefixInputSha256": "5e0bfabd9a38d2f29fe99738533ac57cc82287a5e1638c8b8d9b7763063f1b86",
+      "planInputSha256": "ee5f672857bf2e312341a324320d4dbf3f3dc2ce7c05adaa7eac4bc7c4fb7533",
+      "prefixStatements": 5,
+      "planStatements": 6,
+      "canonicalRowsRead": false,
+      "analyze": false,
+      "limits": {
+        "stdoutBytes": 67108864,
+        "stderrBytes": 16384,
+        "connectSeconds": 10,
+        "statementMilliseconds": 45000,
+        "lockMilliseconds": 2000,
+        "childMilliseconds": 70000,
+        "terminateGraceMilliseconds": 2000,
+        "closeGraceMilliseconds": 3000
+      }
+    },
+    "timing": {
+      "sequenceStartedAt": "2026-10-17T10:23:11.754Z",
+      "sourceBuildStartedAt": "2026-10-17T10:23:11.754Z",
+      "sourceBuildFinishedAt": "2026-10-17T10:23:12.003Z"
+    },
+    "canonicalSnapshotInvoked": false,
+    "mcpDispatched": false,
+    "fixturesAttempted": false,
+    "restorationQualified": false
+  },
+  "actualSharedTurnRecords": [
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_CBEFORE_FIXED_DIAGNOSTIC_V1",
+      "status": "TAKEN",
+      "takenAt": "2026-10-17T10:23:07.426Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_CBEFORE_FIXED_DIAGNOSTIC_V1",
+      "status": "RELEASED",
+      "takenAt": "2026-10-17T10:23:07.426Z",
+      "releasedAt": "2026-10-17T10:23:34.794Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    }
+  ],
+  "review": "Current guard prefix and non-ANALYZE planning completed. Largest estimated scope is audit_events: aggregate cost896994.75; Sort estimated1207404 rows/width1022/cost872846.65. These estimates are not observed row counts, timings, measured speedup or the cause/ordinal of the earlierR3 cancellation. All rows/fingerprints/scopes remain required. A finite hash-projection evaluation-fence source correction is assigned; no full snapshot retry yet.",
+  "canonicalRestoration": "NOT_RUN_NO_VERDICT_COPIED",
+  "nativeConstructorsOrQt": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

@@ -1,0 +1,17 @@
+{
+  "version":"DAILY_S0_CATALOGUE_HOLDER_INDEPENDENT_PEER_V1",
+  "reviewer":"GPT-6.1-sol / xhigh",
+  "disposition":"ACCEPT_BOUNDED_SOURCE_ONLY",
+  "actionableFindings":[],
+  "authorCommit":"474d819407e7fbf2c2c815d306c584fb30c65811",
+  "authorFolder":"docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017",
+  "authorManifestSha256":"7945768f5ed86da4fdbdb364da7adedd4df387e03902043204ccf21f7642cd6d",
+  "capture":{"holderFiles":18,"publicExternalFiles":7,"allSavedIndexHeadEqual":true,"originalI2SharedOwners":2,"originalSharedCommit":"5564a2e5e9e8f57196596b28c7bff526eaa7429d","originalCatalogueCommit":"8d13d7035db66a125b9b78cf4f96fc70b80b3ecc"},
+  "reviewedComplete":["hold.mjs","protocol.mjs","source.mjs","original shared-turn and control owners","ACL and whole parent","protected-release function and whole parent","exact catalogue builder","declared external public imports","all46 offline tests"],
+  "replay":{"testsPassed":46,"testsFailed":0,"sourceManifestRows":17,"productionOrTestBodyAmendments":0,"controlledConnectionsOnly":true,"wholeAclParentInverse":true,"wholeProtectedReleaseFunctionInverse":true,"exact8d13Builder":true,"endReportHeadGuardRetained":true},
+  "budgets":{"workMs":120000,"cleanupMs":60000,"wholeMs":180000,"aProbeMs":5000,"ownedCloseKillMs":10000,"ownedCloseConfirmationMs":5000,"protectedReleaseChildMs":15000,"aclChildMs":15000,"resultBytes":8000000},
+  "closedMeaning":{"capture":"ROOT_REVIEW_REQUIRED_NOT_QUALIFIED","businessScope":"NOT_RUN","canonicalRestoration":"NOT_APPLICABLE_NO_VERDICT_COPIED","sharedUnlockClose":"original actual SEND7 journal only"},
+  "heldQualifications":["root exact committed setup/source admission","actual native rollback result and fresh equality","root independent compatibility/effect/metadata review","no business fixture or canonical restoration proof"],
+  "execution":{"holdInvoked":false,"sourceOrPreflightInvoked":false,"native":"NOT_RUN","psqlExecuted":false,"browser":"NOT_RUN","apiOrConnectorCalls":0,"privateActualStateReads":0,"rootOrOfficeWrites":0,"bankSemanticBodiesRead":0},
+  "sourceStorage":{"configuredCwd":"D:/Development/GitHub","writeRoot":"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026","gitDir":"D:/Development/GitHub/cloudtms-backend/.git/worktrees/healthroster-v2-money-build-13102026","commonGitDir":"D:/Development/GitHub/cloudtms-backend/.git","physicalDPathsVerified":true}
+}

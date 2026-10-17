@@ -1,0 +1,286 @@
+TAP version 13
+# Subtest: fixed builder and synthetic frame yield capture only, with no compatibility or scope PASS
+ok 1 - fixed builder and synthetic frame yield capture only, with no compatibility or scope PASS
+  ---
+  duration_ms: 3.1323
+  type: 'test'
+  ...
+# Subtest: capture refuses wrongDatabase
+ok 2 - capture refuses wrongDatabase
+  ---
+  duration_ms: 0.3207
+  type: 'test'
+  ...
+# Subtest: capture refuses wrongTarget
+ok 3 - capture refuses wrongTarget
+  ---
+  duration_ms: 0.1983
+  type: 'test'
+  ...
+# Subtest: capture refuses wrongLabel
+ok 4 - capture refuses wrongLabel
+  ---
+  duration_ms: 0.1859
+  type: 'test'
+  ...
+# Subtest: capture refuses wrongSql
+ok 5 - capture refuses wrongSql
+  ---
+  duration_ms: 0.2256
+  type: 'test'
+  ...
+# Subtest: capture refuses notAccepted
+ok 6 - capture refuses notAccepted
+  ---
+  duration_ms: 0.1794
+  type: 'test'
+  ...
+# Subtest: capture refuses notRolledBack
+ok 7 - capture refuses notRolledBack
+  ---
+  duration_ms: 0.1461
+  type: 'test'
+  ...
+# Subtest: capture refuses fatal
+ok 8 - capture refuses fatal
+  ---
+  duration_ms: 0.128
+  type: 'test'
+  ...
+# Subtest: capture refuses extraStatement
+ok 9 - capture refuses extraStatement
+  ---
+  duration_ms: 0.1742
+  type: 'test'
+  ...
+# Subtest: capture refuses truncated
+ok 10 - capture refuses truncated
+  ---
+  duration_ms: 0.2538
+  type: 'test'
+  ...
+# Subtest: capture refuses extraRow
+ok 11 - capture refuses extraRow
+  ---
+  duration_ms: 0.1695
+  type: 'test'
+  ...
+# Subtest: capture refuses wrongField
+ok 12 - capture refuses wrongField
+  ---
+  duration_ms: 0.148
+  type: 'test'
+  ...
+# Subtest: capture refuses wrongSet
+ok 13 - capture refuses wrongSet
+  ---
+  duration_ms: 0.1127
+  type: 'test'
+  ...
+# Subtest: capture refuses notFresh
+ok 14 - capture refuses notFresh
+  ---
+  duration_ms: 0.1011
+  type: 'test'
+  ...
+# Subtest: capture refuses wrongFreshDatabase
+ok 15 - capture refuses wrongFreshDatabase
+  ---
+  duration_ms: 0.0951
+  type: 'test'
+  ...
+# Subtest: capture refuses wrongFreshSequence
+ok 16 - capture refuses wrongFreshSequence
+  ---
+  duration_ms: 0.093
+  type: 'test'
+  ...
+# Subtest: capture refuses wrongOid
+ok 17 - capture refuses wrongOid
+  ---
+  duration_ms: 0.5069
+  type: 'test'
+  ...
+# Subtest: capture refuses notReadOnly
+ok 18 - capture refuses notReadOnly
+  ---
+  duration_ms: 0.1439
+  type: 'test'
+  ...
+# Subtest: capture refuses roleSwitch
+ok 19 - capture refuses roleSwitch
+  ---
+  duration_ms: 0.1184
+  type: 'test'
+  ...
+# Subtest: capture refuses notHeld
+ok 20 - capture refuses notHeld
+  ---
+  duration_ms: 0.0908
+  type: 'test'
+  ...
+# Subtest: capture refuses missingRelation
+ok 21 - capture refuses missingRelation
+  ---
+  duration_ms: 0.0816
+  type: 'test'
+  ...
+# Subtest: capture refuses wrongSchema
+ok 22 - capture refuses wrongSchema
+  ---
+  duration_ms: 0.0956
+  type: 'test'
+  ...
+# Subtest: capture refuses oldFrame
+ok 23 - capture refuses oldFrame
+  ---
+  duration_ms: 0.0929
+  type: 'test'
+  ...
+# Subtest: capture refuses futureFrame
+ok 24 - capture refuses futureFrame
+  ---
+  duration_ms: 0.0922
+  type: 'test'
+  ...
+# Subtest: capture refuses freshMetadataDrift
+ok 25 - capture refuses freshMetadataDrift
+  ---
+  duration_ms: 0.1467
+  type: 'test'
+  ...
+# Subtest: capture refuses extraFrameKey
+ok 26 - capture refuses extraFrameKey
+  ---
+  duration_ms: 0.0974
+  type: 'test'
+  ...
+# Subtest: control exact ordering and CRLF acceptance; disposing removes listeners
+ok 27 - control exact ordering and CRLF acceptance; disposing removes listeners
+  ---
+  duration_ms: 0.6844
+  type: 'test'
+  ...
+# Subtest: control refuses early
+ok 28 - control refuses early
+  ---
+  duration_ms: 0.2111
+  type: 'test'
+  ...
+# Subtest: control refuses unknown
+ok 29 - control refuses unknown
+  ---
+  duration_ms: 0.1353
+  type: 'test'
+  ...
+# Subtest: control refuses abort
+ok 30 - control refuses abort
+  ---
+  duration_ms: 0.1107
+  type: 'test'
+  ...
+# Subtest: control refuses oversized
+ok 31 - control refuses oversized
+  ---
+  duration_ms: 0.1203
+  type: 'test'
+  ...
+# Subtest: control EOF, repeated command and turn loss close fail
+ok 32 - control EOF, repeated command and turn loss close fail
+  ---
+  duration_ms: 1.4598
+  type: 'test'
+  ...
+# Subtest: actual original shared turn holds across fixed input/result/release then explicitly unlocks and closes
+ok 33 - actual original shared turn holds across fixed input/result/release then explicitly unlocks and closes
+  ---
+  duration_ms: 1.3881
+  type: 'test'
+  ...
+# Subtest: actual original shared-turn cleanup on before-input
+ok 34 - actual original shared-turn cleanup on before-input
+  ---
+  duration_ms: 0.4348
+  type: 'test'
+  ...
+# Subtest: actual original shared-turn cleanup on waiting-result
+ok 35 - actual original shared-turn cleanup on waiting-result
+  ---
+  duration_ms: 0.4768
+  type: 'test'
+  ...
+# Subtest: actual original shared-turn cleanup on bad-result
+ok 36 - actual original shared-turn cleanup on bad-result
+  ---
+  duration_ms: 0.317
+  type: 'test'
+  ...
+# Subtest: actual original shared-turn cleanup on waiting-release
+ok 37 - actual original shared-turn cleanup on waiting-release
+  ---
+  duration_ms: 0.4928
+  type: 'test'
+  ...
+# Subtest: actual original shared-turn cleanup on before-release
+ok 38 - actual original shared-turn cleanup on before-release
+  ---
+  duration_ms: 0.8241
+  type: 'test'
+  ...
+# Subtest: actual original shared-turn cleanup on ready-then-abort
+ok 39 - actual original shared-turn cleanup on ready-then-abort
+  ---
+  duration_ms: 0.2641
+  type: 'test'
+  ...
+# Subtest: cooldown and busy original turn never produce catalogue input
+ok 40 - cooldown and busy original turn never produce catalogue input
+  ---
+  duration_ms: 0.2064
+  type: 'test'
+  ...
+# Subtest: serialized own A query wrapper never overlaps probes
+ok 41 - serialized own A query wrapper never overlaps probes
+  ---
+  duration_ms: 7.3955
+  type: 'test'
+  ...
+# Subtest: own leaf close escalates only its captured child and refuses missing close confirmation
+ok 42 - own leaf close escalates only its captured child and refuses missing close confirmation
+  ---
+  duration_ms: 0.3885
+  type: 'test'
+  ...
+# Subtest: close after own captured child event is confirmed and timers removed
+ok 43 - close after own captured child event is confirmed and timers removed
+  ---
+  duration_ms: 0.1172
+  type: 'test'
+  ...
+# Subtest: complete ACL parent has exactly one output namespace substitution
+ok 44 - complete ACL parent has exactly one output namespace substitution
+  ---
+  duration_ms: 0.5163
+  type: 'test'
+  ...
+# Subtest: source checks preserve exact current-source images and end HEAD check
+ok 45 - source checks preserve exact current-source images and end HEAD check
+  ---
+  duration_ms: 0.2757
+  type: 'test'
+  ...
+# Subtest: complete original protected release function reverses with only name and bounded CLI option changes
+ok 46 - complete original protected release function reverses with only name and bounded CLI option changes
+  ---
+  duration_ms: 0.7488
+  type: 'test'
+  ...
+1..46
+# tests 46
+# suites 0
+# pass 46
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 141.3029
