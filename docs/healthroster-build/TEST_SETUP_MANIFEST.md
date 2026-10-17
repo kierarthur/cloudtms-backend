@@ -319,3 +319,20 @@ Actual input receipt:
   "native": "NOT_RUN"
 }
 ```
+
+
+### DAILY-GENUINE-S0-20261017 — one bounded staged operator call
+
+SEND_5 D9; agency_test/cloudtms_test_clone only. Operator source 4d5873f820b764681d5fc36ec689cde6e5882ee8. Client f717d043-0000-4000-8000-000000000010; Candidate f717d043-0000-4000-8000-000000000030; booking bk_9364434070884e36. No role changes, direct seeds, authorisation, email/provider/payment/Banking action, cleanup or retry. S0 is read-only. Stages S1–S4 each permit exactly one genuine normalTEST POST after this exact entry is committed.
+
+Fresh native main SQL SHA256 9d46278873162dbc57c5dfb22429763a7256b2febf43df93a8521a6ffa8a6fa8; fresh verification SQL SHA256 31c17647382a0ed2de6be99860543d3e9ed00935d54e7568cf6d127ba6d4985d; actual before envelope SHA256 7a34d2d94a4228e4138ab80b934b7d5578bc209f559045370718d4b4f98efa59; separately reviewed installed Worker/native/schema/ACL/trigger/default/effect admission SHA256 4e72e9f72bb8888b15cd51edd947242aa9e25789957e67b4455b0c8d5d4f6bfd. The actual original shared-turn A remains owned through the readback; fresh current active Admin/WP-PP, TEST/customer-null/LEGACY:1/no APPLYING and vacancy are mandatory. Metadata or an old source pin alone is not effect admission.
+
+Exact request: NONE
+
+```json
+null
+```
+
+Expected scope: S1 one genuine Client plus native initial settings effective1900-01-01, current policy resolution/audit; S1a one exact native mapping f717d043-0000-4000-8000-000000000020 through the existing Hospital POST, one lower-case alias and ward_hint null, zero global current/history alias Timesheets and wakeup targets; S2 one non-login/non-bank Candidate and zero auto-assigned/financial targets; S3 one genuine dated native rate with empty prior rate/override/Client-TSFIN scope; S4 one native DAILY/HOURS/MANUAL/contract-null/current-version1 Timesheet and genuine unprocessed SELF_REPORTED TSFIN through the exact-ID canonical owner, with native outbox completion. S4 requires the genuinely qualified S1a association. No invented financial output.
+
+Before and fresh after native aggregates contain the entire reserved Client/settings/Candidate/join/rate/override/booking/current+historical Timesheet/TSFIN/outbox scope, exact native metadata and fingerprints. Preserve every prior qualified fixture row; only the stage's approved native changes may occur. A 200 response is insufficient without full readback. Any timeout, malformed response, refusal or non-200 permanently retains the attempt as unresolved. S4 HTTP500 may follow committed INSERT/recalculation and failed DELETE: reconcile booking/current+history/financial/outbox before any separately reviewed retry. This operator never retries, repairs, deletes, authorises or advances an uncertain attempt. Full native/API/financial proof remains NOT_RUN before genuine observation.
