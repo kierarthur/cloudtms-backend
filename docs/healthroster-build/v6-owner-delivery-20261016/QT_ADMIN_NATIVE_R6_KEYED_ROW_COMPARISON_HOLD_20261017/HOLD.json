@@ -1,0 +1,52 @@
+{
+  "status": "HOLD",
+  "caseId": "QT_ADMIN_CONTROLS_V1",
+  "code": "CONTACT_QT_MCP_ROLLBACK_ENVELOPE_REFUSED",
+  "observedErrorCode": "CONTACT_QT_MCP_ROLLBACK_ENVELOPE_REFUSED",
+  "deadlineObserved": false,
+  "localTiming": {
+    "sequenceStartedAt": "2026-10-17T16:35:01.070Z",
+    "workDeadlineAt": "2026-10-17T16:37:01.070Z",
+    "readyAt": "2026-10-17T16:35:57.319Z",
+    "resultReadAt": "2026-10-17T16:36:36.119Z"
+  },
+  "rootCallTiming": {
+    "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "sqlSha256": "9477d265d990962285b26ed0b449b422e4820b7897e4301a9c1f684576e400c9",
+    "callStartedAt": "2026-10-17T16:36:02.296Z",
+    "callReturnedAt": "2026-10-17T16:36:34.867Z",
+    "rootObservedCallMilliseconds": 32571,
+    "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+  },
+  "nativeClockFrames": [
+    {
+      "phase": "B_GUARD_BEFORE",
+      "readOnly": false,
+      "holderPid": 294961,
+      "backendPid": 295023,
+      "observedAt": "2026-10-17T16:36:04.445915+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T16:36:04.436093+00:00",
+      "transactionStartedAt": "2026-10-17T16:36:04.225873+00:00"
+    },
+    {
+      "phase": "B_GUARD_AFTER",
+      "readOnly": false,
+      "holderPid": 294961,
+      "backendPid": 295023,
+      "observedAt": "2026-10-17T16:36:04.52799+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T16:36:04.525721+00:00",
+      "transactionStartedAt": "2026-10-17T16:36:04.225873+00:00"
+    }
+  ],
+  "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+  "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+  "elapsedMilliseconds": 95175,
+  "completeMapsPersisted": false
+}

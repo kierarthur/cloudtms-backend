@@ -1,0 +1,41 @@
+{
+  "version": "QT_ADMIN_NATIVE_R6_KEYED_ROW_COMPARISON_HOLD_V1",
+  "sourceCommit": "42c7a828fdadaf6c31521fd7fe23ade7193d9cd9",
+  "verdict": "HOLD_FIRST_BOUNDED_KEYED_FULL_ROW_CAPTURE_STATEMENT_TIMEOUT",
+  "statement": 60,
+  "parsedStatementCount": 69,
+  "sqlState": "57014",
+  "actualCall": {
+    "startedAt": "2026-10-17T16:36:02.296Z",
+    "returnedAt": "2026-10-17T16:36:34.867Z",
+    "milliseconds": 32571
+  },
+  "accepted": false,
+  "rolledBack": true,
+  "freshConnected": true,
+  "freshAbsence": {
+    "readOnly": true,
+    "backendPid": 295064,
+    "qtObjectsAbsent": true,
+    "userFixtureRowsRemaining": 0
+  },
+  "markerAbsent": true,
+  "module": "LEGACY:1",
+  "applyingCount": 0,
+  "reached": "First bounded BEFORE CTAS; no fixture insert, constructor assertions, AFTER capture or tuple comparison.",
+  "ctasWireAbi": "UNOBSERVED; CTAS timed out.",
+  "canonicalAfter": "NOT_RUN",
+  "globalRestorationClaimed": false,
+  "ownTurn": {
+    "takenAt": "2026-10-17T16:35:00.273Z",
+    "releasedAt": "2026-10-17T16:36:36.237Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "originalExitCode": 1
+  },
+  "interpretation": "Removing full-table concatenation did not establish a bounded capture. Actual bottleneck, scan/serialization/storage costs and execution plan are unproved; no cause is inferred from timeout alone.",
+  "disposition": "No unchanged retry or cap increase. Preserve both full scans, original fixture/canonical assertions and evidence. Continue independent Daily source work while designing a bounded read-only cost diagnosis.",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
