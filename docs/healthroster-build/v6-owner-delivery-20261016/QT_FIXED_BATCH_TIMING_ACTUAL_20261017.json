@@ -1,0 +1,184 @@
+{
+  "status": "FIXED_BATCH_TIMINGS_CAPTURED_OWN_TURN_RELEASED_NOT_RESTORATION",
+  "peer": {
+    "database": "cloudtms_test_clone",
+    "readOnly": true,
+    "holderPid": 302713,
+    "isolation": "repeatable read",
+    "readerPid": 302716,
+    "databaseOid": 324139,
+    "noRoleSwitch": true
+  },
+  "queryProgress": {
+    "version": "CONTACT_FIXED_BATCH_TIMING_ONLY_V1",
+    "childClosed": true,
+    "complete": [
+      {
+        "ordinal": 1,
+        "completion": "BEGIN_COMPLETE",
+        "receivedAt": "2026-10-17T18:59:41.130Z",
+        "elapsedMilliseconds": 297.85660000000007
+      },
+      {
+        "ordinal": 2,
+        "completion": "GUARD_COMPLETE",
+        "receivedAt": "2026-10-17T18:59:41.177Z",
+        "elapsedMilliseconds": 344.4494000000004
+      },
+      {
+        "ordinal": 3,
+        "completion": "PEER_COMPLETE",
+        "receivedAt": "2026-10-17T18:59:41.200Z",
+        "elapsedMilliseconds": 368.0694000000003
+      },
+      {
+        "ordinal": 4,
+        "completion": "SEARCH_PATH_COMPLETE",
+        "receivedAt": "2026-10-17T18:59:41.230Z",
+        "elapsedMilliseconds": 397.2354000000005
+      },
+      {
+        "ordinal": 5,
+        "completion": "AUDIT_COMPLETE",
+        "receivedAt": "2026-10-17T19:00:15.484Z",
+        "elapsedMilliseconds": 34651.582800000004
+      },
+      {
+        "ordinal": 6,
+        "completion": "OTHER_NINE_COMPLETE",
+        "receivedAt": "2026-10-17T19:00:15.538Z",
+        "elapsedMilliseconds": 34705.303700000004
+      },
+      {
+        "ordinal": 7,
+        "completion": "FINAL_COMPLETE",
+        "receivedAt": "2026-10-17T19:00:35.162Z",
+        "elapsedMilliseconds": 54329.7342
+      },
+      {
+        "ordinal": 8,
+        "completion": "ROLLBACK_COMPLETE",
+        "receivedAt": "2026-10-17T19:00:35.229Z",
+        "elapsedMilliseconds": 54396.6131
+      }
+    ],
+    "nextUnconfirmedOrdinal": null,
+    "statementFailureOrdinal": "UNKNOWN_COMPLETION_MARKERS_ARE_LOWER_BOUNDS",
+    "restorationQualified": false,
+    "completeMapsPersisted": false
+  },
+  "phaseTimings": [
+    {
+      "phase": "C_READER_AND_INPUT_BUILD",
+      "startedAt": "2026-10-17T18:59:39.379Z",
+      "finishedAt": "2026-10-17T18:59:40.017Z",
+      "elapsedMilliseconds": 638.6931,
+      "completed": true
+    },
+    {
+      "phase": "TIMING_META_BUILD",
+      "startedAt": "2026-10-17T18:59:40.018Z",
+      "finishedAt": "2026-10-17T18:59:40.021Z",
+      "elapsedMilliseconds": 3.0319999999992433,
+      "completed": true
+    },
+    {
+      "phase": "HELD_BEFORE_NATIVE",
+      "startedAt": "2026-10-17T18:59:40.041Z",
+      "finishedAt": "2026-10-17T18:59:40.820Z",
+      "elapsedMilliseconds": 778.8796000000002,
+      "completed": true
+    },
+    {
+      "phase": "HELD_AFTER_NATIVE",
+      "startedAt": "2026-10-17T19:00:35.234Z",
+      "finishedAt": "2026-10-17T19:00:36.003Z",
+      "elapsedMilliseconds": 768.3217999999979,
+      "completed": true
+    },
+    {
+      "phase": "ORIGINAL_PURE_BUILD_INPUT",
+      "startedAt": "2026-10-17T19:00:36.293Z",
+      "finishedAt": "2026-10-17T19:00:36.793Z",
+      "elapsedMilliseconds": 500.8837000000058,
+      "completed": true
+    },
+    {
+      "phase": "HELD_AFTER_PURE_INPUT",
+      "startedAt": "2026-10-17T19:00:36.793Z",
+      "finishedAt": "2026-10-17T19:00:37.491Z",
+      "elapsedMilliseconds": 697.4282999999996,
+      "completed": true
+    }
+  ],
+  "source": {
+    "version": "CONTACT_FIXED_BATCH_TIMING_ONLY_V1",
+    "referenceInputSha256": "b469075079a24420dabb8c58db6b9d3473959598900edb811380ff28fa66d449",
+    "instrumentedInputSha256": "28f8671dead0a5c9e6827d2804a4605171575fabcb184fae3b3d499e9edf42f6",
+    "canonicalSqlSha256": "478cd28239427fa0f9234e0b0781bcfa29eb850e544b89adb8ba31fb8fce29c7",
+    "markers": 8,
+    "existingQueries": 3,
+    "sqlBytesUnchangedAfterRemovingEcho": true,
+    "noB": true,
+    "restorationQualified": false
+  },
+  "childClosed": true,
+  "transport": {
+    "instrumentedStdoutBytes": 28674795,
+    "originalStdoutBytes": 28674422,
+    "nativeFrameCount": 3,
+    "completionMarkers": 8
+  },
+  "noBDispatched": true,
+  "noFixture": true,
+  "completeMapsPersisted": false,
+  "restorationQualified": false,
+  "elapsedMilliseconds": 58871.715399999994,
+  "workBudgetMilliseconds": 120000,
+  "wholeBudgetMilliseconds": 180000,
+  "sourceGates": [
+    {
+      "phase": "INITIAL_SOURCE",
+      "startedAt": "2026-10-17T18:59:35.392Z",
+      "finishedAt": "2026-10-17T18:59:36.316Z",
+      "elapsedMilliseconds": 924.6275,
+      "completed": true
+    },
+    {
+      "phase": "before-work",
+      "startedAt": "2026-10-17T18:59:38.451Z",
+      "finishedAt": "2026-10-17T18:59:39.378Z",
+      "elapsedMilliseconds": 927.2956999999997,
+      "completed": true
+    },
+    {
+      "phase": "before-fixed-read-only-metadata",
+      "startedAt": "2026-10-17T18:59:40.075Z",
+      "finishedAt": "2026-10-17T18:59:40.820Z",
+      "elapsedMilliseconds": 744.2795999999998,
+      "completed": true
+    },
+    {
+      "phase": "after-fixed-read-only-metadata",
+      "startedAt": "2026-10-17T19:00:35.269Z",
+      "finishedAt": "2026-10-17T19:00:36.003Z",
+      "elapsedMilliseconds": 733.3286000000007,
+      "completed": true
+    },
+    {
+      "phase": "before-contact-qt-mcp-ready",
+      "startedAt": "2026-10-17T19:00:36.824Z",
+      "finishedAt": "2026-10-17T19:00:37.491Z",
+      "elapsedMilliseconds": 666.322500000002,
+      "completed": true
+    },
+    {
+      "phase": "callback-complete",
+      "startedAt": "2026-10-17T19:00:37.551Z",
+      "finishedAt": "2026-10-17T19:00:38.214Z",
+      "elapsedMilliseconds": 663.4554999999964,
+      "completed": true
+    }
+  ],
+  "ownTurnExplicitlyReleasedAndClosed": true
+}
