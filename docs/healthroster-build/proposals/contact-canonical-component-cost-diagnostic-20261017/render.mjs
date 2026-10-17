@@ -1,0 +1,5 @@
+// Inspect the actual finite factory with an execution-refusing synthetic turn.
+import'./component-overlay.mjs';import fs from'node:fs';import assert from'node:assert/strict';import{pathToFileURL}from'node:url';import{here,ROOT,ADAPTER,put,json}from'./prepare.mjs';
+const mod=await import(pathToFileURL(ROOT+'/'+ADAPTER+'/fixed-metadata-reader.mjs').href),identity={physicalDatabase:'cloudtms_test_clone',databaseOid:17,backendPid:101,turnId:'hr_turn_'+'1'.repeat(32),key:[20261013,1]},turn={identity,signal:new AbortController().signal,assertHeld:async()=>{throw Error('OFFLINE_NO_NATIVE');},runOwnedChild:()=>{throw Error('OFFLINE_NO_CHILD');}};
+for(const caseId of ['CONTACT_CONSTRUCTORS_V1','QT_ADMIN_CONTROLS_V1']){const diagnostic=await mod.createFixedComponentDiagnostic({root:ROOT,turn,caseId}),built=diagnostic.inspectSource();assert.equal(diagnostic.sourceDescriptor.restorationQualified,false);await assert.rejects(diagnostic.component('ARBITRARY_SQL'),/COMPONENT_MODE_REFUSED/);put('rendered/'+caseId+'.json',json({sourceIdentity:'SYNTHETIC_SOURCE_ONLY_NOT_NATIVE',...built}));}
+console.log(JSON.stringify({cases:2,components:3,native:'NOT_RUN',queriesExecuted:0}));
