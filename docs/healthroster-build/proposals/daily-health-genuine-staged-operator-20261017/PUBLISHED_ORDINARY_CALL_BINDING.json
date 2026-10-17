@@ -1,0 +1,12 @@
+{
+  "version": "DAILY_GENUINE_PUBLISHED_ORDINARY_AUTHORITY_V1",
+  "publishedCalculatorSha256": "64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b",
+  "currentCalculatorSha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942",
+  "wholeModuleEqual": false,
+  "selectedActualCompleteWorkerSha256": "024d4352267936829914046f1b0ec3bb33cc9b053d9c39d35711606948ee50a9",
+  "ordinaryCanonicalCallSites": 1,
+  "rateCorrectionContextSupplied": false,
+  "authority": "Use complete actual published f743 calculator for ordinary fixture. Current module is separately retained, not declared deployed.",
+  "financialNativeOracle": "NOT_PROVIDED",
+  "native": "NOT_RUN"
+}

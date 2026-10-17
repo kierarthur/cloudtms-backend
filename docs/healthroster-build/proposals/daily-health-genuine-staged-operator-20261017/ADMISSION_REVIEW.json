@@ -1,0 +1,33 @@
+{
+  "version": "DAILY_GENUINE_PREFREEZE_ADMISSION_REVIEW_V1",
+  "reviewerSettings": "GPT-6.1-sol/xhigh",
+  "originalDraftPreserved": "reference/pre-freeze-admission-draft",
+  "findings": [
+    {
+      "id": "F1_REVIEWED_SOURCE_COMMIT",
+      "source": "Root pre-freeze review",
+      "before": "Submit required reviewed entry commit to equal execution HEAD, which can reject mandatory setup/evidence commit progression.",
+      "after": "Exact historical operator commit remains bound; actual HEAD must be its descendant and every selected operator image plus manifest must equal saved/index/HEAD/historical bytes. Original selected runtime/source pins are independently reproved. Setup entry itself remains an exact committed root image.",
+      "proof": "source-image.test.mjs real D Git repository: generate entry, commit manifest, accept exact images; refuse worktree/index/committed runtime/nonancestor drift."
+    },
+    {
+      "id": "F2_ROUTINE_SCHEMA_SELECTION",
+      "source": "Root pre-freeze review, corrected after actual frozen metadata inspection",
+      "correction": "No omitted current callback was observed. Captured identity strings are bare with schema held separately. The concrete defect is selecting names across public/private without retaining schema distinctions.",
+      "after": "55 exact schema/name tuples; all same-schema overloads contribute raw complete-definition hashes. Every expected tuple and all selected relations must exist.",
+      "proof": "routine-selection-ast.py evaluates actual generated join/presence AST: 2034 checks over18 inputs; every missing/wrong-schema name refuses and same-schema extra overload is retained. No native catalogue execution."
+    },
+    {
+      "id": "F3_LOCAL_ABORT",
+      "source": "Money independent pre-freeze source review",
+      "before": "Local abort could close a browser while a still-held original turn allowed final PASS or a non-browser qualification to advance.",
+      "after": "Explicit wall deadline and local abort gates before dispatch, attempt and qualification; mandatory final HOLD after local abort/deadline.",
+      "proof": "Complete actual perform() controlled replay: late-close ABORT holds; ABORT after native/effect reads refuses prefix advancement."
+    }
+  ],
+  "originalAuditAndMappingFilesChanged": 0,
+  "businessMutation": "NOT_RUN",
+  "browserApiNative": "NOT_RUN",
+  "privateStateContentsReadHashedCopied": false,
+  "bankBodiesRead": 0
+}

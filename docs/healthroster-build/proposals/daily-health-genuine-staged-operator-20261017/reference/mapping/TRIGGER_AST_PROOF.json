@@ -1,0 +1,916 @@
+{
+  "version": "DAILY_GENUINE_S1A_HEALTH_TRIGGER_SOURCE_AST_V1",
+  "parser": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "rawSourceSha256": "9023ceb4e0bef1d91299732948fe2b9cc6bafafd59ac8e154cb9db9b468be7f3",
+  "outerGrammar": "PASS",
+  "plpgsqlGrammar": "PASS",
+  "actualWriteStatements": 1,
+  "actualTarget": "public.ts_financials_outbox",
+  "actualSqlAst": {
+    "version": 170007,
+    "stmts": [
+      {
+        "stmt": {
+          "InsertStmt": {
+            "relation": {
+              "schemaname": "public",
+              "relname": "ts_financials_outbox",
+              "inh": true,
+              "relpersistence": "p",
+              "location": 387
+            },
+            "cols": [
+              {
+                "ResTarget": {
+                  "name": "timesheet_id",
+                  "location": 416
+                }
+              },
+              {
+                "ResTarget": {
+                  "name": "reason",
+                  "location": 430
+                }
+              }
+            ],
+            "selectStmt": {
+              "SelectStmt": {
+                "distinctClause": [
+                  {}
+                ],
+                "targetList": [
+                  {
+                    "ResTarget": {
+                      "val": {
+                        "ColumnRef": {
+                          "fields": [
+                            {
+                              "String": {
+                                "sval": "ts"
+                              }
+                            },
+                            {
+                              "String": {
+                                "sval": "timesheet_id"
+                              }
+                            }
+                          ],
+                          "location": 456
+                        }
+                      },
+                      "location": 456
+                    }
+                  },
+                  {
+                    "ResTarget": {
+                      "val": {
+                        "TypeCast": {
+                          "arg": {
+                            "A_Const": {
+                              "sval": {
+                                "sval": "CONTEXT_CHANGED"
+                              },
+                              "location": 473
+                            }
+                          },
+                          "typeName": {
+                            "names": [
+                              {
+                                "String": {
+                                  "sval": "ts_fin_reason_enum"
+                                }
+                              }
+                            ],
+                            "typemod": -1,
+                            "location": 492
+                          },
+                          "location": 490
+                        }
+                      },
+                      "location": 473
+                    }
+                  }
+                ],
+                "fromClause": [
+                  {
+                    "JoinExpr": {
+                      "jointype": "JOIN_LEFT",
+                      "larg": {
+                        "JoinExpr": {
+                          "jointype": "JOIN_INNER",
+                          "larg": {
+                            "RangeVar": {
+                              "schemaname": "public",
+                              "relname": "timesheets",
+                              "inh": true,
+                              "relpersistence": "p",
+                              "alias": {
+                                "aliasname": "ts"
+                              },
+                              "location": 518
+                            }
+                          },
+                          "rarg": {
+                            "RangeVar": {
+                              "relname": "alias_norms",
+                              "inh": true,
+                              "relpersistence": "p",
+                              "alias": {
+                                "aliasname": "a"
+                              },
+                              "location": 546
+                            }
+                          },
+                          "quals": {
+                            "A_Expr": {
+                              "kind": "AEXPR_OP",
+                              "name": [
+                                {
+                                  "String": {
+                                    "sval": "="
+                                  }
+                                }
+                              ],
+                              "lexpr": {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "ts"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "hospital_norm"
+                                      }
+                                    }
+                                  ],
+                                  "location": 567
+                                }
+                              },
+                              "rexpr": {
+                                "ColumnRef": {
+                                  "fields": [
+                                    {
+                                      "String": {
+                                        "sval": "a"
+                                      }
+                                    },
+                                    {
+                                      "String": {
+                                        "sval": "norm"
+                                      }
+                                    }
+                                  ],
+                                  "location": 586
+                                }
+                              },
+                              "location": 584
+                            }
+                          }
+                        }
+                      },
+                      "rarg": {
+                        "RangeVar": {
+                          "schemaname": "public",
+                          "relname": "timesheets_financials",
+                          "inh": true,
+                          "relpersistence": "p",
+                          "alias": {
+                            "aliasname": "tf"
+                          },
+                          "location": 605
+                        }
+                      },
+                      "quals": {
+                        "BoolExpr": {
+                          "boolop": "AND_EXPR",
+                          "args": [
+                            {
+                              "A_Expr": {
+                                "kind": "AEXPR_OP",
+                                "name": [
+                                  {
+                                    "String": {
+                                      "sval": "="
+                                    }
+                                  }
+                                ],
+                                "lexpr": {
+                                  "ColumnRef": {
+                                    "fields": [
+                                      {
+                                        "String": {
+                                          "sval": "tf"
+                                        }
+                                      },
+                                      {
+                                        "String": {
+                                          "sval": "timesheet_id"
+                                        }
+                                      }
+                                    ],
+                                    "location": 644
+                                  }
+                                },
+                                "rexpr": {
+                                  "ColumnRef": {
+                                    "fields": [
+                                      {
+                                        "String": {
+                                          "sval": "ts"
+                                        }
+                                      },
+                                      {
+                                        "String": {
+                                          "sval": "timesheet_id"
+                                        }
+                                      }
+                                    ],
+                                    "location": 662
+                                  }
+                                },
+                                "location": 660
+                              }
+                            },
+                            {
+                              "A_Expr": {
+                                "kind": "AEXPR_OP",
+                                "name": [
+                                  {
+                                    "String": {
+                                      "sval": "="
+                                    }
+                                  }
+                                ],
+                                "lexpr": {
+                                  "ColumnRef": {
+                                    "fields": [
+                                      {
+                                        "String": {
+                                          "sval": "tf"
+                                        }
+                                      },
+                                      {
+                                        "String": {
+                                          "sval": "is_current"
+                                        }
+                                      }
+                                    ],
+                                    "location": 685
+                                  }
+                                },
+                                "rexpr": {
+                                  "A_Const": {
+                                    "boolval": {
+                                      "boolval": true
+                                    },
+                                    "location": 701
+                                  }
+                                },
+                                "location": 699
+                              }
+                            }
+                          ],
+                          "location": 681
+                        }
+                      }
+                    }
+                  }
+                ],
+                "whereClause": {
+                  "BoolExpr": {
+                    "boolop": "AND_EXPR",
+                    "args": [
+                      {
+                        "A_Expr": {
+                          "kind": "AEXPR_OP",
+                          "name": [
+                            {
+                              "String": {
+                                "sval": "="
+                              }
+                            }
+                          ],
+                          "lexpr": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "ts"
+                                  }
+                                },
+                                {
+                                  "String": {
+                                    "sval": "is_current"
+                                  }
+                                }
+                              ],
+                              "location": 714
+                            }
+                          },
+                          "rexpr": {
+                            "A_Const": {
+                              "boolval": {
+                                "boolval": true
+                              },
+                              "location": 730
+                            }
+                          },
+                          "location": 728
+                        }
+                      },
+                      {
+                        "NullTest": {
+                          "arg": {
+                            "ColumnRef": {
+                              "fields": [
+                                {
+                                  "String": {
+                                    "sval": "ts"
+                                  }
+                                },
+                                {
+                                  "String": {
+                                    "sval": "revoked_at"
+                                  }
+                                }
+                              ],
+                              "location": 743
+                            }
+                          },
+                          "nulltesttype": "IS_NULL",
+                          "location": 757
+                        }
+                      },
+                      {
+                        "BoolExpr": {
+                          "boolop": "OR_EXPR",
+                          "args": [
+                            {
+                              "NullTest": {
+                                "arg": {
+                                  "ColumnRef": {
+                                    "fields": [
+                                      {
+                                        "String": {
+                                          "sval": "tf"
+                                        }
+                                      },
+                                      {
+                                        "String": {
+                                          "sval": "timesheet_id"
+                                        }
+                                      }
+                                    ],
+                                    "location": 781
+                                  }
+                                },
+                                "nulltesttype": "IS_NULL",
+                                "location": 797
+                              }
+                            },
+                            {
+                              "BoolExpr": {
+                                "boolop": "AND_EXPR",
+                                "args": [
+                                  {
+                                    "NullTest": {
+                                      "arg": {
+                                        "ColumnRef": {
+                                          "fields": [
+                                            {
+                                              "String": {
+                                                "sval": "tf"
+                                              }
+                                            },
+                                            {
+                                              "String": {
+                                                "sval": "locked_by_invoice_id"
+                                              }
+                                            }
+                                          ],
+                                          "location": 815
+                                        }
+                                      },
+                                      "nulltesttype": "IS_NULL",
+                                      "location": 839
+                                    }
+                                  },
+                                  {
+                                    "NullTest": {
+                                      "arg": {
+                                        "ColumnRef": {
+                                          "fields": [
+                                            {
+                                              "String": {
+                                                "sval": "tf"
+                                              }
+                                            },
+                                            {
+                                              "String": {
+                                                "sval": "paid_at_utc"
+                                              }
+                                            }
+                                          ],
+                                          "location": 851
+                                        }
+                                      },
+                                      "nulltesttype": "IS_NULL",
+                                      "location": 866
+                                    }
+                                  }
+                                ],
+                                "location": 847
+                              }
+                            }
+                          ],
+                          "location": 811
+                        }
+                      }
+                    ],
+                    "location": 739
+                  }
+                },
+                "limitOption": "LIMIT_OPTION_DEFAULT",
+                "op": "SETOP_NONE"
+              }
+            },
+            "onConflictClause": {
+              "action": "ONCONFLICT_UPDATE",
+              "infer": {
+                "indexElems": [
+                  {
+                    "IndexElem": {
+                      "name": "timesheet_id",
+                      "ordering": "SORTBY_DEFAULT",
+                      "nulls_ordering": "SORTBY_NULLS_DEFAULT"
+                    }
+                  },
+                  {
+                    "IndexElem": {
+                      "name": "reason",
+                      "ordering": "SORTBY_DEFAULT",
+                      "nulls_ordering": "SORTBY_NULLS_DEFAULT"
+                    }
+                  }
+                ],
+                "location": 895
+              },
+              "targetList": [
+                {
+                  "ResTarget": {
+                    "name": "next_attempt_at",
+                    "val": {
+                      "A_Const": {
+                        "isnull": true,
+                        "location": 952
+                      }
+                    },
+                    "location": 934
+                  }
+                }
+              ],
+              "location": 883
+            },
+            "withClause": {
+              "ctes": [
+                {
+                  "CommonTableExpr": {
+                    "ctename": "alias_norms",
+                    "ctematerialized": "CTEMaterializeDefault",
+                    "ctequery": {
+                      "SelectStmt": {
+                        "distinctClause": [
+                          {}
+                        ],
+                        "targetList": [
+                          {
+                            "ResTarget": {
+                              "name": "norm",
+                              "val": {
+                                "FuncCall": {
+                                  "funcname": [
+                                    {
+                                      "String": {
+                                        "sval": "lower"
+                                      }
+                                    }
+                                  ],
+                                  "args": [
+                                    {
+                                      "FuncCall": {
+                                        "funcname": [
+                                          {
+                                            "String": {
+                                              "sval": "btrim"
+                                            }
+                                          }
+                                        ],
+                                        "args": [
+                                          {
+                                            "ColumnRef": {
+                                              "fields": [
+                                                {
+                                                  "String": {
+                                                    "sval": "x"
+                                                  }
+                                                }
+                                              ],
+                                              "location": 54
+                                            }
+                                          }
+                                        ],
+                                        "funcformat": "COERCE_EXPLICIT_CALL",
+                                        "location": 48
+                                      }
+                                    }
+                                  ],
+                                  "funcformat": "COERCE_EXPLICIT_CALL",
+                                  "location": 42
+                                }
+                              },
+                              "location": 42
+                            }
+                          }
+                        ],
+                        "fromClause": [
+                          {
+                            "RangeFunction": {
+                              "functions": [
+                                {
+                                  "List": {
+                                    "items": [
+                                      {
+                                        "FuncCall": {
+                                          "funcname": [
+                                            {
+                                              "String": {
+                                                "sval": "jsonb_array_elements_text"
+                                              }
+                                            }
+                                          ],
+                                          "args": [
+                                            {
+                                              "CaseExpr": {
+                                                "args": [
+                                                  {
+                                                    "CaseWhen": {
+                                                      "expr": {
+                                                        "A_Expr": {
+                                                          "kind": "AEXPR_OP",
+                                                          "name": [
+                                                            {
+                                                              "String": {
+                                                                "sval": "="
+                                                              }
+                                                            }
+                                                          ],
+                                                          "lexpr": {
+                                                            "ColumnRef": {
+                                                              "fields": [
+                                                                {
+                                                                  "String": {
+                                                                    "sval": "tg_op"
+                                                                  }
+                                                                }
+                                                              ],
+                                                              "location": 126
+                                                            }
+                                                          },
+                                                          "rexpr": {
+                                                            "A_Const": {
+                                                              "sval": {
+                                                                "sval": "INSERT"
+                                                              },
+                                                              "location": 134
+                                                            }
+                                                          },
+                                                          "location": 132
+                                                        }
+                                                      },
+                                                      "result": {
+                                                        "CoalesceExpr": {
+                                                          "args": [
+                                                            {
+                                                              "ColumnRef": {
+                                                                "fields": [
+                                                                  {
+                                                                    "String": {
+                                                                      "sval": "new"
+                                                                    }
+                                                                  },
+                                                                  {
+                                                                    "String": {
+                                                                      "sval": "hospital_name_norm"
+                                                                    }
+                                                                  }
+                                                                ],
+                                                                "location": 157
+                                                              }
+                                                            },
+                                                            {
+                                                              "TypeCast": {
+                                                                "arg": {
+                                                                  "A_Const": {
+                                                                    "sval": {
+                                                                      "sval": "[]"
+                                                                    },
+                                                                    "location": 181
+                                                                  }
+                                                                },
+                                                                "typeName": {
+                                                                  "names": [
+                                                                    {
+                                                                      "String": {
+                                                                        "sval": "jsonb"
+                                                                      }
+                                                                    }
+                                                                  ],
+                                                                  "typemod": -1,
+                                                                  "location": 187
+                                                                },
+                                                                "location": 185
+                                                              }
+                                                            }
+                                                          ],
+                                                          "location": 148
+                                                        }
+                                                      },
+                                                      "location": 121
+                                                    }
+                                                  }
+                                                ],
+                                                "defresult": {
+                                                  "A_Expr": {
+                                                    "kind": "AEXPR_OP",
+                                                    "name": [
+                                                      {
+                                                        "String": {
+                                                          "sval": "||"
+                                                        }
+                                                      }
+                                                    ],
+                                                    "lexpr": {
+                                                      "CoalesceExpr": {
+                                                        "args": [
+                                                          {
+                                                            "ColumnRef": {
+                                                              "fields": [
+                                                                {
+                                                                  "String": {
+                                                                    "sval": "new"
+                                                                  }
+                                                                },
+                                                                {
+                                                                  "String": {
+                                                                    "sval": "hospital_name_norm"
+                                                                  }
+                                                                }
+                                                              ],
+                                                              "location": 216
+                                                            }
+                                                          },
+                                                          {
+                                                            "TypeCast": {
+                                                              "arg": {
+                                                                "A_Const": {
+                                                                  "sval": {
+                                                                    "sval": "[]"
+                                                                  },
+                                                                  "location": 240
+                                                                }
+                                                              },
+                                                              "typeName": {
+                                                                "names": [
+                                                                  {
+                                                                    "String": {
+                                                                      "sval": "jsonb"
+                                                                    }
+                                                                  }
+                                                                ],
+                                                                "typemod": -1,
+                                                                "location": 246
+                                                              },
+                                                              "location": 244
+                                                            }
+                                                          }
+                                                        ],
+                                                        "location": 207
+                                                      }
+                                                    },
+                                                    "rexpr": {
+                                                      "CoalesceExpr": {
+                                                        "args": [
+                                                          {
+                                                            "ColumnRef": {
+                                                              "fields": [
+                                                                {
+                                                                  "String": {
+                                                                    "sval": "old"
+                                                                  }
+                                                                },
+                                                                {
+                                                                  "String": {
+                                                                    "sval": "hospital_name_norm"
+                                                                  }
+                                                                }
+                                                              ],
+                                                              "location": 265
+                                                            }
+                                                          },
+                                                          {
+                                                            "TypeCast": {
+                                                              "arg": {
+                                                                "A_Const": {
+                                                                  "sval": {
+                                                                    "sval": "[]"
+                                                                  },
+                                                                  "location": 289
+                                                                }
+                                                              },
+                                                              "typeName": {
+                                                                "names": [
+                                                                  {
+                                                                    "String": {
+                                                                      "sval": "jsonb"
+                                                                    }
+                                                                  }
+                                                                ],
+                                                                "typemod": -1,
+                                                                "location": 295
+                                                              },
+                                                              "location": 293
+                                                            }
+                                                          }
+                                                        ],
+                                                        "location": 256
+                                                      }
+                                                    },
+                                                    "location": 253
+                                                  }
+                                                },
+                                                "location": 108
+                                              }
+                                            }
+                                          ],
+                                          "funcformat": "COERCE_EXPLICIT_CALL",
+                                          "location": 75
+                                        }
+                                      },
+                                      {}
+                                    ]
+                                  }
+                                }
+                              ],
+                              "alias": {
+                                "aliasname": "t",
+                                "colnames": [
+                                  {
+                                    "String": {
+                                      "sval": "x"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ],
+                        "whereClause": {
+                          "BoolExpr": {
+                            "boolop": "AND_EXPR",
+                            "args": [
+                              {
+                                "NullTest": {
+                                  "arg": {
+                                    "ColumnRef": {
+                                      "fields": [
+                                        {
+                                          "String": {
+                                            "sval": "x"
+                                          }
+                                        }
+                                      ],
+                                      "location": 336
+                                    }
+                                  },
+                                  "nulltesttype": "IS_NOT_NULL",
+                                  "location": 338
+                                }
+                              },
+                              {
+                                "A_Expr": {
+                                  "kind": "AEXPR_OP",
+                                  "name": [
+                                    {
+                                      "String": {
+                                        "sval": "<>"
+                                      }
+                                    }
+                                  ],
+                                  "lexpr": {
+                                    "FuncCall": {
+                                      "funcname": [
+                                        {
+                                          "String": {
+                                            "sval": "btrim"
+                                          }
+                                        }
+                                      ],
+                                      "args": [
+                                        {
+                                          "ColumnRef": {
+                                            "fields": [
+                                              {
+                                                "String": {
+                                                  "sval": "x"
+                                                }
+                                              }
+                                            ],
+                                            "location": 360
+                                          }
+                                        }
+                                      ],
+                                      "funcformat": "COERCE_EXPLICIT_CALL",
+                                      "location": 354
+                                    }
+                                  },
+                                  "rexpr": {
+                                    "A_Const": {
+                                      "sval": {
+                                        "sval": ""
+                                      },
+                                      "location": 366
+                                    }
+                                  },
+                                  "location": 363
+                                }
+                              }
+                            ],
+                            "location": 350
+                          }
+                        },
+                        "limitOption": "LIMIT_OPTION_DEFAULT",
+                        "op": "SETOP_NONE"
+                      }
+                    },
+                    "location": 5
+                  }
+                }
+              ]
+            },
+            "override": "OVERRIDING_NOT_SET"
+          }
+        }
+      }
+    ]
+  },
+  "actualPredicateVectors": [
+    {
+      "case": "matching unauthorised current/no finance",
+      "selectsOutboxTarget": true
+    },
+    {
+      "case": "different Client still wakes",
+      "selectsOutboxTarget": true
+    },
+    {
+      "case": "archived flag not filtered",
+      "selectsOutboxTarget": true
+    },
+    {
+      "case": "different alias",
+      "selectsOutboxTarget": false
+    },
+    {
+      "case": "history row",
+      "selectsOutboxTarget": false
+    },
+    {
+      "case": "revoked row",
+      "selectsOutboxTarget": false
+    },
+    {
+      "case": "invoice locked",
+      "selectsOutboxTarget": false
+    },
+    {
+      "case": "already paid",
+      "selectsOutboxTarget": false
+    },
+    {
+      "case": "unlocked unpaid financial",
+      "selectsOutboxTarget": true
+    }
+  ],
+  "globalAliasVacancyRequired": true,
+  "clientOnlyVacancyInsufficient": true,
+  "oldArchivedCurrentRowsNotExcluded": true,
+  "nativeCompilation": "NOT_PROVED",
+  "nativeExecution": "NOT_RUN",
+  "substitutions": 0
+}

@@ -1,0 +1,38 @@
+{
+  "sourceParent": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+  "signature": "public.trg_tsfin_client_hospitals_wakeup()",
+  "inventory": {
+    "baseline": 25,
+    "migrations": 426,
+    "repeatables": 1096,
+    "uppercaseSqlIncluded": true
+  },
+  "declarations": [
+    {
+      "signature": "public.trg_tsfin_client_hospitals_wakeup()",
+      "physical": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "managedStatementSha256": "3e0366df2d73a6dd17be9c261c5b8498c0d4d43e4dd20d0d8d84817f9a6e785c",
+      "bytes": 1786,
+      "executionRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql"
+    },
+    {
+      "signature": "public.trg_tsfin_client_hospitals_wakeup()",
+      "physical": "supabase/repeatable/05012026_fix_trg_tsfin_client_hospitals_wakeup.sql",
+      "managedStatementSha256": "062b8b3f9a150471b11a7d7f5f1899fc26d608a9cb05ca8d5f0f038544761c0a",
+      "bytes": 1784,
+      "executionRoot": "supabase/repeatable/05012026_fix_trg_tsfin_client_hospitals_wakeup.sql"
+    }
+  ],
+  "selectedCurrentFinal": {
+    "signature": "public.trg_tsfin_client_hospitals_wakeup()",
+    "physical": "supabase/repeatable/05012026_fix_trg_tsfin_client_hospitals_wakeup.sql",
+    "managedStatementSha256": "062b8b3f9a150471b11a7d7f5f1899fc26d608a9cb05ca8d5f0f038544761c0a",
+    "bytes": 1784,
+    "executionRoot": "supabase/repeatable/05012026_fix_trg_tsfin_client_hospitals_wakeup.sql"
+  },
+  "managedCanonicalStatementSha256": "062b8b3f9a150471b11a7d7f5f1899fc26d608a9cb05ca8d5f0f038544761c0a",
+  "rawSourceFileSha256": "9023ceb4e0bef1d91299732948fe2b9cc6bafafd59ac8e154cb9db9b468be7f3",
+  "rawAndManagedHashesNotConflated": true,
+  "bankingBodiesSelected": 0,
+  "native": "NOT_RUN"
+}

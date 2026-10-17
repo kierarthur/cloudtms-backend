@@ -1,0 +1,214 @@
+TAP version 13
+# Subtest: all eight complete functions and route bind exact full published commit/current source
+ok 1 - all eight complete functions and route bind exact full published commit/current source
+  ---
+  duration_ms: 19.3039
+  type: 'test'
+  ...
+# Subtest: finite stage preserves original Client/Candidate/booking, rejects extra body/path authority
+ok 2 - finite stage preserves original Client/Candidate/booking, rejects extra body/path authority
+  ---
+  duration_ms: 0.8837
+  type: 'test'
+  ...
+# Subtest: actual Admin POST forwards allowed explicit map UUID and normalized aliases through genuine REST INSERT
+ok 3 - actual Admin POST forwards allowed explicit map UUID and normalized aliases through genuine REST INSERT
+  ---
+  duration_ms: 2.2361
+  type: 'test'
+  ...
+# Subtest: actual role denial reaches neither JSON parse nor INSERT
+ok 4 - actual role denial reaches neither JSON parse nor INSERT
+  ---
+  duration_ms: 1.4578
+  type: 'test'
+  ...
+# Subtest: actual producer transport failure has no compensation/retry and malformed success needs reconciliation
+ok 5 - actual producer transport failure has no compensation/retry and malformed success needs reconciliation
+  ---
+  duration_ms: 1.8415
+  type: 'test'
+  ...
+# Subtest: actual list/get are read calls scoped to native row/client; client list cannot prove global namespace
+ok 6 - actual list/get are read calls scoped to native row/client; client list cannot prove global namespace
+  ---
+  duration_ms: 1.7181
+  type: 'test'
+  ...
+# Subtest: baseline native field/ACL/trigger evidence is explicit and does not invent an alias uniqueness guarantee
+ok 7 - baseline native field/ACL/trigger evidence is explicit and does not invent an alias uniqueness guarantee
+  ---
+  duration_ms: 0.6544
+  type: 'test'
+  ...
+# Subtest: original recipe and all current source inputs remain saved/committed byte-exact
+ok 8 - original recipe and all current source inputs remain saved/committed byte-exact
+  ---
+  duration_ms: 516.3838
+  type: 'test'
+  ...
+# Subtest: exact current saved/committed source and physical root, twenty-two complete functions
+ok 9 - exact current saved/committed source and physical root, twenty-two complete functions
+  ---
+  duration_ms: 1071.0533
+  type: 'test'
+  ...
+# Subtest: actual pure Worker derivation supplies booking scope, never native IDs or snapshot
+ok 10 - actual pure Worker derivation supplies booking scope, never native IDs or snapshot
+  ---
+  duration_ms: 22.3692
+  type: 'test'
+  ...
+# Subtest: actual S1 wrapper forwards only genuine allowlisted fields and exact five RPC args
+ok 11 - actual S1 wrapper forwards only genuine allowlisted fields and exact five RPC args
+  ---
+  duration_ms: 3.3296
+  type: 'test'
+  ...
+# Subtest: actual targeted empty drain reads settings then returns without enqueue/dequeue/worker
+ok 12 - actual targeted empty drain reads settings then returns without enqueue/dequeue/worker
+  ---
+  duration_ms: 1.2324
+  type: 'test'
+  ...
+# Subtest: actual Client enqueue is scoped to current, uninvoiced TSFIN and empty read causes no POST
+ok 13 - actual Client enqueue is scoped to current, uninvoiced TSFIN and empty read causes no POST
+  ---
+  duration_ms: 1.4539
+  type: 'test'
+  ...
+# Subtest: actual S3 fresh path posts one row and reaches scoped enqueue for the October window
+ok 14 - actual S3 fresh path posts one row and reaches scoped enqueue for the October window
+  ---
+  duration_ms: 1.4016
+  type: 'test'
+  ...
+# Subtest: actual S3 incumbent path can PATCH an old window before later POST failure
+ok 15 - actual S3 incumbent path can PATCH an old window before later POST failure
+  ---
+  duration_ms: 1.3059
+  type: 'test'
+  ...
+# Subtest: actual Worker targeted list chooses only specific dequeue; omitted list is general branch
+ok 16 - actual Worker targeted list chooses only specific dequeue; omitted list is general branch
+  ---
+  duration_ms: 1.613
+  type: 'test'
+  ...
+# Subtest: actual recalculation forwards exact target and refuses nominal or wrong completion evidence
+ok 17 - actual recalculation forwards exact target and refuses nominal or wrong completion evidence
+  ---
+  duration_ms: 3.28
+  type: 'test'
+  ...
+# Subtest: actual S4 failed recalculation plus failed DELETE returns 500 after an INSERT
+ok 18 - actual S4 failed recalculation plus failed DELETE returns 500 after an INSERT
+  ---
+  duration_ms: 5.4951
+  type: 'test'
+  ...
+# Subtest: native S1 body identity receipt is definition-only and no actor/vacancy/API claim
+ok 19 - native S1 body identity receipt is definition-only and no actor/vacancy/API claim
+  ---
+  duration_ms: 0.4029
+  type: 'test'
+  ...
+# Subtest: entry then actual setup-manifest commit admits the exact historical image; dirty/index/HEAD/runtime/nonancestor changes refuse
+ok 20 - entry then actual setup-manifest commit admits the exact historical image; dirty/index/HEAD/runtime/nonancestor changes refuse
+  ---
+  duration_ms: 4256.2215
+  type: 'test'
+  ...
+# Subtest: original request bodies remain exact approved recipe; S1 native baseline1900 is not the request date
+ok 21 - original request bodies remain exact approved recipe; S1 native baseline1900 is not the request date
+  ---
+  duration_ms: 2.1493
+  type: 'test'
+  ...
+# Subtest: routine identity uses its captured schema consistently for bare/qualified names and never accepts a conflicting schema
+ok 22 - routine identity uses its captured schema consistently for bare/qualified names and never accepts a conflicting schema
+  ---
+  duration_ms: 1.2988
+  type: 'test'
+  ...
+# Subtest: strict actual responses reject nominal wrappers, replay, wrong IDs, nonempty drain and empty200
+ok 23 - strict actual responses reject nominal wrappers, replay, wrong IDs, nonempty drain and empty200
+  ---
+  duration_ms: 0.674
+  type: 'test'
+  ...
+# Subtest: only armed exact one current stage POST/body can be forwarded; all other mutation paths remain aborted
+ok 24 - only armed exact one current stage POST/body can be forwarded; all other mutation paths remain aborted
+  ---
+  duration_ms: 1.0562
+  type: 'test'
+  ...
+# Subtest: one exact startup ping remains aborted; query/method/origin variations and second ping are fatal
+ok 25 - one exact startup ping remains aborted; query/method/origin variations and second ping are fatal
+  ---
+  duration_ms: 0.2171
+  type: 'test'
+  ...
+# Subtest: guarded transport aborts redirects without forwarding to redirected origin or fabricating success
+ok 26 - guarded transport aborts redirects without forwarding to redirected origin or fabricating success
+  ---
+  duration_ms: 0.5045
+  type: 'test'
+  ...
+# Subtest: native envelopes require exact SQL, main/fresh actual one-row frames, role/holder/clock/scope consistency
+ok 27 - native envelopes require exact SQL, main/fresh actual one-row frames, role/holder/clock/scope consistency
+  ---
+  duration_ms: 4.1287
+  type: 'test'
+  ...
+# Subtest: S0/S1 complete vacancy and exact prefix/currentness reject collisions before request
+ok 28 - S0/S1 complete vacancy and exact prefix/currentness reject collisions before request
+  ---
+  duration_ms: 0.7043
+  type: 'test'
+  ...
+# Subtest: genuine S1a is mandatory before S2/S4; duplicate/global mapping and wrong association refuse
+ok 29 - genuine S1a is mandatory before S2/S4; duplicate/global mapping and wrong association refuse
+  ---
+  duration_ms: 1.0475
+  type: 'test'
+  ...
+# Subtest: S4 financial/current/history/outbox are independent native predicates; HTTP three keys never suffice
+ok 30 - S4 financial/current/history/outbox are independent native predicates; HTTP three keys never suffice
+  ---
+  duration_ms: 0.5292
+  type: 'test'
+  ...
+# Subtest: committed setup entry is exact and bound to native before/fresh source and effect evidence bytes
+ok 31 - committed setup entry is exact and bound to native before/fresh source and effect evidence bytes
+  ---
+  duration_ms: 0.8316
+  type: 'test'
+  ...
+# Subtest: private state is only the exact R4 path, no shared state/credential reader in parent or child source
+ok 32 - private state is only the exact R4 path, no shared state/credential reader in parent or child source
+  ---
+  duration_ms: 1.0299
+  type: 'test'
+  ...
+# Subtest: exact ACL forward only changes the new owned directory namespace, preserving the complete PS5 parent
+ok 33 - exact ACL forward only changes the new owned directory namespace, preserving the complete PS5 parent
+  ---
+  duration_ms: 0.4682
+  type: 'test'
+  ...
+# Subtest: two separate Node processes cannot replace a lost-reply attempt or send a second request
+ok 34 - two separate Node processes cannot replace a lost-reply attempt or send a second request
+  ---
+  duration_ms: 179.6498
+  type: 'test'
+  ...
+1..34
+# tests 34
+# suites 0
+# pass 34
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4393.0044

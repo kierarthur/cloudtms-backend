@@ -1,0 +1,5 @@
+async function makeBookingId(candidate_id, date_of_shift, hospital, ward, job_title, shift_label = "") {
+  const base = `${norm(candidate_id)}|${date_of_shift}|${norm(hospital)}|${norm(ward)}|${norm(job_title)}|${norm(shift_label)}`;
+  const hash = await sha256Hex(base);
+  return `bk_${hash.slice(0, 16)}`;
+}

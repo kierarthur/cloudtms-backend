@@ -1,0 +1,37 @@
+{
+  "version": "DAILY_GENUINE_STAGED_OPERATOR_SOURCE_RESULT_V1",
+  "status": "SOURCE_IMPLEMENTED_PENDING_INDEPENDENT_PEER_AND_ROOT_CURRENT_ADMISSION",
+  "sourceOnly": true,
+  "stages": ["S0", "S1", "S1a", "S2", "S3", "S4"],
+  "checks": {
+    "nodeTests": 38,
+    "completeControlledWorkerTests": 4,
+    "actualIsolatedGitManifestCommitTest": "PASS",
+    "twoActualNodeProcessesLostReplyJournal": "PASS",
+    "pg17Statements": 54,
+    "generatedReadInputs": 18,
+    "routineSelectionAstChecks": 2034,
+    "schemaNameTuples": 55,
+    "mappingTriggerAstVectors": 9,
+    "completePublishedWorkerFunctions": 29,
+    "originalFrozenPeerFilesUnchanged": 75
+  },
+  "entryPoint": "run-staged.mjs",
+  "rootCommand": "node D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/run-staged.mjs --authorised-root-staged-fixture --outside-other-native-interval --phase bind --stage S0",
+  "commandPrerequisite": "Root reviewed current original shared-turn coordinator supplies genuine authenticated pipe/capability only to owned child. This command alone grants no execution authority.",
+  "setupCommit": "Each exact generated stage SETUP_ENTRY must be appended and committed in root TEST_SETUP_MANIFEST before its one permitted POST. Historical reviewed operator image is preserved across documentation commits.",
+  "remaining": [
+    "Independent immutable source peer",
+    "Root current coordinator/CSE/protected-run composition and source qualification",
+    "Current native compatibility/effect/no-external dossier, actual actor and complete reserved/global alias vacancy",
+    "Root committed exact per-stage setup entry before mutation",
+    "Actual native before/fresh/after plus full approved effects and background attribution",
+    "All genuine API/native/browser/fixture/financial success"
+  ],
+  "nativeApiBrowserAuth": "NOT_RUN",
+  "fixturesCreated": 0,
+  "privateStateContentsReadHashedCopied": false,
+  "bankBodiesRead": 0,
+  "missingBankPublicComposerSuccess": "NOT_PROVIDED",
+  "testOrLiveDeployment": false
+}

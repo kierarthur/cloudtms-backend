@@ -1,0 +1,169 @@
+{
+  "version": "NORMAL_TEST_WORKER_DEPLOYMENTS_READONLY_V1",
+  "route": "Existing Wrangler OAuth account kier@arthur-rai.co.uk; connector reauth required",
+  "worker": "test-cloudtms-backend",
+  "wrangler": "4.125.0",
+  "deployments": [
+    {
+      "id": "26c998ac-3f37-4dec-bafe-ae8dac977d73",
+      "source": "wrangler",
+      "strategy": "percentage",
+      "author_email": "kier@arthur-rai.co.uk",
+      "annotations": {
+        "workers/triggered_by": "deployment"
+      },
+      "versions": [
+        {
+          "version_id": "631ca8e8-bfb9-4b85-9dcf-21dafcd558ff",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-07T15:29:02.228459Z"
+    },
+    {
+      "id": "c21420a4-b60c-43e2-9c4c-3954adf82800",
+      "source": "wrangler",
+      "strategy": "percentage",
+      "author_email": "kier@arthur-rai.co.uk",
+      "annotations": {
+        "workers/triggered_by": "deployment"
+      },
+      "versions": [
+        {
+          "version_id": "9fdd7fce-f187-4c0f-9674-2434fb5654f5",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-07T17:31:49.959309Z"
+    },
+    {
+      "id": "453544b5-fb83-4e3f-81e4-582a89eaa9ff",
+      "source": "wrangler",
+      "strategy": "percentage",
+      "author_email": "kier@arthur-rai.co.uk",
+      "annotations": {
+        "workers/triggered_by": "deployment"
+      },
+      "versions": [
+        {
+          "version_id": "130606b8-86d7-4cfd-8e33-9c75365b3603",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-07T22:32:38.611059Z"
+    },
+    {
+      "id": "96ad8806-b4e3-4846-ba1e-3f441bcd81ea",
+      "source": "wrangler",
+      "strategy": "percentage",
+      "author_email": "kier@arthur-rai.co.uk",
+      "annotations": {
+        "workers/triggered_by": "deployment"
+      },
+      "versions": [
+        {
+          "version_id": "757b2412-752b-4a9b-be90-e589acf4befa",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-09T13:14:25.165305Z"
+    },
+    {
+      "id": "fbfd5e7a-4fc1-49e0-ab12-f04d41c46ad6",
+      "source": "wrangler",
+      "strategy": "percentage",
+      "author_email": "kier@arthur-rai.co.uk",
+      "annotations": {
+        "workers/triggered_by": "deployment"
+      },
+      "versions": [
+        {
+          "version_id": "f6e48b53-6011-4952-a71c-5b0ada80f640",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-09T15:59:32.909811Z"
+    },
+    {
+      "id": "5e23aef3-c63a-4f90-8b8f-5ef84d0c3353",
+      "source": "wrangler",
+      "strategy": "percentage",
+      "author_email": "kier@arthur-rai.co.uk",
+      "annotations": {
+        "workers/triggered_by": "deployment"
+      },
+      "versions": [
+        {
+          "version_id": "6c2a16e6-5e2e-41a2-a826-e39b8da144d3",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-10T17:43:09.074774Z"
+    },
+    {
+      "id": "653649cd-c104-496d-966c-8fcf1683f03d",
+      "source": "wrangler",
+      "strategy": "percentage",
+      "author_email": "kier@arthur-rai.co.uk",
+      "annotations": {
+        "workers/triggered_by": "deployment"
+      },
+      "versions": [
+        {
+          "version_id": "75221ddd-f622-4b35-9be5-eb098584a8a6",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-12T22:10:26.090387Z"
+    },
+    {
+      "id": "fa29af4c-483e-42ac-9f95-626defbc92d2",
+      "source": "wrangler",
+      "strategy": "percentage",
+      "author_email": "kier@arthur-rai.co.uk",
+      "annotations": {
+        "workers/triggered_by": "deployment"
+      },
+      "versions": [
+        {
+          "version_id": "9189b75d-fc6e-47f5-8c33-e86cc266c2a7",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-13T10:17:34.747504Z"
+    },
+    {
+      "id": "f5400d82-888a-48a6-9622-079d053726f8",
+      "source": "wrangler",
+      "strategy": "percentage",
+      "author_email": "kier@arthur-rai.co.uk",
+      "annotations": {
+        "workers/triggered_by": "deployment"
+      },
+      "versions": [
+        {
+          "version_id": "014aa120-6b88-4c6b-adbd-66def6e83ccd",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-13T23:36:32.824822Z"
+    },
+    {
+      "id": "79c61c45-9ec5-48be-bfdd-6e837262cb07",
+      "source": "wrangler",
+      "strategy": "percentage",
+      "author_email": "kier@arthur-rai.co.uk",
+      "annotations": {
+        "workers/triggered_by": "deployment"
+      },
+      "versions": [
+        {
+          "version_id": "5501aaa3-3302-456d-8805-d5e7e82ec86a",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-14T15:52:08.252999Z"
+    }
+  ],
+  "action": "READ_ONLY_NO_DEPLOYMENT"
+}
