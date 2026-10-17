@@ -1,0 +1,19 @@
+{
+  "version": "DAILY_GENUINE_ROOT_STAGE_PREDECISION_V1",
+  "stage": "S4",
+  "operatorSourceCommit": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "decision": "ROOT_REVIEWED_EXACT_EXISTING_STAGE_EFFECTS",
+  "workerSourceSha256": "23cd9c38a20d43398756965210b4d47391eee94583ea61347d548c8d39344a77",
+  "nativeOwnerEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S4_SEVEN_ROUTINE_ACL_METADATA_20261017.json",
+  "schemaEffectEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_CURRENT_NATIVE_CONTEXT_READONLY_20261017.json",
+  "sourceEvidence": [
+    "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+    "docs/healthroster-build/proposals/daily-original-stages-after-original-held-20261017/S4_SOURCE_EFFECT_REVIEW.md",
+    "docs/healthroster-build/proposals/daily-original-stages-after-original-held-20261017/S4_ROUTINE_METADATA_SELECTION.json",
+    "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_CONTEXT_HEALTH_ROUTINE_METADATA_20261017.json",
+    "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_20261017.json"
+  ],
+  "expectedEffects": "The genuine ordinary manual Daily producer creates one native current version1 DAILY/HOURS/MANUAL Timesheet for the actual Candidate/Client/booking, without Contract/adjustment or authorisation. It runs the existing targeted canonical enqueue/limit-one worker using the actual Timesheet ID and forceUnprocessed, genuine dated rates/calculator/writer/completed-ID checks. Original AFTER requires one native unprocessed TSFIN, actual generated ID, scoped outbox zero and the existing audit condition while all prior fixtures remain unchanged.",
+  "reconciliation": "Admit only after the genuine S3 prefix, current actor/source, full original vacancy, exact committed setup and one-shot request. Preserve actual returned native Timesheet ID and strict created_unprocessed response, then full Timesheet/current-history/TSFIN/outbox/audit readback and all original assertions. No S4 auxiliary reader is introduced. A failed request may follow committed INSERT and failed recalculation or compensating DELETE: reconcile the complete deterministic booking family and financial/outbox/audit state; never retry unknown, seed financials or manually remove uncertain data. Original AFTER, closed child qualification and public prefix remain mandatory.",
+  "limitations": "Seven fixed routine ACL rows prove ownership/security/callability, not unavailable definition hashes or transitive body semantics. Reuse approved normal financial contracts and actual catalogue aggregate without reading Banking bodies or adding F17/permission gates. Selected index functions are published-equal; the whole newer canonical module is not, and the ordinary call has default null correction context. No monetary/paid/Bank join/public Preview, race, restoration, S5/S6 acceptance, installation or feature activation is claimed."
+}

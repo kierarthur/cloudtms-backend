@@ -1,0 +1,17 @@
+{
+  "version": "DAILY_GENUINE_ROOT_STAGE_PREDECISION_V1",
+  "stage": "S2",
+  "operatorSourceCommit": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "decision": "ROOT_REVIEWED_EXACT_EXISTING_STAGE_EFFECTS",
+  "workerSourceSha256": "42642fcfbe70961b2b8276e875e75c69a673a15a3442a04fe3c2d4e6046b4231",
+  "nativeOwnerEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_20261017.json",
+  "schemaEffectEvidence": "docs/healthroster-build/proposals/daily-s23-observation-20261017/EFFECT_SOURCE_PINS.json",
+  "sourceEvidence": [
+    "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+    "docs/healthroster-build/proposals/daily-s23-observation-20261017/EFFECT_GUIDANCE.md",
+    "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_FIXED_CATALOGUE_INDEPENDENT_REVIEW_20261017/REVIEW.json"
+  ],
+  "expectedEffects": "One genuine Candidate with the exact original reserved key, roles RN and PAYE facts; the Candidate request has no band field and native minted reference. The request omits job_titles; job_title_id is null and no job-title POST is expected. Preserve native reference/counter/global/Invoice and installed dirty/wakeup callbacks, including both actual INSERT SELECT outbox paths. The Worker six-zero summary is necessary but does not prove full vacancy or no callback execution.",
+  "reconciliation": "Preserve S1/S1a committed prefix and exact original before/after full current/history scopes, active Admin and one POST. Require complete strict response and native minted ID/reference, all prior reserved rows unchanged, full Timesheet/TSFIN/key/alias vacancy and real after facts. S23 before/after main/fresh observations retain all seven turn fields, order AFTER after response and before original read, and treat shared candidate counter/FK/four sequences as nonexclusive. Record actual changes/background; unknown result holds and is never retried automatically.",
+  "limitations": "Settings-loader callsite bodies remain existing normal-owner interfaces: two external normalization calls and shared helpers are not qualified by post-loader stub tests. No Banking semantic bodies are read or changed, no new permission/F17 gate is added, and no exclusive counter attribution, financial success or global restoration is claimed."
+}
