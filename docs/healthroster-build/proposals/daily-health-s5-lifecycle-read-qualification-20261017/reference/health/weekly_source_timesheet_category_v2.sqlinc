@@ -1,0 +1,143 @@
+create or replace function private.weekly_source_timesheet_category_v2(p_root_timesheet_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_root public.timesheets%rowtype;
+  v_duty jsonb;
+  v_category text;
+  v_reason text;
+  v_basis jsonb;
+  v_inventory jsonb;
+  v_component jsonb;
+  v_event public.weekly_exceptional_pay_family_events%rowtype;
+  v_event_id uuid;
+  v_detail jsonb;
+  v_approval public.weekly_exceptional_payment_approvals%rowtype;
+  v_count integer;
+  v_generation_id uuid;
+  v_local jsonb;
+  v_c1 jsonb;
+  v_next jsonb;
+  v_source jsonb;
+  v_waiting_import jsonb:='[]'::jsonb;
+begin
+  select * into v_root from public.timesheets where timesheet_id=p_root_timesheet_id;
+  if not found then return null; end if;
+  if v_root.archived_at_utc is not null then v_category:='ARCHIVED';
+  elsif v_root.authorised_at_server is not null and v_root.is_current
+        and v_root.revoked_at is null and v_root.sheet_scope='WEEKLY'
+        and v_root.line_type='HOURS' and v_root.is_adjustment=false then
+    v_duty:=private.weekly_source_operational_empty_v1(p_root_timesheet_id,null);
+    if v_duty->>'ok'='true' and v_duty->>'authorisation_state'='AUTHORISED_CURRENT'
+       and v_duty->>'effective_empty'='true'
+       and v_duty#>>'{banking_application,application_state}'='APPLIED'
+       and v_duty#>>'{scope,target_family_id}' is not null then v_category:='WITHDRAWN';
+    elsif v_duty->>'authorisation_state'='AUTHORISED_CURRENT'
+       and v_duty#>>'{scope,target_family_id}' is not null
+       and v_duty->'approval_origin' is not null then
+      -- Today's positive approved protected work, not a lifetime invoice-count
+      -- proxy. An old issued document cannot hide a new Source-absent shift;
+      -- a zero component or a pending/unqualified decision cannot create this
+      -- positive-hours presentation. No candidate-pay gate is added.
+      v_inventory:=private.weekly_source_effective_inventory_v1(p_root_timesheet_id);
+      if v_inventory->>'ok'='true'
+         and v_inventory#>>'{approval_basis,coverage_complete}'='true'
+         and v_inventory#>'{approval_basis,scope}'=v_duty->'scope'
+         and v_inventory#>'{approval_basis,origin}'=v_duty->'approval_origin'
+         and v_inventory->>'inventory_digest'=v_duty->>'inventory_digest' then
+        for v_component in select value from jsonb_array_elements(v_inventory->'components')
+          where value->>'component_kind'='WORKED_TIME'
+            and value->'exclude_from_pay'='false'::jsonb
+            and (coalesce((value->>'hours_day')::numeric,0)
+              +coalesce((value->>'hours_night')::numeric,0)
+              +coalesce((value->>'hours_sat')::numeric,0)
+              +coalesce((value->>'hours_sun')::numeric,0)
+              +coalesce((value->>'hours_bh')::numeric,0))>0
+        loop
+          -- Protected-only calculator segments can retain their stable local
+          -- segment identity rather than a durable-event UUID. Use the exact
+          -- I1-validated chosen detail, then require ONE current protected
+          -- event with those full clocks/breaks. Never match only duration or
+          -- select an arbitrary event on the same day.
+          if v_duty#>>'{approval_origin,kind}'='COMMITTED_SOURCE_HEAD_V1' then
+            select count(*),jsonb_agg(d.detail_json)->0 into v_count,v_detail
+              from private.bpay_next_source_chosen_detail d
+              where d.head_id=(v_duty#>>'{approval_origin,head_id}')::uuid
+                and d.component_id=(v_component->>'component_id')::uuid
+                and d.decision_bundle_id=(v_duty#>>'{approval_origin,decision_bundle_id}')::uuid
+                and d.bundle_revision=(v_duty#>>'{approval_origin,bundle_revision}')::bigint;
+          else
+            select count(*),jsonb_agg(s.value)->0 into v_count,v_detail
+              from public.timesheets_financials f
+              cross join lateral jsonb_array_elements(f.invoice_breakdown_json->'segments') s(value)
+              where f.id=(v_duty#>>'{approval_origin,financial_snapshot_id}')::uuid
+                and f.timesheet_id=p_root_timesheet_id and f.is_current
+                and s.value->>'segment_id'=v_component->>'segment_id';
+          end if;
+          if v_count<>1 then continue; end if;
+          select count(*),min(e.id::text)::uuid into v_count,v_event_id
+            from public.weekly_exceptional_pay_family_events e
+            join public.weekly_exceptional_payment_approvals a on a.id=e.evidence_approval_id
+            where e.family_id=(v_duty#>>'{scope,target_family_id}')::uuid and e.state='WAIT'
+              and not exists(select 1 from public.weekly_exceptional_pay_family_events newer
+                where newer.family_id=e.family_id and newer.durable_work_event_id=e.durable_work_event_id
+                  and newer.event_sequence>e.event_sequence)
+              and a.withdrawn_at_utc is null and a.pay_target_family_id=e.family_id
+              and a.work_event_id=e.durable_work_event_id
+              and a.protected_work_date=(v_component->>'work_date')::date
+              and to_char(a.protected_start_at_local,'HH24:MI')=v_detail->>'start'
+              and to_char(a.protected_end_at_local,'HH24:MI')=v_detail->>'end'
+              and (a.protected_end_at_local::date>a.protected_start_at_local::date)
+                =(v_detail->>'overnight')::boolean
+              and a.protected_break_minutes=coalesce(v_detail->>'break_minutes',v_detail->>'break_mins')::integer;
+          if v_count<>1 then continue; end if;
+          select * into strict v_event from public.weekly_exceptional_pay_family_events where id=v_event_id;
+          select a.* into v_approval from public.weekly_exceptional_payment_approvals a
+            where a.id=v_event.evidence_approval_id and a.pay_target_family_id=v_event.family_id
+              and a.work_event_id=v_event.durable_work_event_id
+              and a.candidate_id=(v_duty#>>'{scope,candidate_id}')::uuid
+              and a.client_id=(v_duty#>>'{scope,client_id}')::uuid
+              and a.contract_id=(v_duty#>>'{scope,contract_id}')::uuid
+              and a.week_ending=v_root.week_ending_date;
+          if not found then continue; end if;
+          select count(*),min(t.financial_generation_id::text)::uuid into v_count,v_generation_id
+            from public.weekly_exceptional_pay_target_events t
+            where t.family_id=v_event.family_id and t.approval_id=v_approval.id;
+          if v_count<>1 or v_generation_id is null then continue; end if;
+          v_local:=private.weekly_source_pay_query_local_receipt_v1(p_root_timesheet_id,v_approval.id,v_generation_id);
+          v_c1:=private.weekly_source_pay_query_c1_receipt_v1(p_root_timesheet_id,v_approval.id,v_generation_id);
+          v_next:=private.weekly_source_pay_query_next_receipt_v1(p_root_timesheet_id,v_approval.id,v_generation_id);
+          if (v_local is not null)::integer+(v_c1 is not null)::integer+(v_next is not null)::integer<>1 then
+            continue;
+          end if;
+          v_source:=private.weekly_source_selected_source_witness_v1(
+            v_event.family_id,v_approval.source_cycle_id,v_event.durable_work_event_id);
+          if v_source->>'kind'='CERTIFIED_ABSENCE'
+             and v_source#>>'{source_proposal,selected_work_event_id}'=v_event.durable_work_event_id::text
+             and v_source#>'{source_proposal,source_present}'='false'::jsonb then
+            v_waiting_import:=v_waiting_import||jsonb_build_array(jsonb_build_object(
+              'component_id',v_component->'component_id','approval_id',v_approval.id,
+              'generation_id',v_generation_id,'accepted_receipt',coalesce(v_local,v_c1,v_next),
+              'selected_source_witness',v_source));
+          end if;
+        end loop;
+        if jsonb_array_length(v_waiting_import)>0
+           and v_duty#>'{duties,invoice_task}'='false'::jsonb then
+          v_category:='PROCESSING_DELAYED'; v_reason:='Awaiting a valid import for invoicing';
+        end if;
+      end if;
+    end if;
+  end if;
+  v_basis:=jsonb_build_object('root_timesheet_id',v_root.timesheet_id,'root_version',v_root.version,
+    'is_current',v_root.is_current,'revoked_at',v_root.revoked_at,
+    'authorised_at_server',v_root.authorised_at_server,'archived_at_utc',v_root.archived_at_utc,
+    'presentation_category',v_category,'source_duty',v_duty,'waiting_import',v_waiting_import);
+  return jsonb_build_object('presentation_category',v_category,
+    'category_basis',jsonb_build_object('facts',v_basis,'sha256',encode(
+      private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_TIMESHEET_CATEGORY_V2',v_basis),'hex')),
+    'is_archived',v_root.archived_at_utc is not null,'archived_at_utc',v_root.archived_at_utc,
+    'authorised_at_server',v_root.authorised_at_server,'is_current',v_root.is_current,
+    'revoked_at',v_root.revoked_at,'processing_reason',v_reason);
+end;
+$function$;

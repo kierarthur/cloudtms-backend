@@ -1,0 +1,242 @@
+async function fetchTimesheetLifecycleLightweightRow(env, input = {}) {
+  const isPlainObject = (value) => !!(value && typeof value === 'object' && !Array.isArray(value));
+  const src = isPlainObject(input) ? input : {};
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const firstString = function firstString() {
+    for (let index = 0; index < arguments.length; index += 1) {
+      const text = trimStr(arguments[index]);
+      if (text) return text;
+    }
+    return '';
+  };
+  const toBoolOrNull = (value) => {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (value == null) return null;
+    const text = trimStr(value).toLowerCase();
+    if (!text) return null;
+    if (['true', 't', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', 'f', '0', 'no', 'n', 'off'].includes(text)) return false;
+    return null;
+  };
+  const jsonObject = (value) => isPlainObject(value) ? value : {};
+  const unwrapRpcPayload = (payload, fnName) => {
+    let out = payload;
+    if (Array.isArray(out) && out.length === 1) out = out[0];
+    if (out && typeof out === 'object' && !Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, fnName)) out = out[fnName];
+    if (typeof out === 'string') {
+      try { out = JSON.parse(out); } catch {}
+    }
+    return isPlainObject(out) ? out : {};
+  };
+
+  const requestedTimesheetId = firstString(src.requestedTimesheetId, src.requested_timesheet_id, src.timesheetId, src.timesheet_id, src.currentTimesheetId, src.current_timesheet_id);
+  const directCurrentTimesheetId = firstString(src.currentTimesheetId, src.current_timesheet_id, src.timesheetId, src.timesheet_id);
+  const contractWeekId = firstString(src.contractWeekId, src.contract_week_id, src.weekId, src.week_id);
+  const bookingIdInput = firstString(src.bookingId, src.booking_id);
+  const context = firstString(src.context, src.source_context, 'timesheet_modal').toLowerCase() || 'timesheet_modal';
+  const action = firstString(src.action, src.actionType, 'LIFECYCLE');
+  const actorUserId = firstString(src.actorUserId, src.actor_user_id);
+
+  let resolved = isPlainObject(src.resolved) ? src.resolved : null;
+  if (!resolved && requestedTimesheetId && typeof resolveTimesheetToCurrent === 'function') {
+    try { resolved = await resolveTimesheetToCurrent(env, requestedTimesheetId); } catch { resolved = null; }
+  }
+
+  const currentTimesheetId = firstString(resolved?.current_timesheet_id, directCurrentTimesheetId, requestedTimesheetId);
+  const bookingId = firstString(resolved?.booking_id, bookingIdInput);
+  const currentVersion = resolved?.current_version ?? src.currentVersion ?? src.current_version ?? null;
+  const wasStale = resolved?.was_stale === true || !!(requestedTimesheetId && currentTimesheetId && requestedTimesheetId !== currentTimesheetId);
+
+  const item = {
+    context,
+    row_key: currentTimesheetId ? `timesheet:${currentTimesheetId}` : (contractWeekId ? `contract_week:${contractWeekId}` : null),
+    requested_timesheet_id: requestedTimesheetId || null,
+    timesheet_id: currentTimesheetId || requestedTimesheetId || null,
+    current_timesheet_id: currentTimesheetId || requestedTimesheetId || null,
+    expected_timesheet_id: currentTimesheetId || requestedTimesheetId || null,
+    contract_week_id: contractWeekId || null,
+    booking_id: bookingId || null,
+    previous_row_key: firstString(src.previousRowKey, src.previous_row_key) || null,
+    previous_timesheet_id: firstString(src.previousTimesheetId, src.previous_timesheet_id) || null,
+    previous_bucket: firstString(src.previousBucket, src.previous_bucket) || null
+  };
+
+  if (!item.timesheet_id && !item.contract_week_id && !item.booking_id) {
+    return {
+      ok: false,
+      error_code: 'INVALID_IDENTITY',
+      message: 'timesheet_id, contract_week_id, or booking_id is required for lightweight lifecycle row.',
+      row: null,
+      rows: [],
+      lifecycle_patch_bundle: buildTimesheetLifecyclePatchFromMutation({
+        action,
+        requestedTimesheetId: requestedTimesheetId || null,
+        currentTimesheetId: currentTimesheetId || null,
+        contractWeekId: contractWeekId || null,
+        bookingId: bookingId || null,
+        staleMarkers: { was_stale: wasStale }
+      })
+    };
+  }
+
+  let payload = null;
+  try {
+    const rpcRes = await sbRpc(env, 'timesheet_lifecycle_affected_rows_v1', {
+      p_items: [item],
+      p_context: context,
+      p_actor_user_id: actorUserId || null
+    }, { timeoutMs: Number(src.timeoutMs || src.timeout_ms || 8000) });
+    payload = unwrapRpcPayload(rpcRes, 'timesheet_lifecycle_affected_rows_v1');
+  } catch (err) {
+    return {
+      ok: false,
+      error_code: /timeout|timed out|55P03|57014|LOCK_TIMEOUT/i.test(String(err?.message || err || '')) ? 'LOCK_TIMEOUT' : 'LIGHTWEIGHT_LIFECYCLE_ROW_FAILED',
+      message: String(err?.message || err || 'Lightweight lifecycle row failed'),
+      row: null,
+      rows: [],
+      lifecycle_patch_bundle: buildTimesheetLifecyclePatchFromMutation({
+        action,
+        requestedTimesheetId: requestedTimesheetId || null,
+        currentTimesheetId: currentTimesheetId || null,
+        currentVersion,
+        contractWeekId: contractWeekId || null,
+        bookingId: bookingId || null,
+        staleMarkers: { was_stale: wasStale }
+      })
+    };
+  }
+
+  if (!payload || payload.ok === false) {
+    const code = firstString(payload?.error_code, payload?.code, 'LIGHTWEIGHT_LIFECYCLE_ROW_FAILED');
+    return {
+      ok: false,
+      error_code: code,
+      message: firstString(payload?.message, 'Lightweight lifecycle row failed'),
+      payload: payload || {},
+      row: null,
+      rows: [],
+      lifecycle_patch_bundle: buildTimesheetLifecyclePatchFromMutation({
+        action,
+        requestedTimesheetId: requestedTimesheetId || null,
+        currentTimesheetId: currentTimesheetId || null,
+        currentVersion,
+        contractWeekId: contractWeekId || null,
+        bookingId: bookingId || null,
+        staleMarkers: { was_stale: wasStale }
+      })
+    };
+  }
+
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  const rawRow = rows[0] || null;
+  if (!rawRow || typeof rawRow !== 'object' || Array.isArray(rawRow)) {
+    return {
+      ok: false,
+      error_code: 'LIGHTWEIGHT_LIFECYCLE_ROW_NOT_FOUND',
+      message: 'No lightweight lifecycle row was returned.',
+      payload,
+      row: null,
+      rows: [],
+      missing: Array.isArray(payload.missing) ? payload.missing : [],
+      removed: Array.isArray(payload.removed) ? payload.removed : [],
+      lifecycle_patch_bundle: buildTimesheetLifecyclePatchFromMutation({
+        action,
+        requestedTimesheetId: requestedTimesheetId || null,
+        currentTimesheetId: currentTimesheetId || null,
+        currentVersion,
+        contractWeekId: contractWeekId || null,
+        bookingId: bookingId || null,
+        staleMarkers: { was_stale: wasStale }
+      })
+    };
+  }
+
+  const identity = jsonObject(rawRow.identity);
+  const status = jsonObject(rawRow.status);
+  const actions = jsonObject(rawRow.actions);
+  const display = jsonObject(rawRow.display);
+  const rowCurrentTimesheetId = firstString(rawRow.current_timesheet_id, rawRow.timesheet_id, identity.current_timesheet_id, identity.timesheet_id, currentTimesheetId);
+  const rowContractWeekId = firstString(rawRow.contract_week_id, identity.contract_week_id, contractWeekId);
+  const rowBookingId = firstString(rawRow.booking_id, identity.booking_id, bookingId);
+  const rowCandidateId = firstString(rawRow.candidate_id, display.candidate_id);
+  const processingStatus = firstString(rawRow.processing_status, status.processing_status);
+  const signature = firstString(rawRow.backend_row_signature, rawRow.mutation_row_signature, rawRow.row_signature, rawRow.render_signature, rawRow.signature);
+  const authorised = toBoolOrNull(status.is_authorised ?? rawRow.is_authorised ?? rawRow.authorised);
+  const readyToPay = toBoolOrNull(rawRow.ready_to_pay ?? status.ready_to_pay ?? display.ready_to_pay);
+
+  const row = {
+    ...rawRow,
+    response_mode: 'LIGHTWEIGHT_LIFECYCLE_ROW',
+    context,
+    timesheet_id: rowCurrentTimesheetId || null,
+    current_timesheet_id: rowCurrentTimesheetId || null,
+    requested_timesheet_id: requestedTimesheetId || identity.requested_timesheet_id || null,
+    current_version: currentVersion ?? rawRow.current_version ?? null,
+    contract_week_id: rowContractWeekId || null,
+    booking_id: rowBookingId || null,
+    candidate_id: rowCandidateId || null,
+    processing_status: processingStatus || null,
+    authorised,
+    is_authorised: authorised,
+    ready_to_pay: readyToPay,
+    backend_row_signature: signature || null,
+    mutation_row_signature: signature || null,
+    row_signature: signature || null,
+    expected_row_signature: signature || firstString(src.expectedRowSignature, src.expected_row_signature) || null,
+    identity: {
+      ...identity,
+      requested_timesheet_id: requestedTimesheetId || identity.requested_timesheet_id || null,
+      timesheet_id: rowCurrentTimesheetId || null,
+      current_timesheet_id: rowCurrentTimesheetId || null,
+      contract_week_id: rowContractWeekId || null,
+      booking_id: rowBookingId || null,
+      row_key: firstString(identity.row_key, rawRow.row_key, rowCurrentTimesheetId ? `timesheet:${rowCurrentTimesheetId}` : null) || null
+    },
+    status: {
+      ...status,
+      processing_status: processingStatus || null,
+      is_authorised: authorised,
+      ready_to_pay: readyToPay
+    },
+    actions: {
+      ...actions
+    },
+    stale_markers: {
+      was_stale: wasStale,
+      timesheet_moved: !!(requestedTimesheetId && rowCurrentTimesheetId && requestedTimesheetId !== rowCurrentTimesheetId),
+      moved_from_timesheet_id: requestedTimesheetId && rowCurrentTimesheetId && requestedTimesheetId !== rowCurrentTimesheetId ? requestedTimesheetId : null,
+      moved_to_timesheet_id: requestedTimesheetId && rowCurrentTimesheetId && requestedTimesheetId !== rowCurrentTimesheetId ? rowCurrentTimesheetId : null
+    }
+  };
+
+  const lifecyclePatchBundle = buildTimesheetLifecyclePatchFromMutation({
+    action,
+    requestedTimesheetId: requestedTimesheetId || row.requested_timesheet_id || null,
+    currentTimesheetId: rowCurrentTimesheetId || null,
+    currentVersion: currentVersion ?? null,
+    contractWeekId: rowContractWeekId || null,
+    bookingId: rowBookingId || null,
+    candidateId: rowCandidateId || null,
+    newProcessingStatus: processingStatus || null,
+    authorised,
+    readyToPay,
+    backendRowSignature: signature || null,
+    rowSignature: signature || null,
+    expectedRowSignature: signature || firstString(src.expectedRowSignature, src.expected_row_signature) || null,
+    existingAffectedRows: [row],
+    sourceRow: row,
+    staleMarkers: row.stale_markers
+  });
+
+  return {
+    ok: true,
+    response_mode: 'LIGHTWEIGHT_LIFECYCLE_ROW',
+    payload,
+    row: lifecyclePatchBundle.affected_rows[0] || row,
+    rows: lifecyclePatchBundle.affected_rows,
+    missing: Array.isArray(payload.missing) ? payload.missing : [],
+    removed: Array.isArray(payload.removed) ? payload.removed : [],
+    lifecycle_patch_bundle: lifecyclePatchBundle
+  };
+}

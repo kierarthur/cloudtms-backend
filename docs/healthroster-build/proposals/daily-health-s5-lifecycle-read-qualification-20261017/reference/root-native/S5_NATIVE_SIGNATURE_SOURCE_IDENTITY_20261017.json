@@ -1,0 +1,14 @@
+{
+  "version": "ROOT_S5_NATIVE_SIGNATURE_SOURCE_IDENTITY_V1",
+  "nativeDefinitionBytes": 11346,
+  "nativeDefinitionSha256": "64d0268a4628ef5834b84b7f96446cf041372542a37d1f7bcd63d81a5f7c73ff",
+  "nativeBodySha256": "3d6909bbe551436ff70eeafc72fd10088149692619cc760f5e6c404917982830",
+  "currentRegisteredPhysical": "supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql",
+  "currentPhysicalSha256": "bc3c85a8cd2f8a6d6c76e6f8d0d559a9c8d4bd42910187affc11aff146798648",
+  "nativeBodyEqualsSavedSourceRaw": true,
+  "completeBodyOnlyCrLfTranslationEqual": true,
+  "nativeFunctionInvoked": false,
+  "businessRowsReturned": 0,
+  "readOnlyFalseArmQualification": "PENDING_FULL_SOURCE_CLOSURE",
+  "noSqlNormalisationForFutureNativePins": true
+}

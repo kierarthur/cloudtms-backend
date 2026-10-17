@@ -1,0 +1,71 @@
+CREATE OR REPLACE FUNCTION public._temp_diag_log(p_action text, p_object_type text, p_object_id_text text DEFAULT NULL::text, p_payload_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+DECLARE
+  v_enabled boolean := false;
+  v_payload jsonb := '{}'::jsonb;
+BEGIN
+  BEGIN
+    SELECT COALESCE(sd.temp_log, false)
+      INTO v_enabled
+    FROM public.settings_defaults AS sd
+    ORDER BY sd.id
+    LIMIT 1;
+  EXCEPTION
+    WHEN undefined_table OR undefined_column THEN
+      RETURN;
+    WHEN OTHERS THEN
+      RETURN;
+  END;
+
+  IF COALESCE(v_enabled, false) IS NOT TRUE THEN
+    RETURN;
+  END IF;
+
+  v_payload := COALESCE(p_payload_json, '{}'::jsonb);
+
+  IF LENGTH(v_payload::text) > 12000 THEN
+    v_payload := jsonb_build_object(
+      'truncated', true,
+      'original_length', LENGTH(COALESCE(p_payload_json, '{}'::jsonb)::text)
+    );
+  END IF;
+
+  BEGIN
+    INSERT INTO public.audit_events (
+      actor_user_id,
+      actor_display,
+      actor_role_at_time,
+      object_type,
+      object_id_text,
+      action,
+      before_json,
+      after_json,
+      reason,
+      ip,
+      user_agent,
+      correlation_id
+    )
+    VALUES (
+      NULL::uuid,
+      NULL::text,
+      NULL::text,
+      COALESCE(NULLIF(BTRIM(p_object_type), ''), 'TEMP_DIAG'),
+      NULLIF(BTRIM(COALESCE(p_object_id_text, '')), ''),
+      COALESCE(NULLIF(BTRIM(p_action), ''), 'TEMP_DIAG_STAGE'),
+      NULL::jsonb,
+      v_payload,
+      'TEMP_DIAG',
+      NULL::text,
+      NULL::text,
+      NULL::text
+    );
+  EXCEPTION
+    WHEN OTHERS THEN
+      RETURN;
+  END;
+END;
+$function$;

@@ -1,0 +1,197 @@
+[
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "audit_events",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "candidate_submission_components",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "candidate_submission_workflows",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "candidates",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "clients",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "contract_weeks",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "contracts",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "manual_timesheet_queue",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "settings_defaults",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "timesheet_evidence",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "timesheet_financial_retention",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "timesheets",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "timesheets_financials",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "weekly_exceptional_pay_target_families",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "name": "cloudtms_miget_service_owner_all",
+    "check": "true",
+    "roles": [
+      "postgres",
+      "service_role"
+    ],
+    "table": "weekly_source_row_timesheet_lineages",
+    "using": "true",
+    "schema": "public",
+    "command": "ALL",
+    "permissive": "PERMISSIVE"
+  }
+]

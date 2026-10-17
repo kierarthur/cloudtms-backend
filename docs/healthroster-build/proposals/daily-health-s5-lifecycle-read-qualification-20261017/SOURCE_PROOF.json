@@ -1,0 +1,81 @@
+{
+  "sourceStatus": "CONDITIONAL_EXACT_OFFICE_MANUAL_FIXTURE_ONLY",
+  "nativeQualification": false,
+  "nativeInvocation": "NOT_RUN",
+  "signatureComputedBeforePayloadFlag": true,
+  "falseArmLoggingUnreachable": true,
+  "candidateDownstreamPolicyAndProjectionExcludedOnlyUnderFreshScope": true,
+  "sourceBankBranchExcludedOnlyUnderBothFreshAbsenceGuards": true,
+  "normalLifecycleRouteUnconditionallyReadOnly": false,
+  "heapRelations": 15,
+  "sourcePolicies": 15,
+  "nativeInstalledTransitiveCatalogueAndBuiltinIdentity": "NOT_PROVED",
+  "version": "S5_BOUNDED_SOURCE_CONTROL_FLOW_PROOF_V1",
+  "sourceCommit": "feb36c0c13c87b57b7566172e4bfaa1254117794",
+  "parser": "v7.20",
+  "postgresqlParserVersion": [
+    17,
+    7
+  ],
+  "completeHealthSources": 9,
+  "actualOwnerFinals": 9,
+  "bankBodiesSelected": 0,
+  "productSqlChanged": false,
+  "f23AllowanceChanges": 0,
+  "grammar": [
+    {
+      "name": "timesheet_lifecycle_affected_rows_v1",
+      "outerGrammar": "PASS",
+      "bodyGrammar": "PG17_PLPGSQL_GRAMMAR_PASS_NOT_CATALOGUE_COMPILATION",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "timesheet_lifecycle_guard_signature_v1",
+      "outerGrammar": "PASS",
+      "bodyGrammar": "PG17_PLPGSQL_GRAMMAR_PASS_NOT_CATALOGUE_COMPILATION",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "weekly_source_operational_empty_v1",
+      "outerGrammar": "PASS",
+      "bodyGrammar": "PG17_PLPGSQL_GRAMMAR_PASS_NOT_CATALOGUE_COMPILATION",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "weekly_source_pay_query_next_receipt_v1",
+      "outerGrammar": "PASS",
+      "bodyGrammar": "NOT_APPLICABLE_LANGUAGE_SQL",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "weekly_source_timesheet_category_v2",
+      "outerGrammar": "PASS",
+      "bodyGrammar": "PG17_PLPGSQL_GRAMMAR_PASS_NOT_CATALOGUE_COMPILATION",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "_candidate_feature_enabled_current_v1",
+      "outerGrammar": "PASS",
+      "bodyGrammar": "NOT_APPLICABLE_LANGUAGE_SQL",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "_candidate_record_capabilities_v1",
+      "outerGrammar": "PASS",
+      "bodyGrammar": "PG17_PLPGSQL_GRAMMAR_PASS_NOT_CATALOGUE_COMPILATION",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "_candidate_signature_component_v1",
+      "outerGrammar": "PASS",
+      "bodyGrammar": "PG17_PLPGSQL_GRAMMAR_PASS_NOT_CATALOGUE_COMPILATION",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "_temp_diag_log",
+      "outerGrammar": "PASS",
+      "bodyGrammar": "PG17_PLPGSQL_GRAMMAR_PASS_NOT_CATALOGUE_COMPILATION",
+      "nativeBodyCompilation": "NOT_PROVED"
+    }
+  ]
+}
