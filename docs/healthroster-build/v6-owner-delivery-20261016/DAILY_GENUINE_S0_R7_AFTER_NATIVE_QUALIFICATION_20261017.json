@@ -1,0 +1,101 @@
+{
+  "version": "DAILY_GENUINE_S0_AFTER_NATIVE_QUALIFICATION_V1",
+  "stage": "S0",
+  "phase": "AFTER",
+  "operatorSourceCommit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "actualFrame": {
+    "ids": {
+      "rates": null,
+      "settings": null,
+      "financials": null,
+      "timesheets": null
+    },
+    "facts": {
+      "rate": false,
+      "audit": true,
+      "settings": false,
+      "candidate": false,
+      "financial": false,
+      "timesheet": false,
+      "clientMapping": false
+    },
+    "phase": "AFTER",
+    "scope": {
+      "audit": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "rates": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "outbox": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "clients": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "mappings": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "settings": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "overrides": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "candidates": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "financials": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "timesheets": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "candidateJobs": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      }
+    },
+    "stage": "S0",
+    "version": "DAILY_GENUINE_NATIVE_AGGREGATE_V1",
+    "database": "cloudtms_test_clone",
+    "readOnly": true,
+    "holderPid": 286808,
+    "legacyOne": true,
+    "backendPid": 286823,
+    "observedAt": "2026-10-17T14:05:20.455274+00:00",
+    "databaseOid": 324139,
+    "actorAllowed": true,
+    "noRoleSwitch": true,
+    "testIdentity": true,
+    "applyingCount": 0,
+    "holderGranted": true,
+    "catalogueSha256": "717b0254c002aaa71860add11c3cfff4adafb7dc77f83679f0c7fabb7f0e514e",
+    "catalogueComplete": true
+  },
+  "nativeResultSha256": "3bbd4441dcdbd8b8f6cb60fa8be61739d11de11b3990858b691e6e996a990207",
+  "actualInputSqlSha256": "55f7473ce931e7a5c23bf426469ac41f85566b10e5367276d62a8504a7df8860",
+  "actualVerificationSqlSha256": "428dc300c6919a3e43616dcbff42e8dfdb91769643ed63777b4d6a27a9d48c15",
+  "accepted": true,
+  "rolledBack": true,
+  "connectedFresh": true,
+  "reservedScopeCount": 11,
+  "reservedScopesVacant": true,
+  "businessRequests": 0,
+  "fullCanonicalRestorationClaimed": false,
+  "globalWeakMapClaimed": false,
+  "responseProjectionSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "exactApprovedChanges": [],
+  "observedReservedScopeChanges": 0,
+  "backgroundAttribution": "No business request forwarded; all eleven reserved scopes and catalogue unchanged. No assertion about unread unrelated background rows."
+}
