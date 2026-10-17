@@ -1,0 +1,15 @@
+{
+  "version": "OFFICE_FRESH_MAIN_SOURCE_CHECK_V1",
+  "capturedAt": "2026-10-17T16:42:01.547Z",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-office-13102026",
+  "gitDirectory": "D:/Development/GitHub/TEST-Frontend/.git/worktrees/healthroster-v2-office-13102026",
+  "commonGitDirectory": "D:/Development/GitHub/TEST-Frontend/.git",
+  "featureBranch": "codex/healthroster-v2-office-13102026",
+  "featureLocalAndRemote": "353d402f7d44efb8693775f8922f26fabd8c31dd",
+  "freshFetchedAndRemoteMain": "8ea8c8af0435702d3bf032b3197fe0e0eda64d1c",
+  "mainAncestorOfFeature": true,
+  "dirtyFiles": 0,
+  "mergeRequiredNow": false,
+  "sourceChangeOrNewTesting": "NONE; existing107-test/peer source qualification remains at unchanged353d.",
+  "deployment": "NOT_RUN"
+}
