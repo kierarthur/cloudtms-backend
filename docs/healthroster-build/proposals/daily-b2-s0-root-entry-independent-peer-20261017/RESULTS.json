@@ -1,0 +1,33 @@
+{
+  "version": "DAILY_B2_S0_ENTRYPOINT_INDEPENDENT_SOURCE_PEER_V1",
+  "disposition": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "findings": [],
+  "authorManifest": "5d8964533697eeace7580f5864dc2713605fa163c6fecc9f8e9bb5d8f03ba972",
+  "selection": "66c069736d635347e7e58e0d0c406c21394e8f65478468989b3de38e0bf036d6",
+  "parents": "9523713502ffddc9e802c49b741a2e8a9a52d53fe70961db9056b4b75a9c27ff",
+  "capturedFiles": 42,
+  "authorTests": 43,
+  "independentCommittedReaderTests": 13,
+  "actualPublicParents": 27,
+  "wholeRawInverses": 3,
+  "rootObservedHead": "736dc59f1644c04e7315950d59bb4687b6b0d3e1",
+  "reportObservedHead": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "sourceImagesAfterReplay": "ALL_42_RAW_IDENTICAL",
+  "checks": [
+    "Complete three payload bodies, original full parents and raw inverses read",
+    "Before-A actual 14-metadata and original public source gates required; no synthetic review accepted",
+    "Closed real-commit config and source-review binding; exact R10 public receipt/source remains unchanged",
+    "Exact current R9 alias raw/history protection and fresh B2 proof namespaces",
+    "All 22 substantive predecision parents retained; five records alter only the operator source literal",
+    "Original native loader, two S0 reads, response/readback, 30s/180s, source ownership, setup append, commit-only/push and abort/release controls retained",
+    "Original PUBLISH owner remains required before actual new prefix and 10 V2 stage-plan records",
+    "Independent reader positive and drift/path/physical/ancestor/HEAD refusals exercise actual source function with memory doubles"
+  ],
+  "limits": [
+    "No actual config, source admission, entrypoint, publisher or bookkeeper invocation",
+    "No auth, browser, private state/binding/journal lookup, native query or SQL execution",
+    "No Report/runtime/root mutation, commit, push or mount",
+    "Actual config/source review/entrypoint commit and real source admission remain root-owned prerequisites",
+    "No native performance, fixture, financial-success or Part B acceptance claimed"
+  ]
+}

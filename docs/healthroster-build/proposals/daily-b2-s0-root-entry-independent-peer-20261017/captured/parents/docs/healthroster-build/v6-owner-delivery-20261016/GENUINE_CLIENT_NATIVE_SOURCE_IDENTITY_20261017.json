@@ -1,0 +1,13 @@
+{
+  "version": "GENUINE_CLIENT_NATIVE_SOURCE_BODY_IDENTITY_V1",
+  "sourceFile": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+  "sourceFileSha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff",
+  "nativeDefinitionBytes": 28816,
+  "nativeDefinitionSha256": "1a132a38423d477d6ecd424579ccad3af75d26f7f4d49e851259a41934080be8",
+  "nativeBodySha256": "0fcc7d6740cf279569b9a9bcc06fc9255eaeb0238c448e0c3aaf06d2620f1401",
+  "sourceBodySha256": "0fcc7d6740cf279569b9a9bcc06fc9255eaeb0238c448e0c3aaf06d2620f1401",
+  "completeInnerBodyRawEqual": true,
+  "SQLNormalisationApplied": false,
+  "nativeInvocation": "NOT_RUN",
+  "actorVacancyAndSetup": "NOT_BOUND"
+}

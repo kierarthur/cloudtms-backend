@@ -1,0 +1,268 @@
+TAP version 13
+# Subtest: all three new targets preserve complete raw originals and exact whole inverses
+ok 1 - all three new targets preserve complete raw originals and exact whole inverses
+  ---
+  duration_ms: 2.3748
+  type: 'test'
+  ...
+# Subtest: pure five predecisions preserve every approval/evidence/producer byte except source literal
+ok 2 - pure five predecisions preserve every approval/evidence/producer byte except source literal
+  ---
+  duration_ms: 4.119
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_PREDECISION_20261017.json
+ok 3 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_PREDECISION_20261017.json
+  ---
+  duration_ms: 0.4179
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_R10_PREDECISION_20261017.json
+ok 4 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_R10_PREDECISION_20261017.json
+  ---
+  duration_ms: 0.34
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S2_R10_PREDECISION_20261017.json
+ok 5 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S2_R10_PREDECISION_20261017.json
+  ---
+  duration_ms: 0.4457
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S3_R10_PREDECISION_20261017.json
+ok 6 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S3_R10_PREDECISION_20261017.json
+  ---
+  duration_ms: 0.4657
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S4_R10_PREDECISION_20261017.json
+ok 7 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S4_R10_PREDECISION_20261017.json
+  ---
+  duration_ms: 0.5337
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/daily-health-genuine-hospital-mapping-stage-20261017/SOURCE_PINS.json
+ok 8 - predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/daily-health-genuine-hospital-mapping-stage-20261017/SOURCE_PINS.json
+  ---
+  duration_ms: 0.7348
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/daily-original-stages-after-original-held-20261017/S4_ROUTINE_METADATA_SELECTION.json
+ok 9 - predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/daily-original-stages-after-original-held-20261017/S4_ROUTINE_METADATA_SELECTION.json
+  ---
+  duration_ms: 0.7399
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/daily-original-stages-after-original-held-20261017/S4_SOURCE_EFFECT_REVIEW.md
+ok 10 - predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/daily-original-stages-after-original-held-20261017/S4_SOURCE_EFFECT_REVIEW.md
+  ---
+  duration_ms: 0.9065
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/daily-s23-observation-20261017/EFFECT_GUIDANCE.md
+ok 11 - predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/daily-s23-observation-20261017/EFFECT_GUIDANCE.md
+  ---
+  duration_ms: 1.0002
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/daily-s23-observation-20261017/EFFECT_SOURCE_PINS.json
+ok 12 - predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/daily-s23-observation-20261017/EFFECT_SOURCE_PINS.json
+  ---
+  duration_ms: 0.9498
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/s1-normal-producer-effect-review-guidance-20261017/MEMO.md
+ok 13 - predecision binding refuses changed substantive public parent docs/healthroster-build/proposals/s1-normal-producer-effect-review-guidance-20261017/MEMO.md
+  ---
+  duration_ms: 1
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_CURRENT_NATIVE_CONTEXT_READONLY_20261017.json
+ok 14 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_CURRENT_NATIVE_CONTEXT_READONLY_20261017.json
+  ---
+  duration_ms: 1.0817
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_CONTEXT_HEALTH_ROUTINE_METADATA_20261017.json
+ok 15 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_CONTEXT_HEALTH_ROUTINE_METADATA_20261017.json
+  ---
+  duration_ms: 1.8842
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json
+ok 16 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json
+  ---
+  duration_ms: 1.5695
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_20261017.json
+ok 17 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_20261017.json
+  ---
+  duration_ms: 1.668
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_FIXED_NATIVE_METADATA_20261017.json
+ok 18 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_FIXED_NATIVE_METADATA_20261017.json
+  ---
+  duration_ms: 1.7139
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_ROOT_SOURCE_REVIEW_20261017.json
+ok 19 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_ROOT_SOURCE_REVIEW_20261017.json
+  ---
+  duration_ms: 1.6282
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_CURRENT_NATIVE_HEALTH_BODY_BINDINGS_20261017.json
+ok 20 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_CURRENT_NATIVE_HEALTH_BODY_BINDINGS_20261017.json
+  ---
+  duration_ms: 1.64
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_FIXED_CATALOGUE_INDEPENDENT_REVIEW_20261017/REVIEW.json
+ok 21 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_FIXED_CATALOGUE_INDEPENDENT_REVIEW_20261017/REVIEW.json
+  ---
+  duration_ms: 2.3248
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_ROOT_ORDINARY_EFFECT_PREDECISION_20261017.json
+ok 22 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_ROOT_ORDINARY_EFFECT_PREDECISION_20261017.json
+  ---
+  duration_ms: 2.394
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S4_SEVEN_ROUTINE_ACL_METADATA_20261017.json
+ok 23 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S4_SEVEN_ROUTINE_ACL_METADATA_20261017.json
+  ---
+  duration_ms: 1.8875
+  type: 'test'
+  ...
+# Subtest: predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json
+ok 24 - predecision binding refuses changed substantive public parent docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json
+  ---
+  duration_ms: 1.9608
+  type: 'test'
+  ...
+# Subtest: predecision binding rejects missing reader/source and never accepts a nominal review
+ok 25 - predecision binding rejects missing reader/source and never accepts a nominal review
+  ---
+  duration_ms: 0.1791
+  type: 'test'
+  ...
+# Subtest: actual config preserves closed seven-commit metadata selection and no unknown/future values
+ok 26 - actual config preserves closed seven-commit metadata selection and no unknown/future values
+  ---
+  duration_ms: 1.2895
+  type: 'test'
+  ...
+# Subtest: only exact source-only preparation config can omit the not-yet-created source review commit
+ok 27 - only exact source-only preparation config can omit the not-yet-created source review commit
+  ---
+  duration_ms: 0.1116
+  type: 'test'
+  ...
+# Subtest: all five exact B2 predecisions and actual-source S0 plan are required before source-only READY
+ok 28 - all five exact B2 predecisions and actual-source S0 plan are required before source-only READY
+  ---
+  duration_ms: 6.0388
+  type: 'test'
+  ...
+# Subtest: missing/changed B2 predecision refuses before A: S1
+ok 29 - missing/changed B2 predecision refuses before A: S1
+  ---
+  duration_ms: 4.9745
+  type: 'test'
+  ...
+# Subtest: missing/changed B2 predecision refuses before A: S1a
+ok 30 - missing/changed B2 predecision refuses before A: S1a
+  ---
+  duration_ms: 5.0493
+  type: 'test'
+  ...
+# Subtest: missing/changed B2 predecision refuses before A: S2
+ok 31 - missing/changed B2 predecision refuses before A: S2
+  ---
+  duration_ms: 5.3529
+  type: 'test'
+  ...
+# Subtest: missing/changed B2 predecision refuses before A: S3
+ok 32 - missing/changed B2 predecision refuses before A: S3
+  ---
+  duration_ms: 5.4676
+  type: 'test'
+  ...
+# Subtest: missing/changed B2 predecision refuses before A: S4
+ok 33 - missing/changed B2 predecision refuses before A: S4
+  ---
+  duration_ms: 5.1627
+  type: 'test'
+  ...
+# Subtest: old or different-source S0 execution plan cannot pass the pre-A guard
+ok 34 - old or different-source S0 execution plan cannot pass the pre-A guard
+  ---
+  duration_ms: 5.1377
+  type: 'test'
+  ...
+# Subtest: both aliases have exact current R9 raw SHA and original historical commit guards
+ok 35 - both aliases have exact current R9 raw SHA and original historical commit guards
+  ---
+  duration_ms: 0.264
+  type: 'test'
+  ...
+# Subtest: S0 original native guards/30+180/readback/vacancy/setup/write-only index and remote checks retained
+ok 36 - S0 original native guards/30+180/readback/vacancy/setup/write-only index and remote checks retained
+  ---
+  duration_ms: 0.2082
+  type: 'test'
+  ...
+# Subtest: fresh proof/publication namespace and real helper/composer commit replace all collision/hardcoded refs
+ok 37 - fresh proof/publication namespace and real helper/composer commit replace all collision/hardcoded refs
+  ---
+  duration_ms: 0.1028
+  type: 'test'
+  ...
+# Subtest: fixed native input loader/tool/write response and original abort/release controller bodies are raw unchanged
+ok 38 - fixed native input loader/tool/write response and original abort/release controller bodies are raw unchanged
+  ---
+  duration_ms: 0.3057
+  type: 'test'
+  ...
+# Subtest: controlled actual tools body admits source BEFORE A, runs only original two S0 reads, then releases own session
+ok 39 - controlled actual tools body admits source BEFORE A, runs only original two S0 reads, then releases own session
+  ---
+  duration_ms: 10.3986
+  type: 'test'
+  ...
+# Subtest: controlled tools hold/close without blind retry: source-refusal
+ok 40 - controlled tools hold/close without blind retry: source-refusal
+  ---
+  duration_ms: 5.8103
+  type: 'test'
+  ...
+# Subtest: controlled tools hold/close without blind retry: wrong-ready
+ok 41 - controlled tools hold/close without blind retry: wrong-ready
+  ---
+  duration_ms: 4.2306
+  type: 'test'
+  ...
+# Subtest: controlled tools hold/close without blind retry: book-refusal
+ok 42 - controlled tools hold/close without blind retry: book-refusal
+  ---
+  duration_ms: 4.7789
+  type: 'test'
+  ...
+# Subtest: controlled tools hold/close without blind retry: missing-result
+ok 43 - controlled tools hold/close without blind retry: missing-result
+  ---
+  duration_ms: 3.8361
+  type: 'test'
+  ...
+1..43
+# tests 43
+# suites 0
+# pass 43
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 236.7739

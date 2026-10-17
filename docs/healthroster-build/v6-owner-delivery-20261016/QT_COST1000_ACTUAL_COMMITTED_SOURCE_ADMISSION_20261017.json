@@ -1,0 +1,10 @@
+{
+  "version": "QT_COST1000_ACTUAL_COMMITTED_SOURCE_ADMISSION_V1",
+  "status": "ACTUAL_COMMITTED_SOURCE_PASS",
+  "rootSourceCommit": "736dc59f1644c04e7315950d59bb4687b6b0d3e1",
+  "rootExecutionCommit": "736dc59f1644c04e7315950d59bb4687b6b0d3e1",
+  "reportSourceCommit": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "privateStateRead": false,
+  "native": "NOT_RUN",
+  "qtAcceptance": "NOT_RUN"
+}

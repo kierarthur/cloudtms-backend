@@ -1,0 +1,47 @@
+{
+  "version": "DAILY_B2_S0_ENTRY_ROOT_SOURCE_REVIEW_V1",
+  "recordedAt": "2026-10-17T17:33:29.312161+00:00",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "authorManifest": "5d8964533697eeace7580f5864dc2713605fa163c6fecc9f8e9bb5d8f03ba972",
+  "rootTests": 43,
+  "independentReaderTests": 13,
+  "actualSavedIndexHeadHistoricalParents": 27,
+  "wholeRawInverses": 3,
+  "targets": [
+    {
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-s0-b2-bookkeeper-20261017.mjs",
+      "bytes": 9025,
+      "sha256": "7d25340d94e57f4549de728fec04224b48f7ac6c9ed7c59213659046e6657c9f",
+      "parentFile": "docs/healthroster-build/proposals/daily-genuine-root-s0-r9-bookkeeper-20261017.mjs",
+      "parentCommit": "7cf643245b52559f861b81b8003e13e5c51e863d",
+      "parentSha256": "07496482e927774df1e1875c26e084be00f291505f488e066f0bb64071f6312c",
+      "newTarget": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-genuine-s0-b2-tools-orchestration-20261017.js.txt",
+      "bytes": 8014,
+      "sha256": "a84ca64281f9d765cc99b9310d3a475fe2e3d3f1bc0a541698013ed4456e66ca",
+      "parentFile": "docs/healthroster-build/proposals/daily-genuine-s0-r9-tools-orchestration-20261017.js.txt",
+      "parentCommit": "7cf643245b52559f861b81b8003e13e5c51e863d",
+      "parentSha256": "dbb18eb4fc7c8e37a9203b89fbe516145bf7465d775228e298defee594ac2475",
+      "newTarget": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-b2-s0-publish-stageplans-20261017.mjs",
+      "bytes": 22021,
+      "sha256": "2e791467e258bf2b81938ce8e3a8cab9dd3ce9cefe37455e5a9492a25a037cef",
+      "parentFile": "docs/healthroster-build/proposals/daily-r10-s0-r9-publish-stageplans-20261017.mjs",
+      "parentCommit": "7cf643245b52559f861b81b8003e13e5c51e863d",
+      "parentSha256": "66d29d11c6b1cf40b22f5b3e13791cca1c5766ee4c812982fb81541bda76a10b",
+      "newTarget": true
+    }
+  ],
+  "originalAuthBinding": "UNCHANGED_R10",
+  "newPermission": false,
+  "actualConfiguration": "NOT_PREPARED",
+  "actualSourceAdmission": "NOT_RUN_FOR_NEW_ENTRY",
+  "actualS0": "NOT_RUN",
+  "partB": "NOT_RUN",
+  "independentPeerManifest": "41ebbdc3ab17deedab962293e4a1012b5d571ab412f7b8ae9051e7f653b2d0b1",
+  "rootIndependentReaderReplay": 13
+}

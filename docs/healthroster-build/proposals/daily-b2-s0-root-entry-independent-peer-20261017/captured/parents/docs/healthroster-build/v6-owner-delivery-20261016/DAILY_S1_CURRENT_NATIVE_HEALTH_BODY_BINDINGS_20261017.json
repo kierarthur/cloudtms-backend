@@ -1,0 +1,747 @@
+{
+  "version": "DAILY_S1_HEALTH_GENERAL_INSTALLED_BODY_BINDING_V1",
+  "capturedAtUtc": "2026-10-17T14:15:53.403Z",
+  "scope": "Only the immutable S1 selection15 Health/general complete bodies. No Bank semantic routine body requested.",
+  "source": {
+    "auditCommit": "30ecfec7f7ca813ccc417ec1fac98d8059088cf6",
+    "selectionSha256": "136478cb49793baef35309b9c4cfee4622bfe21ed813116b4c10429b4b68ac95",
+    "rootHead": "b8bdd9914724999598876c6b2b3d6359ee784775",
+    "reportFrozenHead": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+    "contract": {
+      "file": "supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "savedIndexHeadEqual": true
+    },
+    "producerReuse": {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json",
+      "sha256": "24083c4747f29c1f77d67a5035e5e38f2cedcfa1063d86ce1a0e33ff0e88bd2c",
+      "savedIndexHeadEqual": true
+    },
+    "parents": [
+      {
+        "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+        "bytes": 29493,
+        "sha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
+        "bytes": 405963,
+        "sha256": "e809ea52ad67dc0abc5607d7605a1871f64481d127eb2976b265acfed4953bbd",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_03.sql",
+        "bytes": 564475,
+        "sha256": "189e041dd8158ff4841034ae6493b8be435d0fb2ab531f5f546cda1e3fc7a651",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+        "bytes": 280735,
+        "sha256": "114fe1b3f66d44d45a7328e242f859bb1cc561203fd506e596cc9b45f5e8609d",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+        "bytes": 1026129,
+        "sha256": "64a093996df1633cfe06c99d103316dc12b9f86e20c2d9ab614eed59e7e748d1",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_05_private_invoice_candidate_revision_trigger_v2.sql",
+        "bytes": 11202,
+        "sha256": "6cd325310d2a0375ba5c7403f39d1883adf3a9369612de533dd51fce05ee01aa",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_04_private_invoice_candidate_snapshot_bump_v2.sql",
+        "bytes": 2002,
+        "sha256": "7459204bf2f0bf197c1bc3d8a50cbad6d450d4fbb402cd3ed744ddc0a0caa029",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+        "bytes": 70450,
+        "sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/repeatable/04092026_1901_client_planned_override_refresh_v1.sql",
+        "bytes": 1454,
+        "sha256": "c3fe064c19895587ca09156372f35849a7fc17df1b3253e4bf4c3538237a58de",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql",
+        "bytes": 28271,
+        "sha256": "846bbeeeb3902faf8144bfa4cd5ee6be25fded6a5556a1fd25fa123dc29d40dd",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/repeatable/21072026_1820_00b_import_correction_settings_guard.sql",
+        "bytes": 2355,
+        "sha256": "b5d956dbe6df1e10264f9a836ee5408a40f3f47da34deb1404c0268824d8330a",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      },
+      {
+        "file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+        "bytes": 86352,
+        "sha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d",
+        "savedIndexHeadHistoricalEqual": true,
+        "historicalCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8"
+      }
+    ]
+  },
+  "route": {
+    "server": "cloudtms-miget-operations-kier-codex",
+    "tool": "miget_db_get_rpc_definition",
+    "database": "agency_test",
+    "freshMatchedOneDefinitionCalls": 14,
+    "reusedActualReceiptCount": 1,
+    "initialArgumentMiss": {
+      "name": "public._change_bump",
+      "requestedIdentityArguments": "p_entity text",
+      "matched": 0,
+      "correctActualIdentityArguments": "p_entity_key text",
+      "meaning": "Initial requested argument name was wrong; corrected schema/name query matched exactly one. No native function absence finding."
+    },
+    "sqlSubmitted": false,
+    "transactionLabCalled": false,
+    "mutativeApiCalled": false
+  },
+  "method": {
+    "sourceOffsets": "Frozen selection start/end are JavaScript UTF16 code-unit offsets; selected source substring is UTF8 encoded before exact capture comparison.",
+    "innerBody": "Exact complete dollar-quoted inner body including leading/trailing whitespace. CRLF_TO_LF_ONLY applies only literal CRLF→LF and is not raw equality.",
+    "canonicalDefinition": "Exact exporter canonicalization: remove newline-prefixed SET \"plpgsql_check.*\" header entries with its declared regexp; literal CRLF→LF; UTF8 SHA256. Separate from raw native definition/body hashes.",
+    "owner": "Fixed definition tool returns no actual owner/ACL observation. Logical baseline owner postgres is kept separate from provider alias; no native owner/ACL equality is inferred."
+  },
+  "counts": {
+    "selected": 15,
+    "freshReadOnly": 14,
+    "reusedActualReceipt": 1,
+    "rawCompleteInnerBodyEqual": 7,
+    "crlfToLfOnlyCompleteInnerBodyEqual": 8,
+    "bodyMismatches": 0,
+    "canonicalNativeBaselineMatches": 15,
+    "currentSourceStatementMatches": 15
+  },
+  "rows": [
+    {
+      "signature": "public.client_create_with_settings_v1(uuid,jsonb,uuid,jsonb,timestamp with time zone)",
+      "source": {
+        "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+        "capture": "reference/public__client_create_with_settings_v1.sql",
+        "statementBytes": 28816,
+        "statementSha256": "83d8b610606abd6299bcd5be3b3cf2987d245ee34c83fbbd33e63060ff78de1c",
+        "bodyBytes": 28468,
+        "bodySha256": "0fcc7d6740cf279569b9a9bcc06fc9255eaeb0238c448e0c3aaf06d2620f1401",
+        "bodyLfBytes": 28468,
+        "bodyLfSha256": "0fcc7d6740cf279569b9a9bcc06fc9255eaeb0238c448e0c3aaf06d2620f1401",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "public",
+        "name": "client_create_with_settings_v1",
+        "identityArguments": "p_client_id uuid, p_client_json jsonb, p_actor_user_id uuid, p_settings_json jsonb, p_now_utc timestamp with time zone",
+        "nativeDefinitionBytes": 28816,
+        "nativeDefinitionSha256": "1a132a38423d477d6ecd424579ccad3af75d26f7f4d49e851259a41934080be8",
+        "baselineCanonicalNativeSha256": "1a132a38423d477d6ecd424579ccad3af75d26f7f4d49e851259a41934080be8",
+        "nativeBodyBytes": 28468,
+        "nativeBodySha256": "0fcc7d6740cf279569b9a9bcc06fc9255eaeb0238c448e0c3aaf06d2620f1401",
+        "nativeLfBodyBytes": 28468,
+        "nativeLfBodySha256": "0fcc7d6740cf279569b9a9bcc06fc9255eaeb0238c448e0c3aaf06d2620f1401",
+        "nativeHasCRLF": false,
+        "evidenceKind": "REUSED_COMMITTED_ACTUAL_SOURCE_IDENTITY_RECEIPT"
+      },
+      "comparison": "RAW_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "client_create_with_settings_v1(p_client_id uuid, p_client_json jsonb, p_actor_user_id uuid, p_settings_json jsonb, p_now_utc timestamp with time zone)",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "1a132a38423d477d6ecd424579ccad3af75d26f7f4d49e851259a41934080be8",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "public._change_bump(text)",
+      "source": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
+        "capture": "reference/public___change_bump.sql",
+        "statementBytes": 678,
+        "statementSha256": "6cd3d6678341c02a750832c6db1d4258eb203681d7c4cf031023756cd95f1aa7",
+        "bodyBytes": 484,
+        "bodySha256": "1736beb45d211148fafa215d902acaa171c65abff05d968c4919e22f210e5ce2",
+        "bodyLfBytes": 484,
+        "bodyLfSha256": "1736beb45d211148fafa215d902acaa171c65abff05d968c4919e22f210e5ce2",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "public",
+        "name": "_change_bump",
+        "identityArguments": "p_entity_key text",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 697,
+        "nativeDefinitionSha256": "213164943f83b4fb73efd2920f2885c40e7411eacc386e9e4d30f296924414ac",
+        "baselineCanonicalNativeSha256": "356a2001278b73434ca58eb4dc8627bd7c0393dd776b5e5d0c5be58eff0bf3db",
+        "nativeBodyBytes": 503,
+        "nativeBodySha256": "05705b26d68099ac1758f418b02a73df41503ef021adcea4145131b982c6307f",
+        "nativeLfBodyBytes": 484,
+        "nativeLfBodySha256": "1736beb45d211148fafa215d902acaa171c65abff05d968c4919e22f210e5ce2",
+        "nativeHasCRLF": true,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "CRLF_TO_LF_ONLY_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_change_bump(p_entity_key text)",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "356a2001278b73434ca58eb4dc8627bd7c0393dd776b5e5d0c5be58eff0bf3db",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "public._trg_change_bump()",
+      "source": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_03.sql",
+        "capture": "reference/public___trg_change_bump.sql",
+        "statementBytes": 411,
+        "statementSha256": "116b63f5732db79a61d0831e356d71abd8932979d08204bacb187a6134c853c3",
+        "bodyBytes": 227,
+        "bodySha256": "0b921643ac4792bdb9689730074d409e26b8c4db23f7780af4fd31794f3b5a75",
+        "bodyLfBytes": 227,
+        "bodyLfSha256": "0b921643ac4792bdb9689730074d409e26b8c4db23f7780af4fd31794f3b5a75",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "public",
+        "name": "_trg_change_bump",
+        "identityArguments": "",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 425,
+        "nativeDefinitionSha256": "7d6b1633b0cfcf79f69c57fc99f66ed81aa8d852515dce127369da7ee14a2f47",
+        "baselineCanonicalNativeSha256": "ef70ba42e5e47163bdfed335646c9b38fb904612c6674204770a0589d7612234",
+        "nativeBodyBytes": 241,
+        "nativeBodySha256": "1ad6fb147f4186fb3c5ee0752e8ea4e25f76eaa9db81d30bcd1b01f3d176e7ef",
+        "nativeLfBodyBytes": 227,
+        "nativeLfBodySha256": "0b921643ac4792bdb9689730074d409e26b8c4db23f7780af4fd31794f3b5a75",
+        "nativeHasCRLF": true,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "CRLF_TO_LF_ONLY_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_trg_change_bump()",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "ef70ba42e5e47163bdfed335646c9b38fb904612c6674204770a0589d7612234",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "public._trg_touch_client_from_client_settings()",
+      "source": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_03.sql",
+        "capture": "reference/public___trg_touch_client_from_client_settings.sql",
+        "statementBytes": 558,
+        "statementSha256": "70c5068421ccc408f1401105e7b77ccd5e0a69a6125243630da2bed51bf70f55",
+        "bodyBytes": 352,
+        "bodySha256": "a064c03eb665acd9817e57a9e03fe1df6ac9d56d61664f3ad1466b98d99239cf",
+        "bodyLfBytes": 352,
+        "bodyLfSha256": "a064c03eb665acd9817e57a9e03fe1df6ac9d56d61664f3ad1466b98d99239cf",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "public",
+        "name": "_trg_touch_client_from_client_settings",
+        "identityArguments": "",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 577,
+        "nativeDefinitionSha256": "fa88f7528975372aaddb33b0daa2e0215e4aa139090f6a0a479275db61926d86",
+        "baselineCanonicalNativeSha256": "2e8f9e4c91aacc30e4a8c9ede8e5c048d478a20c3537ebbf882e5adb7ebec947",
+        "nativeBodyBytes": 371,
+        "nativeBodySha256": "c61cf96dc88d4177b710cfa926839e8990863bba5229fda44d0539570886266a",
+        "nativeLfBodyBytes": 352,
+        "nativeLfBodySha256": "a064c03eb665acd9817e57a9e03fe1df6ac9d56d61664f3ad1466b98d99239cf",
+        "nativeHasCRLF": true,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "CRLF_TO_LF_ONLY_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_trg_touch_client_from_client_settings()",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "2e8f9e4c91aacc30e4a8c9ede8e5c048d478a20c3537ebbf882e5adb7ebec947",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "public.trg_set_cli_ref()",
+      "source": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+        "capture": "reference/public__trg_set_cli_ref.sql",
+        "statementBytes": 565,
+        "statementSha256": "a1bb5da14b5719e67c456b3d7cc3bcb89d76f0a8cd0d38df570ededc20acd9fe",
+        "bodyBytes": 382,
+        "bodySha256": "74e98f405575d2de3bdc89e9fadcc3c7b8307e5a979df0eb5b463dbfe6f85769",
+        "bodyLfBytes": 382,
+        "bodyLfSha256": "74e98f405575d2de3bdc89e9fadcc3c7b8307e5a979df0eb5b463dbfe6f85769",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "public",
+        "name": "trg_set_cli_ref",
+        "identityArguments": "",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 578,
+        "nativeDefinitionSha256": "826eb0975466d3d740829d9d60b989c27b9498cba47ddb508f97c163d52f4a03",
+        "baselineCanonicalNativeSha256": "ff9234141e74244462b919e4c25c01f9e469ad9b9dc10167791ae47c7250f3e1",
+        "nativeBodyBytes": 395,
+        "nativeBodySha256": "89dba07a59266f76bbfacf94d8f0e7a9d0ec9b6357a377d2d9af71068ac969bd",
+        "nativeLfBodyBytes": 382,
+        "nativeLfBodySha256": "74e98f405575d2de3bdc89e9fadcc3c7b8307e5a979df0eb5b463dbfe6f85769",
+        "nativeHasCRLF": true,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "CRLF_TO_LF_ONLY_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "trg_set_cli_ref()",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "ff9234141e74244462b919e4c25c01f9e469ad9b9dc10167791ae47c7250f3e1",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "public.trg_set_rev()",
+      "source": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+        "capture": "reference/public__trg_set_rev.sql",
+        "statementBytes": 252,
+        "statementSha256": "d9699690b36500cfbfdfecb68e44bba0517768ed623c7529f43b2c58fb6d3725",
+        "bodyBytes": 73,
+        "bodySha256": "be01dc3eeeadb2f096f463f79c9a72bbf10eeef7b77e2b5d6158972da96237d0",
+        "bodyLfBytes": 73,
+        "bodyLfSha256": "be01dc3eeeadb2f096f463f79c9a72bbf10eeef7b77e2b5d6158972da96237d0",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "public",
+        "name": "trg_set_rev",
+        "identityArguments": "",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 257,
+        "nativeDefinitionSha256": "85e40c3289554b65f82c792d0de3907ed54675bd4f30f983aa7c77765e64180a",
+        "baselineCanonicalNativeSha256": "8a96983d80a5ade6479a08ba1c9d256a3ac9b041f94ec18b298d6c2fa3d11559",
+        "nativeBodyBytes": 78,
+        "nativeBodySha256": "85f9c4d2cd9d464847b26d0b81b8033fdc29292c7d92ef17cdb5a0f7477633a1",
+        "nativeLfBodyBytes": 73,
+        "nativeLfBodySha256": "be01dc3eeeadb2f096f463f79c9a72bbf10eeef7b77e2b5d6158972da96237d0",
+        "nativeHasCRLF": true,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "CRLF_TO_LF_ONLY_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "trg_set_rev()",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "8a96983d80a5ade6479a08ba1c9d256a3ac9b041f94ec18b298d6c2fa3d11559",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "public.set_updated_at()",
+      "source": {
+        "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+        "capture": "reference/public__set_updated_at.sql",
+        "statementBytes": 234,
+        "statementSha256": "a062e5ad37d69bcf67ddb5dd13a5cd1439b0339600f77f123c834dfb14342572",
+        "bodyBytes": 52,
+        "bodySha256": "3c6d6c41d6262a20e7c102dbd49bb3383bd86a4138c8a3ab6b9b04a1ec2420a5",
+        "bodyLfBytes": 52,
+        "bodyLfSha256": "3c6d6c41d6262a20e7c102dbd49bb3383bd86a4138c8a3ab6b9b04a1ec2420a5",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "public",
+        "name": "set_updated_at",
+        "identityArguments": "",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 239,
+        "nativeDefinitionSha256": "ed9589bc0144124803a2760697dd53ed82a571114953f06ddba6c7575572c2b4",
+        "baselineCanonicalNativeSha256": "280159edf08e0ff07327f18ef3e1e6ee55d4feb74272e98a2699a76ac54c7e6e",
+        "nativeBodyBytes": 57,
+        "nativeBodySha256": "a168126301b25f7fe7be9694c104cb8e0b4a75bae20fb0abf805045dbf91e93f",
+        "nativeLfBodyBytes": 52,
+        "nativeLfBodySha256": "3c6d6c41d6262a20e7c102dbd49bb3383bd86a4138c8a3ab6b9b04a1ec2420a5",
+        "nativeHasCRLF": true,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "CRLF_TO_LF_ONLY_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "set_updated_at()",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "280159edf08e0ff07327f18ef3e1e6ee55d4feb74272e98a2699a76ac54c7e6e",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "private._invoice_candidate_revision_trigger_v2()",
+      "source": {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_05_private_invoice_candidate_revision_trigger_v2.sql",
+        "capture": "reference/private___invoice_candidate_revision_trigger_v2.sql",
+        "statementBytes": 10297,
+        "statementSha256": "78bf3693df96a18ae88229f2347eb2e185949fc406fcc1b9b4fde72af83136c8",
+        "bodyBytes": 10077,
+        "bodySha256": "ee84b3cdc4627886eb6c7ab8a226a94ad55053740262b8e35df2e86bd0b3ad55",
+        "bodyLfBytes": 10077,
+        "bodyLfSha256": "ee84b3cdc4627886eb6c7ab8a226a94ad55053740262b8e35df2e86bd0b3ad55",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "private",
+        "name": "_invoice_candidate_revision_trigger_v2",
+        "identityArguments": "",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 10295,
+        "nativeDefinitionSha256": "bfd729a5eb25bc5fef8c6ed100d0b54f99af4e3e27ece84c1c1680acd55ec8b9",
+        "baselineCanonicalNativeSha256": "bfd729a5eb25bc5fef8c6ed100d0b54f99af4e3e27ece84c1c1680acd55ec8b9",
+        "nativeBodyBytes": 10077,
+        "nativeBodySha256": "ee84b3cdc4627886eb6c7ab8a226a94ad55053740262b8e35df2e86bd0b3ad55",
+        "nativeLfBodyBytes": 10077,
+        "nativeLfBodySha256": "ee84b3cdc4627886eb6c7ab8a226a94ad55053740262b8e35df2e86bd0b3ad55",
+        "nativeHasCRLF": false,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "RAW_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_invoice_candidate_revision_trigger_v2()",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "bfd729a5eb25bc5fef8c6ed100d0b54f99af4e3e27ece84c1c1680acd55ec8b9",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "private._invoice_candidate_snapshot_bump_v2(boolean,boolean,text,text,timestamp with time zone)",
+      "source": {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_04_private_invoice_candidate_snapshot_bump_v2.sql",
+        "capture": "reference/private___invoice_candidate_snapshot_bump_v2.sql",
+        "statementBytes": 1605,
+        "statementSha256": "0fb637ccf968811cd552fa95f1da384683589a3b96a511dfc60701e7e2d4cfba",
+        "bodyBytes": 1276,
+        "bodySha256": "e2b345edcb18f36ff8078cdd022ffb7b87a7c7c3b73d8cebe4772d0b08d63ac9",
+        "bodyLfBytes": 1276,
+        "bodyLfSha256": "e2b345edcb18f36ff8078cdd022ffb7b87a7c7c3b73d8cebe4772d0b08d63ac9",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "private",
+        "name": "_invoice_candidate_snapshot_bump_v2",
+        "identityArguments": "p_generate boolean, p_issue boolean, p_reason text, p_source text, p_now_utc timestamp with time zone",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 1604,
+        "nativeDefinitionSha256": "5d51a9ef2b527ab40232b475f446d9f82c89fabc55a6b11a8bb31705e2a1bae1",
+        "baselineCanonicalNativeSha256": "5d51a9ef2b527ab40232b475f446d9f82c89fabc55a6b11a8bb31705e2a1bae1",
+        "nativeBodyBytes": 1276,
+        "nativeBodySha256": "e2b345edcb18f36ff8078cdd022ffb7b87a7c7c3b73d8cebe4772d0b08d63ac9",
+        "nativeLfBodyBytes": 1276,
+        "nativeLfBodySha256": "e2b345edcb18f36ff8078cdd022ffb7b87a7c7c3b73d8cebe4772d0b08d63ac9",
+        "nativeHasCRLF": false,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "RAW_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_invoice_candidate_snapshot_bump_v2(p_generate boolean, p_issue boolean, p_reason text, p_source text, p_now_utc timestamp with time zone)",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "5d51a9ef2b527ab40232b475f446d9f82c89fabc55a6b11a8bb31705e2a1bae1",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "private._invoice_jsonb_pick_v2(jsonb,text[])",
+      "source": {
+        "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_05_private_invoice_candidate_revision_trigger_v2.sql",
+        "capture": "reference/private___invoice_jsonb_pick_v2.sql",
+        "statementBytes": 434,
+        "statementSha256": "85a73351c163ac080e3a5e033d03544b72f153d91795374371f5b4e0e2110003",
+        "bodyBytes": 201,
+        "bodySha256": "b7271acc2f4ed75e6b03c3b56332e71e4b2bb4eda3313e62b41c32637356bf1b",
+        "bodyLfBytes": 201,
+        "bodyLfSha256": "b7271acc2f4ed75e6b03c3b56332e71e4b2bb4eda3313e62b41c32637356bf1b",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "private",
+        "name": "_invoice_jsonb_pick_v2",
+        "identityArguments": "p_value jsonb, p_keys text[]",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 418,
+        "nativeDefinitionSha256": "c51b4d70db794053ddccc94ad9cc827d88ccef1d74e273f1eeed243ec81062c4",
+        "baselineCanonicalNativeSha256": "c51b4d70db794053ddccc94ad9cc827d88ccef1d74e273f1eeed243ec81062c4",
+        "nativeBodyBytes": 201,
+        "nativeBodySha256": "b7271acc2f4ed75e6b03c3b56332e71e4b2bb4eda3313e62b41c32637356bf1b",
+        "nativeLfBodyBytes": 201,
+        "nativeLfBodySha256": "b7271acc2f4ed75e6b03c3b56332e71e4b2bb4eda3313e62b41c32637356bf1b",
+        "nativeHasCRLF": false,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "RAW_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_invoice_jsonb_pick_v2(p_value jsonb, p_keys text[])",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "c51b4d70db794053ddccc94ad9cc827d88ccef1d74e273f1eeed243ec81062c4",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "private._contract_settings_after_client_v1()",
+      "source": {
+        "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+        "capture": "reference/private___contract_settings_after_client_v1.sql",
+        "statementBytes": 466,
+        "statementSha256": "26dcc58ed823d896737606a8df7dbec41ab90c8ffd37a01c60066190586fe5b9",
+        "bodyBytes": 244,
+        "bodySha256": "e70c21bac95c81e2a95bdbba6f95b4aa105127dfa7b410e97b28f97726944bf8",
+        "bodyLfBytes": 244,
+        "bodyLfSha256": "e70c21bac95c81e2a95bdbba6f95b4aa105127dfa7b410e97b28f97726944bf8",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "private",
+        "name": "_contract_settings_after_client_v1",
+        "identityArguments": "",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 472,
+        "nativeDefinitionSha256": "7edc130233b81e93a5906adb453a6b8514e1aa53929171c29f9f6406b4b99408",
+        "baselineCanonicalNativeSha256": "7edc130233b81e93a5906adb453a6b8514e1aa53929171c29f9f6406b4b99408",
+        "nativeBodyBytes": 244,
+        "nativeBodySha256": "e70c21bac95c81e2a95bdbba6f95b4aa105127dfa7b410e97b28f97726944bf8",
+        "nativeLfBodyBytes": 244,
+        "nativeLfBodySha256": "e70c21bac95c81e2a95bdbba6f95b4aa105127dfa7b410e97b28f97726944bf8",
+        "nativeHasCRLF": false,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "RAW_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_contract_settings_after_client_v1()",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "7edc130233b81e93a5906adb453a6b8514e1aa53929171c29f9f6406b4b99408",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "private._contract_settings_refresh_planned_for_client_v1(uuid)",
+      "source": {
+        "file": "supabase/repeatable/04092026_1901_client_planned_override_refresh_v1.sql",
+        "capture": "reference/private___contract_settings_refresh_planned_for_client_v1.sql",
+        "statementBytes": 685,
+        "statementSha256": "0b4776e70d53a4c0604f1db307b1dc49920b0855ebc915713f098b98683083d8",
+        "bodyBytes": 429,
+        "bodySha256": "444bd26841a8d55c208ee3925706bdab9f654614f4f9e1766e276858414d71f5",
+        "bodyLfBytes": 429,
+        "bodyLfSha256": "444bd26841a8d55c208ee3925706bdab9f654614f4f9e1766e276858414d71f5",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "private",
+        "name": "_contract_settings_refresh_planned_for_client_v1",
+        "identityArguments": "p_client_id uuid",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 687,
+        "nativeDefinitionSha256": "db842706e7c61e4610254d2c20e4215579666c2d96ebebc23097d82bec5a095a",
+        "baselineCanonicalNativeSha256": "db842706e7c61e4610254d2c20e4215579666c2d96ebebc23097d82bec5a095a",
+        "nativeBodyBytes": 429,
+        "nativeBodySha256": "444bd26841a8d55c208ee3925706bdab9f654614f4f9e1766e276858414d71f5",
+        "nativeLfBodyBytes": 429,
+        "nativeLfBodySha256": "444bd26841a8d55c208ee3925706bdab9f654614f4f9e1766e276858414d71f5",
+        "nativeHasCRLF": false,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "RAW_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_contract_settings_refresh_planned_for_client_v1(p_client_id uuid)",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "db842706e7c61e4610254d2c20e4215579666c2d96ebebc23097d82bec5a095a",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "public._inv_write_audit(uuid,text,jsonb,text,text,jsonb,text,text,text,text)",
+      "source": {
+        "file": "supabase/repeatable/08012026_invoice_sql_first_rpcs_generator_paid_batches.sql",
+        "capture": "reference/public___inv_write_audit.sql",
+        "statementBytes": 1735,
+        "statementSha256": "b729230e3379458e9027787feb8c4f4b9b57fa6fdce3858c7e0f79c991679707",
+        "bodyBytes": 1337,
+        "bodySha256": "fbd166f894fd851107eea152a45b1a0a9b0805c48b4ae0723ac176aca2b5562e",
+        "bodyLfBytes": 1337,
+        "bodyLfSha256": "fbd166f894fd851107eea152a45b1a0a9b0805c48b4ae0723ac176aca2b5562e",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "public",
+        "name": "_inv_write_audit",
+        "identityArguments": "p_actor_user_id uuid, p_action text, p_after_json jsonb, p_entity text, p_subject_id text, p_before_json jsonb, p_reason text, p_ip text, p_user_agent text, p_correlation_id text",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 1827,
+        "nativeDefinitionSha256": "bee4076c54b8920b023f045f9edaa766b2ee16bbc31a556887d0fc3d9e4a0cf7",
+        "baselineCanonicalNativeSha256": "d4e3a1d0d92e05cf077cb5ad97f4760a72f7ca4a92b458deb81f72e100066086",
+        "nativeBodyBytes": 1397,
+        "nativeBodySha256": "904c3e42a209c1b011810fd8f403eb2285f3e250352c6fa22710ef6c4180238f",
+        "nativeLfBodyBytes": 1337,
+        "nativeLfBodySha256": "fbd166f894fd851107eea152a45b1a0a9b0805c48b4ae0723ac176aca2b5562e",
+        "nativeHasCRLF": true,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "CRLF_TO_LF_ONLY_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_inv_write_audit(p_actor_user_id uuid, p_action text, p_after_json jsonb, p_entity text, p_subject_id text, p_before_json jsonb, p_reason text, p_ip text, p_user_agent text, p_correlation_id text)",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "d4e3a1d0d92e05cf077cb5ad97f4760a72f7ca4a92b458deb81f72e100066086",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "public._ctms_assert_import_correction_settings_write_v1(boolean,boolean,boolean,public.correction_financials_date_basis_enum,public.correction_financials_date_basis_enum)",
+      "source": {
+        "file": "supabase/repeatable/21072026_1820_00b_import_correction_settings_guard.sql",
+        "capture": "reference/public___ctms_assert_import_correction_settings_write_v1.sql",
+        "statementBytes": 1333,
+        "statementSha256": "c8cec86cf668e08c0e9c65c86c2fa1c31f670639189e25e419fc6058ac642055",
+        "bodyBytes": 873,
+        "bodySha256": "12f0ce80a3fc103467025a1296f5eb849caf4afde47380d357ccbc634f829e85",
+        "bodyLfBytes": 873,
+        "bodyLfSha256": "12f0ce80a3fc103467025a1296f5eb849caf4afde47380d357ccbc634f829e85",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "public",
+        "name": "_ctms_assert_import_correction_settings_write_v1",
+        "identityArguments": "p_is_nhsp boolean, p_autoprocess_hr boolean, p_no_timesheet_required boolean, p_reversal_complete_financials_date correction_financials_date_basis_enum, p_reversal_replacement_financials_date correction_financials_date_basis_enum",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 1336,
+        "nativeDefinitionSha256": "243f23f6f8089e7685f8338d5a872ba793703d9b4912ecfccfd3904492caf149",
+        "baselineCanonicalNativeSha256": "e9696b95a3a6ee4e5f9ad61f1210b9191cc4c088743081bcccdd2634714d7081",
+        "nativeBodyBytes": 898,
+        "nativeBodySha256": "6449a9933589b1aadf200b7b0b94f15ee580225a0a20599795128413a490bb87",
+        "nativeLfBodyBytes": 873,
+        "nativeLfBodySha256": "12f0ce80a3fc103467025a1296f5eb849caf4afde47380d357ccbc634f829e85",
+        "nativeHasCRLF": true,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "CRLF_TO_LF_ONLY_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_ctms_assert_import_correction_settings_write_v1(p_is_nhsp boolean, p_autoprocess_hr boolean, p_no_timesheet_required boolean, p_reversal_complete_financials_date correction_financials_date_basis_enum, p_reversal_replacement_financials_date correction_financials_date_basis_enum)",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "e9696b95a3a6ee4e5f9ad61f1210b9191cc4c088743081bcccdd2634714d7081",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    },
+    {
+      "signature": "private._candidate_feature_enabled_current_v1(text)",
+      "source": {
+        "file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+        "capture": "reference/private___candidate_feature_enabled_current_v1.sql",
+        "statementBytes": 390,
+        "statementSha256": "b3941173042ac963df10e84e10f1cdc4d521f50a3aaaf8efb8e31ca18ae3535e",
+        "bodyBytes": 161,
+        "bodySha256": "603e81b2ed7e30ae5dd6b42929bc9c310903263d6686887a2ea05dcda2cbb5bf",
+        "bodyLfBytes": 161,
+        "bodyLfSha256": "603e81b2ed7e30ae5dd6b42929bc9c310903263d6686887a2ea05dcda2cbb5bf",
+        "frozenCaptureGitEqual": true,
+        "currentCompleteStatementEqual": true
+      },
+      "native": {
+        "schema": "private",
+        "name": "_candidate_feature_enabled_current_v1",
+        "identityArguments": "p_feature_key text",
+        "authenticated": true,
+        "readOnly": true,
+        "database": "agency_test",
+        "matched": 1,
+        "nativeDefinitionBytes": 399,
+        "nativeDefinitionSha256": "06d3fc5a330beaa37a65e7397920f75aaf1cf3632067418c188a20857fb40a19",
+        "baselineCanonicalNativeSha256": "06d3fc5a330beaa37a65e7397920f75aaf1cf3632067418c188a20857fb40a19",
+        "nativeBodyBytes": 161,
+        "nativeBodySha256": "603e81b2ed7e30ae5dd6b42929bc9c310903263d6686887a2ea05dcda2cbb5bf",
+        "nativeLfBodyBytes": 161,
+        "nativeLfBodySha256": "603e81b2ed7e30ae5dd6b42929bc9c310903263d6686887a2ea05dcda2cbb5bf",
+        "nativeHasCRLF": false,
+        "evidenceKind": "FRESH_FIXED_READ_ONLY_DEFINITION"
+      },
+      "comparison": "RAW_COMPLETE_INNER_BODY_EQUAL",
+      "baseline": {
+        "identity": "_candidate_feature_enabled_current_v1(p_feature_key text)",
+        "ownerLogicalAlias": "postgres",
+        "definitionSha256": "06d3fc5a330beaa37a65e7397920f75aaf1cf3632067418c188a20857fb40a19",
+        "nativeExporterCanonicalHashEqual": true
+      }
+    }
+  ],
+  "qualification": {
+    "verdict": "SOURCE_IDENTITY_MATCH_ONLY",
+    "routineInvocation": "NOT_RUN",
+    "ordinaryProducerEffectQualification": "SEPARATE_ROOT_EVIDENCE",
+    "rawNativeBodiesWrittenToFiles": false,
+    "authStatePrivateBindingOrJournalRead": false,
+    "reportCommitOrTrackedChange": false
+  }
+}

@@ -1,0 +1,179 @@
+{
+  "version": "DAILY_S1_FIXED_CATALOGUE_INDEPENDENT_REVIEW_V1",
+  "reviewedAt": "2026-10-17T14:29:10.998Z",
+  "verdict": "NO_SCOPED_METADATA_SOURCE_MISMATCH",
+  "inputs": [
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/s1-fixed-catalogue-20261017-6ca7110c/CATALOGUE.json",
+      "bytes": 524174,
+      "sha256": "2e2d87b82e23e4b729fa64c64f6c15437a832a10cb20c60e82b3b1cb7c106e36"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/s1-fixed-catalogue-20261017-6ca7110c/SIDE_METADATA.json",
+      "bytes": 29922,
+      "sha256": "ba19466806c3be98b3d386ffe336836539fb6980f7106416a9edb060c3936983"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/s1-fixed-catalogue-20261017-6ca7110c/HEALTH_ROUTINE_ACL.json",
+      "bytes": 31325,
+      "sha256": "e5a8697c9870f5ea4ff3dbcfc41e0cfa7294891bcda732f65d946b6da4950d85"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/daily-health-s1-scoped-effects-observer-20261017/SOURCE_METADATA.json",
+      "bytes": 111800,
+      "sha256": "8010fd638ed4ce5f003e507e8eb98b085c3b56532e0256d2230c34e2c1b42e3c"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/docs/healthroster-build/proposals/daily-health-s1-scoped-effects-observer-20261017/SOURCE_SELECTION.json",
+      "bytes": 13071,
+      "sha256": "136478cb49793baef35309b9c4cfee4622bfe21ed813116b4c10429b4b68ac95"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-s1-health-native-bindings-20261017-fd882bea4f65d25578db2dadfd2b33a4/REPORT.json",
+      "bytes": 37243,
+      "sha256": "855427c65d3d344616b1dbf3861e778d69d642725609664cb85a5dd9355034c1"
+    }
+  ],
+  "checks": {
+    "heapRelations": 7,
+    "columnsAndExactDefaults": 182,
+    "sourceOwnedConstraints": 40,
+    "allMetadataConstraintRecords": 146,
+    "foreignKeyMetadataRecords": 113,
+    "userTriggerDefinitions": 36,
+    "internalRiForeignKeyTriggers": 234,
+    "rules": 0,
+    "literalServiceOwnerPolicies": 7,
+    "sequenceIdentities": 4,
+    "mappedDirectRelationAndSequenceACLRows": 128,
+    "healthRoutineMetadataAndEffectiveACL": 15,
+    "namedBankCallbackACLOnly": 3,
+    "selectedHealthNativeBodyBindings": 15,
+    "rawBodyEqual": 7,
+    "explicitNewlineOnlyBodyEqual": 8,
+    "mismatches": 0
+  },
+  "relationRows": [
+    {
+      "identity": "public.app_change_counters",
+      "columns": 5,
+      "constraints": 2,
+      "owner": "dee50tht",
+      "rlsEnabled": true,
+      "rlsForced": false,
+      "ownerSelect": true,
+      "serviceDml": {
+        "select": true,
+        "insert": true,
+        "update": true,
+        "delete": true
+      }
+    },
+    {
+      "identity": "public.audit_events",
+      "columns": 16,
+      "constraints": 2,
+      "owner": "dee50tht",
+      "rlsEnabled": true,
+      "rlsForced": false,
+      "ownerSelect": true,
+      "serviceDml": {
+        "select": true,
+        "insert": true,
+        "update": true,
+        "delete": true
+      }
+    },
+    {
+      "identity": "public.banking_pay_scope_change_transactions",
+      "columns": 5,
+      "constraints": 4,
+      "owner": "dee50tht",
+      "rlsEnabled": true,
+      "rlsForced": false,
+      "ownerSelect": true,
+      "serviceDml": {
+        "select": false,
+        "insert": false,
+        "update": false,
+        "delete": false
+      }
+    },
+    {
+      "identity": "public.client_settings",
+      "columns": 60,
+      "constraints": 9,
+      "owner": "dee50tht",
+      "rlsEnabled": true,
+      "rlsForced": false,
+      "ownerSelect": true,
+      "serviceDml": {
+        "select": true,
+        "insert": true,
+        "update": true,
+        "delete": true
+      }
+    },
+    {
+      "identity": "public.clients",
+      "columns": 24,
+      "constraints": 3,
+      "owner": "dee50tht",
+      "rlsEnabled": true,
+      "rlsForced": false,
+      "ownerSelect": true,
+      "serviceDml": {
+        "select": true,
+        "insert": true,
+        "update": true,
+        "delete": true
+      }
+    },
+    {
+      "identity": "public.contract_weeks",
+      "columns": 23,
+      "constraints": 7,
+      "owner": "dee50tht",
+      "rlsEnabled": true,
+      "rlsForced": false,
+      "ownerSelect": true,
+      "serviceDml": {
+        "select": true,
+        "insert": true,
+        "update": true,
+        "delete": true
+      }
+    },
+    {
+      "identity": "public.contracts",
+      "columns": 49,
+      "constraints": 13,
+      "owner": "dee50tht",
+      "rlsEnabled": true,
+      "rlsForced": false,
+      "ownerSelect": true,
+      "serviceDml": {
+        "select": true,
+        "insert": true,
+        "update": true,
+        "delete": true
+      }
+    }
+  ],
+  "representations": {
+    "applicationLogicalOwner": "postgres",
+    "observedPhysicalOwnerAndGrantor": "dee50tht",
+    "builtinRiOwner": "postgres",
+    "sourceEnabledO": "fixed metadata origin_and_local",
+    "sourceNoIdentityOrGeneratedEmpty": "fixed metadata null"
+  },
+  "ordinaryS1Disposition": "These metadata/body identity facts support the already approved ordinary D9 Client/settings/audit producer; they create no financial gate or permission change. Root owns fresh actor/vacancy/before/POST/readback/reconcile and actual callback-effect attribution.",
+  "qualificationLimits": [
+    "No producer/helper/trigger invocation or new native/API/auth/SQL/lock call by this reviewer",
+    "Bank callback metadata/ACL only; no Bank semantic body or invented dirty-table predicate",
+    "Incoming FK catalogue rows and internal RI triggers are not extra application callbacks",
+    "Shared counters/sequences and deferred finalizer need genuine separately attributed observed effects; no exact global delta assumed",
+    "Sequence identity/privileges are observed; pg_sequence parameter values are not in this fixed capture",
+    "No S1 fixture success, complete effect/financial/restoration/native acceptance verdict"
+  ]
+}

@@ -1,0 +1,168 @@
+{
+  "rootHead": "d6af1981b74b2ff1ae3b02891bdb5c1b2266d71a",
+  "rows": [
+    {
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-s0-r9-bookkeeper-20261017.mjs",
+      "commit": "7cf643245b52559f861b81b8003e13e5c51e863d",
+      "bytes": 8716,
+      "sha256": "07496482e927774df1e1875c26e084be00f291505f488e066f0bb64071f6312c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-genuine-s0-r9-tools-orchestration-20261017.js.txt",
+      "commit": "7cf643245b52559f861b81b8003e13e5c51e863d",
+      "bytes": 7584,
+      "sha256": "dbb18eb4fc7c8e37a9203b89fbe516145bf7465d775228e298defee594ac2475"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-r10-s0-r9-publish-stageplans-20261017.mjs",
+      "commit": "7cf643245b52559f861b81b8003e13e5c51e863d",
+      "bytes": 6358,
+      "sha256": "66d29d11c6b1cf40b22f5b3e13791cca1c5766ee4c812982fb81541bda76a10b"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_EFFECT_ADMISSION_20261017.json",
+      "commit": "804a0e9a3efbb3530f6b20b52966f6d86bcbe857",
+      "bytes": 870,
+      "sha256": "c43840e2ae7e2a244b81a14a0335bb59baa3ecd9cd70c0a54ac93668892e63dc"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_AFTER_EFFECT_QUALIFICATION_20261017.json",
+      "commit": "5e69c4a3c1f55a36ddb84a86e5788d7f568f291f",
+      "bytes": 812,
+      "sha256": "b9d52dffd30c2b4b091e548cda2c3e309755c0f6071564dadb35a2eb463d5d2d"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_PREDECISION_20261017.json",
+      "commit": "3dd0046d68adf129cb89e76c2bc4a136c103d796",
+      "bytes": 2474,
+      "sha256": "08495d5a5dde608bfc0b650db25757616d575555a593789d17db48a884994300"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_R10_PREDECISION_20261017.json",
+      "commit": "3dd0046d68adf129cb89e76c2bc4a136c103d796",
+      "bytes": 2030,
+      "sha256": "a7e76b6acd55788552ff9cdacd944c54410f0745df91e057c69a26d15b6197c6"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S2_R10_PREDECISION_20261017.json",
+      "commit": "3dd0046d68adf129cb89e76c2bc4a136c103d796",
+      "bytes": 2361,
+      "sha256": "c5d23e7d46cb585d6305ec66018bcbd46704d740d6d8d9c9b9d2af1b4cbf2b00"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S3_R10_PREDECISION_20261017.json",
+      "commit": "3dd0046d68adf129cb89e76c2bc4a136c103d796",
+      "bytes": 2296,
+      "sha256": "94a7adfa66e47dc9f305ec72874385b9818dd6416b0b62344346b1503571500f"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S4_R10_PREDECISION_20261017.json",
+      "commit": "3dd0046d68adf129cb89e76c2bc4a136c103d796",
+      "bytes": 3002,
+      "sha256": "f58f8bfe185d5c0d090a60c4e406c0094f3e7db0c8ffe1a3ef130bf6a0c5090f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-hospital-mapping-stage-20261017/SOURCE_PINS.json",
+      "commit": "da365b7367e2d78d810ad04b7af436e90d36c8f6",
+      "bytes": 6541,
+      "sha256": "233c9bf7140bdd0b1bb14a8b60da98335042d7be87afa20792dc90b98e9a555c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-original-held-20261017/S4_ROUTINE_METADATA_SELECTION.json",
+      "commit": "267f4e2c5fe30b02cbe69ca143f17d50dd89e960",
+      "bytes": 10442,
+      "sha256": "51ccb698471e2107098daa06b5768580df85d005b9e8c460ca6212a4faa1542f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-original-stages-after-original-held-20261017/S4_SOURCE_EFFECT_REVIEW.md",
+      "commit": "267f4e2c5fe30b02cbe69ca143f17d50dd89e960",
+      "bytes": 6661,
+      "sha256": "aad254054d8c2a45999b280b2583abf35fa977428b4512a3baf73930b226e328"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-s23-observation-20261017/EFFECT_GUIDANCE.md",
+      "commit": "9d92eaffbb0dab36374615aa7cc5fe6f8084b46d",
+      "bytes": 4927,
+      "sha256": "65ffd73934a70577736814b92186b4f84968bac8cd7e76588c3792858fff3c54"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-s23-observation-20261017/EFFECT_SOURCE_PINS.json",
+      "commit": "9d92eaffbb0dab36374615aa7cc5fe6f8084b46d",
+      "bytes": 2361,
+      "sha256": "11fe9eb98fa5bbe3765b8e97d30472e41823a30f0342060d96beb14f64004e98"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/s1-normal-producer-effect-review-guidance-20261017/MEMO.md",
+      "commit": "0a519e37e1cc64317d7e064dc93402fa54c11427",
+      "bytes": 8270,
+      "sha256": "9259c8f2997ff1194694dd99e318b0554cc3cb4b1a47fa0bd26cb11de9e43c5f"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_CURRENT_NATIVE_CONTEXT_READONLY_20261017.json",
+      "commit": "2b0fcee4eeecb9ce3adb61ef3c25d02c0e5a948c",
+      "bytes": 14564,
+      "sha256": "631192d73fbe65e23b9cf98cbe133882b0c7043a82e3625fefdeb62353522f66"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_CONTEXT_HEALTH_ROUTINE_METADATA_20261017.json",
+      "commit": "cdb4540daae048a2646793b401058392fef51ef6",
+      "bytes": 35144,
+      "sha256": "fc985ee8d7844aeb4b11c9d67ff94d6251a6c67ef9a2081c69abe759a4bb3633"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+      "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+      "bytes": 5618,
+      "sha256": "b9ba019fc9f2ec59e5ae9ddd7d2257f214c5bc76246e2e3089bb76e38a588275"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_20261017.json",
+      "commit": "783d97c8e844fedce9e300d5051aabf7f484ed7a",
+      "bytes": 119766,
+      "sha256": "c1e91c6507d3624dd69e92707f6f7fd0e8614479b3f5a75c3b4fd9268f152f8c"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_FIXED_NATIVE_METADATA_20261017.json",
+      "commit": "da365b7367e2d78d810ad04b7af436e90d36c8f6",
+      "bytes": 73115,
+      "sha256": "14ed1941cc9a4ca175e71128848ba18fa3f731dcf16074bdda18d6ea11a1ae66"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_ROOT_SOURCE_REVIEW_20261017.json",
+      "commit": "da365b7367e2d78d810ad04b7af436e90d36c8f6",
+      "bytes": 1467,
+      "sha256": "b6c633c8ee1d69e99580649692c7c9fb1b291d8d9cdc6a318eda062fa7538149"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_CURRENT_NATIVE_HEALTH_BODY_BINDINGS_20261017.json",
+      "commit": "7132397988172f4294a0fd123f72fe4801efcfb3",
+      "bytes": 37243,
+      "sha256": "855427c65d3d344616b1dbf3861e778d69d642725609664cb85a5dd9355034c1"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_FIXED_CATALOGUE_INDEPENDENT_REVIEW_20261017/REVIEW.json",
+      "commit": "cffe40eb8655bd279619660c7c7edd09b5fb4cb7",
+      "bytes": 6147,
+      "sha256": "a9c84457bc556ca429788a78e6b7e190e50778faa49da93b5f610a923744ebea"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_ROOT_ORDINARY_EFFECT_PREDECISION_20261017.json",
+      "commit": "ea17085c96ec78bb0e72646b2f6ef90a422cdcda",
+      "bytes": 4171,
+      "sha256": "f21543b7287271e994e88049a1a312d69a175b3d7eb76f741a49014eb0a3584a"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S4_SEVEN_ROUTINE_ACL_METADATA_20261017.json",
+      "commit": "769a54fc1053b57c8242d2960002c900dd716791",
+      "bytes": 18024,
+      "sha256": "68d58fd4bb86074d74d5c37b03c5ff1641b00f2c00f0a0fa62fd6128b6c56b93"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json",
+      "commit": "a331f2955e87ae55ad570484da70dcd763007202",
+      "bytes": 703,
+      "sha256": "24083c4747f29c1f77d67a5035e5e38f2cedcfa1063d86ce1a0e33ff0e88bd2c"
+    }
+  ],
+  "privateAuthOrNativeRead": false
+}

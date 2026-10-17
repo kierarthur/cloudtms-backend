@@ -1,0 +1,1107 @@
+{
+  "version": "DAILY_NATIVE_CONTEXT_HEALTH_ROUTINE_METADATA_V1",
+  "scope": "Exact 16 selected Health/general routine ACL/volatility/owner metadata; no invocation or transitive effect qualification",
+  "metadata": {
+    "authenticated": true,
+    "read_only": true,
+    "database": "agency_test",
+    "live_access_allowed": false,
+    "secrets_returned": false,
+    "metadata_contract": "CLOUDTMS_ROUTINE_METADATA_V1",
+    "requested_routine_count": 16,
+    "requested_role_count": 4,
+    "total": 16,
+    "limit": 50,
+    "offset": 0,
+    "returned": 16,
+    "eof": true,
+    "next_offset": null,
+    "truncated": false,
+    "business_rows_returned": 0,
+    "caller_supplied_sql_accepted": false,
+    "effective_execute_source": "pg_catalog.has_function_privilege(role_oid, routine_oid, EXECUTE)",
+    "effective_schema_usage_source": "pg_catalog.has_schema_privilege(role_oid, schema_oid, USAGE)",
+    "roles": [
+      {
+        "role": "dee50tht",
+        "role_present": true,
+        "can_login": true,
+        "superuser": false,
+        "inherits_by_default": true,
+        "bypass_rls": false
+      },
+      {
+        "role": "service_role",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      },
+      {
+        "role": "anon",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      },
+      {
+        "role": "authenticated",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      }
+    ],
+    "effective_membership_paths": [
+      {
+        "requested_role": "anon",
+        "inherited_role": "anon",
+        "depth": 0,
+        "path": "{anon}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "authenticated",
+        "inherited_role": "authenticated",
+        "depth": 0,
+        "path": "{authenticated}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "dee50tht",
+        "inherited_role": "dee50tht",
+        "depth": 0,
+        "path": "{dee50tht}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "service_role",
+        "inherited_role": "service_role",
+        "depth": 0,
+        "path": "{service_role}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      }
+    ],
+    "items": [
+      {
+        "requested_ordinal": 0,
+        "schema": "public",
+        "name": "_ctms_correction_policy_envelope_read_v1",
+        "identity_arguments": "p_timesheet_id uuid",
+        "present": true,
+        "routine_oid": "325681",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "plpgsql",
+        "security_definer": true,
+        "volatility": "stable",
+        "result_type": "jsonb",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "325681",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "325681",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "325681",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325681",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325681",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 1,
+        "schema": "public",
+        "name": "_ctms_correction_policy_leg_read_v1",
+        "identity_arguments": "p_timesheet_id uuid",
+        "present": true,
+        "routine_oid": "325682",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "plpgsql",
+        "security_definer": true,
+        "volatility": "stable",
+        "result_type": "jsonb",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "325682",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "325682",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "325682",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325682",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325682",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 2,
+        "schema": "public",
+        "name": "_ctms_import_correction_classify_v1",
+        "identity_arguments": "p_timesheet_id uuid",
+        "present": true,
+        "routine_oid": "325687",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "sql",
+        "security_definer": true,
+        "volatility": "stable",
+        "result_type": "jsonb",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "325687",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "325687",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "325687",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325687",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325687",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 3,
+        "schema": "private",
+        "name": "_candidate_normalize_domain_v1",
+        "identity_arguments": "p_domain text",
+        "present": true,
+        "routine_oid": "325381",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "sql",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "text",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "325381",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "325381",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "325381",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325381",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325381",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 4,
+        "schema": "private",
+        "name": "_candidate_normalize_email",
+        "identity_arguments": "p_email text",
+        "present": true,
+        "routine_oid": "325382",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "sql",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "text",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "325382",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "325382",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "325382",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325382",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325382",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 5,
+        "schema": "public",
+        "name": "settings_finance_pick",
+        "identity_arguments": "p_date date",
+        "present": true,
+        "routine_oid": "326819",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "sql",
+        "security_definer": false,
+        "volatility": "stable",
+        "result_type": "TABLE(id uuid, date_from date, date_to date, vat_rate_pct numeric, erni_pct numeric, holiday_pay_pct numeric, mileage_pay_defaults numeric, mileage_charge_defaults numeric, apply_holiday_to text, apply_erni_to text, margin_includes jsonb, source text)",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "326819",
+            "grantee": "PUBLIC",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          },
+          {
+            "routine_oid": "326819",
+            "grantee": "anon",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          },
+          {
+            "routine_oid": "326819",
+            "grantee": "authenticated",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          },
+          {
+            "routine_oid": "326819",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          },
+          {
+            "routine_oid": "326819",
+            "grantee": "service_role",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "326819",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "326819",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "326819",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "326819",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 6,
+        "schema": "public",
+        "name": "timesheet_pdf_reference_rows",
+        "identity_arguments": "p_timesheet_id uuid",
+        "present": true,
+        "routine_oid": "326875",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "plpgsql",
+        "security_definer": true,
+        "volatility": "volatile",
+        "result_type": "TABLE(timesheet_id uuid, sheet_scope text, submission_mode text, ref_target text, segment_id text, day_ymd text, start_utc text, end_utc text, current_reference text, row_key text)",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "326875",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          },
+          {
+            "routine_oid": "326875",
+            "grantee": "service_role",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "326875",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "326875",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "326875",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "326875",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 7,
+        "schema": "public",
+        "name": "timesheet_pdf_reference_sig",
+        "identity_arguments": "p_timesheet_id uuid",
+        "present": true,
+        "routine_oid": "326877",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "plpgsql",
+        "security_definer": true,
+        "volatility": "volatile",
+        "result_type": "text",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "326877",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          },
+          {
+            "routine_oid": "326877",
+            "grantee": "service_role",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "326877",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "326877",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "326877",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "326877",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 8,
+        "schema": "public",
+        "name": "tsfin_load_context_batch",
+        "identity_arguments": "p_timesheet_ids uuid[]",
+        "present": true,
+        "routine_oid": "326958",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "sql",
+        "security_definer": true,
+        "volatility": "stable",
+        "result_type": "TABLE(effective_timesheet_id uuid, out_timesheet jsonb, out_cur_fin jsonb, out_candidate jsonb, out_umbrella jsonb, out_client_id uuid, out_effective_flags jsonb, out_policy jsonb)",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "326958",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          },
+          {
+            "routine_oid": "326958",
+            "grantee": "service_role",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "326958",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "326958",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "326958",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "326958",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 9,
+        "schema": "private",
+        "name": "_contract_settings_effective_core_v1",
+        "identity_arguments": "p_client_id uuid, p_contract_id uuid, p_relevant_date date, p_workflow text, p_timesheet_id uuid",
+        "present": true,
+        "routine_oid": "32624636",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "plpgsql",
+        "security_definer": true,
+        "volatility": "stable",
+        "result_type": "jsonb",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "32624636",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "32624636",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "32624636",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "32624636",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "32624636",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 10,
+        "schema": "private",
+        "name": "_timesheet_settings_authority_frozen_v1",
+        "identity_arguments": "p_timesheet_id uuid",
+        "present": true,
+        "routine_oid": "32624638",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "plpgsql",
+        "security_definer": true,
+        "volatility": "volatile",
+        "result_type": "jsonb",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "32624638",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "32624638",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "32624638",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "32624638",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "32624638",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 11,
+        "schema": "private",
+        "name": "_candidate_manager_authoriser_email_array_v2",
+        "identity_arguments": "p_value jsonb",
+        "present": true,
+        "routine_oid": "660009",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "plpgsql",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "jsonb",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "660009",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "660009",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "660009",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "660009",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "660009",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 12,
+        "schema": "private",
+        "name": "_candidate_manager_authoriser_domain_array_v2",
+        "identity_arguments": "p_value jsonb",
+        "present": true,
+        "routine_oid": "660010",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "plpgsql",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "jsonb",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "660010",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "660010",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "660010",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "660010",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "660010",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 13,
+        "schema": "private",
+        "name": "_candidate_manager_authoriser_policy_normalize_v2",
+        "identity_arguments": "p_policy jsonb, p_scope text",
+        "present": true,
+        "routine_oid": "660011",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "plpgsql",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "jsonb",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "660011",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "660011",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "660011",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "660011",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "660011",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 14,
+        "schema": "private",
+        "name": "_candidate_manager_authoriser_effective_v2",
+        "identity_arguments": "p_client_policy jsonb, p_contract_policy jsonb",
+        "present": true,
+        "routine_oid": "660012",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "plpgsql",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "jsonb",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "660012",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "660012",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "660012",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "660012",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "660012",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 15,
+        "schema": "public",
+        "name": "contract_settings_effective_get_v1",
+        "identity_arguments": "p_client_id uuid, p_contract_id uuid, p_relevant_date date, p_workflow text, p_timesheet_id uuid",
+        "present": true,
+        "routine_oid": "32625949",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "sql",
+        "security_definer": true,
+        "volatility": "stable",
+        "result_type": "jsonb",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "32625949",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          },
+          {
+            "routine_oid": "32625949",
+            "grantee": "service_role",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "32625949",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "32625949",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "32625949",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "32625949",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          }
+        ]
+      }
+    ]
+  }
+}

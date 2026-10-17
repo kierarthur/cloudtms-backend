@@ -1,0 +1,45 @@
+{
+  "version": "S23_EXISTING_PUBLIC_SOURCE_EFFECT_EVIDENCE_V1",
+  "pins": [
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026",
+      "commit": "92ec880ade00bc1119a7e6a900dbe32467ee0ad6",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-scoped-effects-observer-20261017/SOURCE_SELECTION.json",
+      "bytes": 5601,
+      "sha256": "f7dca1d55f0841eb9fd31e0eae912d7fb27be9d76176a77f4b47d4ecf6780f0a",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026",
+      "commit": "92ec880ade00bc1119a7e6a900dbe32467ee0ad6",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-scoped-effects-observer-20261017/SOURCE_EFFECT_MAP.md",
+      "bytes": 8751,
+      "sha256": "a87563b314f551fa6d738007746afa984ac19753c157f0667a4d64e16bc48d24",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026",
+      "commit": "92ec880ade00bc1119a7e6a900dbe32467ee0ad6",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-scoped-effects-observer-20261017/SOURCE_METADATA.json",
+      "bytes": 193689,
+      "sha256": "4d87c39bfeed0aca413ffe661477dcaa6d65516ecf4bf857fbd990f2f123eebf",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026",
+      "commit": "a72d3387a3489d0f483da2d6066218aee70b971d",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-settings-effect-disposition-20261017/README.md",
+      "bytes": 1945,
+      "sha256": "411342b970c36cdf88c4956d308b819057e38ab3dad2c1bfe9061f6a6f2afaca",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026",
+      "commit": "fa55ae0c9c701cad3419d143732e0c46711020ab",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-settings-effect-disposition-20261017/COMMON_HELPER_NOTE.md",
+      "bytes": 794,
+      "sha256": "5bede4e992cfbc12a552984ed7a6a93220d61dce1d8ea35276922d3952c6065f",
+      "savedIndexHeadHistoricalEqual": true
+    }
+  ]
+}

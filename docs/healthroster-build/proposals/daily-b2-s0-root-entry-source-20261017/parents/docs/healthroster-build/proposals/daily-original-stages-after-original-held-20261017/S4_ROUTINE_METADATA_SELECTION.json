@@ -1,0 +1,292 @@
+{
+  "version": "S4_EXISTING_PUBLIC_ROUTINE_METADATA_SELECTION_V1",
+  "sourceOnly": true,
+  "bodiesRead": false,
+  "rows": [
+    {
+      "schema": "public",
+      "name": "client_create_with_settings_v1",
+      "identity_arguments": "p_client_id uuid, p_client_json jsonb, p_actor_user_id uuid, p_settings_json jsonb, p_now_utc timestamp with time zone",
+      "sourceContractIdentity": "client_create_with_settings_v1(p_client_id uuid, p_client_json jsonb, p_actor_user_id uuid, p_settings_json jsonb, p_now_utc timestamp with time zone)",
+      "sourceDefinitionSha256": "1a132a38423d477d6ecd424579ccad3af75d26f7f4d49e851259a41934080be8",
+      "sourceOwner": "postgres",
+      "sourceSecurityDefiner": true,
+      "sourceConfig": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "sourceAcl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "installedStatus": "ALREADY_NATIVE_CLIENT_BINDING_NOT_S4",
+      "semanticsBodyRead": false
+    },
+    {
+      "schema": "public",
+      "name": "enqueue_ts_financials_priority",
+      "identity_arguments": "_timesheet_ids uuid[], _reason ts_fin_reason_enum",
+      "sourceContractIdentity": "enqueue_ts_financials_priority(_timesheet_ids uuid[], _reason ts_fin_reason_enum)",
+      "sourceDefinitionSha256": "a9009525bdaf38929dc7acf8c1c97c61ad3c82154cb6c64ebeb7f1571dab7abc",
+      "sourceOwner": "postgres",
+      "sourceSecurityDefiner": false,
+      "sourceConfig": [],
+      "sourceAcl": [
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "installedStatus": "NARROW_INSTALLED_METADATA_NOT_FOUND_IN_NAMED_PUBLIC_RECORDS",
+      "semanticsBodyRead": false
+    },
+    {
+      "schema": "public",
+      "name": "tsfin_dequeue_specific",
+      "identity_arguments": "p_timesheet_ids uuid[], p_limit integer",
+      "sourceContractIdentity": "tsfin_dequeue_specific(p_timesheet_ids uuid[], p_limit integer)",
+      "sourceDefinitionSha256": "63da55c5f59d51c3ae2f28005984ef4826989cbc0e75dbf9fa3fee919303ada4",
+      "sourceOwner": "postgres",
+      "sourceSecurityDefiner": false,
+      "sourceConfig": [],
+      "sourceAcl": [
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "installedStatus": "NARROW_INSTALLED_METADATA_NOT_FOUND_IN_NAMED_PUBLIC_RECORDS",
+      "semanticsBodyRead": false
+    },
+    {
+      "schema": "public",
+      "name": "tsfin_load_context_batch",
+      "identity_arguments": "p_timesheet_ids uuid[]",
+      "sourceContractIdentity": "tsfin_load_context_batch(p_timesheet_ids uuid[])",
+      "sourceDefinitionSha256": "f84d6893cbe6f8568dcd601811debbb4a1a1fe470674730ff738eca690f8a6ea",
+      "sourceOwner": "postgres",
+      "sourceSecurityDefiner": true,
+      "sourceConfig": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "sourceAcl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "installedStatus": "ALREADY_EXACT_NATIVE_BODY_AND_ROUTINE_ACL",
+      "semanticsBodyRead": false
+    },
+    {
+      "schema": "public",
+      "name": "tsfin_resolve_rates_batch",
+      "identity_arguments": "p_items jsonb",
+      "sourceContractIdentity": "tsfin_resolve_rates_batch(p_items jsonb)",
+      "sourceDefinitionSha256": "6102f37fe7857f41c97134de68abb4be75d960ccf6479a8b1634f0694d8a5e01",
+      "sourceOwner": "postgres",
+      "sourceSecurityDefiner": false,
+      "sourceConfig": [],
+      "sourceAcl": [
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "installedStatus": "NARROW_INSTALLED_METADATA_NOT_FOUND_IN_NAMED_PUBLIC_RECORDS",
+      "semanticsBodyRead": false
+    },
+    {
+      "schema": "public",
+      "name": "tsfin_work_fail",
+      "identity_arguments": "p_id uuid, p_error text",
+      "sourceContractIdentity": "tsfin_work_fail(p_id uuid, p_error text)",
+      "sourceDefinitionSha256": "02f9b0d49608eeb7525a848c25eed3196f02dc24cf7493d2ec45060fa8701ace",
+      "sourceOwner": "postgres",
+      "sourceSecurityDefiner": false,
+      "sourceConfig": [],
+      "sourceAcl": [
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "installedStatus": "NARROW_INSTALLED_METADATA_NOT_FOUND_IN_NAMED_PUBLIC_RECORDS",
+      "semanticsBodyRead": false
+    },
+    {
+      "schema": "public",
+      "name": "tsfin_work_success",
+      "identity_arguments": "p_id uuid",
+      "sourceContractIdentity": "tsfin_work_success(p_id uuid)",
+      "sourceDefinitionSha256": "c309bf51b8f54894b3ce810d6640533abe0adbc068036ff29da689806c0508cc",
+      "sourceOwner": "postgres",
+      "sourceSecurityDefiner": false,
+      "sourceConfig": [],
+      "sourceAcl": [
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "installedStatus": "NARROW_INSTALLED_METADATA_NOT_FOUND_IN_NAMED_PUBLIC_RECORDS",
+      "semanticsBodyRead": false
+    },
+    {
+      "schema": "public",
+      "name": "tsfin_work_success_bulk",
+      "identity_arguments": "p_ids uuid[]",
+      "sourceContractIdentity": "tsfin_work_success_bulk(p_ids uuid[])",
+      "sourceDefinitionSha256": "3784a81907c265bdaed416a7054bd13b6eee9105e473a82b7b7f7d111568718e",
+      "sourceOwner": "postgres",
+      "sourceSecurityDefiner": false,
+      "sourceConfig": [],
+      "sourceAcl": [
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "installedStatus": "NARROW_INSTALLED_METADATA_NOT_FOUND_IN_NAMED_PUBLIC_RECORDS",
+      "semanticsBodyRead": false
+    },
+    {
+      "schema": "public",
+      "name": "tsfin_write_snapshots_and_complete",
+      "identity_arguments": "p_rows jsonb",
+      "sourceContractIdentity": "tsfin_write_snapshots_and_complete(p_rows jsonb)",
+      "sourceDefinitionSha256": "84f0d9f6359f03ba30e46a334acd19422319aa16619a2861f913c0fff83b09ef",
+      "sourceOwner": "postgres",
+      "sourceSecurityDefiner": true,
+      "sourceConfig": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "sourceAcl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "installedStatus": "NARROW_INSTALLED_METADATA_NOT_FOUND_IN_NAMED_PUBLIC_RECORDS",
+      "semanticsBodyRead": false
+    }
+  ],
+  "existingNativeContextDefinitionSha256": "f84d6893cbe6f8568dcd601811debbb4a1a1fe470674730ff738eca690f8a6ea",
+  "existingNativeContextAclRoutineCount": 16,
+  "bindings": [
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-current-genuine-producer-audit-20261017/SOURCE_SCHEMA_EFFECT_BOUNDARIES.json",
+      "commit": "ea17085c96ec78bb0e72646b2f6ef90a422cdcda",
+      "bytes": 236921,
+      "sha256": "b702b374a964e6368e5b7dca3caab714397d1f91d8bdd0591a63cd07bb971bbd",
+      "savedIndexHeadEqual": true
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "commit": "ea17085c96ec78bb0e72646b2f6ef90a422cdcda",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "savedIndexHeadEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_CURRENT_NATIVE_CONTEXT_READONLY_20261017.json",
+      "commit": "ea17085c96ec78bb0e72646b2f6ef90a422cdcda",
+      "bytes": 14564,
+      "sha256": "631192d73fbe65e23b9cf98cbe133882b0c7043a82e3625fefdeb62353522f66",
+      "savedIndexHeadEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_CONTEXT_HEALTH_ROUTINE_METADATA_20261017.json",
+      "commit": "ea17085c96ec78bb0e72646b2f6ef90a422cdcda",
+      "bytes": 35144,
+      "sha256": "fc985ee8d7844aeb4b11c9d67ff94d6251a6c67ef9a2081c69abe759a4bb3633",
+      "savedIndexHeadEqual": true
+    }
+  ],
+  "qualification": "The nine original source rows contain Client and already-bound context; seven remaining S4 routine identities need only existing-or-narrow installed metadata. Source logical postgres is not native role-switch authority."
+}

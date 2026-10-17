@@ -1,0 +1,15 @@
+{
+  "version": "DAILY_GENUINE_ROOT_STAGE_PREDECISION_V1",
+  "stage": "S1a",
+  "operatorSourceCommit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+  "decision": "ROOT_REVIEWED_EXACT_EXISTING_STAGE_EFFECTS",
+  "workerSourceSha256": "637bacbb79016c357724ba1e88f8d854d2dcc55201d0bd77a0a14bedd293d968",
+  "nativeOwnerEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_FIXED_NATIVE_METADATA_20261017.json",
+  "schemaEffectEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_ROOT_SOURCE_REVIEW_20261017.json",
+  "sourceEvidence": [
+    "docs/healthroster-build/proposals/daily-health-genuine-hospital-mapping-stage-20261017/SOURCE_PINS.json"
+  ],
+  "expectedEffects": "One real Hospital alias mapping to the genuinely created S1 Client, using the approved original route and the original approved reserved mapping UUID forwarded by the request and inserted/returned by the genuine native owner. Require global alias and mapping UUID/Client vacancy plus all current/history Timesheet alias vacancy; preserve existing mapping wakeup owner and prove zero targeted Timesheets, rather than pretending callbacks are absent.",
+  "reconciliation": "Use the committed S1 prefix and exact setup manifest, current active Admin/shared turn, one original POST and strict complete response. Original eleven-scope AFTER must prove the exact native mapping row and global cardinality one/wakeup zero while retaining S1 Client/settings and all other scopes. Unknown outcome requires readback reconciliation before any separately authorised action; never blind retry. The reviewed four-stage recorder only records public actual facts; original AFTER/PUBLISH and closed child release remain controlling.",
+  "limitations": "Published route and eight selected functions are bound to the existing Install1 source, not the whole current Worker. Fixed metadata and newline-qualified trigger source are bounded evidence. No Bank implementation, financial success, global restoration or Install2 acceptance follows."
+}

@@ -1,0 +1,22 @@
+{
+  "status": "BOUNDED_SOURCE_ONLY_PASS",
+  "tests": 43,
+  "failures": 0,
+  "verification": {
+    "status": "SOURCE_ONLY_PASS",
+    "publicParents": 27,
+    "newTargets": 3,
+    "wholeRawInverses": 3,
+    "currentPublicImagesChecked": true,
+    "native": "NOT_RUN",
+    "auth": "NOT_RUN",
+    "privateStateAccess": false
+  },
+  "actualRootExecution": "NOT_RUN",
+  "actualSourceAdmission": "NOT_RUN",
+  "auth": "NOT_RUN",
+  "native": "NOT_RUN",
+  "privateStateRead": false,
+  "sourceChangesOnlyThreeNewRootEntries": true,
+  "oldAuthContractUnchanged": true
+}
