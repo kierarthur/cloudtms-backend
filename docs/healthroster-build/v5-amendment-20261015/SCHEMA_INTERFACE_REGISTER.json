@@ -7249,5 +7249,19 @@
     "in_app": "NOT_RUN",
     "release": "NOT_RUN",
     "final_critics": "NOT_RUN"
+  },
+  "daily_actor_native_component_20261017": {
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_ACTOR_NATIVE_R2_PASS_20261017.json",
+    "sourceCommit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+    "status": "PASS_EXACT_ACTOR_PROGRAMME_AND_ORIGINAL_CANONICAL_RESTORATION",
+    "actorMatrixChecks": 12,
+    "matrixDenials": 10,
+    "sameTransactionChanges": 3,
+    "effectiveRoleAclChecks": 3,
+    "directRoleExecution": "NOT_RUN",
+    "fullCanonicalRestoration": "PASS",
+    "wholeElapsedMilliseconds": 60038,
+    "sharedTurnExplicitlyUnlockedAndClosed": true,
+    "install2": "NOT_INSTALLED"
   }
 }

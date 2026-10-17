@@ -1,0 +1,467 @@
+{
+  "version": "DAILY_ACTOR_NATIVE_R2_ROOT_RECEIPT_V1",
+  "reviewedSourceCommit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+  "authorCommit": "8c05acdd766eb909db7f73f5cfbfa08b5112b7f3",
+  "independentPeerCommit": "0e9fc60974176729246764f8ac0887f8000dd17e",
+  "nativeEnvelope": {
+    "accepted": true,
+    "rolledBack": true,
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "databaseTarget": "agency_test"
+  },
+  "summary": {
+    "status": "PASS_EXACT_ACTOR_PROGRAMME_AND_ORIGINAL_CANONICAL_RESTORATION",
+    "scope": "DAILY_HEALTH_ACTOR_REAL_USERS_BOTH_COMPLETE_BACKGROUND_RELATIONS_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "programmeSha256": "4157d0e2d9de71e1a5d6bdef8523b8aed3c8e6ff45b01c5dcfa1f7722813f314",
+    "programmeBytes": 19447,
+    "definitions": 1,
+    "actorMatrixChecks": 12,
+    "matrixDenials": 10,
+    "sameTransactionChanges": 3,
+    "effectiveRoleAclChecks": 3,
+    "directRoleExecution": "NOT_RUN",
+    "nullGuardRefusals": 2,
+    "sqlSha256": "536b3fcc03968fab421066c122e3dc0cb7c2a3373536fba7f7fb834284b3dc79",
+    "rolledBack": true,
+    "connectedFresh": true,
+    "markerAbsent": true,
+    "realMarkerCreatedInB": true,
+    "businessFixtureRows": 6,
+    "readerPids": {
+      "holder": 262800,
+      "before": 262803,
+      "nativeB": 262815,
+      "mcpVerification": 262815,
+      "after": 262838
+    },
+    "localTransport": {
+      "before": {
+        "stdoutBytes": 28397290,
+        "snapshotUtf8Bytes": 28397114,
+        "snapshotSha256": "9242b25343f0956227c680b5bfe67e03dbe2da735ccfba291052622253bdd0c0",
+        "frameCount": 2
+      },
+      "after": {
+        "stdoutBytes": 28397664,
+        "snapshotUtf8Bytes": 28397114,
+        "snapshotSha256": "3ce450bc2292b95593d644d2f9ff8800874497e044dbb1dc59175ce7c6567ef6",
+        "frameCount": 3,
+        "fixtureProofUtf8Bytes": 372,
+        "fixtureProofSha256": "506d3834fa65dd74d4e5bb93b083652e65caa06adbbf535d1268ebf68a6568d3"
+      }
+    },
+    "before": {
+      "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+      "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+      "relationCensus": "67f5d30e6f8c6706aa01a55b401db007d8674411fcbd7d9443fe75e7cd826269",
+      "businessCountsFingerprint": "410d152e982ddc6d33b55dba592d6cde206afc9136468281ba01c6abb4146766",
+      "businessRowsFingerprint": "ee43ee78cbc3f844228652abd95218363052e4a6c16f2f878e64f875c55d7b3d",
+      "businessRelations": [
+        {
+          "hash": "29d6f24d5d3b951a83edcb89934569d7855cbdbe0f2e518129aea53571589dbb",
+          "count": 74348,
+          "relation": "private.candidate_daily_batch_receipts"
+        },
+        {
+          "hash": "11708bf7015a47b628f22f7e2f78c74d56a4820a96199f7782fde18e82d5c569",
+          "count": 6,
+          "relation": "public.tms_users"
+        },
+        {
+          "hash": "162e70dfbd9a78c70be1618a73ab2de1392be6ff8dd1889e4b029d4ef95b48a9",
+          "count": 20,
+          "relation": "public.ts_financials_outbox"
+        }
+      ],
+      "otherActivityCount": 0
+    },
+    "after": {
+      "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+      "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+      "relationCensus": "67f5d30e6f8c6706aa01a55b401db007d8674411fcbd7d9443fe75e7cd826269",
+      "businessCountsFingerprint": "410d152e982ddc6d33b55dba592d6cde206afc9136468281ba01c6abb4146766",
+      "businessRowsFingerprint": "ee43ee78cbc3f844228652abd95218363052e4a6c16f2f878e64f875c55d7b3d",
+      "businessRelations": [
+        {
+          "hash": "29d6f24d5d3b951a83edcb89934569d7855cbdbe0f2e518129aea53571589dbb",
+          "count": 74348,
+          "relation": "private.candidate_daily_batch_receipts"
+        },
+        {
+          "hash": "11708bf7015a47b628f22f7e2f78c74d56a4820a96199f7782fde18e82d5c569",
+          "count": 6,
+          "relation": "public.tms_users"
+        },
+        {
+          "hash": "162e70dfbd9a78c70be1618a73ab2de1392be6ff8dd1889e4b029d4ef95b48a9",
+          "count": 20,
+          "relation": "public.ts_financials_outbox"
+        }
+      ],
+      "otherActivityCount": 0
+    },
+    "restoration": {
+      "connectedFresh": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "module": "LEGACY:1",
+      "markerAbsent": true,
+      "compared": [
+        "ledgerFingerprint",
+        "catalogueFingerprint",
+        "businessCountsFingerprint",
+        "businessRowsFingerprint"
+      ],
+      "liveRestoration": {
+        "status": "LIVE_TEST_RESTORATION_QUALIFIED",
+        "ownerRuling": "14 October 2026: background changes require attribution, never job pause",
+        "relationCount": 3,
+        "unchangedBusinessRelations": 3,
+        "qualifiedBusinessChanges": [],
+        "parentRollback": {
+          "database": "cloudtms_test_clone",
+          "backendPid": 262815,
+          "xid": "414570437",
+          "status": "aborted",
+          "connectedFresh": true
+        },
+        "fixtureAbsence": {
+          "allUnchangedRelationsBound": true,
+          "exceptionCaptureUnits": 1,
+          "observedExceptionFixtureKeys": 0,
+          "remaining": 0
+        },
+        "writerProof": {
+          "matched": true,
+          "routines": [
+            {
+              "schema": "private",
+              "identity": "_candidate_daily_json_sha256_v1(p_value jsonb)",
+              "definitionSha256": "91bb08b79571e0e9937e8d82f4388959eea6dadf9981e259e537e7cb7fc199fd"
+            },
+            {
+              "schema": "public",
+              "identity": "candidate_daily_projection_claim_v1(p_internal_context jsonb, p_claim_request_id uuid, p_idempotency_key text, p_target text, p_claimant text, p_max_items integer, p_lease_seconds integer, p_correlation_id text)",
+              "definitionSha256": "f9323cdcb4f2163f97c8b0c31bf1f0f92c3e2766041f0e0571c3dc22698eae3d"
+            },
+            {
+              "schema": "public",
+              "identity": "tsfin_dequeue_batch_ids(p_limit integer)",
+              "definitionSha256": "3daeab18828c11b4b18a42cd07842f1c5fcc672e4940aa5824830a201a26e82d"
+            },
+            {
+              "schema": "public",
+              "identity": "tsfin_work_fail(p_id uuid, p_error text)",
+              "definitionSha256": "02f9b0d49608eeb7525a848c25eed3196f02dc24cf7493d2ec45060fa8701ace"
+            }
+          ],
+          "authority": "Exact original sealed four writer records equal genuine complete C-before and distinct C-after catalogue records"
+        },
+        "backgroundPaused": false,
+        "proofSha256": "a2def1854947f33022c25a898d37d7f89c444c642d6a9e0f927feafdd9cfea07"
+      },
+      "otherActivityCountObserved": 0,
+      "activityIsRestorationEvidence": false
+    },
+    "nativeClockFrames": [
+      {
+        "phase": "B_GUARD_BEFORE",
+        "readOnly": false,
+        "holderPid": 262800,
+        "backendPid": 262815,
+        "observedAt": "2026-10-17T07:05:03.257569+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T07:05:03.251302+00:00",
+        "transactionStartedAt": "2026-10-17T07:05:03.050461+00:00"
+      },
+      {
+        "phase": "B_GUARD_AFTER",
+        "readOnly": false,
+        "holderPid": 262800,
+        "backendPid": 262815,
+        "observedAt": "2026-10-17T07:05:03.311363+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T07:05:03.310321+00:00",
+        "transactionStartedAt": "2026-10-17T07:05:03.050461+00:00"
+      }
+    ],
+    "nativeCompletionObservedAt": "2026-10-17T07:05:03.736999+00:00",
+    "mcpVerificationObservedAt": "2026-10-17T07:05:03.916858+00:00",
+    "fullInstallRehearsal": "NOT_RUN",
+    "dailyComposers": "NOT_RUN",
+    "businessCurrentness": "NOT_QUALIFIED",
+    "dailyBasis": "NOT_RUN",
+    "incompleteReview": "NOT_RUN",
+    "isolationRefusal": "NOT_RUN",
+    "postWaitRace": "NOT_RUN",
+    "rootCallTiming": {
+      "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+      "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+      "sqlSha256": "536b3fcc03968fab421066c122e3dc0cb7c2a3373536fba7f7fb834284b3dc79",
+      "callStartedAt": "2026-10-17T07:05:02.090Z",
+      "callReturnedAt": "2026-10-17T07:05:03.256Z",
+      "rootObservedCallMilliseconds": 1166,
+      "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+    },
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T07:04:31.939Z",
+      "workDeadlineAt": "2026-10-17T07:06:31.939Z",
+      "readyAt": "2026-10-17T07:04:57.203Z",
+      "resultReadAt": "2026-10-17T07:05:05.689Z"
+    },
+    "elapsedMilliseconds": 60038,
+    "wholeSequenceBudgetMilliseconds": 180000,
+    "workBudgetMilliseconds": 120000,
+    "canonicalSharedTurnUnlockedAndClosed": true,
+    "completeMapsPersisted": false
+  },
+  "inputReceipt": {
+    "version": "DAILY_HEALTH_ACTOR_ROLLBACK_INPUT_V1",
+    "scope": "DAILY_HEALTH_ACTOR_REAL_USERS_BOTH_COMPLETE_BACKGROUND_RELATIONS_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "holderIdentity": {
+      "physicalDatabase": "cloudtms_test_clone",
+      "databaseOid": 324139,
+      "backendPid": 262800,
+      "turnId": "hr_turn_b8b5f7859bdc853579e8b7a205013881",
+      "key": [
+        20261013,
+        1
+      ],
+      "takenAt": "2026-10-17T07:04:30.207Z",
+      "task": "DAILY_HEALTH_EXACT_ACTOR_NATIVE_PROOF"
+    },
+    "marker": "hr_install2_b8b5f7859bdc853579e8b7a205013881",
+    "sqlSha256": "536b3fcc03968fab421066c122e3dc0cb7c2a3373536fba7f7fb834284b3dc79",
+    "verificationSqlSha256": "983e1814bc5ca594a0fd34ad27a8251f0784883c7c2afbf7820e4159f7f96cb4",
+    "programmeSha256": "4157d0e2d9de71e1a5d6bdef8523b8aed3c8e6ff45b01c5dcfa1f7722813f314",
+    "programmeBytes": 19447,
+    "programmeStatements": 7,
+    "programmeStart": 10,
+    "statements": 20,
+    "indices": {
+      "guardBefore": 5,
+      "guard": 6,
+      "guardAfter": 7,
+      "markerCreation": 8,
+      "transaction": 9,
+      "programmeResult": 16,
+      "fixtureObservation": 19,
+      "completion": 20
+    },
+    "canonicalSqlSha256": "054e3d6b0e71eeee5177bfdcd11af28d2f0f12af7ac4531ff450baaff87c7d8e",
+    "responses": [
+      {
+        "statement": 1,
+        "command": "SET",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "313269157df425d940687d0d791b87ee8df2f7f9158edc699bda91879c02a1fb",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 2,
+        "command": "SET",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "1f44ec7c7b25338d9cf745c346e167088e37c6eac3086b5395722937d792aad9",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 3,
+        "command": "SET",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "ed4c72afb2a8536df3c3e4187bf11e3047f00ceca3ecdf8de1e9029cf7b9a179",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 4,
+        "command": "SET",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "bb75576969de55a1a47b60d3afd1e91a0ed5b84795800b04b9a4783f1100aad3",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 5,
+        "command": "SELECT",
+        "kind": "ONE_ROW",
+        "sqlSha256": "81ad97b33952d7d4a26314c42082469decc64c72fc714cdc5f5026dc79c610ec",
+        "abiQualification": "INTEGER_ROW_COUNT_REQUIRED"
+      },
+      {
+        "statement": 6,
+        "command": "DO",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "b99e1f634b55a7942d0843ea2a48e2daf5f62d4994c26f534b35ae11b9f98ea7",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 7,
+        "command": "SELECT",
+        "kind": "ONE_ROW",
+        "sqlSha256": "1347f6f9f8efea7cdd6d23be227f497d1a785a07830f56578e5e2e9f147c6745",
+        "abiQualification": "INTEGER_ROW_COUNT_REQUIRED"
+      },
+      {
+        "statement": 8,
+        "command": "CREATE",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "41c8ce9a40a443870733267b050b0df395ca8873487783a0dc45450d5040b850",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 9,
+        "command": "SELECT",
+        "kind": "ONE_ROW",
+        "sqlSha256": "736e478db0068ae6a4a92683500bbc107177d6b4713f8f635cb2f80968bc5d5b",
+        "abiQualification": "INTEGER_ROW_COUNT_REQUIRED"
+      },
+      {
+        "statement": 10,
+        "command": "SET",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "11732ed4ffeb6bf169b68689fd87c55db4b75bd426a912635ed7d1abd979c6b9",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 11,
+        "command": "DO",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "d76cd1389de263b7583d7c49a6de3a74cea9177cf83fe1723ab180517ce3fb9c",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 12,
+        "command": "CREATE",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "83d8b84284f46415977fdad8735843ac2f9d82aa25bbf16c7994ab157f9fe07e",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 13,
+        "command": "DO",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "8167a2da6ff112763da59afd335a1b2cf342bbbb8fb1b78a39349f01fcd1f22f",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 14,
+        "command": "CREATE",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "39e76fbaaa680e8bc4505946c0ccf5a3890613de5a480ab66ddfc993ee9b727d",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 15,
+        "command": "DO",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "1acc4f30c1bbd7dc5b2a3e000eebf145b1aafaf690185952918a3866fbdf7532",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 16,
+        "command": "SELECT",
+        "kind": "ONE_ROW",
+        "sqlSha256": "24583c14afe51aa68f56bd1b4a2b6c09a34d6fdb43404571c229b0fa03d2abc6",
+        "abiQualification": "INTEGER_ROW_COUNT_REQUIRED"
+      },
+      {
+        "statement": 17,
+        "command": "RESET",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "fa3e6dbbdf8d20346a8fdacad18dc6b953edff9e9d5018d67e0d066cc1af951a",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 18,
+        "command": "RESET",
+        "kind": "EMPTY_COMMAND",
+        "sqlSha256": "8772189179b442218def5bd4a2e6e39cd8bf9ce6a13263a8a17d51287e231964",
+        "abiQualification": "OBSERVED_GENUINE_R3_COMMAND_SHAPE_ACTOR_PROGRAMME_NOT_RUN"
+      },
+      {
+        "statement": 19,
+        "command": "SELECT",
+        "kind": "ONE_ROW",
+        "sqlSha256": "ac59eef88fb438aabea0529c50866f44d8b0a12b21dde63931a53a2cb9c0ff36",
+        "abiQualification": "INTEGER_ROW_COUNT_REQUIRED"
+      },
+      {
+        "statement": 20,
+        "command": "SELECT",
+        "kind": "ONE_ROW",
+        "sqlSha256": "4abc412093dce844c2f1099c1d63b91ea628d3c87ce1caa15a18506b442b42d6",
+        "abiQualification": "INTEGER_ROW_COUNT_REQUIRED"
+      }
+    ],
+    "verificationResponses": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "kind": "ONE_ROW",
+        "sqlSha256": "7dad24976537d076dde2486e7bbd1e1c8dad337695dea6249c4739d1dc986ce5",
+        "abiQualification": "INTEGER_ROW_COUNT_REQUIRED"
+      },
+      {
+        "statement": 2,
+        "command": "SELECT",
+        "kind": "ONE_ROW",
+        "sqlSha256": "d2add516a5e123c19b00a509f379046230e29db400e5e709f24fabc21dbdfc38",
+        "abiQualification": "INTEGER_ROW_COUNT_REQUIRED"
+      },
+      {
+        "statement": 3,
+        "command": "SELECT",
+        "kind": "ONE_ROW",
+        "sqlSha256": "47997be3311cca2913c733c1f9a7db5a7bef1504287e534ba01e13139601e003",
+        "abiQualification": "INTEGER_ROW_COUNT_REQUIRED"
+      },
+      {
+        "statement": 4,
+        "command": "SELECT",
+        "kind": "ONE_ROW",
+        "sqlSha256": "25da8896c60eb9d0ba830d669c254183d53e6e1ebf03fa965622f15e1280a13d",
+        "abiQualification": "INTEGER_ROW_COUNT_REQUIRED"
+      }
+    ],
+    "businessFixtureRows": 6,
+    "markerControlRelationCreated": true,
+    "publicComposer": "NOT_RUN",
+    "bankingBody": "NOT_INCLUDED",
+    "native": "NOT_RUN"
+  },
+  "rootObservedTiming": {
+    "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "sqlSha256": "536b3fcc03968fab421066c122e3dc0cb7c2a3373536fba7f7fb834284b3dc79",
+    "callStartedAt": "2026-10-17T07:05:02.090Z",
+    "callReturnedAt": "2026-10-17T07:05:03.256Z"
+  },
+  "ownedTurnClose": {
+    "chat": "HealthRoster",
+    "task": "DAILY_HEALTH_EXACT_ACTOR_NATIVE_PROOF",
+    "status": "RELEASED",
+    "takenAt": "2026-10-17T07:04:30.207Z",
+    "releasedAt": "2026-10-17T07:05:31.971Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": true,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "unchangedNativeResultSha256": "8318963f672b998b7994ff52865fdfab2e8720b2061dc7718e95a1af635aa970",
+  "limitations": {
+    "directRoleExecution": "NOT_RUN",
+    "API": "NOT_RUN",
+    "dailyBasis": "NOT_RUN",
+    "fullRehearsal": "NOT_RUN",
+    "install2": "NOT_INSTALLED",
+    "finalCritics": "NOT_RUN"
+  },
+  "privateMapsPersisted": false
+}
