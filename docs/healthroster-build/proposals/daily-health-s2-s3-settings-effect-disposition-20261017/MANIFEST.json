@@ -1,0 +1,20 @@
+{
+  "version": "S2_S3_SETTINGS_DISPOSITION_V1",
+  "files": [
+    {
+      "file": "DISPOSITION.json",
+      "bytes": 1050,
+      "sha256": "56269fe02a9d2be0d3935467b415ae94fb2c10311d1ba0747625e0309a636ac5"
+    },
+    {
+      "file": "README.md",
+      "bytes": 1945,
+      "sha256": "411342b970c36cdf88c4956d308b819057e38ab3dad2c1bfe9061f6a6f2afaca"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 2075,
+      "sha256": "7513f0ef623e84bb058183654fe00353696f54707e94e09a98617cc31fedf5cb"
+    }
+  ]
+}
