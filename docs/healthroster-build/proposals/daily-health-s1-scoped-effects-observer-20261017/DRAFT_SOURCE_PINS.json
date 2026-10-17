@@ -1,0 +1,73 @@
+{
+  "parent": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+  "status": "DRAFT_NOT_FROZEN_NATIVE_NOT_RUN",
+  "fixtureClientId": "f717d043-0000-4000-8000-000000000010",
+  "files": [
+    {
+      "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "bytes": 29493,
+      "sha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff"
+    },
+    {
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
+      "bytes": 405963,
+      "sha256": "e809ea52ad67dc0abc5607d7605a1871f64481d127eb2976b265acfed4953bbd"
+    },
+    {
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_03.sql",
+      "bytes": 564475,
+      "sha256": "189e041dd8158ff4841034ae6493b8be435d0fb2ab531f5f546cda1e3fc7a651"
+    },
+    {
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+      "bytes": 1026129,
+      "sha256": "64a093996df1633cfe06c99d103316dc12b9f86e20c2d9ab614eed59e7e748d1"
+    },
+    {
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "bytes": 280735,
+      "sha256": "114fe1b3f66d44d45a7328e242f859bb1cc561203fd506e596cc9b45f5e8609d"
+    },
+    {
+      "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "bytes": 70450,
+      "sha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+    },
+    {
+      "file": "supabase/repeatable/04092026_1901_client_planned_override_refresh_v1.sql",
+      "bytes": 1454,
+      "sha256": "c3fe064c19895587ca09156372f35849a7fc17df1b3253e4bf4c3538237a58de"
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_05_private_invoice_candidate_revision_trigger_v2.sql",
+      "bytes": 11202,
+      "sha256": "6cd325310d2a0375ba5c7403f39d1883adf3a9369612de533dd51fce05ee01aa"
+    },
+    {
+      "file": "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_04_private_invoice_candidate_snapshot_bump_v2.sql",
+      "bytes": 2002,
+      "sha256": "7459204bf2f0bf197c1bc3d8a50cbad6d450d4fbb402cd3ed744ddc0a0caa029"
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "bytes": 1753534,
+      "sha256": "f357496129f0d1eab1f2a2115a8da788be9c2f4a42f50e4d41baa1c700fc3cc0"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json",
+      "bytes": 703,
+      "sha256": "24083c4747f29c1f77d67a5035e5e38f2cedcfa1063d86ce1a0e33ff0e88bd2c"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_20261017.json",
+      "bytes": 119766,
+      "sha256": "c1e91c6507d3624dd69e92707f6f7fd0e8614479b3f5a75c3b4fd9268f152f8c"
+    }
+  ],
+  "semanticBankBodiesRead": 0
+}
