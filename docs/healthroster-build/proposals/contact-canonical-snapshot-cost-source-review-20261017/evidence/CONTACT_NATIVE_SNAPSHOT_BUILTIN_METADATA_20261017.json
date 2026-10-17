@@ -1,0 +1,135 @@
+{
+  "version": "CONTACT_NATIVE_SNAPSHOT_BUILTIN_METADATA_V1",
+  "route": "cloudtms-miget-operations-kier-codex",
+  "scope": "Exact PostgreSQL builtin metadata only; no invocation or cancellation-cause proof",
+  "metadata": {
+    "authenticated": true,
+    "read_only": true,
+    "database": "agency_test",
+    "live_access_allowed": false,
+    "secrets_returned": false,
+    "metadata_contract": "CLOUDTMS_ROUTINE_METADATA_V1",
+    "requested_routine_count": 2,
+    "requested_role_count": 1,
+    "total": 2,
+    "limit": 50,
+    "offset": 0,
+    "returned": 2,
+    "eof": true,
+    "next_offset": null,
+    "truncated": false,
+    "business_rows_returned": 0,
+    "caller_supplied_sql_accepted": false,
+    "effective_execute_source": "pg_catalog.has_function_privilege(role_oid, routine_oid, EXECUTE)",
+    "effective_schema_usage_source": "pg_catalog.has_schema_privilege(role_oid, schema_oid, USAGE)",
+    "roles": [
+      {
+        "role": "dee50tht",
+        "role_present": true,
+        "can_login": true,
+        "superuser": false,
+        "inherits_by_default": true,
+        "bypass_rls": false
+      }
+    ],
+    "effective_membership_paths": [
+      {
+        "requested_role": "dee50tht",
+        "inherited_role": "dee50tht",
+        "depth": 0,
+        "path": "{dee50tht}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      }
+    ],
+    "items": [
+      {
+        "requested_ordinal": 0,
+        "schema": "pg_catalog",
+        "name": "pg_current_snapshot",
+        "identity_arguments": "",
+        "present": true,
+        "routine_oid": "5061",
+        "kind": "function",
+        "owner": "postgres",
+        "language": "internal",
+        "security_definer": false,
+        "volatility": "stable",
+        "result_type": "pg_snapshot",
+        "acl_uses_postgresql_default": true,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "5061",
+            "grantee": "PUBLIC",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          },
+          {
+            "routine_oid": "5061",
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "5061",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 1,
+        "schema": "pg_catalog",
+        "name": "pg_snapshot_xip",
+        "identity_arguments": "pg_snapshot",
+        "present": true,
+        "routine_oid": "5064",
+        "kind": "function",
+        "owner": "postgres",
+        "language": "internal",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "SETOF xid8",
+        "acl_uses_postgresql_default": true,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "5064",
+            "grantee": "PUBLIC",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          },
+          {
+            "routine_oid": "5064",
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "5064",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "version": "CONTACT_CONSTRUCTORS_NATIVE_R2_CANCELLED_PREQUERY_V1",
+  "executionCommit": "42802228977b941325f0feb44c11918b0f42190f",
+  "actualHolderHold": {
+    "status": "HOLD",
+    "caseId": "CONTACT_CONSTRUCTORS_V1",
+    "code": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+    "observedErrorCode": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+    "deadlineObserved": false,
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T09:18:51.829Z",
+      "workDeadlineAt": "2026-10-17T09:20:51.829Z"
+    },
+    "metadataDiagnostic": {
+      "version": "CONTACT_QT_FIXED_METADATA_DIAGNOSTIC_V1",
+      "phase": "BEFORE",
+      "startedAt": "2026-10-17T09:18:52.117Z",
+      "spawnReturnedAt": "2026-10-17T09:18:56.014Z",
+      "firstStderrAt": "2026-10-17T09:19:41.490Z",
+      "finishedAt": "2026-10-17T09:19:41.494Z",
+      "elapsedMilliseconds": 49378,
+      "sqlstate": "57014"
+    },
+    "nativeClockFrames": [],
+    "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+    "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+    "elapsedMilliseconds": 49707,
+    "completeMapsPersisted": false
+  },
+  "mcpDispatched": false,
+  "rollbackSqlSubmitted": false,
+  "markerCreated": false,
+  "constructorsOrFixturesAttempted": false,
+  "observedSqlstate": "57014",
+  "meaning": "query_canceled; BEFORE metadata phase; first stderr observed45476ms after spawn return under configured45000ms statement limit",
+  "exactCancellationCauseAndStatement": "NOT_INFERRED_FROM_SQLSTATE_OR_TIMING_ALONE",
+  "ownTurn": {
+    "takenAt": "2026-10-17T09:18:47.879Z",
+    "releasedAt": "2026-10-17T09:19:41.531Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false
+  },
+  "completeRestorationPassClaimed": false,
+  "next": "No another full snapshot retry until finite diagnosed performance/capture correction reviewed; no raised caps or removed checks",
+  "fixedPerformanceToolFollowup": {
+    "tool": "miget_db_performance_summary",
+    "status": "ERROR",
+    "message": "Query read timeout",
+    "retryLoop": false
+  },
+  "temporaryFolder": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-constructors-r2",
+  "cleanupAttempted": false,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
