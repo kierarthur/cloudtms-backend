@@ -1,0 +1,138 @@
+{
+  "version": "ROOT_READONLY_SOURCE_PURE_ROUTINE_METADATA_V1",
+  "rootRecordedAt": "2026-10-17T07:38:06.564Z",
+  "route": "cloudtms-miget-operations-kier-codex",
+  "observation": {
+    "authenticated": true,
+    "read_only": true,
+    "database": "agency_test",
+    "live_access_allowed": false,
+    "secrets_returned": false,
+    "metadata_contract": "CLOUDTMS_ROUTINE_METADATA_V1",
+    "requested_routine_count": 1,
+    "requested_role_count": 3,
+    "total": 1,
+    "limit": 50,
+    "offset": 0,
+    "returned": 1,
+    "eof": true,
+    "next_offset": null,
+    "truncated": false,
+    "business_rows_returned": 0,
+    "caller_supplied_sql_accepted": false,
+    "effective_execute_source": "pg_catalog.has_function_privilege(role_oid, routine_oid, EXECUTE)",
+    "effective_schema_usage_source": "pg_catalog.has_schema_privilege(role_oid, schema_oid, USAGE)",
+    "roles": [
+      {
+        "role": "anon",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      },
+      {
+        "role": "authenticated",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      },
+      {
+        "role": "service_role",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      }
+    ],
+    "effective_membership_paths": [
+      {
+        "requested_role": "anon",
+        "inherited_role": "anon",
+        "depth": 0,
+        "path": "{anon}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "authenticated",
+        "inherited_role": "authenticated",
+        "depth": 0,
+        "path": "{authenticated}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "service_role",
+        "inherited_role": "service_role",
+        "depth": 0,
+        "path": "{service_role}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      }
+    ],
+    "items": [
+      {
+        "requested_ordinal": 0,
+        "schema": "private",
+        "name": "weekly_exceptional_json_keys_exact_v1",
+        "identity_arguments": "p_value jsonb, p_allowed_keys text[]",
+        "present": true,
+        "routine_oid": "33782701",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "sql",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "boolean",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "33782701",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "33782701",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "33782701",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": false,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "33782701",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          }
+        ]
+      }
+    ]
+  },
+  "limits": [
+    "Read-only metadata; no helper execution or rollback trial.",
+    "proconfig must also be asserted inside the separately reviewed trial; this metadata endpoint does not return it."
+  ]
+}
