@@ -1,0 +1,10 @@
+RUN programme/verify-programme.py
+{"checks": 41, "grammar": "PG17", "statements": 6, "plpgsqlPrograms": 4, "newDefinitions": 1, "existingDependencyReplaced": false, "native": "NOT_RUN", "restoration": "NOT_RUN"}
+RUN catalogue-vectors.py
+{"checks": 56, "native": "NOT_RUN", "scope": "EXACT_ACTUAL_ADMISSION_AST_SYNTHETIC_CATALOGUE_BOUNDARIES", "rawNativeDefinitionAndEffectivePrivileges": "OPAQUE_BOUNDARY_TOKENS_NOT_A_NATIVE_OBSERVATION"}
+RUN verify-adapter.py
+{"checks": 177, "sourceRootCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d", "rootInputs": 42, "wholeCurrentParents": 9, "grammar": [{"name": "ORIGINAL_PROGRAMME", "statements": 6, "plpgsqlPrograms": 4}, {"name": "SYNTHETIC_B", "statements": 19, "plpgsqlPrograms": 5}, {"name": "SYNTHETIC_MCP_VERIFICATION", "statements": 4, "plpgsqlPrograms": 0}, {"name": "SYNTHETIC_C_BEFORE", "statements": 6, "plpgsqlPrograms": 1}, {"name": "SYNTHETIC_C_AFTER", "statements": 7, "plpgsqlPrograms": 1}], "native": "NOT_RUN", "restoration": "NOT_RUN", "DBConnections": 0, "publicFinancialResult": "NOT_PROVIDED"}
+RUN verify-r2.py
+{"checks": 134, "R1ActualFailure": "42702: column reference p.pronamespace is ambiguous; statement10 preflight, child CREATE11 not reached", "original46": "BYTE_UNCHANGED", "oldCollisionSites": [{"program": 0, "alias": "p", "relation": "pg_proc", "qualifiedReferences": [["p", "pronamespace"], ["p", "proname"]]}, {"program": 0, "alias": "p", "relation": "pg_proc", "qualifiedReferences": [["p", "pronamespace"], ["p", "proname"]]}, {"program": 2, "alias": "p", "relation": "pg_proc", "qualifiedReferences": [["p", "pronamespace"], ["p", "proname"]]}], "native": "NOT_RUN", "restoration": "NOT_RUN", "bindingQualification": "STATIC_SCOPE_AUDIT_ONLY_NATIVE_R2_REQUIRED"}
+RUN verify-freeze.py
+{"files": 51, "manifestSha256": "3807087a10214f5734e76b149c1ff954521eb37b53ad919526c84165b18d8275", "savedIndexHEAD": "NOT_CHECKED_BEFORE_COMMIT", "native": "NOT_RUN", "restoration": "NOT_RUN"}

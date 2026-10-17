@@ -1,0 +1,132 @@
+{
+  "checks": 134,
+  "R1ActualFailure": "42702: column reference p.pronamespace is ambiguous; statement10 preflight, child CREATE11 not reached",
+  "R1Restoration": "NOT_RUN_C_AFTER_NOT_RUN",
+  "R1MarkerRollbackAndFreshAbsence": "ROOT_REPORTED_NOT_FULL_RESTORATION",
+  "original46": "BYTE_UNCHANGED",
+  "originalProgramme13": "RETAINED_BY_ORIGINAL_PACKET",
+  "oldCollisionSites": [
+    {
+      "program": 0,
+      "alias": "p",
+      "relation": "pg_proc",
+      "qualifiedReferences": [
+        [
+          "p",
+          "pronamespace"
+        ],
+        [
+          "p",
+          "proname"
+        ]
+      ]
+    },
+    {
+      "program": 0,
+      "alias": "p",
+      "relation": "pg_proc",
+      "qualifiedReferences": [
+        [
+          "p",
+          "pronamespace"
+        ],
+        [
+          "p",
+          "proname"
+        ]
+      ]
+    },
+    {
+      "program": 2,
+      "alias": "p",
+      "relation": "pg_proc",
+      "qualifiedReferences": [
+        [
+          "p",
+          "pronamespace"
+        ],
+        [
+          "p",
+          "proname"
+        ]
+      ]
+    }
+  ],
+  "programmes": [
+    {
+      "program": 0,
+      "sqlExpressions": 13,
+      "aliases": [
+        "catalogue_routine",
+        "s",
+        "catalogue_routine",
+        "s",
+        "a"
+      ],
+      "declaredNames": [
+        "found",
+        "n",
+        "p"
+      ]
+    },
+    {
+      "program": 1,
+      "sqlExpressions": 89,
+      "aliases": [],
+      "declaredNames": [
+        "a",
+        "b",
+        "found",
+        "k",
+        "keys",
+        "n",
+        "p_decision",
+        "p_family",
+        "p_request",
+        "p_run",
+        "p_source",
+        "r",
+        "s"
+      ]
+    },
+    {
+      "program": 2,
+      "sqlExpressions": 8,
+      "aliases": [
+        "catalogue_routine",
+        "s",
+        "a"
+      ],
+      "declaredNames": [
+        "found",
+        "n",
+        "p"
+      ]
+    },
+    {
+      "program": 3,
+      "sqlExpressions": 24,
+      "aliases": [],
+      "declaredNames": [
+        "d",
+        "f",
+        "found",
+        "got",
+        "j",
+        "negatives",
+        "other_id",
+        "positives",
+        "q",
+        "r",
+        "reason",
+        "refused",
+        "sqlerrm",
+        "sqlstate",
+        "v"
+      ]
+    }
+  ],
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "bindingQualification": "STATIC_SCOPE_AUDIT_ONLY_NATIVE_R2_REQUIRED"
+}

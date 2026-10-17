@@ -7362,5 +7362,16 @@
     "currentResultMapping": "UNIMPLEMENTED_GENUINE_READER_REQUIRED",
     "runtimeMounted": false,
     "native": "NOT_RUN"
+  },
+  "source_status_child_r2_alias_source_20261017": {
+    "authorCommit": "d56db402e8b415a1303b0ae5956ceab2ec6822ca",
+    "peerCommit": "b8293a0d306e9a94b32455a24ab32238e23f9026",
+    "verdict": "ACCEPT_BOUNDED_SOURCE_CORRECTION",
+    "fixesApplied": 1,
+    "fixesRejected": 0,
+    "SQLRangeAliasesChanged": 3,
+    "native": "NOT_RUN",
+    "fullCanonicalRestoration": "NOT_RUN",
+    "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PURE_R2_ALIAS_ROOT_REVIEW_20261017.json"
   }
 }

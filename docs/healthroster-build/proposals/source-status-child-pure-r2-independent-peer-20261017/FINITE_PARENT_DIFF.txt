@@ -1,0 +1,447 @@
+--- 5931/hold-pure.mjs
++++ d56d/hold-pure.mjs
+@@ -57,7 +57,7 @@
+      saveSmall(out,'TURN_IDENTITY.json',turn.identity);saveSmall(out,'INPUT.json',built.input);saveSmall(out,'INPUT_RECEIPT.json',built.receipt);
+      localTiming.readyAt=new Date().toISOString();saveSmall(out,'READY_TIMING.json',{...localTiming,sqlSha256:built.receipt.sqlSha256});
+      const ready=controls.wait('PREPARE');
+-     console.log(JSON.stringify({status:'READY_ROOT_KIER_MCP_B_REQUIRED',out,route:ROUTE,programmeBytes:20303,
++     console.log(JSON.stringify({status:'READY_ROOT_KIER_MCP_B_REQUIRED',out,route:ROUTE,programmeBytes:20447,
+       readyAt:localTiming.readyAt,workDeadlineAt:localTiming.workDeadlineAt,
+       remainingWorkMilliseconds:Math.floor(BUDGET.workMilliseconds-(performance.now()-sequenceStart)),canonicalMetadata:'PROCESS_MEMORY_ONLY'}));
+      await ready;within();await turn.assertHeld('after-root-pure-mcp-result');
+--- 5931/input-builder.mjs
++++ d56d/input-builder.mjs
+@@ -72,7 +72,7 @@
+  const canonicalSql=rehearsal.restorationSnapshotSql({identity,marker,relations,
+   exportContractSql:fs.readFileSync(path.join(root,'supabase/release/export_contract.sql'),'utf8'),observeLiveBusiness:true});
+  const receipt={version:'SOURCE_STATUS_CHILD_PURE_ROLLBACK_INPUT_V1',scope:SCOPE,route:ROUTE,holderIdentity:identity,marker,
+-  sqlSha256:sha(text),verificationSqlSha256:sha(verification),programmeSha256:programme.sqlSha256,programmeBytes:20303,
++  sqlSha256:sha(text),verificationSqlSha256:sha(verification),programmeSha256:programme.sqlSha256,programmeBytes:20447,
+   programmeStatements:sql.scanManagedSql(programme.sql).statements.length,programmeStart,
+   statements:sql.scanManagedSql(text).statements.length,indices,canonicalSqlSha256:sha(canonicalSql),
+   responses:responseExpectations(text,sql.scanManagedSql),verificationResponses:responseExpectations(verification,sql.scanManagedSql),
+--- 5931/OFFLINE_RESULTS.json
++++ d56d/OFFLINE_RESULTS.json
+@@ -1,10 +1,10 @@
+ {
+-  "version": "SOURCE_STATUS_CHILD_PURE_ADAPTER_OFFLINE_RESULTS_V1",
++  "version": "SOURCE_STATUS_CHILD_PURE_R2_ALIAS_OFFLINE_RESULTS_V1",
+   "programmeMilestoneCommit": "fb235cfae7a6d3f5eb3ef581bebebf7daa68315e",
+   "rootSourceCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+   "programme": {
+-    "bytes": 20303,
+-    "sha256": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8",
++    "bytes": 20447,
++    "sha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64",
+     "statements": 6,
+     "newDefinitions": 1,
+     "positiveSyntheticBoundaries": 4,
+@@ -15,7 +15,8 @@
+     "programmeSourceAndPG17": 41,
+     "exactCataloguePredicateASTSyntheticBoundaryVectors": 56,
+     "nodeAdapterCases": 20,
+-    "sourceAndWholeParentAndGrammar": 177
++    "sourceAndWholeParentAndGrammar": 177,
++    "R1R2FullParentAndScopeAudit": 134
+   },
+   "rootInputs": 42,
+   "completeCurrentParents": 9,
+@@ -33,5 +34,7 @@
+   "runtimeRootSourceWrites": 0,
+   "BankBodyReads": 0,
+   "Docker": false,
+-  "nativeTrials": 0
++  "nativeTrials": 0,
++  "originalAdapterCommit": "5931ae9e2f1ab11de810996f5aea6a02570b7ce9",
++  "originalR1": "ROOT_NATIVE_HOLD_42702_NO_C_AFTER_OR_FULL_RESTORATION"
+ }
+--- 5931/prepare-offline.mjs
++++ d56d/prepare-offline.mjs
+@@ -10,7 +10,7 @@
+ const transaction={database:'cloudtms_test_clone',backendPid:200,xid:'50',epochZero:true},observations=[{...transaction,unit:0,rows:[]}];
+ const metadata=reader.inspectSource({transaction,observations,before:{backgroundRows:Object.fromEntries(src.live.backgroundRelations.map(r=>[r,[]]))}});
+ const value={status:'SYNTHETIC_SOURCE_EXAMPLES_NEVER_DISPATCH',syntheticIdentity:true,native:'NOT_RUN',dbConnections:0,
+- programmeSha256:src.programme.sqlSha256,programmeBytes:20303,
++ programmeSha256:src.programme.sqlSha256,programmeBytes:20447,
+  examples:[['ORIGINAL_PROGRAMME',src.programme.sql],['SYNTHETIC_B',built.input.sql],['SYNTHETIC_MCP_VERIFICATION',built.input.verification_sql],
+   ['SYNTHETIC_C_BEFORE',metadata.input],['SYNTHETIC_C_AFTER',metadata.after.input]].map(([name,sql])=>({name,sql,sha256:sha(sql),bytes:Buffer.byteLength(sql)}))};
+ fs.writeFileSync(path.join(here,'OFFLINE_INPUTS.json'),JSON.stringify(value,null,2)+'\n');
+--- 5931/programme/postflight.sql
++++ d56d/programme/postflight.sql
+@@ -2,8 +2,8 @@
+ do $source_pure_postflight$
+ declare p pg_catalog.pg_proc%rowtype; n integer;
+ begin
+- select count(*) into n from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace
+-  where s.nspname='private' and p.proname='weekly_source_pay_decision_native_status_child_v1';
++ select count(*) into n from pg_catalog.pg_proc catalogue_routine join pg_catalog.pg_namespace s on s.oid=catalogue_routine.pronamespace
++  where s.nspname='private' and catalogue_routine.proname='weekly_source_pay_decision_native_status_child_v1';
+  if n<>1 then raise exception 'SOURCE_PURE_NEW_NAME_COUNT_REFUSED' using errcode='55000';end if;
+  select * into p from pg_catalog.pg_proc where oid=pg_catalog.to_regprocedure('private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)');
+  if not found then raise exception 'SOURCE_PURE_NEW_SIGNATURE_MISSING' using errcode='55000';end if;
+--- 5931/programme/preflight.sql
++++ d56d/programme/preflight.sql
+@@ -6,11 +6,11 @@
+   or current_setting('transaction_read_only')<>'off'
+   or current_setting('server_version_num')::integer not between 170000 and 179999 then
+   raise exception 'SOURCE_PURE_NATIVE_CONTEXT_REFUSED' using errcode='55000';end if;
+- select count(*) into n from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace
+-  where s.nspname='private' and p.proname='weekly_source_pay_decision_native_status_child_v1';
++ select count(*) into n from pg_catalog.pg_proc catalogue_routine join pg_catalog.pg_namespace s on s.oid=catalogue_routine.pronamespace
++  where s.nspname='private' and catalogue_routine.proname='weekly_source_pay_decision_native_status_child_v1';
+  if n<>0 then raise exception 'SOURCE_PURE_NEW_NAME_ALREADY_PRESENT' using errcode='55000';end if;
+- select count(*) into n from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace
+-  where s.nspname='private' and p.proname='weekly_exceptional_json_keys_exact_v1';
++ select count(*) into n from pg_catalog.pg_proc catalogue_routine join pg_catalog.pg_namespace s on s.oid=catalogue_routine.pronamespace
++  where s.nspname='private' and catalogue_routine.proname='weekly_exceptional_json_keys_exact_v1';
+  if n<>1 then raise exception 'SOURCE_PURE_DEPENDENCY_OVERLOAD_REFUSED' using errcode='55000';end if;
+  select * into p from pg_catalog.pg_proc where oid=pg_catalog.to_regprocedure('private.weekly_exceptional_json_keys_exact_v1(jsonb,text[])');
+  if not found then raise exception 'SOURCE_PURE_DEPENDENCY_MISSING' using errcode='55000';end if;
+--- 5931/programme/PROGRAMME.sql
++++ d56d/programme/PROGRAMME.sql
+@@ -6,11 +6,11 @@
+   or current_setting('transaction_read_only')<>'off'
+   or current_setting('server_version_num')::integer not between 170000 and 179999 then
+   raise exception 'SOURCE_PURE_NATIVE_CONTEXT_REFUSED' using errcode='55000';end if;
+- select count(*) into n from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace
+-  where s.nspname='private' and p.proname='weekly_source_pay_decision_native_status_child_v1';
++ select count(*) into n from pg_catalog.pg_proc catalogue_routine join pg_catalog.pg_namespace s on s.oid=catalogue_routine.pronamespace
++  where s.nspname='private' and catalogue_routine.proname='weekly_source_pay_decision_native_status_child_v1';
+  if n<>0 then raise exception 'SOURCE_PURE_NEW_NAME_ALREADY_PRESENT' using errcode='55000';end if;
+- select count(*) into n from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace
+-  where s.nspname='private' and p.proname='weekly_exceptional_json_keys_exact_v1';
++ select count(*) into n from pg_catalog.pg_proc catalogue_routine join pg_catalog.pg_namespace s on s.oid=catalogue_routine.pronamespace
++  where s.nspname='private' and catalogue_routine.proname='weekly_exceptional_json_keys_exact_v1';
+  if n<>1 then raise exception 'SOURCE_PURE_DEPENDENCY_OVERLOAD_REFUSED' using errcode='55000';end if;
+  select * into p from pg_catalog.pg_proc where oid=pg_catalog.to_regprocedure('private.weekly_exceptional_json_keys_exact_v1(jsonb,text[])');
+  if not found then raise exception 'SOURCE_PURE_DEPENDENCY_MISSING' using errcode='55000';end if;
+@@ -184,8 +184,8 @@
+ do $source_pure_postflight$
+ declare p pg_catalog.pg_proc%rowtype; n integer;
+ begin
+- select count(*) into n from pg_catalog.pg_proc p join pg_catalog.pg_namespace s on s.oid=p.pronamespace
+-  where s.nspname='private' and p.proname='weekly_source_pay_decision_native_status_child_v1';
++ select count(*) into n from pg_catalog.pg_proc catalogue_routine join pg_catalog.pg_namespace s on s.oid=catalogue_routine.pronamespace
++  where s.nspname='private' and catalogue_routine.proname='weekly_source_pay_decision_native_status_child_v1';
+  if n<>1 then raise exception 'SOURCE_PURE_NEW_NAME_COUNT_REFUSED' using errcode='55000';end if;
+  select * into p from pg_catalog.pg_proc where oid=pg_catalog.to_regprocedure('private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)');
+  if not found then raise exception 'SOURCE_PURE_NEW_SIGNATURE_MISSING' using errcode='55000';end if;
+--- 5931/programme/README.md
++++ d56d/programme/README.md
+@@ -1,11 +1,3 @@
+-This immutable milestone contains source only. Its programme is 20,303 UTF-8 bytes, SHA-256 `ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8`, six PostgreSQL 17 statements and four PL/pgSQL programmes. Native execution and restoration are NOT_RUN. The surrounding execution adapter is a separate, unfinished checkpoint at this milestone.
++R2 source programme20447 bytes SHA ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64: six PG17 statements/four PL programmes/one new CREATE, no existing helper replacement. Four positive/twelve negative synthetic NULL/ownership/closed-four-key boundaries remain unchanged. Native/restoration NOT_RUN.
+ 
+-The sole new declaration is the complete current Health `weekly_source_pay_decision_native_status_child_v1`, with the single finite header change from CREATE OR REPLACE to CREATE. Its source body is unchanged. The pre-existing JSON-key helper is neither installed nor replaced. Before the first call, the programme checks the exact new definition body, signature, immutable/security-definer header, owner and closed owner-only ACL.
+-
+-The existing helper's native admission uses the exact 429-byte `pg_get_functiondef` UTF-8 SHA without newline conversion, complete inner-body SHA, invoker/immutable/language/signature metadata, explicit owner `dee50tht`, non-default sole owner ACL and three denied effective EXECUTE privileges. Schema USAGE remains denied for anon/authenticated and allowed for service_role. The metadata endpoint did not expose proconfig: the native trial must satisfy the exact source-derived search_path expectation as well as the genuine complete raw-definition pin. A mismatch refuses the trial. Name-wide namespace checks cover every overload before creation and after creation.
+-
+-Four synthetic positive boundaries cover SQL NULL without ownership and the three closed SOURCE_RESULT_REQUIRED reasons. Twelve negative boundaries require exact SQLSTATE 55000 and the expected ownership/status message. No synthetic Banking publication, successful financial receipt, business row, actor, rate, currentness or public B051 result is substituted. Only the two exact Health function bodies form the application call closure; neither reads application relations nor has effects. Catalogue admission reads are outside that pure function closure.
+-
+-`verify-programme.py` passes 41 offline checks, including current saved/pinned Git equality, both complete declarations, effect/call closure, exact six-statement/four-programme PG17 grammar and the entire original Daily builder inverse. `build-program.mjs` is a closed source constructor with no database client, callback, CLI or file sink. PostgreSQL 17 supplies the builtin binary SHA function used by native catalogue admission ([official documentation](https://www.postgresql.org/docs/17/functions-binarystring.html)). Grammar and source checks do not prove native outcomes.
+-
+-The adapter must retain original canonical before/after snapshots, original WeakMap qualifier, independent closed C readers, actual B transaction and empty observations, shared turn and explicit unlock/close, fixture-zero marker proof and all existing time/transport bounds. This milestone authorises no execution.
++Only three namespace-query SQL range aliases change from p to catalogue_routine, avoiding the actual R1 conflict with pg_proc%rowtype p. Their exact full inverse reproduces the original programme. Every definition/header/raw UTF8 hash/ACL/effective-role/schema/absence/body check remains. No newline translation or conflict-policy setting is introduced. All original pure call/effect closure and no Banking/public-success limits apply. Grammar and the scope audit are source evidence; actual native binding requires root's separately owned R2 trial.
+--- 5931/programme/SOURCE_MANIFEST.json
++++ d56d/programme/SOURCE_MANIFEST.json
+@@ -30,13 +30,13 @@
+     },
+     {
+       "file": "preflight.sql",
+-      "bytes": 2973,
+-      "sha256": "9fe0984139bd6888ac694555ffc3e632038e64c06d5fdc375f775d04dbf779da"
++      "bytes": 3069,
++      "sha256": "67fb77f99d7ac2fa86600ecae56a46c985dbf3ae194c4e20591fb9beb67fc409"
+     },
+     {
+       "file": "postflight.sql",
+-      "bytes": 1965,
+-      "sha256": "baac80aa7dfbe3cdfef1e23d352750c0737076ec733ff4b9150aea1db6b56606"
++      "bytes": 2013,
++      "sha256": "db6cb28b9300bdfe3cdef668e53c9e5225607acf1dfc3b7b76f335c54868305b"
+     },
+     {
+       "file": "assertions.sql",
+@@ -59,8 +59,8 @@
+   "publicResultSuccess": "NOT_PROVIDED",
+   "native": "NOT_RUN",
+   "restoration": "NOT_RUN",
+-  "sqlBytes": 20303,
+-  "sqlSha256": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8",
++  "sqlBytes": 20447,
++  "sqlSha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64",
+   "metadataInputs": [
+     {
+       "file": "docs/healthroster-build/v6-owner-delivery-20261016/SOURCE_PURE_DEPENDENCY_READONLY_20261017.json",
+--- 5931/programme/verify-programme.py
++++ d56d/programme/verify-programme.py
+@@ -34,14 +34,14 @@
+ for row in m['localInputs']:
+  b=(HERE/row['file']).read_bytes();check(len(b)==row['bytes'] and sha(b)==row['sha256'])
+ sql=(HERE/'PROGRAMME.sql').read_bytes()
+-check(len(sql)==20303 and sha(sql)==m['sqlSha256'])
++check(len(sql)==20447 and sha(sql)==m['sqlSha256'])
+ check(len(pglast.parse_sql(sql.decode()))==6)
+ check(len(pglast.parse_plpgsql(sql.decode()))==4)
+ check(sql.count(b'create function ')==1 and b'create or replace function' not in sql)
+ check(b'create function private.weekly_exceptional_json_keys_exact_v1' not in sql)
+ check(sql.index(b'SOURCE_PURE_NEW_NAME_ALREADY_PRESENT')<sql.index(b'create function '))
+ check(sql.index(b'revoke all on function')<sql.index(b'SOURCE_PURE_NEW_DEFINITION_OR_ACL_REFUSED')<sql.index(b'-- SYNTHETIC JSON'))
+-check(b"where s.nspname='private' and p.proname='weekly_source_pay_decision_native_status_child_v1'" in sql)
++check(b"where s.nspname='private' and catalogue_routine.proname='weekly_source_pay_decision_native_status_child_v1'" in sql)
+ check(b"pg_catalog.pg_get_functiondef(p.oid)" in sql and b'bb36d7e2d71abd7b9c0dfba29936d85edca54c8101591fd113e11d3ab7cf9189' in sql)
+ check(sql.count(b'cardinality(p.proacl)<>1')==2)
+ for role in ['anon','authenticated','service_role']:
+--- 5931/PROGRAMME_MILESTONE_MANIFEST.json
++++ d56d/PROGRAMME_MILESTONE_MANIFEST.json
+@@ -1,9 +1,9 @@
+ {
+-  "version": "SOURCE_STATUS_CHILD_PROGRAMME_MILESTONE_V1",
++  "version": "SOURCE_STATUS_CHILD_PROGRAMME_R2_ALIAS_MILESTONE_V1",
+   "sourceRootCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+   "native": "NOT_RUN",
+   "restoration": "NOT_RUN",
+-  "adapter": "UNFINISHED_SEPARATE_CHECKPOINT",
++  "adapter": "SOURCE_ONLY_REQUIRES_ROOT_AND_MONEY_REVIEW",
+   "files": [
+     {
+       "file": "programme/assertions.sql",
+@@ -22,23 +22,23 @@
+     },
+     {
+       "file": "programme/postflight.sql",
+-      "bytes": 1965,
+-      "sha256": "baac80aa7dfbe3cdfef1e23d352750c0737076ec733ff4b9150aea1db6b56606"
++      "bytes": 2013,
++      "sha256": "db6cb28b9300bdfe3cdef668e53c9e5225607acf1dfc3b7b76f335c54868305b"
+     },
+     {
+       "file": "programme/preflight.sql",
+-      "bytes": 2973,
+-      "sha256": "9fe0984139bd6888ac694555ffc3e632038e64c06d5fdc375f775d04dbf779da"
++      "bytes": 3069,
++      "sha256": "67fb77f99d7ac2fa86600ecae56a46c985dbf3ae194c4e20591fb9beb67fc409"
+     },
+     {
+       "file": "programme/PROGRAMME.sql",
+-      "bytes": 20303,
+-      "sha256": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8"
++      "bytes": 20447,
++      "sha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64"
+     },
+     {
+       "file": "programme/README.md",
+-      "bytes": 2912,
+-      "sha256": "a39f96c40a800c4e53b7a42848bece52b04d75c7be1783103964fd8fa45d2aac"
++      "bytes": 867,
++      "sha256": "9e8b8745fbc8ea7abb4c80a5ef652918716ed6b39121e8d28e7f384f3f96b451"
+     },
+     {
+       "file": "programme/source-child.sqlinc",
+@@ -48,12 +48,12 @@
+     {
+       "file": "programme/SOURCE_MANIFEST.json",
+       "bytes": 2800,
+-      "sha256": "d0c166a356a96d1950233b9b274e84851a1dcf4578eb7dc229d1cdab3cf3ec5d"
++      "sha256": "6c38ed2632f9347a6fb68d8771f5a7393e7665784574d42422f4241dc00a016c"
+     },
+     {
+       "file": "programme/verify-programme.py",
+-      "bytes": 3830,
+-      "sha256": "7fc8efc2ef9139aef93c8e3136bebc8ca4d4ff6127b0cc651432ee4da2179026"
++      "bytes": 3846,
++      "sha256": "92341cba002052f2f0b7d4bfc960c32df9d8b198fb8dc7debc4a71287b3251d2"
+     },
+     {
+       "file": "PROGRAMME_SOURCE_TRANSFER.json",
+@@ -65,5 +65,6 @@
+       "bytes": 3514,
+       "sha256": "1ec1bf64e57ec38856a509be1df433a3318a439271eb53cfed2008d8b151d69d"
+     }
+-  ]
++  ],
++  "originalMilestoneCommit": "fb235cfae7a6d3f5eb3ef581bebebf7daa68315e"
+ }
+--- 5931/PROGRESS.md
++++ d56d/PROGRESS.md
+@@ -1 +1 @@
+-17 October 2026 — Source status-child pure source adapter frozen for root and Money independent review. Root accepted the immutable programme milestone `fb235cfae7a6d3f5eb3ef581bebebf7daa68315e`. The final adapter retains nine complete reviewed Daily parents, two byte-unchanged controls and the original canonical/WeakMap/shared-turn closure. One closed fresh-verification name-wide absence frame is added. Offline: programme 41 checks, catalogue-predicate AST 56 vectors, adapter 20 Node cases and 177 source/grammar checks PASS. The next step is independent peer and root's exact committed setup, followed only by a root-owned bounded native trial. Native, restoration, public financial result, API, business currentness and release remain NOT_RUN/NOT_PROVIDED.
++17 October2026 — R1 actual42702 HOLD retained at root767030f0; CREATE not reached/no full restoration. Separate R2 corrects only three namespace aliases with complete5931/fb inverses, original46/fb13 preserved, same42root inputs/canonical controls/budgets. Actual scope regression reproduces original3 and corrected0. Root review/Money peer/exact setup precede native R2. Auth unfinished checkpoint7a00c5f5 remains preserved. R2 native/restoration/API/public-finance NOT_RUN/NOT_PROVIDED.
+--- 5931/README.md
++++ d56d/README.md
+@@ -1,13 +1,13 @@
+-This is the Source-only forward of the reviewed Daily finite rollback adapter. Native execution and restoration are NOT_RUN. The immutable programme milestone is `fb235cfae7a6d3f5eb3ef581bebebf7daa68315e`; all thirteen milestone files remain byte-identical. The programme SHA is `ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8` (20,303 bytes, six statements, one new definition, four positive and twelve negative synthetic JSON boundaries).
++Finite Source R2 proposal; native and restoration NOT_RUN. Actual R1 failed SQLSTATE42702 at statement10: declared PL/pgSQL record p conflicted with SQL pg_proc range alias p in p.pronamespace. Statements1–9 passed including real marker8; CREATE11 was not reached. Root proved rollback/fresh absence/own A closure, but C-after/full restoration did not run. R1_ROOT_EVIDENCE.json pins genuine root767030f0 unchanged result/HOLD. No R1 success verdict is copied.
+ 
+-`SOURCE_PINS.json` binds 42 actual saved, index and Git inputs at root `bb6252f46597cf15a6450adfb2af27c1e615fb3d`. Later root commits are admitted only as descendants with every bound saved/HEAD/index byte unchanged. `SOURCE_TRANSFERS.json` reverses all nine complete current Daily source parents; control and timing are byte-identical. The fixed metadata reader changes only its application name. `PROGRAMME_SOURCE_TRANSFER.json` separately reverses the complete genuine Daily source constructor.
++The only programme correction renames SQL range alias p to catalogue_routine in two preflight and one postflight namespace counts. The PL record p, every other field binding, raw/body/header/ACL/effective-role/schema-usage/absence check and sixteen boundary vectors are unchanged. No variable_conflict directive, GUC, use_column or use_variable is added. NAMESPACE_ALIAS_ONLY_EDITS.json reverses precisely these three queries; reversing the entire combined programme reproduces original20303 bytes. R2 is20447 bytes SHA ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64, still six statements/four PL programmes/one new declaration.
+ 
+-The Source changes are the distinct case/task/output/application labels; exact local programme binding; CREATE FUNCTION response classification; the single exact REVOKE response shape; and one additional SELECT-only MCP verification statement. That fourth frame is a closed six-key object proving name-wide new-child count zero on the same actual read-only physical verification PID. The original three verification statements remain unchanged. REVOKE remains a source expectation pending actual native observation; the local pg Result parser establishes only parser behavior.
++This is a separate immutable holder folder. R2_FULL_PARENT_TRANSFERS.json reverses every changed existing file to complete5931 parents, including necessary programme pins/lengths and this folder's location binding. SOURCE_TRANSFERS.json retains whole genuine Daily inverses too. verify-r2.py proves original46 saved/Git5931 equality; verify-adapter.py verifies originalfb23513 through the original packet. Nothing overwrites the original packet.
+ 
+-The untouched original root modules own the shared advisory turn, protected-release exclusion, actual transaction identity, empty observations, complete canonical snapshots and private WeakMap restoration qualification. C-before closes before B. C-after is a separately closed, independent physical read-only repeatable-read child; only its third frame is the unchanged original fresh-fixture proof built from actual B and the complete before snapshot. A/B/C-before identities are distinct; C-after also differs from the MCP verification peer. Full background maps stay in process memory. Both complete background relations and all four original writer records remain mandatory. Changed business rows must satisfy the original source/kind/timing attribution rules; no jobs are paused.
++The static regression derives actual PL/pgSQL scope names and SQL range aliases from PG17 parse trees: original three collisions versus R2 zero across all four programme scopes. Grammar alone did not prove native binding in R1; this conservative audit also cannot replace actual native R2.
+ 
+-Bounds remain 64 MiB stdout, 16 KiB stderr, 70-second child, 120-second work plus 60-second cleanup reserve and 180-second whole sequence. Every failure uses the original confirmed child/turn cleanup; no copied verdict, synthetic close proof or PID waiver qualifies. The real empty temporary marker and actual B transaction are mandatory. The existing key helper is never replaced. `SETUP_INTENT.json` lists zero business fixtures, the temporary function and actual marker; root must append and commit its exact setup entry before its call.
++All42 root pins at bb6252 remain exact. Control/timing/fixed reader, complete key/child declarations, boundaries and source constructor are byte-identical to R1. Original canonical/WeakMap/shared-turn/fixture-zero/marker/PID and64MiB/70s/120+60/180 bounds remain. All four fresh verification statements remain mandatory.
+ 
+-Offline checks: `python programme/verify-programme.py`, `python catalogue-vectors.py`, `node --test test.mjs`, `node prepare-offline.mjs`, then `python verify-adapter.py`. The prepare step writes clearly synthetic SQL examples only. None opens a database connection. Admission AST vectors use opaque synthetic catalogue/hash/privilege tokens and do not claim a native observation. The programme contains no successful Banking financial or public B051 result example.
++Offline: python programme/verify-programme.py; python catalogue-vectors.py; node --test test.mjs; node prepare-offline.mjs; python verify-adapter.py; python verify-r2.py; python verify-freeze.py --committed. No native dispatch. Root entry is this folder's hold-pure.mjs, fixed I2 root, fresh .codex-tmp/source-status-child-pure-native-20261017-r2-<unique> and --authorised-root-holder. Root review, immutable Money peer and exact committed R2 setup precede the root-owned trial. Existing key helper is never replaced. Banking producer/public financial success remain NOT_PROVIDED.
+ 
+-After root review and independent Money peer, the root-owned entry point is `hold-pure.mjs`. Supply the fixed I2 root, a fresh direct child `.codex-tmp/source-status-child-pure-native-20261017-<unique>` and `--authorised-root-holder`. No native operator was invoked here. Root alone handles READY, dispatch of the exact INPUT through the specified direct Kier rollback tool, genuine NATIVE_RESULT and observed NATIVE_CALL_TIMING files, PREPARE, then explicit RELEASE. PASS can be emitted only after the original coordinator confirms its own unlock and connection closure. A HOLD after dispatch requires reconciliation before another trial. This package changes no root runtime source and mounts no application owner.
++GENUINE_R2_COMMAND_EVIDENCE.json remains the original Daily command-ABI record, not a Source R2 native receipt.
+--- 5931/result-validator.mjs
++++ d56d/result-validator.mjs
+@@ -117,7 +117,7 @@
+  const safe=s=>({ledgerFingerprint:s.ledgerFingerprint,catalogueFingerprint:s.catalogueFingerprint,relationCensus:s.relationCensus,
+   businessCountsFingerprint:s.businessCountsFingerprint,businessRowsFingerprint:s.businessRowsFingerprint,businessRelations:s.businessRelations,otherActivityCount:s.otherActivityCount});
+  return {status:'PURE_PROGRAMME_AND_ORIGINAL_RESTORATION_QUALIFIED_PENDING_SHARED_TURN_CLOSE',scope:SCOPE,route:receipt.route,
+-  programmeSha256:receipt.programmeSha256,programmeBytes:20303,definitions:1,positiveBoundaryVectors:4,negativeBoundaryRefusals:12,existingDependencyReplaced:false,
++  programmeSha256:receipt.programmeSha256,programmeBytes:20447,definitions:1,positiveBoundaryVectors:4,negativeBoundaryRefusals:12,existingDependencyReplaced:false,
+   sqlSha256:receipt.sqlSha256,rolledBack:true,connectedFresh:true,markerAbsent:true,realMarkerCreatedInB:true,businessFixtureRows:0,statusChildAbsentOnFreshVerification:true,
+   readerPids:{holder:receipt.holderIdentity.backendPid,before:beforePacket.peer.readerPid,nativeB:stage.transaction.backendPid,mcpVerification:stage.freshPeerPid,after:afterPacket.peer.readerPid},
+   localTransport:{before:beforePacket.transport,after:afterPacket.transport},before:safe(local.before),after:safe(local.after),restoration,
+--- 5931/source.mjs
++++ d56d/source.mjs
+@@ -8,7 +8,7 @@
+ export const ROOT='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026';
+ export const ROUTE='mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback';
+ export const SCOPE='SOURCE_STATUS_CHILD_PURE_NO_BUSINESS_DML_BOTH_COMPLETE_BACKGROUND_RELATIONS_V1';
+-export const PROGRAMME_SHA='ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8';
++export const PROGRAMME_SHA='ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64';
+ export const requireThat=(ok,code)=>{if(!ok)throw Error(code);};
+ export const sha=value=>crypto.createHash('sha256').update(value).digest('hex');
+ export const literal=value=>`'${String(value).replaceAll("'","''")}'`;
+@@ -29,7 +29,7 @@
+  const top=git(here,['rev-parse','--show-toplevel']).toString('utf8').trim();
+  requireThat(/^D:\/Development\/GitHub(?:\/|$)/.test(physical(top)),'PURE_ADAPTER_PHYSICAL_SOURCE_REQUIRED');
+  const relative=path.relative(top,here).replaceAll('\\','/');
+- requireThat(relative==='docs/healthroster-build/proposals/source-status-child-pure-rollback-adapter-20261017','PURE_ADAPTER_REPOSITORY_LOCATION_REQUIRED');
++ requireThat(relative==='docs/healthroster-build/proposals/source-status-child-pure-r2-alias-forward-20261017','PURE_ADAPTER_REPOSITORY_LOCATION_REQUIRED');
+  const common=git(here,['rev-parse','--git-common-dir']).toString('utf8').trim();
+  requireThat(physical(path.resolve(here,common))==='D:/Development/GitHub/cloudtms-backend/.git','PURE_ADAPTER_SHARED_REPOSITORY_REQUIRED');
+  const manifest=JSON.parse(fs.readFileSync(path.join(here,'SOURCE_MANIFEST.json'),'utf8'));
+@@ -62,7 +62,7 @@
+  const load=file=>import(pathToFileURL(path.join(root,file)).href);
+  const builder=await import('./programme/build-program.mjs');
+  const programme=builder.buildPureProgram({root});
+- requireThat(programme.sqlBytes===20303&&programme.sqlSha256===PROGRAMME_SHA&&programme.definitionCount===1
++ requireThat(programme.sqlBytes===20447&&programme.sqlSha256===PROGRAMME_SHA&&programme.definitionCount===1
+   &&programme.positiveBoundaryVectors===4&&programme.negativeBoundaryRefusals===12&&programme.existingDependencyReplaced===false&&programme.businessFixtureRows===0,'PURE_EXACT_ORIGINAL_PROGRAMME_REQUIRED');
+  const rehearsal=await load('scripts/healthroster-install1-full-rehearsal.mjs'),live=await load('scripts/healthroster-live-test-restoration.mjs'),
+   sql=await load('scripts/cloudtms-managed-release-sql.mjs'),control=await load('scripts/healthroster-turn-control.mjs');
+--- 5931/SOURCE_MANIFEST.json
++++ d56d/SOURCE_MANIFEST.json
+@@ -12,23 +12,23 @@
+     },
+     {
+       "file": "hold-pure.mjs",
+-      "sha256": "f2ffb92e7187ed7224e6e01880c28ddcf7f3d75122bd25a179ba6bf75d72385c"
++      "sha256": "e1b78512203ce2e0bd0c823fa1c0735c2d93c591a7b73d1709a1a6386c89c62c"
+     },
+     {
+       "file": "input-builder.mjs",
+-      "sha256": "f2d82970749a9a523d2f375f31d4011e8e33dbc01a06002234e120c45f8e7edc"
++      "sha256": "ffcabaa02f33d0eed925686077e0971279ba094e4a3be08ec7f719f3e8df3d54"
+     },
+     {
+       "file": "programme/PROGRAMME.sql",
+-      "sha256": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8"
++      "sha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64"
+     },
+     {
+       "file": "programme/README.md",
+-      "sha256": "a39f96c40a800c4e53b7a42848bece52b04d75c7be1783103964fd8fa45d2aac"
++      "sha256": "9e8b8745fbc8ea7abb4c80a5ef652918716ed6b39121e8d28e7f384f3f96b451"
+     },
+     {
+       "file": "programme/SOURCE_MANIFEST.json",
+-      "sha256": "d0c166a356a96d1950233b9b274e84851a1dcf4578eb7dc229d1cdab3cf3ec5d"
++      "sha256": "6c38ed2632f9347a6fb68d8771f5a7393e7665784574d42422f4241dc00a016c"
+     },
+     {
+       "file": "programme/assertions.sql",
+@@ -44,11 +44,11 @@
+     },
+     {
+       "file": "programme/postflight.sql",
+-      "sha256": "baac80aa7dfbe3cdfef1e23d352750c0737076ec733ff4b9150aea1db6b56606"
++      "sha256": "db6cb28b9300bdfe3cdef668e53c9e5225607acf1dfc3b7b76f335c54868305b"
+     },
+     {
+       "file": "programme/preflight.sql",
+-      "sha256": "9fe0984139bd6888ac694555ffc3e632038e64c06d5fdc375f775d04dbf779da"
++      "sha256": "67fb77f99d7ac2fa86600ecae56a46c985dbf3ae194c4e20591fb9beb67fc409"
+     },
+     {
+       "file": "programme/source-child.sqlinc",
+@@ -56,15 +56,15 @@
+     },
+     {
+       "file": "programme/verify-programme.py",
+-      "sha256": "7fc8efc2ef9139aef93c8e3136bebc8ca4d4ff6127b0cc651432ee4da2179026"
++      "sha256": "92341cba002052f2f0b7d4bfc960c32df9d8b198fb8dc7debc4a71287b3251d2"
+     },
+     {
+       "file": "result-validator.mjs",
+-      "sha256": "ddf58caf3300c203c9190bbf27ce98aee152dc68e801c7969514957be5271fc5"
++      "sha256": "7934c9bc36a05de74db8522c1bc5232ba6e0153a8fba7e912503b47b561c6091"
+     },
+     {
+       "file": "source.mjs",
+-      "sha256": "743ef3a0eadb7d7eb7c5e4a52b70bb5eb07393b88b269ddc290d9b16abfb8b15"
++      "sha256": "8474970cf2d0392c0a01182c53e9b3f620cf865ec0932d2a11b8f753a4f6b531"
+     },
+     {
+       "file": "timing.mjs",
+--- 5931/test.mjs
++++ d56d/test.mjs
+@@ -52,7 +52,7 @@
+  return {beforePacket,afterPacket};
+ }
+ test('committed root source and exact original programme, no business relation closure',()=>{
+- assert.equal(src.programme.sqlBytes,20303);assert.equal(src.programme.sqlSha256,PROGRAMME_SHA);assert.equal(src.programme.definitionCount,1);
++ assert.equal(src.programme.sqlBytes,20447);assert.equal(src.programme.sqlSha256,PROGRAMME_SHA);assert.equal(src.programme.definitionCount,1);
+  assert.equal(src.programme.positiveBoundaryVectors,4);assert.equal(src.programme.negativeBoundaryRefusals,12);
+  const declarations=fs.readFileSync(path.join(here,'programme/source-child.sqlinc'),'utf8');
+  assert.doesNotMatch(declarations,/\b(?:from|join)\s+(?:private|public)\.|\b(?:insert|update|delete|merge|execute|nextval|setval)\b/i);
+@@ -66,7 +66,7 @@
+  }
+ });
+ test('input is exact programme plus finite marker/control envelope, genuine original observation',()=>{
+- assert.equal(built.receipt.route,ROUTE);assert.equal(built.receipt.programmeBytes,20303);assert.equal(built.input.sql.split(src.programme.sql).length,2);
++ assert.equal(built.receipt.route,ROUTE);assert.equal(built.receipt.programmeBytes,20447);assert.equal(built.input.sql.split(src.programme.sql).length,2);
+  assert.equal(built.receipt.programmeStatements,6);assert.match(built.input.sql,/create table private\.hr_install2_a{32}\(proof boolean not null\);/);
+  assert.ok(built.input.sql.includes(src.live.fixtureObservationSql(0)));
+  assert.ok(built.input.sql.indexOf(src.live.fixtureObservationSql(0))>built.input.sql.indexOf(src.programme.sql));
+--- 5931/verify-adapter.py
++++ d56d/verify-adapter.py
+@@ -34,13 +34,14 @@
+ for f in ['control.mjs','timing.mjs']:check('byte-unchanged:'+f,(HERE/f).read_bytes()==(HERE/'reference/daily'/f).read_bytes())
+ check('fixed-reader-only-application-name-forward',
+  (HERE/'fixed-metadata-reader.mjs').read_bytes().replace(b'healthroster_source_status_pure_fixed_metadata',b'healthroster_daily_pure_fixed_metadata')==(HERE/'reference/daily/fixed-metadata-reader.mjs').read_bytes())
+-milestone=json.loads((HERE/'PROGRAMME_MILESTONE_MANIFEST.json').read_bytes())
++ORIGINAL=HERE.parent/'source-status-child-pure-rollback-adapter-20261017'
++milestone=json.loads((ORIGINAL/'PROGRAMME_MILESTONE_MANIFEST.json').read_bytes())
+ milestone_prefix='docs/healthroster-build/proposals/source-status-child-pure-rollback-adapter-20261017/'
+ milestone_commit='fb235cfae7a6d3f5eb3ef581bebebf7daa68315e'
+ check('immutable-programme-milestone-manifest',
+- (HERE/'PROGRAMME_MILESTONE_MANIFEST.json').read_bytes()==git('show',milestone_commit+':'+milestone_prefix+'PROGRAMME_MILESTONE_MANIFEST.json'))
++ (ORIGINAL/'PROGRAMME_MILESTONE_MANIFEST.json').read_bytes()==git('show',milestone_commit+':'+milestone_prefix+'PROGRAMME_MILESTONE_MANIFEST.json'))
+ for r in milestone['files']:
+- b=(HERE/r['file']).read_bytes()
++ b=(ORIGINAL/r['file']).read_bytes()
+  check('immutable-programme-milestone:'+r['file'],len(b)==r['bytes'] and sha(b)==r['sha256'] and b==git('show',milestone_commit+':'+milestone_prefix+r['file']))
+ for f in [*HERE.glob('*.mjs'),HERE/'programme/build-program.mjs']:
+  subprocess.run(['node','--check',str(f)],check=True,capture_output=True)
+--- 5931/verify-freeze.py
++++ d56d/verify-freeze.py
+@@ -6,7 +6,7 @@
+ committed=sys.argv[1:]==['--committed']
+ assert not sys.argv[1:] or committed
+ git=lambda *a:subprocess.check_output(['git','-c','gc.auto=0','-c','maintenance.auto=false','-C',str(HERE),*a])
+-prefix='docs/healthroster-build/proposals/source-status-child-pure-rollback-adapter-20261017/'
++prefix='docs/healthroster-build/proposals/source-status-child-pure-r2-alias-forward-20261017/'
+ for r in manifest['files']:
+  b=(HERE/r['file']).read_bytes()
+  assert len(b)==r['bytes'] and sha(b)==r['sha256'],r['file']

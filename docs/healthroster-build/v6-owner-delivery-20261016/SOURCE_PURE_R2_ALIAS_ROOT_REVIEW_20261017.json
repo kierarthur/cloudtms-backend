@@ -1,0 +1,41 @@
+{
+  "version": "ROOT_SOURCE_PURE_R2_ALIAS_FORWARD_REVIEW_V1",
+  "authorCommit": "d56db402e8b415a1303b0ae5956ceab2ec6822ca",
+  "authorFilesRawGitExact": 51,
+  "freezeManifestSha256": "3807087a10214f5734e76b149c1ff954521eb37b53ad919526c84165b18d8275",
+  "programmeBytes": 20447,
+  "programmeSha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64",
+  "rootChecks": {
+    "programme": 41,
+    "cataloguePredicateAST": 56,
+    "adapter": 20,
+    "sourceGrammar": 177,
+    "scopeAndFullParent": 134,
+    "dbSourceIntegrity": "426 migrations / 1096 repeatables PASS"
+  },
+  "sourceFixesApplied": 1,
+  "sourceFixesRejected": 0,
+  "SQLRangeAliasQueriesChanged": 3,
+  "completeExistingParentInverses": 21,
+  "original46AndProgramme13Preserved": true,
+  "PLRecordChanged": false,
+  "variableConflictPolicyChanged": false,
+  "childOrExistingKeyBodyChanged": false,
+  "coreCanonicalWeakMapBudgetsControlTimingFixedReaderChanged": false,
+  "rootFindings": 0,
+  "verdict": "ACCEPT_ALIAS_ONLY_BOUNDED_SOURCE_CORRECTION",
+  "independentPeer": {
+    "commit": "b8293a0d306e9a94b32455a24ab32238e23f9026",
+    "manifestSha256": "d6ee20d959567566eb1d1d497111a542b9b3650a0fbe640ced7a827e081fc0a9",
+    "filesRawGitExact": 119,
+    "verdict": "ACCEPT_BOUNDED_SOURCE_CORRECTION",
+    "findings": 0,
+    "rootReplayedIndependentChecks": 93,
+    "negativeAliasMutations": 3
+  },
+  "native": "NOT_RUN",
+  "fullRestoration": "NOT_RUN",
+  "realPublicFinancialSuccess": "NOT_PROVIDED",
+  "install2": "NOT_INSTALLED",
+  "finalCriticSignoff": false
+}

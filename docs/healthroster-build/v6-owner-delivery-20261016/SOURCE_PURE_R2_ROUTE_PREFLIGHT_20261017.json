@@ -1,0 +1,99 @@
+{
+  "version": "ROOT_SOURCE_PURE_R2_ROUTE_PREFLIGHT_V1",
+  "rootRecordedAt": "2026-10-17T08:13:38.283Z",
+  "account": "kier@arthur-rai.co.uk",
+  "parity": {
+    "accepted": true,
+    "authenticated": true,
+    "read_only": false,
+    "rollback_only_transaction_tool": true,
+    "durable_database_writes_allowed": false,
+    "route": "Codex -> authenticated MCP -> Miget TEST read tools plus rollback-only transaction rehearsal",
+    "resource_count": 1,
+    "secrets_returned": false
+  },
+  "services": [
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "agency_test",
+      "service": {
+        "uuid": "01a02f5a-2bee-7db2-910d-a7e71f11ba0a",
+        "name": "postgres-service-p0qoe",
+        "label": "cloudtms-codex-poc-pg17",
+        "service_type": "postgres",
+        "state": "healthy",
+        "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+        "created_at": "2026-08-23T16:00:33.774Z",
+        "updated_at": "2026-09-30T19:16:42.824Z"
+      }
+    },
+    {
+      "authenticated": true,
+      "read_only": true,
+      "database": "mytms_test",
+      "service": {
+        "uuid": "01a03045-5d5a-7892-b555-704ba6edc733",
+        "name": "postgres-service-kpqwi",
+        "label": "mytms-control-plane-pg17",
+        "service_type": "postgres",
+        "state": "healthy",
+        "project_id": "01a02ef7-18d1-7a96-9ea2-63df1bf06adc",
+        "created_at": "2026-08-23T20:17:27.386Z",
+        "updated_at": "2026-08-24T20:44:30.793Z"
+      }
+    }
+  ],
+  "physical": [
+    {
+      "observedAt": "2026-10-17T08:13:27.390Z",
+      "database": "agency_test",
+      "serviceHealthy": true,
+      "database_name": "cloudtms_test_clone",
+      "connection_role": "dee50tht",
+      "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+      "server_version_num": 170011,
+      "in_recovery": false,
+      "postmaster_started_at": "2026-10-14T09:07:33.240Z",
+      "database_bytes": "4203427507",
+      "connected_replica_count": 0,
+      "active_replication_slot_count": 0,
+      "prepared_transaction_count": 0
+    },
+    {
+      "observedAt": "2026-10-17T08:13:23.501Z",
+      "database": "mytms_test",
+      "serviceHealthy": true,
+      "database_name": "uofvkfi5",
+      "connection_role": "3eoatknm",
+      "server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+      "server_version_num": 170011,
+      "in_recovery": false,
+      "postmaster_started_at": "2026-09-17T23:40:44.934Z",
+      "database_bytes": "34830003",
+      "connected_replica_count": 0,
+      "active_replication_slot_count": 0,
+      "prepared_transaction_count": 0
+    }
+  ],
+  "anonymousMcpStatus": 401,
+  "normalTestReadinessObservations": [
+    {
+      "status": 503,
+      "source": "actual initial fetch; body not captured; cause not inferred"
+    },
+    {
+      "status": 200,
+      "ready": true,
+      "backend_ready": true,
+      "processor_ready": true,
+      "dispatcher_ready": true,
+      "source": "single bounded follow-up actual readyz"
+    }
+  ],
+  "postmasterUnchangedFromEarlierPreflight": true,
+  "poolRefreshes": 0,
+  "serviceChanges": 0,
+  "backgroundJobChanges": 0,
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,97 @@
+{
+  "version": "DAILY_PURE_GENUINE_R2_COMMAND_EVIDENCE_V1",
+  "status": "GUARD_FAILURE_NOT_NATIVE_SUCCESS",
+  "sourceResultPath": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-health-pure-native-20261017-r2/NATIVE_RESULT.json",
+  "sourceResultSha256": "f7280e7b2d7c48dff51ded1c8bc2a5a4927b32042927faffa865f86941e5cbc1",
+  "sourceInputSha256": "fb7efea983175b45ff22247783df1a67a0aee91736bbdf58f2a614188ae7c960",
+  "sourceReceiptSha256": "42cb6fbf318e178f6c80a7f69d30886757f4e6ae8bf61b9d3c1c59adad0ec4ce",
+  "sqlSha256": "8a306d4c84dea7086f83dea9dc47734fe8217339844c23d1ca51bd7ec9480782",
+  "observedCommandRows": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    }
+  ],
+  "failure": {
+    "statement": 5,
+    "code": "55000"
+  },
+  "accepted": false,
+  "rolledBack": true,
+  "connectedFresh": true,
+  "observedSelectShapes": [
+    {
+      "statement": 1,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "set_config"
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "jsonb_build_object"
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "jsonb_build_object"
+      ],
+      "rowsTruncated": false
+    }
+  ],
+  "nativeDefinitionsReached": false,
+  "nativeProgrammeRan": false,
+  "cAfterRan": false,
+  "supplementalProviderSource": {
+    "path": "D:/Development/GitHub/cloudtms-backend/infra/miget/cloudtms-miget-operations/src/rollback-transaction.ts",
+    "sha256": "27f7331b43623717db3a139ca269a644f1c06ef163f476f82919294ccc4c86eb",
+    "provenance": "SAVED_ONLY_NOT_PRESENT_IN_MAIN_HEAD_3ae9c929f1b9e94f406958bf75da10daa84bc275",
+    "evidence": "outcome forwards pg QueryResult command/nullable rowCount/field names/rows without coercion; verifier begins READ ONLY",
+    "deploymentIdentity": "NOT_PROVED"
+  },
+  "unobservedCommandABI": [
+    "DO",
+    "CREATE",
+    "RESET"
+  ],
+  "unobservedABIQualification": "SOURCE_EXPECTATION_ONLY_NATIVE_NOT_PROVED",
+  "noDispatchTimingCaptured": true,
+  "native": "HOLD_NOT_QUALIFIED"
+}

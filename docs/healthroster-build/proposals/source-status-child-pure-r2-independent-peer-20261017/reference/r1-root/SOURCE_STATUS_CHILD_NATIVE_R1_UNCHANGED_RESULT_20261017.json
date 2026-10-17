@@ -1,0 +1,225 @@
+{
+  "accepted": false,
+  "databaseTarget": "agency_test",
+  "database": "cloudtms_test_clone",
+  "label": "HR_SOURCE_STATUS_CHILD_PURE_24CEA5054E3E7E0D4ADB705E06FE932A",
+  "sqlSha256": "d3a381aba00d3bbe38ea671c75e5f5b7a7eda57d050549175ae8fd1c56a1a301",
+  "statementCount": 19,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_guard_clock"
+      ],
+      "rows": [
+        {
+          "hr_guard_clock": {
+            "phase": "B_GUARD_BEFORE",
+            "readOnly": false,
+            "holderPid": 266423,
+            "backendPid": 266453,
+            "observedAt": "2026-10-17T08:00:46.995015+00:00",
+            "databaseOid": 324139,
+            "holderGranted": true,
+            "physicalDatabase": "cloudtms_test_clone",
+            "statementStartedAt": "2026-10-17T08:00:46.985121+00:00",
+            "transactionStartedAt": "2026-10-17T08:00:46.781297+00:00"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 7,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_guard_clock"
+      ],
+      "rows": [
+        {
+          "hr_guard_clock": {
+            "phase": "B_GUARD_AFTER",
+            "readOnly": false,
+            "holderPid": 266423,
+            "backendPid": 266453,
+            "observedAt": "2026-10-17T08:00:47.047118+00:00",
+            "databaseOid": 324139,
+            "holderGranted": true,
+            "physicalDatabase": "cloudtms_test_clone",
+            "statementStartedAt": "2026-10-17T08:00:47.046046+00:00",
+            "transactionStartedAt": "2026-10-17T08:00:46.781297+00:00"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 8,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 9,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "?column?"
+      ],
+      "rows": [
+        {
+          "?column?": "HR_REHEARSAL_TRANSACTION_JSON {\"xid\": \"414570536\", \"database\": \"cloudtms_test_clone\", \"epochZero\": true, \"backendPid\": 266453}"
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 10,
+      "error": {
+        "message": "column reference \"p.pronamespace\" is ambiguous",
+        "code": "42702",
+        "detail": "It could refer to either a PL/pgSQL variable or a table column.",
+        "where": "PL/pgSQL function inline_code_block line 8 at SQL statement",
+        "routine": "plpgsql_post_column_ref"
+      }
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "set_config"
+        ],
+        "rows": [
+          {
+            "set_config": "pg_catalog, public"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": "{\"module\": \"LEGACY:1\", \"identityTest\": true, \"markerAbsent\": true, \"applyingCount\": 0, \"latestRelease\": {\"commit\": \"f743b81fe537830d81b1de93ec4f9cb0331532a7\", \"status\": \"VERIFIED\", \"releaseId\": \"20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537\", \"completedAt\": \"2026-10-14T15:47:03.075975+00:00\", \"installedContract\": \"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\", \"repositoryContract\": \"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\"}, \"customerKeyNull\": true, \"physicalDatabase\": \"cloudtms_test_clone\"}"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "readOnly": true,
+              "holderPid": 266423,
+              "backendPid": 266453,
+              "observedAt": "2026-10-17T08:00:47.312226+00:00",
+              "databaseOid": 324139,
+              "noRoleSwitch": true,
+              "holderGranted": true,
+              "physicalDatabase": "cloudtms_test_clone",
+              "statementStartedAt": "2026-10-17T08:00:47.310746+00:00",
+              "transactionStartedAt": "2026-10-17T08:00:47.171331+00:00"
+            }
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "readOnly": true,
+              "backendPid": 266453,
+              "databaseOid": 324139,
+              "noRoleSwitch": true,
+              "physicalDatabase": "cloudtms_test_clone",
+              "statusChildNameCount": 0
+            }
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+  ],
+  "fatalError": {
+    "message": "column reference \"p.pronamespace\" is ambiguous",
+    "code": "42702",
+    "detail": "It could refer to either a PL/pgSQL variable or a table column.",
+    "where": "PL/pgSQL function inline_code_block line 8 at SQL statement",
+    "routine": "plpgsql_post_column_ref"
+  }
+}

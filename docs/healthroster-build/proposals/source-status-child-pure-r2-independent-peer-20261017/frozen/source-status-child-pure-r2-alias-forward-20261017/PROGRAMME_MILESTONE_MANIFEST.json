@@ -1,0 +1,70 @@
+{
+  "version": "SOURCE_STATUS_CHILD_PROGRAMME_R2_ALIAS_MILESTONE_V1",
+  "sourceRootCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "adapter": "SOURCE_ONLY_REQUIRES_ROOT_AND_MONEY_REVIEW",
+  "files": [
+    {
+      "file": "programme/assertions.sql",
+      "bytes": 2902,
+      "sha256": "c8785a0cfc06b44849244e32ab68d2b412254614a9b89fc321fa88780227cb5f"
+    },
+    {
+      "file": "programme/build-program.mjs",
+      "bytes": 4453,
+      "sha256": "8a01debc06d70a190d2002f3c77b666a101373f14711c0b56613acc6bdeba543"
+    },
+    {
+      "file": "programme/key-source.sqlinc",
+      "bytes": 430,
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "file": "programme/postflight.sql",
+      "bytes": 2013,
+      "sha256": "db6cb28b9300bdfe3cdef668e53c9e5225607acf1dfc3b7b76f335c54868305b"
+    },
+    {
+      "file": "programme/preflight.sql",
+      "bytes": 3069,
+      "sha256": "67fb77f99d7ac2fa86600ecae56a46c985dbf3ae194c4e20591fb9beb67fc409"
+    },
+    {
+      "file": "programme/PROGRAMME.sql",
+      "bytes": 20447,
+      "sha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64"
+    },
+    {
+      "file": "programme/README.md",
+      "bytes": 867,
+      "sha256": "9e8b8745fbc8ea7abb4c80a5ef652918716ed6b39121e8d28e7f384f3f96b451"
+    },
+    {
+      "file": "programme/source-child.sqlinc",
+      "bytes": 12317,
+      "sha256": "ffae1fc04874e0b3590c89609f592b4ca33c6b95654a4272e0dd1cc8b6ffb30b"
+    },
+    {
+      "file": "programme/SOURCE_MANIFEST.json",
+      "bytes": 2800,
+      "sha256": "6c38ed2632f9347a6fb68d8771f5a7393e7665784574d42422f4241dc00a016c"
+    },
+    {
+      "file": "programme/verify-programme.py",
+      "bytes": 3846,
+      "sha256": "92341cba002052f2f0b7d4bfc960c32df9d8b198fb8dc7debc4a71287b3251d2"
+    },
+    {
+      "file": "PROGRAMME_SOURCE_TRANSFER.json",
+      "bytes": 8584,
+      "sha256": "609d8852eaab05f46b86c64fb1587e10239730dd3f7a328380fe951824ca15a1"
+    },
+    {
+      "file": "reference/daily-build-program.mjs",
+      "bytes": 3514,
+      "sha256": "1ec1bf64e57ec38856a509be1df433a3318a439271eb53cfed2008d8b151d69d"
+    }
+  ],
+  "originalMilestoneCommit": "fb235cfae7a6d3f5eb3ef581bebebf7daa68315e"
+}

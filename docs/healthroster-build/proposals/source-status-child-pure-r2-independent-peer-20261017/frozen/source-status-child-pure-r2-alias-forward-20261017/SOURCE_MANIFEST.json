@@ -1,0 +1,75 @@
+{
+  "version": "SOURCE_STATUS_CHILD_PURE_ADAPTER_EXECUTABLE_V1",
+  "sourcePinsSha256": "d39584d9e176d31ed4295db6b7bb27300212ffc40b3c9ad2e96a6ecd04c16912",
+  "files": [
+    {
+      "file": "control.mjs",
+      "sha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9"
+    },
+    {
+      "file": "fixed-metadata-reader.mjs",
+      "sha256": "9f53ec75880ef8371ca37aae7163dcb275c582492a2912fa42ca2c57e2d0b2cf"
+    },
+    {
+      "file": "hold-pure.mjs",
+      "sha256": "e1b78512203ce2e0bd0c823fa1c0735c2d93c591a7b73d1709a1a6386c89c62c"
+    },
+    {
+      "file": "input-builder.mjs",
+      "sha256": "ffcabaa02f33d0eed925686077e0971279ba094e4a3be08ec7f719f3e8df3d54"
+    },
+    {
+      "file": "programme/PROGRAMME.sql",
+      "sha256": "ec52dff75ea03a6886691cab3b426186d07b6636a97e6a94f2ff3b2ef5fe6f64"
+    },
+    {
+      "file": "programme/README.md",
+      "sha256": "9e8b8745fbc8ea7abb4c80a5ef652918716ed6b39121e8d28e7f384f3f96b451"
+    },
+    {
+      "file": "programme/SOURCE_MANIFEST.json",
+      "sha256": "6c38ed2632f9347a6fb68d8771f5a7393e7665784574d42422f4241dc00a016c"
+    },
+    {
+      "file": "programme/assertions.sql",
+      "sha256": "c8785a0cfc06b44849244e32ab68d2b412254614a9b89fc321fa88780227cb5f"
+    },
+    {
+      "file": "programme/build-program.mjs",
+      "sha256": "8a01debc06d70a190d2002f3c77b666a101373f14711c0b56613acc6bdeba543"
+    },
+    {
+      "file": "programme/key-source.sqlinc",
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "file": "programme/postflight.sql",
+      "sha256": "db6cb28b9300bdfe3cdef668e53c9e5225607acf1dfc3b7b76f335c54868305b"
+    },
+    {
+      "file": "programme/preflight.sql",
+      "sha256": "67fb77f99d7ac2fa86600ecae56a46c985dbf3ae194c4e20591fb9beb67fc409"
+    },
+    {
+      "file": "programme/source-child.sqlinc",
+      "sha256": "ffae1fc04874e0b3590c89609f592b4ca33c6b95654a4272e0dd1cc8b6ffb30b"
+    },
+    {
+      "file": "programme/verify-programme.py",
+      "sha256": "92341cba002052f2f0b7d4bfc960c32df9d8b198fb8dc7debc4a71287b3251d2"
+    },
+    {
+      "file": "result-validator.mjs",
+      "sha256": "7934c9bc36a05de74db8522c1bc5232ba6e0153a8fba7e912503b47b561c6091"
+    },
+    {
+      "file": "source.mjs",
+      "sha256": "8474970cf2d0392c0a01182c53e9b3f620cf865ec0932d2a11b8f753a4f6b531"
+    },
+    {
+      "file": "timing.mjs",
+      "sha256": "db5a330bd11c4f1d1c5c23d68b1ec297f5503d21a86be0863f633f997f51531c"
+    }
+  ],
+  "native": "NOT_RUN"
+}
