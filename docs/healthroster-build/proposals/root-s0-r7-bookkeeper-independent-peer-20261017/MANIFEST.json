@@ -1,0 +1,46 @@
+{
+  "version": "ROOT_S0_R7_BOOKKEEPER_INDEPENDENT_PEER_V1",
+  "reviewedRootCommit": "5abe62f50c11970069c99459c222587e499ef0b6",
+  "files": [
+    {
+      "file": "reference/FULL_FORWARD.json",
+      "bytes": 1869,
+      "sha256": "b84bff154fccc9c8e023799b132068e91800ba570a92c231fd42eb8e66dbe77d"
+    },
+    {
+      "file": "reference/PLAN.json",
+      "bytes": 8822,
+      "sha256": "6bd95bcc8de29db662f819a4cc5c3bdc85b3cc94099337a17e070fd874c6ecbe"
+    },
+    {
+      "file": "reference/r6.mjs",
+      "bytes": 6302,
+      "sha256": "0c277dd04a09bc4eb663cba7fe621185233428cfa63e5ebdc38468b09f4ae7df"
+    },
+    {
+      "file": "reference/r7.mjs",
+      "bytes": 6436,
+      "sha256": "3110c1442d58e7d5bd8fedfde9633fba43a70efd96a32dac692599232c0bcc3d"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 499,
+      "sha256": "a863bf42cc3c0aa86d0fde49b5218c3d0f2218eac9f627c288bf25ef64de63ca"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 2802,
+      "sha256": "b1df33b17b5f4719afe4f6bbb4f6fe345702d5259f749a15c7204be3c33fd13b"
+    },
+    {
+      "file": "SOURCE_PROOF.json",
+      "bytes": 1791,
+      "sha256": "58eda0177c87c743e4aca48d80f376404622c3602ac3b11e47bc2bb49162e1b7"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 5084,
+      "sha256": "75b8fa6a164878efaaa129fb225f97c6bc4767853fb35f668ab44a61d8a95f33"
+    }
+  ]
+}
