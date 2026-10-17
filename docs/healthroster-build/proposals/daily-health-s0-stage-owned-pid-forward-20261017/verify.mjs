@@ -1,0 +1,9 @@
+// Saved public source/Git images only; never invokes source/preflight or any operator.
+import fs from 'node:fs';import crypto from 'node:crypto';import {execFileSync} from 'node:child_process';import path from 'node:path';import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),root='D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026',base='8c4eb1f88db25ff6b7b88889be9f36dddc1387ed',old='docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/',hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+const git=(...args)=>execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','-C',root,...args],{windowsHide:true,maxBuffer:4e6,stdio:['ignore','pipe','ignore']});
+const manifest=JSON.parse(fs.readFileSync(here+'/MANIFEST.json'));for(const r of manifest.files){const b=fs.readFileSync(here+'/'+r.file);if(b.length!==r.bytes||hash(b)!==r.sha256)throw Error('S0_PID_FROZEN_SOURCE_CHANGED');}
+const parent=JSON.parse(fs.readFileSync(here+'/reference/MANIFEST.json')),mounted=process.argv.includes('--mounted'),head=git('rev-parse','HEAD').toString().trim();
+for(const file of ['MANIFEST.json',...parent.files.map(r=>r.file)]){const original=git('show',base+':'+old+file),expected=mounted&&['owned-worker.mjs','README.md','MANIFEST.json'].includes(file)?fs.readFileSync(here+'/payload/'+file):original,b=fs.readFileSync(root+'/'+old+file);if(!b.equals(expected)||!b.equals(git('show',head+':'+old+file))||!b.equals(git('show',':'+old+file)))throw Error('S0_PID_CURRENT_IMAGE_REFUSED');}
+if(git('rev-parse','HEAD').toString().trim()!==head)throw Error('S0_PID_HEAD_MOVED');
+console.log(JSON.stringify({status:'PASS',mode:mounted?'MOUNTED_THREE_TARGET_FORWARD':'HELD16_RETAINED',frozenFiles:manifest.files.length,runtimeImages:16,native:'NOT_RUN',browser:'NOT_RUN',osKills:0}));

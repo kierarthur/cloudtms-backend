@@ -1,0 +1,58 @@
+{
+  "sourceCommit": "8c4eb1f88db25ff6b7b88889be9f36dddc1387ed",
+  "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/owned-worker.mjs",
+  "sourceSha256": "5e2e0298a27a11bf06652aeee6e3a00cca55ba540d03c5402270e3775e68d95e",
+  "results": [
+    {
+      "transition": "exit-code-before-close",
+      "killTreePids": [
+        81234
+      ],
+      "exitObservedBeforeKill": true,
+      "closeObservedBeforeKill": false,
+      "confirmation": {
+        "childClosed": true,
+        "started": true,
+        "cooperativeAbort": true,
+        "forcedTree": true,
+        "exitCode": 0
+      },
+      "expectedSafeBehavior": "NO_TREE_COMMAND_AFTER_OBSERVED_EXIT_OR_CLOSE"
+    },
+    {
+      "transition": "signal-before-close",
+      "killTreePids": [
+        81234
+      ],
+      "exitObservedBeforeKill": true,
+      "closeObservedBeforeKill": false,
+      "confirmation": {
+        "childClosed": true,
+        "started": true,
+        "cooperativeAbort": true,
+        "forcedTree": true,
+        "exitCode": null
+      },
+      "expectedSafeBehavior": "NO_TREE_COMMAND_AFTER_OBSERVED_EXIT_OR_CLOSE"
+    },
+    {
+      "transition": "observed-close",
+      "killTreePids": [
+        81234
+      ],
+      "exitObservedBeforeKill": true,
+      "closeObservedBeforeKill": true,
+      "confirmation": {
+        "childClosed": true,
+        "started": true,
+        "cooperativeAbort": true,
+        "forcedTree": true,
+        "exitCode": 0
+      },
+      "expectedSafeBehavior": "NO_TREE_COMMAND_AFTER_OBSERVED_EXIT_OR_CLOSE"
+    }
+  ],
+  "native": "NOT_RUN",
+  "osTreeCommands": 0,
+  "privateActualStateReads": 0
+}
