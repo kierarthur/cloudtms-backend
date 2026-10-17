@@ -1,9 +1,9 @@
 [
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
-    "commit": "5f22c1c0b5bf0a0438f895a1229e716237c99824",
-    "bytes": 24285,
-    "sha256": "6d9f4a05ca161c2bcfceb909e698a09db96bed453fbdcc5f7cc7f1cec4e9d960"
+    "commit": "486e7c953b6a97446649ad460fc1cf378927c666",
+    "bytes": 24587,
+    "sha256": "73d5aacf329803e1de6a92cdc4f60298a548715af777a83d436c2c67bd8ae115"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/ADMISSION_FULL_PARENT_FORWARD.json",
@@ -727,9 +727,9 @@
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
-    "commit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
-    "bytes": 7292,
-    "sha256": "c167833e193d3fac9b9de40c0a9b4447f5a193c024cb4caab19401264440e1f5"
+    "commit": "506cd695ab0cb38182a0c1076b0685803151f307",
+    "bytes": 7576,
+    "sha256": "4f91ffea9ce323ae24b9333b3ff51eb2c69cdcb86eb692de4d33ec2fc3652eb2"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/test.mjs",
@@ -787,9 +787,9 @@
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/worker.mjs",
-    "commit": "c5a71f45522dd2bfef097c34c4145c020ce17fa4",
-    "bytes": 12684,
-    "sha256": "ef082cac41ef6f653d044a33b3801d83eb0b1bc1275a6bb9684d06a46b4d9f60"
+    "commit": "506cd695ab0cb38182a0c1076b0685803151f307",
+    "bytes": 15899,
+    "sha256": "fb0f8e6c3935448c346cb61ddd2a281e408a4ebf8c250a50577a370671e776ef"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/git-image-batch.mjs",
@@ -904,5 +904,17 @@
     "commit": "7272c318d0354e4dd484ffb40746397988ac23fe",
     "bytes": 690,
     "sha256": "8f1fbc1bfde997d1dd29b4d2c5be9c464179a850ede29a384c8bb17ef7d50e19"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/current-read.mjs",
+    "bytes": 12940,
+    "sha256": "db5332b466f979fd78e1e9d58477990d72e012c2f7d94ea84324b204e53471fc",
+    "commit": "506cd695ab0cb38182a0c1076b0685803151f307"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/current-ipc.mjs",
+    "bytes": 3158,
+    "sha256": "7276f1555f25675f67752c6e6fba46972a15f63d1ff2974d278eeda7d928c85e",
+    "commit": "506cd695ab0cb38182a0c1076b0685803151f307"
   }
 ]
