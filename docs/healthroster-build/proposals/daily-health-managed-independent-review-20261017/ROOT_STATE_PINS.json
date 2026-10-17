@@ -1,0 +1,61 @@
+{
+  "rootHead": "728a2c32e624fed2db577b7deba70600d27885b1",
+  "rootState": "DIRTY_EXPECTED_DAILY_MOUNT",
+  "files": [
+    {
+      "file": "supabase/migrations/17102026_0248_daily_health_support_admission.sql",
+      "sha256": "6dcb719b0e62eec72cd547e59e9726dec7b7ccc513edba463ada003046b8842d",
+      "bytes": 835,
+      "matchesFrozenPhysicalPayload": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "sha256": "e4e70d06e78dce2d8ea19f033cf5ef9fadc2de753106cc5677dad7b982dcd1d8",
+      "bytes": 172,
+      "matchesFrozenPhysicalPayload": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "bytes": 15886,
+      "matchesFrozenPhysicalPayload": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "sha256": "ec1dae1cab0e44a1713ace86ceaf4d6ae916e5550ba4f204e407450ce73e117a",
+      "bytes": 1358,
+      "matchesFrozenPhysicalPayload": true
+    },
+    {
+      "file": "supabase/verification/17102026_0248_daily_health_support_security.sql",
+      "sha256": "d2a1bc26c9c5b5650f78235e46e505037e4e59fbd74f095859fd3fc62817a847",
+      "bytes": 2400,
+      "matchesFrozenPhysicalPayload": true
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "37eb7b44bf997287bb0684edc1873bbd0a38ee2111234e3aa23a18b8ab141bd6",
+      "bytes": 1681882,
+      "matchesFrozenPhysicalPayload": true
+    },
+    {
+      "file": "supabase/release/current-release.json",
+      "sha256": "cf68ab7b56dd2bfe5a865892cd8364845851ac6fb6fb56fd884e4f16ef2359f8",
+      "bytes": 36188,
+      "matchesFrozenPhysicalPayload": true
+    },
+    {
+      "file": "supabase/release/migration-lock.json",
+      "sha256": "33b1190fd6e483fcfd7d5abdbaecf451cd04788e73f97900aa069917b5874968",
+      "bytes": 79097
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_HEALTH_SUPPORT_ROOT_MOUNT_20261017.json",
+      "sha256": "12060f85bb80b5c2bf47fece817720d551b20cf3016632a5c223e4dbb24f851d",
+      "bytes": 1299
+    }
+  ],
+  "native": "NOT_RUN",
+  "metadataParent": "acee28f5b4d862bdf7e4425a65566dd2d060be35",
+  "physicalCommit": "82b14dc385319ebe3d741bb2586c9b6ed172914c"
+}

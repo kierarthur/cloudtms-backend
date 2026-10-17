@@ -1,0 +1,53 @@
+{
+  "version": "DAILY_MANAGED_INDEPENDENT_SOURCE_REVIEW_V1",
+  "verdict": "PASS_SOURCE_ONLY_NO_ACTIONABLE_FINDING",
+  "physicalCommit": "82b14dc385319ebe3d741bb2586c9b6ed172914c",
+  "metadataParent": "acee28f5b4d862bdf7e4425a65566dd2d060be35",
+  "pureCommit": "728a2c32e624fed2db577b7deba70600d27885b1",
+  "independentChecksPassed": 11,
+  "managedPayloads": 7,
+  "exactPrivateHelpers": 6,
+  "wholeMetadataReversals": 2,
+  "pureSqlBytes": 8029,
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "publicComposerAcceptance": "NOT_PROVED",
+  "release": "NOT_RUN",
+  "files": [
+    {
+      "file": "grammar.py",
+      "sha256": "41cd4f06fe26b4770463b0695092811f27eabf5dd9c9f9cc9e1cdfa89014b8dc",
+      "bytes": 3164
+    },
+    {
+      "file": "GRAMMAR_RESULTS.json",
+      "sha256": "38e17e1cf94dc28f7be5c775e962af668bdd8278fa0f683ce170d867e2a79f0c",
+      "bytes": 1432
+    },
+    {
+      "file": "README.md",
+      "sha256": "e6c7831cc3d16065dd3099adccfabe415489bbbadef28dc11561a46152f541b6",
+      "bytes": 5759
+    },
+    {
+      "file": "review.mjs",
+      "sha256": "8480a125726bf3365231ed8b79907b7b26f6385e29da3ac51fae58918405e529",
+      "bytes": 15177
+    },
+    {
+      "file": "REVIEW_RESULTS.json",
+      "sha256": "95c3df7142a2bf5057c78c3159ce2f425925c6ab486fbf703431ab3dc41d2f14",
+      "bytes": 3295
+    },
+    {
+      "file": "ROOT_STATE_PINS.json",
+      "sha256": "c68414e1f527dd25335f9675b7ecc9d7dc1523ae9a94bcc2721dbf4e66e577a8",
+      "bytes": 2383
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "sha256": "70fb13e1b285a1f9738a02ae2bb77ea3286ae53c168bf3c269ad2b170b1133d6",
+      "bytes": 9916
+    }
+  ]
+}

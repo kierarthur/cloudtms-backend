@@ -1,0 +1,52 @@
+{
+  "scope": "INDEPENDENT_POSTGRESQL17_GRAMMAR_ONLY",
+  "parser": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "managed": [
+    {
+      "file": "supabase/migrations/17102026_0248_daily_health_support_admission.sql",
+      "statements": 1,
+      "parserPrograms": 1,
+      "status": "PASS_GRAMMAR_ONLY"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "statements": 2,
+      "parserPrograms": 0,
+      "status": "PASS_GRAMMAR_ONLY"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "statements": 6,
+      "parserPrograms": 6,
+      "status": "PASS_GRAMMAR_ONLY"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "statements": 12,
+      "parserPrograms": 0,
+      "status": "PASS_GRAMMAR_ONLY"
+    },
+    {
+      "file": "supabase/verification/17102026_0248_daily_health_support_security.sql",
+      "statements": 3,
+      "parserPrograms": 1,
+      "status": "PASS_GRAMMAR_ONLY"
+    }
+  ],
+  "exactHelpers": 6,
+  "reverseStatements": 6,
+  "pure": {
+    "statements": 7,
+    "parserPrograms": 6,
+    "sqlBytes": 8029,
+    "sqlSha256": "779aff554ca8bce78a7e21520a41574beba211503ab1c79d492eccb6b5ad8ab6"
+  },
+  "databaseConnections": 0,
+  "nativeBodyCompilation": "NOT_PROVED",
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN"
+}
