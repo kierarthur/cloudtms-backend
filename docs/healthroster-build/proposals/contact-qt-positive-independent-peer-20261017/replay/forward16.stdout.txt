@@ -1,0 +1,24 @@
+✔ two exact complete programmes render within unchanged caps (26.9747ms)
+✔ unprovided case, fake Contact lock alias, wrong physical root refuse before connection (0.7613ms)
+✔ full constructor bodies and complete old assertions are retained (178.6065ms)
+✔ QT actual return tag and command/domain audit checks bind current owner (0.4326ms)
+✔ unchanged native actor preflight precedes INSERT; no role switching (0.3316ms)
+✔ fixed C uses original canonical query and all twelve complete relations without connecting (447.6086ms)
+✔ reader parent full raw inverse and original control/timing exact bytes (1.515ms)
+✔ all four original SQL parents fully reverse including exact owner and framing spans (0.4933ms)
+✔ native metadata guard refuses unreviewed policy/owner/rule/inheritance/DDL hooks before business reads (0.4494ms)
+✔ synthetic response boundaries accept exact two shapes, not native qualification (1.3085ms)
+✔ synthetic SET/DDL null is per-index; SELECT null, wrong tag and extra fields refuse (0.8615ms)
+✔ synthetic wrong programme counters/accepted/rollback/freshness refuse (0.8644ms)
+✔ pooled MCP PID equal B is permitted only with independent C-after and full scope (0.7345ms)
+✔ original WeakMap refuses invented proof or stale copied qualification (186.869ms)
+✔ bounded capture and persistence refuse oversized/native raw maps (0.5904ms)
+✔ root timing is actual bounded metadata only; no fabricated latency or SQL result (1.2627ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5590.6541

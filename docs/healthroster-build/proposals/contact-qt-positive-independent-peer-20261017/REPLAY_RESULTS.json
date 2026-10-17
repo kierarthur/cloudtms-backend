@@ -1,0 +1,34 @@
+{
+  "runs": [
+    {
+      "name": "original16",
+      "exitCode": 0
+    },
+    {
+      "name": "original-grammar",
+      "exitCode": 0
+    }
+  ],
+  "rebuilt": [
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "sqlSha256": "2ee9712aa357c9db4c8fbde1cd9e541de38b0721e19aec7d6fc9a31c692b9c91",
+      "bytes": 13974,
+      "programmeStatements": 21,
+      "inputStatements": 34,
+      "allProgrammeAndInputBytesEqual": true
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "sqlSha256": "2c4762a2acb7a3d75d5a96ccaa4e9aeba82a25481e67197c00142fda38040ea0",
+      "bytes": 39656,
+      "programmeStatements": 51,
+      "inputStatements": 64,
+      "allProgrammeAndInputBytesEqual": true
+    }
+  ],
+  "originalProgrammeWholeParentInverses": 4,
+  "fixedReaderWholeParentInverse": true,
+  "native": "NOT_RUN",
+  "rootWrites": 0
+}
