@@ -1,0 +1,55 @@
+{
+  "actualNativeOwner": "private.timesheet_contract_move_scope_v1(uuid,boolean)",
+  "parentPath": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_scope_v1.sqlinc",
+  "parentSha256": "2d3eb8da4dcdf329225bb0f8eaa96dd4df8a9466304d0d52fc48ab88960c0cad",
+  "outputSha256": "c7ccf8cda969c400d776aef07e4acd1f0ed934a29dd0a3cc72ce34943a942df0",
+  "finiteReplacements": [
+    {
+      "before": "create or replace function private.timesheet_contract_move_scope_v1(p_operation_id uuid,p_lock boolean)\nreturns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'\nas $function$\n",
+      "after": "",
+      "beforeOffset": 0,
+      "afterOffset": 0,
+      "occurrences": 1
+    },
+    {
+      "before": "declare o private.timesheet_contract_move_operations%rowtype; c public.contracts%rowtype;",
+      "after": "declare p_lock constant boolean:=true; c public.contracts%rowtype;",
+      "beforeOffset": 0,
+      "afterOffset": 0,
+      "occurrences": 1
+    },
+    {
+      "before": " select v.* into o from private.timesheet_contract_move_operations v where v.id=p_operation_id;\n",
+      "after": "",
+      "beforeOffset": 379,
+      "afterOffset": 379,
+      "occurrences": 1
+    },
+    {
+      "before": " if not found or o.purpose<>'CONTRACT_CORRECTION' or not private.weekly_source_pay_actor_allowed_v1(o.created_by_user_id) then",
+      "after": " if o.id is null or o.id is distinct from operation or o.purpose<>'CONTRACT_CORRECTION' or not private.weekly_source_pay_actor_allowed_v1(o.created_by_user_id) then",
+      "beforeOffset": 379,
+      "afterOffset": 379,
+      "occurrences": 1
+    },
+    {
+      "before": " return result||jsonb_build_object('scope_sha256',encode(private.timesheet_contract_move_row_hash_v1(result),'hex'));",
+      "after": " before_scope:=result||jsonb_build_object('scope_sha256',encode(private.timesheet_contract_move_row_hash_v1(result),'hex'));",
+      "beforeOffset": 9408,
+      "afterOffset": 9408,
+      "occurrences": 1
+    },
+    {
+      "before": "$function$;\n",
+      "after": "",
+      "beforeOffset": 9538,
+      "afterOffset": 9538,
+      "occurrences": 1
+    }
+  ],
+  "fullCurrentOwnerReverse": true,
+  "p_lock": "CONSTANT_TRUE",
+  "transientOperationRecord": "EXISTING_NATIVE_ROWTYPE_NO_INSERT",
+  "native": "NOT_RUN",
+  "preparedRecordPresence": "NON_NULL_O_ID_EQUALS_OPERATION_NO_AMBIENT_FOUND"
+}
