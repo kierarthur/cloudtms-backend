@@ -1,0 +1,21 @@
+{
+  "version": "ROOT_DAILY_GENUINE_STAGE_HELPER_REVIEW_V1",
+  "status": "ACCEPTED_BOUNDED_SOURCE_ONLY",
+  "operatorSourceCommit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "authorManifestSha256": "e635cf32745d5d06a1310d74c08aaa66a508116722eee05cb4f1b1f97f56efac",
+  "peerCommit": "2a3a4fbbc5616b438884dd3d8712dff7d9b4bbd7",
+  "peerManifestSha256": "3d9daed7f16ba94a0c568bb0f11b616d6e77fe7fdbd10c98ce86c144e802fbfa",
+  "runtimeFile": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+  "runtimeSha256": "f1f77eb5222ddea37357f14fe6eb2b44ea1c0079fd6c5e42d3286d945dcd5e08",
+  "completeFourEditInverse": true,
+  "originalCoreAndNativeOwnersChanged": false,
+  "authorTests": 29,
+  "independentTests": 10,
+  "rootReplayedAuthorTests": 29,
+  "beforeCommit": "LOCAL_COMMIT_PUBLISHED_BY_SETUP_BEFORE_ANY_SUBMIT",
+  "setupAfterPublish": "NORMAL_FEATURE_PUSH_AND_FRESH_REMOTE_EQUALITY",
+  "authPrivateJournalAccess": false,
+  "effectQualificationSupplied": false,
+  "native": "NOT_RUN",
+  "sourceBlockers": 0
+}

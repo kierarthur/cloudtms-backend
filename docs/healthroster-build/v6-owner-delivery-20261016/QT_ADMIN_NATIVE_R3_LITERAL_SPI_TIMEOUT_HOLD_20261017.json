@@ -5,7 +5,7 @@
   "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/contact-qt-positive-native-20261017-qt-admin-literal-spi-r3",
   "sourceProposal": "docs/healthroster-build/proposals/qt-audit-unlimited-spi-forward-20261017",
   "sourceProposalCommit": "fa2f3a595c87acf00bd8395133190271b46b0005",
-  "sourceRootMountCommit": "0184485",
+  "sourceRootMountCommit": "0184485ddc54780a524bb8e8bdeea82843885e1c",
   "mainStatementCount": 64,
   "lastReachedStatement": 59,
   "lastReachedOperation": "First complete audit_events MD5 snapshot, DO line23 EXECUTE; final IF not reached",

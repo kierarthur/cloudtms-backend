@@ -1,0 +1,65 @@
+{
+  "version": "ROOT_STAGE_HELPER_INDEPENDENT_PEER_V1",
+  "files": [
+    {
+      "file": "peer.test.mjs",
+      "bytes": 2231,
+      "sha256": "ccfcaca5019aa0fd21f7b94d72da209adbcd79ec3baea6f6ba4cdfdbbed284c0"
+    },
+    {
+      "file": "reference/FULL_PARENT_FORWARD.json",
+      "bytes": 3050,
+      "sha256": "74a55a09df49b7c0dfceade014b5d03dc6cead5b208f56196c95115265757b44"
+    },
+    {
+      "file": "reference/MANIFEST.json",
+      "bytes": 1146,
+      "sha256": "e635cf32745d5d06a1310d74c08aaa66a508116722eee05cb4f1b1f97f56efac"
+    },
+    {
+      "file": "reference/README.md",
+      "bytes": 6076,
+      "sha256": "a95ee35510c918c429788c3d818bf54a82680bac32b5a1287d57fe828a0a8ffe"
+    },
+    {
+      "file": "reference/RESULTS.json",
+      "bytes": 585,
+      "sha256": "0d29b7a0d1f8a63313f0c389500636c8740ae01fb5ce8c6f5d039874c233e4cd"
+    },
+    {
+      "file": "reference/s1-observation.mjs",
+      "bytes": 3049,
+      "sha256": "bed5df6f321c009b36c4de2d5120f8147e7ac25c81226b579ccb52e8e2ef0a8e"
+    },
+    {
+      "file": "reference/SOURCE_PINS.json",
+      "bytes": 4409,
+      "sha256": "810c650d0f79720798bf93f5aef742f77f831dd79e157fdcf6cea44ce1008430"
+    },
+    {
+      "file": "reference/stage-bookkeeper.mjs",
+      "bytes": 11251,
+      "sha256": "f1f77eb5222ddea37357f14fe6eb2b44ea1c0079fd6c5e42d3286d945dcd5e08"
+    },
+    {
+      "file": "reference/test.mjs",
+      "bytes": 7970,
+      "sha256": "9e3366ba7268c441c2c8fd5a3d6942b362c8ed5f7b51d606152c72b87e8e4b06"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 330,
+      "sha256": "d0d7c23156b91c8cf408b11892b3a1e15f3a85a1db93e7bd2a34e0b2b60641d7"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 2985,
+      "sha256": "924b9026d3c358da559d5c0602d3a2e623277d7aa8a9d26fef4f283ea355d6e8"
+    },
+    {
+      "file": "SOURCE_RESULTS.json",
+      "bytes": 398,
+      "sha256": "a6839257de5a0fabb8757767453ac18f01defb060072590d3ffb9b6551ebe1a0"
+    }
+  ]
+}

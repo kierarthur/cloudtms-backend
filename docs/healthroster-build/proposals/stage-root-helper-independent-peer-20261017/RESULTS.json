@@ -1,0 +1,13 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "sourceFiles": 8,
+  "currentHistoricalPins": 10,
+  "completeInverseEdits": 4,
+  "authorTestsPassed": 29,
+  "extraExactTailTestsPassed": 10,
+  "syntax": "PASS",
+  "bookkeeperExecuted": false,
+  "nativeCalls": 0,
+  "privateAccess": false,
+  "futureTiming": "NOT_PROVED"
+}

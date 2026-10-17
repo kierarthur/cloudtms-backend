@@ -1,0 +1,20 @@
+{
+  "version": "DAILY_STAGE_ROOT_HELPER_SOURCE_ONLY_REVIEW_V1",
+  "sourceOnly": true,
+  "tests": 29,
+  "passed": 29,
+  "failed": 0,
+  "syntaxCheck": "PASS",
+  "completeParentInverse": {
+    "edits": 4,
+    "rawEqual": true
+  },
+  "originalCoreChanged": false,
+  "bookkeeperRuntimeExecuted": false,
+  "syntheticObserverSqlExecuted": false,
+  "authStatePrivateBindingJournalRead": false,
+  "sqlApiNativeBrowserIpcCalls": false,
+  "reportHead": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "reportCommitOrRuntimeChange": false,
+  "rootReviewAndRealHelperCommit": "REQUIRED_BEFORE_USE"
+}
