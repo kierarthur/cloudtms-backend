@@ -1,0 +1,80 @@
+{
+  "version": "QT_PLAN_HOLDER_SOURCE_PACKET_V1",
+  "files": [
+    {
+      "file": "holder.mjs",
+      "bytes": 8824,
+      "sha256": "3dc43f82d5dccb444c407e022bd8bde6af0aa7df8b1234da0ffaa92f13c6e46e"
+    },
+    {
+      "file": "README.md",
+      "bytes": 5180,
+      "sha256": "2b2b59fa37bfd70cb2898638eac37c2c5796d585ed7a170b4731233c07bd5fec"
+    },
+    {
+      "file": "reference/money/GRAMMAR_RESULTS.json",
+      "bytes": 599,
+      "sha256": "7c085282e92233b92c5d046abc3477a2063c25001e40d72b2e87656b9ae4cbaf"
+    },
+    {
+      "file": "reference/money/grammar.py",
+      "bytes": 4565,
+      "sha256": "d8ab7f084a6219a05e1494b11b7ab767dbd021347e34d50bd70b848e24855dfa"
+    },
+    {
+      "file": "reference/money/MANIFEST.json",
+      "bytes": 1311,
+      "sha256": "a3e0c8a9e0a2be2160482c67052ad82b7438103e0caa33ae34f37d3c60151ae1"
+    },
+    {
+      "file": "reference/money/QUERY.json",
+      "bytes": 632,
+      "sha256": "eea53d93d45fe320e37ba83d14f565d48929665d2357cee6ef34e7d14cce8f13"
+    },
+    {
+      "file": "reference/money/README.md",
+      "bytes": 4783,
+      "sha256": "990966e242df97dadd9d8800cae326c6a21037132f517315ff3f69d6eff8ea90"
+    },
+    {
+      "file": "reference/money/reference/qt-assertions.sql",
+      "bytes": 12100,
+      "sha256": "11f720baf63f49a6f6e309d5ad4c42c67c63ebed691a216171ef12364c4adfe3"
+    },
+    {
+      "file": "reference/money/RESULTS.json",
+      "bytes": 606,
+      "sha256": "d9be085ed927aa24537f238ce56ce49cddb0c36eb2dbf52290395212f506ebb5"
+    },
+    {
+      "file": "reference/money/selection.mjs",
+      "bytes": 5260,
+      "sha256": "3107a433ee68229cb74c602e828e14b4b1e7a67900dad738025020b21808c4c7"
+    },
+    {
+      "file": "reference/money/test.mjs",
+      "bytes": 3730,
+      "sha256": "4b6c1a7c0eb191af736cafd43785277a4f43803bcd5ea957e3b7303627dfd8fb"
+    },
+    {
+      "file": "result.mjs",
+      "bytes": 8273,
+      "sha256": "533acf2daa5fddd758752c31103fbab85d8b10d56272be8f54ae9dde499c910e"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 462,
+      "sha256": "c8547b69782a001deeabef3428b8bc1eb30b5f42a57a3558b9eceaa2a0fb7560"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 1395,
+      "sha256": "5f89739b22d783a7a0683aa942316e4838182b7cc8ed5f39fab39f2201390805"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 10840,
+      "sha256": "ded47f99b7a25049453c6fc557bf43e9c97d0416c98fd3886670b6c1ca58f6cd"
+    }
+  ]
+}

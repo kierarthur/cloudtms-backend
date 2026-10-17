@@ -1,0 +1,15 @@
+{
+  "version": "QT_AUDIT_PLAN_HOLDER_ROOT_SOURCE_REVIEW_V1",
+  "sourceManifestSha256": "aabbda40800b96cc8187d04eb1ee14ce8e069b2ca879b0cb531ae73272accd9c",
+  "holderSha256": "3dc43f82d5dccb444c407e022bd8bde6af0aa7df8b1234da0ffaa92f13c6e46e",
+  "rootOfflineTests": 70,
+  "rootSyntaxChecks": 2,
+  "review": "Root read complete holder/result/README and accepted Money fixed eight-statement/read-only fresh-context selection. Own actual seven-field A; no Bpsql. Root dispatches only unchanged fixed Kier input; accepted/rollback/fresh/held-own-A/30s and metadata/estimated non-ANALYZE plan shape required.",
+  "mainStatementCount": 8,
+  "freshStatementCount": 1,
+  "rootCallPermission": "Existing bounded rollback diagnostic under shared lock; no business-row scan, fixture or side effect.",
+  "explainAbi": "Proposed until genuine result; unexpected actual shape HOLD and raw result retained.",
+  "interpretation": "Top-level estimates only, no nested SPI plan/timing, restoration or financial proof.",
+  "actualHolderRun": false,
+  "actualNativeCall": false
+}

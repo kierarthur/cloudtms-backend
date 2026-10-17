@@ -1,0 +1,11 @@
+{
+  "rootCommit": "cffe40eb8655bd279619660c7c7edd09b5fb4cb7",
+  "path": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+  "bytes": 12100,
+  "sha256": "11f720baf63f49a6f6e309d5ad4c42c67c63ebed691a216171ef12364c4adfe3",
+  "unchangedFullAuditQuery": "select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by md5(to_jsonb(a)::text)),'')) from public.audit_events a",
+  "querySha256": "9397805512911d4c340ec4f85184d0bc094dcca681f31c8349c5b25150af4e50",
+  "occurrencesInOriginalDO": 2,
+  "sourceSavedIndexHeadHistoricalEqual": true,
+  "queryExecution": "NOT_RUN"
+}

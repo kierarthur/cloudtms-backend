@@ -1,0 +1,21 @@
+{
+  "version": "QT_PLAN_HOLDER_OFFLINE_RESULTS_V1",
+  "tests": 70,
+  "pass": 70,
+  "fail": 0,
+  "syntaxChecks": [
+    "holder.mjs",
+    "result.mjs",
+    "test.mjs"
+  ],
+  "originalMoneyCompleteImagesVerified": 9,
+  "originalRootOwnersVerified": 3,
+  "syntheticOnly": true,
+  "nativeCommandAbiQualified": false,
+  "holderRun": false,
+  "nativeRun": false,
+  "sqlRun": false,
+  "rootEdits": false,
+  "authenticationAccess": false,
+  "restorationClaimed": false
+}
