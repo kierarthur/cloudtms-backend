@@ -1,0 +1,178 @@
+--- v6-contact-six-lock-mcp-successor-20261016/input-builder.mjs
++++ v6-contact-independent-c-after-20261017/canonical-input-builder.mjs
+@@ -11,0 +12,12 @@
++// Exact owner-reviewed storage migration; every other source byte stays pinned.
++export function reviewedPathRepair(root){
++ const file='scripts/healthroster-rehearsal-turn.mjs',bytes=fs.readFileSync(path.join(root,file)),text=bytes.toString('utf8');
++ const before="const workspace='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';",after="const workspace='D:/Development/GitHub';";
++ requireThat(text.split(after).length===2&&!text.includes(before),'EXACT_REVIEWED_D_WORKSPACE_REQUIRED');
++ const reversed=text.replace(after,before),currentSha256=sha(bytes),currentLfSha256=sha(text.replaceAll('\r\n','\n'));
++ requireThat(currentSha256==='2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa'
++  &&sha(reversed)==='b7e16cdb12e8b5c6d11894e53296e4d20aeeaceb8dd968ed32936884f3ab3610','EXACT_PATH_ONLY_SOURCE_REVERSE_REQUIRED');
++ const plan=JSON.parse(fs.readFileSync(path.join(previous,'PLAN.json'),'utf8'));
++ requireThat(plan.inputs.find(r=>r.file===file)?.sha256===sha(reversed.replaceAll('\r\n','\n')),'HISTORICAL_PATH_SOURCE_PIN_REQUIRED');
++ return {file,currentSha256,currentLfSha256,beforeSha256:sha(reversed),wholeSourceReverse:true};
++}
+@@ -13 +25,3 @@
+- const plan=JSON.parse(fs.readFileSync(path.join(previous,'PLAN.json'),'utf8'));assertSourcePins(plan,root);
++ const plan=JSON.parse(fs.readFileSync(path.join(previous,'PLAN.json'),'utf8'));
++ const repair=reviewedPathRepair(root);
++ assertSourcePins({...plan,inputs:plan.inputs.map(r=>r.file===repair.file?{...r,sha256:repair.currentLfSha256}:r)},root);
+@@ -15 +29 @@
+- const expected=JSON.parse(fs.readFileSync(path.join(here,'AUTHORITY.json'),'utf8'));
++ const expected=JSON.parse(fs.readFileSync(path.join(here,'../v6-contact-six-lock-mcp-successor-20261016/AUTHORITY.json'),'utf8'));
+@@ -17 +31 @@
+- for(const row of expected.helperInputs)requireThat(sha(fs.readFileSync(path.join(root,row.file)))===row.sha256,'MCP_SUCCESSOR_HELPER_SOURCE_CHANGED');
++ for(const row of expected.helperInputs)requireThat(sha(fs.readFileSync(path.join(root,row.file)))===(row.file===repair.file?repair.currentSha256:row.sha256),'MCP_SUCCESSOR_HELPER_SOURCE_CHANGED');
+--- v6-contact-local-metadata-mcp-adapter-20261016/input-builder.mjs
++++ v6-contact-independent-c-after-20261017/input-builder.mjs
+@@ -2 +2 @@
+-import {buildInput as originalBuild,source,proofSql,requireThat,sortWriters,literal,holderProofSql} from '../v6-contact-six-lock-mcp-successor-20261016/input-builder.mjs';
++import {buildInput as originalBuild,source,proofSql,requireThat,sortWriters,literal,holderProofSql} from './canonical-input-builder.mjs';
+--- v6-contact-large-frame-feasibility-20261016/fixed-metadata-reader.mjs
++++ v6-contact-independent-c-after-20261017/fixed-metadata-reader.mjs
+@@ -8 +8 @@
+-import {source} from '../v6-contact-six-lock-mcp-successor-20261016/input-builder.mjs';
++import {source} from './input-builder.mjs';
+@@ -23 +23 @@
+- constructor(){this.bytes=0;this.stderrBytes=0;this.chunks=[];this.failed=null;}
++ constructor(phase='BEFORE'){check(['BEFORE','AFTER'].includes(phase),'LOCAL_METADATA_PHASE_REFUSED');this.phase=phase;this.bytes=0;this.stderrBytes=0;this.chunks=[];this.failed=null;}
+@@ -42,4 +42,6 @@
+-  check(lines.length===2&&lines.every(v=>v.startsWith('{')&&v.endsWith('}')),'LOCAL_METADATA_FRAME_COUNT_REFUSED');
+-  let peer,snapshot;try{peer=JSON.parse(lines[0]);snapshot=JSON.parse(lines[1]);}catch{throw Error('LOCAL_METADATA_JSON_REFUSED');}
+-  check(peer&&typeof peer==='object'&&!Array.isArray(peer)&&snapshot&&typeof snapshot==='object'&&!Array.isArray(snapshot),'LOCAL_METADATA_OBJECT_REQUIRED');
+-  return {peer,snapshot,transport:{stdoutBytes:this.bytes,snapshotUtf8Bytes:Buffer.byteLength(lines[1]),snapshotSha256:sha(lines[1])}};
++  check(lines.length===(this.phase==='AFTER'?3:2)&&lines.every(v=>v.startsWith('{')&&v.endsWith('}')),'LOCAL_METADATA_FRAME_COUNT_REFUSED');
++  if(this.phase==='AFTER')check(Buffer.byteLength(lines[2])<=16384,'LOCAL_METADATA_CONTROL_FRAME_BOUND');
++  let peer,snapshot,fixtureProof;try{peer=JSON.parse(lines[0]);snapshot=JSON.parse(lines[1]);if(this.phase==='AFTER')fixtureProof=JSON.parse(lines[2]);}catch{throw Error('LOCAL_METADATA_JSON_REFUSED');}
++  check([peer,snapshot,...this.phase==='AFTER'?[fixtureProof]:[]].every(v=>v&&typeof v==='object'&&!Array.isArray(v)),'LOCAL_METADATA_OBJECT_REQUIRED');
++  return {peer,snapshot,...this.phase==='AFTER'?{fixtureProof}:{},transport:{stdoutBytes:this.bytes,snapshotUtf8Bytes:Buffer.byteLength(lines[1]),snapshotSha256:sha(lines[1]),
++   frameCount:lines.length,...this.phase==='AFTER'?{fixtureProofUtf8Bytes:Buffer.byteLength(lines[2]),fixtureProofSha256:sha(lines[2])}:{}}};
+@@ -52 +54 @@
+-async function runFixedChild({input,env,turn}){
++async function runFixedChild({input,env,turn,phase}){
+@@ -58 +60 @@
+-  const capture=new BoundedMemoryCapture();let failure=null,closed=false,settled=false,termTimer,closeTimer;
++  const capture=new BoundedMemoryCapture(phase);let failure=null,closed=false,settled=false,termTimer,closeTimer;
+@@ -114,2 +116,11 @@
+- let phase='BEFORE',beforePeer;
+- const read=async(wanted,nativeBackendPid)=>{
++ let phase='BEFORE',beforePeer,beforeSnapshot;
++ const afterProgram=({transaction,observations},before=beforeSnapshot)=>{
++  live.validateFixtureObservations(transaction,observations,[0]);
++  check(observations[0].rows.length===0&&transaction.backendPid!==turn.identity.backendPid,'LOCAL_METADATA_EMPTY_NATIVE_B_REQUIRED');
++  const fixtureSql=live.freshFixtureProofSql(transaction,observations,before);
++  check(Buffer.byteLength(fixtureSql)<16384,'LOCAL_METADATA_CONTROL_SQL_BOUND');
++  const afterInput=input.slice(0,-'rollback;\n'.length)+fixtureSql+'\nrollback;\n';
++  check(afterInput.split(canonicalSql).length===2&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(canonicalSql),'LOCAL_METADATA_CANONICAL_ORDER_REFUSED');
++  return {input:afterInput,fixtureSql};
++ };
++ const read=async(wanted,args)=>{
+@@ -117 +128 @@
+-  if(wanted==='AFTER')check(Number.isSafeInteger(nativeBackendPid)&&nativeBackendPid>0&&nativeBackendPid!==turn.identity.backendPid,'LOCAL_METADATA_NATIVE_B_PID_REQUIRED');
++  let program;
+@@ -118,0 +130 @@
++   program=wanted==='AFTER'?afterProgram(args):{input};
+@@ -122 +134 @@
+-   const result=await runFixedChild({input,env,turn}),p=result.peer,s=result.snapshot;
++   const result=await runFixedChild({input:program.input,env,turn,phase:wanted}),p=result.peer,s=result.snapshot;
+@@ -125 +137,4 @@
+-   if(wanted==='AFTER')check(p.readerPid!==nativeBackendPid&&p.readerPid!==beforePeer.readerPid,'LOCAL_METADATA_AFTER_NOT_FRESH');
++   if(wanted==='AFTER'){
++    check(p.readerPid!==args.transaction.backendPid&&p.readerPid!==beforePeer.readerPid,'LOCAL_METADATA_AFTER_NOT_FRESH');
++    check(result.fixtureProof.backendPid===p.readerPid&&result.fixtureProof.connectedFresh===true,'LOCAL_METADATA_FIXTURE_PID_REFUSED');
++   }
+@@ -128 +143 @@
+-   assertPins(root);phase=wanted==='BEFORE'?'AFTER':'DONE';if(wanted==='BEFORE')beforePeer=p;
++   assertPins(root);phase=wanted==='BEFORE'?'AFTER':'DONE';if(wanted==='BEFORE'){beforePeer=p;beforeSnapshot=s;}
+@@ -130 +145 @@
+-    provenance:{phase:wanted,caseId,canonicalSqlSha256:sha(canonicalSql),inputSha256:sha(input),sourcePinsSha256:sha(JSON.stringify(expectedPins)),
++    provenance:{phase:wanted,caseId,canonicalSqlSha256:sha(canonicalSql),inputSha256:sha(program.input),...wanted==='AFTER'?{fixtureSqlSha256:sha(program.fixtureSql),fixtureSource:'UNCHANGED_CANONICAL_FRESH_FIXTURE_PROOF_C_AFTER_THIRD_FRAME'}:{},sourcePinsSha256:sha(JSON.stringify(expectedPins)),
+@@ -134 +149 @@
+- return Object.freeze({before:()=>read('BEFORE'),after:({nativeBackendPid})=>read('AFTER',nativeBackendPid),
++ return Object.freeze({before:()=>read('BEFORE'),after:args=>read('AFTER',args),
+@@ -137 +152 @@
+-  inspectSource:()=>({input,canonicalSql,relations})});
++  inspectSource:({transaction,observations,before}={})=>({input,canonicalSql,relations,...transaction?{after:afterProgram({transaction,observations},before)}:{}})});
+--- v6-contact-fresh-verification-successor-20261016/result-validator.mjs
++++ v6-contact-independent-c-after-20261017/result-validator.mjs
+@@ -2 +2 @@
+-import {source,proofSql,sortWriters,sha,requireThat} from '../v6-contact-local-metadata-mcp-adapter-20261016/input-builder.mjs';
++import {source,proofSql,sortWriters,sha,requireThat} from './input-builder.mjs';
+@@ -43,2 +43,2 @@
+-  &&Number.isSafeInteger(held.writerPid)&&held.writerPid>0&&held.writerPid!==transaction.backendPid&&held.writerPid!==receipt.holderIdentity.backendPid,'MCP_FRESH_HELD_HOLDER_REQUIRED');
+- return {transaction,observations:[observation],expectedUnits:[0],freshPeerPid:held.writerPid};
++  &&Number.isSafeInteger(held.writerPid)&&held.writerPid>0&&held.writerPid!==receipt.holderIdentity.backendPid,'MCP_FRESH_HELD_HOLDER_REQUIRED');
++ return {transaction,observations:[observation],expectedUnits:[0],poolContextPid:held.writerPid};
+@@ -55 +55 @@
+-  &&afterPacket.peer.readerPid!==stage.freshPeerPid,'LOCAL_AFTER_NOT_FRESH');
++  ,'LOCAL_AFTER_NOT_FRESH');
+@@ -58,2 +58,2 @@
+-export async function prepareQualification({root,result,receipt,beforePacket,afterPacket}){
+- const {live,plan}=await source(root),stage=readStageOne(result,receipt),local=bindLocalSnapshots({receipt,stage,beforePacket,afterPacket});
++export async function validateCase({root,result,receipt,beforePacket,afterPacket}){
++ const {live,rehearsal,expected}=await source(root),stage=readStageOne(result,receipt),local=bindLocalSnapshots({receipt,stage,beforePacket,afterPacket});
+@@ -61,27 +61,6 @@
+- const row=plan.cases.find(c=>c.id===receipt.caseId),text=live.freshFixtureProofSql(stage.transaction,stage.observations,local.before)+'\n'+proofSql(row,receipt.holderIdentity,0);
+- requireThat(Buffer.byteLength(text)<65536,'SMALL_GENUINE_FIXTURE_PROOF_REQUIRED');
+- return {database:'agency_test',label:'HR_CONTACT_MCP_FRESH_'+receipt.caseId.replaceAll('-','_').toUpperCase(),sql:text,
+-  verification_sql:text,continue_on_error:false,max_rows_per_statement:1,statement_timeout_ms:30000,lock_timeout_ms:2000};
+-}
+-export async function validatePair({root,result,receipt,beforePacket,afterPacket,qualificationInput,qualificationResult}){
+- const {live,rehearsal,expected}=await source(root),stage=readStageOne(result,receipt),local=bindLocalSnapshots({receipt,stage,beforePacket,afterPacket});
+- const rebuilt=await prepareQualification({root,result,receipt,beforePacket,afterPacket});
+- requireThat(JSON.stringify(rebuilt)===JSON.stringify(qualificationInput),'MCP_FRESH_INPUT_CHANGED');
+- requireThat(qualificationResult.accepted===true&&qualificationResult.rolledBack===true&&qualificationResult.database==='cloudtms_test_clone'
+-  &&qualificationResult.databaseTarget==='agency_test'&&qualificationResult.label===qualificationInput.label&&qualificationResult.sqlSha256===sha(qualificationInput.sql)&&qualificationResult.statementCount===2
+-  &&!qualificationResult.fatalError&&statementSequence(qualificationResult.statements,2)&&qualificationResult.statements.every(s=>!s.error),'MCP_FRESH_FIXTURE_RESULT_REQUIRED');
+- // The main tool session may legitimately reuse original B's pool PID. It
+- // is only execution evidence, never the fresh fixture/restoration authority.
+- const mainFixture=oneRow(qualificationResult.statements[0]),mainHeld=oneRow(qualificationResult.statements[1]);
+- requireThat(Number.isSafeInteger(mainFixture.backendPid)&&mainFixture.backendPid>0
+-  &&mainHeld.holderGranted===true&&mainHeld.holderPid===receipt.holderIdentity.backendPid
+-  &&mainHeld.precedingGranted===true&&mainHeld.precedingCount===0&&mainHeld.writerPid===mainFixture.backendPid,'MCP_SECOND_MAIN_PROOF_REQUIRED');
+- const fresh=qualificationResult.rollbackVerification;
+- requireThat(fresh?.connectedFresh===true&&fresh.database==='cloudtms_test_clone'
+-  &&statementSequence(fresh.statements,2)&&fresh.statements.every(s=>!s.error),'MCP_SECOND_FRESH_ROLLBACK_REQUIRED');
+- const fixtureProof=oneRow(fresh.statements[0]),held=oneRow(fresh.statements[1]);
+- requireThat(held.holderGranted===true&&held.holderPid===receipt.holderIdentity.backendPid&&held.precedingGranted===true&&held.precedingCount===0
+-  &&held.writerPid===fixtureProof.backendPid,'MCP_FIXTURE_PROOF_HOLDER_REQUIRED');
+- requireThat(fixtureProof.connectedFresh===true&&Number.isSafeInteger(fixtureProof.backendPid)&&fixtureProof.backendPid>0
+-  &&![stage.transaction.backendPid,receipt.holderIdentity.backendPid,beforePacket.peer.readerPid,afterPacket.peer.readerPid,
+-    mainFixture.backendPid].includes(fixtureProof.backendPid),'MCP_SECOND_VERIFICATION_PID_NOT_FRESH');
++ const fixtureSql=live.freshFixtureProofSql(stage.transaction,stage.observations,local.before),fixtureProof=afterPacket.fixtureProof;
++ requireThat(afterPacket.provenance.fixtureSource==='UNCHANGED_CANONICAL_FRESH_FIXTURE_PROOF_C_AFTER_THIRD_FRAME'
++  &&afterPacket.provenance.fixtureSqlSha256===sha(fixtureSql)&&afterPacket.transport.frameCount===3,'LOCAL_C_AFTER_CANONICAL_FIXTURE_SOURCE_REQUIRED');
++ requireThat(fixtureProof?.backendPid===afterPacket.peer.readerPid&&fixtureProof.connectedFresh===true
++  &&Number.isSafeInteger(fixtureProof.backendPid)&&fixtureProof.backendPid>0
++  &&![stage.transaction.backendPid,receipt.holderIdentity.backendPid,beforePacket.peer.readerPid].includes(fixtureProof.backendPid),'LOCAL_C_AFTER_FIXTURE_PID_REQUIRED');
+@@ -98 +77 @@
+- return {version:'CONTACT_FIXED_LOCAL_METADATA_MCP_FRESH_VERIFICATION_V2',status:'EXPECTED_EXACT_LOCK_AND_FULL_CANONICAL_RESTORATION_QUALIFIED_PENDING_OWNED_CLOSE',
++ return {version:'CONTACT_INDEPENDENT_C_AFTER_CANONICAL_RESTORATION_V1',status:'EXPECTED_EXACT_LOCK_AND_FULL_CANONICAL_RESTORATION_QUALIFIED_PENDING_OWNED_CLOSE',
+@@ -101,2 +80,2 @@
+-  readerPids:{before:beforePacket.peer.readerPid,after:afterPacket.peer.readerPid,nativeB:stage.transaction.backendPid,holder:receipt.holderIdentity.backendPid,qualificationMain:mainFixture.backendPid,qualificationFresh:fixtureProof.backendPid},
+-  qualificationVerificationSqlSha256:sha(qualificationInput.verification_sql),fixtureQualificationSource:'SECOND_MCP_FRESH_READ_ONLY_VERIFICATION_ONLY',
++  readerPids:{before:beforePacket.peer.readerPid,after:afterPacket.peer.readerPid,nativeB:stage.transaction.backendPid,holder:receipt.holderIdentity.backendPid,initialMcpPoolContext:stage.poolContextPid,fixtureProof:fixtureProof.backendPid},
++  fixtureSqlSha256:sha(fixtureSql),fixtureQualificationSource:'UNCHANGED_CANONICAL_FRESH_FIXTURE_PROOF_C_AFTER_THIRD_FRAME',
+--- v6-contact-fresh-verification-successor-20261016/hold-case.mjs
++++ v6-contact-independent-c-after-20261017/hold-case.mjs
+@@ -6,3 +6,3 @@
+-import {source,buildInput,holderProofSql,requireThat,literal,ROUTE} from '../v6-contact-local-metadata-mcp-adapter-20261016/input-builder.mjs';
+-import {readStageOne,prepareQualification,validatePair} from './result-validator.mjs';
+-import {createFixedMetadataReader} from '../v6-contact-large-frame-feasibility-20261016/fixed-metadata-reader.mjs';
++import {source,buildInput,holderProofSql,requireThat,literal,ROUTE} from './input-builder.mjs';
++import {readStageOne,validateCase} from './result-validator.mjs';
++import {createFixedMetadataReader} from './fixed-metadata-reader.mjs';
+@@ -30 +30 @@
+- const {sha}=await import('../v6-contact-local-metadata-mcp-adapter-20261016/input-builder.mjs');
++ const {sha}=await import('./input-builder.mjs');
+@@ -68,7 +68,2 @@
+-     afterPacket=await reader.after({nativeBackendPid:stage.transaction.backendPid});within();
+-     const qualificationInput=await prepareQualification({root,result:nativeResult,receipt:built.receipt,beforePacket,afterPacket});
+-     saveSmall(out,'QUALIFICATION_INPUT.json',qualificationInput);
+-     const second=controls.wait('RELEASE');
+-     console.log(JSON.stringify({status:'PREPARED_ROOT_SECOND_KIER_MCP_FIXTURE_PROOF_REQUIRED',caseId,out,route:ROUTE,remainingWorkMilliseconds:Math.floor(BUDGET.workMilliseconds-(performance.now()-sequenceStart))}));
+-     await second;within();
+-     summary=await validatePair({root,result:nativeResult,receipt:built.receipt,beforePacket,afterPacket,qualificationInput,qualificationResult:readSmall(out,'QUALIFICATION_RESULT.json')});within();
++     afterPacket=await reader.after({transaction:stage.transaction,observations:stage.observations});within();
++     summary=await validateCase({root,result:nativeResult,receipt:built.receipt,beforePacket,afterPacket});within();
