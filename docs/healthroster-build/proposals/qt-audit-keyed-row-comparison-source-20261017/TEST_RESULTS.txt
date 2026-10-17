@@ -1,0 +1,40 @@
+✔ all six complete images and8 code hunks reverse raw to actual d353 parents (4.9198ms)
+✔ native index admission and complete fixture DO incl every original assertion remain raw unchanged (0.8933ms)
+✔ only exact two keyed CTAS hashes receive closed bounded SELECT expectation (0.6985ms)
+✔ exact bounded empty CTAS accepts native integer 0 (0.2208ms)
+✔ exact bounded empty CTAS accepts native integer 1 (0.0785ms)
+✔ exact bounded empty CTAS accepts native integer 1139776 (0.0675ms)
+✔ exact bounded empty CTAS accepts native integer 1500000 (0.0631ms)
+✔ CTAS count refuses cap+1 (0.0927ms)
+✔ CTAS count refuses negative (0.0731ms)
+✔ CTAS count refuses fractional (0.0995ms)
+✔ CTAS count refuses null (0.105ms)
+✔ CTAS count refuses string (0.0486ms)
+✔ CTAS count refuses infinity (0.0988ms)
+✔ CTAS count refuses NaN (0.0383ms)
+✔ CTAS count refuses unsafe (0.0275ms)
+✔ CTAS count refuses undefined (0.0542ms)
+✔ CTAS closed shape refuses truncation (0.0828ms)
+✔ CTAS closed shape refuses returned hash row (0.0477ms)
+✔ CTAS closed shape refuses wrong command (0.1019ms)
+✔ CTAS closed shape refuses extra key (0.0705ms)
+✔ CTAS closed shape refuses error (0.0363ms)
+✔ CTAS closed shape refuses wrong statement (0.0336ms)
+✔ unrelated and old aggregate CTAS hashes do not acquire bounded ABI permission (0.6171ms)
+✔ ordinary ONE_ROW SELECT and EMPTY_COMMAND retain exact shape semantics (0.0941ms)
+✔ complete manifest inverse preserves all46 unselected rows; no changes to source/timing/closure owners (1.2575ms)
+✔ entire PROGRAMMES/OFFLINE structures invert; constructors/current12scopes/caps/fresh verification unchanged (2.8367ms)
+✔ actual proposed response builder reproduces all69 sealed frame expectations (1.8143ms)
+✔ no new external storage/SQL effect: two fixed temp maps, local hashagg restored, same final response (0.373ms)
+✔ LIMIT M+1 and strict refusal is complete on every PASS; separate old-snapshot count cannot substitute (0.1697ms)
+✔ keyed full-row inner hashes retain every field/null/key and both directions unlike count-only (0.2679ms)
+✔ count+ordinary EXCEPT needs uniqueness; EXCEPT ALL preserves multiplicity (0.0777ms)
+✔ source-only render was actual original buildProgram with one virtual known assertion and no guard waiver (0.0368ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 133.8028

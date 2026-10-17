@@ -1,0 +1,61 @@
+{
+  "version": "QT_KEYED_AUDIT_SOURCE_DESIGN_RESEARCH_V1",
+  "postgresqlNativeVersion": "17.11",
+  "grammarParserVersion": "pglast v7.20 / PostgreSQL17.7 grammar, not native17.11 execution",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/postgres/postgres/REL_17_11/src/backend/optimizer/prep/prepunion.c",
+      "lines": "1221-1248",
+      "claim": "Sortable int8/bytea choose_hashed_setop takes sorted path when enable_hashagg is off; no actual plan claimed."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/postgres/postgres/REL_17_11/src/backend/executor/nodeSetOp.c",
+      "lines": "110-134,140-166,213-445",
+      "claim": "EXCEPT ALL multiplicity and sorted versus in-memory hashed SetOp paths."
+    },
+    {
+      "url": "https://www.postgresql.org/docs/17/queries-union.html",
+      "claim": "EXCEPT ALL retains multiplicity instead of DISTINCT set semantics."
+    },
+    {
+      "url": "https://www.postgresql.org/docs/17/runtime-config-resource.html",
+      "claim": "work_mem per operation; temp_buffers temporary cache; explicit temporary heap storage excluded from temp_file_limit."
+    },
+    {
+      "url": "https://www.postgresql.org/docs/17/transaction-iso.html",
+      "claim": "READ COMMITTED command snapshots; row-bound guard must qualify each actual capture snapshot."
+    }
+  ],
+  "historicalCountEvidence": {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_FIXED_COMPONENTS_R1_ACTUAL_20261017.json",
+    "actualObservedRows": "1139776",
+    "olderPlanEstimate": "1207404",
+    "freshCountClaimed": false,
+    "actualHeapBytes": "UNAVAILABLE"
+  },
+  "storageEstimate": {
+    "rowsAtMaterializationLimit": 1500001,
+    "twoBinaryTupleRawPayloadBytes": 72000048,
+    "twoBinaryTupleHeapEstimateBytes": 180715520,
+    "assumptions": "8KiB pages,24B page header,24B nonnull heap tuple header,int8+17B short bytea16,8B align,4B line pointer,noindexes,noTOAST; excludesFSM/VM/catalogue and sort spill",
+    "hardByteLimit": false
+  },
+  "budgets": {
+    "BStatementMs": 30000,
+    "CStatementMs": 45000,
+    "childMs": 70000,
+    "workMs": 120000,
+    "cleanupMs": 60000,
+    "wholeMs": 180000,
+    "workMem": "4MB",
+    "maintenanceWorkMem": "32MB",
+    "unchanged": true,
+    "combinedTiming": "NOT_PROVED"
+  },
+  "effects": {
+    "businessWritesAdded": 0,
+    "temporaryAuditHashMaps": 2,
+    "allTemporaryAndMarkerRestoration": "Original fresh/canonical proof still required",
+    "sqlOrNativeExecuted": false
+  }
+}

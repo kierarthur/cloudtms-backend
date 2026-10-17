@@ -23,7 +23,13 @@ do $qt_audit_admission$ begin
  if to_regclass('pg_temp.hr_contact_qt_audit_before') is not null or to_regclass('pg_temp.hr_contact_qt_audit_after') is not null then
   raise exception 'QT_AUDIT_DIGEST_TEMP_NAMESPACE_UNAVAILABLE';end if;
 end;$qt_audit_admission$;
-create temporary table hr_contact_qt_audit_before on commit drop as select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by a.event_sequence),'')) as digest from public.audit_events a;
+create temporary table hr_contact_qt_audit_before on commit drop as select a.event_sequence,pg_catalog.decode(md5(to_jsonb(a)::text),'hex') as row_digest from public.audit_events a limit 1500001;
+do $qt_audit_before_bound$ begin
+ if (select count(*) from pg_temp.hr_contact_qt_audit_before)>1500000 then
+  raise exception 'QT_AUDIT_WHOLE_TABLE_ROW_BOUND_EXCEEDED';end if;
+ if exists(select 1 from pg_temp.hr_contact_qt_audit_before where event_sequence is null or row_digest is null or pg_catalog.octet_length(row_digest)<>16) then
+  raise exception 'QT_AUDIT_DIGEST_NATIVE_FRAME_INVALID';end if;
+end;$qt_audit_before_bound$;
 do $qt_controls$
 declare
  ids uuid[]:=array['f717d041-0000-4000-8000-000000000001','f717d041-0000-4000-8000-000000000002',
@@ -146,13 +152,26 @@ begin
  'changedBodyRefusals',1,'staleCasRefusals',1,'effectiveRoleAclChecks',acl_checks,'directRoleApi','NOT_RUN',
  'crossAgencyProof','NOT_RUN','postWaitRace','NOT_RUN','outerIsolation',current_setting('transaction_isolation')));
 end;$qt_controls$;
-create temporary table hr_contact_qt_audit_after on commit drop as select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by a.event_sequence),'')) as digest from public.audit_events a;
-do $qt_audit_equality$ begin
- if (select count(*) from pg_temp.hr_contact_qt_audit_before)<>1 or (select count(*) from pg_temp.hr_contact_qt_audit_after)<>1
-  or exists(select 1 from pg_temp.hr_contact_qt_audit_before where digest is null or digest!~'^[0-9a-f]{32}$')
-  or exists(select 1 from pg_temp.hr_contact_qt_audit_after where digest is null or digest!~'^[0-9a-f]{32}$') then
-  raise exception 'QT_AUDIT_DIGEST_NATIVE_FRAME_INVALID';end if;
- if (select digest from pg_temp.hr_contact_qt_audit_after) is distinct from (select digest from pg_temp.hr_contact_qt_audit_before) then
+create temporary table hr_contact_qt_audit_after on commit drop as select a.event_sequence,pg_catalog.decode(md5(to_jsonb(a)::text),'hex') as row_digest from public.audit_events a limit 1500001;
+do $qt_audit_equality$
+declare audit_before_count bigint;audit_after_count bigint;audit_original_hashagg text;
+begin
+ select count(*) into audit_before_count from pg_temp.hr_contact_qt_audit_before;
+ select count(*) into audit_after_count from pg_temp.hr_contact_qt_audit_after;
+ if audit_before_count>1500000 or audit_after_count>1500000 then
+  raise exception 'QT_AUDIT_WHOLE_TABLE_ROW_BOUND_EXCEEDED';end if;
+ if audit_before_count is distinct from audit_after_count then
   raise exception 'QT_UNRELATED_SETTINGS_OR_GLOBAL_AUDIT_CHANGED';end if;
+ if exists(select 1 from pg_temp.hr_contact_qt_audit_before where event_sequence is null or row_digest is null or pg_catalog.octet_length(row_digest)<>16)
+  or exists(select 1 from pg_temp.hr_contact_qt_audit_after where event_sequence is null or row_digest is null or pg_catalog.octet_length(row_digest)<>16) then
+  raise exception 'QT_AUDIT_DIGEST_NATIVE_FRAME_INVALID';end if;
+ audit_original_hashagg:=pg_catalog.current_setting('enable_hashagg');
+ perform pg_catalog.set_config('enable_hashagg','off',true);
+ if exists(select event_sequence,row_digest from pg_temp.hr_contact_qt_audit_before
+   except all select event_sequence,row_digest from pg_temp.hr_contact_qt_audit_after)
+  or exists(select event_sequence,row_digest from pg_temp.hr_contact_qt_audit_after
+   except all select event_sequence,row_digest from pg_temp.hr_contact_qt_audit_before) then
+  raise exception 'QT_UNRELATED_SETTINGS_OR_GLOBAL_AUDIT_CHANGED';end if;
+ perform pg_catalog.set_config('enable_hashagg',audit_original_hashagg,true);
 end;$qt_audit_equality$;
 select value as programme_result from hr_contact_qt_result;

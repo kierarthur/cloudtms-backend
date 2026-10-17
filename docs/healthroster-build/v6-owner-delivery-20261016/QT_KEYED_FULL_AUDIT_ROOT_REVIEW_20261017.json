@@ -1,0 +1,30 @@
+{
+  "version": "QT_KEYED_FULL_AUDIT_ROOT_REVIEW_V1",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY_FOR_ONE_CHANGED_TRIAL",
+  "packet": "docs/healthroster-build/proposals/qt-audit-keyed-row-comparison-source-20261017",
+  "manifestSha256": "0409243c8acca4987e11e2246f4a36ce9a3152d7376dd29b656ff88e3c47f970",
+  "packetFiles": 24,
+  "targets": 6,
+  "rawCodeInverses": 8,
+  "retainedAdapterImages": 46,
+  "allSavedIndexHeadHistoricalParentImages": 52,
+  "rootTests": 32,
+  "authorTests": 32,
+  "pg17Ast": "PASS pglast7.20/PostgreSQL17.7 grammar only; original fixture/admission DO raw+AST unchanged; no local business DB.",
+  "syntaxChecks": 6,
+  "scope": "Every audit row/all columns via unchanged inner MD5; binary keyed count+both EXCEPT ALL equality implies original ordered-inner-hash-vector equality. Original per-row hash collision limitation retained; no literal collision-free equality claim.",
+  "completeness": "Each actual CTAS LIMIT1500001 plus native count<=1500000 proves no truncation on every PASS. BEFORE cap refusal before fixtures. Row growth may HOLD.",
+  "resource": "Fixed narrow tuple row bound; estimated explicit TEMP heap bytes are not a hard disk/memory limit. enable_hashagg off only around comparison selects sorted SetOp for int8/bytea on PG17 and restores original setting. Original4MB work_mem/32MB maintenance/30s statement/C45child70/work120cleanup60whole180 retained.",
+  "plannerSource": "https://raw.githubusercontent.com/postgres/postgres/REL_17_11/src/backend/optimizer/prep/prepunion.c#L1221-L1248",
+  "wire": "Only two exact new SQL hashes accept integer0..1500000 SELECT/empty fields+rows/nottruncated. Actual CTAS provider ABI UNOBSERVED; mismatch HOLD.",
+  "runtime": "NOT_RUN; no speed/parallelism/whole-budget fit claim.",
+  "controller": {
+    "parent": "docs/healthroster-build/proposals/qt-top-level-ctas-r5-tools-orchestration-20261017.js.txt",
+    "file": "docs/healthroster-build/proposals/qt-keyed-row-comparison-r6-tools-orchestration-20261017.js.txt",
+    "wholeRawInverse": true,
+    "edits": 2
+  },
+  "setupPrefixPreserved": true,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

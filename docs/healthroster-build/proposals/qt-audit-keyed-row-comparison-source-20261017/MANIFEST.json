@@ -1,0 +1,120 @@
+{
+  "version": "QT_KEYED_FULL_AUDIT_BOUND_SOURCE_PACKET_V1",
+  "files": [
+    {
+      "file": "FORWARD.json",
+      "bytes": 37708,
+      "sha256": "166473e48f6d4fef06bd54661602df89989d7d4e44cae221236a7dfa21f7c5a6"
+    },
+    {
+      "file": "PG17_AST_PROOF.json",
+      "bytes": 526,
+      "sha256": "cbc445a7249324e5a0004447bdaa73f70601d24ae22c0eb2898a09eb2ea83138"
+    },
+    {
+      "file": "README.md",
+      "bytes": 5696,
+      "sha256": "7f7fff6bcfa968dd8ec169563c01ad6230c6a474b0e0964de1f5e859cf003547"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 566,
+      "sha256": "ee96afd77f8af337dc730a2683bf68f65715f56d7139f6762fc132d0da9bf0ba"
+    },
+    {
+      "file": "SOURCE_RESEARCH.json",
+      "bytes": 2498,
+      "sha256": "ab28ed4d314c26776f64f922db1334773f1279195cde34d72e33565faef0efc3"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 2434,
+      "sha256": "bcf9d4399e8afd0b487213635b86de1fa145c761fdb5b264f333cf7f600bb226"
+    },
+    {
+      "file": "parent/MANIFEST.json",
+      "bytes": 8530,
+      "sha256": "f3387d72e94b3d318d8400628bef11f974856b0a017cf9e56bd0ed21e76d1049"
+    },
+    {
+      "file": "parent/OFFLINE_INPUTS.json",
+      "bytes": 117902,
+      "sha256": "0f2095235a18b02cf4f13edab6c7d28469b1b5bd74931676ecd95b7c020f6b50"
+    },
+    {
+      "file": "parent/PROGRAMMES.json",
+      "bytes": 61875,
+      "sha256": "5b8ee4436ec2f453a02d18d957eff9ba6936a222558cdff358adf2df8db192e3"
+    },
+    {
+      "file": "parent/input-builder.mjs",
+      "bytes": 7950,
+      "sha256": "17065b23b0eb030d928354a785b1eba0f537bc798fa7f1a805bb4ad4c07fd9f4"
+    },
+    {
+      "file": "parent/qt-assertions.sql",
+      "bytes": 14934,
+      "sha256": "42bad7324edb5dcdc4c2c28b4d4978109478e2de86531cff074ee891619244c5"
+    },
+    {
+      "file": "parent/result-validator.mjs",
+      "bytes": 12137,
+      "sha256": "4f0f1701d9c7fde6e968bc0926514f800a50d8c2a10b90eda528c3cada9bb8ca"
+    },
+    {
+      "file": "payload/MANIFEST.json",
+      "bytes": 8530,
+      "sha256": "6fc7c1502e302facfd336467adc449cfb0f2873d62ae931112ad1b7d387c7354"
+    },
+    {
+      "file": "payload/OFFLINE_INPUTS.json",
+      "bytes": 119598,
+      "sha256": "ad4444554dcc64d8ee8ac22fbc6f9e347dde8ef29b93bb9416aa00f93c108681"
+    },
+    {
+      "file": "payload/PROGRAMMES.json",
+      "bytes": 63226,
+      "sha256": "ae130b4e0c414fe0a380029ad960f107b8f0bfd4f8d7221c5a7db744a1eb5200"
+    },
+    {
+      "file": "payload/input-builder.mjs",
+      "bytes": 7966,
+      "sha256": "80f80e517dcca68d672fbc2349c02573009740d87dbffb3e2d953fb74bdeb37c"
+    },
+    {
+      "file": "payload/qt-assertions.sql",
+      "bytes": 16266,
+      "sha256": "ff38691201bf33472ca6355a55605114b0077baa8f62b56c9ccda189dede32b8"
+    },
+    {
+      "file": "payload/result-validator.mjs",
+      "bytes": 12196,
+      "sha256": "7256e287f323932745e6b54d928c5d1db42eb4f5edf0e2bd5e18927a8a89e6a9"
+    },
+    {
+      "file": "pg17-proof.py",
+      "bytes": 4681,
+      "sha256": "54d8af5ad91153dc411b80509eeca02ba880810261cf7a07a05af1a21035a751"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 11065,
+      "sha256": "6e536ddc6569a5dcd0ac02a3561a7291543dd5094ccd3878f9580dbd121a2fbe"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 2721,
+      "sha256": "018eefbd87167d0be044f67dad8665f6c4efeb005691a02ff93fb41b14e2e4fd"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 10074,
+      "sha256": "e4e9b77ba326733d7fa865e2d3dae19d23e0fe3a94eb5053f04f47b19f821cc5"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1597,
+      "sha256": "163ee8ee2d2c1a44fef28232dcbb606d1ab69af83fed4b3392114edbe2f7eabd"
+    }
+  ]
+}

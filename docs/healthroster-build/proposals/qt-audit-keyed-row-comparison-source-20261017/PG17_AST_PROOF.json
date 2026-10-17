@@ -1,0 +1,20 @@
+{
+  "status": "PASS_PG17_AST_SOURCE_ONLY",
+  "pglast": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "assertionStatements": 8,
+  "twoFixedSnapshotBoundedKeyHashCaptures": true,
+  "limit": 1500001,
+  "cap": 1500000,
+  "mainFixtureAndAdmissionRawAndAstUnchanged": true,
+  "bothExactBinaryTupleExceptAllDirections": true,
+  "localHashaggSaveOffRestoreSourceOrder": true,
+  "statementAndDoParsingAllProgrammes": true,
+  "native": "NOT_RUN",
+  "performance": "NOT_PROVED",
+  "ctasWireAbi": "UNOBSERVED",
+  "SQLExecuted": false
+}

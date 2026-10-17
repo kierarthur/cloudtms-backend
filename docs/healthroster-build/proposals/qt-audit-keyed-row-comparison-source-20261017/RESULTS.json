@@ -1,0 +1,18 @@
+{
+  "version": "QT_KEYED_AUDIT_SOURCE_RESULTS_V1",
+  "status": "PASS_BOUNDED_SOURCE_PREPARATION_ONLY",
+  "tests": 32,
+  "pg17Ast": true,
+  "fullCodeInverses": 8,
+  "fullTargetImages": 6,
+  "allParentImages": 52,
+  "unselectedUnchanged": 46,
+  "originalParent": "d3531a4a729aeeac06d3cf943358e0dad2dcd69b",
+  "finalSourceVerificationHead": "d9ff79d6b5535182bd6578e18d018ffba3ccc7cb",
+  "sqlExecuted": false,
+  "native": "NOT_RUN",
+  "ctasProviderAbi": "UNOBSERVED",
+  "performance": "NOT_PROVED",
+  "wholeWorkBudgetFit": "NOT_PROVED",
+  "noActiveSourceWrites": true
+}
