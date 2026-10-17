@@ -1,0 +1,94 @@
+{
+  "version": "CONTRACT_PREVIEW_PREPARED_RECORD_FOUND_FORWARD_V1",
+  "files": [
+    {
+      "path": "assemble.py",
+      "bytes": 6742,
+      "sha256": "d369d5bb2a310ad3765e3a1fe206bc4f136f57484264649ab07bbdc911fb7336"
+    },
+    {
+      "path": "checks/offline.py",
+      "bytes": 14570,
+      "sha256": "760cb7b9d231065bd752ed3fc75e3b378c7ab8a46cb7073ba2bd0acf82cce672"
+    },
+    {
+      "path": "checks/verify-freeze.py",
+      "bytes": 993,
+      "sha256": "bf1459ef7156c5a681118a7ecea899f6fb226ea5aa25a4c79b59fcc1a9d34a6d"
+    },
+    {
+      "path": "F2_FORWARD_EDITS.json",
+      "bytes": 19978,
+      "sha256": "22810f8b7a75ddce66488b42aaf2c1912abbd3f01e7a833056b4cba3392c8a55"
+    },
+    {
+      "path": "FINDING_SOURCE_PIN.json",
+      "bytes": 3261,
+      "sha256": "9cf4ffe6d767133006ab2bda4f41084b59880a1837c9785a7c9d7c5fa897dcae"
+    },
+    {
+      "path": "fragments/21_locked_preview_enrollment.plpgsql",
+      "bytes": 12246,
+      "sha256": "c3ad74f57bf42c7292ceda4505b430753f3b976d1490d928e065406313c710f2"
+    },
+    {
+      "path": "fragments/21_scope_locked_from_native_owner.plpgsql",
+      "bytes": 9538,
+      "sha256": "c7ccf8cda969c400d776aef07e4acd1f0ed934a29dd0a3cc72ce34943a942df0"
+    },
+    {
+      "path": "OFFLINE_RESULTS.json",
+      "bytes": 4130,
+      "sha256": "ba6b4053ec5092c8ab84bec48040b8d47956781c562a6d35df53a90b25f010ec"
+    },
+    {
+      "path": "OWNER_BLOCKS.json",
+      "bytes": 6078,
+      "sha256": "059fe42b84ae3641a17cf662bf6150b9fb6f2299e0a2c5d7e0355c2dad1962fc"
+    },
+    {
+      "path": "README.md",
+      "bytes": 6710,
+      "sha256": "bf34fb0a8fbaec83dd480f0613c56c1ab3cc3be3510bc25e35cdfb7f8b2fa398"
+    },
+    {
+      "path": "reference/20_preview.before.sql.tmpl",
+      "bytes": 10427,
+      "sha256": "d5a1e843e2894a6ad1b5674f7dc735bb8d5b7c33f850cfe8d0b4df87399fea3c"
+    },
+    {
+      "path": "reference/private__timesheet_contract_move_family_lock_v1.sqlinc",
+      "bytes": 2224,
+      "sha256": "8fc91c710e6ca1ddb26d814c3e02662ade9c769b40f084496a58459d3ea54888"
+    },
+    {
+      "path": "reference/private__timesheet_contract_move_scope_v1.sqlinc",
+      "bytes": 9857,
+      "sha256": "2d3eb8da4dcdf329225bb0f8eaa96dd4df8a9466304d0d52fc48ab88960c0cad"
+    },
+    {
+      "path": "SCOPE_BLOCK_DERIVATION.json",
+      "bytes": 2465,
+      "sha256": "0233900d338d3249dd110113fcea6398b88ca4e62dde62d94a3f391bf412603c"
+    },
+    {
+      "path": "SOURCE_SELECTION.json",
+      "bytes": 14438,
+      "sha256": "ac579c07f364bbc1de5b657b41375d9bed3e4ca3d71af9deb944b8099da7ac8a"
+    },
+    {
+      "path": "TEMPLATE_PARENT_EDITS.json",
+      "bytes": 3352,
+      "sha256": "98d4371844d7ea0a8186ab298388f6ec9a5fe3eeca8980171508e5083cfd743f"
+    },
+    {
+      "path": "templates/20_preview.sql.tmpl",
+      "bytes": 10148,
+      "sha256": "8039d0e8d3c162e9dea38395ea9d6d633f7c42ce5ba329cb5cc2fa900669ee77"
+    }
+  ],
+  "cf267Original17FilesUnchanged": true,
+  "F2": "EXPLICIT_RECORD_IDENTITY_NO_AMBIENT_FOUND",
+  "runtimeEmission": "REFUSED",
+  "native": "NOT_RUN"
+}

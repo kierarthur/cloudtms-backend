@@ -1,0 +1,30 @@
+create or replace function private.timesheet_contract_move_family_lock_v1(p_timesheet_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+declare placement jsonb; checked jsonb; candidate uuid; root_id uuid; pending jsonb;
+begin
+ placement:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
+ root_id:=(placement->>'family_root_id')::uuid;
+ if placement->'current_timesheet_id'='null'::jsonb then
+  select private.timesheet_contract_native_pending_v1(to_jsonb(p),false) into pending
+   from private.timesheet_contract_current_placements p where p.family_root_id=root_id
+    and p.member_key=(select a.member_key from private.timesheet_contract_family_aliases a where a.timesheet_id=p_timesheet_id);
+  select c.candidate_id into candidate from public.contracts c where c.id=(placement->>'current_contract_id')::uuid
+   and c.candidate_id=(pending#>>'{placement,candidate_id}')::uuid;
+ else
+  select c.candidate_id into candidate from public.timesheets t join public.contracts c on c.id=t.contract_id
+   where t.timesheet_id=(placement->>'current_timesheet_id')::uuid;
+ end if;
+ if candidate is null then raise exception 'CONTRACT_MOVE_NATIVE_CANDIDATE_UNBOUND' using errcode='55000'; end if;
+ perform 1 from public.candidates c where c.id=candidate for update;
+ perform 1 from private.bpay_next_worker_control c where c.candidate_id=candidate for update;
+ perform 1 from private.timesheet_contract_current_placements p where p.family_root_id=root_id order by p.member_key for update;
+ perform 1 from public.timesheets t where t.timesheet_id=root_id or t.timesheet_id=(placement->>'current_timesheet_id')::uuid
+  or t.timesheet_id in(select a.timesheet_id from private.timesheet_contract_family_aliases a where a.family_root_id=root_id)
+  order by t.timesheet_id for update;
+ if pending is not null then perform 1 from public.contract_weeks cw where cw.id=(pending->>'contract_week_id')::uuid for update;end if;
+ checked:=private.timesheet_contract_current_placement_v1(p_timesheet_id);
+ if checked is distinct from placement then raise exception 'REVIEW_STALE' using errcode='40001'; end if;
+ return checked;
+end;
+$function$;
