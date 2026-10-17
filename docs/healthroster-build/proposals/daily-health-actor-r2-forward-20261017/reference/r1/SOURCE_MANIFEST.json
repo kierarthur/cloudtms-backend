@@ -1,0 +1,43 @@
+{
+  "version": "DAILY_HEALTH_ACTOR_ADAPTER_EXECUTABLE_V1",
+  "sourcePinsSha256": "f0601a9308651e40c3490d298d402258588023562ffcdd6777534b4bb2205ac3",
+  "files": [
+    {
+      "file": "source.mjs",
+      "sha256": "93a228812d25b13c70b80487518a04c1355e2235e318bff0bda1f74cc063b50a"
+    },
+    {
+      "file": "build-program.mjs",
+      "sha256": "643b6fc1010c588358982644251da48b419b72bb711a89f6e19e25de20c2b141"
+    },
+    {
+      "file": "input-builder.mjs",
+      "sha256": "43bd23352aa8f8b25b38f58a4e9c9fdb563f75ab000b13653976e57dfe426470"
+    },
+    {
+      "file": "fixed-metadata-reader.mjs",
+      "sha256": "8713d13168b49d046f8d85b91352143ccfe283cc04682702366074dc30eaad34"
+    },
+    {
+      "file": "control.mjs",
+      "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8"
+    },
+    {
+      "file": "result-validator.mjs",
+      "sha256": "dcf8321c0a30c686381a5cc098a7ce61378d2bc96ba14df290782b934a8304cc"
+    },
+    {
+      "file": "timing.mjs",
+      "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9"
+    },
+    {
+      "file": "hold-actor.mjs",
+      "sha256": "be3f798a7521bdfc7a36fd370595a513807364f40b82de81def0c23aa504d4a2"
+    },
+    {
+      "file": "SETUP_ENTRY.md",
+      "sha256": "9604ad0a836eccea6d5ccb80b7244e9ed88c91114e09d031611c37c3729fae37"
+    }
+  ],
+  "native": "NOT_RUN"
+}

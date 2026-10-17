@@ -1,0 +1,252 @@
+{
+  "version": "DAILY_HEALTH_REMAINING_COMPOSERS_SOURCE_CENSUS_V1",
+  "rootCheckpointObserved": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
+  "reportFrozenCommit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+  "reportOwnerBlocksSha256": "6dcc99a25a5080ca3d35260aa4c589274cd03c5c9164a5535fb90dd4493cf718",
+  "approvedPolicy": [
+    {
+      "absolutePath": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "sha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1"
+    },
+    {
+      "absolutePath": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.json",
+      "sha256": "26340d197b911b4b64ec4889e4207f95d79b1b080fac8f03734cfeb5cf50123d"
+    },
+    {
+      "absolutePath": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json",
+      "sha256": "213c4ff9afc09b9fbf3be54b75b4d3629342647ba6f32119a9b13d269eec7c8f"
+    }
+  ],
+  "existingPublicBoundary": {
+    "root": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql",
+    "page": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+    "semantics": "Three actual service-only preview/accept/result wrappers and closed public assertion are source-mounted; missing private delegate refuses. Context is actual0858 separate wrapper. No nominal composer may satisfy existence."
+  },
+  "remaining": [
+    {
+      "name": "Review",
+      "signature": "private.daily_rate_correction_review_v1(jsonb)",
+      "registeredCurrentOwner": [],
+      "sourceTemplate": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/templates/01_review.sql.tmpl",
+      "status": "HEALTH_SOURCE_REVIEWED_GENUINE_BANK_JOIN_UNPROVIDED",
+      "boundary": {
+        "token": "@@BANK_REVIEW@@",
+        "owner": "BANKING",
+        "status": "UNPROVIDED",
+        "publishedContractPath": null,
+        "publishedContractCommit": null,
+        "publishedContractSha256": null,
+        "ownerCallBlockPath": null,
+        "ownerCallBlockSha256": null,
+        "inputSourceLocals": [
+          "actor",
+          "o",
+          "daily",
+          "physical"
+        ],
+        "mustBindSourceLocals": [
+          "bank_pay_cut_hash",
+          "bank_manifest_extension",
+          "bank_pay_effect",
+          "bank_financial_visible",
+          "bank_ready",
+          "bank_blockers",
+          "bank_links"
+        ],
+        "existingNativeMetadataRequired": [
+          "o.financial_state=QUALIFIED",
+          "o.current_financial_cut_id genuine",
+          "native prospective accepted_valuation_json when required by real0955"
+        ],
+        "obligation": "Actual original paid/frozen/current financial cut and known freeze/permission/history qualification under the actual native lock order; canonical SummaryDTO/current-role preview projection; genuine cut hash and any exact original native manifest extension. No prospective Work/command/publication or fabricated cut/zero/Ready. The exact callable signature, cut-hash semantics and native return/proof contract have not been published. Local variable names define Health composition slots only, not a new Bank service ABI."
+      }
+    },
+    {
+      "name": "Accept",
+      "signature": "private.daily_rate_correction_accept_v1(jsonb)",
+      "registeredCurrentOwner": [],
+      "sourceTemplate": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/templates/02_accept.sql.tmpl",
+      "status": "HEALTH_SOURCE_REVIEWED_GENUINE_BANK_JOIN_UNPROVIDED",
+      "boundary": {
+        "token": "@@BANK_ACCEPT@@",
+        "owner": "BANKING",
+        "status": "UNPROVIDED",
+        "publishedContractPath": null,
+        "publishedContractCommit": null,
+        "publishedContractSha256": null,
+        "ownerCallBlockPath": null,
+        "ownerCallBlockSha256": null,
+        "inputSourceLocals": [
+          "actor",
+          "o",
+          "r",
+          "context",
+          "preview_args"
+        ],
+        "mustBindSourceLocals": [
+          "bank_accept_qualified"
+        ],
+        "obligation": "Re-execute the genuine original financial cut/frozen/currentness/permission admission against this immutable review and actual native state under retained native locks, before Health Invoice/metadata locks, capability issue or DML. Exact original owner proof must be consumed by the real publisher and accepted valuation. No caller boolean, GUC, symbol-existence probe, legacy Contract-only cut API, new kernel or trusted arbitrary JSON substitutes. The Health local remains NULL unless a published reviewed owner block qualifies it."
+      }
+    },
+    {
+      "name": "Result",
+      "signature": "private.daily_rate_correction_result_v1(uuid,uuid)",
+      "registeredCurrentOwner": [],
+      "sourceTemplate": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/templates/03_result.sql.tmpl",
+      "status": "HEALTH_SOURCE_REVIEWED_GENUINE_BANK_JOIN_UNPROVIDED",
+      "boundary": {
+        "token": "@@BANK_RESULT@@",
+        "owner": "BANKING",
+        "status": "UNPROVIDED",
+        "publishedContractPath": null,
+        "publishedContractCommit": null,
+        "publishedContractSha256": null,
+        "ownerCallBlockPath": null,
+        "ownerCallBlockSha256": null,
+        "inputSourceLocals": [
+          "p_actor_user_id",
+          "o",
+          "basis"
+        ],
+        "mustBindSourceLocals": [
+          "financial",
+          "financial_visible",
+          "bank_next_actions",
+          "bank_links"
+        ],
+        "obligation": "Actual independent current Office reader authority plus canonical native current-versus-retained semantic financial result/SummaryDTO and exact permitted native actions/links. Project into the existing closed V3 Financial/Effect/Action shapes only using the sole published native owner/adapter. No raw receipt, no immutable creator projection replay, no Admin/pay/creator implies visibility, no invented status or monetary IDs. Required actual native callable/projection contract is unprovided."
+      }
+    }
+  ],
+  "sourcePrerequisiteOwners": [
+    {
+      "signature": "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "actualCurrentPhysicalSha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.daily_rate_correction_scope_v1(uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "actualCurrentPhysicalSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.daily_rate_correction_snapshot_assert_v1(jsonb,jsonb,jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "actualCurrentPhysicalSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.daily_rate_correction_normalized_snapshot_v1(jsonb,jsonb,jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "actualCurrentPhysicalSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.daily_rate_correction_request_assert_v1(jsonb,text)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "actualCurrentPhysicalSha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.invoice_contract_move_inspect_v1(jsonb,jsonb,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "actualCurrentPhysicalSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.invoice_contract_move_preflight_v1(uuid,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "actualCurrentPhysicalSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.invoice_contract_move_billing_read_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "actualCurrentPhysicalSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.timesheet_contract_move_commit_guard_v1()",
+      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "actualCurrentPhysicalSha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.timesheet_contract_move_reason_v1(text,text)",
+      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "actualCurrentPhysicalSha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.daily_rate_correction_revision_admit_v1(uuid,text)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "actualCurrentPhysicalSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.daily_rate_correction_assert_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "actualCurrentPhysicalSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.invoice_contract_move_prepare_v1(uuid,bigint,uuid,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "actualCurrentPhysicalSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    },
+    {
+      "signature": "private.timesheet_contract_move_capability_cleanup_v1()",
+      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "actualCurrentPhysicalSha256": "40945fe7761856b8296ef9a760c7168bdeeabedcbba7d619e4a5413167a0b0db",
+      "status": "ACTUAL_SOURCE_OWNER_ONLY_NATIVE_NOT_PROVED"
+    }
+  ],
+  "publishedProducerOnly": {
+    "signature": "private.bpay_next_daily_rate_correction_publish_v1(uuid,uuid)",
+    "policy": "WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.md section3 / DAILY-RATE-ADMISSION-01",
+    "declaredReturn": "DAILY_RATE_PUBLICATION_V1 with genuine work_id, revision_id, command_id, agency_sequence, state REGISTERED, canonical summary_dto",
+    "rule": "Health calls this exact producer once after real0858 revision admission, then requires original native daily_assert proof and Invoice obligation. No separate producer or summary implementation. Symbol existence alone never proves admission/publication."
+  },
+  "notRequiredCertificate": {
+    "status": "UNPROVIDED",
+    "signature": null,
+    "rule": "The actual pinned0858 path requires an approved genuine revision/publication and QUALIFIED native cut. No nominal NOT_REQUIRED alternative is authored. A genuine owner certificate and corresponding original native admission/receipt proof would require a separately reviewed successor."
+  },
+  "privatePlacementScalar": {
+    "sourcePeer": "0ee755825c136ab1434f98df003e0683d1326ae2",
+    "rootApproval": "REQUIRED_WITH_FULL_ASSEMBLY_NOT_RECORDED",
+    "history": "Native population/read behavior must be established; never guess or backfill historical revision"
+  },
+  "assemblyRemaining": [
+    "Reviewed current registry/source binding successor; preserve all original final-owner chains",
+    "Three actual published Banking contracts and exact owner call blocks, with independent current-reader permissions and native proofs",
+    "Full Health+owner expanded assembly peer review and root approval, including private placement receipt scalar",
+    "Fresh managed repeatable, complete owner/ACL/admission/final-definer registration, independent catalogue verification and finite source hazard proof",
+    "Native whole assembly/cross-session replay, positive RC basis, deferred incomplete-review rollback, RR/serializable refusal, actor/selector races, role redaction, exact invoice branches and once-only real publication/restoration"
+  ],
+  "lockedBasisDependency": "BANK_F17_EXISTING_NEXT_READINESS_PLUS_REAL_DAILY_FIXTURE_OTHER_ACCEPTANCE_MAY_RUN_FIRST",
+  "bankingBodiesRead": 0,
+  "inventedBankABI": false,
+  "native": "NOT_RUN",
+  "nativePublisherExecution": "NOT_RUN",
+  "runtimeComposerSymbolsEmitted": false,
+  "previousRootCheckpointObserved": "84738fe4057d9d693ccd723eb1835106f1091f57"
+}
