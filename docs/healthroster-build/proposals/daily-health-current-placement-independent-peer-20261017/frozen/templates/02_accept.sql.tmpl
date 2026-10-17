@@ -1,0 +1,94 @@
+-- HELD SOURCE TEMPLATE. Never installed with an unbound owner block.
+create or replace function private.daily_rate_correction_accept_v1(p_args jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare actor uuid; v_request_id uuid; operation uuid; request_hash bytea; preview_args jsonb; context jsonb; basis jsonb;
+ o private.timesheet_contract_move_operations%rowtype; r private.timesheet_contract_move_reviews%rowtype;
+ q private.timesheet_contract_move_requests%rowtype; applied jsonb; accepted_receipt jsonb; result jsonb; now_utc timestamptz;
+ bank_accept_qualified boolean;
+begin
+ perform private.daily_rate_correction_request_assert_v1(p_args,'ACCEPT');
+ actor:=(p_args->>'actor_user_id')::uuid;v_request_id:=(p_args->>'request_id')::uuid;operation:=(p_args->>'operation_id')::uuid;
+ request_hash:=private.daily_rate_correction_request_hash_v1(p_args,'ACCEPT');
+ if not exists(select 1 from public.tms_users u where u.id=actor and u.is_active) then
+  raise exception 'DAILY_RATE_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
+ select x.* into o from private.timesheet_contract_move_operations x where x.id=operation;
+ if o.id is null or o.purpose is distinct from 'DAILY_RATE_CORRECTION' or o.created_by_user_id is distinct from actor
+  or o.from_contract_id is not null or o.to_contract_id is not null then
+  raise exception 'DAILY_RATE_ACTOR_NOT_ALLOWED' using errcode='42501';end if;
+ -- A committed identical acceptance is a current-reader replay, independently
+ -- of newly lost mutation rights. Never return the creator's saved projection.
+ select x.* into q from private.timesheet_contract_move_requests x where x.request_id=v_request_id;
+ if q.request_id is not null then
+  if q.operation_id is distinct from operation or q.request_kind is distinct from 'ACCEPT'
+   or q.request_hash is distinct from request_hash or q.receipt_json is null then
+   raise exception 'DAILY_RATE_REQUEST_CONFLICT' using errcode='22023';end if;
+  return private.daily_rate_correction_result_v1(operation,actor);
+ end if;
+ perform private.daily_rate_correction_health_actor_require_v1(actor,false);
+ if current_setting('transaction_isolation') is distinct from 'read committed' then
+  raise exception 'DAILY_RATE_LOCKED_CONTEXT_ISOLATION_REQUIRED' using errcode='55000';end if;
+ -- Actual native locks first. Do not reject the original reviewed digest before
+ -- an in-flight identical acceptance can finish and be observed as a replay.
+ context:=private.daily_rate_correction_context_v1(o.from_timesheet_id,actor,true);
+ select x.* into q from private.timesheet_contract_move_requests x where x.request_id=v_request_id;
+ if q.request_id is not null then
+  if q.operation_id is distinct from operation or q.request_kind is distinct from 'ACCEPT'
+   or q.request_hash is distinct from request_hash or q.receipt_json is null then
+   raise exception 'DAILY_RATE_REQUEST_CONFLICT' using errcode='22023';end if;
+  return private.daily_rate_correction_result_v1(operation,actor);
+ end if;
+ perform private.daily_rate_correction_health_actor_require_v1(actor,true);
+ select x.* into o from private.timesheet_contract_move_operations x where x.id=operation;
+ select x.* into r from private.timesheet_contract_move_reviews x where x.id=(p_args->>'review_id')::uuid and x.operation_id=o.id;
+ if o.state is distinct from 'REVIEWED' or r.id is null or encode(r.review_digest,'hex') is distinct from p_args->>'review_digest'
+  or o.state_revision::text is distinct from p_args->>'expected_state_revision'
+  or exists(select 1 from private.timesheet_contract_move_reviews newer where newer.operation_id=o.id and newer.review_no>r.review_no) then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ preview_args:=jsonb_build_object('version','DAILY_RATE_CORRECTION_V1','request_id',r.preview_request_id,'actor_user_id',actor,
+  'timesheet_id',o.from_timesheet_id,'reason',private.daily_rate_correction_health_reason_note_v1(o.reason),
+  'context_digest',r.manifest_json#>>'{daily,context,context_digest}',
+  'calculation_snapshot',r.manifest_json#>'{daily,calculation_snapshot}','rate_provenance',r.manifest_json#>'{daily,rate_provenance}');
+ if private.daily_rate_correction_request_hash_v1(preview_args,'PREVIEW') is distinct from r.preview_request_hash then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ if private.daily_rate_correction_health_basis_v1(preview_args,true) is distinct from r.manifest_json->'daily' then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ @@BANK_ACCEPT@@
+ if bank_accept_qualified is distinct from true then
+  raise exception 'DAILY_RATE_BANK_ACCEPT_UNBOUND' using errcode='55000';end if;
+ -- Frozen helper acquires real Invoice locks then operation/review locks and
+ -- compares the entire rows again. No business effect has been admitted yet.
+ basis:=private.daily_rate_correction_health_accept_basis_v1(p_args);
+ perform pg_advisory_xact_lock(hashtextextended('timesheet-contract-move-request:'||v_request_id::text,0));
+ select x.* into q from private.timesheet_contract_move_requests x where x.request_id=v_request_id;
+ if q.request_id is not null then
+  if q.operation_id is distinct from operation or q.request_kind is distinct from 'ACCEPT'
+   or q.request_hash is distinct from request_hash or q.receipt_json is null then
+   raise exception 'DAILY_RATE_REQUEST_CONFLICT' using errcode='22023';end if;
+  return private.daily_rate_correction_result_v1(operation,actor);
+ end if;
+ applied:=private.daily_rate_correction_health_revision_apply_v1(p_args);
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=operation;
+ if applied->>'operation_id' is distinct from operation::text or applied->>'review_id' is distinct from r.id::text
+  or o.state is distinct from 'REVIEWED' or o.accepted_review_id is distinct from r.id
+  or o.accepted_review_digest is distinct from r.review_digest or o.after_invoice_hash is null then
+  raise exception 'DAILY_RATE_NATIVE_ACCEPTANCE_NOT_PROVED' using errcode='23514';end if;
+ now_utc:=clock_timestamp();
+ accepted_receipt:=jsonb_build_object('version','DAILY_RATE_CORRECTION_ACCEPTED_V1','operation_id',o.id,'request_id',v_request_id,
+  'review_id',r.id,'placement_receipt_id',o.placement_receipt_json->'receipt_id','financial_command_id',o.financial_command_id,
+  'billing_revision',o.billing_revision::text,'preparation_operation_id',o.preparation_operation_id,'accepted_at_utc',now_utc);
+ insert into private.timesheet_contract_move_requests(request_id,operation_id,request_kind,request_hash,review_id,state_revision,created_at_utc)
+ values(v_request_id,o.id,'ACCEPT',request_hash,r.id,o.state_revision+1,now_utc);
+ update private.timesheet_contract_move_operations set accept_request_id=v_request_id,accept_request_hash=request_hash,
+  state='COMPLETE',state_revision=state_revision+1,completed_at_utc=now_utc,receipt_json=accepted_receipt where id=o.id;
+ perform private.daily_rate_correction_assert_v1(o.id,r.id);
+ result:=private.daily_rate_correction_result_v1(o.id,actor);
+ result:=private.daily_rate_correction_public_assert_v1(result,'RESULT');
+ update private.timesheet_contract_move_requests saved set receipt_json=result where saved.request_id=v_request_id and saved.operation_id=o.id;
+ return result;
+ -- Any missing current-reader join or projection failure rolls back revision,
+ -- publication and Invoice registration together. Never return a partial success.
+end;
+$function$;
+revoke all on function private.daily_rate_correction_accept_v1(jsonb) from public,anon,authenticated,service_role;

@@ -1,0 +1,38 @@
+{
+  "version": "DAILY_HEALTH_SOURCE_SELECTION_V1",
+  "runtimeTargets": [],
+  "installable": false,
+  "closedHelpers": [
+    "health/00_presentation.sqlinc",
+    "health/05_review_enrollment.sqlinc",
+    "health/10_revision_apply.sqlinc"
+  ],
+  "heldTemplates": [
+    "templates/01_review.sql.tmpl",
+    "templates/02_accept.sql.tmpl",
+    "templates/03_result.sql.tmpl"
+  ],
+  "healthDefinitions": 8,
+  "newSignatures": [
+    "private.daily_rate_correction_health_financial_projection_assert_v1(jsonb,boolean)",
+    "private.daily_rate_correction_health_invoice_effect_v1(jsonb)",
+    "private.daily_rate_correction_health_actions_assert_v1(jsonb)",
+    "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+    "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+    "private.daily_rate_correction_review_v1(jsonb)",
+    "private.daily_rate_correction_accept_v1(jsonb)",
+    "private.daily_rate_correction_result_v1(uuid,uuid)"
+  ],
+  "explicitOwnerAcl": "health/99_acl.sqlinc",
+  "oneTimeAdmission": "admission/ONE_TIME_ADMISSION.sqlinc",
+  "independentMandatoryCatalogueVerifier": "verification/mandatory_security.sql",
+  "finiteAdditiveReverse": "ADDITIVE_REVERSE.sqlinc",
+  "fullParentReversal": "FORWARD_REVERSE.json",
+  "currentSourceBinding": "CURRENT_SOURCE_BINDING.json",
+  "sharedPlacementHistoryQualification": "PLACEMENT_HISTORY_QUALIFICATION.md",
+  "runtimeEmission": "REFUSED_UNPROVIDED_REAL_JOINS_AND_ROOT_APPROVAL",
+  "native": "NOT_RUN",
+  "current0910Binding": "CURRENT0910_BINDING.json",
+  "currentSourceParent": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+  "previousSelection": "reference/bc9f/SOURCE_SELECTION.json"
+}

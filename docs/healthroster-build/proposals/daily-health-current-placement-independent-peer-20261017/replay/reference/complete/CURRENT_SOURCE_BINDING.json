@@ -1,0 +1,238 @@
+{
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "physicalRoot": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "gitdir": "D:/Development/GitHub/cloudtms-backend/.git/worktrees/healthroster-install2-14102026",
+  "commonGitDirectory": "D:/Development/GitHub/cloudtms-backend/.git",
+  "commit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+  "inputs": [
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "sha256": "869be3d8ff7f6635c9ca81c6805558e1de8d1f1de60c0d21342b0dfbfac39ea0",
+      "bytes": 244,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "sha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6",
+      "bytes": 8650,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "sha256": "f0477a93e05e9fa6960d64df4628c17421ce1e80d661067febec3c5fa0e6f3c4",
+      "bytes": 288,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "sha256": "888fcbcb73c5222f3756e1428130a67fe7a06f56b544d3a17c92cc46795b9852",
+      "bytes": 2886,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "sha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+      "bytes": 18959,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "bytes": 15886,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "bytes": 15693,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "bytes": 38065,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "bytes": 4862,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+      "bytes": 40625,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/release/migration-lock.json",
+      "sha256": "6b0b4a3d518a3d80a2dff6ab9a17dfe347efb6c073574c4cf5014581ada2f250",
+      "bytes": 79483,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "bytes": 1314634,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c",
+      "bytes": 1746259,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "supabase/release/current-release.json",
+      "sha256": "1396346c26872e318231f0815594b2efe206eac4180de7b3c9120f14be24726d",
+      "bytes": 36636,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+      "bytes": 283554,
+      "savedEqualsCommit": true,
+      "provenance": "ACTUAL_SAVED_EQUALS_COMMITTED_SOURCE"
+    }
+  ],
+  "originalDailyBodiesUnchanged": true,
+  "existingSevenOwnerChains": [
+    {
+      "signature": "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+        "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql"
+      ],
+      "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_reason_note_v1(text)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_actor_require_v1(uuid,boolean)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_basis_v1(jsonb,boolean)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_review_prepare_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_accept_basis_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_result_basis_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    }
+  ],
+  "newEightNamesAbsentFromRegisteredChains": true,
+  "sharedPolicy": {
+    "path": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/MOVE_STAGE_CONTRACT.md",
+    "sha256": "e8fd1cbff0165343b7460d52a4c73d41d6ee1fc7b4cb6b624f5df3eedf55262f",
+    "bytes": 87319,
+    "copy": "reference/policy/MOVE_STAGE_CONTRACT.md"
+  },
+  "migrationLockIsCurrentMetadataOnly": true,
+  "actualMigrationLockTopLevelKeys": [
+    "formatVersion",
+    "policy",
+    "migrations"
+  ],
+  "metadataComposition": "CURRENT0910_SOURCE_BINDING_ONLY; no root registry/release replacement payload",
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "prior77Binding": "reference/bc9f/CURRENT_SOURCE_BINDING.json",
+  "current0910Binding": "CURRENT0910_BINDING.json",
+  "oldObservedDivergencePreserved": true
+}
