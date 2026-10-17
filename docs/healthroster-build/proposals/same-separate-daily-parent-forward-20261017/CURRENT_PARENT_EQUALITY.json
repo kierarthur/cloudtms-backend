@@ -1,0 +1,202 @@
+{
+  "parent": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c",
+  "functionalParent": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+  "pins": [
+    {
+      "path": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+      "sha256": "a9149686b3aa1456603550dfa8eb93af1936606e498113286110a4f900274902",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "sha256": "f99a6448dc8e3534768fa8742ca6b1a0b71a79507bee30f09e39e33afe71e9b5",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "sha256": "23a0681163e4942f71fac7c9ff3eb275719cf1dafb39c2b817f0c3dba8d6a711",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "sha256": "264922d32b47818ae8ad289d9b822bb4e9514803d35e409c977dfec8cac38125",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "sha256": "cca64fd3d0f21814b5c7fa57f9c8958486b2d20740a4170d5e75c4be4d92925d",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "sha256": "97df46e0db21c7a232c0368ad6da2a7cbc6f16f4743328757fa37a433c1ea9c3",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/030_off_rule_shape.sqlinc",
+      "sha256": "15dbe990cfe6792c01d0775c956cf41c2fa88e44b16ccda58400c0e5a9d2d79a",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "sha256": "7daf9acc89cc8cfbb387524d180fd55e2482326e51b4fee6eadccb6a6ee434a8",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+      "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "sha256": "0815260d495a35c0c612dbd7cbb9f07940d719236e5fbbc0d335b57695e128f6",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "broker/src/weekly-source/routes.js",
+      "sha256": "91b1a323e74114490c2c15455e3c9a9db20675e8ad35a695c8061bc43d37eb1d",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc",
+      "sha256": "0ccc3bce3002fb844c88017ed66d45ecf2bbb70f92c78039d3105539c564ca79",
+      "functionalCheckpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "currentCheckpoint": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c"
+    }
+  ],
+  "currentClassifierUnchanged": true,
+  "preservedDailyChains": 6,
+  "independentRootVerifierCopiedOrChanged": false,
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,22 @@
+{
+  "parent": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c",
+  "actualLoader": true,
+  "checks": [
+    {
+      "name": "PHANTOM_0126_CLOSURE",
+      "refusal": "BPAY_NEXT_FINAL_CLOSURE_MISSING: supabase/repeatable/17102026_0126_weekly_source_missing_health_authority_v1.sql"
+    },
+    {
+      "name": "MISSING_SAME_NATIVE_OWNER",
+      "refusal": "NO_UNPINNED_SOURCE_FALLBACK supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc"
+    }
+  ],
+  "oldEf64Metadata": {
+    "selectedRootLoader": "ACCEPTS",
+    "independentPreservationGuard": "REFUSES",
+    "refusal": "EXACT_DAILY_CHAIN_REQUIRED private.daily_rate_correction_health_reason_note_v1(text)\n+ actual - expected\n\n+ undefined\n- {\n-   allowedPhysical: [\n-     'supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc'\n-   ],\n-   finalClosures: [\n-     'supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql'\n-   ],\n-   finalPhysical: 'supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc',\n-   finalRoot: 'supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql',\n-   healthDailySupportReview: 'docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md',\n-   owner: 'HEALTH Daily support; exact e938 private helper body',\n-   predecessors: [],\n-   signature: 'private.daily_rate_correction_health_reason_note_v1(text)'\n- }\n"
+  },
+  "native": "NOT_RUN",
+  "rootWrites": 0,
+  "dbConnections": 0
+}
