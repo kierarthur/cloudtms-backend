@@ -6,7 +6,7 @@
     {
       "file": "EXTERNAL_SOURCE_PINS.json",
       "bytes": 2057,
-      "sha256": "3e691dc5cbf31ddc3710b29d3ac0ef87992c26265326e7ae3292778d5011e64a"
+      "sha256": "fc5d8566dab287e2c2fef26c1b38ec16c7a9c46b75f1ae31165e203f26a7b9f9"
     },
     {
       "file": "FULL_PARENT_COMPOSITION.json",
@@ -80,8 +80,8 @@
     },
     {
       "file": "source.mjs",
-      "bytes": 3759,
-      "sha256": "4d2e9fe18522883360e79a0c65c22e09c3c2d4215cd185ff4911a8c0d4324770"
+      "bytes": 4069,
+      "sha256": "9bcf873383794c3195ba51cf07b8246ca966b83b8a3a7e8b70106035f0dd4c88"
     },
     {
       "file": "verify.mjs",
