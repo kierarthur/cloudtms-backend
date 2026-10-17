@@ -73,8 +73,8 @@
     },
     {
       "file": "input-builder.mjs",
-      "bytes": 7217,
-      "sha256": "c715cc0cb96a9c6b83819ddcf210385b4797eb52112b8785d69c54ac5ee6f90d"
+      "bytes": 7950,
+      "sha256": "17065b23b0eb030d928354a785b1eba0f537bc798fa7f1a805bb4ad4c07fd9f4"
     },
     {
       "file": "metadata-diagnostic.mjs",
@@ -93,8 +93,8 @@
     },
     {
       "file": "OFFLINE_INPUTS.json",
-      "bytes": 115614,
-      "sha256": "51915dabd2235f9babde18175f02841baa79e564a39ae65c9fdd322dc547b484"
+      "bytes": 117902,
+      "sha256": "0f2095235a18b02cf4f13edab6c7d28469b1b5bd74931676ecd95b7c020f6b50"
     },
     {
       "file": "PLAN_SOURCE_SCOPES.json",
@@ -118,13 +118,13 @@
     },
     {
       "file": "PROGRAMMES.json",
-      "bytes": 60871,
-      "sha256": "c98db008ec087f94fd2aa7d07e7192020fec4b9f563d39e94ffeda1e27f43be7"
+      "bytes": 61875,
+      "sha256": "5b8ee4436ec2f453a02d18d957eff9ba6936a222558cdff358adf2df8db192e3"
     },
     {
       "file": "qt-assertions.sql",
-      "bytes": 13942,
-      "sha256": "b1b03dac5ae2b066a5de499f9c493efbc3827302b2bb81707c83e088f1505d48"
+      "bytes": 14934,
+      "sha256": "42bad7324edb5dcdc4c2c28b4d4978109478e2de86531cff074ee891619244c5"
     },
     {
       "file": "READER_PARENT_REVERSE.json",
@@ -218,8 +218,8 @@
     },
     {
       "file": "result-validator.mjs",
-      "bytes": 11793,
-      "sha256": "ebb88d1b7d6b2cfeb89f5fe5f0762d00d0633251a9b96c7f7de9ea65f84cc713"
+      "bytes": 12137,
+      "sha256": "4f0f1701d9c7fde6e968bc0926514f800a50d8c2a10b90eda528c3cada9bb8ca"
     },
     {
       "file": "ROOT_SOURCE_BINDING.json",

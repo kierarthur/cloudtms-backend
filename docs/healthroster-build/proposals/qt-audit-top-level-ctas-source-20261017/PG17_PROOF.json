@@ -1,0 +1,40 @@
+{
+  "version": "QT_TOP_LEVEL_CTAS_PG17_SOURCE_PROOF_V1",
+  "postgresql": [
+    17,
+    7
+  ],
+  "pglast": "v7.20",
+  "fullRawInverse": true,
+  "mainPlAstOnlyRemovesMovedGuardAndTwoDigestSites": true,
+  "twoCtasInnerFullSelectAstEqualToOriginal": true,
+  "temporaryOnCommitDropTables": 2,
+  "programmeResultAfterNativeEquality": true,
+  "indexGuardBeforeCtasAndFixtures": true,
+  "auditIntervalTail": {
+    "existingReadOnlyAclRoleCountChecks": true,
+    "existingTemporaryResultInsert": 1,
+    "additionalBusinessWrites": 0
+  },
+  "programmes": {
+    "CONTACT_CONSTRUCTORS_V1": 21,
+    "QT_ADMIN_CONTROLS_V1": 55
+  },
+  "inputs": {
+    "CONTACT_CONSTRUCTORS_V1": {
+      "sql": 34,
+      "verification_sql": 4
+    },
+    "QT_ADMIN_CONTROLS_V1": {
+      "sql": 68,
+      "verification_sql": 4
+    }
+  },
+  "ctasExpectedWireCompletion": "SELECT 1, empty fields and rows",
+  "ctasNativeAbi": "UNOBSERVED",
+  "nestedSpiSerialCause": "NOT_PROVED",
+  "parallelExecution": "NOT_PROVED",
+  "performance": "NOT_PROVED",
+  "SQLExecuted": false,
+  "native": "NOT_RUN"
+}

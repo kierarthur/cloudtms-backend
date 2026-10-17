@@ -1,5 +1,29 @@
 -- Root-only server-owned rollback B. These are native assertions, not a result fixture.
 create temporary table hr_contact_qt_result(value jsonb not null) on commit drop;
+do $qt_audit_admission$ begin
+ -- Canonical local digest order requires the exact existing unique native sequence index.
+ -- This is metadata admission, not an assumption that GENERATED ALWAYS implies uniqueness.
+ if not exists(
+  select 1 from pg_catalog.pg_index audit_order_index
+  join pg_catalog.pg_class audit_order_relation on audit_order_relation.oid=audit_order_index.indexrelid
+  join pg_catalog.pg_namespace audit_order_namespace on audit_order_namespace.oid=audit_order_relation.relnamespace
+  join pg_catalog.pg_am audit_order_method on audit_order_method.oid=audit_order_relation.relam
+  join pg_catalog.pg_attribute audit_order_column on audit_order_column.attrelid=audit_order_index.indrelid
+   and audit_order_column.attname='event_sequence' and audit_order_column.attnum>0 and not audit_order_column.attisdropped
+  where audit_order_namespace.nspname='public' and audit_order_relation.relname='audit_events_event_sequence_uq'
+   and audit_order_relation.relkind='i' and audit_order_method.amname='btree'
+   and audit_order_index.indrelid='public.audit_events'::regclass
+   and audit_order_index.indisunique and audit_order_index.indimmediate and audit_order_index.indisvalid and audit_order_index.indisready and audit_order_index.indislive
+   and audit_order_index.indnkeyatts=1 and audit_order_index.indnatts=1
+   and audit_order_index.indexprs is null and audit_order_index.indpred is null
+   and audit_order_index.indkey[0]=audit_order_column.attnum and audit_order_index.indoption[0]=0
+   and audit_order_column.attnotnull and audit_order_column.atttypid='pg_catalog.int8'::regtype and audit_order_column.attidentity='a'
+   and pg_catalog.pg_get_indexdef(audit_order_relation.oid)='CREATE UNIQUE INDEX audit_events_event_sequence_uq ON public.audit_events USING btree (event_sequence)'
+ ) then raise exception 'QT_AUDIT_EVENT_SEQUENCE_INDEX_UNAVAILABLE';end if;
+ if to_regclass('pg_temp.hr_contact_qt_audit_before') is not null or to_regclass('pg_temp.hr_contact_qt_audit_after') is not null then
+  raise exception 'QT_AUDIT_DIGEST_TEMP_NAMESPACE_UNAVAILABLE';end if;
+end;$qt_audit_admission$;
+create temporary table hr_contact_qt_audit_before on commit drop as select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by a.event_sequence),'')) as digest from public.audit_events a;
 do $qt_controls$
 declare
  ids uuid[]:=array['f717d041-0000-4000-8000-000000000001','f717d041-0000-4000-8000-000000000002',
@@ -20,28 +44,8 @@ declare
  result jsonb;before_journal jsonb;actor uuid;api text;role_name text;denials integer:=0;rejected boolean;
  global_before jsonb;defaults_before jsonb;audits_before text;constraint_name text;acl_checks integer:=0;
 begin
- -- Canonical local digest order requires the exact existing unique native sequence index.
- -- This is metadata admission, not an assumption that GENERATED ALWAYS implies uniqueness.
- if not exists(
-  select 1 from pg_catalog.pg_index audit_order_index
-  join pg_catalog.pg_class audit_order_relation on audit_order_relation.oid=audit_order_index.indexrelid
-  join pg_catalog.pg_namespace audit_order_namespace on audit_order_namespace.oid=audit_order_relation.relnamespace
-  join pg_catalog.pg_am audit_order_method on audit_order_method.oid=audit_order_relation.relam
-  join pg_catalog.pg_attribute audit_order_column on audit_order_column.attrelid=audit_order_index.indrelid
-   and audit_order_column.attname='event_sequence' and audit_order_column.attnum>0 and not audit_order_column.attisdropped
-  where audit_order_namespace.nspname='public' and audit_order_relation.relname='audit_events_event_sequence_uq'
-   and audit_order_relation.relkind='i' and audit_order_method.amname='btree'
-   and audit_order_index.indrelid='public.audit_events'::regclass
-   and audit_order_index.indisunique and audit_order_index.indimmediate and audit_order_index.indisvalid and audit_order_index.indisready and audit_order_index.indislive
-   and audit_order_index.indnkeyatts=1 and audit_order_index.indnatts=1
-   and audit_order_index.indexprs is null and audit_order_index.indpred is null
-   and audit_order_index.indkey[0]=audit_order_column.attnum and audit_order_index.indoption[0]=0
-   and audit_order_column.attnotnull and audit_order_column.atttypid='pg_catalog.int8'::regtype and audit_order_column.attidentity='a'
-   and pg_catalog.pg_get_indexdef(audit_order_relation.oid)='CREATE UNIQUE INDEX audit_events_event_sequence_uq ON public.audit_events USING btree (event_sequence)'
- ) then raise exception 'QT_AUDIT_EVENT_SEQUENCE_INDEX_UNAVAILABLE';end if;
  global_before:=(select to_jsonb(s) from public.weekly_source_global_settings s where singleton);
  defaults_before:=(select jsonb_agg(to_jsonb(s) order by s.id) from public.settings_defaults s);
- execute $qt_full_audit_digest$select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by a.event_sequence),'')) from public.audit_events a$qt_full_audit_digest$ into audits_before;
  insert into public.tms_users(id,email,role,is_active,password_hash,payment_authoriser,payment_golden_key) values
  (ids[1],'daily-health-actor-admin-20261017@example.invalid','admin',true,'!DAILY_HEALTH_ACTOR_ROLLBACK_ONLY!',false,false),
  (ids[2],'daily-health-actor-authoriser-20261017@example.invalid','user',true,'!DAILY_HEALTH_ACTOR_ROLLBACK_ONLY!',true,false),
@@ -116,8 +120,7 @@ begin
   if constraint_name<>'tms_users_payment_golden_implies_authoriser_chk' then raise;end if;rejected:=true;end;
  if not rejected then raise exception 'QT_GOLDEN_NATIVE_INVARIANT_NOT_PRESERVED';end if;
  if (select to_jsonb(s) from public.weekly_source_global_settings s where singleton) is distinct from global_before
-  or (select jsonb_agg(to_jsonb(s) order by s.id) from public.settings_defaults s) is distinct from defaults_before
-  or (select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by a.event_sequence),'')) from public.audit_events a) is distinct from audits_before then
+  or (select jsonb_agg(to_jsonb(s) order by s.id) from public.settings_defaults s) is distinct from defaults_before then
   raise exception 'QT_UNRELATED_SETTINGS_OR_GLOBAL_AUDIT_CHANGED';end if;
  foreach role_name in array array['anon','authenticated','service_role'] loop
   if has_table_privilege(role_name,'public.candidate_push_timing_policy','SELECT,INSERT,UPDATE,DELETE')
@@ -143,4 +146,13 @@ begin
  'changedBodyRefusals',1,'staleCasRefusals',1,'effectiveRoleAclChecks',acl_checks,'directRoleApi','NOT_RUN',
  'crossAgencyProof','NOT_RUN','postWaitRace','NOT_RUN','outerIsolation',current_setting('transaction_isolation')));
 end;$qt_controls$;
+create temporary table hr_contact_qt_audit_after on commit drop as select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by a.event_sequence),'')) as digest from public.audit_events a;
+do $qt_audit_equality$ begin
+ if (select count(*) from pg_temp.hr_contact_qt_audit_before)<>1 or (select count(*) from pg_temp.hr_contact_qt_audit_after)<>1
+  or exists(select 1 from pg_temp.hr_contact_qt_audit_before where digest is null or digest!~'^[0-9a-f]{32}$')
+  or exists(select 1 from pg_temp.hr_contact_qt_audit_after where digest is null or digest!~'^[0-9a-f]{32}$') then
+  raise exception 'QT_AUDIT_DIGEST_NATIVE_FRAME_INVALID';end if;
+ if (select digest from pg_temp.hr_contact_qt_audit_after) is distinct from (select digest from pg_temp.hr_contact_qt_audit_before) then
+  raise exception 'QT_UNRELATED_SETTINGS_OR_GLOBAL_AUDIT_CHANGED';end if;
+end;$qt_audit_equality$;
 select value as programme_result from hr_contact_qt_result;

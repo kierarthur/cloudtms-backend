@@ -1,0 +1,36 @@
+{
+  "version": "QT_CTAS_PG_COMMAND_SOURCE_EVIDENCE_V1",
+  "localParser": {
+    "file": "D:/Development/GitHub/cloudtms-backend/infra/miget/cloudtms-miget-operations/node_modules/pg/lib/result.js",
+    "sha256": "6d7193da53f8557600a065e4356626026e8c5baf12c477dc19e439d8f204225c",
+    "packageVersion": "8.23.0",
+    "packageSha256": "e42dd36cba6e9dd8dbb6f773a2f7be8a8c3c273e18b155e42e75961a4cb8bc28",
+    "syntheticTag": "SELECT 1",
+    "command": "SELECT",
+    "rowCount": 1,
+    "fields": [],
+    "rows": []
+  },
+  "localRollbackSource": {
+    "file": "D:/Development/GitHub/cloudtms-backend/infra/miget/cloudtms-miget-operations/src/rollback-transaction.ts",
+    "sha256": "27f7331b43623717db3a139ca269a644f1c06ef163f476f82919294ccc4c86eb",
+    "facts": [
+      "outcome forwards pg command,rowCount and field names; empty rows remain empty",
+      "runStatements awaits client.query(statement) under one outer BEGIN and unconditional ROLLBACK"
+    ],
+    "currentDeployedIdentity": "NOT_PROVED_FROM_LOCAL_SOURCE"
+  },
+  "nativeCtasAbi": "UNOBSERVED",
+  "sourceExpectationOnly": true,
+  "SQLExecuted": false,
+  "nativeRun": false,
+  "localEnvelopeSource": {
+    "file": "D:/Development/GitHub/cloudtms-backend/infra/miget/cloudtms-miget-transaction-lab/src/sql-envelope.ts",
+    "sha256": "9d6d5edcd55e8e2e5920770c06a997b4e374d483551aed3debb616fa78dd2f94",
+    "actualPurePrepareSqlBatchCount": 68,
+    "maxStatements": 1000,
+    "sqlBytes": 50165,
+    "deployedBinding": "NOT_PROVED_FROM_LOCAL_SOURCE",
+    "SQLExecuted": false
+  }
+}

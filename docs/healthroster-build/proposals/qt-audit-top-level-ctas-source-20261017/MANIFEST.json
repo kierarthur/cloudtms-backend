@@ -1,0 +1,110 @@
+{
+  "version": "QT_TOP_LEVEL_CTAS_SOURCE_PACKET_V1",
+  "files": [
+    {
+      "file": "FORWARD.json",
+      "bytes": 28094,
+      "sha256": "942c9f304abc06564b849dcd7c3e5ca07f72683c3dccb00cf208cd6e7a657ece"
+    },
+    {
+      "file": "parent/input-builder.mjs",
+      "bytes": 7217,
+      "sha256": "c715cc0cb96a9c6b83819ddcf210385b4797eb52112b8785d69c54ac5ee6f90d"
+    },
+    {
+      "file": "parent/MANIFEST.json",
+      "bytes": 8530,
+      "sha256": "5b037c48b246e25e6efe2fd4841c54f2cb198d0a3d0093b63edbde6ac5a55577"
+    },
+    {
+      "file": "parent/OFFLINE_INPUTS.json",
+      "bytes": 115614,
+      "sha256": "51915dabd2235f9babde18175f02841baa79e564a39ae65c9fdd322dc547b484"
+    },
+    {
+      "file": "parent/PROGRAMMES.json",
+      "bytes": 60871,
+      "sha256": "c98db008ec087f94fd2aa7d07e7192020fec4b9f563d39e94ffeda1e27f43be7"
+    },
+    {
+      "file": "parent/qt-assertions.sql",
+      "bytes": 13942,
+      "sha256": "b1b03dac5ae2b066a5de499f9c493efbc3827302b2bb81707c83e088f1505d48"
+    },
+    {
+      "file": "parent/result-validator.mjs",
+      "bytes": 11793,
+      "sha256": "ebb88d1b7d6b2cfeb89f5fe5f0762d00d0633251a9b96c7f7de9ea65f84cc713"
+    },
+    {
+      "file": "payload/input-builder.mjs",
+      "bytes": 7950,
+      "sha256": "17065b23b0eb030d928354a785b1eba0f537bc798fa7f1a805bb4ad4c07fd9f4"
+    },
+    {
+      "file": "payload/MANIFEST.json",
+      "bytes": 8530,
+      "sha256": "f3387d72e94b3d318d8400628bef11f974856b0a017cf9e56bd0ed21e76d1049"
+    },
+    {
+      "file": "payload/OFFLINE_INPUTS.json",
+      "bytes": 117902,
+      "sha256": "0f2095235a18b02cf4f13edab6c7d28469b1b5bd74931676ecd95b7c020f6b50"
+    },
+    {
+      "file": "payload/PROGRAMMES.json",
+      "bytes": 61875,
+      "sha256": "5b8ee4436ec2f453a02d18d957eff9ba6936a222558cdff358adf2df8db192e3"
+    },
+    {
+      "file": "payload/qt-assertions.sql",
+      "bytes": 14934,
+      "sha256": "42bad7324edb5dcdc4c2c28b4d4978109478e2de86531cff074ee891619244c5"
+    },
+    {
+      "file": "payload/result-validator.mjs",
+      "bytes": 12137,
+      "sha256": "4f0f1701d9c7fde6e968bc0926514f800a50d8c2a10b90eda528c3cada9bb8ca"
+    },
+    {
+      "file": "PG_COMMAND_SOURCE_EVIDENCE.json",
+      "bytes": 1537,
+      "sha256": "de46245f91978c6c4085a9d0294ce7a15a84d6d03c7c4ddffcc49f599a66e4f7"
+    },
+    {
+      "file": "PG17_PROOF.json",
+      "bytes": 1059,
+      "sha256": "b73a871f79f29aecac639be8a59fe990437ad0c96c17ab01bd8ed4f2d2bd2d90"
+    },
+    {
+      "file": "pg17-proof.py",
+      "bytes": 5901,
+      "sha256": "9efe6ed3a5675c085d9c69e46f58c44d758dea392bbd83c7272d6f3bfe8140b2"
+    },
+    {
+      "file": "README.md",
+      "bytes": 6038,
+      "sha256": "b4be8fd6e6a87952fccfaadd318ced8a5d7e685064294902d5e72e37c44f1d45"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1050,
+      "sha256": "d1d8639f308020fb8ccbb38463a29bf13b574534ee707632d89bcdeb5599b4bd"
+    },
+    {
+      "file": "SETUP_APPEND_PROPOSAL.md",
+      "bytes": 986,
+      "sha256": "bce6242417000d669ab87562a1588da975497517e2ed4569b24b6c3c6f4b4943"
+    },
+    {
+      "file": "SOURCE_RESEARCH.json",
+      "bytes": 2415,
+      "sha256": "afdca5f7f93956625f42b15c94aafea4f0e556905212fe0f6c18a9a8fc8105d9"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 8211,
+      "sha256": "a1f9b7bf88fde8f1699a82874ed0a640d39122c31957a1537b5f51f65adf82d0"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "version": "QT_PG17_PARALLEL_AND_CTAS_SOURCE_RESEARCH_V1",
+  "references": [
+    {
+      "url": "https://www.postgresql.org/docs/17/when-can-parallel-query-be-used.html",
+      "finding": "Data-writing queries normally prohibit parallel planning; CTAS is an explicit exception for the contained SELECT. Parallel-capable planning does not guarantee launched workers. Neither DO nor prior DDL alone establishes a blanket prohibition."
+    },
+    {
+      "url": "https://github.com/postgres/postgres/blob/REL_17_STABLE/src/pl/plpgsql/src/pl_exec.c#L4190-L4199",
+      "finding": "Dynamic EXECUTE initializes its SPI options to zero and does not impose a positive tuple-count limit. The prior literal-EXECUTE change already removed the SELECT-INTO tuple-count issue."
+    },
+    {
+      "url": "https://github.com/postgres/postgres/blob/REL_17_STABLE/src/backend/executor/spi.c#L598-L625",
+      "finding": "SPI_execute_extended supplies parallel-capable cursor options. A nested plan cannot be inferred from an independently observed top-level plan."
+    },
+    {
+      "url": "https://github.com/postgres/postgres/blob/REL_17_STABLE/src/backend/optimizer/plan/planner.c#L348-L363",
+      "finding": "Eligibility also depends on SELECT shape, modifying CTE absence, worker settings, not being a parallel worker, and the query's parallel hazards."
+    },
+    {
+      "url": "https://github.com/postgres/postgres/blob/REL_17_STABLE/src/backend/executor/execMain.c#L1581-L1594",
+      "finding": "Partial or positive-count execution disables parallel execution. Unlimited execution can use a parallel-required plan; it does not prove the plan chosen here."
+    },
+    {
+      "url": "https://github.com/postgres/postgres/blob/REL_17_STABLE/src/backend/commands/createas.c#L280-L304",
+      "finding": "The CTAS SELECT is planned with parallel eligibility, gets a command-ID-updated snapshot, executes to completion into the table destination, and emits a SELECT completion with processed count. Both whole aggregates produce exactly one stored row even for an empty source."
+    }
+  ],
+  "sourceVersionScope": "Primary PG17 documentation and REL_17_STABLE implementation; not a binary/deployed nested-plan attestation",
+  "nativeNestedPlanObserved": false,
+  "spiSerialCauseProved": false,
+  "ctasNativeAbiObserved": false,
+  "parallelExecutionProved": false,
+  "performanceProved": false,
+  "authorNativeCalls": 0
+}

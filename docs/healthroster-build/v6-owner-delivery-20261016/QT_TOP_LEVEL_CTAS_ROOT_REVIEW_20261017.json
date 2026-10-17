@@ -1,0 +1,21 @@
+{
+  "version": "QT_TOP_LEVEL_CTAS_ROOT_SOURCE_REVIEW_V1",
+  "verdict": "ACCEPT_BOUNDED_STRUCTURAL_SOURCE_ONLY",
+  "proposal": "docs/healthroster-build/proposals/qt-audit-top-level-ctas-source-20261017",
+  "manifestSha256": "8faf16fbe20464b3a6667540509bf651ec928df5de9ed6148d4cf32b7f58887a",
+  "files": 22,
+  "targets": 6,
+  "literalCodeInverses": 8,
+  "retainedAdapterRows": 46,
+  "rootTests": 18,
+  "independentTests": 18,
+  "pg17AstProof": "PASS; both full CTAS SELECT ASTs equal accepted parent; main fixture PL body only moves guard/digest sites; native equality before programme result.",
+  "independentReviewer": "Report GPT-6.1 Extra High; all52 saved/index/HEAD/historical267f selected parent images exact; official REL_17_11 createas.c independently checked.",
+  "scope": "Whole audit rows/all columns/both MD5/delimiter/coalesce/exact unique sequence order/equality retained. Same outer rollback and all12 canonical scopes/WeakMap/strict turn and original caps. Expanded interval includes existing temporary result INSERT; no new business writes.",
+  "ctasWireExpectation": "Only two exact SQL hashes accept SELECT/rowCount1/empty fields and rows. Actual deployed ABI is unobserved; mismatch HOLD.",
+  "limitations": [
+    "No proven nested-SPI cause or blanket DO/prior-DDL serial ban.",
+    "Actual parallel execution, performance and constructor acceptance remain unproved."
+  ],
+  "native": "NOT_RUN"
+}

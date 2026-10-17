@@ -5,9 +5,11 @@ const here=path.dirname(fileURLToPath(import.meta.url)),plans=JSON.parse(fs.read
  relations=JSON.parse(fs.readFileSync(here+'/SOURCE_PINS.json')).relationNames;
 const pid=v=>Number.isSafeInteger(v)&&v>0;
 const ordered=value=>JSON.stringify(Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))));
+const fixedAuditCtasHashes=new Set(["838ab1b7ef57d1948524b2bee8770babafe5255a73f20678ed59d393d726288b","6ba75812a767abd941ed2f0cad57f7ee659ada4a5e4a5bbcf3ed6b16df008419"]);
 function statementResponse(s,e){
  if(!s||!e||s.statement!==e.statement||s.error||s.rowsTruncated!==false||s.command!==e.command
   ||JSON.stringify(Object.keys(s).sort())!==JSON.stringify(['command','fields','rowCount','rows','rowsTruncated','statement'])||!Array.isArray(s.rows)||!Array.isArray(s.fields))return false;
+ if(e.kind==='FIXED_AUDIT_CTAS_ONE_STORED_ROW')return e.command==='SELECT'&&fixedAuditCtasHashes.has(e.sqlSha256)&&s.rowCount===1&&s.rows.length===0&&s.fields.length===0;
  if(e.kind==='EMPTY_COMMAND')return ['SET','DO','CREATE','ALTER','REVOKE','GRANT','DROP','LOCK','RESET','NOTIFY'].includes(e.command)&&s.rowCount===null&&s.rows.length===0&&s.fields.length===0;
  return e.kind==='ONE_ROW'&&e.command==='SELECT'&&s.rowCount===1&&s.rows.length===1&&s.fields.length===1&&typeof s.fields[0]==='string'
   &&s.fields[0].length>0&&s.fields[0].length<=128&&s.rows[0]&&typeof s.rows[0]==='object'&&!Array.isArray(s.rows[0])&&JSON.stringify(Object.keys(s.rows[0]))===JSON.stringify(s.fields);

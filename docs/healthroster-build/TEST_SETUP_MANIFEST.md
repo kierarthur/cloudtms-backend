@@ -387,3 +387,20 @@ null
 Expected scope: S1 one genuine Client plus native initial settings effective1900-01-01, current policy resolution/audit; S1a one exact native mapping f717d043-0000-4000-8000-000000000020 through the existing Hospital POST, one lower-case alias and ward_hint null, zero global current/history alias Timesheets and wakeup targets; S2 one non-login/non-bank Candidate and zero auto-assigned/financial targets; S3 one genuine dated native rate with empty prior rate/override/Client-TSFIN scope; S4 one native DAILY/HOURS/MANUAL/contract-null/current-version1 Timesheet and genuine unprocessed SELF_REPORTED TSFIN through the exact-ID canonical owner, with native outbox completion. S4 requires the genuinely qualified S1a association. No invented financial output.
 
 Before and fresh after native aggregates contain the entire reserved Client/settings/Candidate/join/rate/override/booking/current+historical Timesheet/TSFIN/outbox scope, exact native metadata and fingerprints. Preserve every prior qualified fixture row; only the stage's approved native changes may occur. A 200 response is insufficient without full readback. Any timeout, malformed response, refusal or non-200 permanently retains the attempt as unresolved. S4 HTTP500 may follow committed INSERT/recalculation and failed DELETE: reconcile booking/current+history/financial/outbox before any separately reviewed retry. This operator never retries, repairs, deletes, authorises or advances an uncertain attempt. Full native/API/financial proof remains NOT_RUN before genuine observation.
+
+
+### QT/Admin top-level full audit CTAS source admission, 17 October 2026
+
+Source proposal for root review before any QT CTAS native attempt: retain the
+original six reserved rollback-only user fixtures, programme policy/command IDs,
+scope, shared-turn and full restoration requirements. The sole additional
+control objects are fresh session-temporary `hr_contact_qt_audit_before` and
+`hr_contact_qt_audit_after`, each ON COMMIT DROP and containing exactly one text
+digest row from the exact whole audit relation. Check both names absent before
+the first CTAS. No audit/business row is copied into either object; no digest is
+returned. Both objects exist only inside the original server-owned B transaction,
+which unconditionally rolls back and closes. This is not durable application
+setup, an additional business fixture, a separate transaction, or a relaxation
+of the original 12 complete canonical restoration scopes or any cap. Root must
+record actual source admission and any native result separately; this text is
+not an execution or acceptance receipt.

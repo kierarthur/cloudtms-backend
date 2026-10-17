@@ -1,0 +1,34 @@
+{
+  "version": "QT_TOP_LEVEL_CTAS_OFFLINE_SOURCE_RESULTS_V1",
+  "tests": 18,
+  "pass": 18,
+  "fail": 0,
+  "wholeRawRuntimeInverses": 6,
+  "literalCodeHunks": 8,
+  "unchangedAdapterEntries": 46,
+  "actualCurrentParentImages": 52,
+  "savedIndexHeadHistoricalEqual": true,
+  "postgresqlParser": [
+    17,
+    7
+  ],
+  "actualPriorConstructorShapeReplay": {
+    "resultSource": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/contact-qt-positive-native-20261017-constructors-background-cse-r4/NATIVE_RESULT.json",
+    "resultSha256": "177a9ae80465012bbb8fc00cd4351c86110c1c4c32a82c764b33cd573eaed214",
+    "statements": 34,
+    "oldAndNewShapeValidatorsPass": true,
+    "ctasNativeObservation": false
+  },
+  "newCtasResponseIndices": [
+    60,
+    62
+  ],
+  "mainStatements": 68,
+  "verificationStatements": 4,
+  "ctasNativeAbi": "UNOBSERVED_SOURCE_EXPECTATION_HOLD_UNEXPECTED",
+  "SQLExecuted": false,
+  "authorNativeCalls": 0,
+  "rootEdits": false,
+  "parallelExecution": "NOT_PROVED",
+  "performance": "NOT_PROVED"
+}
