@@ -1,0 +1,44 @@
+{
+  "version": "PREBODY_EXACT_HISTORICAL_DEPENDENCY_SOURCE_FORWARD_V1",
+  "parent": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+  "targets": 3,
+  "wholeHelperRawReversals": 3,
+  "wholeHistoricalSourceReconstructions": 3,
+  "literalHistoricalHunks": [
+    1,
+    4,
+    2
+  ],
+  "immutableReviewSha256": "69d2b3aee092e78e36386642a8fbf65df406d5fc9f5d8e6a6d42bccf993895b0",
+  "originalDependencies": 95,
+  "currentTranslations": 5,
+  "retainedOlderTranslations": 2,
+  "originalPrebodyPackets": 4,
+  "originalPriorDynamicHazards": 99,
+  "compiledAtomicRehearsalUnit": "BYTE_PRESENT_IN_COMPLETE_HISTORICAL_SOURCE_AND_FOUR_ACTUAL_RECEIPTS_EQUAL",
+  "classificationsUnchanged": [
+    "69d2b3aee092e78e36386642a8fbf65df406d5fc9f5d8e6a6d42bccf993895b0",
+    "f338e3eaf7f3ce2ff027cd2728cc5f16f0724ea4ce7eeea139f5217ee949766d",
+    "7aa875bf450b81be3d945182c67398c4134f3cb325ab88ff2aa089ac99f2a399"
+  ],
+  "coupling": {
+    "contactInputCount": 63,
+    "dailySelectedInputRows": 24,
+    "proposedTargetsAbsentFromBoth": true,
+    "targets": [
+      "scripts/healthroster-prebody-dynamic-review.mjs",
+      "scripts/healthroster-same-separate-type-review.mjs",
+      "scripts/healthroster-source-read-type-review.mjs"
+    ],
+    "scope": "CURRENT_EXPLICIT_SELECTED_INPUT_UNIONS_ONLY"
+  },
+  "tests": 22,
+  "originalPacketGuardCases": 16,
+  "newBindingCases": 6,
+  "rawSameHelperCRLFHistoricalIdentityPreserved": true,
+  "native0400": "NOT_RUN",
+  "native": "NOT_RUN",
+  "fullGlobalGate": "ROOT_AFTER_INDEPENDENT_PEER_NOT_RUN",
+  "actualPostimageSourceAdmission": "NOT_RUN_UNMOUNTED",
+  "BankSemanticBodyReview": false
+}
