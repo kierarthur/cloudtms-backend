@@ -1,0 +1,104 @@
+{
+  "version": "DAILY_R10_ACTUAL_SOURCE_AND_S0_R8_HOLD_V1",
+  "authReceiptCommit": "23243623b6e95f311857c016560983df51a30810",
+  "authReceiptSha256": "b6b0d15fc48b6e65708fc66651d5ca22bed4669f73c5a7f33e51d669452363ce",
+  "actualSourceBinding": {
+    "status": "ACTUAL_R10_FOUR_PHASE_SOURCE_COMMITTED",
+    "commits": [
+      "5f22c1c0b5bf0a0438f895a1229e716237c99824",
+      "c5b3c9adad4256767f040824657046ac880b4ce2",
+      "791184094ddc5944acfaec8c1a932521503bc5f1",
+      "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23"
+    ],
+    "records": [
+      {
+        "phase": "operator",
+        "commit": "5f22c1c0b5bf0a0438f895a1229e716237c99824",
+        "out": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r10-source-d11384eeb495dbdaae7ee876d79a8b23",
+        "files": [
+          "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/contract.mjs",
+          "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/SOURCE_PINS.json",
+          "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json"
+        ]
+      },
+      {
+        "phase": "holder",
+        "commit": "c5b3c9adad4256767f040824657046ac880b4ce2",
+        "out": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r10-source-27cd448f7d5943794598a415cb9438db",
+        "files": [
+          "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/EXTERNAL_SOURCE_PINS.json",
+          "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/MANIFEST.json"
+        ]
+      },
+      {
+        "phase": "coordinator",
+        "commit": "791184094ddc5944acfaec8c1a932521503bc5f1",
+        "out": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r10-source-44a9aa4b0a401d0f66e83740186c1dcb",
+        "files": [
+          "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/SOURCE_PINS.json",
+          "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json"
+        ]
+      },
+      {
+        "phase": "continuation",
+        "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+        "out": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r10-source-24e1d8b17017a590cee26f237f0b2c41",
+        "files": [
+          "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/SOURCE_PINS.json",
+          "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/MANIFEST.json"
+        ]
+      }
+    ]
+  },
+  "actualAllSourceAdmission": {
+    "operatorCommit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "rootCommit": "23243623b6e95f311857c016560983df51a30810",
+    "coordinator": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "continuation": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "status": "PASS"
+  },
+  "actualS0": {
+    "out": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-bcb40c5bd7e25782eb70a1a0d3478b76",
+    "beforeCommit": "bc9f27ed652a00c3bc85a51cd1df7aadf6c35c05",
+    "setupCommit": "dfe46bfdccf2afd57c346baccb84becab423c709",
+    "nativeBefore": {
+      "accepted": true,
+      "rolledBack": true,
+      "connectedFresh": true,
+      "mainObservedAt": "2026-10-17T15:55:17.083059+00:00",
+      "freshObservedAt": "2026-10-17T15:55:21.132905+00:00",
+      "reservedScopes": 11,
+      "reservedScopesVacant": true
+    },
+    "closedSubmit": {
+      "status": "HOLD",
+      "code": "FIXTURE_FRESH_NATIVE_CLOCK_REQUIRED",
+      "phase": "submit",
+      "stage": "S0",
+      "browserClosed": true
+    },
+    "businessRequests": 0,
+    "afterNative": "NOT_RUN",
+    "qualifiedPrefix": "NOT_CREATED",
+    "ownTurn": {
+      "takenAt": "2026-10-17T15:55:00.406Z",
+      "releasedAt": "2026-10-17T15:55:50.157Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": false
+    },
+    "originalExitCode": 1
+  },
+  "next": "Finite source-only R9 bookkeeping successor batches equivalent Git image reads, retaining every exact saved/index/HEAD/history, source and 30-second freshness predicate. No unchanged native retry or business request.",
+  "optionalWriterProbe": {
+    "tool": "mcp__node_repl__js",
+    "outcome": "failed to write kernel assets: The system cannot find the path specified. (os error 3)",
+    "projectFileAccess": false,
+    "projectFileWrite": false,
+    "configurationChanged": false,
+    "alternative": "Existing approved atomic file writer retained; no C fallback."
+  },
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN",
+  "unansweredOwnerQuestion": false
+}

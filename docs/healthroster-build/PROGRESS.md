@@ -1480,3 +1480,10 @@ S1 auxiliary-after-clock finite wrapper now passes13root tests plus6 independent
 
 
 17 October 15:49 UTC continuation: exact thin original-stage adapter adopted/pushed bd4809cb (44 root+44 peer tests,11pins/7syntax). Five source predecisions corrected and peer-accepted (Hospital original reserved UUID; Candidate RN/PAYE with no band). Generic actual-stage tool orchestration11 independent controlled checks PASS, preserving all original native/clock/one-shot/AFTER/release/PUBLISH owners. Fresh Kier parity/healthy exact physical TEST identities/anonymous401 proved15:40; no PostgreSQL restart since prior observed postmaster starts. Preparing actual-value-only source mounting/publication scripts; provenance issue in first postbinding writer fixed before any execution. No fresh auth/native/business rows or Install2 yet; final critics NOT_RUN.
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","status":"TAKEN","takenAt":"2026-10-17T15:55:00.406Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","status":"RELEASED","takenAt":"2026-10-17T15:55:00.406Z","releasedAt":"2026-10-17T15:55:50.157Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+
+17 October actual R10 source complete: auth first ready-HOLD beforelogin/browserclosed; currentready200 then fresh actual login/Admin/queryworkspace PASS, receipt23243623; actualReport fourphase5f22/c5b3/7911/K4 6b5ebede pushed with complete originalsource admission PASS. R8 S0 nativeBefore accepted/rollback/fresh/main15:55:17.083/fresh21.133/all11vacant PASS; BEFOREbc9f27ed and SETUPdfe46bfd pushed. Originalsubmit held FRESH_NATIVE_CLOCK at15:55:49, no businessrequest/AFTER/qualifiedprefix. OwnA15:55:00.406-15:55:50.157 explicitlyreleased/closed. Real R8 files/history retained. Source-only R9 successor will batch equivalent Gitimage reads to save bookkeeping time;30s/native/source/caps remain. No unchanged rerun. Install2 NOT_INSTALLED/finalcritics NOT_RUN/noowneranswerpending.
