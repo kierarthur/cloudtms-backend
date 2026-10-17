@@ -1,0 +1,158 @@
+{
+  "sourceParent": "148fc0c36ea82867532368b9578d727713ef993e",
+  "executionParent": "10e534362a6e1fb220d389cf6bb431aa44c07dd2",
+  "rows": [
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+      "captured": "reference/adapter/qt-assertions.sql",
+      "bytes": 12046,
+      "sha256": "2839d6cd132af55b1545217f005a0578e99544f30f642ccddaf298d9731149ec"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/PROGRAMMES.json",
+      "captured": "reference/adapter/PROGRAMMES.json",
+      "bytes": 58956,
+      "sha256": "8c006889bf628d350fd94b5826c6aa6beb0477f40900e98383bbc29904343d42"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/OFFLINE_INPUTS.json",
+      "captured": "reference/adapter/OFFLINE_INPUTS.json",
+      "bytes": 113699,
+      "sha256": "e681fe29f07ccf90da8633872b6f46388d4a7c7d3770722a3bc67f49ef4b73f7"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "captured": "reference/adapter/MANIFEST.json",
+      "bytes": 8530,
+      "sha256": "0d55920b597bf8873e8f03dad06841f0bad381bc2ebf76889bd9a744e779e2e8"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/build-program.mjs",
+      "captured": "reference/adapter/build-program.mjs",
+      "bytes": 7043,
+      "sha256": "d4c1c806fa3b5884ace7e7671335cd8956edf1cbf727e264b46d99b10689baee"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/input-builder.mjs",
+      "captured": "reference/adapter/input-builder.mjs",
+      "bytes": 7217,
+      "sha256": "c715cc0cb96a9c6b83819ddcf210385b4797eb52112b8785d69c54ac5ee6f90d"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/source.mjs",
+      "captured": "reference/adapter/source.mjs",
+      "bytes": 14702,
+      "sha256": "24449c3b195c6b552547536c0ce93c3ce88e3059b105724d014d33d2a0468313"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "captured": "reference/adapter/SOURCE_PINS.json",
+      "bytes": 27619,
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/test.mjs",
+      "captured": "reference/adapter/test.mjs",
+      "bytes": 12897,
+      "sha256": "b644b59f663b37cf859137166fbd0dd6dc145887bb1ba0263dc52bab52f8dafd"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/control.mjs",
+      "captured": "reference/adapter/control.mjs",
+      "bytes": 3227,
+      "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/timing.mjs",
+      "captured": "reference/adapter/timing.mjs",
+      "bytes": 1313,
+      "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/native-boundary.mjs",
+      "captured": "reference/adapter/native-boundary.mjs",
+      "bytes": 2620,
+      "sha256": "84abd1f06ec85ffa002cd79fa4f5cf010d7f939bf86b4546ca35c56de54000eb"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/result-validator.mjs",
+      "captured": "reference/adapter/result-validator.mjs",
+      "bytes": 11793,
+      "sha256": "ebb88d1b7d6b2cfeb89f5fe5f0762d00d0633251a9b96c7f7de9ea65f84cc713"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "captured": "reference/adapter/fixed-metadata-reader.mjs",
+      "bytes": 20596,
+      "sha256": "7c2810461e8b3b671b7ac2e5e553487258a3cc36e3c196ff8dccdde79da5335b"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/QT_ADMIN_NATIVE_R1_AUDIT_TIMEOUT_HOLD_20261017.json",
+      "captured": "reference/QT_R1_HOLD.json",
+      "bytes": 4927,
+      "sha256": "226ccedf13049f32ff33a7f4050273913373707b8d5794a9b114e1634fb0ea04"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_QT_ACTUAL_FIXED_METADATA_20261017.json",
+      "captured": "reference/CONTACT_QT_FIXED_METADATA.json",
+      "bytes": 9535,
+      "sha256": "cb6b02430c70054bdaa087ac65bb94945ca2264d3a0f49b0966634db23b4cf5c"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/reference/helpers/_weekly_source_settings_require_admin_v1.sqlinc",
+      "captured": "reference/reference/helpers/_weekly_source_settings_require_admin_v1.sqlinc",
+      "bytes": 588,
+      "sha256": "bf3a9ec7a2fcacc5428f11df878c1e99eb0f968fdb2f9ec343aa98b072e2eb5e"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/reference/helpers/weekly_source_sha256_text_v1.sqlinc",
+      "captured": "reference/reference/helpers/weekly_source_sha256_text_v1.sqlinc",
+      "bytes": 384,
+      "sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "148fc0c36ea82867532368b9578d727713ef993e",
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/reference/helpers/weekly_source_sha256_jsonb_v1.sqlinc",
+      "captured": "reference/reference/helpers/weekly_source_sha256_jsonb_v1.sqlinc",
+      "bytes": 336,
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    }
+  ]
+}

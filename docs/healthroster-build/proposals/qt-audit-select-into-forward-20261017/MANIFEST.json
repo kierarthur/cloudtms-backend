@@ -1,0 +1,248 @@
+{
+  "version": "QT_AUDIT_BINDING_FINITE_SOURCE_FREEZE_V1",
+  "sourceParent": "148fc0c36ea82867532368b9578d727713ef993e",
+  "files": [
+    {
+      "file": "forward.mjs",
+      "bytes": 978,
+      "sha256": "d1d0c535a176dff276bd8d3622f01b47b9c3f0b76438da252829eb54c2122afd"
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 2898,
+      "sha256": "05956487de2fb5f87bae794cdd1c55e21a0ba38cc1483f09043f903fbcdf48ba"
+    },
+    {
+      "file": "PARENTS.json",
+      "bytes": 8595,
+      "sha256": "18bc8a9d126c5c9d48f0395b978ea35dab3bea3437529de1a7db784a13a3abe8"
+    },
+    {
+      "file": "payload/MANIFEST.json",
+      "bytes": 8530,
+      "sha256": "53c41e6077a995b3712ba55f67e5f00f605743c6629cdae886c56d9c8005b351"
+    },
+    {
+      "file": "payload/OFFLINE_INPUTS.json",
+      "bytes": 113701,
+      "sha256": "c716b2484f54be5f757ec7dc21d7dcc87e3d16c00c85b063892391581fce137e"
+    },
+    {
+      "file": "payload/PROGRAMMES.json",
+      "bytes": 58958,
+      "sha256": "775163889bac34792c74207019127f2f59d020a23186452d21d2a01f5dc898bf"
+    },
+    {
+      "file": "payload/qt-assertions.sql",
+      "bytes": 12048,
+      "sha256": "e39b2cbcab6d8baab8a9d7287a1869984def0e6aa1c4137088d3eafcbeb7b209"
+    },
+    {
+      "file": "PG17_SOURCE_AST_PROOF.json",
+      "bytes": 1054,
+      "sha256": "407ea82a0660ba063a3af8fe9c507334ad5f722d7ddd3cc4e069faa1c675f5aa"
+    },
+    {
+      "file": "pg17-proof.py",
+      "bytes": 6385,
+      "sha256": "03ef62798c29b18ab688fb4bd3115bec6282268253285bafd466608134a25262"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 7238,
+      "sha256": "cc3ea12f83c5b6d179ce86a110f68b52b722f86bd8dfd63d85b27cf24f8fb06e"
+    },
+    {
+      "file": "README.md",
+      "bytes": 5641,
+      "sha256": "06b80097ec05f9470d3397490dc97106b94e2927152321959abe15ea8aea3d0a"
+    },
+    {
+      "file": "reference/adapter/build-program.mjs",
+      "bytes": 7043,
+      "sha256": "d4c1c806fa3b5884ace7e7671335cd8956edf1cbf727e264b46d99b10689baee"
+    },
+    {
+      "file": "reference/adapter/control.mjs",
+      "bytes": 3227,
+      "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8"
+    },
+    {
+      "file": "reference/adapter/fixed-metadata-reader.mjs",
+      "bytes": 20596,
+      "sha256": "7c2810461e8b3b671b7ac2e5e553487258a3cc36e3c196ff8dccdde79da5335b"
+    },
+    {
+      "file": "reference/adapter/input-builder.mjs",
+      "bytes": 7217,
+      "sha256": "c715cc0cb96a9c6b83819ddcf210385b4797eb52112b8785d69c54ac5ee6f90d"
+    },
+    {
+      "file": "reference/adapter/MANIFEST.json",
+      "bytes": 8530,
+      "sha256": "0d55920b597bf8873e8f03dad06841f0bad381bc2ebf76889bd9a744e779e2e8"
+    },
+    {
+      "file": "reference/adapter/native-boundary.mjs",
+      "bytes": 2620,
+      "sha256": "84abd1f06ec85ffa002cd79fa4f5cf010d7f939bf86b4546ca35c56de54000eb"
+    },
+    {
+      "file": "reference/adapter/OFFLINE_INPUTS.json",
+      "bytes": 113699,
+      "sha256": "e681fe29f07ccf90da8633872b6f46388d4a7c7d3770722a3bc67f49ef4b73f7"
+    },
+    {
+      "file": "reference/adapter/PROGRAMMES.json",
+      "bytes": 58956,
+      "sha256": "8c006889bf628d350fd94b5826c6aa6beb0477f40900e98383bbc29904343d42"
+    },
+    {
+      "file": "reference/adapter/qt-assertions.sql",
+      "bytes": 12046,
+      "sha256": "2839d6cd132af55b1545217f005a0578e99544f30f642ccddaf298d9731149ec"
+    },
+    {
+      "file": "reference/adapter/result-validator.mjs",
+      "bytes": 11793,
+      "sha256": "ebb88d1b7d6b2cfeb89f5fe5f0762d00d0633251a9b96c7f7de9ea65f84cc713"
+    },
+    {
+      "file": "reference/adapter/SOURCE_PINS.json",
+      "bytes": 27619,
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751"
+    },
+    {
+      "file": "reference/adapter/source.mjs",
+      "bytes": 14702,
+      "sha256": "24449c3b195c6b552547536c0ce93c3ce88e3059b105724d014d33d2a0468313"
+    },
+    {
+      "file": "reference/adapter/test.mjs",
+      "bytes": 12897,
+      "sha256": "b644b59f663b37cf859137166fbd0dd6dc145887bb1ba0263dc52bab52f8dafd"
+    },
+    {
+      "file": "reference/adapter/timing.mjs",
+      "bytes": 1313,
+      "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9"
+    },
+    {
+      "file": "reference/AUDIT_DOCUMENTARY_METADATA.json",
+      "bytes": 8306,
+      "sha256": "d526e8f72672bcf801541d565530dce0466935411de1c65745778f44c3d7abb4"
+    },
+    {
+      "file": "reference/CONTACT_QT_FIXED_METADATA.json",
+      "bytes": 9535,
+      "sha256": "cb6b02430c70054bdaa087ac65bb94945ca2264d3a0f49b0966634db23b4cf5c"
+    },
+    {
+      "file": "reference/postgresql-17.11/parse_agg.c",
+      "bytes": 66311,
+      "sha256": "f50cd8a791a12164717d0fc99777160e643aa1ee3fcdaabe03c31fd93831252d"
+    },
+    {
+      "file": "reference/postgresql-17.11/parse_clause.c",
+      "bytes": 120589,
+      "sha256": "47bb07a42ea4c5e914e2cdd64016e1c7cd75b95cf9f5571a11ab35f5fa61f714"
+    },
+    {
+      "file": "reference/postgresql-17.11/pl_exec.c",
+      "bytes": 263179,
+      "sha256": "fb3107b97932082670c84b04cf36e3dff0908e2da2750d8e709564362cb3ae45"
+    },
+    {
+      "file": "reference/postgresql-17.11/planner.c",
+      "bytes": 265057,
+      "sha256": "2ebc9eccec9f234bac5f8c43c1671acde070e606418c7c1359e1a87f569465a4"
+    },
+    {
+      "file": "reference/postgresql-17.11/SOURCES.json",
+      "bytes": 1114,
+      "sha256": "2fb7cc35c6946a9f6f0dcfd68f80d8929a64afd720fe364cbdf3d3fea794d0db"
+    },
+    {
+      "file": "reference/QT_R1_HOLD.json",
+      "bytes": 4927,
+      "sha256": "226ccedf13049f32ff33a7f4050273913373707b8d5794a9b114e1634fb0ea04"
+    },
+    {
+      "file": "reference/reference/helpers/_weekly_source_settings_require_admin_v1.sqlinc",
+      "bytes": 588,
+      "sha256": "bf3a9ec7a2fcacc5428f11df878c1e99eb0f968fdb2f9ec343aa98b072e2eb5e"
+    },
+    {
+      "file": "reference/reference/helpers/weekly_source_sha256_jsonb_v1.sqlinc",
+      "bytes": 336,
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "file": "reference/reference/helpers/weekly_source_sha256_text_v1.sqlinc",
+      "bytes": 384,
+      "sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+    },
+    {
+      "file": "render/build-program.mjs",
+      "bytes": 7043,
+      "sha256": "d4c1c806fa3b5884ace7e7671335cd8956edf1cbf727e264b46d99b10689baee"
+    },
+    {
+      "file": "render/qt-assertions.sql",
+      "bytes": 12048,
+      "sha256": "e39b2cbcab6d8baab8a9d7287a1869984def0e6aa1c4137088d3eafcbeb7b209"
+    },
+    {
+      "file": "render/reference/helpers/_weekly_source_settings_require_admin_v1.sqlinc",
+      "bytes": 588,
+      "sha256": "bf3a9ec7a2fcacc5428f11df878c1e99eb0f968fdb2f9ec343aa98b072e2eb5e"
+    },
+    {
+      "file": "render/reference/helpers/weekly_source_sha256_jsonb_v1.sqlinc",
+      "bytes": 336,
+      "sha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3"
+    },
+    {
+      "file": "render/reference/helpers/weekly_source_sha256_text_v1.sqlinc",
+      "bytes": 384,
+      "sha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb"
+    },
+    {
+      "file": "render/SOURCE_PINS.json",
+      "bytes": 27619,
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 865,
+      "sha256": "0dacb3562cd85121ef10131ab419ded495fe80e111f1c2084a28baaf4732b4f6"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 2425,
+      "sha256": "fe05c9ff165235f1b053b94942cf5f20e183b747a7f8f16bda3f5cedc7c9cff3"
+    },
+    {
+      "file": "SELECTION.json",
+      "bytes": 4065,
+      "sha256": "efa423b5e008fcd0df8233189f6fa11b107fb38fcdb2619a7b218f235b2bdc17"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 2697,
+      "sha256": "c42c1f3da015c9a79798d55a5e5f6bc565dd47da40ba9f5ab348962ca484e22a"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 6863,
+      "sha256": "99a308e695fd6b3eade2f6ca471bfdc5fbfe8bb99f6233d622b9f5c7a7bc023a"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1488,
+      "sha256": "53f2697a19ebe789246af8fd888797e59ed6af9d92fbca8a6ae91dfa106b4f35"
+    }
+  ],
+  "native": "NOT_RUN",
+  "performance": "NOT_PROVED"
+}

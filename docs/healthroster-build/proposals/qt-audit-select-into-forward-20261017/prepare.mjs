@@ -1,0 +1,36 @@
+// One-time public source preparation; no native, holder or source-admission call.
+import fs from 'node:fs';import path from 'node:path';import {fileURLToPath,pathToFileURL} from 'node:url';import {execFileSync} from 'node:child_process';
+import {base,sha,pretty,assertionForward,replaceOnce,before,after} from './forward.mjs';
+const here=path.dirname(fileURLToPath(import.meta.url)),root='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026';
+const check=(v,c)=>{if(!v)throw Error(c);};check(!fs.existsSync(here+'/MANIFEST.json'),'FROZEN_HISTORY');
+const git=(...a)=>execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','-C',root,...a],{maxBuffer:24e6,windowsHide:true,env:{...process.env,GIT_OPTIONAL_LOCKS:'0',GIT_NO_LAZY_FETCH:'1'}});
+const head=git('rev-parse','HEAD').toString().trim(),rows=[];
+const capture=(file,copy)=>{const b=fs.readFileSync(root+'/'+file);for(const ref of [head,'','10e534362a6e1fb220d389cf6bb431aa44c07dd2']){if(file.includes('/v6-owner-delivery-')&&ref==='10e534362a6e1fb220d389cf6bb431aa44c07dd2')continue;check(b.equals(git('show',ref+':'+file)),'QT_REAL_PARENT_SAVED_INDEX_HEAD_REQUIRED');}fs.mkdirSync(path.dirname(here+'/'+copy),{recursive:true});fs.writeFileSync(here+'/'+copy,b);rows.push({root,commit:head,file,captured:copy,bytes:b.length,sha256:sha(b)});return b;};
+for(const f of ['qt-assertions.sql','PROGRAMMES.json','OFFLINE_INPUTS.json','MANIFEST.json','build-program.mjs','input-builder.mjs','source.mjs','SOURCE_PINS.json','test.mjs','control.mjs','timing.mjs','native-boundary.mjs','result-validator.mjs','fixed-metadata-reader.mjs'])capture(base+'/'+f,'reference/adapter/'+f);
+capture('docs/healthroster-build/v6-owner-delivery-20261016/QT_ADMIN_NATIVE_R1_AUDIT_TIMEOUT_HOLD_20261017.json','reference/QT_R1_HOLD.json');
+capture('docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_QT_ACTUAL_FIXED_METADATA_20261017.json','reference/CONTACT_QT_FIXED_METADATA.json');
+const contract=JSON.parse(fs.readFileSync(root+'/supabase/release/current-contract.json'));
+const audit=contract.relations.filter(r=>r.schema==='public'&&r.name==='audit_events');check(audit.length===1,'QT_EXACT_AUDIT_SCHEMA_REQUIRED');
+fs.writeFileSync(here+'/reference/AUDIT_DOCUMENTARY_METADATA.json',pretty({qualification:'DOCUMENTARY_SOURCE_NOT_FRESH_NATIVE_OR_CALLBACK_EFFECT_PROOF',source:'supabase/release/current-contract.json',wholeSha256:sha(fs.readFileSync(root+'/supabase/release/current-contract.json')),relation:audit[0],triggers:contract.triggers.filter(t=>t.schema==='public'&&t.table==='audit_events')}));
+const original=fs.readFileSync(here+'/reference/adapter/qt-assertions.sql'),changed=assertionForward(original),payload={};payload['qt-assertions.sql']=changed;
+const plans=JSON.parse(fs.readFileSync(here+'/reference/adapter/PROGRAMMES.json')),oldPlan=structuredClone(plans.QT_ADMIN_CONTROLS_V1);
+check(oldPlan.sql.split(original.toString()).length===2,'QT_COMPLETE_ASSERTION_EMBED_ONCE');plans.QT_ADMIN_CONTROLS_V1.sql=replaceOnce(oldPlan.sql,original.toString(),changed.toString());plans.QT_ADMIN_CONTROLS_V1.sqlSha256=sha(plans.QT_ADMIN_CONTROLS_V1.sql);plans.QT_ADMIN_CONTROLS_V1.sqlBytes=Buffer.byteLength(plans.QT_ADMIN_CONTROLS_V1.sql);payload['PROGRAMMES.json']=Buffer.from(pretty(plans));
+const offline=JSON.parse(fs.readFileSync(here+'/reference/adapter/OFFLINE_INPUTS.json')),qt=offline.QT_ADMIN_CONTROLS_V1,priorInput=structuredClone(qt);
+qt.input.sql=replaceOnce(qt.input.sql,oldPlan.sql,plans.QT_ADMIN_CONTROLS_V1.sql);qt.receipt.sqlSha256=sha(qt.input.sql);qt.receipt.programmeSha256=plans.QT_ADMIN_CONTROLS_V1.sqlSha256;qt.receipt.programmeBytes=plans.QT_ADMIN_CONTROLS_V1.sqlBytes;
+const managed=await import(pathToFileURL(root+'/scripts/cloudtms-managed-release-sql.mjs').href),scan=managed.scanManagedSql(qt.input.sql);
+for(const response of qt.receipt.responses){const s=scan.statements[response.statement-1];response.sqlSha256=sha(scan.source.slice(s.start,s.end).trim());}
+payload['OFFLINE_INPUTS.json']=Buffer.from(pretty(offline));
+const manifest=JSON.parse(fs.readFileSync(here+'/reference/adapter/MANIFEST.json'));
+for(const [f,b] of Object.entries(payload)){const row=manifest.files.find(r=>r.file===f);check(row,'QT_ORIGINAL_MANIFEST_ROW_REQUIRED');row.bytes=b.length;row.sha256=sha(b);}
+payload['MANIFEST.json']=Buffer.from(pretty(manifest));
+const targets=[];for(const [file,b] of Object.entries(payload)){const destination=here+'/payload/'+file;fs.mkdirSync(path.dirname(destination),{recursive:true});fs.writeFileSync(destination,b);const parent=fs.readFileSync(here+'/reference/adapter/'+file);targets.push({target:base+'/'+file,payload:'payload/'+file,parent:'reference/adapter/'+file,beforeBytes:parent.length,beforeSha256:sha(parent),bytes:b.length,sha256:sha(b)});}
+fs.writeFileSync(here+'/PARENTS.json',pretty({sourceParent:head,executionParent:'10e534362a6e1fb220d389cf6bb431aa44c07dd2',rows}));
+fs.writeFileSync(here+'/SELECTION.json',pretty({version:'QT_EXACT_AUDIT_BINDING_FORWARD_V1',sourceParent:head,targets,codeEdits:[{file:base+'/qt-assertions.sql',before,after}],unchangedAdapterFiles:manifest.files.filter(r=>!Object.keys(payload).includes(r.file)).map(r=>r.file),native:'NOT_RUN',plan:'NOT_RUN',performance:'NOT_PROVED'}));
+// Build the genuine complete programme from the copied original builder and
+// exact helper sources. This is a local source renderer, never source().
+const render=here+'/render';fs.mkdirSync(render,{recursive:true});fs.copyFileSync(here+'/reference/adapter/build-program.mjs',render+'/build-program.mjs');fs.copyFileSync(here+'/reference/adapter/SOURCE_PINS.json',render+'/SOURCE_PINS.json');fs.writeFileSync(render+'/qt-assertions.sql',changed);
+for(const row of JSON.parse(fs.readFileSync(render+'/SOURCE_PINS.json')).selectedHelpers){const b=capture(base+'/'+row.copy,'reference/'+row.copy);fs.mkdirSync(path.dirname(render+'/'+row.copy),{recursive:true});fs.writeFileSync(render+'/'+row.copy,b);}
+const renderer=await import(pathToFileURL(render+'/build-program.mjs').href);for(const caseId of renderer.CASES){const p=await renderer.buildProgram({root,caseId});check(JSON.stringify(p)===JSON.stringify(plans[caseId]),'QT_ACTUAL_COMPLETE_PROGRAMME_RENDER_REQUIRED');}
+fs.writeFileSync(here+'/PARENTS.json',pretty({sourceParent:head,executionParent:'10e534362a6e1fb220d389cf6bb431aa44c07dd2',rows}));
+fs.writeFileSync(here+'/FULL_PARENT_FORWARD.json',pretty({version:'QT_FOUR_WHOLE_PARENT_INVERSES_V1',sourceParent:head,targets,assertionLiteralEdit:{before,after},derivedFieldsOnly:{PROGRAMMES:['QT_ADMIN_CONTROLS_V1.sql','QT_ADMIN_CONTROLS_V1.sqlSha256','QT_ADMIN_CONTROLS_V1.sqlBytes'],OFFLINE_INPUTS:['QT_ADMIN_CONTROLS_V1.input.sql','QT_ADMIN_CONTROLS_V1.receipt.sqlSha256','QT_ADMIN_CONTROLS_V1.receipt.programmeSha256','QT_ADMIN_CONTROLS_V1.receipt.programmeBytes','QT_ADMIN_CONTROLS_V1.receipt.responses[statement59].sqlSha256'],MANIFEST:['exact three named existing row bytes/SHA only']},originalNativeR1Retained:true,sourceOrRuntimeFilesEdited:0}));
+check(git('rev-parse','HEAD').toString().trim()===head,'QT_PARENT_HEAD_MOVED');console.log(JSON.stringify({targets:targets.length,parents:rows.length,rootHead:head,render:'COMPLETE_ACTUAL_BUILDER_EQUAL',native:'NOT_RUN'}));

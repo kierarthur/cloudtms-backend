@@ -1,0 +1,102 @@
+{
+  "version": "QT_EXACT_AUDIT_BINDING_FORWARD_V1",
+  "sourceParent": "148fc0c36ea82867532368b9578d727713ef993e",
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+      "payload": "payload/qt-assertions.sql",
+      "parent": "reference/adapter/qt-assertions.sql",
+      "beforeBytes": 12046,
+      "beforeSha256": "2839d6cd132af55b1545217f005a0578e99544f30f642ccddaf298d9731149ec",
+      "bytes": 12048,
+      "sha256": "e39b2cbcab6d8baab8a9d7287a1869984def0e6aa1c4137088d3eafcbeb7b209"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/PROGRAMMES.json",
+      "payload": "payload/PROGRAMMES.json",
+      "parent": "reference/adapter/PROGRAMMES.json",
+      "beforeBytes": 58956,
+      "beforeSha256": "8c006889bf628d350fd94b5826c6aa6beb0477f40900e98383bbc29904343d42",
+      "bytes": 58958,
+      "sha256": "775163889bac34792c74207019127f2f59d020a23186452d21d2a01f5dc898bf"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/OFFLINE_INPUTS.json",
+      "payload": "payload/OFFLINE_INPUTS.json",
+      "parent": "reference/adapter/OFFLINE_INPUTS.json",
+      "beforeBytes": 113699,
+      "beforeSha256": "e681fe29f07ccf90da8633872b6f46388d4a7c7d3770722a3bc67f49ef4b73f7",
+      "bytes": 113701,
+      "sha256": "c716b2484f54be5f757ec7dc21d7dcc87e3d16c00c85b063892391581fce137e"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "payload": "payload/MANIFEST.json",
+      "parent": "reference/adapter/MANIFEST.json",
+      "beforeBytes": 8530,
+      "beforeSha256": "0d55920b597bf8873e8f03dad06841f0bad381bc2ebf76889bd9a744e779e2e8",
+      "bytes": 8530,
+      "sha256": "53c41e6077a995b3712ba55f67e5f00f605743c6629cdae886c56d9c8005b351"
+    }
+  ],
+  "codeEdits": [
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+      "before": " audits_before:=(select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by md5(to_jsonb(a)::text)),'')) from public.audit_events a);",
+      "after": " select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by md5(to_jsonb(a)::text)),'')) into audits_before from public.audit_events a;"
+    }
+  ],
+  "unchangedAdapterFiles": [
+    "batch-source.mjs",
+    "build-program.mjs",
+    "capture.mjs",
+    "component-source.mjs",
+    "control.mjs",
+    "diagnose-component.mjs",
+    "diagnose-metadata.mjs",
+    "fixed-metadata-reader.mjs",
+    "freeze.mjs",
+    "GRAMMAR_RECORD_BINDING.json",
+    "GRAMMAR_RUN.txt",
+    "grammar-and-bindings.py",
+    "hold-case.mjs",
+    "input-builder.mjs",
+    "metadata-diagnostic.mjs",
+    "metadata-progress-diagnostic.mjs",
+    "native-boundary.mjs",
+    "PLAN_SOURCE_SCOPES.json",
+    "prepare-adapter.mjs",
+    "prepare-offline.mjs",
+    "PROGRAMME_PARENT_REVERSES.json",
+    "READER_PARENT_REVERSE.json",
+    "README.md",
+    "reference/actor/build-program.mjs",
+    "reference/actor/NATIVE_DEPENDENCY_DIAG_R1.json",
+    "reference/actor/SOURCE_PINS.json",
+    "reference/adapter/control.mjs",
+    "reference/adapter/fixed-metadata-reader.mjs",
+    "reference/adapter/timing.mjs",
+    "reference/contact20.sql",
+    "reference/contact30.sql",
+    "reference/helpers/_weekly_source_settings_require_admin_v1.sqlinc",
+    "reference/helpers/weekly_source_sha256_jsonb_v1.sqlinc",
+    "reference/helpers/weekly_source_sha256_text_v1.sqlinc",
+    "reference/original-qt-trial.sql",
+    "reference/original-six-case-receipt.json",
+    "reference/qt-authority.sql",
+    "reference/qt-schema.sql",
+    "reference/source-store-metadata.json",
+    "result-validator.mjs",
+    "ROOT_SOURCE_BINDING.json",
+    "SETUP_ENTRY.md",
+    "SOURCE_PINS.json",
+    "SOURCE_REVIEW.json",
+    "source.mjs",
+    "TEST_RESULTS.txt",
+    "test.mjs",
+    "timing.mjs"
+  ],
+  "native": "NOT_RUN",
+  "plan": "NOT_RUN",
+  "performance": "NOT_PROVED"
+}
