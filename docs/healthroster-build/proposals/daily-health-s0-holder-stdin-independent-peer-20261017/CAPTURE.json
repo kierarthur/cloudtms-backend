@@ -1,0 +1,69 @@
+{
+  "authorCommit": "b55ee046f7c058f5e4a4f3bf2ef4485ef1a3ae72",
+  "authorManifestSha256": "16e360c6b4f38aab59ba7ae120d07dad5f5a5f19d703c5663c8b3a14bab873a1",
+  "files": [
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 1618,
+      "sha256": "ba8e4696923b1d8b99b491d88b8039e393e1aafabc148d87e2e75379a9a0d22f"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2521,
+      "sha256": "fdc0b9f347c50de1eba1b3b57b0a1399293b9f8010e978190ed2cec241e1c83a"
+    },
+    {
+      "file": "RESULT.json",
+      "bytes": 422,
+      "sha256": "b69656aae8b74775f648d72039de136ab727f54c1125ffcd91b718f9f7871b5f"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 546,
+      "sha256": "206975e155fdcd5103c6068e1d7e70f233184a20adcd791eeb68327aa2aeac19"
+    },
+    {
+      "file": "TEST_OUTPUT.tap",
+      "bytes": 1294,
+      "sha256": "ffe73bf351643f34713aad107b7a82a5cc3ef6989ce294694854c73d7515b64d"
+    },
+    {
+      "file": "payload/MANIFEST.json",
+      "bytes": 2880,
+      "sha256": "7a1cfedfb0e5d7f7538e9e4527ebfef46717fa34e40a6a4f3c8a8d92297981e3"
+    },
+    {
+      "file": "payload/protocol.mjs",
+      "bytes": 6451,
+      "sha256": "6474897d63080657c43ca14160364057b950580feea22de6871bdd92dfdb4e1a"
+    },
+    {
+      "file": "reference/MANIFEST.json",
+      "bytes": 2880,
+      "sha256": "7945768f5ed86da4fdbdb364da7adedd4df387e03902043204ccf21f7642cd6d"
+    },
+    {
+      "file": "reference/protocol.mjs",
+      "bytes": 6432,
+      "sha256": "b5f9bd91aa1e47a4f291163bb4be73ffa2a5af924b2f988911af9bcd491178a1"
+    },
+    {
+      "file": "stdin.test.mjs",
+      "bytes": 4523,
+      "sha256": "28ad6988d2e13cddf586084fb5da3141628e6ab54d994927401ef54929b08e36"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1850,
+      "sha256": "e8b0896bed7aaee61b82c22a7d13aa2860b98cf5a5ee236a96a60334dad52d7e"
+    },
+    {
+      "file": "MANIFEST.json",
+      "bytes": 1797,
+      "sha256": "16e360c6b4f38aab59ba7ae120d07dad5f5a5f19d703c5663c8b3a14bab873a1"
+    }
+  ],
+  "savedIndexHeadEqual": true,
+  "privateActualStateReads": 0,
+  "native": "NOT_RUN"
+}

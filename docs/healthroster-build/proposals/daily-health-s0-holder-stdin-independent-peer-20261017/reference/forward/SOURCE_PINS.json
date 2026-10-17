@@ -1,0 +1,14 @@
+[
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/protocol.mjs",
+    "commit": "474d819407e7fbf2c2c815d306c584fb30c65811",
+    "bytes": 6432,
+    "sha256": "b5f9bd91aa1e47a4f291163bb4be73ffa2a5af924b2f988911af9bcd491178a1"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/MANIFEST.json",
+    "commit": "474d819407e7fbf2c2c815d306c584fb30c65811",
+    "bytes": 2880,
+    "sha256": "7945768f5ed86da4fdbdb364da7adedd4df387e03902043204ccf21f7642cd6d"
+  }
+]

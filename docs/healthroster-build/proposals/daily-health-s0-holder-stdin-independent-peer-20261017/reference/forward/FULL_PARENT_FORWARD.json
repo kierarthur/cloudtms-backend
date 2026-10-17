@@ -1,0 +1,42 @@
+{
+  "version": "DAILY_S0_HOLDER_OWNED_STDIN_FORWARD_V1",
+  "base": "474d819407e7fbf2c2c815d306c584fb30c65811",
+  "protocol": {
+    "parent": "reference/protocol.mjs",
+    "payload": "payload/protocol.mjs",
+    "before": "this.signal.removeEventListener('abort',this.onAbort);}",
+    "after": "this.signal.removeEventListener('abort',this.onAbort);this.input.pause();}",
+    "wholeRawInverse": true
+  },
+  "manifest": {
+    "parent": "reference/MANIFEST.json",
+    "payload": "payload/MANIFEST.json",
+    "beforeRow": {
+      "file": "protocol.mjs",
+      "bytes": 6432,
+      "sha256": "b5f9bd91aa1e47a4f291163bb4be73ffa2a5af924b2f988911af9bcd491178a1"
+    },
+    "afterRow": {
+      "file": "protocol.mjs",
+      "bytes": 6451,
+      "sha256": "6474897d63080657c43ca14160364057b950580feea22de6871bdd92dfdb4e1a"
+    },
+    "retainedRows": 16
+  },
+  "originalSavedFilesUnchanged": true,
+  "nativeRetryRequired": false,
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/protocol.mjs",
+      "source": "payload/protocol.mjs",
+      "beforeSha256": "b5f9bd91aa1e47a4f291163bb4be73ffa2a5af924b2f988911af9bcd491178a1",
+      "afterSha256": "6474897d63080657c43ca14160364057b950580feea22de6871bdd92dfdb4e1a"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/MANIFEST.json",
+      "source": "payload/MANIFEST.json",
+      "beforeSha256": "7945768f5ed86da4fdbdb364da7adedd4df387e03902043204ccf21f7642cd6d",
+      "afterSha256": "7a1cfedfb0e5d7f7538e9e4527ebfef46717fa34e40a6a4f3c8a8d92297981e3"
+    }
+  ]
+}
