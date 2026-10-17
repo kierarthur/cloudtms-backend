@@ -1,0 +1,22 @@
+{
+  "version": "CONTACT_SNAPSHOT_CSE_ACTUAL_OFFLINE_REGRESSIONS_V1",
+  "tests": [
+    {
+      "file": "tests/healthroster-live-test-restoration.test.mjs",
+      "bytes": 13344,
+      "sha256": "701dd1d9b0bba0b18c451446089268a48eb722f3455c0718bc26b12912a356bc"
+    },
+    {
+      "file": "tests/healthroster-install1-full-rehearsal.test.mjs",
+      "bytes": 24216,
+      "sha256": "96ef1cb24b109db7e1d3b2f517ac70a0ff3ee02e820a51ae470eb8b73efad371"
+    }
+  ],
+  "sourceOverlay": "Exactly two complete candidate module bodies at original module URLs; no filesystem/Git/source-admission spoofing",
+  "processAndNetworkCalls": "REFUSED_IN_TEST_WORKERS_EXCEPT_EXACT_READONLY_GIT_LS_FILES_INVENTORY",
+  "exitCode": 0,
+  "passes": 43,
+  "failures": 0,
+  "tapSha256": "e61c52e547ab17fe462111bbe6cc4ba0a8b2fc8b58ce26e35317a9a1fbe83ed0",
+  "native": "NOT_RUN"
+}

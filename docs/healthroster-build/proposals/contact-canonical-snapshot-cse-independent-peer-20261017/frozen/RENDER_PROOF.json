@@ -1,0 +1,60 @@
+{
+  "version": "CONTACT_CANONICAL_SNAPSHOT_BOUND_SOURCE_RENDER_V1",
+  "inputIdentity": "SYNTHETIC_SOURCE_RENDER_ONLY_NOT_NATIVE",
+  "proof": [
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "parentSha256": "050d6e416c988ad58251f1c50b300c448dddc74471b8251e0b5437e958387fe1",
+      "candidateSha256": "42a76b6e6e25ab8df6d09a47111f2cf0661c2da8fdda882e5079fd7eac2b396f",
+      "parentBytes": 25515,
+      "candidateBytes": 25793,
+      "legacyNonLiveRawEqual": true,
+      "oldNoArgumentLiveFieldsRawEqual": true,
+      "canonicalOriginalReaderRawEqual": true,
+      "relations": [
+        "private.candidate_daily_batch_receipts",
+        "public.audit_events",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.ts_financials_outbox",
+        "public.weekly_candidate_cohorts",
+        "public.weekly_candidate_outreach_generations",
+        "public.weekly_manager_recipient_generations",
+        "public.weekly_message_dispatch_commands",
+        "public.weekly_source_global_settings",
+        "public.weekly_timesheet_submission_request_memberships",
+        "public.weekly_timesheet_submission_requests"
+      ],
+      "native": "NOT_RUN"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "parentSha256": "050d6e416c988ad58251f1c50b300c448dddc74471b8251e0b5437e958387fe1",
+      "candidateSha256": "42a76b6e6e25ab8df6d09a47111f2cf0661c2da8fdda882e5079fd7eac2b396f",
+      "parentBytes": 25515,
+      "candidateBytes": 25793,
+      "legacyNonLiveRawEqual": true,
+      "oldNoArgumentLiveFieldsRawEqual": true,
+      "canonicalOriginalReaderRawEqual": true,
+      "relations": [
+        "private.candidate_daily_batch_receipts",
+        "public.audit_events",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.ts_financials_outbox",
+        "public.weekly_candidate_cohorts",
+        "public.weekly_candidate_outreach_generations",
+        "public.weekly_manager_recipient_generations",
+        "public.weekly_message_dispatch_commands",
+        "public.weekly_source_global_settings",
+        "public.weekly_timesheet_submission_request_memberships",
+        "public.weekly_timesheet_submission_requests"
+      ],
+      "native": "NOT_RUN"
+    }
+  ],
+  "rootWrites": 0,
+  "nativeCalls": 0,
+  "queriesExecuted": 0,
+  "explainCalls": 0
+}

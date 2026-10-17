@@ -1,0 +1,47 @@
+{
+  "version": "CONTACT_CSE_COMMITTED_SOURCE_ADMISSION_V1",
+  "executionCommit": "f3e7e0a49a61f9979a6866ae31afe3fa67a870b6",
+  "remoteCommitFreshEqual": true,
+  "committedAdapter": true,
+  "savedIndexHeadEqual": true,
+  "exactCommittedSetupEntry": true,
+  "cases": [
+    "CONTACT_CONSTRUCTORS_V1",
+    "QT_ADMIN_CONTROLS_V1"
+  ],
+  "actualRootSourceProgrammeGuards": "PASS_BOTH_CASES",
+  "mountedRegressions": 43,
+  "independentPeer": {
+    "commit": "a8c8afeeb0b89688450aa755829f6c99ef6d71c7",
+    "filesGitExact": 99,
+    "manifestSha256": "e6448b4ac654dd49ee154a7553989e4e1acd5c8b6746bd249e53aa677cb0e1c8",
+    "verdict": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+    "byteCases": 25,
+    "astNegatives": 21,
+    "regressions": 43
+  },
+  "nativeRoute": {
+    "authenticated": true,
+    "rollbackOnlyTransactionTool": true,
+    "durableWritesAllowed": false,
+    "secretsReturned": false
+  },
+  "services": {
+    "agency": {
+      "healthy": true,
+      "database": "cloudtms_test_clone",
+      "postmaster": "2026-10-14T09:07:33.240Z"
+    },
+    "mytms": {
+      "healthy": true,
+      "database": "uofvkfi5",
+      "postmaster": "2026-09-17T23:40:44.934Z"
+    }
+  },
+  "normalReadyz": 200,
+  "anonymousMcp": 401,
+  "operationalConfiguration": "D development paths; existing C Program Files psql executable intentionally unchanged",
+  "nativeExecution": "NOT_RUN",
+  "performance": "NOT_MEASURED",
+  "originalHoldsPreserved": true
+}

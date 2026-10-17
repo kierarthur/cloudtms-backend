@@ -1,0 +1,268 @@
+TAP version 13
+# Subtest: fresh gate refuses missing authority, wrong environment/module, concurrent release, dirty/unpushed or stale source
+ok 1 - fresh gate refuses missing authority, wrong environment/module, concurrent release, dirty/unpushed or stale source
+  ---
+  duration_ms: 2.9632
+  type: 'test'
+  ...
+# Subtest: fresh restoration requires all four identical fingerprints and the exact absent marker
+ok 2 - fresh restoration requires all four identical fingerprints and the exact absent marker
+  ---
+  duration_ms: 0.523
+  type: 'test'
+  ...
+# Subtest: source lexer distinguishes a quoted catalogue identity and INSERT column list from an executed queue call
+ok 3 - source lexer distinguishes a quoted catalogue identity and INSERT column list from an executed queue call
+  ---
+  duration_ms: 1.1283
+  type: 'test'
+  ...
+# Subtest: dynamic SQL literal edges survive masking, while catalogue literals alone confer no executed call
+ok 4 - dynamic SQL literal edges survive masking, while catalogue literals alone confer no executed call
+  ---
+  duration_ms: 1.0297
+  type: 'test'
+  ...
+# Subtest: every client fixture switch is cleared before and after its full native verifier savepoint
+ok 5 - every client fixture switch is cleared before and after its full native verifier savepoint
+  ---
+  duration_ms: 2.0529
+  type: 'test'
+  ...
+# Subtest: one outer REPEATABLE READ cannot absorb an incompatible native SERIALIZABLE requirement
+ok 6 - one outer REPEATABLE READ cannot absorb an incompatible native SERIALIZABLE requirement
+  ---
+  duration_ms: 0.5301
+  type: 'test'
+  ...
+# Subtest: fresh activity exclusion has only own query PID and proved same-database turn PID
+ok 7 - fresh activity exclusion has only own query PID and proved same-database turn PID
+  ---
+  duration_ms: 0.2366
+  type: 'test'
+  ...
+# Subtest: snapshot compiles exact repository exporter and fresh relation names without retaining business payloads
+ok 8 - snapshot compiles exact repository exporter and fresh relation names without retaining business payloads
+  ---
+  duration_ms: 5.0696
+  type: 'test'
+  ...
+# Subtest: historical Install1 verifier approval cannot authorise a changed Install2 census
+ok 9 - historical Install1 verifier approval cannot authorise a changed Install2 census
+  ---
+  duration_ms: 2583.3026
+  type: 'test'
+  ...
+# Subtest: one supplied retained turn spans before/full/explicit rollback/fresh and canonical root publication callback
+ok 10 - one supplied retained turn spans before/full/explicit rollback/fresh and canonical root publication callback
+  ---
+  duration_ms: 2.5425
+  type: 'test'
+  ...
+# Subtest: live observation admits active background sessions before SQL but requires genuine restoration before publication
+ok 11 - live observation admits active background sessions before SQL but requires genuine restoration before publication
+  ---
+  duration_ms: 0.9448
+  type: 'test'
+  ...
+# Subtest: before activity without complete observation and malformed activity counts fail before SQL
+ok 12 - before activity without complete observation and malformed activity counts fail before SQL
+  ---
+  duration_ms: 0.5874
+  type: 'test'
+  ...
+# Subtest: SQL errors or missing explicit rollback always get fresh proof and hold publication
+ok 13 - SQL errors or missing explicit rollback always get fresh proof and hold publication
+  ---
+  duration_ms: 1.2751
+  type: 'test'
+  ...
+# Subtest: interrupted or incomplete execution and collected SQL errors never receive an intermediate SQL-pass receipt
+ok 14 - interrupted or incomplete execution and collected SQL errors never receive an intermediate SQL-pass receipt
+  ---
+  duration_ms: 0.9145
+  type: 'test'
+  ...
+# Subtest: restoration mismatch and lost turn prevent publication, with no duplicate dispatch on protected failure
+ok 15 - restoration mismatch and lost turn prevent publication, with no duplicate dispatch on protected failure
+  ---
+  duration_ms: 0.5803
+  type: 'test'
+  ...
+# Subtest: root psql adapter sends synthetic credentials only through environment and returns closed complete diagnostics
+ok 16 - root psql adapter sends synthetic credentials only through environment and returns closed complete diagnostics
+  ---
+  duration_ms: 1.335
+  type: 'test'
+  ...
+# Subtest: root psql adapter refuses missing unit end markers and unmapped database diagnostics
+ok 17 - root psql adapter refuses missing unit end markers and unmapped database diagnostics
+  ---
+  duration_ms: 0.6512
+  type: 'test'
+  ...
+# Subtest: psql client errors are mapped and held even when all unit and rollback markers are present
+ok 18 - psql client errors are mapped and held even when all unit and rollback markers are present
+  ---
+  duration_ms: 0.373
+  type: 'test'
+  ...
+# Subtest: in-session contract strips only the exact checked marker while every security/catalogue section remains sealed
+ok 19 - in-session contract strips only the exact checked marker while every security/catalogue section remains sealed
+  ---
+  duration_ms: 2.0562
+  type: 'test'
+  ...
+# Subtest: closed exception codes are derived only from hash-bound literal source messages
+ok 20 - closed exception codes are derived only from hash-bound literal source messages
+  ---
+  duration_ms: 2.3102
+  type: 'test'
+  ...
+# Subtest: expected contract digest is derived by read-only PostgreSQL jsonb conversion of the exact source contract
+ok 21 - expected contract digest is derived by read-only PostgreSQL jsonb conversion of the exact source contract
+  ---
+  duration_ms: 184.4067
+  type: 'test'
+  ...
+# Subtest: F5 remains mandatory post-VERIFIED and cannot be turned into a passed preinstall or safety exclusion
+ok 22 - F5 remains mandatory post-VERIFIED and cannot be turned into a passed preinstall or safety exclusion
+  ---
+  duration_ms: 0.6933
+  type: 'test'
+  ...
+# Subtest: unchanged full tables and exact fresh parent abort/fixture absence qualify
+ok 23 - unchanged full tables and exact fresh parent abort/fixture absence qualify
+  ---
+  duration_ms: 2.3391
+  type: 'test'
+  ...
+# Subtest: native other-transaction claim and retry qualify without replacing original fingerprints
+ok 24 - native other-transaction claim and retry qualify without replacing original fingerprints
+  ---
+  duration_ms: 0.6181
+  type: 'test'
+  ...
+# Subtest: claim labels without native request/terminal proof fail
+ok 25 - claim labels without native request/terminal proof fail
+  ---
+  duration_ms: 0.5777
+  type: 'test'
+  ...
+# Subtest: other changed relation and omitted or duplicate relation cannot be attributed
+ok 26 - other changed relation and omitted or duplicate relation cannot be attributed
+  ---
+  duration_ms: 0.6166
+  type: 'test'
+  ...
+# Subtest: incomplete or independently wrong two-table row map fails
+ok 27 - incomplete or independently wrong two-table row map fails
+  ---
+  duration_ms: 0.4167
+  type: 'test'
+  ...
+# Subtest: old receipt mutation/deletion and new finance identity fail
+ok 28 - old receipt mutation/deletion and new finance identity fail
+  ---
+  duration_ms: 0.8482
+  type: 'test'
+  ...
+# Subtest: outbox stable-field change, nonincreasing attempts and impossible retry time fail
+ok 29 - outbox stable-field change, nonincreasing attempts and impossible retry time fail
+  ---
+  duration_ms: 0.6715
+  type: 'test'
+  ...
+# Subtest: own, aborted, unknown or before-visible writer XID fails
+ok 30 - own, aborted, unknown or before-visible writer XID fails
+  ---
+  duration_ms: 0.6734
+  type: 'test'
+  ...
+# Subtest: genuinely active before-snapshot writer is distinguished from later native time
+ok 31 - genuinely active before-snapshot writer is distinguished from later native time
+  ---
+  duration_ms: 0.3351
+  type: 'test'
+  ...
+# Subtest: dynamic exception fixture identity must be absent and cannot be attributed as background
+ok 32 - dynamic exception fixture identity must be absent and cannot be attributed as background
+  ---
+  duration_ms: 0.581
+  type: 'test'
+  ...
+# Subtest: exact observer order, all units, epoch and parent PID/XID bind
+ok 33 - exact observer order, all units, epoch and parent PID/XID bind
+  ---
+  duration_ms: 1.5658
+  type: 'test'
+  ...
+# Subtest: fixture readback is read-only, identity-scoped and handles empty native footprint
+ok 34 - fixture readback is read-only, identity-scoped and handles empty native footprint
+  ---
+  duration_ms: 1.6352
+  type: 'test'
+  ...
+# Subtest: observer resets roles before read and does not add mutation/transaction control
+ok 35 - observer resets roles before read and does not add mutation/transaction control
+  ---
+  duration_ms: 1.4992
+  type: 'test'
+  ...
+# Subtest: snapshot binds complete raw-row and stable-field hashes and native receipt semantics
+ok 36 - snapshot binds complete raw-row and stable-field hashes and native receipt semantics
+  ---
+  duration_ms: 0.2208
+  type: 'test'
+  ...
+# Subtest: writer census explicitly converts the actual text-valued contract exporter before JSON traversal
+ok 37 - writer census explicitly converts the actual text-valued contract exporter before JSON traversal
+  ---
+  duration_ms: 0.642
+  type: 'test'
+  ...
+# Subtest: actual renderer retains native body exactly and captures after role reset before rollback
+ok 38 - actual renderer retains native body exactly and captures after role reset before rollback
+  ---
+  duration_ms: 0.7078
+  type: 'test'
+  ...
+# Subtest: only actual qualification for these exact before/after snapshots admits a delta
+ok 39 - only actual qualification for these exact before/after snapshots admits a delta
+  ---
+  duration_ms: 0.4947
+  type: 'test'
+  ...
+# Subtest: changed proof fields and mutated before maps cannot reuse a legitimate qualification
+ok 40 - changed proof fields and mutated before maps cannot reuse a legitimate qualification
+  ---
+  duration_ms: 0.4898
+  type: 'test'
+  ...
+# Subtest: both actual full snapshot epochs and Xip ranges must be proved
+ok 41 - both actual full snapshot epochs and Xip ranges must be proved
+  ---
+  duration_ms: 0.4053
+  type: 'test'
+  ...
+# Subtest: retry timing derives the exact capped fail formula as well as five-minute dequeue
+ok 42 - retry timing derives the exact capped fail formula as well as five-minute dequeue
+  ---
+  duration_ms: 0.3266
+  type: 'test'
+  ...
+# Subtest: actual final publication gate rejects forged, copied and stale qualifications and retains its independent guards
+ok 43 - actual final publication gate rejects forged, copied and stale qualifications and retains its independent guards
+  ---
+  duration_ms: 0.6856
+  type: 'test'
+  ...
+1..43
+# tests 43
+# suites 0
+# pass 43
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3026.0364
