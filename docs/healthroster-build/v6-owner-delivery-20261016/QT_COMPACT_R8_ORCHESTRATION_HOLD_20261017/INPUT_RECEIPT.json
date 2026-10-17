@@ -1,0 +1,585 @@
+{
+  "version": "CONTACT_QT_POSITIVE_ROLLBACK_INPUT_V1",
+  "caseId": "QT_ADMIN_CONTROLS_V1",
+  "scope": "CONTACT_QT_POSITIVE_TWELVE_COMPLETE_RELATIONS_V1",
+  "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+  "holderIdentity": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 305902,
+    "turnId": "hr_turn_1ccbdbf2be3ed1861050d55200137a26",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-17T19:59:08.100Z",
+    "task": "CONTACT_QT_POSITIVE_QT_ADMIN_CONTROLS_V1"
+  },
+  "marker": "hr_install2_1ccbdbf2be3ed1861050d55200137a26",
+  "label": "HR_CONTACT_QT_QT_ADMIN_CONTROLS_V1_1CCBDBF2BE3ED1861050D55200137A26",
+  "sqlSha256": "19bb9b0812bde6290ab637659d425ae115717712ec854dfeeb7679ae59fb293d",
+  "verificationSqlSha256": "ea909e1949b9be005bce68f1be4c1fc4a5a7cc6b87284a032a840a342c19326d",
+  "programmeSha256": "f9838f8cfa95da2546373ecb707911d2810c83dc42c81d280c7260df5093321c",
+  "programmeBytes": 55276,
+  "programmeStart": 10,
+  "expectedProgramme": {
+    "programme": "QT_ADMIN_CONTROLS_V1",
+    "fixtureUsers": 6,
+    "policyRows": 1,
+    "commandAuditRows": 2,
+    "ordinaryPayInactiveDenials": 10,
+    "sameTransactionRevocationRefusals": 2,
+    "changedBodyRefusals": 1,
+    "staleCasRefusals": 1,
+    "effectiveRoleAclChecks": 3,
+    "directRoleApi": "NOT_RUN",
+    "crossAgencyProof": "NOT_RUN",
+    "postWaitRace": "NOT_RUN",
+    "outerIsolation": "read committed"
+  },
+  "statements": 69,
+  "indices": {
+    "guardBefore": 5,
+    "guard": 6,
+    "guardAfter": 7,
+    "markerCreation": 8,
+    "transaction": 9,
+    "programmeResult": 65,
+    "fixtureObservation": 68,
+    "completion": 69
+  },
+  "canonicalSqlSha256": "cc010d36891f2d8a3e66b2de343e02c7ed6782844b7f1fce3b4e816ab0a6456e",
+  "snapshotRelations": [
+    "private.candidate_daily_batch_receipts",
+    "public.audit_events",
+    "public.settings_defaults",
+    "public.tms_users",
+    "public.ts_financials_outbox",
+    "public.weekly_candidate_cohorts",
+    "public.weekly_candidate_outreach_generations",
+    "public.weekly_manager_recipient_generations",
+    "public.weekly_message_dispatch_commands",
+    "public.weekly_source_global_settings",
+    "public.weekly_timesheet_submission_request_memberships",
+    "public.weekly_timesheet_submission_requests"
+  ],
+  "responses": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "313269157df425d940687d0d791b87ee8df2f7f9158edc699bda91879c02a1fb",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "1f44ec7c7b25338d9cf745c346e167088e37c6eac3086b5395722937d792aad9",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "ed4c72afb2a8536df3c3e4187bf11e3047f00ceca3ecdf8de1e9029cf7b9a179",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 4,
+      "command": "SET",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "bb75576969de55a1a47b60d3afd1e91a0ed5b84795800b04b9a4783f1100aad3",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 5,
+      "command": "SELECT",
+      "kind": "ONE_ROW",
+      "sqlSha256": "9dbef9562730bec04140cf5b08e2517f0183e49c1a0cc996468120f2b2a78c62",
+      "abiQualification": "STRICT_NATIVE_INTEGER_ONE_ROW_REQUIRED"
+    },
+    {
+      "statement": 6,
+      "command": "DO",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "e59c20fcb5160858f4b6a8b32e0478a349db2b913913b7c9b102840b18581aff",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 7,
+      "command": "SELECT",
+      "kind": "ONE_ROW",
+      "sqlSha256": "b7ec9de34618be62991daf38715027597b06a79c9fee78079067b76e8278cc02",
+      "abiQualification": "STRICT_NATIVE_INTEGER_ONE_ROW_REQUIRED"
+    },
+    {
+      "statement": 8,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "e6879ba428d752f5de6411b1e903c3997231e18aaf3fe6edf828c95c7fabdd96",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 9,
+      "command": "SELECT",
+      "kind": "ONE_ROW",
+      "sqlSha256": "736e478db0068ae6a4a92683500bbc107177d6b4713f8f635cb2f80968bc5d5b",
+      "abiQualification": "STRICT_NATIVE_INTEGER_ONE_ROW_REQUIRED"
+    },
+    {
+      "statement": 10,
+      "command": "SET",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "11732ed4ffeb6bf169b68689fd87c55db4b75bd426a912635ed7d1abd979c6b9",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 11,
+      "command": "DO",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "d76cd1389de263b7583d7c49a6de3a74cea9177cf83fe1723ab180517ce3fb9c",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 12,
+      "command": "DO",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "1e8ead789a2ac9d69029e8380379a84050ac406223005541ae77393d84a87408",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 13,
+      "command": "DO",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "edb92ac994cbea8c688e57403bc07e008446a320ce834fd735ee74bcef3be21a",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 14,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "bf3a9ec7a2fcacc5428f11df878c1e99eb0f968fdb2f9ec343aa98b072e2eb5e",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 15,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "d88bb5fc9d51acaba5cf11e8632cb3ef5eba2d97dc061c504983a66709ad5391",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 16,
+      "command": "REVOKE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "9d7ef607d8f0b43548e7ef72dcb2b1332a564e1f5e9bae2c23d78e8d6114ba91",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 17,
+      "command": "DO",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "1a5fed52c58d13ade43f9f01a137f3700745e6d8e2589a5273ef7682b4a61519",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 18,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "36ef708c9077def1df23eadfdd73785fc4a8716b6778eb2c1afeae51ba37a9eb",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 19,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "778fab5b9618d85e66deaa77a84f942b65daa32075f4bf028137c1a05dc52aa7",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 20,
+      "command": "REVOKE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "88f0a4e9bc8de1723f0af46c4800a9589d737288dfc6388de1036c2a2be0a752",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 21,
+      "command": "DO",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "17b7bb9c1818bfe2d1798f049fde969a6ef29dfd442b15e9ef9e6c4baccfed5b",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 22,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "980fbfd48266311ce4105a9c077288ab6dec27ec3566373eeb3f04c08de1a9a3",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 23,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "eafdc7f52e540c84a981ad337fa81446da1c82038c4f99e74a2a53d95876b3a9",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 24,
+      "command": "REVOKE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "90c194fdc7056a0a7eeed01d712eb6d6cf377d0fb386e7806f6a4eff27f4c858",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 25,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "162e3b18e5d773eea7b6c948717396a9532c7309e7732dae654e379a8b47ac7f",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 26,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "22c906549fbb387921204640d7669b5d56c2237fb5d4856aed64596dddc375bb",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 27,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "43b8b206d69d52f1d20923cd2d5a5519c0f27820ad4f503dbc6cb7af3a5e85b2",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 28,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "023a13c2a5ac085a3464d8f1b1feafd84277d4ff48b79b46b4bd628130e76add",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 29,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "88b10ec952827271f9d010138255a5db1cb2a4186e639a0b58d427e893c38e36",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 30,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "5eda37ad310476fc5e2cf16371baf70b4d940ee407b3231b5f77378485355a43",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 31,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "c53a6ea6889509b9e702ff2fde375f43cba8d9eababd93d97fb1924676c6ce2e",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 32,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "2e883666977f451a8a1e840961d70354fabe52c6f73f3f32720366dfea7c4c48",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 33,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "8d4a8ee5178d8eede418639ab3365d1b6ac42ed9e03a8bab391ac611fb80e667",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 34,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "6317208b8b0395f807f83b3531b49e34eff5ce878fe59e056e7907d3f8af3015",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 35,
+      "command": "REVOKE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "172c3153fef443c83a7478bbf4c8b2b470783a5b8164f94d3b5e27ee525f184f",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 36,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "ce77754239dc18fdc228f7ed59b8eb2d36a3a01970d9239d85412581cebaa079",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 37,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "ea978b07726b87d9ac8af9cdce4b054a4d3023ee72f5de8deb3e57f9d3ee4ab5",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 38,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "80defdd55f8065464a1bf27b173d3f8678b6090e306243ec7927783cadbeac86",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 39,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "33cfd11cf769674980e48f6a9162d141bf5a1fdf8c4de15d386b90f053684a4d",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 40,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "519ade7e8fe2d6ec6466a2c1afea9c73c4c052cce2256385d50652c43ea8ac72",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 41,
+      "command": "DROP",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "813c3faaa957864a6153f1495dacf84a68e87f904a8d7f5101c47288075a19b0",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 42,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "8dc5c29c4f864d6cb212b9bee0e8a6b387fbe9126c9ff47265a7b6896e59dbf7",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 43,
+      "command": "DROP",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "6ffcbf878a3964b74d18c128fac486c3279d7a42df60c06b01eafccd0c003d82",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 44,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "589dcc4a0dd891f1cb35bfc737ce1e72a4e1ec3cab36ca8272bcddb6a8e1e220",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 45,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "f2bf6ed7ca45509c498907fe234e104372c9b361e0a009eaf0bb1c3f041c69e3",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 46,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "059279ff8efa20a4bf3740bb73843dd8f76e852a784484b1bc7281a88b254b11",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 47,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "d6c301107252b11865936bac04156937410da7fb3709f131e75ba18a4b0a97fd",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 48,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "389df60ea18b17967d13f8bb4f3bf2e911e889c35d93bb565feeba25b8382126",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 49,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "a5642c859e4fd6ba1d555b4660d6c746259f08c4aa891bd166f4f9e22030f0d9",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 50,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "4931ba7711cbdb57fd8ea11a89f7d3b085b7fda0e4e5e6e024aa5c2622f46852",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 51,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "0baeba700ea4132605931af075c41e93d7e0f92460aecf62db972f0b2619ae30",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 52,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "4199ecd86c7cf892f5dc8026e9ba97231ff6bbf6398f52d0020cb3415e938004",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 53,
+      "command": "ALTER",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "fc9ecb914e907f9ebb398cd24a6f2a7ecd7b06c37b489fe30853196402000293",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 54,
+      "command": "REVOKE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "55baa288f2004222560baa259c58ce8e174dbf7a2a3aa85965e6a0a1775c85a5",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 55,
+      "command": "REVOKE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "186878d835e4748309c6b44e0ebb76a65179382f443495f6364ea1e23a690716",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 56,
+      "command": "GRANT",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "a1a5b4a6f55ebfc9f96c1ce4cb26520bb2a9f58dea2ab19057c6e81f6471d226",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 57,
+      "command": "NOTIFY",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "beae8e6f16857473db571b80b8d55f26d7f8b1fcf2c134cc8904a9b4f71d3fe4",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 58,
+      "command": "CREATE",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "2f6448647c1d35ba104b1cc1bea33b82dc76d2bfe1f078bedee49a529f08ac06",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 59,
+      "command": "DO",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "7934f8f0c18a44fa4a2b5aa03206c9ffc73a0fd4a6b04263016464144ad88ccf",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 60,
+      "command": "SELECT",
+      "kind": "FIXED_AUDIT_CTAS_BOUNDED_STORED_ROWS",
+      "sqlSha256": "0904dcc7587186f0a4e97fe8e8689281623cc41a9f1368611e5e93c768de0053",
+      "abiQualification": "PG17_SELECT_0_TO_1500000_EMPTY_FIELDS_ROWS_SOURCE_EXPECTATION_NATIVE_CTAS_UNOBSERVED"
+    },
+    {
+      "statement": 61,
+      "command": "DO",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "cf3a47a27d997c7aa7258272bc55066f17b76f2d9ce4a76a4c8d3521235ca14c",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 62,
+      "command": "DO",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "f0d22c03412ac465bcee90e9121970c36199a2f08dc5564d51ac1cafc1a13e33",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 63,
+      "command": "SELECT",
+      "kind": "FIXED_AUDIT_CTAS_BOUNDED_STORED_ROWS",
+      "sqlSha256": "cdcad1677f200c91390d0196a79b084127924b9b810de229d6895e1f133f8025",
+      "abiQualification": "PG17_SELECT_0_TO_1500000_EMPTY_FIELDS_ROWS_SOURCE_EXPECTATION_NATIVE_CTAS_UNOBSERVED"
+    },
+    {
+      "statement": 64,
+      "command": "DO",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "6841777e32ef2d2fa62a0017a10913185d47a344243dd39c0e5f2d5513f66810",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 65,
+      "command": "SELECT",
+      "kind": "ONE_ROW",
+      "sqlSha256": "29ecaf4411661c7d852c9aeef030e3c998fdca6b16af553e10217250d180215a",
+      "abiQualification": "STRICT_NATIVE_INTEGER_ONE_ROW_REQUIRED"
+    },
+    {
+      "statement": 66,
+      "command": "RESET",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "fa3e6dbbdf8d20346a8fdacad18dc6b953edff9e9d5018d67e0d066cc1af951a",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 67,
+      "command": "RESET",
+      "kind": "EMPTY_COMMAND",
+      "sqlSha256": "8772189179b442218def5bd4a2e6e39cd8bf9ce6a13263a8a17d51287e231964",
+      "abiQualification": "CLOSED_EXACT_STATEMENT_AND_PROVIDER_COMMAND_TAG_EXPECTATION_NATIVE_CASE_NOT_RUN"
+    },
+    {
+      "statement": 68,
+      "command": "SELECT",
+      "kind": "ONE_ROW",
+      "sqlSha256": "ac59eef88fb438aabea0529c50866f44d8b0a12b21dde63931a53a2cb9c0ff36",
+      "abiQualification": "STRICT_NATIVE_INTEGER_ONE_ROW_REQUIRED"
+    },
+    {
+      "statement": 69,
+      "command": "SELECT",
+      "kind": "ONE_ROW",
+      "sqlSha256": "34d5c29a665753ba1e2ea0d56d214c7ff805df78ffa0502df001d10e82e3e365",
+      "abiQualification": "STRICT_NATIVE_INTEGER_ONE_ROW_REQUIRED"
+    }
+  ],
+  "verificationResponses": [
+    {
+      "statement": 1,
+      "command": "SELECT",
+      "kind": "ONE_ROW",
+      "sqlSha256": "7dad24976537d076dde2486e7bbd1e1c8dad337695dea6249c4739d1dc986ce5",
+      "abiQualification": "STRICT_NATIVE_INTEGER_ONE_ROW_REQUIRED"
+    },
+    {
+      "statement": 2,
+      "command": "SELECT",
+      "kind": "ONE_ROW",
+      "sqlSha256": "e4b4ea0277864b98d675a47bfed11d400968a8828359b00963b752cfc2009273",
+      "abiQualification": "STRICT_NATIVE_INTEGER_ONE_ROW_REQUIRED"
+    },
+    {
+      "statement": 3,
+      "command": "SELECT",
+      "kind": "ONE_ROW",
+      "sqlSha256": "21babdef7c5ee9ea612ce10701c01913d20247e21b765f2b4d5fee28f7163876",
+      "abiQualification": "STRICT_NATIVE_INTEGER_ONE_ROW_REQUIRED"
+    },
+    {
+      "statement": 4,
+      "command": "SELECT",
+      "kind": "ONE_ROW",
+      "sqlSha256": "191dfc8c74929087a1e191dcdfea34e67549a661d66e8f005683c2a9c4e58411",
+      "abiQualification": "STRICT_NATIVE_INTEGER_ONE_ROW_REQUIRED"
+    }
+  ],
+  "businessFixtureRows": 6,
+  "markerControlRelationCreated": true,
+  "bankingBody": "NOT_INCLUDED",
+  "native": "NOT_RUN"
+}

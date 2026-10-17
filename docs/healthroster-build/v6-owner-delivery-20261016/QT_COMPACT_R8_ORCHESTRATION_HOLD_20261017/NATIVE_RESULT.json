@@ -1,0 +1,740 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"accepted\": true,\n  \"databaseTarget\": \"agency_test\",\n  \"database\": \"cloudtms_test_clone\",\n  \"label\": \"HR_CONTACT_QT_QT_ADMIN_CONTROLS_V1_1CCBDBF2BE3ED1861050D55200137A26\",\n  \"sqlSha256\": \"19bb9b0812bde6290ab637659d425ae115717712ec854dfeeb7679ae59fb293d\",\n  \"statementCount\": 69,\n  \"statements\": [\n    {\n      \"statement\": 1,\n      \"command\": \"SET\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 2,\n      \"command\": \"SET\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 3,\n      \"command\": \"SET\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 4,\n      \"command\": \"SET\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 5,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1,\n      \"fields\": [\n        \"hr_guard_clock\"\n      ],\n      \"rows\": [\n        {\n          \"hr_guard_clock\": {\n            \"phase\": \"B_GUARD_BEFORE\",\n            \"readOnly\": false,\n            \"holderPid\": 305902,\n            \"backendPid\": 305955,\n            \"observedAt\": \"2026-10-17T20:00:11.949579+00:00\",\n            \"databaseOid\": 324139,\n            \"holderGranted\": true,\n            \"physicalDatabase\": \"cloudtms_test_clone\",\n            \"statementStartedAt\": \"2026-10-17T20:00:11.943652+00:00\",\n            \"transactionStartedAt\": \"2026-10-17T20:00:11.741041+00:00\"\n          }\n        }\n      ],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 6,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 7,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1,\n      \"fields\": [\n        \"hr_guard_clock\"\n      ],\n      \"rows\": [\n        {\n          \"hr_guard_clock\": {\n            \"phase\": \"B_GUARD_AFTER\",\n            \"readOnly\": false,\n            \"holderPid\": 305902,\n            \"backendPid\": 305955,\n            \"observedAt\": \"2026-10-17T20:00:12.012696+00:00\",\n            \"databaseOid\": 324139,\n            \"holderGranted\": true,\n            \"physicalDatabase\": \"cloudtms_test_clone\",\n            \"statementStartedAt\": \"2026-10-17T20:00:12.010534+00:00\",\n            \"transactionStartedAt\": \"2026-10-17T20:00:11.741041+00:00\"\n          }\n        }\n      ],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 8,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 9,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1,\n      \"fields\": [\n        \"?column?\"\n      ],\n      \"rows\": [\n        {\n          \"?column?\": \"HR_REHEARSAL_TRANSACTION_JSON {\\\"xid\\\": \\\"414571808\\\", \\\"database\\\": \\\"cloudtms_test_clone\\\", \\\"epochZero\\\": true, \\\"backendPid\\\": 305955}\"\n        }\n      ],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 10,\n      \"command\": \"SET\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 11,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 12,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 13,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 14,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 15,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 16,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 17,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 18,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 19,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 20,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 21,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 22,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 23,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 24,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 25,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 26,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 27,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 28,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 29,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 30,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 31,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 32,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 33,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 34,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 35,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 36,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 37,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 38,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 39,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 40,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 41,\n      \"command\": \"DROP\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 42,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 43,\n      \"command\": \"DROP\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 44,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 45,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 46,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 47,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 48,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 49,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 50,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 51,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 52,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 53,\n      \"command\": \"ALTER\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 54,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 55,\n      \"command\": \"REVOKE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 56,\n      \"command\": \"GRANT\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 57,\n      \"command\": \"NOTIFY\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 58,\n      \"command\": \"CREATE\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 59,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 60,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1139776,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 61,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 62,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 63,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1139776,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 64,\n      \"command\": \"DO\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 65,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1,\n      \"fields\": [\n        \"programme_result\"\n      ],\n      \"rows\": [\n        {\n          \"programme_result\": {\n            \"programme\": \"QT_ADMIN_CONTROLS_V1\",\n            \"policyRows\": 1,\n            \"fixtureUsers\": 6,\n            \"postWaitRace\": \"NOT_RUN\",\n            \"directRoleApi\": \"NOT_RUN\",\n            \"outerIsolation\": \"read committed\",\n            \"commandAuditRows\": 2,\n            \"crossAgencyProof\": \"NOT_RUN\",\n            \"staleCasRefusals\": 1,\n            \"changedBodyRefusals\": 1,\n            \"effectiveRoleAclChecks\": 3,\n            \"ordinaryPayInactiveDenials\": 10,\n            \"sameTransactionRevocationRefusals\": 2\n          }\n        }\n      ],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 66,\n      \"command\": \"RESET\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 67,\n      \"command\": \"RESET\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 68,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1,\n      \"fields\": [\n        \"?column?\"\n      ],\n      \"rows\": [\n        {\n          \"?column?\": \"HR_FIXTURE_OBSERVATION_JSON {\\\"xid\\\": \\\"414571808\\\", \\\"rows\\\": [], \\\"unit\\\": 0, \\\"database\\\": \\\"cloudtms_test_clone\\\", \\\"epochZero\\\": true, \\\"backendPid\\\": 305955}\"\n        }\n      ],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 69,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1,\n      \"fields\": [\n        \"jsonb_build_object\"\n      ],\n      \"rows\": [\n        {\n          \"jsonb_build_object\": {\n            \"xid\": \"414571808\",\n            \"marker\": \"hr_install2_1ccbdbf2be3ed1861050d55200137a26\",\n            \"holderPid\": 305902,\n            \"backendPid\": 305955,\n            \"markerRows\": 0,\n            \"observedAt\": \"2026-10-17T20:00:56.587439+00:00\",\n            \"databaseOid\": 324139,\n            \"noRoleSwitch\": true,\n            \"holderGranted\": true,\n            \"markerPresent\": true,\n            \"physicalDatabase\": \"cloudtms_test_clone\",\n            \"statementStartedAt\": \"2026-10-17T20:00:56.584318+00:00\",\n            \"transactionStartedAt\": \"2026-10-17T20:00:11.741041+00:00\"\n          }\n        }\n      ],\n      \"rowsTruncated\": false\n    }\n  ],\n  \"rolledBack\": true,\n  \"rollbackVerification\": {\n    \"connectedFresh\": true,\n    \"database\": \"cloudtms_test_clone\",\n    \"statements\": [\n      {\n        \"statement\": 1,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"set_config\"\n        ],\n        \"rows\": [\n          {\n            \"set_config\": \"pg_catalog, public\"\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 2,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"jsonb_build_object\"\n        ],\n        \"rows\": [\n          {\n            \"jsonb_build_object\": \"{\\\"module\\\": \\\"LEGACY:1\\\", \\\"identityTest\\\": true, \\\"markerAbsent\\\": true, \\\"applyingCount\\\": 0, \\\"latestRelease\\\": {\\\"commit\\\": \\\"f743b81fe537830d81b1de93ec4f9cb0331532a7\\\", \\\"status\\\": \\\"VERIFIED\\\", \\\"releaseId\\\": \\\"20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537\\\", \\\"completedAt\\\": \\\"2026-10-14T15:47:03.075975+00:00\\\", \\\"installedContract\\\": \\\"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\\\", \\\"repositoryContract\\\": \\\"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\\\"}, \\\"customerKeyNull\\\": true, \\\"physicalDatabase\\\": \\\"cloudtms_test_clone\\\"}\"\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 3,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"jsonb_build_object\"\n        ],\n        \"rows\": [\n          {\n            \"jsonb_build_object\": {\n              \"readOnly\": true,\n              \"holderPid\": 305902,\n              \"backendPid\": 305955,\n              \"observedAt\": \"2026-10-17T20:00:56.858083+00:00\",\n              \"databaseOid\": 324139,\n              \"noRoleSwitch\": true,\n              \"holderGranted\": true,\n              \"physicalDatabase\": \"cloudtms_test_clone\",\n              \"statementStartedAt\": \"2026-10-17T20:00:56.856044+00:00\",\n              \"transactionStartedAt\": \"2026-10-17T20:00:56.709828+00:00\"\n            }\n          }\n        ],\n        \"rowsTruncated\": false\n      },\n      {\n        \"statement\": 4,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"jsonb_build_object\"\n        ],\n        \"rows\": [\n          {\n            \"jsonb_build_object\": {\n              \"readOnly\": true,\n              \"backendPid\": 305955,\n              \"qtObjectsAbsent\": true,\n              \"userFixtureRowsRemaining\": 0\n            }\n          }\n        ],\n        \"rowsTruncated\": false\n      }\n    ]\n  },\n  \"warnings\": [\n    \"All transactional database and catalog changes were rolled back.\",\n    \"PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.\",\n    \"Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback.\"\n  ]\n}"
+    }
+  ],
+  "structuredContent": {
+    "accepted": true,
+    "databaseTarget": "agency_test",
+    "database": "cloudtms_test_clone",
+    "label": "HR_CONTACT_QT_QT_ADMIN_CONTROLS_V1_1CCBDBF2BE3ED1861050D55200137A26",
+    "sqlSha256": "19bb9b0812bde6290ab637659d425ae115717712ec854dfeeb7679ae59fb293d",
+    "statementCount": 69,
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "hr_guard_clock"
+        ],
+        "rows": [
+          {
+            "hr_guard_clock": {
+              "phase": "B_GUARD_BEFORE",
+              "readOnly": false,
+              "holderPid": 305902,
+              "backendPid": 305955,
+              "observedAt": "2026-10-17T20:00:11.949579+00:00",
+              "databaseOid": 324139,
+              "holderGranted": true,
+              "physicalDatabase": "cloudtms_test_clone",
+              "statementStartedAt": "2026-10-17T20:00:11.943652+00:00",
+              "transactionStartedAt": "2026-10-17T20:00:11.741041+00:00"
+            }
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "hr_guard_clock"
+        ],
+        "rows": [
+          {
+            "hr_guard_clock": {
+              "phase": "B_GUARD_AFTER",
+              "readOnly": false,
+              "holderPid": 305902,
+              "backendPid": 305955,
+              "observedAt": "2026-10-17T20:00:12.012696+00:00",
+              "databaseOid": 324139,
+              "holderGranted": true,
+              "physicalDatabase": "cloudtms_test_clone",
+              "statementStartedAt": "2026-10-17T20:00:12.010534+00:00",
+              "transactionStartedAt": "2026-10-17T20:00:11.741041+00:00"
+            }
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 8,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 9,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "?column?"
+        ],
+        "rows": [
+          {
+            "?column?": "HR_REHEARSAL_TRANSACTION_JSON {\"xid\": \"414571808\", \"database\": \"cloudtms_test_clone\", \"epochZero\": true, \"backendPid\": 305955}"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 10,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 11,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 12,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 13,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 14,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 15,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 16,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 17,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 18,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 19,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 20,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 21,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 22,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 23,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 24,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 25,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 26,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 27,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 28,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 29,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 30,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 31,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 32,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 33,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 34,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 35,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 36,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 37,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 38,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 39,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 40,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 41,
+        "command": "DROP",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 42,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 43,
+        "command": "DROP",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 44,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 45,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 46,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 47,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 48,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 49,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 50,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 51,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 52,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 53,
+        "command": "ALTER",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 54,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 55,
+        "command": "REVOKE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 56,
+        "command": "GRANT",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 57,
+        "command": "NOTIFY",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 58,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 59,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 60,
+        "command": "SELECT",
+        "rowCount": 1139776,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 61,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 62,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 63,
+        "command": "SELECT",
+        "rowCount": 1139776,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 64,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 65,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "programme_result"
+        ],
+        "rows": [
+          {
+            "programme_result": {
+              "programme": "QT_ADMIN_CONTROLS_V1",
+              "policyRows": 1,
+              "fixtureUsers": 6,
+              "postWaitRace": "NOT_RUN",
+              "directRoleApi": "NOT_RUN",
+              "outerIsolation": "read committed",
+              "commandAuditRows": 2,
+              "crossAgencyProof": "NOT_RUN",
+              "staleCasRefusals": 1,
+              "changedBodyRefusals": 1,
+              "effectiveRoleAclChecks": 3,
+              "ordinaryPayInactiveDenials": 10,
+              "sameTransactionRevocationRefusals": 2
+            }
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 66,
+        "command": "RESET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 67,
+        "command": "RESET",
+        "rowCount": null,
+        "fields": [],
+        "rows": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 68,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "?column?"
+        ],
+        "rows": [
+          {
+            "?column?": "HR_FIXTURE_OBSERVATION_JSON {\"xid\": \"414571808\", \"rows\": [], \"unit\": 0, \"database\": \"cloudtms_test_clone\", \"epochZero\": true, \"backendPid\": 305955}"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 69,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "xid": "414571808",
+              "marker": "hr_install2_1ccbdbf2be3ed1861050d55200137a26",
+              "holderPid": 305902,
+              "backendPid": 305955,
+              "markerRows": 0,
+              "observedAt": "2026-10-17T20:00:56.587439+00:00",
+              "databaseOid": 324139,
+              "noRoleSwitch": true,
+              "holderGranted": true,
+              "markerPresent": true,
+              "physicalDatabase": "cloudtms_test_clone",
+              "statementStartedAt": "2026-10-17T20:00:56.584318+00:00",
+              "transactionStartedAt": "2026-10-17T20:00:11.741041+00:00"
+            }
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ],
+    "rolledBack": true,
+    "rollbackVerification": {
+      "connectedFresh": true,
+      "database": "cloudtms_test_clone",
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "set_config"
+          ],
+          "rows": [
+            {
+              "set_config": "pg_catalog, public"
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 2,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "jsonb_build_object"
+          ],
+          "rows": [
+            {
+              "jsonb_build_object": "{\"module\": \"LEGACY:1\", \"identityTest\": true, \"markerAbsent\": true, \"applyingCount\": 0, \"latestRelease\": {\"commit\": \"f743b81fe537830d81b1de93ec4f9cb0331532a7\", \"status\": \"VERIFIED\", \"releaseId\": \"20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537\", \"completedAt\": \"2026-10-14T15:47:03.075975+00:00\", \"installedContract\": \"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\", \"repositoryContract\": \"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\"}, \"customerKeyNull\": true, \"physicalDatabase\": \"cloudtms_test_clone\"}"
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 3,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "jsonb_build_object"
+          ],
+          "rows": [
+            {
+              "jsonb_build_object": {
+                "readOnly": true,
+                "holderPid": 305902,
+                "backendPid": 305955,
+                "observedAt": "2026-10-17T20:00:56.858083+00:00",
+                "databaseOid": 324139,
+                "noRoleSwitch": true,
+                "holderGranted": true,
+                "physicalDatabase": "cloudtms_test_clone",
+                "statementStartedAt": "2026-10-17T20:00:56.856044+00:00",
+                "transactionStartedAt": "2026-10-17T20:00:56.709828+00:00"
+              }
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 4,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "jsonb_build_object"
+          ],
+          "rows": [
+            {
+              "jsonb_build_object": {
+                "readOnly": true,
+                "backendPid": 305955,
+                "qtObjectsAbsent": true,
+                "userFixtureRowsRemaining": 0
+              }
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ]
+    },
+    "warnings": [
+      "All transactional database and catalog changes were rolled back.",
+      "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+      "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+    ]
+  }
+}

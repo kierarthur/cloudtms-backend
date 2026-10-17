@@ -1,0 +1,55 @@
+{
+  "version": "QT_COMPACT_R8_ACTUAL_HOLD_EVIDENCE_V1",
+  "files": [
+    {
+      "file": "B_RECONCILIATION.json",
+      "bytes": 1594,
+      "sha256": "c7c0612b3c7a66a91ed1f1df92a122baaddf98b64e0e39da964e87ee7dc683a8"
+    },
+    {
+      "file": "DISPOSITION.json",
+      "bytes": 1502,
+      "sha256": "2f3d3bd265618a77b8050822c1b5aaf6c01b2deef83af5a513a17c38f48544d0"
+    },
+    {
+      "file": "HOLD.json",
+      "bytes": 642,
+      "sha256": "f0395c2b757b91f640d09a45efd3f772955aaf091984468e4f0d2156058a9225"
+    },
+    {
+      "file": "INPUT_RECEIPT.json",
+      "bytes": 23106,
+      "sha256": "c0b34c48b79df4f5f8b145e1619b8ae24fa75de42e5dd012b2676966844e1eaa"
+    },
+    {
+      "file": "NATIVE_CALL_TIMING.json",
+      "bytes": 317,
+      "sha256": "2ef612d569cd9554085ba8fea8849687e94378621a5a88178c0fd91141297ce7"
+    },
+    {
+      "file": "NATIVE_PAYLOAD_EXACT.json",
+      "bytes": 16642,
+      "sha256": "676c484361a015b7f78d51f3971dec38302634c085901e3090e37b3339049fec"
+    },
+    {
+      "file": "NATIVE_RESULT.json",
+      "bytes": 36996,
+      "sha256": "d189e7f081080889c40ec439d1ed87a8910f974bc15037efccacd8acbb284313"
+    },
+    {
+      "file": "READY_TIMING.json",
+      "bytes": 226,
+      "sha256": "e43282d9d6ba4ed80ba6eb77a5b3cb09818f08d1f29b7cefed66667a578d7bf3"
+    },
+    {
+      "file": "SHARED_TURN_JOURNAL.json",
+      "bytes": 570,
+      "sha256": "128350af16ade0b227e4f9a90e474e3daf2f94eefe3e2a7b0952622855033e7c"
+    },
+    {
+      "file": "TURN_IDENTITY.json",
+      "bytes": 284,
+      "sha256": "895d6f4a7b68d883e6b71f73a4f4231dadb57d3619f759e5a9a6d4387ef214ba"
+    }
+  ]
+}

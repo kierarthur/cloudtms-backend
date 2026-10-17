@@ -1,0 +1,18 @@
+{
+  "status": "HOLD",
+  "caseId": "QT_ADMIN_CONTROLS_V1",
+  "code": "ACTOR_SEQUENCE_WORK_BUDGET_HELD",
+  "observedErrorCode": "ACTOR_SEQUENCE_WORK_BUDGET_HELD",
+  "deadlineObserved": true,
+  "localTiming": {
+    "sequenceStartedAt": "2026-10-17T19:59:08.888Z",
+    "workDeadlineAt": "2026-10-17T20:01:08.888Z",
+    "readyAt": "2026-10-17T19:59:54.447Z",
+    "workTimerFiredAt": "2026-10-17T20:01:08.899Z"
+  },
+  "nativeClockFrames": [],
+  "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+  "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+  "elapsedMilliseconds": 120052,
+  "completeMapsPersisted": false
+}

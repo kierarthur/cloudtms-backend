@@ -1,0 +1,45 @@
+{
+  "status": "ACTUAL_B_AND_FRESH_NATIVE_VERIFICATION_PASS_NOT_C_RESTORATION",
+  "sourceCommit": "15984caf59d7ee3c8cddcc35454cc46cbb33f038",
+  "accepted": true,
+  "database": "cloudtms_test_clone",
+  "rolledBack": true,
+  "connectedFresh": true,
+  "statements": 69,
+  "verificationStatements": 4,
+  "allStatementShapesAndProgrammeAssertions": true,
+  "markerAbsent": true,
+  "allFixtureIdentifiersAbsent": true,
+  "nativeClockFrames": [
+    {
+      "phase": "B_GUARD_BEFORE",
+      "readOnly": false,
+      "holderPid": 305902,
+      "backendPid": 305955,
+      "observedAt": "2026-10-17T20:00:11.949579+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T20:00:11.943652+00:00",
+      "transactionStartedAt": "2026-10-17T20:00:11.741041+00:00"
+    },
+    {
+      "phase": "B_GUARD_AFTER",
+      "readOnly": false,
+      "holderPid": 305902,
+      "backendPid": 305955,
+      "observedAt": "2026-10-17T20:00:12.012696+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T20:00:12.010534+00:00",
+      "transactionStartedAt": "2026-10-17T20:00:11.741041+00:00"
+    }
+  ],
+  "nativeCompletionObservedAt": "2026-10-17T20:00:56.587439+00:00",
+  "mcpVerificationObservedAt": "2026-10-17T20:00:56.858083+00:00",
+  "independentCAfter": "NOT_RUN",
+  "restoration": "HOLD",
+  "reason": "Root result handoff errors exhausted original120 work before PREPARE",
+  "actualToolEnvelopePreserved": true
+}
