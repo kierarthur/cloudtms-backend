@@ -1,0 +1,35 @@
+# Independent missing-source Health source review
+
+Frozen source: `01ec68ef68a2cb16aa86ddb058b5d37989a60f43`, Money worktree package `missing-source-health-current-successor-20261017`. Integration observed: `24c57e6c7af4a8fb07d5e3126ab9ac76e9448560`. Source review only. No database, Docker, native, API, browser, release, lock or integration edits.
+
+The proposed Health definitions pass this bounded source composition review. **The frozen complete registry/classifier images require rebasing before installation on the current integration.** Nineteen of the twenty a34 payload targets remain byte-exact. The registry has the independently reviewed correction-entry delta: three new chains and six classifier ownership relocations to the later `17102026_0135` root. The nineteen functional missing-source anchors still match. Its six classifier anchors conflict with that legitimate relocation. Replacing the frozen whole registry would remove the three entry chains; leaving the later classifier unchanged would omit ten new private missing-source helpers.
+
+The integrator must retain the entry chains, compose the missing-source helper literals into the later complete classifier, and preserve the complete classifier ownership history in all six registry rows. The final ACL must follow that complete classifier. This report does not silently treat an old complete image as a valid current mount. `EVIDENCE.json` records the exact overlap; `verify.mjs` proves the current registry reverses through the reviewed entry receipt to the exact a34 image.
+
+## What was checked
+
+All 78 saved package files equal their frozen Git blobs. The 22 payloads retain their declared bytes and SHA-256. All nineteen functional definitions are present with their exact signatures. The eighteen recursive pages end with the complete classifier then exact ACL; their twenty-five final definitions agree with the package registry. The two existing public owners alone keep service execution; all seventeen private owners explicitly deny PUBLIC, anon, authenticated and service_role. No new relation is introduced.
+
+The six complete Health owners reverse to their pinned current definitions, including the actual current invoice-duty owner, not the earlier invoice version. Their complete input statements occur in the actual integration source. The three overlapping a34 ACK functions reverse to their complete actual a34 predecessors. The original typed ACK writer and immutable audit guard are retained; read admission is changed at both saved writer replay points through the reviewed helper. The classifier's one ten-helper addition reverses byte-for-byte to a34. The twenty-five registry changes likewise reverse to the complete frozen a34 registry, independently of the current entry overlap.
+
+## Semantic review
+
+The publication-specific facts/context readers distinguish CURRENT/APPLIED correction lineage from the explicitly requested CORRECTION_READY target and bind the latter to the current session actor and actual pay-work role. Native export membership, source group, client, date and complete credit-line census feed the facts. The latest genuine ACK event is chosen before reason/hash comparison: an older matching ACK cannot reappear after a newer different decision. A genuine source reappearance prevents an absent-source ACK from being reused. The original reason/fingerprint domain is retained.
+
+Snapshot movement follows immutable NO_CHANGE predecessor edges to the real ADD/AMEND movement with cycle and exact mapping checks; it does not choose a convenient movement by timestamp or replace its economic/VAT vector. The missing-source basis requires genuine absence, exact requested native scope and real root lock membership. Invoiced default retention precedes paid retention, known unpaid absence can CANCEL, and unknown unpaid evidence refuses. The stored projection generation remains a string. There is no invented zero expense snapshot and no substitution of a different actor's paid evidence.
+
+FIN4 computes the complete exclusion census before revision or movement writes. Excluded CANCEL retains the original snapshot and movement, with no new reversal or positive movement. The existing native CANCEL transition shape remains real current absence with nullable new snapshot. The deferred native insert guard requires the real FIN4 stack, service/session identity, exact transaction/frame binding and immutable revision census, then re-derives the original movement and actual raw absence. It is not authorized by a caller-provided boolean. All terminal and exception paths restore the frame. FIN3 keeps its validation/report routing and delegates ordinary execution to FIN4 with the explicit null request context. Invoice duty, prepared context, prepare and apply propagate and recheck the full census through their current immutable hashes and locked CAS paths.
+
+The legacy root inventory adds current ContractWeek, retained prior native snapshots and real expense roots through initial selection and both subsequent rechecks. NEXT ordering is retained. This is not proof that the still-missing capture/inventory/paid-evidence producer joins or their full consumer paths have been implemented. The candidate itself keeps those dependencies explicit. CorrectFinal's existing money/invoice/frozen-placement refusal is preserved; this review grants no new ability to void paid or invoiced placements.
+
+## Grammar and practical limits
+
+An independent offline run of pglast 7.20/PostgreSQL 17.7 processed forty files and 235 SQL statements, parsing forty-four PL/pgSQL bodies. Four body occurrences (logical and payload FIN4/FIN3) fail on `"v_prior_movement.id" is not a known variable`; their complete current owners fail identically because this parser has no native `%ROWTYPE` catalogue. These four are **NOT_PROVED**, not grammar PASS. `GRAMMAR_RECHECK.json` retains every result. Native catalogue compilation, trigger sequencing, deferred guards and concurrency remain NOT_RUN. No database connection was made.
+
+LaterAccept, full SameSeparate, prepared-root consumers, Office consumers and the genuine producer joins remain implementation work. This is not feature completion, mounted-root approval, a payment proof or a native qualification.
+
+## Reproduce
+
+Run `node docs/healthroster-build/proposals/missing-source-health-successor-review-20261017/verify.mjs` and `python docs/healthroster-build/proposals/missing-source-health-successor-review-20261017/grammar_recheck.py` from the owned D: worktree. Both read the frozen source/integration and write only this report directory. No retained draft or Money build script is executed.
+
+The configured cwd, physical worktrees, Git/common directory and write destination were verified on D:. Pre-existing untracked proposal directories remain untouched. Git mutations for this report use `-c gc.auto=0 -c maintenance.auto=false`; there is no shared metadata repair or prune. The earlier maintenance incident's scoped baseline evidence remains as recorded in the Daily proposal; this review makes no broader cleanup assertion.
