@@ -1,0 +1,49 @@
+{
+  "version": "QT_LITERAL_EXECUTE_UNLIMITED_SPI_SOURCE_AST_V1",
+  "parser": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "programmes": {
+    "CONTACT_CONSTRUCTORS_V1": 21,
+    "QT_ADMIN_CONTROLS_V1": 51
+  },
+  "inputs": {
+    "CONTACT_CONSTRUCTORS_V1": {
+      "sql": 34,
+      "verification_sql": 4
+    },
+    "QT_ADMIN_CONTROLS_V1": {
+      "sql": 64,
+      "verification_sql": 4
+    }
+  },
+  "wholePlAstInverse": true,
+  "aggregateSelectAstEqual": true,
+  "aggregateArgumentSortAstEqual": true,
+  "fixedLiteralOnly": true,
+  "usingParameters": 0,
+  "executorTupleLimit": 0,
+  "foundConsumers": 0,
+  "finalIfPath": [
+    "exec_stmt_if",
+    "exec_eval_boolean",
+    "exec_eval_expr",
+    "CURSOR_OPT_PARALLEL_OK",
+    "exec_run_select_tcount0"
+  ],
+  "counterexamples": [
+    "filter",
+    "order",
+    "separator",
+    "null",
+    "wholeRow",
+    "hash",
+    "distinct",
+    "limit"
+  ],
+  "parallelPlan": "NOT_OBSERVED",
+  "performance": "NOT_PROVED",
+  "native": "NOT_RUN"
+}

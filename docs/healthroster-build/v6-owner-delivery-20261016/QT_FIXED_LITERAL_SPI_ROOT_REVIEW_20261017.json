@@ -1,0 +1,85 @@
+{
+  "version": "QT_FIXED_LITERAL_SPI_ROOT_REVIEW_V1",
+  "rootParent": "771226f560faee929b21e757b57efeaf24080294",
+  "packs": [
+    {
+      "folder": "docs/healthroster-build/proposals/qt-audit-unlimited-spi-forward-20261017",
+      "commit": "fa2f3a595c87acf00bd8395133190271b46b0005",
+      "manifestSha256": "ba078559e027d3756bc7f5e6a2c1cfb1253d077f2f267284a9ebd81de2dd0b1b",
+      "files": 46
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/qt-audit-unlimited-spi-independent-peer-20261017",
+      "commit": "0e409968a1e4f6c8db9a1644f4c2da4a931695ba",
+      "manifestSha256": "ab1ea24101d4760655ffa7777b069b369cebd2909939ea09e5742dfcdc023dd0",
+      "files": 5
+    }
+  ],
+  "verdict": "ACCEPT_FOUR_EXACT_IMAGES_FOR_ONE_BOUNDED_CHANGED_NATIVE_TRIAL",
+  "rootRead": "Complete changed binding/README, four source inverses, PG17 execution chain and independent peer",
+  "proofs": {
+    "frozenAuthorFiles": 46,
+    "completeCurrentHistoricalParents": 20,
+    "authorTests": 14,
+    "authorAstCounterexamples": 8,
+    "independentParsedScalarCounterexamples": 6,
+    "wholeInnerSqlAndPlAstInverses": true
+  },
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+      "payload": "payload/qt-assertions.sql",
+      "parent": "reference/adapter/qt-assertions.sql",
+      "beforeBytes": 12048,
+      "beforeSha256": "e39b2cbcab6d8baab8a9d7287a1869984def0e6aa1c4137088d3eafcbeb7b209",
+      "bytes": 12100,
+      "sha256": "11f720baf63f49a6f6e309d5ad4c42c67c63ebed691a216171ef12364c4adfe3"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/PROGRAMMES.json",
+      "payload": "payload/PROGRAMMES.json",
+      "parent": "reference/adapter/PROGRAMMES.json",
+      "beforeBytes": 58958,
+      "beforeSha256": "775163889bac34792c74207019127f2f59d020a23186452d21d2a01f5dc898bf",
+      "bytes": 59010,
+      "sha256": "c404d285214cc634f1e2c6441442faf992a2e709b229a72225ccc62b69ea9c23"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/OFFLINE_INPUTS.json",
+      "payload": "payload/OFFLINE_INPUTS.json",
+      "parent": "reference/adapter/OFFLINE_INPUTS.json",
+      "beforeBytes": 113701,
+      "beforeSha256": "c716b2484f54be5f757ec7dc21d7dcc87e3d16c00c85b063892391581fce137e",
+      "bytes": 113753,
+      "sha256": "b9329b866e3c1af1d1fffd54602b6978ab6ef9993dfa942fbecf3446096387aa"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "payload": "payload/MANIFEST.json",
+      "parent": "reference/adapter/MANIFEST.json",
+      "beforeBytes": 8530,
+      "beforeSha256": "53c41e6077a995b3712ba55f67e5f00f605743c6629cdae886c56d9c8005b351",
+      "bytes": 8530,
+      "sha256": "67b15a656f213dc13c7e4e21456bb3665c17829e6243f0fe1ca6274ba871d8f4"
+    }
+  ],
+  "change": "First complete all-row digest is one fixed dollar-quoted EXECUTE SQL literal INTO original variable, no USING/parameters/interpolation. Same observation position; final IF full digest/equality/settings comparisons/all other assertions remain raw unchanged.",
+  "pg17Fact": "SELECT-INTO SPI tuple limit1/2 reaches ExecutorRun which disables parallel execution for nonzero numberTuples. Literal EXECUTE initializes zero tuple limit and permits planning; this removes identified restrictions only, not proof of physical plan or performance.",
+  "originalR1R2Holds": "Preserved; no acceptance/restoration promotion",
+  "caps": {
+    "Bstatement": 30000,
+    "Cstatement": 45000,
+    "Cchild": 70000,
+    "work": 120000,
+    "cleanup": 60000,
+    "whole": 180000
+  },
+  "rootSourcePins": 63,
+  "canonicalRelationScopes": 12,
+  "native": "NOT_RUN_AT_MOUNT",
+  "physicalParallelPlan": "NOT_OBSERVED",
+  "performance": "NOT_PROVED",
+  "bankSemanticBodiesRead": false,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

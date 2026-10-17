@@ -1,0 +1,45 @@
+{
+  "version": "DAILY_OBSERVER_SEVEN_FIELD_ROOT_REVIEW_V1",
+  "rootParent": "771226f560faee929b21e757b57efeaf24080294",
+  "packs": [
+    {
+      "folder": "docs/healthroster-build/proposals/daily-health-observer-original-receipt-bridge-20261017",
+      "commit": "6389be83a2989c2828965c13783cabbd2fa4efd5",
+      "manifestSha256": "000074ddbfcb108d5765a5b28d935f5260a43968f5036896ab9ed1e4668ac193",
+      "files": 10
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/daily-health-observer-seven-field-turn-forward-20261017",
+      "commit": "218dec4b93632b167d38434ed03530fa0e86a314",
+      "manifestSha256": "51ce676b14e714dfd7b58aea1852f2f9e8f16feaf8d632699114c2a36e21c29b",
+      "files": 9
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/observer-seven-field-independent-peer-20261017",
+      "commit": "d9fe2a435f888a8db05c93ee831c7207e903ebfd",
+      "manifestSha256": "9cda68407bc66fba97186f8f804f3fedf35368102c526f450c599a712d6401e4",
+      "files": 5
+    }
+  ],
+  "verdict": "ACCEPT_NEW_THREE_MODULE_SEVEN_FIELD_SOURCE_ONLY",
+  "rootRead": "Complete receipt validator, exact standalone owner deltas, source selection and peer review/replay",
+  "proofs": {
+    "whole6389ParentInverses": 3,
+    "sourcePins": 3,
+    "nodeGrammars": 3,
+    "authorTests": 6,
+    "independentTests": 4,
+    "sevenFieldOutputEqualities": 18
+  },
+  "fixesApplied": 1,
+  "fixesRejected": 0,
+  "fix": "Receipt path requires exact genuine seven identity fields including canonical takenAt/task, compares both exactly and retains all seven. UUID API alone preserves explicit legacy-five compatibility. Opaque actor hash stays original, no double hash/UUID recovery.",
+  "old6389": "Preserved immutable HOLD for real receipts; no old runtime executed or old files overwritten.",
+  "original11And12ScopesChanged": false,
+  "sqlOrCapsChanged": false,
+  "actualInputProvenanceAndNativeEnvelope": "REQUIRED_NOT_QUALIFIED_BY_SOURCE",
+  "privateAuthBindingOrJournalRead": false,
+  "native": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

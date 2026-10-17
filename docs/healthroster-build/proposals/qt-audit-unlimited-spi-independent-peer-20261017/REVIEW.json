@@ -1,0 +1,32 @@
+{
+  "version": "QT_LITERAL_SPI_BOUNDED_INDEPENDENT_PEER_V1",
+  "subjectCommit": "fa2f3a595c87acf00bd8395133190271b46b0005",
+  "subjectRoot": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+  "subjectFolder": "docs/healthroster-build/proposals/qt-audit-unlimited-spi-forward-20261017",
+  "subjectManifestSha256": "ba078559e027d3756bc7f5e6a2c1cfb1253d077f2f267284a9ebd81de2dd0b1b",
+  "selectionSha256": "3530b2a93e4bd244cc95d4ca5f8bc47fc48b49f9695c9cf881f54b99386e7a5b",
+  "sourceParent": "01d930d49f18c88841165876b7344131e4c31618",
+  "rootObserved": "771226f560faee929b21e757b57efeaf24080294",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "findings": [],
+  "scope": "One fixed literal EXECUTE replacing first audit SELECT INTO; four exact images only",
+  "evidence": {
+    "savedIndexHeadAndFrozenFiles": 46,
+    "wholeTargetInverses": 4,
+    "unamendedAuthorTests": 14,
+    "authorParsedNegatives": 8,
+    "independentAdditionalParserVectors": 6
+  },
+  "reviewedFacts": [
+    "Complete changed DO and original observation positions read; both all-row digests unchanged",
+    "No WHERE/DISTINCT/LIMIT/row projection/hash separator/null or sort modification",
+    "One constant SQL string; no params/USING/interpolation; no FOUND consumers",
+    "Whole PL inverse and complete companion inverses preserve all source guards/caps/assertions",
+    "PostgreSQL17.11 SPI/ExecutorRun source distinguishes parallel planning from nonzero tuple execution limit",
+    "Shared turn, genuine independent C-after, original full canonical/WeakMap remain mandatory"
+  ],
+  "native": "NOT_RUN",
+  "physicalPlan": "NOT_OBSERVED",
+  "performance": "NOT_PROVED",
+  "noAuthPrivateBusinessRowsBankBodyRootWrites": true
+}
