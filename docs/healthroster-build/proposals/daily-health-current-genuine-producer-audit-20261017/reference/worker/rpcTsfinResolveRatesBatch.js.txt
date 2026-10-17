@@ -1,0 +1,17 @@
+async function rpcTsfinResolveRatesBatch(env, { items = [] } = {}) {
+  // items is an array of objects {k, candidate_id, client_id, role, band, date, rate_type}
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const args = { p_items: items };
+
+  _tsfinRpcLog('tsfin_resolve_rates_batch -> call', { count: items.length });
+  try {
+    const res = await sbRpc(env, 'tsfin_resolve_rates_batch', args);
+    const rows = _asArray(res);
+    _tsfinRpcLog('tsfin_resolve_rates_batch -> ok', { rows: rows.length });
+    return rows;
+    // [{k, source_kind, override_id, default_id, pay_day.., charge_day.., ...}, ...]
+  } catch (e) {
+    _tsfinRpcLog('tsfin_resolve_rates_batch -> fail', { err: String(e?.message || e) });
+    throw e;
+  }
+}

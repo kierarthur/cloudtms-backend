@@ -1,0 +1,24 @@
+const CLIENT_CREATE_FIELDS = new Set([
+  'name', 'invoice_address', 'primary_invoice_email', 'ap_phone', 'vat_chargeable',
+  'payment_terms_days', 'mileage_charge_rate', 'ts_queries_email', 'client_address',
+  'contact_title', 'contact_known_as', 'contact_forename', 'contact_surname',
+  'contact_job_title', 'contact_tel', 'contact_mobile', 'contact_email', 'website', 'notes'
+]);
+
+const CLIENT_SETTINGS_CREATE_FIELDS = new Set([
+  'timezone_id', 'day_start', 'day_end', 'night_start', 'night_end',
+  'vat_rate_pct', 'holiday_pay_pct', 'apply_holiday_to',
+  'margin_includes', 'effective_from', 'hr_validation_required',
+  'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'pay_reference_required',
+  'invoice_reference_required', 'default_submission_mode', 'sat_start', 'sat_end', 'sun_start',
+  'sun_end', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices',
+  'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice',
+  'ts_attach_to_invoice', 'bh_start', 'bh_end', 'auto_invoice_default',
+  'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address',
+  'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'opt_in_email',
+  'opt_in_sms', 'opt_in_whatsapp', 'healthroster_import_auto_authorise',
+  'nhsp_import_auto_authorise', 'timesheet_break_entry_mode',
+  'candidate_paper_submission_enabled',
+  'candidate_expenses_require_separate_timesheet', 'candidate_expense_invoice_email'
+]);
+

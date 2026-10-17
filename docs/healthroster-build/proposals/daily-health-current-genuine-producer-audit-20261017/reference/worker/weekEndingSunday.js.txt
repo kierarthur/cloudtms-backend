@@ -1,0 +1,10 @@
+function weekEndingSunday(dateYmd) {
+  const [y, m, d] = dateYmd.split("-").map((x) => parseInt(x, 10));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dow = new Intl.DateTimeFormat("en-GB", { timeZone: LONDON_TZ, weekday: "short" }).format(dt).toLowerCase();
+  const dayNum = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].indexOf(dow.slice(0, 3));
+  const add = 6 - (dayNum === -1 ? 0 : dayNum);
+  const sunday = new Date(dt);
+  sunday.setUTCDate(sunday.getUTCDate() + add);
+  return londonDate(sunday);
+}

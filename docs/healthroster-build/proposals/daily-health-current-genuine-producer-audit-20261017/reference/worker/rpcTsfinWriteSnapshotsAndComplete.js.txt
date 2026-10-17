@@ -1,0 +1,232 @@
+async function rpcTsfinWriteSnapshotsAndComplete(env, { rows = [] } = {}) {
+  // rows is an array: [{outbox_id, timesheet_id, snapshot}, ...]
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { ok_count: 0, fail_count: 0, errors: [] };
+  }
+
+  const enc = encodeURIComponent;
+
+  const chunk = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < (arr?.length || 0); i += n) out.push(arr.slice(i, i + n));
+    return out;
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ NO-OP WRITE OPTIMISATION (Mode-A requirement)
+  // If the would-be snapshot is identical to the current TSFIN row,
+  // do NOT write a new timesheets_financials row; just mark outbox success.
+  // ─────────────────────────────────────────────────────────────
+
+  const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
+  const normalizeJson = (v) => {
+    if (v === undefined) return null;
+    if (v === null) return null;
+
+    // Keep numbers as numbers; treat NaN as null
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+
+    // Trim strings (but preserve exact strings otherwise)
+    if (typeof v === 'string') return v;
+
+    if (Array.isArray(v)) return v.map(normalizeJson);
+
+    if (isPlainObject(v)) {
+      const out = {};
+      const keys = Object.keys(v).sort();
+      for (const k of keys) out[k] = normalizeJson(v[k]);
+      return out;
+    }
+
+    // booleans, etc.
+    return v;
+  };
+
+  const deepEqual = (a, b) => {
+    if (a === b) return true;
+    if (a == null || b == null) return a == null && b == null;
+
+    const ta = typeof a;
+    const tb = typeof b;
+    if (ta !== tb) return false;
+
+    if (Array.isArray(a)) {
+      if (!Array.isArray(b)) return false;
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (!deepEqual(a[i], b[i])) return false;
+      }
+      return true;
+    }
+
+    if (isPlainObject(a)) {
+      if (!isPlainObject(b)) return false;
+      const ak = Object.keys(a);
+      const bk = Object.keys(b);
+      if (ak.length !== bk.length) return false;
+      // keys already sorted by normalizeJson for objects we compare, but be safe:
+      ak.sort();
+      bk.sort();
+      for (let i = 0; i < ak.length; i++) {
+        if (ak[i] !== bk[i]) return false;
+        if (!deepEqual(a[ak[i]], b[ak[i]])) return false;
+      }
+      return true;
+    }
+
+    return false;
+  };
+
+  const snapshotMatchesCurrent = (snapshot, curRow) => {
+    if (!snapshot || typeof snapshot !== 'object') return false;
+    if (!curRow || typeof curRow !== 'object') return false;
+
+    // Compare ONLY fields present in snapshot (if any differ, a write would change state)
+    const s = normalizeJson(snapshot);
+    const c = curRow; // curRow comes from PostgREST already as JSON-friendly types
+    const keys = Object.keys(s || {});
+    for (const k of keys) {
+      const sv = s[k];
+      const cv = normalizeJson(c[k]);
+      if (!deepEqual(sv, cv)) return false;
+    }
+    return true;
+  };
+
+  // Try to fetch current TSFIN rows and pre-skip no-ops.
+  let rowsToWrite = rows;
+  let noopOutboxIds = [];
+
+  try {
+    const tsIds = Array.from(
+      new Set(
+        rows
+          .map((r) => (r?.timesheet_id != null ? String(r.timesheet_id) : ''))
+          .filter(Boolean)
+      )
+    );
+
+    if (tsIds.length) {
+      const currentByTsId = new Map();
+
+      // Chunk to keep URL sizes sane
+      for (const idsChunk of chunk(tsIds, 120)) {
+        const inParam = idsChunk.map(enc).join(',');
+        const qs =
+          `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?is_current=eq.true` +
+          `&timesheet_id=in.(${inParam})` +
+          // select only what we need: timesheet_id + JSON/derived columns; but
+          // to keep it robust, we pull a broad set of columns.
+          // (Comparisons are restricted to keys present in snapshot anyway.)
+          `&select=*`;
+
+        const { rows: curRows } = await sbFetch(env, qs);
+        for (const cr of (curRows || [])) {
+          const tid = cr?.timesheet_id != null ? String(cr.timesheet_id) : '';
+          if (tid) currentByTsId.set(tid, cr);
+        }
+      }
+
+      const keep = [];
+      const noop = [];
+
+      for (const r of rows) {
+        const tid = r?.timesheet_id != null ? String(r.timesheet_id) : '';
+        const cur = tid ? (currentByTsId.get(tid) || null) : null;
+
+        // If we can prove no-op, do NOT write; just clear outbox.
+        if (r?.is_correction_ts !== true && cur && snapshotMatchesCurrent(r.snapshot, cur)) {
+          const ob = r?.outbox_id != null ? r.outbox_id : null;
+          if (ob != null) noop.push(ob);
+          continue;
+        }
+
+        keep.push(r);
+      }
+
+      rowsToWrite = keep;
+      noopOutboxIds = noop;
+    }
+  } catch (e) {
+    // If anything goes wrong, fail open (do normal write path).
+    rowsToWrite = rows;
+    noopOutboxIds = [];
+    try {
+      _tsfinRpcLog('tsfin_write_snapshots_and_complete -> noop-skip disabled (fetch/compare failed)', {
+        err: String(e?.message || e)
+      });
+    } catch {}
+  }
+
+  // Mark no-op outbox rows as success so they clear (without writing TSFIN)
+  let noopCleared = 0;
+  if (noopOutboxIds.length) {
+    try {
+      for (const idsChunk of chunk(noopOutboxIds, 200)) {
+        const cleared = await sbRpc(env, 'tsfin_work_success_bulk', { p_ids: idsChunk });
+        if (!Number.isSafeInteger(cleared) || cleared !== idsChunk.length) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+        noopCleared += cleared;
+      }
+      _tsfinRpcLog('tsfin_write_snapshots_and_complete -> noop-cleared', { count: noopCleared });
+    } catch (e) {
+      // If we fail to clear outbox, revert to writing everything (safer than leaving jobs stuck).
+      rowsToWrite = rows;
+      noopOutboxIds = [];
+      noopCleared = 0;
+      _tsfinRpcLog('tsfin_write_snapshots_and_complete -> noop-clear failed; reverting to write-all', {
+        err: String(e?.message || e)
+      });
+    }
+  }
+
+  // If everything was a no-op, we're done.
+  if (!rowsToWrite.length) {
+    return { ok_count: noopCleared, fail_count: 0, errors: [] };
+  }
+
+  const args = {
+    p_rows: rowsToWrite.map((row) => ({
+      outbox_id: row.outbox_id,
+      timesheet_id: row.timesheet_id,
+      snapshot: row.snapshot
+    }))
+  };
+
+  _tsfinRpcLog('tsfin_write_snapshots_and_complete -> call', {
+    count: rowsToWrite.length,
+    noop_cleared: noopCleared
+  });
+
+  try {
+    const res = await sbRpcRecordingGuardRefusal(env, 'tsfin_write_snapshots_and_complete', args);
+    // PostgREST returns table results as an array of rows (usually 1 row here).
+    if (Array.isArray(res) && res.length !== 1) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+    const out = Array.isArray(res) ? res[0] : res;
+    const count = value => Number.isSafeInteger(value) && value >= 0 ? value :
+      typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
+    const writtenOk = count(out?.ok_count), fail_count = count(out?.fail_count);
+    let errors = out?.errors;
+    if (typeof errors === 'string') { try { errors = JSON.parse(errors); } catch { errors = null; } }
+    if (!isPlainObject(out) || writtenOk === null || fail_count === null || writtenOk + fail_count !== rowsToWrite.length
+        || !Array.isArray(errors) || errors.length !== fail_count) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+    const written = new Map(rowsToWrite.map(row => [String(row.outbox_id).toLowerCase(), String(row.timesheet_id).toLowerCase()])), failed = new Set();
+    if (written.size !== rowsToWrite.length) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+    for (const error of errors) {
+      if (!isPlainObject(error) || Object.keys(error).sort().join(',') !== 'error,outbox_id,timesheet_id'
+          || typeof error.outbox_id !== 'string' || typeof error.timesheet_id !== 'string' || typeof error.error !== 'string' || !error.error.trim()) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+      const id = error.outbox_id.toLowerCase();
+      if (failed.has(id) || !written.has(id) || written.get(id) !== error.timesheet_id.toLowerCase()) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+      failed.add(id);
+    }
+    const ok_count = writtenOk + noopCleared;
+    if (ok_count + fail_count !== rows.length) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+
+    _tsfinRpcLog('tsfin_write_snapshots_and_complete -> ok', { ok_count, fail_count, noop_cleared: noopCleared });
+    return { ok_count, fail_count, errors };
+  } catch (e) {
+    _tsfinRpcLog('tsfin_write_snapshots_and_complete -> fail', { err: String(e?.message || e), noop_cleared: noopCleared });
+    throw e;
+  }
+}

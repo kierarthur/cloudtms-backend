@@ -1,0 +1,18 @@
+async function rpcTsfinDequeueSpecific(env, { timesheetIds = [], limit = null } = {}) {
+  if (!Array.isArray(timesheetIds) || timesheetIds.length === 0) return [];
+  const p_limit = _asPosIntOrNull(limit);
+
+  const args = { p_timesheet_ids: timesheetIds };
+  if (p_limit != null) args.p_limit = p_limit;
+
+  _tsfinRpcLog('tsfin_dequeue_specific -> call', { count: timesheetIds.length, p_limit });
+  try {
+    const res = await sbRpc(env, 'tsfin_dequeue_specific', args);
+    const rows = _asArray(res);
+    _tsfinRpcLog('tsfin_dequeue_specific -> ok', { rows: rows.length });
+    return rows; // [{id, timesheet_id, reason, attempt_count, next_attempt_at, last_error, created_at}, ...]
+  } catch (e) {
+    _tsfinRpcLog('tsfin_dequeue_specific -> fail', { err: String(e?.message || e) });
+    throw e;
+  }
+}
