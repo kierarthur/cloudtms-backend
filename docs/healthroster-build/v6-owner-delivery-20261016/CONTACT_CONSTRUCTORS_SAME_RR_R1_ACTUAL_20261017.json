@@ -1,0 +1,146 @@
+{
+  "version": "CONTACT_CONSTRUCTORS_SAME_RR_R1_ACTUAL_V1",
+  "executionCommit": "5fe3f08c74d681d2e1cf101c50834514bce81a1c",
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/contact-qt-positive-native-20261017-constructors-same-rr-r1",
+  "caseId": "CONTACT_CONSTRUCTORS_V1",
+  "holderReady": {
+    "sequenceStartedAt": "2026-10-17T11:41:47.767Z",
+    "workDeadlineAt": "2026-10-17T11:43:47.767Z",
+    "readyAt": "2026-10-17T11:43:03.762Z",
+    "sqlSha256": "e4722729144aa6837e1a2c5aaecb8a55708ffde7587bdc7f30f27bdbbbe45bea"
+  },
+  "actualHold": {
+    "status": "HOLD",
+    "caseId": "CONTACT_CONSTRUCTORS_V1",
+    "code": "ACTOR_SEQUENCE_WORK_BUDGET_HELD",
+    "observedErrorCode": "LOCAL_METADATA_TURN_LOST",
+    "deadlineObserved": true,
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T11:41:47.767Z",
+      "workDeadlineAt": "2026-10-17T11:43:47.767Z",
+      "readyAt": "2026-10-17T11:43:03.762Z",
+      "resultReadAt": "2026-10-17T11:43:11.979Z",
+      "workTimerFiredAt": "2026-10-17T11:43:47.775Z"
+    },
+    "metadataDiagnostic": {
+      "version": "CONTACT_QT_FIXED_METADATA_DIAGNOSTIC_V1",
+      "phase": "AFTER",
+      "startedAt": "2026-10-17T11:43:12.024Z",
+      "spawnReturnedAt": "2026-10-17T11:43:17.462Z",
+      "firstStderrAt": null,
+      "finishedAt": "2026-10-17T11:43:47.782Z",
+      "elapsedMilliseconds": 35758,
+      "sqlstate": null
+    },
+    "rootCallTiming": {
+      "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+      "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+      "sqlSha256": "e4722729144aa6837e1a2c5aaecb8a55708ffde7587bdc7f30f27bdbbbe45bea",
+      "callStartedAt": "2026-10-17T11:43:04.887Z",
+      "callReturnedAt": "2026-10-17T11:43:06.568Z",
+      "rootObservedCallMilliseconds": 1681,
+      "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+    },
+    "nativeClockFrames": [
+      {
+        "phase": "B_GUARD_BEFORE",
+        "readOnly": false,
+        "holderPid": 279161,
+        "backendPid": 279243,
+        "observedAt": "2026-10-17T11:43:06.605762+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T11:43:06.593187+00:00",
+        "transactionStartedAt": "2026-10-17T11:43:06.381204+00:00"
+      },
+      {
+        "phase": "B_GUARD_AFTER",
+        "readOnly": false,
+        "holderPid": 279161,
+        "backendPid": 279243,
+        "observedAt": "2026-10-17T11:43:06.677766+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T11:43:06.676687+00:00",
+        "transactionStartedAt": "2026-10-17T11:43:06.381204+00:00"
+      }
+    ],
+    "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+    "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+    "elapsedMilliseconds": 120065,
+    "completeMapsPersisted": false
+  },
+  "actualNative": {
+    "accepted": true,
+    "rolledBack": true,
+    "database": "cloudtms_test_clone",
+    "databaseTarget": "agency_test",
+    "statementCount": 34,
+    "statementErrors": 0,
+    "closedReadStageValidation": "PASS_ALL_EXACT_NATIVE_CONSTRUCTOR_ASSERTIONS_AND_STATEMENT_BOUNDARIES",
+    "transactionBackendPid": 279243,
+    "connectedFresh": true,
+    "identityProbe": {
+      "module": "LEGACY:1",
+      "identityTest": true,
+      "markerAbsent": true,
+      "applyingCount": 0,
+      "latestRelease": {
+        "commit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+        "status": "VERIFIED",
+        "releaseId": "20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537",
+        "completedAt": "2026-10-14T15:47:03.075975+00:00",
+        "installedContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6",
+        "repositoryContract": "7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6"
+      },
+      "customerKeyNull": true,
+      "physicalDatabase": "cloudtms_test_clone"
+    },
+    "holderProof": {
+      "readOnly": true,
+      "holderPid": 279161,
+      "backendPid": 279138,
+      "observedAt": "2026-10-17T11:43:07.572911+00:00",
+      "databaseOid": 324139,
+      "noRoleSwitch": true,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T11:43:07.570273+00:00",
+      "transactionStartedAt": "2026-10-17T11:43:07.449532+00:00"
+    },
+    "fixtureAbsence": {
+      "readOnly": true,
+      "backendPid": 279138,
+      "userFixtureRowsRemaining": 0
+    }
+  },
+  "nativeResultSha256": "b3f6ceaabaa1342e773c262febc93e73a84690cdb293773153ca76eb3d9e5b57",
+  "inputReceiptSha256": "0a67164c1c4709520a6bbbae99472c337d112876036445be46ecda532871d23d",
+  "inputSqlSha256": "e4722729144aa6837e1a2c5aaecb8a55708ffde7587bdc7f30f27bdbbbe45bea",
+  "originalRootCallTiming": {
+    "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "sqlSha256": "e4722729144aa6837e1a2c5aaecb8a55708ffde7587bdc7f30f27bdbbbe45bea",
+    "callStartedAt": "2026-10-17T11:43:04.887Z",
+    "callReturnedAt": "2026-10-17T11:43:06.568Z"
+  },
+  "sharedTurn": {
+    "takenAt": "2026-10-17T11:41:42.881Z",
+    "releasedAt": "2026-10-17T11:43:47.829Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "processExitCode": 1
+  },
+  "fullCanonicalCbefore": "COMPLETED_IN_ORIGINAL_MEMORY_ONLY_READER_BEFORE_READY",
+  "fullCanonicalCafter": "DEADLINE_HOLD_NOT_COMPLETED",
+  "canonicalRestorationQualified": false,
+  "weakMapProofMinted": false,
+  "completeMapsPersisted": false,
+  "noPermanentInstallation": true,
+  "next": "No blind native retry. Source-only timings and finite optimisation must retain original45/70/120/180 caps and all canonical/fixture/ownership guards.",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}
