@@ -1,5 +1,5 @@
 {
-  "version": "CONTACT_QT_POSITIVE_NAME_ADMISSION_FORWARD_FREEZE_V1",
+  "version": "CONTACT_QT_FIXED_CHILD_SQLSTATE_DIAGNOSTIC_FORWARD_V1",
   "sourceParent": "feb36c0c13c87b57b7566172e4bfaa1254117794",
   "sourceTests": 16,
   "parsedNativeInputPlBodies": 21,
@@ -23,8 +23,8 @@
     },
     {
       "file": "fixed-metadata-reader.mjs",
-      "bytes": 12541,
-      "sha256": "bdb0e829b8ea4d21ba3612e81718a26957ea6411d9dc0e3d9cd59cdd0d46ad5b"
+      "bytes": 13203,
+      "sha256": "b4e8359ab9d4c3b6e400beb66237fe568639610540915717dfea40755993b9e7"
     },
     {
       "file": "freeze.mjs",
@@ -48,8 +48,8 @@
     },
     {
       "file": "hold-case.mjs",
-      "bytes": 8022,
-      "sha256": "cc27168603b9b5df1b57e7a54d6f1f6dda699eae8688c2b3756658e71e81383e"
+      "bytes": 8170,
+      "sha256": "b19cf397047e895ddfa2c92bd6f91d433557e50907e48ea1df1f95cfac902b73"
     },
     {
       "file": "input-builder.mjs",
@@ -93,13 +93,13 @@
     },
     {
       "file": "READER_PARENT_REVERSE.json",
-      "bytes": 27503,
-      "sha256": "98b1cc7f6ae913b9528713929e43ffef56e124b24f8068b70af3db4027f6fe71"
+      "bytes": 31099,
+      "sha256": "8fcdb0c268c5a79b2b5d9446b68f7f634b45a54193e8e1ae268fc298840266dc"
     },
     {
       "file": "README.md",
-      "bytes": 5500,
-      "sha256": "9dad7cdd67efa9395d7ba49d4d3d4cee682df0dcf415b0f2e3717e4e1826de8d"
+      "bytes": 5911,
+      "sha256": "665075d47612a3abc16cca6b8da0ec2386a58dc70232c085296c76e300da3d93"
     },
     {
       "file": "reference/actor/build-program.mjs",
@@ -225,7 +225,12 @@
       "file": "timing.mjs",
       "bytes": 1313,
       "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9"
+    },
+    {
+      "file": "metadata-diagnostic.mjs",
+      "bytes": 3613,
+      "sha256": "a16b0a67e5c333e39c23fed4c5287d1929aa0baf9ac2107b9b93112de55f6794"
     }
   ],
-  "parentManifestSha256": "1fba7ea3a91147d75ea69df68b0e80be1300fccba1e5e0be4fe17eaf75713204"
+  "parentManifestSha256": "96b79241ed757a6ede404bdb9d1dd19ff29137d12b2c46847ce529f993c2a828"
 }

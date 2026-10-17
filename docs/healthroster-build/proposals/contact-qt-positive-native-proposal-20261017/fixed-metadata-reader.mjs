@@ -7,6 +7,7 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {source,SCOPE,markerFor} from './input-builder.mjs';
 import {NATIVE_BOUNDARY_SQL} from './native-boundary.mjs';
+import {SqlstateStderrCapture,diagnosticContext,diagnosticError,preserveMetadataDiagnostic} from './metadata-diagnostic.mjs';
 
 export const LIMITS=Object.freeze({stdoutBytes:64*1024*1024,stderrBytes:16*1024,
  connectSeconds:10,statementMilliseconds:45000,lockMilliseconds:2000,
@@ -21,6 +22,7 @@ const protectedFiles=expectedPins.rootInputs;
 // Pure transport state used by the offline tests. Once failed, no further bytes
 // are retained. A cap bounds captured bytes, not all JSON objects/V8 process RAM.
 export class BoundedMemoryCapture {
+ #stderrState=new SqlstateStderrCapture();
  constructor(phase='BEFORE'){check(['BEFORE','AFTER'].includes(phase),'LOCAL_METADATA_PHASE_REFUSED');this.phase=phase;this.bytes=0;this.stderrBytes=0;this.chunks=[];this.failed=null;}
  stdout(chunk){
   if(this.failed)return;
@@ -29,11 +31,12 @@ export class BoundedMemoryCapture {
   this.bytes+=chunk.length;this.chunks.push(chunk);
  }
  stderr(chunk){
-  if(this.failed)return;
-  this.stderrBytes+=Buffer.byteLength(chunk);
-  this.failed=this.stderrBytes>LIMITS.stderrBytes?'LOCAL_METADATA_STDERR_BOUND':'LOCAL_METADATA_DIAGNOSTIC_REFUSED';
+  this.stderrBytes=Math.min(LIMITS.stderrBytes+1,this.stderrBytes+Buffer.byteLength(chunk));
+  this.#stderrState.write(chunk);
+  if(!this.failed||this.stderrBytes>LIMITS.stderrBytes)this.failed=this.stderrBytes>LIMITS.stderrBytes?'LOCAL_METADATA_STDERR_BOUND':'LOCAL_METADATA_DIAGNOSTIC_REFUSED';
   this.chunks=[];
  }
+ diagnosticSqlstate(closed){return this.#stderrState.finish({closed});}
  finish(){
   check(!this.failed,this.failed);
   const bytes=Buffer.concat(this.chunks,this.bytes);this.chunks=[];
@@ -53,14 +56,15 @@ function assertPins(root){
  for(const row of protectedFiles)check(sha(fs.readFileSync(path.join(root,row.file)))===row.sha256,'LOCAL_METADATA_REVIEWED_SOURCE_CHANGED');
 }
 async function runFixedChild({input,env,turn,phase}){
- try{await turn.assertHeld('before-fixed-read-only-metadata');}catch{throw Error('LOCAL_METADATA_TURN_LOST');}
+ const diagnostic=diagnosticContext(phase);
+ try{await turn.assertHeld('before-fixed-read-only-metadata');}catch{throw diagnosticError('LOCAL_METADATA_TURN_LOST',diagnostic);}
  check(!turn.signal.aborted,'LOCAL_METADATA_TURN_LOST');
  let child;try{child=spawn(psql,['-X','-q','-A','-t','-v','ON_ERROR_STOP=on','-v','VERBOSITY=sqlstate'],
-  {windowsHide:true,env,stdio:['pipe','pipe','pipe']});}catch{throw Error('LOCAL_METADATA_START_FAILED');}
+  {windowsHide:true,env,stdio:['pipe','pipe','pipe']});diagnostic.spawnReturnedAt=new Date().toISOString();}catch{throw diagnosticError('LOCAL_METADATA_START_FAILED',diagnostic);}
  return new Promise((resolve,reject)=>{
   const capture=new BoundedMemoryCapture(phase);let failure=null,closed=false,settled=false,termTimer,closeTimer;
   const clean=()=>{clearTimeout(deadline);clearTimeout(termTimer);clearTimeout(closeTimer);turn.signal.removeEventListener('abort',lost);};
-  const finishError=code=>{if(settled)return;settled=true;clean();reject(Error(code));};
+  const finishError=code=>{if(settled)return;settled=true;clean();reject(diagnosticError(code,diagnostic,capture.diagnosticSqlstate(closed)));};
   const stop=code=>{
    failure??=code;if(closed)return;
    child.kill('SIGTERM');
@@ -71,7 +75,7 @@ async function runFixedChild({input,env,turn,phase}){
   const deadline=setTimeout(()=>stop('LOCAL_METADATA_CHILD_DEADLINE'),LIMITS.childMilliseconds);
   turn.signal.addEventListener('abort',lost,{once:true});
   child.stdout.on('data',chunk=>{if(failure)return;capture.stdout(chunk);if(capture.failed)stop(capture.failed);});
-  child.stderr.on('data',chunk=>{if(failure)return;capture.stderr(chunk);if(capture.failed)stop(capture.failed);});
+  child.stderr.on('data',chunk=>{diagnostic.firstStderrAt??=new Date().toISOString();const alreadyFailed=!!failure;capture.stderr(chunk);if(!alreadyFailed&&capture.failed)stop(capture.failed);});
   child.stdin.on('error',()=>stop('LOCAL_METADATA_INPUT_FAILED'));
   child.once('error',()=>stop('LOCAL_METADATA_START_FAILED'));
   child.once('close',async(code,signal)=>{
@@ -147,7 +151,7 @@ export async function createFixedMetadataReader({root,turn,caseId}){
    return {...result,snapshot:{...s,marker,...wanted==='AFTER'?{connectedFresh:true}:{}},
     provenance:{phase:wanted,scope:SCOPE,canonicalSqlSha256:sha(canonicalSql),inputSha256:sha(program.input),...wanted==='AFTER'?{fixtureSqlSha256:sha(program.fixtureSql),fixtureSource:'UNCHANGED_CANONICAL_FRESH_FIXTURE_PROOF_C_AFTER_THIRD_FRAME'}:{},sourcePinsSha256:sha(JSON.stringify(expectedPins)),
      childClosed:true,route:'OWNER_SEND5B_FIXED_READ_ONLY_METADATA_NOT_PROPOSED_B_SQL',observeLiveBusiness:true,nativeQualification:'NOT_PROVED_BY_READER'}};
-  }catch(error){phase='FAILED';throw Error(/^LOCAL_METADATA_[A-Z_]+$/.test(error?.message??'')?error.message:'LOCAL_METADATA_READ_REFUSED');}
+  }catch(error){phase='FAILED';throw preserveMetadataDiagnostic(error,Error(/^LOCAL_METADATA_[A-Z_]+$/.test(error?.message??'')?error.message:'LOCAL_METADATA_READ_REFUSED'));}
  };
  return Object.freeze({before:()=>read('BEFORE'),after:args=>read('AFTER',args),
   sourceDescriptor:Object.freeze({canonicalSqlSha256:sha(canonicalSql),inputSha256:sha(input),scope:SCOPE,limits:LIMITS}),

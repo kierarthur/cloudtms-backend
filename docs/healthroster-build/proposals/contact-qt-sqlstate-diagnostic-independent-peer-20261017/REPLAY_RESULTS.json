@@ -1,0 +1,42 @@
+{
+  "version": "CONTACT_QT_SQLSTATE_INDEPENDENT_REPLAY_V1",
+  "runs": [
+    {
+      "name": "original16",
+      "exitCode": 0
+    },
+    {
+      "name": "diagnostic8",
+      "exitCode": 0
+    }
+  ],
+  "rawParentInverses": 5,
+  "unchangedRawParents": 40,
+  "newModules": 1,
+  "combinedActorReaderInverse": true,
+  "rootPins": 63,
+  "currentRootHead": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+  "rebuilt": [
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "programmeBytes": 13974,
+      "programmeStatements": 21,
+      "inputStatements": 34,
+      "programmeSha256": "2ee9712aa357c9db4c8fbde1cd9e541de38b0721e19aec7d6fc9a31c692b9c91",
+      "programmeInputRawEqual": true
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "programmeBytes": 39738,
+      "programmeStatements": 51,
+      "inputStatements": 64,
+      "programmeSha256": "6e8feb37c2177f674b0ff372264dca1c8572b24e83e03f4cdf3e35acac114e93",
+      "programmeInputRawEqual": true
+    }
+  ],
+  "r1HoldSavedRawEqual": true,
+  "r1NativeIndependentlyObserved": false,
+  "r1Cause": "UNKNOWN",
+  "native": "NOT_RUN",
+  "rootWrites": 0
+}

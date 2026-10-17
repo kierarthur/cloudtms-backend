@@ -1,0 +1,630 @@
+{
+  "version": "DAILY_HEALTH_ACTOR_ADAPTER_SOURCE_V1",
+  "rootCommit": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "rootInputs": [
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48190,
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754"
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "bytes": 14597,
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "bytes": 12827,
+      "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "bytes": 9580,
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-pure-native-proof-20261017/build-program.mjs",
+      "bytes": 3514,
+      "sha256": "1ec1bf64e57ec38856a509be1df433a3318a439271eb53cfed2008d8b151d69d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-pure-native-proof-20261017/SOURCE_MANIFEST.json",
+      "bytes": 2917,
+      "sha256": "d46a4e3da510f5ca2ded9551acc8f8079aa3420f7928d633158f037e0a49b1c6"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "bytes": 21633,
+      "sha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "bytes": 13366,
+      "sha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "bytes": 4862,
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-pure-native-proof-20261017/inputs/health_reason.sqlinc",
+      "bytes": 1112,
+      "sha256": "f305db48ad0c96a578b7ea21937f3bcef98bf3f0b49e15e04f06ff39f4cecc78"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-pure-native-proof-20261017/inputs/17102026_0126_daily_health_reason_program.sql",
+      "bytes": 2261,
+      "sha256": "a8891d6a208b39a5603346feb0f48c4638dea277f66049dff43159dc9f91379d"
+    },
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "bytes": 32174,
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "bytes": 48153,
+      "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8"
+    },
+    {
+      "file": "scripts/healthroster-contact-claim-boundary.mjs",
+      "bytes": 8052,
+      "sha256": "505abc1c41cf7adc21aa16c4c7f5f42d6678a58818cd694d992d3d0271fbff0d"
+    },
+    {
+      "file": "scripts/healthroster-money-predecessor-boundary.mjs",
+      "bytes": 4543,
+      "sha256": "3c49e8aa9e128dfb331d282551c17cc2e12528075ff33866347e51eb2328dbc6"
+    },
+    {
+      "file": "scripts/healthroster-capability-predecessor-boundary.mjs",
+      "bytes": 16330,
+      "sha256": "e24e16cd1bd0cd8afe28b7e697a5fd7ec0c03a4edeb0e458ca81e1eecd47bbc3"
+    },
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "bytes": 13611,
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    },
+    {
+      "file": "scripts/weekly-source-reader-release.mjs",
+      "bytes": 2834,
+      "sha256": "b35b0d8698fbddecfc2b98f9226d5ecc88a076643366533822c3e3178b72e313"
+    },
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "bytes": 10596,
+      "sha256": "53c301664b449168b34803ca995eedcfd4cf90df1533c6d78086637df6488550"
+    },
+    {
+      "file": "scripts/healthroster-install1-verifier-census.mjs",
+      "bytes": 11479,
+      "sha256": "742635a7ed15dfb190d77dda9063fd49315ec3390f573982bc461bfd8f1e862c"
+    },
+    {
+      "file": "scripts/healthroster-install2-native-gate.mjs",
+      "bytes": 7883,
+      "sha256": "ec3c2eca5b648fdf2996dbeb3c116e39ef37fdc54d1e896cfb4489682cbad9be"
+    },
+    {
+      "file": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "bytes": 6985,
+      "sha256": "53b92b41b522851a68126447f88d11862974e70895c829e9e79b1877ea86c19b"
+    },
+    {
+      "file": "scripts/healthroster-f5-post-verified-gate.mjs",
+      "bytes": 8425,
+      "sha256": "dfd1454e057c27e6693a012aef107382f9bc0479322fd0e3ae09b35bb19e99a3"
+    },
+    {
+      "file": "scripts/cloudtms-managed-psql.mjs",
+      "bytes": 5398,
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d"
+    },
+    {
+      "file": "scripts/weekly-source-protected-release-qualification.mjs",
+      "bytes": 10311,
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2"
+    },
+    {
+      "file": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "bytes": 17500,
+      "sha256": "42717a80f6d60598b99790106e1d9c4e182c1137f7039b97782017da189865cc"
+    },
+    {
+      "file": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "bytes": 18719,
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5"
+    },
+    {
+      "file": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "bytes": 5426,
+      "sha256": "12a4988d8d7626edc8748092b4780cdc881482be288e496f3f464533e959e610"
+    },
+    {
+      "file": "scripts/cloudtms-managed-execution-policy.mjs",
+      "bytes": 11421,
+      "sha256": "ba1ed5d23cdd639e814c7e009bfa07502dd633511e9e0be265d2a8486fa495d1"
+    },
+    {
+      "file": "scripts/weekly-source-protected-execution-tree.mjs",
+      "bytes": 17345,
+      "sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2"
+    },
+    {
+      "file": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "bytes": 15969,
+      "sha256": "7c0342fe85df257a28b19f19158f98123bb03d4bb574f913d341fdaac80fd853"
+    },
+    {
+      "file": "scripts/healthroster-f5-synthetic-fixture.mjs",
+      "bytes": 9442,
+      "sha256": "d9223bcfc5448b9d01636463d60c42312bdd2107ade9881f08d70cfcc9380a66"
+    },
+    {
+      "file": "scripts/weekly-source-activation-window-binding.mjs",
+      "bytes": 3778,
+      "sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2"
+    },
+    {
+      "file": "scripts/weekly-source-native-fixture-participants.mjs",
+      "bytes": 6818,
+      "sha256": "8a9dec4e027a1967ca07b6aa69ded0156f25a9aca126bff3c7f4bac8ee94d696"
+    },
+    {
+      "file": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "bytes": 6862,
+      "sha256": "5b0392bcd30c0b9b55692c3793a444bb7591aa89a77d22cea3fbb5c0128eb5e8"
+    },
+    {
+      "file": "scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "bytes": 1718,
+      "sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42"
+    },
+    {
+      "file": "scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "bytes": 9395,
+      "sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c"
+    },
+    {
+      "file": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "bytes": 20759,
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3"
+    },
+    {
+      "file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "bytes": 3851,
+      "sha256": "c46b57f1b923e57674a13a7d0b2d19a0745bd583257174aea0aecf86d0ac4a0c"
+    },
+    {
+      "file": "scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "bytes": 5751,
+      "sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2"
+    },
+    {
+      "file": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "bytes": 12480,
+      "sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816"
+    },
+    {
+      "file": "broker/src/weekly-source/coverage-warnings.mjs",
+      "bytes": 3588,
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "bytes": 15886,
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "bytes": 1358,
+      "sha256": "ec1dae1cab0e44a1713ace86ceaf4d6ae916e5550ba4f204e407450ce73e117a"
+    },
+    {
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "bytes": 311541,
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "bytes": 280735,
+      "sha256": "114fe1b3f66d44d45a7328e242f859bb1cc561203fd506e596cc9b45f5e8609d"
+    }
+  ],
+  "expectedWritersSha256": "69a10a3358d516e6db400f53c75e3763af2e5e5dfad5dba782bf816c081cc676",
+  "expectedWriters": [
+    {
+      "schema": "private",
+      "identity": "_candidate_daily_json_sha256_v1(p_value jsonb)",
+      "definitionSha256": "91bb08b79571e0e9937e8d82f4388959eea6dadf9981e259e537e7cb7fc199fd"
+    },
+    {
+      "schema": "public",
+      "identity": "candidate_daily_projection_claim_v1(p_internal_context jsonb, p_claim_request_id uuid, p_idempotency_key text, p_target text, p_claimant text, p_max_items integer, p_lease_seconds integer, p_correlation_id text)",
+      "definitionSha256": "f9323cdcb4f2163f97c8b0c31bf1f0f92c3e2766041f0e0571c3dc22698eae3d"
+    },
+    {
+      "schema": "public",
+      "identity": "tsfin_dequeue_batch_ids(p_limit integer)",
+      "definitionSha256": "3daeab18828c11b4b18a42cd07842f1c5fcc672e4940aa5824830a201a26e82d"
+    },
+    {
+      "schema": "public",
+      "identity": "tsfin_work_fail(p_id uuid, p_error text)",
+      "definitionSha256": "02f9b0d49608eeb7525a848c25eed3196f02dc24cf7493d2ec45060fa8701ace"
+    }
+  ],
+  "catalogueAndLedger": "WHOLE_UNCHANGED_ORIGINAL_CANONICAL_QUERY",
+  "businessSnapshotScope": [
+    "private.candidate_daily_batch_receipts",
+    "public.tms_users",
+    "public.ts_financials_outbox"
+  ],
+  "businessProgrammeReadsAndWrites": [
+    "public.tms_users"
+  ],
+  "externalEffects": false,
+  "native": "NOT_RUN",
+  "userStore": {
+    "relation": {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "tms_users",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "display_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "email_settings",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "email_signature_html",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "grid_prefs_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_login_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "password_hash",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "payment_authoriser",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "payment_golden_key",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "default": "'user'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "session_version",
+          "type": "integer",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "tms_users_email_key",
+          "definition": "CREATE UNIQUE INDEX tms_users_email_key ON public.tms_users USING btree (email)"
+        },
+        {
+          "name": "tms_users_last_login_at_utc_idx",
+          "definition": "CREATE INDEX tms_users_last_login_at_utc_idx ON public.tms_users USING btree (last_login_at_utc DESC)"
+        },
+        {
+          "name": "tms_users_pkey",
+          "definition": "CREATE UNIQUE INDEX tms_users_pkey ON public.tms_users USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "tms_users_email_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (email)"
+        },
+        {
+          "name": "tms_users_payment_golden_implies_authoriser_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (payment_golden_key = false OR payment_authoriser = true)"
+        },
+        {
+          "name": "tms_users_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    "triggers": [
+      {
+        "name": "tms_users_touch",
+        "table": "tms_users",
+        "schema": "public",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER tms_users_touch BEFORE UPDATE ON tms_users FOR EACH ROW EXECUTE FUNCTION tms_touch_updated_at()"
+      }
+    ],
+    "wp": {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_pay_actor_allowed_v1(p_actor_user_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "736fa960e78a591c8f1dbc3b3750dffa03cb504f87c8c46a0b2d0bf913042289"
+    },
+    "touch": {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "tms_touch_updated_at()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "f6ea6fb5bdd1a6db720dd669ebd8da61f86651674a74ce7df23cdd4e630eefe6",
+      "nativeRawDefinitionSha256": "d5d7808078fd3fa302415a450a4e8255e6a2519f0a5f29b89416583637499b63"
+    }
+  },
+  "fixtureIDs": [
+    "f717d041-0000-4000-8000-000000000001",
+    "f717d041-0000-4000-8000-000000000002",
+    "f717d041-0000-4000-8000-000000000003",
+    "f717d041-0000-4000-8000-000000000004",
+    "f717d041-0000-4000-8000-000000000005",
+    "f717d041-0000-4000-8000-000000000006"
+  ],
+  "fixtureEmails": [
+    "daily-health-actor-admin-20261017@example.invalid",
+    "daily-health-actor-authoriser-20261017@example.invalid",
+    "daily-health-actor-golden-20261017@example.invalid",
+    "daily-health-actor-ordinary-20261017@example.invalid",
+    "daily-health-actor-inactive-admin-20261017@example.invalid",
+    "daily-health-actor-inactive-authoriser-20261017@example.invalid"
+  ],
+  "pureR3ABIReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PURE_NATIVE_R3_PASS_20261017.json",
+  "rootSourceForward": "ROOT_SOURCE_FORWARD.json",
+  "nativeDependencyProof": {
+    "file": "NATIVE_DEPENDENCY_DIAG_R1.json",
+    "sha256": "1a140b79364a0d873b03143f9575f64a82dcbe73a2f42b9330b98d2ba1598486",
+    "rootReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_ACTOR_R1_READONLY_DEPENDENCY_DIAG_20261017.json",
+    "rootCheckpoint": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
+    "rootReceiptGitStatus": "EXACT_GIT_BACKED_DIAGNOSTIC",
+    "sealedTouchCompleteLfSha256": "f6ea6fb5bdd1a6db720dd669ebd8da61f86651674a74ce7df23cdd4e630eefe6",
+    "rawTouchSha256": "d5d7808078fd3fa302415a450a4e8255e6a2519f0a5f29b89416583637499b63",
+    "runtimeComparison": "EXACT_RAW_HASH_ONLY_NO_SQL_NORMALIZATION",
+    "rootReceiptCommit": "b4cb19f04be68f67b8aad81692c26e96f7b6f0ed",
+    "originallyCapturedSavedBeforeCommit": true
+  }
+}

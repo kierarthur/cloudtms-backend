@@ -1,0 +1,106 @@
+TAP version 13
+# Subtest: two exact complete programmes render within unchanged caps
+ok 1 - two exact complete programmes render within unchanged caps
+  ---
+  duration_ms: 34.7136
+  type: 'test'
+  ...
+# Subtest: unprovided case, fake Contact lock alias, wrong physical root refuse before connection
+ok 2 - unprovided case, fake Contact lock alias, wrong physical root refuse before connection
+  ---
+  duration_ms: 0.7641
+  type: 'test'
+  ...
+# Subtest: full constructor bodies and complete old assertions are retained
+ok 3 - full constructor bodies and complete old assertions are retained
+  ---
+  duration_ms: 214.3316
+  type: 'test'
+  ...
+# Subtest: QT actual return tag and command/domain audit checks bind current owner
+ok 4 - QT actual return tag and command/domain audit checks bind current owner
+  ---
+  duration_ms: 0.4717
+  type: 'test'
+  ...
+# Subtest: unchanged native actor preflight precedes INSERT; no role switching
+ok 5 - unchanged native actor preflight precedes INSERT; no role switching
+  ---
+  duration_ms: 0.3237
+  type: 'test'
+  ...
+# Subtest: fixed C uses original canonical query and all twelve complete relations without connecting
+ok 6 - fixed C uses original canonical query and all twelve complete relations without connecting
+  ---
+  duration_ms: 451.3156
+  type: 'test'
+  ...
+# Subtest: reader parent full raw inverse and original control/timing exact bytes
+ok 7 - reader parent full raw inverse and original control/timing exact bytes
+  ---
+  duration_ms: 1.5892
+  type: 'test'
+  ...
+# Subtest: all four original SQL parents fully reverse including exact owner and framing spans
+ok 8 - all four original SQL parents fully reverse including exact owner and framing spans
+  ---
+  duration_ms: 0.4688
+  type: 'test'
+  ...
+# Subtest: native metadata guard refuses unreviewed policy/owner/rule/inheritance/DDL hooks before business reads
+ok 9 - native metadata guard refuses unreviewed policy/owner/rule/inheritance/DDL hooks before business reads
+  ---
+  duration_ms: 0.318
+  type: 'test'
+  ...
+# Subtest: synthetic response boundaries accept exact two shapes, not native qualification
+ok 10 - synthetic response boundaries accept exact two shapes, not native qualification
+  ---
+  duration_ms: 1.3082
+  type: 'test'
+  ...
+# Subtest: synthetic SET/DDL null is per-index; SELECT null, wrong tag and extra fields refuse
+ok 11 - synthetic SET/DDL null is per-index; SELECT null, wrong tag and extra fields refuse
+  ---
+  duration_ms: 1.2148
+  type: 'test'
+  ...
+# Subtest: synthetic wrong programme counters/accepted/rollback/freshness refuse
+ok 12 - synthetic wrong programme counters/accepted/rollback/freshness refuse
+  ---
+  duration_ms: 0.9922
+  type: 'test'
+  ...
+# Subtest: pooled MCP PID equal B is permitted only with independent C-after and full scope
+ok 13 - pooled MCP PID equal B is permitted only with independent C-after and full scope
+  ---
+  duration_ms: 0.7599
+  type: 'test'
+  ...
+# Subtest: original WeakMap refuses invented proof or stale copied qualification
+ok 14 - original WeakMap refuses invented proof or stale copied qualification
+  ---
+  duration_ms: 211.282
+  type: 'test'
+  ...
+# Subtest: bounded capture and persistence refuse oversized/native raw maps
+ok 15 - bounded capture and persistence refuse oversized/native raw maps
+  ---
+  duration_ms: 0.7374
+  type: 'test'
+  ...
+# Subtest: root timing is actual bounded metadata only; no fabricated latency or SQL result
+ok 16 - root timing is actual bounded metadata only; no fabricated latency or SQL result
+  ---
+  duration_ms: 1.3443
+  type: 'test'
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5692.5389

@@ -1,0 +1,15 @@
+create or replace function private.weekly_source_sha256_text_v1(
+  p_domain text,
+  p_value text
+) returns bytea
+language sql immutable
+set search_path to 'pg_catalog','extensions','pg_temp'
+as $function$
+  select extensions.digest(
+    pg_catalog.convert_to(
+      coalesce(p_domain,'') || pg_catalog.chr(31) || coalesce(p_value,''),
+      'UTF8'
+    ),
+    'sha256'
+  );
+$function$;

@@ -1,0 +1,35 @@
+{
+  "version": "CONTACT_SQLSTATE_DIAGNOSTIC_ROOT_REVIEW_V1",
+  "authorCommit": "c7ff9a1478edc776ec4ed9087a58cc8c12dd7890",
+  "files": 58,
+  "manifestSha256": "6dcb0a3ca0b5e91fb59f04c6aaaabc4246718a1be021a1e19a35b8779189d175",
+  "parentRootCommit": "2b0fcee4eeecb9ce3adb61ef3c25d02c0e5a948c",
+  "rootChecks": {
+    "nodeTests": 24,
+    "byteBoundaryVectors": 1890,
+    "wholeParentInverses": 5,
+    "unchangedFiles": 40,
+    "newDiagnosticModules": 1
+  },
+  "rootRead": "Complete finite parser and private capture/HOLD hunks reviewed; complete canonical/input/control bytes and whole parents replayed",
+  "sourceVerdict": "ROOT_PASS_INDEPENDENT_PEER_PENDING",
+  "diagnostic": "Exactly one anchored closed ERROR/FATAL SQLSTATE only after actual child close; bounded byte-wise parsing retains no raw line. Unsupported, NOTICE, overflow, malformed, unclosed or reused captures yield null. Brand carries only phase, actual clock observations and optional SQLSTATE",
+  "unchanged": "Every stderr still refuses, clears stdout and immediately requests termination; native B, twelve scopes, canonical SQL, WeakMap, permissions and all timing/output caps preserved",
+  "originalR1": "Before native B; cause UNKNOWN, no inference from elapsed time; actual own lock unlocked/closed 08:58:22.259Z proved false",
+  "selectedAdapterMounted": false,
+  "nativeRetry": "NOT_RUN_PENDING_PEER_AND_COMMITTED_SELECTION",
+  "ownerDecisionRequired": false,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN",
+  "independentPeer": {
+    "commit": "dd06ae23b09770f9b9411d2c341ab3cc0f2e5eaf",
+    "files": 73,
+    "manifestSha256": "75f9452bdbd86e30d410d6ee523c0ce612a8c67101175b4e6f7ced402ad536be",
+    "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+    "findings": 0,
+    "extraIndependentChildEventCases": 9
+  },
+  "exact46PostimagesMounted": true,
+  "setupEntryUnchanged": true,
+  "nativeRetryAfterCommittedSelection": "NEXT_NOT_RUN_AT_CHECKPOINT"
+}

@@ -6,6 +6,7 @@ import {assertCommittedAdapter,assertManifestedFixtureEntry,CASES}from'./source.
 import {readStage,validateRestoration,nativeClockFrames}from'./result-validator.mjs';
 import {rootCallTiming,WORK_DEADLINE_CODE}from'./timing.mjs';import {createFixedMetadataReader}from'./fixed-metadata-reader.mjs';
 import {BUDGET,FiniteControls,assertElapsed,assertNoMaps}from'./control.mjs';
+import {metadataDiagnosticFor}from'./metadata-diagnostic.mjs';
 const closed=e=>/^[A-Z0-9_]+$/.test(e?.message??'')?e.message:'CONTACT_QT_CLOSED_FAILURE';
 function serialized(connection){const query=connection.query.bind(connection);let queue=Promise.resolve();connection.query=s=>{const next=queue.then(()=>query(s));queue=next.catch(()=>{});return next;};return connection;}
 export function saveSmall(out,name,value){assertNoMaps(value);const text=JSON.stringify(value,null,2)+'\n';requireThat(Buffer.byteLength(text)<=BUDGET.smallFileBytes,'CONTACT_QT_SMALL_FILE_BOUND');fs.writeFileSync(path.join(out,name),text,{flag:'wx'});}
@@ -40,7 +41,7 @@ export async function holdCase({root,out,caseId,authorisedRootHolder=false}){
   const elapsed=assertElapsed(sequenceStart),final={...result,status:'PASS_EXACT_CONTACT_QT_CASE_AND_ORIGINAL_CANONICAL_RESTORATION',elapsedMilliseconds:Math.ceil(elapsed),wholeSequenceBudgetMilliseconds:BUDGET.wholeMilliseconds,workBudgetMilliseconds:BUDGET.workMilliseconds,canonicalSharedTurnUnlockedAndClosed:true,completeMapsPersisted:false};
   saveSmall(out,'SUMMARY.json',final);console.log(JSON.stringify({status:final.status,caseId,elapsedMilliseconds:final.elapsedMilliseconds}));return final;
  }catch(error){const deadlineObserved=!!(localTiming.workTimerFiredAt||localTiming.workElapsedDeadlineObservedAt),code=deadlineObserved?WORK_DEADLINE_CODE:closed(error);
-  saveSmall(out,'HOLD.json',{status:'HOLD',caseId,code,observedErrorCode:closed(error),deadlineObserved,localTiming,...callTiming?{rootCallTiming:callTiming}:{},nativeClockFrames:nativeTimes,sharedTurnCompletion:'SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF',dispatchedMcpMustBeReconciledBeforeNextTrial:true,elapsedMilliseconds:sequenceStart===undefined?null:Math.ceil(performance.now()-sequenceStart),completeMapsPersisted:false});throw Error(code);}
+  saveSmall(out,'HOLD.json',{status:'HOLD',caseId,code,observedErrorCode:closed(error),deadlineObserved,localTiming,...metadataDiagnosticFor(error)?{metadataDiagnostic:metadataDiagnosticFor(error)}:{},...callTiming?{rootCallTiming:callTiming}:{},nativeClockFrames:nativeTimes,sharedTurnCompletion:'SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF',dispatchedMcpMustBeReconciledBeforeNextTrial:true,elapsedMilliseconds:sequenceStart===undefined?null:Math.ceil(performance.now()-sequenceStart),completeMapsPersisted:false});throw Error(code);}
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{const[root,out,caseId,flag,...rest]=process.argv.slice(2);requireThat(flag==='--authorised-root-holder'&&rest.length===0,'CONTACT_QT_ROOT_HOLDER_AUTHORIZATION_REQUIRED');await holdCase({root,out,caseId,authorisedRootHolder:true});}

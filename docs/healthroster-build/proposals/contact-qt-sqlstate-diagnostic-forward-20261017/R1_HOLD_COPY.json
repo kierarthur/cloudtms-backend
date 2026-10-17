@@ -1,0 +1,16 @@
+{
+  "status": "HOLD",
+  "caseId": "CONTACT_CONSTRUCTORS_V1",
+  "code": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+  "observedErrorCode": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+  "deadlineObserved": false,
+  "localTiming": {
+    "sequenceStartedAt": "2026-10-17T08:57:32.383Z",
+    "workDeadlineAt": "2026-10-17T08:59:32.383Z"
+  },
+  "nativeClockFrames": [],
+  "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+  "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+  "elapsedMilliseconds": 49881,
+  "completeMapsPersisted": false
+}
