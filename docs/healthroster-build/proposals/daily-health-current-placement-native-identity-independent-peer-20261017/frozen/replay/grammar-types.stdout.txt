@@ -1,0 +1,1 @@
+{"inputs": 5, "helperSqlExpressions": 28, "relations": 6, "referencedColumns": 70, "Result": "HELD_NOT_PARSED", "native": "NOT_RUN"}

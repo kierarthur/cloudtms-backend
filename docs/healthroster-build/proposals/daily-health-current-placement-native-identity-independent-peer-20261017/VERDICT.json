@@ -1,0 +1,21 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "reviewedCommit": "174cf17ff3368b84cbb51d1f57e46d94666105f2",
+  "priorFindingCommit": "a1845f42868ad8479f524aa4feecf5fd3ce8dbb8",
+  "F1": "CLOSED_AT_SOURCE_ONLY",
+  "newFindings": [],
+  "frozenFiles": 54,
+  "nodeTests": 14,
+  "controlledAstCases": 66,
+  "oldAcceptNewRefuseCases": 19,
+  "independentFinalTupleCases": 16,
+  "strictNativeReads": 2,
+  "grammarInputs": 5,
+  "rawGateHazards": 0,
+  "wholeParentReversals": 1,
+  "inheritedFilesUnchanged": 10,
+  "bankSlots": "THREE_UNPROVIDED",
+  "native": "NOT_RUN",
+  "databaseRace": "NOT_RUN",
+  "catalogueAndApi": "NOT_RUN"
+}

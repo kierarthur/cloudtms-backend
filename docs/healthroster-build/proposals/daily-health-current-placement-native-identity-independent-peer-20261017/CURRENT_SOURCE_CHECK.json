@@ -1,0 +1,8 @@
+{
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "head": "384d6b5aa266211bf8ea233aca7c12016f6e29fe",
+  "file": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+  "sha256": "a42094b5b39c2a1d858c6c995951c7f9a1e82092d4949a38b9a58401f834e1d9",
+  "savedHeadIndexAndCaptureEqual": true,
+  "native": "NOT_RUN"
+}

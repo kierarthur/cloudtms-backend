@@ -1,0 +1,142 @@
+{
+  "status": "CONFIRMED_SOURCE_GUARD_GAP",
+  "cases": [
+    {
+      "case": "canonical_candidate_disagrees",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "canonical_client_disagrees",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "canonical_financial_disagrees",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "canonical_effective_disagrees",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "physical_line_type_not_admitted",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "physical_is_adjustment_not_admitted",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "physical_parent_timesheet_id_not_admitted",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "physical_correction_id_not_admitted",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "physical_correction_kind_not_admitted",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "physical_adjustment_origin_not_admitted",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    },
+    {
+      "case": "physical_authorised_at_server_not_admitted",
+      "actual0910NativeGuard": "REFUSES",
+      "040bbSelectorAndFiveGuards": "ACCEPTS",
+      "placement": {
+        "status": "COMMITTED",
+        "original_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "current_timesheet_id": "00000000-0000-0000-0000-000000000001",
+        "placement_revision": "10",
+        "receipt_id": "00000000-0000-0000-0000-000000000033"
+      }
+    }
+  ],
+  "caseCount": 11,
+  "scope": "Actual authored selector/five guards and actual0910 guard ASTs; final helper query has the same missing reference census. Existing native basis is not executed.",
+  "native": "NOT_RUN",
+  "databaseReachabilityOrRace": "NOT_PROVED",
+  "BankingOwnerBodyReviewed": false
+}

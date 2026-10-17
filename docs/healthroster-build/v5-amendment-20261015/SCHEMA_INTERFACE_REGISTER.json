@@ -7397,5 +7397,21 @@
     "runtimeMounted": false,
     "native": "NOT_RUN",
     "ownerDecisionRequired": false
+  },
+  "daily_current_placement_f1_source_correction_20261017": {
+    "authorCommit": "174cf17ff3368b84cbb51d1f57e46d94666105f2",
+    "peerCommit": "ad99d0fc0e24fd2c39e413d08ddae98e25522d0f",
+    "status": "ACCEPT_BOUNDED_SOURCE_FORWARD_F1_CLOSED_AT_SOURCE",
+    "proposedPrivateSignature": "private.daily_rate_correction_health_current_placement_v1(uuid,uuid)",
+    "sourceFixesApplied": 1,
+    "rejected": 0,
+    "rootChecks": "14 Node;66 selector AST;19 F1 counterexamples;16 independent final-tuple cases;2 STRICT native reads;6 decoder;5 PG17;70 referenced fields;2 raw gate inputs,zero hazards",
+    "runtimeMounted": false,
+    "genuineBankSlots": "THREE_UNPROVIDED",
+    "native": "NOT_RUN",
+    "API": "NOT_RUN",
+    "races": "NOT_RUN",
+    "ownerDecisionRequired": false,
+    "priorHoldRetained": true
   }
 }
