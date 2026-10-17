@@ -1,0 +1,53 @@
+{
+  "version": "S4_EXISTING_PUBLIC_SOURCE_EFFECT_REVIEW_PINS_V1",
+  "pins": [
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "769a54fc1053b57c8242d2960002c900dd716791",
+      "file": "docs/healthroster-build/proposals/daily-health-current-genuine-producer-audit-20261017/CURRENT_SOURCE_CENSUS.json",
+      "bytes": 17945,
+      "sha256": "ea394b58e75dfdc19d704a685b07ea05ac6dba028c10f1a040ec55c1aa9f96b4",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "769a54fc1053b57c8242d2960002c900dd716791",
+      "file": "docs/healthroster-build/proposals/daily-health-current-genuine-producer-audit-20261017/README.md",
+      "bytes": 8426,
+      "sha256": "42b04618a2cd0a47029bde4b0eafdd39d7093e942a7cc6fe117e0ebde7dab29d",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "769a54fc1053b57c8242d2960002c900dd716791",
+      "file": "docs/healthroster-build/proposals/daily-health-current-genuine-producer-audit-20261017/test.mjs",
+      "bytes": 9138,
+      "sha256": "65dbc5907b74468712463a19843173e173e9452a65cad6ec04d898f99079f588",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "769a54fc1053b57c8242d2960002c900dd716791",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+      "bytes": 5618,
+      "sha256": "b9ba019fc9f2ec59e5ae9ddd7d2257f214c5bc76246e2e3089bb76e38a588275",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "769a54fc1053b57c8242d2960002c900dd716791",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_20261017.json",
+      "bytes": 119766,
+      "sha256": "c1e91c6507d3624dd69e92707f6f7fd0e8614479b3f5a75c3b4fd9268f152f8c",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "769a54fc1053b57c8242d2960002c900dd716791",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_CONTEXT_HEALTH_DEFINITION_BINDINGS_20261017.json",
+      "bytes": 11121,
+      "sha256": "a58ff8ed18e83b9a8e08c416611ea64fc30721b1f6f9fbd257d2fc0f7bafb44d",
+      "savedIndexHeadHistoricalEqual": true
+    }
+  ]
+}

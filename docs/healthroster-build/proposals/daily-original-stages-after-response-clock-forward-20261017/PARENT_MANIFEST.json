@@ -1,0 +1,75 @@
+{
+  "version": "ORIGINAL_STAGES_FOUR_RECORD_PURE_COMPOSER_SOURCE_MANIFEST_V1",
+  "files": [
+    {
+      "file": "PARENT_COMPOSITION.json",
+      "bytes": 824,
+      "sha256": "8e3eb736e1640c1b8be483eb5a2c1341a2ba3c5d5912c5824a76875031da6b84"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4976,
+      "sha256": "2cb2dcbe72345c8084a596465ceca5c1ce928596b915e0218120fcbbea0a1b37"
+    },
+    {
+      "file": "recorder.mjs",
+      "bytes": 8350,
+      "sha256": "d2d6577781a4f38e53ce1a1d5a735e3af7acf95efb853fd1bea23fff59d6eef2"
+    },
+    {
+      "file": "reference/recorder.mjs",
+      "bytes": 14975,
+      "sha256": "a247aca92d5be78878766b12793c7399089574446633a6fd0b6dcc656a1f46a1"
+    },
+    {
+      "file": "reference/synthetic-fixtures.mjs",
+      "bytes": 16354,
+      "sha256": "31c80cd263a6c4ac9c9c7662941b5a149b31df913a84ac8b472d64eaa2393d44"
+    },
+    {
+      "file": "reference/test.mjs",
+      "bytes": 16317,
+      "sha256": "a5dac3d483df8041fece9db020bd955c8520dbba0309da4781b5ee1b3dd34d8b"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 630,
+      "sha256": "0cdd359858a60c423e635a57a8120f2b06f3f851c7fb4c561133039c0f355084"
+    },
+    {
+      "file": "S4_ROUTINE_METADATA_SELECTION.json",
+      "bytes": 10442,
+      "sha256": "51ccb698471e2107098daa06b5768580df85d005b9e8c460ca6212a4faa1542f"
+    },
+    {
+      "file": "S4_SOURCE_EFFECT_REVIEW.md",
+      "bytes": 6661,
+      "sha256": "aad254054d8c2a45999b280b2583abf35fa977428b4512a3baf73930b226e328"
+    },
+    {
+      "file": "S4_SOURCE_PINS.json",
+      "bytes": 2767,
+      "sha256": "184635863c981e547019092fbbb29dcd591e800cd9b31ae0a39fc40a05a37231"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 3129,
+      "sha256": "871b6734306f0dc0c9664bae8c12bf6a3adbc49a554eccaa53533be4bddc4475"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 10314,
+      "sha256": "5b785b1a07bffd0cb28cbb71d93e7a89b02554b51786c4d6de68fde0e5f2dece"
+    },
+    {
+      "file": "TEST_FIXTURE_FULL_PARENT_FORWARD.json",
+      "bytes": 410,
+      "sha256": "56df868dfac6e5698e083704a8dbf7654945a7192a69dcab78efd21dbd4c364a"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 2877,
+      "sha256": "212d48b98b6b15cca0545bdcf8d3e64c48d89b6e25d29422d4e538e01c5b0647"
+    }
+  ]
+}

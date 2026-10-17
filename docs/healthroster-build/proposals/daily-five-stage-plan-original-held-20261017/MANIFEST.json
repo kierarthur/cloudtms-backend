@@ -1,0 +1,40 @@
+{
+  "version": "FIVE_STAGE_PLAN_SOURCE_MANIFEST_V1",
+  "files": [
+    {
+      "file": "compose.mjs",
+      "bytes": 6526,
+      "sha256": "e19cb21e5497ac5d2654ca21863fba09430c6d1b32793507d6729fefa6221f86"
+    },
+    {
+      "file": "EVIDENCE_CANDIDATES.json",
+      "bytes": 5517,
+      "sha256": "b36da896a461870df9e881ddd4436f56ca4a36729cdf9a244e2d02190752734c"
+    },
+    {
+      "file": "PREDECISION_TEMPLATE.json",
+      "bytes": 1840,
+      "sha256": "a40feda176053f46bbd0c8294e14f7ef954b7810161ca6d99ab6a46f8ef030d2"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3837,
+      "sha256": "3029186e7dcace561dbe6b7e7f84142b33680fe10d10c4d8baf2bcd21e2e7192"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 381,
+      "sha256": "8cd629f72ce5ffd93bd966932892a4a21d03449fbc31cd1b5fc390780c5c6858"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 1317,
+      "sha256": "8653f619dc919e40d255e310e2b88a6fa11722f031ded0f44a8d153a80b844b3"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 7778,
+      "sha256": "3799aba1ca6d1f7a0a6e4e6ed6e881bd8d7fd98009f44348a257074df7aa8e9f"
+    }
+  ]
+}

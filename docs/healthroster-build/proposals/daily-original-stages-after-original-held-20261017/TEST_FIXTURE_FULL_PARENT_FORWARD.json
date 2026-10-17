@@ -1,0 +1,9 @@
+{
+  "parent": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/test.mjs",
+  "beforeBytes": 16317,
+  "beforeSha256": "a5dac3d483df8041fece9db020bd955c8520dbba0309da4781b5ee1b3dd34d8b",
+  "afterBytes": 16354,
+  "afterSha256": "31c80cd263a6c4ac9c9c7662941b5a149b31df913a84ac8b472d64eaa2393d44",
+  "append": "\nexport {vector,stageVector,change};\n",
+  "runtimeChange": false
+}

@@ -1,0 +1,19 @@
+{
+  "version": "ORIGINAL_STAGES_AUX_AFTER_RESPONSE_CLOCK_FORWARD_V1",
+  "parentDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026/.codex-tmp/daily-original-stages-after-recorder-source-20261017-97359412021530d3f905efb354049bc4",
+  "parentManifestSha256": "5ba097a0b6396f826c92060888baa337d13756313bea3b4387bba1b808d8feb0",
+  "beforeBytes": 8350,
+  "beforeSha256": "d2d6577781a4f38e53ce1a1d5a735e3af7acf95efb853fd1bea23fff59d6eef2",
+  "afterBytes": 8472,
+  "afterSha256": "028cefd464b1ece2349b1c2eb6f53c49721f7e57be68debade208a9eccefa5f9",
+  "edits": [
+    {
+      "before": "  const ab=aux('BEFORE',a.auxBeforeBuilt,a.auxBeforeBytes,a.beforeBuilt,180000),aa=aux('AFTER',a.auxAfterBuilt,a.auxAfterBytes,a.afterBuilt,30000);frames.push(ab.main,ab.fresh,aa.main,aa.fresh);\n",
+      "after": "  const ab=aux('BEFORE',a.auxBeforeBuilt,a.auxBeforeBytes,a.beforeBuilt,180000),aa=aux('AFTER',a.auxAfterBuilt,a.auxAfterBytes,a.afterBuilt,30000);frames.push(ab.main,ab.fresh,aa.main,aa.fresh);\n  must(Date.parse(aa.main.observedAt)>=Date.parse(response.finishedAt),'ACTUAL_AUXILIARY_AFTER_RESPONSE_ORDER_REQUIRED');\n"
+    }
+  ],
+  "completeParent": "reference/parent-recorder.mjs",
+  "wholeRawInverse": true,
+  "originalParentFilesChanged": 0,
+  "runtimeTargets": 1
+}

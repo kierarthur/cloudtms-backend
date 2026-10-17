@@ -1,0 +1,52 @@
+{
+  "status": "HOLD",
+  "caseId": "QT_ADMIN_CONTROLS_V1",
+  "code": "CONTACT_QT_MCP_ROLLBACK_ENVELOPE_REFUSED",
+  "observedErrorCode": "CONTACT_QT_MCP_ROLLBACK_ENVELOPE_REFUSED",
+  "deadlineObserved": false,
+  "localTiming": {
+    "sequenceStartedAt": "2026-10-17T15:21:53.242Z",
+    "workDeadlineAt": "2026-10-17T15:23:53.242Z",
+    "readyAt": "2026-10-17T15:22:47.128Z",
+    "resultReadAt": "2026-10-17T15:23:23.799Z"
+  },
+  "rootCallTiming": {
+    "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "sqlSha256": "3d112ef566fcf5c05897ccde113ba1c46a90c36c2053887f4115ee3baa59a839",
+    "callStartedAt": "2026-10-17T15:22:50.250Z",
+    "callReturnedAt": "2026-10-17T15:23:22.347Z",
+    "rootObservedCallMilliseconds": 32097,
+    "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+  },
+  "nativeClockFrames": [
+    {
+      "phase": "B_GUARD_BEFORE",
+      "readOnly": false,
+      "holderPid": 291008,
+      "backendPid": 291059,
+      "observedAt": "2026-10-17T15:22:52.218934+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T15:22:52.21482+00:00",
+      "transactionStartedAt": "2026-10-17T15:22:52.02878+00:00"
+    },
+    {
+      "phase": "B_GUARD_AFTER",
+      "readOnly": false,
+      "holderPid": 291008,
+      "backendPid": 291059,
+      "observedAt": "2026-10-17T15:22:52.27758+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T15:22:52.273239+00:00",
+      "transactionStartedAt": "2026-10-17T15:22:52.02878+00:00"
+    }
+  ],
+  "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+  "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+  "elapsedMilliseconds": 90618,
+  "completeMapsPersisted": false
+}

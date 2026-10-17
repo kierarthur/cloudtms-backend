@@ -1,0 +1,19 @@
+{
+  "version": "ORIGINAL_STAGES_AUX_AFTER_RESPONSE_CLOCK_SOURCE_RESULTS_V1",
+  "tests": 30,
+  "pass": 30,
+  "fail": 0,
+  "originalCorrectedComposerCasesRetained": 27,
+  "exactOldCounterexamplesReproduced": ["S2 done-100/done-99", "S3 done-100/done-99"],
+  "correctedCounterexamplesRefused": 2,
+  "equalResponseBoundaryAdmitted": true,
+  "freshOrderingRetained": true,
+  "fourStageValidOutputBytesUnchanged": true,
+  "runtimeHunks": 1,
+  "heldParentFilesChanged": 0,
+  "originalS1Changed": false,
+  "actualPositiveRecordsWritten": 0,
+  "nativeAuthBrowserIPC": "NOT_RUN",
+  "privateTargetAccess": "NONE",
+  "otherWorktreeWrites": 0
+}

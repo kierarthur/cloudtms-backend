@@ -1,0 +1,613 @@
+{
+  "accepted": false,
+  "databaseTarget": "agency_test",
+  "database": "cloudtms_test_clone",
+  "label": "HR_CONTACT_QT_QT_ADMIN_CONTROLS_V1_7FB6F5816DCC0C751E12EBEFD5F1B01B",
+  "sqlSha256": "3d112ef566fcf5c05897ccde113ba1c46a90c36c2053887f4115ee3baa59a839",
+  "statementCount": 64,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_guard_clock"
+      ],
+      "rows": [
+        {
+          "hr_guard_clock": {
+            "phase": "B_GUARD_BEFORE",
+            "readOnly": false,
+            "holderPid": 291008,
+            "backendPid": 291059,
+            "observedAt": "2026-10-17T15:22:52.218934+00:00",
+            "databaseOid": 324139,
+            "holderGranted": true,
+            "physicalDatabase": "cloudtms_test_clone",
+            "statementStartedAt": "2026-10-17T15:22:52.21482+00:00",
+            "transactionStartedAt": "2026-10-17T15:22:52.02878+00:00"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 7,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_guard_clock"
+      ],
+      "rows": [
+        {
+          "hr_guard_clock": {
+            "phase": "B_GUARD_AFTER",
+            "readOnly": false,
+            "holderPid": 291008,
+            "backendPid": 291059,
+            "observedAt": "2026-10-17T15:22:52.27758+00:00",
+            "databaseOid": 324139,
+            "holderGranted": true,
+            "physicalDatabase": "cloudtms_test_clone",
+            "statementStartedAt": "2026-10-17T15:22:52.273239+00:00",
+            "transactionStartedAt": "2026-10-17T15:22:52.02878+00:00"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 8,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 9,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "?column?"
+      ],
+      "rows": [
+        {
+          "?column?": "HR_REHEARSAL_TRANSACTION_JSON {\"xid\": \"414571359\", \"database\": \"cloudtms_test_clone\", \"epochZero\": true, \"backendPid\": 291059}"
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 10,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 11,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 12,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 13,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 14,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 15,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 16,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 17,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 18,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 19,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 20,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 21,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 22,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 23,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 24,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 25,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 26,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 27,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 28,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 29,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 30,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 31,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 32,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 33,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 34,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 35,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 36,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 37,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 38,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 39,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 40,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 41,
+      "command": "DROP",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 42,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 43,
+      "command": "DROP",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 44,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 45,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 46,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 47,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 48,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 49,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 50,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 51,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 52,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 53,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 54,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 55,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 56,
+      "command": "GRANT",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 57,
+      "command": "NOTIFY",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 58,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 59,
+      "error": {
+        "message": "canceling statement due to statement timeout",
+        "code": "57014",
+        "where": "SQL statement \"select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by a.event_sequence),'')) from public.audit_events a\"\nPL/pgSQL function inline_code_block line 42 at EXECUTE",
+        "routine": "ProcessInterrupts"
+      }
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "set_config"
+        ],
+        "rows": [
+          {
+            "set_config": "pg_catalog, public"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": "{\"module\": \"LEGACY:1\", \"identityTest\": true, \"markerAbsent\": true, \"applyingCount\": 0, \"latestRelease\": {\"commit\": \"f743b81fe537830d81b1de93ec4f9cb0331532a7\", \"status\": \"VERIFIED\", \"releaseId\": \"20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537\", \"completedAt\": \"2026-10-14T15:47:03.075975+00:00\", \"installedContract\": \"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\", \"repositoryContract\": \"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\"}, \"customerKeyNull\": true, \"physicalDatabase\": \"cloudtms_test_clone\"}"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "readOnly": true,
+              "holderPid": 291008,
+              "backendPid": 290357,
+              "observedAt": "2026-10-17T15:23:23.615098+00:00",
+              "databaseOid": 324139,
+              "noRoleSwitch": true,
+              "holderGranted": true,
+              "physicalDatabase": "cloudtms_test_clone",
+              "statementStartedAt": "2026-10-17T15:23:23.612563+00:00",
+              "transactionStartedAt": "2026-10-17T15:23:23.41093+00:00"
+            }
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "readOnly": true,
+              "backendPid": 290357,
+              "qtObjectsAbsent": true,
+              "userFixtureRowsRemaining": 0
+            }
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+  ],
+  "fatalError": {
+    "message": "canceling statement due to statement timeout",
+    "code": "57014",
+    "where": "SQL statement \"select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by a.event_sequence),'')) from public.audit_events a\"\nPL/pgSQL function inline_code_block line 42 at EXECUTE",
+    "routine": "ProcessInterrupts"
+  }
+}

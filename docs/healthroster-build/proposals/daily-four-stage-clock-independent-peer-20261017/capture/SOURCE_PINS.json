@@ -1,0 +1,61 @@
+{
+  "version": "ORIGINAL_STAGES_FOUR_RECORD_COMPOSER_SOURCE_PINS_V1",
+  "pins": [
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "9d92eaffbb0dab36374615aa7cc5fe6f8084b46d",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+      "bytes": 14975,
+      "sha256": "a247aca92d5be78878766b12793c7399089574446633a6fd0b6dcc656a1f46a1",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "9d92eaffbb0dab36374615aa7cc5fe6f8084b46d",
+      "file": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/test.mjs",
+      "bytes": 16317,
+      "sha256": "a5dac3d483df8041fece9db020bd955c8520dbba0309da4781b5ee1b3dd34d8b",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "ea17085c96ec78bb0e72646b2f6ef90a422cdcda",
+      "file": "docs/healthroster-build/proposals/daily-s23-observation-20261017/s23-observation.mjs",
+      "bytes": 3099,
+      "sha256": "272c368536518ccfb1009112cd171a7054e2ea1e1435e9bbc9336fa40a9df951",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "commit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "bytes": 10764,
+      "sha256": "0101582d00801709d57c9f518cf17506f457fbd64ff33e965ac4821be9953f25",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "commit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/stages.mjs",
+      "bytes": 7292,
+      "sha256": "c167833e193d3fac9b9de40c0a9b4447f5a193c024cb4caab19401264440e1f5",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "commit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/native-read.mjs",
+      "bytes": 18744,
+      "sha256": "b8449f6bc901f41c2d058c6618b11bab70337579133fd99360c6988eb820cf07",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "repository": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "commit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/contract.mjs",
+      "bytes": 7643,
+      "sha256": "7a9ee854c214ccbc3b8851ceae32dd0bb7ceb5e90aa6f41f44f585d858b2f4db",
+      "savedIndexHeadHistoricalEqual": true
+    }
+  ]
+}

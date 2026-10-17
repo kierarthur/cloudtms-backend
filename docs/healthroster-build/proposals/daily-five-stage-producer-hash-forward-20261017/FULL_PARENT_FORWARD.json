@@ -1,0 +1,28 @@
+{
+  "version": "FIVE_STAGE_PRODUCER_HASH_EXACT_SOURCE_FORWARD_V1",
+  "parentManifestSha256": "7e75f7d5d63db81551ec9e494e76bc6b9b2341ed44af1fff637c2b76814b5f0c",
+  "parentComposeSha256": "e19cb21e5497ac5d2654ca21863fba09430c6d1b32793507d6729fefa6221f86",
+  "afterComposeSha256": "6a22ef0bb4089d50325084ee96259b73637052f9e09808cad421febdfabf16cc",
+  "changes": [
+    {
+      "before": "'decision','nativeOwnerEvidence'",
+      "after": "'decision','workerSourceSha256','nativeOwnerEvidence'",
+      "occurrences": 1,
+      "why": "Require manual per-stage genuine producer hash as part of closed predecision."
+    },
+    {
+      "before": " const refs=[decision.nativeOwnerEvidence,decision.schemaEffectEvidence,...(Array.isArray(decision.sourceEvidence)?decision.sourceEvidence:[])];",
+      "after": " // The S0 hash identifies its own read producer; it is never inherited by a business stage.\n const bindingFile=stage==='S1a'?'docs/healthroster-build/proposals/daily-health-genuine-hospital-mapping-stage-20261017/SOURCE_PINS.json':publicBase+'DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json';\n must(/^[a-f0-9]{64}$/.test(decision.workerSourceSha256??'')&&Array.isArray(decision.sourceEvidence)&&decision.sourceEvidence.includes(bindingFile),'MANUAL_STAGE_PRODUCER_HASH_AND_BINDING_REQUIRED');\n const binding=parse(readPublic(bindingFile));let producer;\n if(stage==='S1a'){\n  must(binding.version==='DAILY_GENUINE_S1A_CURRENT_PUBLISHED_SOURCE_PINS_V1'&&binding.route?.file==='reference/worker/hospital-route.js.txt'&&binding.route.rawPublishedEqual===true&&binding.route.sha256===binding.route.publishedSha256,'ACTUAL_HOSPITAL_ROUTE_BINDING_REQUIRED');producer=binding.route.sha256;\n }else{\n  const name={S1:'handleCreateClient',S2:'handleCreateCandidate',S3:'handleUpsertClientRate',S4:'handleTimesheetCreateManualDaily'}[stage],matches=binding.selectedFunctions?.filter(v=>v.name===name);\n  must(binding.version==='DAILY_PRODUCERS_CURRENT_ACTIVE_RUNTIME_SOURCE_BINDING_V1'&&binding.allSelectedFunctionsRawEqualPublishedOnce===true&&matches?.length===1&&matches[0].exactPublishedOccurrences===1,'ACTUAL_STAGE_PRODUCER_BINDING_REQUIRED');producer=matches[0].sha256;\n }\n must(decision.workerSourceSha256===producer,'ACTUAL_STAGE_PRODUCER_HASH_MISMATCH');\n const refs=[decision.nativeOwnerEvidence,decision.schemaEffectEvidence,...(Array.isArray(decision.sourceEvidence)?decision.sourceEvidence:[])];",
+      "occurrences": 1,
+      "why": "Use the exact existing stage-specific published source-binding record, not an S0 auth/read hash."
+    },
+    {
+      "before": "workerSourceSha256:effect.workerSourceSha256",
+      "after": "workerSourceSha256:decision.workerSourceSha256",
+      "occurrences": 1,
+      "why": "Keep original nine-field admission but bind actual manually reviewed stage producer."
+    }
+  ],
+  "wholeRawInverse": true,
+  "actualPlansCreated": false
+}

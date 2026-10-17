@@ -1,0 +1,22 @@
+{
+  "version": "S1_CLOCK_INDEPENDENT_SOURCE_REVIEW_V1",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "remainingFindings": [],
+  "correctedManifestSha256": "9c64d928a8bc5cef9b61801f630e8b906879999a4455e0845cca8f33cfe8439e",
+  "wholeTwoLiteralRawForwardInverse": "PASS",
+  "actualHistoricalParent": "ea17085c96ec78bb0e72646b2f6ef90a422cdcda",
+  "originalRecorderSha256": "a247aca92d5be78878766b12793c7399089574446633a6fd0b6dcc656a1f46a1",
+  "authorTests": 13,
+  "independentActualFactoryTests": 6,
+  "factoryCounterexamples": [
+    "main/fresh before actual response",
+    "main before actual response with later fresh"
+  ],
+  "bothPublicEntryPointsRefuseEarlyEvidence": true,
+  "baselineAndEqualityBoundaryBytesUnchanged": true,
+  "initialRawNewlineProofIssue": "Corrected by source author before adoption; SOURCE_CORRECTION preserves original00fc/2805 hashes; no semantic body difference inferred.",
+  "actualRecorderRun": "NOT_RUN",
+  "privateAuthNativeApi": "NOT_RUN",
+  "reportHeadChanged": false,
+  "rootFilesEdited": false
+}

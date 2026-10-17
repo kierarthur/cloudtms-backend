@@ -1,0 +1,22 @@
+{
+  "version": "S1_AFTER_CLOCK_ADAPTER_EXACT_FORWARD_V1",
+  "parentCommit": "ea17085c96ec78bb0e72646b2f6ef90a422cdcda",
+  "parentFile": "docs/healthroster-build/proposals/daily-s1-root-actual-effect-adapter-20261017/run.mjs",
+  "parentSha256": "7d5ef4fda04d9a4ef6f8d84ed378e320f809244dc21c55276d3896dab0417541",
+  "afterSha256": "0e2cee7749f55deaf2fa76ce4c2fece5b069dfbddd01d7a7d6da3b8ffb86fb22",
+  "literalChanges": [
+    {
+      "before": "from '../daily-s1-actual-effect-recorder-20261017/recorder.mjs'",
+      "after": "from './clock-forward.mjs'",
+      "occurrences": 1
+    },
+    {
+      "before": "daily-s1-root-actual-effect-adapter-20261017/",
+      "after": "daily-s1-after-clock-adapter-20261017/",
+      "occurrences": 1
+    }
+  ],
+  "wholeRawInverse": true,
+  "newClockGuard": "Both actual auxiliary AFTER observations must follow actual response.finishedAt; unchanged original prepare/committed-validation remain required.",
+  "historicalOriginalPacketsPreserved": true
+}

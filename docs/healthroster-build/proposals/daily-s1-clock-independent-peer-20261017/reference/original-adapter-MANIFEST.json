@@ -1,0 +1,20 @@
+{
+  "version": "S1_ROOT_ACTUAL_EFFECT_ADAPTER_SOURCE_MANIFEST_V1",
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 1969,
+      "sha256": "0261d747c825f752b93aa1aa0631fbabe6e69dd7626ff2e40871dddfdc644ed8"
+    },
+    {
+      "file": "run.mjs",
+      "bytes": 8279,
+      "sha256": "7d5ef4fda04d9a4ef6f8d84ed378e320f809244dc21c55276d3896dab0417541"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 3354,
+      "sha256": "9b3c72855f3b98683b1d3b7da14a728e88f8ce3b31cbdca4c247b2bc88894b78"
+    }
+  ]
+}

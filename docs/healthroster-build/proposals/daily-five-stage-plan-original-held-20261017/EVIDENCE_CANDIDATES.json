@@ -1,0 +1,112 @@
+{
+  "version": "EXISTING_STAGE_SOURCE_EVIDENCE_INDEX_V1",
+  "rows": [
+    {
+      "stage": "S1",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_CURRENT_NATIVE_HEALTH_BODY_BINDINGS_20261017.json",
+      "bytes": 37243,
+      "sha256": "855427c65d3d344616b1dbf3861e778d69d642725609664cb85a5dd9355034c1",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S1",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_FIXED_CATALOGUE_INDEPENDENT_REVIEW_20261017/REVIEW.json",
+      "bytes": 6147,
+      "sha256": "a9c84457bc556ca429788a78e6b7e190e50778faa49da93b5f610a923744ebea",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S1",
+      "file": "docs/healthroster-build/proposals/daily-health-s1-scoped-effects-observer-20261017/SOURCE_EFFECT_MAP.md",
+      "bytes": 6152,
+      "sha256": "76a14138d5655e07197669177e33283321d8088bf237ebc331631b8f3f78fb7e",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S1",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_RECORDER_AND_S23_OBSERVER_ROOT_REVIEW_20261017.json",
+      "bytes": 844,
+      "sha256": "5998e99dbce38a7577773ca59980774969e5cd2f3d2ef53ccfa155967c6a4e34",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S1a",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_ROOT_SOURCE_REVIEW_20261017.json",
+      "bytes": 1467,
+      "sha256": "b6c633c8ee1d69e99580649692c7c9fb1b291d8d9cdc6a318eda062fa7538149",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S1a",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_FIXED_NATIVE_METADATA_20261017.json",
+      "bytes": 73115,
+      "sha256": "14ed1941cc9a4ca175e71128848ba18fa3f731dcf16074bdda18d6ea11a1ae66",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S1a",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-hospital-mapping-stage-20261017/SOURCE_REVIEW.json",
+      "bytes": 1268,
+      "sha256": "7120060f75a46ef346fd0fd55a80447a17985ef5edd3b49648aa25793499a930",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S2",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/S2_S3_SCOPED_OBSERVER_ROOT_REVIEW_20261017.json",
+      "bytes": 2836,
+      "sha256": "248d7f8eb6f9318eafb239063fe870e30a24935f1cf054e8abaf1c8a83946319",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S2",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-scoped-effects-observer-20261017/SOURCE_EFFECT_MAP.md",
+      "bytes": 8751,
+      "sha256": "a87563b314f551fa6d738007746afa984ac19753c157f0667a4d64e16bc48d24",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S2",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-settings-effect-disposition-20261017/DISPOSITION.json",
+      "bytes": 1050,
+      "sha256": "56269fe02a9d2be0d3935467b415ae94fb2c10311d1ba0747625e0309a636ac5",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S2",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-settings-effect-disposition-20261017/COMMON_HELPER_NOTE.md",
+      "bytes": 794,
+      "sha256": "5bede4e992cfbc12a552984ed7a6a93220d61dce1d8ea35276922d3952c6065f",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S3",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/S2_S3_SCOPED_OBSERVER_ROOT_REVIEW_20261017.json",
+      "bytes": 2836,
+      "sha256": "248d7f8eb6f9318eafb239063fe870e30a24935f1cf054e8abaf1c8a83946319",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S3",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-scoped-effects-observer-20261017/SOURCE_EFFECT_MAP.md",
+      "bytes": 8751,
+      "sha256": "a87563b314f551fa6d738007746afa984ac19753c157f0667a4d64e16bc48d24",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S3",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-settings-effect-disposition-20261017/DISPOSITION.json",
+      "bytes": 1050,
+      "sha256": "56269fe02a9d2be0d3935467b415ae94fb2c10311d1ba0747625e0309a636ac5",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    },
+    {
+      "stage": "S3",
+      "file": "docs/healthroster-build/proposals/daily-health-s2-s3-settings-effect-disposition-20261017/COMMON_HELPER_NOTE.md",
+      "bytes": 794,
+      "sha256": "5bede4e992cfbc12a552984ed7a6a93220d61dce1d8ea35276922d3952c6065f",
+      "scope": "Existing source/metadata input only; not automatic stage admission"
+    }
+  ],
+  "S4": "Root genuine ordinary manual-create financial/effect review remains not supplied here",
+  "manualRootPredecisionsCreated": false
+}

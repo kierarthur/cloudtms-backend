@@ -1,0 +1,20 @@
+{
+  "version": "ORIGINAL_STAGES_FOUR_RECORD_DATA_COMPOSER_SOURCE_RESULTS_V1",
+  "tests": 27,
+  "pass": 27,
+  "fail": 0,
+  "unchangedOriginalTests": 9,
+  "focusedComposerTests": 18,
+  "fourStageUnchangedAfterProofHandoffs": 4,
+  "originalRecorderChanged": false,
+  "originalCoreAndReadEnvelopeChanged": false,
+  "acceptedS23GuardChanged": false,
+  "actualRecordsWritten": 0,
+  "S4OriginalSourceCounterexamplesPassed": 3,
+  "financialSuccessClaimed": false,
+  "monetaryAcceptanceClaimed": false,
+  "globalRestorationClaimed": false,
+  "nativeAuthBrowserIPC": "NOT_RUN",
+  "privateTargetAccess": "NONE",
+  "otherWorktreeWrites": 0
+}

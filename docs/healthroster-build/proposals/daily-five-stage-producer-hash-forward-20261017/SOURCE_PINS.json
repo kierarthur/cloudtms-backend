@@ -1,0 +1,24 @@
+{
+  "version": "STAGE_PRODUCER_BINDING_FORWARD_SOURCE_PINS_V1",
+  "originalManifest": "7e75f7d5d63db81551ec9e494e76bc6b9b2341ed44af1fff637c2b76814b5f0c",
+  "originalEightFilesRetained": true,
+  "actualPublicBindingRecords": [
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+      "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+      "bytes": 5618,
+      "sha256": "b9ba019fc9f2ec59e5ae9ddd7d2257f214c5bc76246e2e3089bb76e38a588275",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-hospital-mapping-stage-20261017/SOURCE_PINS.json",
+      "commit": "da365b7367e2d78d810ad04b7af436e90d36c8f6",
+      "bytes": 6541,
+      "sha256": "233c9bf7140bdd0b1bb14a8b60da98335042d7be87afa20792dc90b98e9a555c",
+      "savedIndexHeadHistoricalEqual": true
+    }
+  ],
+  "reportHead": "62226fa587bf5ad977043d6abd9d103002212b65",
+  "actualR10Source": "NOT_PROVIDED",
+  "privateLookup": false
+}

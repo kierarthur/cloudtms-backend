@@ -1,0 +1,44 @@
+{
+  "version": "DAILY_CLOCK_AND_PRODUCER_HASH_FORWARDS_ROOT_REVIEW_V1",
+  "S1": {
+    "currentManifest": "9c64d928a8bc5cef9b61801f630e8b906879999a4455e0845cca8f33cfe8439e",
+    "authorTests": 13,
+    "independentFactoryVectors": 6,
+    "peer": "ACCEPT_BOUNDED_SOURCE_ONLY",
+    "newlineSourceProofCorrection": "Recorded first unpublished CRLF run image; current exact declared LF/raw two-literal inverse passes."
+  },
+  "otherStages": {
+    "currentManifest": "56b30e4790e39a5213e28a71d6436c814947c27dd01a9c0410258938a1b2d467",
+    "rootReplayedTests": 30,
+    "independentFactoryVectors": 4,
+    "peer": "ACCEPT_BOUNDED_SOURCE_ONLY",
+    "fix": "Actual auxiliary S2/S3 AFTER main must not predate real HTTP response; fresh order unchanged.",
+    "heldOriginalFiles": 15
+  },
+  "plans": {
+    "currentManifest": "70ca5e9fdd0c3f7f86b1285cf338e8d6936d88ad7c675cd1c6be461dfeafcbdb",
+    "rootReplayedTests": 22,
+    "fix": "Manual per-stage actual producer hash must match exact existing published binding; original12/9 output schemas/guards unchanged.",
+    "heldOriginalFiles": 8
+  },
+  "actualPlansOrEffectRecordsCreated": false,
+  "actualGenuineFixtureCalls": false,
+  "reportFrozenHead": "62226fa587bf5ad977043d6abd9d103002212b65",
+  "authR10": "NOT_STARTED",
+  "install2": "NOT_INSTALLED",
+  "frozenSourceWhitespaceExceptions": {
+    "paths": [
+      "docs/healthroster-build/proposals/daily-five-stage-plan-original-held-20261017/README.md",
+      "docs/healthroster-build/proposals/daily-five-stage-plan-original-held-20261017/compose.mjs",
+      "docs/healthroster-build/proposals/daily-five-stage-plan-original-held-20261017/test.mjs",
+      "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/README.md",
+      "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs",
+      "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/reference/compose.mjs",
+      "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/reference/test.mjs",
+      "docs/healthroster-build/proposals/daily-four-stage-clock-independent-peer-20261017/extra.test.mjs",
+      "docs/healthroster-build/proposals/daily-s1-clock-independent-peer-20261017/extra.test.mjs"
+    ],
+    "diagnostic": "new blank line at EOF only",
+    "review": "Preserve exact frozen source and captured parent/peer manifests; no trailing whitespace or other diff-check defect. All remaining selected files pass diff --check."
+  }
+}

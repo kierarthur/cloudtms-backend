@@ -1,0 +1,85 @@
+{
+  "version": "S1_CLOCK_COMPACT_INDEPENDENT_PEER_MANIFEST_V1",
+  "files": [
+    {
+      "file": "capture/clock-forward.mjs",
+      "bytes": 1314,
+      "sha256": "7fb4fe6d0370d4bdb2cc1cb4246046931577d700d143602b805053629732a32d"
+    },
+    {
+      "file": "capture/clock.test.mjs",
+      "bytes": 2079,
+      "sha256": "5450400eec710825be9eaaa3e26895ff0c7cb8369ccf48e3ec42b2a99b2d1c84"
+    },
+    {
+      "file": "capture/FULL_PARENT_FORWARD.json",
+      "bytes": 1009,
+      "sha256": "94c2430bc20f978e6acada1a15c72eeb9a8af676decfd5aa401bbe2f28e93e17"
+    },
+    {
+      "file": "capture/MANIFEST.json",
+      "bytes": 1280,
+      "sha256": "9c64d928a8bc5cef9b61801f630e8b906879999a4455e0845cca8f33cfe8439e"
+    },
+    {
+      "file": "capture/README.md",
+      "bytes": 1140,
+      "sha256": "f00972c3ea423da90564a31a195c9695faf04d5e64c44062604a316a2a7fdea6"
+    },
+    {
+      "file": "capture/reference/parent-run.mjs",
+      "bytes": 8279,
+      "sha256": "7d5ef4fda04d9a4ef6f8d84ed378e320f809244dc21c55276d3896dab0417541"
+    },
+    {
+      "file": "capture/run.mjs",
+      "bytes": 8235,
+      "sha256": "0e2cee7749f55deaf2fa76ce4c2fece5b069dfbddd01d7a7d6da3b8ffb86fb22"
+    },
+    {
+      "file": "capture/SOURCE_CORRECTION.json",
+      "bytes": 624,
+      "sha256": "2e26e0f014ec92054483060ce343f3f097430d5d8108f3a7673948e22791efc7"
+    },
+    {
+      "file": "capture/test.mjs",
+      "bytes": 3354,
+      "sha256": "9b3c72855f3b98683b1d3b7da14a728e88f8ce3b31cbdca4c247b2bc88894b78"
+    },
+    {
+      "file": "extra.test.mjs",
+      "bytes": 2846,
+      "sha256": "820719b0f7068161317c73a224150d06ccff28c5937d313b52989ade33eb8e43"
+    },
+    {
+      "file": "README.md",
+      "bytes": 853,
+      "sha256": "163a99eddcd550c884a3f03613d9a42f64dfe12ee37d9e39df17dc2354eb8ee7"
+    },
+    {
+      "file": "reference/original-adapter-MANIFEST.json",
+      "bytes": 514,
+      "sha256": "00b1a7f880c0844b9ac6b92b37d4e2b0df073adcc4c54f0c315bd502acd622c7"
+    },
+    {
+      "file": "reference/original-recorder-MANIFEST.json",
+      "bytes": 1020,
+      "sha256": "4995dd2ef2b268cb242c610f4c24a8e456fe42274876b2ae7ff505f0ad914346"
+    },
+    {
+      "file": "reference/original-recorder-test.mjs",
+      "bytes": 16317,
+      "sha256": "a5dac3d483df8041fece9db020bd955c8520dbba0309da4781b5ee1b3dd34d8b"
+    },
+    {
+      "file": "reference/original-recorder.mjs",
+      "bytes": 14975,
+      "sha256": "a247aca92d5be78878766b12793c7399089574446633a6fd0b6dcc656a1f46a1"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 1052,
+      "sha256": "5f9588a9d67cef1436b1ffc01378b7fbb7dfc30b3f51d838ec2433978de5837b"
+    }
+  ]
+}

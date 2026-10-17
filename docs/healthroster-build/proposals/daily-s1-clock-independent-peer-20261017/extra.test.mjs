@@ -1,0 +1,14 @@
+// RAM-only actual-factory vectors. No recorder run, auth/private data or transport.
+import fs from'node:fs';import{pathToFileURL}from'node:url';import assert from'node:assert/strict';import test from'node:test';
+const own=new URL('./',import.meta.url),old='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/',next='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/';
+let code=fs.readFileSync(new URL('reference/original-recorder-test.mjs',own),'utf8').split("test('synthetic full seven-field")[0].replace("'./recorder.mjs'",JSON.stringify(pathToFileURL(old+'recorder.mjs').href));
+const{vector}=await import('data:text/javascript;base64,'+Buffer.from(code+'\nexport{vector};').toString('base64'));
+const original=await import(pathToFileURL(old+'recorder.mjs').href),forward=await import(pathToFileURL(next+'clock-forward.mjs').href);
+test('normal actual original factory result remains byte-identical',()=>{const{a}=vector();assert.deepEqual(forward.prepareS1After(a),original.prepareS1After(a));});
+for(const mixed of[false,true]){
+ const fixture=()=>{const{a,publicFiles}=vector(),v=JSON.parse(a.auxAfterBytes),done=Date.parse(JSON.parse(a.responseBytes).finishedAt);v.statements[1].rows[0].s1_observer.observedAt=new Date(done-100).toISOString();v.rollbackVerification.statements[0].rows[0].s1_observer.observedAt=new Date(done+(mixed?1:-99)).toISOString();a.auxAfterBytes=Buffer.from(JSON.stringify(v,null,2)+'\n');return{a,publicFiles};};
+ test('early '+(mixed?'main/laterfresh':'main+fresh')+' accepted oldprepare refused newprepare',()=>{const{a}=fixture();assert.equal(original.prepareS1After(a).records.length,4);assert.throws(()=>forward.prepareS1After(a),/AUXILIARY_AFTER_NOT_BEFORE_ACTUAL_RESPONSE/);});
+ test('early '+(mixed?'main/laterfresh':'main+fresh')+' accepted oldcommittedvalidator refused newvalidator',()=>{const{a,publicFiles}=fixture();for(const r of original.prepareS1After(a).records)publicFiles.set(r.file,r.bytes);assert.equal(original.validateCommittedS1After(a).originalChildQualification,'PENDING_ORIGINAL_QUALIFY');assert.throws(()=>forward.validateCommittedS1After(a),/AUXILIARY_AFTER_NOT_BEFORE_ACTUAL_RESPONSE/);});
+}
+test('actual factory equality boundary remains admitted with unchanged byte result',()=>{const{a}=vector(),v=JSON.parse(a.auxAfterBytes),done=Date.parse(JSON.parse(a.responseBytes).finishedAt);v.statements[1].rows[0].s1_observer.observedAt=new Date(done).toISOString();v.rollbackVerification.statements[0].rows[0].s1_observer.observedAt=new Date(done+1).toISOString();a.auxAfterBytes=Buffer.from(JSON.stringify(v,null,2)+'\n');assert.deepEqual(forward.prepareS1After(a),original.prepareS1After(a));});
+

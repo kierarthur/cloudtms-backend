@@ -1,0 +1,13 @@
+{
+  "version": "STAGE_PRODUCER_HASH_SOURCE_CHECKS_V1",
+  "nodeCheck": "PASS",
+  "controlledTests": 22,
+  "completeParentInverse": "PASS",
+  "sourceChanges": 3,
+  "originalEightFilesRetained": true,
+  "outputPlanFields": 12,
+  "outputEffectFields": 9,
+  "actualPlansCreated": false,
+  "runtimeOrHeadEdits": false,
+  "nativeAuthPrivate": "NOT_RUN"
+}

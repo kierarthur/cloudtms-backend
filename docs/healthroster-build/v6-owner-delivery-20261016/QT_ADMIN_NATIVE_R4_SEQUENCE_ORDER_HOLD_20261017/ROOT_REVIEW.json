@@ -1,0 +1,38 @@
+{
+  "version": "QT_ADMIN_NATIVE_R4_SEQUENCE_ORDER_HOLD_V1",
+  "sourceCommit": "68cc30087a1e94face985f4ea0d3f239bb862925",
+  "verdict": "HOLD_FIRST_FULL_AUDIT_DIGEST_STATEMENT_TIMEOUT",
+  "statement": 59,
+  "parsedStatementCount": 64,
+  "sqlState": "57014",
+  "where": "SQL statement \"select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by a.event_sequence),'')) from public.audit_events a\"\nPL/pgSQL function inline_code_block line 42 at EXECUTE",
+  "observedCall": {
+    "startedAt": "2026-10-17T15:22:50.250Z",
+    "returnedAt": "2026-10-17T15:23:22.347Z",
+    "milliseconds": 32097
+  },
+  "accepted": false,
+  "rolledBack": true,
+  "freshConnected": true,
+  "freshAbsence": {
+    "readOnly": true,
+    "backendPid": 290357,
+    "qtObjectsAbsent": true,
+    "userFixtureRowsRemaining": 0
+  },
+  "markerAbsent": true,
+  "module": "LEGACY:1",
+  "applyingCount": 0,
+  "firstDigest": "Before fixture inserts; no constructor case reached.",
+  "canonicalAfter": "NOT_RUN",
+  "globalRestorationClaimed": false,
+  "ownTurn": {
+    "takenAt": "2026-10-17T15:21:52.500Z",
+    "releasedAt": "2026-10-17T15:23:23.851Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false
+  },
+  "disposition": "No unchanged retry. Continue independent stage integration and source review of execution context/parallel planning without raising caps or narrowing digest coverage.",
+  "install2": "NOT_INSTALLED"
+}

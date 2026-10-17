@@ -1,0 +1,9 @@
+{
+  "version": "S1_AFTER_CLOCK_AUTHORING_NEWLINE_CORRECTION_V1",
+  "independentFinding": "First unpublished run.mjs was CRLF while its full-parent forward record declared LF. Corrected only new run.mjs to its already-declared exact LF image; original committed parents remain untouched.",
+  "firstManifestSha256": "00fc09b230588f2f30ae745b90c2ed0f0e17bdac3924827f2b4ee86cbcbaa0b0",
+  "firstRunSha256": "2805b2f1c4317a4cde4dc6241862ae39c46ce43b7fb8ae38eaaef700af585527",
+  "correctRunSha256": "0e2cee7749f55deaf2fa76ce4c2fece5b069dfbddd01d7a7d6da3b8ffb86fb22",
+  "crlfPairsRemoved": 68,
+  "wholeLiteralRawInverseNow": true
+}

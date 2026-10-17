@@ -1,0 +1,14 @@
+{
+  "version": "FIVE_STAGE_PLAN_SOURCE_CHECKS_V1",
+  "nodeCheck": "PASS",
+  "controlledTests": 16,
+  "originalGuardPins": 3,
+  "planFields": 12,
+  "effectDescriptorFields": 9,
+  "plannedRecords": 10,
+  "actualPlansCreated": false,
+  "manualDecisionsCreated": false,
+  "prefixRecordsCreated": false,
+  "nativeAuthPrivateApi": "NOT_RUN",
+  "reportHeadChanged": false
+}

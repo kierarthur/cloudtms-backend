@@ -1,0 +1,13 @@
+{
+  "version": "ORIGINAL_STAGES_RECORDER_ADDITIVE_COMPOSITION_V1",
+  "originalRecorderCommit": "9d92eaffbb0dab36374615aa7cc5fe6f8084b46d",
+  "originalRecorderFile": "docs/healthroster-build/proposals/daily-s1-actual-effect-recorder-20261017/recorder.mjs",
+  "completeOriginalCaptured": "reference/recorder.mjs",
+  "originalBytes": 14975,
+  "originalSha256": "a247aca92d5be78878766b12793c7399089574446633a6fd0b6dcc656a1f46a1",
+  "originalRecorderRuntimeEdits": 0,
+  "composition": "New pure module imports unchanged reviewOriginalStage; original core/readEnvelope/stages/acceptedS23guard remain pinned and unchanged.",
+  "newSourceSha256": "d2d6577781a4f38e53ce1a1d5a735e3af7acf95efb853fd1bea23fff59d6eef2",
+  "testFixtureForward": "TEST_FIXTURE_FULL_PARENT_FORWARD.json",
+  "actualPositiveRecordsAuthored": 0
+}

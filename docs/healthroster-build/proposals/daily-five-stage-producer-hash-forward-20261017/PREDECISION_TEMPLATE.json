@@ -1,0 +1,71 @@
+{
+  "templateOnly": true,
+  "actualAdmission": false,
+  "stages": [
+    {
+      "version": "DAILY_GENUINE_ROOT_STAGE_PREDECISION_V1",
+      "stage": "S1",
+      "operatorSourceCommit": null,
+      "decision": null,
+      "nativeOwnerEvidence": null,
+      "schemaEffectEvidence": null,
+      "sourceEvidence": [],
+      "expectedEffects": null,
+      "reconciliation": null,
+      "limitations": null,
+      "workerSourceSha256": null
+    },
+    {
+      "version": "DAILY_GENUINE_ROOT_STAGE_PREDECISION_V1",
+      "stage": "S1a",
+      "operatorSourceCommit": null,
+      "decision": null,
+      "nativeOwnerEvidence": null,
+      "schemaEffectEvidence": null,
+      "sourceEvidence": [],
+      "expectedEffects": null,
+      "reconciliation": null,
+      "limitations": null,
+      "workerSourceSha256": null
+    },
+    {
+      "version": "DAILY_GENUINE_ROOT_STAGE_PREDECISION_V1",
+      "stage": "S2",
+      "operatorSourceCommit": null,
+      "decision": null,
+      "nativeOwnerEvidence": null,
+      "schemaEffectEvidence": null,
+      "sourceEvidence": [],
+      "expectedEffects": null,
+      "reconciliation": null,
+      "limitations": null,
+      "workerSourceSha256": null
+    },
+    {
+      "version": "DAILY_GENUINE_ROOT_STAGE_PREDECISION_V1",
+      "stage": "S3",
+      "operatorSourceCommit": null,
+      "decision": null,
+      "nativeOwnerEvidence": null,
+      "schemaEffectEvidence": null,
+      "sourceEvidence": [],
+      "expectedEffects": null,
+      "reconciliation": null,
+      "limitations": null,
+      "workerSourceSha256": null
+    },
+    {
+      "version": "DAILY_GENUINE_ROOT_STAGE_PREDECISION_V1",
+      "stage": "S4",
+      "operatorSourceCommit": null,
+      "decision": null,
+      "nativeOwnerEvidence": null,
+      "schemaEffectEvidence": null,
+      "sourceEvidence": [],
+      "expectedEffects": null,
+      "reconciliation": null,
+      "limitations": null,
+      "workerSourceSha256": null
+    }
+  ]
+}
