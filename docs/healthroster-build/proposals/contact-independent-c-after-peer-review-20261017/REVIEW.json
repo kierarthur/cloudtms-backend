@@ -1,0 +1,37 @@
+{
+  "reviewerModel": "gpt-6.1-sol",
+  "reasoningEffort": "xhigh",
+  "verdict": "PASS_SOURCE_ONLY",
+  "sourceCommit": "826e8d7d47a1b9961668bc523e86a898eae7742a",
+  "sourceManifestSha256": "b7742cf7f5826bbc09ce60e55687102cbd4788b671df860d571815fd44415506",
+  "manifestFilesVerified": 19,
+  "predecessorFilesVerified": 17,
+  "mismatches": 0,
+  "changedFiles": {
+    "fixed-metadata-reader.mjs": "cb5747ec996844949e1d4b41dca7ebfe1149ab360a580d540c94efd97d6d776c",
+    "result-validator.mjs": "87e4125a315bd1b1f27c9e6284a76dd0cc93b6db58272d92f744b4cfd52eabb7",
+    "hold-case.mjs": "948f0bf38165d21a054513b111076e8a0280d4cd463a833b623d9da26d93e685",
+    "canonical-input-builder.mjs": "fdfd8088d0dad4e7de156108344889d0a7de528bbbd76cb884b250e1b9489934",
+    "input-builder.mjs": "df622e8ec2a1d00194dd27ec60458bbeaec9f5e88f342c1c29f43f75f294b1f0"
+  },
+  "checks": {
+    "fullCanonicalSnapshotBeforeUnchangedFixtureProof": true,
+    "CafterDistinctFromA_B_Cbefore": true,
+    "samePhysicalThirdFrame": true,
+    "fullMapsWeakMapAndWriterAttributionRetained": true,
+    "oneMcpB_NoSecondMcp": true,
+    "explicitWitnessRollbackAndCanonicalUnlockCloseAttempts": true,
+    "unconfirmedCloseCannotPass": true,
+    "work120Cleanup60Whole180Retained": true,
+    "exactOneLineDPathWholeReverse": true,
+    "allOtherOldPinsRetained": true
+  },
+  "independentlyRunTests": {"passed":56,"failed":0,"durationMilliseconds":20427.2681},
+  "findings": [],
+  "native": "NOT_RUN_BY_REVIEWER",
+  "PartB": "NOT_RUN_BY_REVIEWER",
+  "databaseCalls": 0,
+  "mcpCalls": 0,
+  "credentialReads": 0,
+  "otherWorktreeEdits": 0
+}
