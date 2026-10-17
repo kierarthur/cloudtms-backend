@@ -1,0 +1,114 @@
+{
+  "version": "DAILY_GENUINE_PUBLIC_COMPLETED_PREFIX_V1",
+  "stage": "S0",
+  "operatorSourceCommit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+  "qualified": [
+    "S0"
+  ],
+  "beforeEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_R9_BEFORE_NATIVE_QUALIFICATION_20261017.json",
+  "afterEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_R9_AFTER_NATIVE_QUALIFICATION_20261017.json",
+  "afterFrame": {
+    "ids": {
+      "rates": null,
+      "settings": null,
+      "financials": null,
+      "timesheets": null
+    },
+    "facts": {
+      "rate": false,
+      "audit": true,
+      "settings": false,
+      "candidate": false,
+      "financial": false,
+      "timesheet": false,
+      "clientMapping": false
+    },
+    "phase": "AFTER",
+    "scope": {
+      "audit": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "rates": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "outbox": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "clients": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "mappings": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "settings": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "overrides": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "candidates": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "financials": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "timesheets": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "candidateJobs": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      }
+    },
+    "stage": "S0",
+    "version": "DAILY_GENUINE_NATIVE_AGGREGATE_V1",
+    "database": "cloudtms_test_clone",
+    "readOnly": true,
+    "holderPid": 293327,
+    "legacyOne": true,
+    "backendPid": 293405,
+    "observedAt": "2026-10-17T16:06:25.229544+00:00",
+    "databaseOid": 324139,
+    "actorAllowed": true,
+    "noRoleSwitch": true,
+    "testIdentity": true,
+    "applyingCount": 0,
+    "holderGranted": true,
+    "catalogueSha256": "717b0254c002aaa71860add11c3cfff4adafb7dc77f83679f0c7fabb7f0e514e",
+    "catalogueComplete": true
+  },
+  "originalQualifyResult": {
+    "status": "PASS",
+    "code": "FIXTURE_STAGE_NATIVE_QUALIFIED",
+    "phase": "qualify",
+    "stage": "S0",
+    "browserClosed": true
+  },
+  "coordinatorReleased": true,
+  "originalCoordinatorSummary": {
+    "status": "S0_NATIVE_QUALIFIED_OWN_TURN_RELEASED",
+    "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-05bc9532a9ff8931fac617c11910f274",
+    "operatorSourceCommit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "stage": "S0",
+    "businessRequests": 0,
+    "elapsedMs": 80847,
+    "publicComposer": "NOT_PROVIDED",
+    "financialSuccess": "NOT_CLAIMED",
+    "sharedTurn": "ORIGINAL_EXPLICIT_UNLOCK_CLOSE_REQUIRED"
+  },
+  "beforeEnvelopeSha256": "ef2ac9e6ccecb7624ccaf9da39959621ed8684f7dd8401d629f577b4d775d5a5",
+  "afterEnvelopeSha256": "438bf7c75638538b8a325d7d035384a7bb6a1122c6c6e98c02dafa3ab7171bdb",
+  "responseProjectionSha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "qualification": "ORIGINAL_CHILD_AND_ROOT_EFFECT_QUALIFIED_STAGE_ONLY_NOT_PUBLIC_FINANCIAL_SUCCESS",
+  "fullCanonicalRestorationClaimed": false
+}
